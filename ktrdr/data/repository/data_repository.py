@@ -307,3 +307,71 @@ class DataRepository:
                 "unique_symbols": 0,
                 "data_directory": str(self.data_dir),
             }
+
+    def validate_data(
+        self,
+        data: pd.DataFrame,
+        symbol: str,
+        timeframe: str,
+        validation_type: str = "local",
+    ) -> tuple[pd.DataFrame, Any]:
+        """
+        Validate cached data quality.
+
+        Performs comprehensive data quality checks including:
+        - Basic structure validation
+        - Duplicate detection and removal
+        - OHLC relationship validation
+        - Missing value detection and handling
+        - Timestamp gap detection
+        - Price outlier detection
+        - Volume pattern validation
+
+        Args:
+            data: DataFrame with OHLCV data to validate
+            symbol: Trading symbol
+            timeframe: Timeframe of the data
+            validation_type: Type of validation ("local", "ib", "general")
+                           Default is "local" for cached data
+
+        Returns:
+            Tuple of (corrected_dataframe, quality_report)
+            - corrected_dataframe: DataFrame with auto-corrections applied
+            - quality_report: DataQualityReport with validation results
+
+        Example:
+            >>> repo = DataRepository()
+            >>> df = repo.load_from_cache("AAPL", "1d")
+            >>> corrected_df, report = repo.validate_data(df, "AAPL", "1d")
+            >>> if not report.is_healthy():
+            ...     print(f"Found {len(report.issues)} issues")
+        """
+        logger.info(f"Validating data for {symbol} {timeframe} ({len(data)} rows)")
+
+        try:
+            # Delegate to DataQualityValidator
+            corrected_df, quality_report = self.validator.validate_data(
+                df=data,
+                symbol=symbol,
+                timeframe=timeframe,
+                validation_type=validation_type,
+            )
+
+            # Log summary
+            summary = quality_report.get_summary()
+            logger.info(
+                f"Validation complete: {summary['total_issues']} issues found, "
+                f"{summary['corrections_made']} auto-corrected"
+            )
+
+            if not quality_report.is_healthy():
+                logger.warning(
+                    f"Data quality issues detected for {symbol} {timeframe}. "
+                    f"Review the quality report for details."
+                )
+
+            return corrected_df, quality_report
+
+        except Exception as e:
+            logger.error(f"Error validating data: {e}")
+            raise

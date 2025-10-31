@@ -303,7 +303,7 @@ class TestDataQualityIntegration:
 
 
 class TestHelperMethods:
-    """Test helper methods that may be added."""
+    """Test helper methods for repository management."""
 
     def test_get_available_symbols(self, repository, sample_dataframe, data_dir):
         """Test getting list of available symbols."""
@@ -312,12 +312,288 @@ class TestHelperMethods:
             csv_file = data_dir / f"{symbol}_1d.csv"
             sample_dataframe.to_csv(csv_file, date_format="%Y-%m-%dT%H:%M:%SZ")
 
-        # This method might not exist yet, will be added if needed
-        if hasattr(repository, "get_available_symbols"):
-            symbols = repository.get_available_symbols()
-            assert "AAPL" in symbols
-            assert "MSFT" in symbols
-            assert "GOOGL" in symbols
+        # Get available symbols
+        symbols = repository.get_available_symbols()
+        assert "AAPL" in symbols
+        assert "MSFT" in symbols
+        assert "GOOGL" in symbols
+        assert len(symbols) == 3
+
+    def test_get_available_symbols_empty_cache(self, repository):
+        """Test get_available_symbols returns empty list for empty cache."""
+        symbols = repository.get_available_symbols()
+        assert isinstance(symbols, list)
+        assert len(symbols) == 0
+
+    def test_get_available_symbols_multiple_timeframes(
+        self, repository, sample_dataframe, data_dir
+    ):
+        """Test get_available_symbols with same symbol, different timeframes."""
+        # Save AAPL with multiple timeframes
+        for timeframe in ["1d", "1h", "5m"]:
+            csv_file = data_dir / f"AAPL_{timeframe}.csv"
+            sample_dataframe.to_csv(csv_file, date_format="%Y-%m-%dT%H:%M:%SZ")
+
+        # Should return unique symbols only
+        symbols = repository.get_available_symbols()
+        assert "AAPL" in symbols
+        assert len(symbols) == 1  # Only one unique symbol
+
+    def test_delete_from_cache_existing_file(
+        self, repository, sample_dataframe, data_dir
+    ):
+        """Test deleting existing cached data."""
+        # Save data first
+        csv_file = data_dir / "AAPL_1d.csv"
+        sample_dataframe.to_csv(csv_file, date_format="%Y-%m-%dT%H:%M:%SZ")
+
+        # Verify file exists
+        assert csv_file.exists()
+
+        # Delete from cache
+        result = repository.delete_from_cache("AAPL", "1d")
+
+        # Should return True and file should be gone
+        assert result is True
+        assert not csv_file.exists()
+
+    def test_delete_from_cache_nonexistent_file(self, repository):
+        """Test deleting non-existent cached data."""
+        # Try to delete file that doesn't exist
+        result = repository.delete_from_cache("NONEXISTENT", "1d")
+
+        # Should return False
+        assert result is False
+
+    def test_delete_from_cache_multiple_files(
+        self, repository, sample_dataframe, data_dir
+    ):
+        """Test deleting specific file doesn't affect others."""
+        # Save multiple files
+        for symbol in ["AAPL", "MSFT", "GOOGL"]:
+            csv_file = data_dir / f"{symbol}_1d.csv"
+            sample_dataframe.to_csv(csv_file, date_format="%Y-%m-%dT%H:%M:%SZ")
+
+        # Delete one
+        result = repository.delete_from_cache("AAPL", "1d")
+        assert result is True
+
+        # Others should still exist
+        assert (data_dir / "MSFT_1d.csv").exists()
+        assert (data_dir / "GOOGL_1d.csv").exists()
+        assert not (data_dir / "AAPL_1d.csv").exists()
+
+    def test_get_cache_stats_empty_cache(self, repository):
+        """Test get_cache_stats with empty cache."""
+        stats = repository.get_cache_stats()
+
+        assert isinstance(stats, dict)
+        assert "total_files" in stats
+        assert "unique_symbols" in stats
+        assert "data_directory" in stats
+
+        assert stats["total_files"] == 0
+        assert stats["unique_symbols"] == 0
+        assert stats["data_directory"] == str(repository.data_dir)
+
+    def test_get_cache_stats_single_file(self, repository, sample_dataframe, data_dir):
+        """Test get_cache_stats with single cached file."""
+        # Save one file
+        csv_file = data_dir / "AAPL_1d.csv"
+        sample_dataframe.to_csv(csv_file, date_format="%Y-%m-%dT%H:%M:%SZ")
+
+        stats = repository.get_cache_stats()
+
+        assert stats["total_files"] == 1
+        assert stats["unique_symbols"] == 1
+        assert stats["data_directory"] == str(repository.data_dir)
+
+    def test_get_cache_stats_multiple_files(
+        self, repository, sample_dataframe, data_dir
+    ):
+        """Test get_cache_stats with multiple cached files."""
+        # Save multiple files: 3 symbols × 2 timeframes = 6 files
+        for symbol in ["AAPL", "MSFT", "GOOGL"]:
+            for timeframe in ["1d", "1h"]:
+                csv_file = data_dir / f"{symbol}_{timeframe}.csv"
+                sample_dataframe.to_csv(csv_file, date_format="%Y-%m-%dT%H:%M:%SZ")
+
+        stats = repository.get_cache_stats()
+
+        assert stats["total_files"] == 6
+        assert stats["unique_symbols"] == 3
+        assert stats["data_directory"] == str(repository.data_dir)
+
+    def test_validate_data_valid_dataframe(self, repository, sample_dataframe):
+        """Test validate_data with valid OHLCV data."""
+        # Validate valid data
+        corrected_df, report = repository.validate_data(sample_dataframe, "AAPL", "1d")
+
+        # Should return corrected dataframe and report
+        assert isinstance(corrected_df, pd.DataFrame)
+        assert not corrected_df.empty
+        assert len(corrected_df) == len(sample_dataframe)
+
+        # Report should exist and be healthy
+        assert report is not None
+        assert hasattr(report, "is_healthy")
+        # Valid data should pass health check (or have minimal issues)
+        # Note: validator may find minor issues even in "good" data
+
+    def test_validate_data_with_duplicates(self, repository):
+        """Test validate_data detects and handles duplicate timestamps."""
+        # Create data with duplicates
+        dates = pd.date_range("2024-01-01", periods=10, freq="1D", tz="UTC")
+        # Add duplicate date
+        dates = dates.append(pd.DatetimeIndex([dates[0]], tz="UTC"))
+
+        df = pd.DataFrame(
+            {
+                "open": list(range(10)) + [999],
+                "high": list(range(1, 11)) + [1000],
+                "low": list(range(10)) + [998],
+                "close": list(range(10)) + [999],
+                "volume": list(range(10)) + [500],
+            },
+            index=dates,
+        )
+
+        # Validate - should detect duplicates
+        corrected_df, report = repository.validate_data(df, "TEST", "1d")
+
+        # Report should contain issues
+        assert report is not None
+        summary = report.get_summary()
+        assert summary["total_issues"] > 0
+
+        # Corrected dataframe should have duplicates removed (if auto_correct=True)
+        # The number of rows should be reduced or duplicates should be flagged
+        assert isinstance(corrected_df, pd.DataFrame)
+
+    def test_validate_data_with_missing_values(self, repository):
+        """Test validate_data detects and handles missing values."""
+        # Create data with missing values
+        dates = pd.date_range("2024-01-01", periods=10, freq="1D", tz="UTC")
+        df = pd.DataFrame(
+            {
+                "open": [
+                    100.0,
+                    None,
+                    102.0,
+                    103.0,
+                    104.0,
+                    105.0,
+                    106.0,
+                    107.0,
+                    108.0,
+                    109.0,
+                ],
+                "high": [
+                    105.0,
+                    106.0,
+                    107.0,
+                    None,
+                    109.0,
+                    110.0,
+                    111.0,
+                    112.0,
+                    113.0,
+                    114.0,
+                ],
+                "low": [95.0, 96.0, 97.0, 98.0, 99.0, 100.0, None, 102.0, 103.0, 104.0],
+                "close": [
+                    102.0,
+                    103.0,
+                    104.0,
+                    105.0,
+                    106.0,
+                    107.0,
+                    108.0,
+                    109.0,
+                    None,
+                    111.0,
+                ],
+                "volume": [1000, 1010, 1020, 1030, 1040, None, 1060, 1070, 1080, 1090],
+            },
+            index=dates,
+        )
+
+        # Validate - should detect missing values
+        corrected_df, report = repository.validate_data(df, "TEST", "1d")
+
+        # Report should contain issues
+        assert report is not None
+        summary = report.get_summary()
+        # Missing values should be detected
+        assert summary["total_issues"] > 0
+
+        # Corrected dataframe should have handled missing values
+        assert isinstance(corrected_df, pd.DataFrame)
+
+    def test_validate_data_with_invalid_ohlc_relationships(self, repository):
+        """Test validate_data detects invalid OHLC relationships."""
+        # Create data with invalid OHLC (high < low, close > high, etc.)
+        dates = pd.date_range("2024-01-01", periods=5, freq="1D", tz="UTC")
+        df = pd.DataFrame(
+            {
+                "open": [100.0, 101.0, 102.0, 103.0, 104.0],
+                "high": [
+                    95.0,
+                    106.0,
+                    107.0,
+                    108.0,
+                    109.0,
+                ],  # First high < low (invalid!)
+                "low": [105.0, 96.0, 97.0, 98.0, 99.0],  # First low > open (invalid!)
+                "close": [102.0, 103.0, 104.0, 105.0, 106.0],
+                "volume": [1000, 1010, 1020, 1030, 1040],
+            },
+            index=dates,
+        )
+
+        # Validate - should detect OHLC issues
+        corrected_df, report = repository.validate_data(df, "TEST", "1d")
+
+        # Report should contain OHLC validation issues
+        assert report is not None
+        summary = report.get_summary()
+        assert summary["total_issues"] > 0
+
+        # Corrected dataframe should have OHLC issues handled
+        assert isinstance(corrected_df, pd.DataFrame)
+
+    def test_validate_data_empty_dataframe(self, repository):
+        """Test validate_data handles empty dataframe."""
+        # Create empty dataframe
+        empty_df = pd.DataFrame()
+
+        # Validate - should detect empty dataset
+        corrected_df, report = repository.validate_data(empty_df, "EMPTY", "1d")
+
+        # Report should contain critical empty dataset issue
+        assert report is not None
+        summary = report.get_summary()
+        assert summary["total_issues"] > 0
+        assert not report.is_healthy()
+
+    def test_validate_data_returns_quality_report(self, repository, sample_dataframe):
+        """Test that validate_data returns proper DataQualityReport."""
+        corrected_df, report = repository.validate_data(sample_dataframe, "AAPL", "1d")
+
+        # Verify report has expected attributes
+        assert hasattr(report, "symbol")
+        assert hasattr(report, "timeframe")
+        assert hasattr(report, "issues")
+        assert hasattr(report, "get_summary")
+        assert hasattr(report, "is_healthy")
+
+        # Verify report content
+        assert report.symbol == "AAPL"
+        assert report.timeframe == "1d"
+
+        summary = report.get_summary()
+        assert "total_issues" in summary
+        assert "corrections_made" in summary
 
 
 class TestEdgeCases:

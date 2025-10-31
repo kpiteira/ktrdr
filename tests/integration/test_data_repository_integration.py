@@ -12,7 +12,6 @@ Integration tests are slower than unit tests but validate real component interac
 
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -305,7 +304,7 @@ class TestDataRepositoryIntegration:
         deep_path = tmp_path / "level1" / "level2" / "level3" / "data"
 
         # Should create all directories
-        repo = DataRepository(data_dir=str(deep_path))
+        _ = DataRepository(data_dir=str(deep_path))
 
         # Verify directories were created
         assert deep_path.exists()
