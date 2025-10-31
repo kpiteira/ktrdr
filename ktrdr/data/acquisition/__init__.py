@@ -17,6 +17,7 @@ from ktrdr.data.acquisition.gap_classifier import (
     GapClassifier,
     GapInfo,
 )
+from ktrdr.data.acquisition.ib_data_provider import IbDataProvider
 from ktrdr.data.acquisition.segment_manager import SegmentManager
 
 __all__ = [
@@ -28,5 +29,6 @@ __all__ = [
     "GapClassification",
     "GapClassifier",
     "GapInfo",
+    "IbDataProvider",
     "SegmentManager",
 ]
