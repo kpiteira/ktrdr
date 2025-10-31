@@ -494,47 +494,45 @@ async def get_data(...):
 
 #### TASK 2.5: Wire Repository to CLI (Read-Only)
 
-**Objective**: Update CLI read commands to use DataRepository.
+**Status**: ❌ **NOT NEEDED** - Task based on incorrect assumption
 
-**What to REFACTOR**:
+**Why Not Needed**:
+
+The implementation plan was written with an incorrect assumption about CLI architecture. Upon investigation, the CLI **already uses the API exclusively** and does NOT directly import DataManager or DataRepository:
 
 ```python
-# FROM: ktrdr/cli/data_commands.py
-# Current:
-from ktrdr.data.data_manager import DataManager
+# ACTUAL IMPLEMENTATION (ktrdr/cli/data_commands.py)
 
-@app.command("show")
-def show_data(...):
-    data_manager = DataManager()
-    df = data_manager.load_data(symbol, timeframe, mode="local")
+# ktrdr data show (line 147-149)
+async with AsyncCLIClient() as cli:
+    data = await cli._make_request("GET", f"/data/{symbol}/{timeframe}", params=params)
 
-# TO:
-from ktrdr.data.repository import DataRepository
+# ktrdr data load (line 439)
+response = await api_client.load_data(...)
 
-@app.command("show")
-def show_data(...):
-    data_repository = DataRepository()
-    df = data_repository.load_from_cache(symbol, timeframe)
+# ktrdr data range (line 891)
+data = await api_client.get_data_range(symbol=symbol, timeframe=timeframe)
 ```
 
-**Files Modified**:
-- `ktrdr/cli/data_commands.py`
+**Architecture Verification**:
 
-**Scope**:
-1. Update `ktrdr data show`
-2. Update `ktrdr data get-range` (if exists)
-3. Keep `ktrdr data load` using DataManager
+The CLI follows the correct architecture from CLAUDE.md:
+```
+CLI → AsyncCLIClient → API Endpoints → Backend Services (DataRepository/DataManager)
+```
 
-**Integration Test**: CLI version of D1.1
+**Impact**:
+- ✅ **Task 2.4 complete**: API endpoints use DataRepository
+- ✅ **CLI already correct**: Uses API, not direct imports
+- ✅ **Zero changes needed**: API interface unchanged
+- ✅ **No breaking changes**: Everything works without CLI modifications
 
-**Acceptance Criteria**:
-- [ ] `ktrdr data show` uses DataRepository
-- [ ] `ktrdr data load` still uses DataManager
-- [ ] CLI cache reads work
-- [ ] All tests pass
-- [ ] `make quality` passes
+**Conclusion**: Since the API endpoints were updated in Task 2.4 to use DataRepository, and the CLI already uses the API (not direct imports), there are no CLI changes required. The CLI automatically benefits from the API improvements.
 
-**Estimated Duration**: 0.5 days
+**Files Verified**:
+- `ktrdr/cli/data_commands.py` - Confirmed uses AsyncCLIClient/API only
+
+**Original Estimated Duration**: 0.5 days → **Actual Duration**: 0 days (not applicable)
 
 ---
 
