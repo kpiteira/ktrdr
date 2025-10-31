@@ -114,6 +114,60 @@ ktrdr/data/
 
 ---
 
+## Testing Guide
+
+### Where Integration Tests Are Defined
+
+**Integration test scenarios are fully documented in:**
+
+1. **`docs/testing/SCENARIOS.md`** - Complete test scenario definitions
+   - 13 data scenarios (D1.1-D4.3)
+   - Training scenarios (1.1-4.2)
+   - Step-by-step commands for each scenario
+   - Expected results and performance baselines
+
+2. **`docs/testing/TESTING_GUIDE.md`** - Building blocks for testing
+   - API endpoint reference
+   - Service URLs and ports
+   - Common commands and scripts
+   - Log access patterns
+
+### How to Run Integration Tests
+
+**For each task, run the relevant scenarios:**
+
+```bash
+# Example: Task 2.4 (Wire Repository to API)
+# Run scenarios: D1.1, D1.2, D1.4
+
+# D1.1: Load cached data
+curl -s "http://localhost:8000/api/v1/data/EURUSD/1h" | jq '.data.dates | length'
+
+# D1.2: Query data range
+curl -s -X POST http://localhost:8000/api/v1/data/range \
+  -H "Content-Type: application/json" \
+  -d '{"symbol":"EURUSD","timeframe":"1h"}' | jq
+
+# D1.4: List available data
+curl -s "http://localhost:8000/api/v1/data/info" | jq '.data.total_symbols'
+```
+
+**Prerequisites for Integration Tests:**
+- Backend running (`docker-compose up` or local API server)
+- For IB tests: IB Host Service + IB Gateway running
+- Sample data cached (EURUSD 1h recommended)
+
+### Test Validation Requirements
+
+Each task MUST pass:
+1. ✅ All relevant integration test scenarios (see task acceptance criteria)
+2. ✅ All unit tests (`make test-unit`)
+3. ✅ Quality checks (`make quality`)
+
+**Integration test scenarios are NOT optional** - they verify end-to-end functionality.
+
+---
+
 ## Table of Contents
 
 1. [Phase 0: Baseline Testing](#phase-0-baseline-testing) ✅
@@ -422,13 +476,19 @@ async def get_data(...):
 **Integration Test**: D1.1, D1.2, D1.4 via API
 
 **Acceptance Criteria**:
-- [ ] GET endpoints use DataRepository
-- [ ] POST endpoints still use DataManager
-- [ ] Integration tests D1.1, D1.2, D1.4 pass
-- [ ] All unit tests pass
-- [ ] `make quality` passes
+- [x] GET endpoints use DataRepository
+- [x] POST endpoints still use DataManager
+- [x] Integration tests D1.1, D1.2, D1.4 pass (see `docs/testing/SCENARIOS.md` for details)
+- [x] All unit tests pass (1776/1776)
+- [x] `make quality` passes
+
+**Test Documentation**: See [Testing Guide](#testing-guide) section above for integration test locations and commands.
 
 **Estimated Duration**: 1 day
+
+**Actual Duration**: 1 day ✅
+
+**Status**: ✅ COMPLETE (Commit: 42aadb0)
 
 ---
 
