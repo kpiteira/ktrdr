@@ -10,8 +10,10 @@ from ktrdr.data.repository.data_quality_validator import (
     DataQualityReport,
     DataQualityValidator,
 )
+from ktrdr.data.repository.data_repository import DataRepository
 
 __all__ = [
+    "DataRepository",
     "DataQualityValidator",
     "DataQualityReport",
     "DataQualityIssue",

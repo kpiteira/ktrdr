@@ -244,9 +244,9 @@ class TestDataFetcherDatetimeHandling:
         # Localize naive timestamps to UTC to match DataFrame index
         # This is the same fix applied in data_fetcher.py
         if start_pd.tz is None:
-            start_pd = start_pd.tz_localize('UTC')
+            start_pd = start_pd.tz_localize("UTC")
         if end_pd.tz is None:
-            end_pd = end_pd.tz_localize('UTC')
+            end_pd = end_pd.tz_localize("UTC")
 
         # Act: Filter (mimics the fixed code)
         filtered = df[(df.index >= start_pd) & (df.index <= end_pd)]
