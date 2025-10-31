@@ -30,7 +30,6 @@ from ktrdr import (
 from ktrdr.async_infrastructure.progress import GenericProgressManager
 from ktrdr.async_infrastructure.service_orchestrator import ServiceOrchestrator
 from ktrdr.data.components.data_fetcher import DataFetcher
-from ktrdr.data.components.data_quality_validator import DataQualityValidator
 
 # Old ProgressManager no longer needed - using GenericProgressManager directly
 from ktrdr.data.data_manager_builder import (
@@ -38,6 +37,7 @@ from ktrdr.data.data_manager_builder import (
     create_default_datamanager_builder,
 )
 from ktrdr.data.ib_data_adapter import IbDataAdapter
+from ktrdr.data.repository.data_quality_validator import DataQualityValidator
 from ktrdr.errors import (
     DataCorruptionError,
     DataError,

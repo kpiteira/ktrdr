@@ -8,9 +8,9 @@ components, extracted to keep DataManager lean and maintain separation of concer
 import os
 from typing import TYPE_CHECKING, Any, Optional
 
-from ktrdr.data.components.data_quality_validator import DataQualityValidator
 from ktrdr.data.components.gap_classifier import GapClassifier
 from ktrdr.data.local_data_loader import LocalDataLoader
+from ktrdr.data.repository.data_quality_validator import DataQualityValidator
 
 if TYPE_CHECKING:
     from ktrdr.data.ib_data_adapter import IbDataAdapter

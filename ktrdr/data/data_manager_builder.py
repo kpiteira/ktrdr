@@ -25,13 +25,13 @@ from ktrdr.config.models import IbHostServiceConfig, KtrdrConfig
 from ktrdr.data.async_infrastructure.data_progress_renderer import DataProgressRenderer
 from ktrdr.data.components.data_health_checker import DataHealthChecker
 from ktrdr.data.components.data_processor import DataProcessor
-from ktrdr.data.components.data_quality_validator import DataQualityValidator
 from ktrdr.data.components.gap_analyzer import GapAnalyzer
 from ktrdr.data.components.gap_classifier import GapClassifier
 from ktrdr.data.components.segment_manager import SegmentManager
 from ktrdr.data.data_loading_orchestrator import DataLoadingOrchestrator
 from ktrdr.data.ib_data_adapter import IbDataAdapter
 from ktrdr.data.local_data_loader import LocalDataLoader
+from ktrdr.data.repository.data_quality_validator import DataQualityValidator
 from ktrdr.errors import DataError
 
 logger = get_logger(__name__)

@@ -400,7 +400,9 @@ class OperationsService:
                 self._refresh_from_bridge(operation_id)
 
             # TASK 2.5: Pull from remote proxy if registered and operation still running
-            if operation.status == OperationStatus.RUNNING and self._get_remote_proxy(operation_id):
+            if operation.status == OperationStatus.RUNNING and self._get_remote_proxy(
+                operation_id
+            ):
                 # Force refresh bypasses cache
                 if force_refresh:
                     # Invalidate cache to force refresh
@@ -622,9 +624,7 @@ class OperationsService:
             f"host {host_operation_id}"
         )
 
-    def _get_remote_proxy(
-        self, operation_id: str
-    ) -> Optional[tuple[Any, str]]:
+    def _get_remote_proxy(self, operation_id: str) -> Optional[tuple[Any, str]]:
         """
         Get proxy and host operation ID for a remote operation.
 

@@ -211,6 +211,14 @@ class IbDataFetcher:
             # Convert Python datetime objects to pandas Timestamps for proper comparison
             start_pd = pd.Timestamp(start)
             end_pd = pd.Timestamp(end)
+
+            # Localize naive timestamps to UTC to match the timezone-aware DataFrame index
+            # This prevents TypeError: Invalid comparison between dtype=datetime64[ns, UTC] and Timestamp
+            if start_pd.tz is None:
+                start_pd = start_pd.tz_localize('UTC')
+            if end_pd.tz is None:
+                end_pd = end_pd.tz_localize('UTC')
+
             df = df[(df.index >= start_pd) & (df.index <= end_pd)]
 
             logger.info(

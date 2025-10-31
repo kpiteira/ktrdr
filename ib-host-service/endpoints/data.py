@@ -9,11 +9,12 @@ from datetime import datetime
 from typing import Any, Optional
 
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
 
 # Import local IB modules
 from ib.data_fetcher import IbDataFetcher
 from ib.symbol_validator import IbSymbolValidator
+from pydantic import BaseModel, Field
+
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)

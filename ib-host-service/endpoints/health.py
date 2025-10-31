@@ -8,10 +8,11 @@ from datetime import datetime
 from typing import Any, Optional
 
 from fastapi import APIRouter
-from pydantic import BaseModel
 
 # Import local IB modules
 from ib.pool import IbConnectionPool
+from pydantic import BaseModel
+
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)

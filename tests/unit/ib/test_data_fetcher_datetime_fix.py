@@ -44,7 +44,9 @@ class TestDataFetcherDatetimeHandling:
         """Create a data fetcher instance."""
         return IbDataFetcher()
 
-    def test_datetime_filter_with_naive_datetime(self, data_fetcher, mock_ib_connection):
+    def test_datetime_filter_with_naive_datetime(
+        self, data_fetcher, mock_ib_connection
+    ):
         """
         Test that naive datetime objects work correctly in filtering.
 
@@ -56,7 +58,9 @@ class TestDataFetcherDatetimeHandling:
         end = datetime(2024, 12, 5, 23, 59, 59)  # Naive
 
         # Act: Call the implementation with mock IB connection
-        with patch.object(data_fetcher.connection_pool, 'execute_with_connection_sync') as mock_execute:
+        with patch.object(
+            data_fetcher.connection_pool, "execute_with_connection_sync"
+        ) as mock_execute:
             # Configure mock to call the actual implementation method
             def call_impl(*args, **kwargs):
                 impl_method = args[0]
@@ -72,7 +76,7 @@ class TestDataFetcherDatetimeHandling:
                 timeframe="1h",
                 start=start,
                 end=end,
-                instrument_type="CASH"
+                instrument_type="CASH",
             )
 
         # Assert: Should return DataFrame without errors
@@ -82,7 +86,9 @@ class TestDataFetcherDatetimeHandling:
         assert result.index.tz is not None  # Should be timezone-aware
         assert str(result.index.tz) == "UTC"  # Should be UTC
 
-    def test_datetime_filter_with_aware_datetime(self, data_fetcher, mock_ib_connection):
+    def test_datetime_filter_with_aware_datetime(
+        self, data_fetcher, mock_ib_connection
+    ):
         """
         Test that timezone-aware datetime objects work correctly in filtering.
 
@@ -99,7 +105,7 @@ class TestDataFetcherDatetimeHandling:
             timeframe="1h",
             start=start,
             end=end,
-            instrument_type="CASH"
+            instrument_type="CASH",
         )
 
         # Assert: Should work without errors
@@ -109,7 +115,9 @@ class TestDataFetcherDatetimeHandling:
         assert result.index.tz is not None
         assert str(result.index.tz) == "UTC"
 
-    def test_datetime_filter_excludes_out_of_range(self, data_fetcher, mock_ib_connection):
+    def test_datetime_filter_excludes_out_of_range(
+        self, data_fetcher, mock_ib_connection
+    ):
         """
         Test that date filtering correctly excludes bars outside the range.
 
@@ -126,7 +134,7 @@ class TestDataFetcherDatetimeHandling:
             timeframe="1h",
             start=start,
             end=end,
-            instrument_type="CASH"
+            instrument_type="CASH",
         )
 
         # Assert: Should only include bars from Dec 2-3
@@ -146,6 +154,7 @@ class TestDataFetcherDatetimeHandling:
 
         # Create bars with Eastern Time (UTC-5)
         from datetime import timedelta
+
         eastern_tz = timezone(timedelta(hours=-5))
 
         mock_bars = []
@@ -169,7 +178,7 @@ class TestDataFetcherDatetimeHandling:
             timeframe="1h",
             start=start,
             end=end,
-            instrument_type="CASH"
+            instrument_type="CASH",
         )
 
         # Assert: All bars should be converted to UTC and included
@@ -194,7 +203,9 @@ class TestDataFetcherDatetimeHandling:
         aware_ts = pd.Timestamp(aware_dt)
 
         # Assert: Timestamps should be compatible with DatetimeIndex
-        test_index = pd.DatetimeIndex([datetime(2024, 12, 1, 12, 0, 0, tzinfo=timezone.utc)])
+        test_index = pd.DatetimeIndex(
+            [datetime(2024, 12, 1, 12, 0, 0, tzinfo=timezone.utc)]
+        )
 
         # These comparisons should NOT raise TypeError
         _ = test_index >= aware_ts  # Should work
@@ -220,7 +231,7 @@ class TestDataFetcherDatetimeHandling:
                 "close": range(10),
                 "volume": range(10),
             },
-            index=dates
+            index=dates,
         )
 
         # Test with naive datetime
@@ -229,6 +240,13 @@ class TestDataFetcherDatetimeHandling:
 
         start_pd = pd.Timestamp(start_naive)
         end_pd = pd.Timestamp(end_naive)
+
+        # Localize naive timestamps to UTC to match DataFrame index
+        # This is the same fix applied in data_fetcher.py
+        if start_pd.tz is None:
+            start_pd = start_pd.tz_localize('UTC')
+        if end_pd.tz is None:
+            end_pd = end_pd.tz_localize('UTC')
 
         # Act: Filter (mimics the fixed code)
         filtered = df[(df.index >= start_pd) & (df.index <= end_pd)]
