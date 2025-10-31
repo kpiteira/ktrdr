@@ -29,6 +29,7 @@ from ktrdr import (
 )
 from ktrdr.async_infrastructure.progress import GenericProgressManager
 from ktrdr.async_infrastructure.service_orchestrator import ServiceOrchestrator
+from ktrdr.data.acquisition.ib_data_provider import IbDataProvider
 from ktrdr.data.components.data_fetcher import DataFetcher
 
 # Old ProgressManager no longer needed - using GenericProgressManager directly
@@ -36,7 +37,6 @@ from ktrdr.data.data_manager_builder import (
     DataManagerBuilder,
     create_default_datamanager_builder,
 )
-from ktrdr.data.ib_data_adapter import IbDataAdapter
 from ktrdr.data.repository.data_quality_validator import DataQualityValidator
 from ktrdr.errors import (
     DataCorruptionError,
@@ -180,19 +180,15 @@ class DataManager(ServiceOrchestrator):
         )
 
     # ServiceOrchestrator abstract method implementations
-    def _initialize_adapter(self) -> IbDataAdapter:
-        """Initialize IB data adapter based on environment variables."""
+    def _initialize_adapter(self) -> IbDataProvider:
+        """Initialize IB data provider (HTTP-only)."""
         import os
 
-        env_enabled = os.getenv("USE_IB_HOST_SERVICE", "").lower()
-        use_host_service = env_enabled in ("true", "1", "yes")
         host_service_url = os.getenv(
             "IB_HOST_SERVICE_URL", self._get_default_host_url()
         )
 
-        return IbDataAdapter(
-            use_host_service=use_host_service, host_service_url=host_service_url
-        )
+        return IbDataProvider(host_service_url=host_service_url)
 
     def _get_service_name(self) -> str:
         """Get the service name for logging and configuration."""

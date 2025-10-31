@@ -209,37 +209,34 @@ class TestDataManagerBuilderComponentConstruction:
         assert loader == mock_loader
         mock_loader_class.assert_called_with(data_dir="/test/data")
 
-    @patch("ktrdr.data.data_manager_builder.IbDataAdapter")
+    @patch("ktrdr.data.data_manager_builder.IbDataProvider")
     @patch("ktrdr.data.data_manager_builder.IbConfigurationLoader")
-    def test_build_ib_adapter_with_config(self, mock_loader, mock_adapter_class):
-        """Test IB adapter construction with configuration."""
+    def test_build_ib_adapter_with_config(self, mock_loader, mock_provider_class):
+        """Test IB provider construction with configuration."""
         # Setup mocks
         mock_config = IbHostServiceConfig(enabled=True, url="http://test:5001")
         mock_loader.load_configuration.return_value = mock_config
-        mock_adapter = Mock()
-        mock_adapter_class.return_value = mock_adapter
+        mock_provider = Mock()
+        mock_provider_class.return_value = mock_provider
 
         builder = DataManagerBuilder()
-        adapter = builder._build_ib_adapter()
+        provider = builder._build_ib_adapter()
 
-        # Verify adapter created with configuration
-        mock_adapter_class.assert_called_with(
-            use_host_service=True, host_service_url="http://test:5001"
-        )
-        assert adapter == mock_adapter
+        # Verify provider created with configuration (HTTP-only, no use_host_service param)
+        mock_provider_class.assert_called_with(host_service_url="http://test:5001")
+        assert provider == mock_provider
 
-    @patch("ktrdr.data.data_manager_builder.IbDataAdapter")
-    def test_build_ib_adapter_fallback(self, mock_adapter_class):
-        """Test IB adapter construction with fallback on error."""
+    @patch("ktrdr.data.data_manager_builder.IbDataProvider")
+    def test_build_ib_adapter_fallback(self, mock_provider_class):
+        """Test IB provider construction with fallback on error."""
         # Setup mocks - first call raises exception, second succeeds
-        mock_adapter_class.side_effect = [Exception("Config error"), Mock()]
+        mock_provider_class.side_effect = [Exception("Config error"), Mock()]
 
         builder = DataManagerBuilder()
         builder._build_ib_adapter()
 
-        # Verify fallback was used
-        assert mock_adapter_class.call_count == 2
-        # First call with config, second call without args (fallback)
+        # Verify fallback was used (calls with default URL)
+        assert mock_provider_class.call_count == 2
 
     def test_build_core_components(self):
         """Test core components construction."""
