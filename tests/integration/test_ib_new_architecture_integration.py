@@ -16,8 +16,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from ktrdr.config.ib_config import get_ib_config
-from ktrdr.data.data_manager import DataManager
 from ktrdr.data.acquisition.ib_data_provider import IbDataProvider
+from ktrdr.data.data_manager import DataManager
 from ktrdr.ib import IbConnectionPool, IbErrorClassifier, IbPaceManager
 
 
@@ -61,12 +61,14 @@ class TestIbNewArchitectureIntegration:
 
     @pytest.fixture(scope="class")
     def data_adapter(self, ib_config):
-        """Create data adapter for testing."""
-        adapter = IbDataAdapter(
-            host=ib_config.host, port=ib_config.port, max_connections=2
-        )
+        """Create data provider for testing."""
+        # IbDataProvider uses host service URL, not direct IB connection
+        import os
+
+        host_service_url = os.getenv("IB_HOST_SERVICE_URL", "http://localhost:5001")
+        adapter = IbDataProvider(host_service_url=host_service_url)
         yield adapter
-        # No explicit cleanup needed - adapter manages its own pool
+        # No explicit cleanup needed - provider manages its own connections
 
     async def test_connection_persistence_across_operations(self, connection_pool):
         """Test that connections persist across multiple operations (fixes the core issue)."""

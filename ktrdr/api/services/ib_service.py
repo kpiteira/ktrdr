@@ -88,7 +88,6 @@ class IbService:
         from datetime import datetime, timezone
         from pathlib import Path
 
-        from ktrdr.config.ib_config import get_ib_config
         from ktrdr.config.loader import ConfigLoader
         from ktrdr.config.models import IbHostServiceConfig, KtrdrConfig
         from ktrdr.data.acquisition.ib_data_provider import IbDataProvider
@@ -130,8 +129,6 @@ class IbService:
 
             if host_service_config.enabled:
                 # Use host service for status
-                ib_config = get_ib_config()
-
                 # Create IbDataProvider for host service communication
                 adapter = IbDataProvider(
                     host_service_url=host_service_config.url,
@@ -636,7 +633,6 @@ class IbService:
             # Use IB data adapter with host service support
             from pathlib import Path
 
-            from ktrdr.config.ib_config import get_ib_config
             from ktrdr.config.loader import ConfigLoader
             from ktrdr.config.models import IbHostServiceConfig, KtrdrConfig
 
@@ -655,9 +651,6 @@ class IbService:
                 host_service_config = IbHostServiceConfig(
                     enabled=False, url="http://localhost:5001"
                 )
-
-            # Get IB connection config for fallback
-            ib_config = get_ib_config()
 
             # Initialize provider for host service communication
             adapter = IbDataProvider(

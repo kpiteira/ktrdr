@@ -12,8 +12,8 @@ import pytest
 
 from ktrdr.api.services.data_service import DataService
 from ktrdr.api.services.ib_service import IbService
-from ktrdr.data.data_manager import DataManager
 from ktrdr.data.acquisition.ib_data_provider import IbDataProvider
+from ktrdr.data.data_manager import DataManager
 
 
 @pytest.fixture(scope="class")
