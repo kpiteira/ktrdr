@@ -14,8 +14,8 @@ from fastapi import APIRouter, HTTPException
 from ktrdr import metadata
 from ktrdr.api.models.base import ApiResponse
 
-# Old architecture removed - using new ktrdr.ib module
-from ktrdr.ib.gap_filler import get_gap_filler
+# Gap filler moved to acquisition layer
+from ktrdr.data.acquisition.gap_filler import get_gap_filler
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)

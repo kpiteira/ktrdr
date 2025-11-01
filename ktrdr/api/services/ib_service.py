@@ -24,7 +24,6 @@ from ktrdr.api.models.ib import (
 )
 from ktrdr.config.ib_config import reset_ib_config
 from ktrdr.data.acquisition.ib_data_provider import IbDataProvider
-from ktrdr.ib import IbPaceManager
 
 logger = get_logger(__name__)
 
@@ -175,24 +174,35 @@ class IbService:
                     ib_available=ib_available,
                 )
             else:
-                # Use direct IB connection pool (existing behavior)
-                from ktrdr.ib.pool_manager import get_shared_ib_pool
-
-                pool = get_shared_ib_pool()
-                pool_stats = pool.get_pool_stats()
-                ib_available = pool_stats["total_connections"] >= 0  # Pool exists
-
-                logger.info(
-                    "🔍 IB status via direct connection - checking connection pool"
+                # Host service not enabled - return unavailable status
+                logger.warning("IB host service not enabled - IB functionality unavailable")
+                return IbStatusResponse(
+                    connection=ConnectionInfo(
+                        connected=False,
+                        host="",
+                        port=0,
+                        client_id=0,
+                        connection_time=None,
+                    ),
+                    connection_metrics=ConnectionMetrics(
+                        total_connections=0,
+                        failed_connections=0,
+                        last_connect_time=None,
+                        last_disconnect_time=None,
+                        uptime_seconds=None,
+                    ),
+                    data_metrics=DataFetchMetrics(
+                        total_requests=0,
+                        successful_requests=0,
+                        failed_requests=0,
+                        total_bars_fetched=0,
+                        success_rate=0.0,
+                    ),
+                    ib_available=False,
                 )
 
         except Exception as e:
             logger.warning(f"IB status check failed: {e}")
-            ib_available = False
-            pool_stats = {}
-
-        if not ib_available:
-            # Return minimal status when IB is not available
             return IbStatusResponse(
                 connection=ConnectionInfo(
                     connected=False, host="", port=0, client_id=0, connection_time=None
@@ -214,216 +224,78 @@ class IbService:
                 ib_available=False,
             )
 
-        # Get connection info from connection pool
-        connection_info = ConnectionInfo(
-            connected=ib_available,
-            host=pool_stats.get("host", ""),
-            port=pool_stats.get("port", 0),
-            client_id=0,  # Pool manages multiple client IDs
-            connection_time=datetime.now(timezone.utc) if ib_available else None,
-        )
-
-        # Get connection metrics from connection pool
-        connection_metrics = ConnectionMetrics(
-            total_connections=pool_stats.get("total_connections", 0),
-            failed_connections=pool_stats.get("failed_connections", 0),
-            last_connect_time=None,  # Enhanced in pool stats if needed
-            last_disconnect_time=None,
-            uptime_seconds=pool_stats.get("uptime_seconds"),
-        )
-
-        # Get pace manager statistics from new architecture
-        pace_manager = IbPaceManager()
-        pace_stats = pace_manager.get_stats()
-        current_state = pace_stats.get("current_state", {})
-
-        # Calculate aggregated data metrics from pace manager
-        total_requests = current_state.get("requests_in_10min", 0)
-        successful_requests = max(
-            0,
-            total_requests
-            - pace_stats.get("violation_statistics", {})
-            .get("ib_error_162", {})
-            .get("count", 0),
-        )
-
-        data_metrics = DataFetchMetrics(
-            total_requests=total_requests,
-            successful_requests=successful_requests,
-            failed_requests=total_requests - successful_requests,
-            total_bars_fetched=0,  # Not tracked in pace manager
-            success_rate=(
-                successful_requests / total_requests if total_requests > 0 else 0.0
-            ),
-        )
-
-        return IbStatusResponse(
-            connection=connection_info,
-            connection_metrics=connection_metrics,
-            data_metrics=data_metrics,
-            ib_available=ib_available,
-        )
-
     async def get_health(self) -> IbHealthStatus:
         """
-        Perform health check on IB connection and functionality.
+        Perform health check on IB connection via host service.
 
         Returns:
             IbHealthStatus indicating overall health
         """
-        # Check if IB connection pool is available
         try:
-            # Use new IB connection pool from new architecture
-            from ktrdr.ib.pool_manager import get_shared_ib_pool
+            # Use IbDataProvider to check health via host service
+            provider = IbDataProvider()
+            health = await provider.health_check()
 
-            pool = get_shared_ib_pool()
-            pool.get_pool_stats()
-            pool_available = True  # Pool created successfully
+            # Extract health status from host service response
+            healthy = health.get("healthy", False)
+            connected = health.get("connected", False)
+
+            return IbHealthStatus(
+                healthy=healthy,
+                connection_ok=connected,
+                data_fetching_ok=healthy,
+                last_successful_request=None,  # Host service doesn't track this yet
+                error_message=None if healthy else "IB host service reports unhealthy",
+            )
+
         except Exception as e:
-            logger.warning(f"IB connection pool not available: {e}")
-            pool_available = False
-
-        if not pool_available:
+            logger.warning(f"IB health check via host service failed: {e}")
             return IbHealthStatus(
                 healthy=False,
                 connection_ok=False,
                 data_fetching_ok=False,
                 last_successful_request=None,
-                error_message="IB connection pool not available",
+                error_message=f"Health check failed: {str(e)}",
             )
-
-        # IB API TEST: Test connection using new architecture
-        api_test_ok = False
-        connection_ok = False
-        try:
-            # Use new architecture connection pool to test connection
-            async with pool.get_connection() as connection:
-                connection_ok = True
-
-                # Test basic connection health first
-                if not connection.is_healthy():
-                    logger.warning("❌ Connection not healthy after acquisition")
-                    raise Exception("Connection not healthy")
-
-                # Test basic connection health - minimal API calls to avoid overwhelming IB
-                ib = connection.ib
-
-                # Level 1: Basic connection state validation (non-invasive)
-                if not ib.isConnected():
-                    logger.warning(
-                        f"❌ Level 1 failed: IB reports not connected (client_id: {connection.client_id})"
-                    )
-                    raise Exception("IB connection lost during health check")
-
-                # Level 2: Light API test - managedAccounts is a cached property
-                try:
-                    accounts = ib.managedAccounts()
-                    if not accounts:
-                        logger.warning(
-                            f"❌ Level 2 failed: No managed accounts (client_id: {connection.client_id})"
-                        )
-                        raise Exception("No managed accounts returned")
-                except Exception as e:
-                    logger.warning(
-                        f"❌ Level 2 failed: managedAccounts call failed: {e}"
-                    )
-                    raise Exception("Managed accounts access failed") from e
-
-                api_test_ok = True
-                logger.info(
-                    f"✅ New architecture health check passed: {len(accounts)} accounts, connection healthy (client_id: {connection.client_id})"
-                )
-
-        except asyncio.TimeoutError as e:
-            logger.error(
-                f"❌ IB health check TIMEOUT: {e} - This indicates a silent connection issue!"
-            )
-            api_test_ok = False
-            connection_ok = False
-        except Exception as e:
-            logger.warning(f"❌ IB health check failed: {e}")
-            api_test_ok = False
-            connection_ok = False
-
-        # Data fetching is OK if we can successfully make API calls
-        data_fetching_ok = api_test_ok
-
-        # Get last successful request time from pace manager
-        pace_manager = IbPaceManager()
-        pace_stats = pace_manager.get_stats()
-        current_state = pace_stats.get("current_state", {})
-
-        last_successful_request = None
-        if (
-            connection_ok and current_state.get("time_since_last_request", 0) < 300
-        ):  # Within 5 minutes
-            last_successful_request = datetime.now(timezone.utc) - timedelta(
-                seconds=current_state.get("time_since_last_request", 0)
-            )
-
-        # Determine overall health
-        healthy = connection_ok and data_fetching_ok
-
-        # Build error message if unhealthy
-        error_message = None
-        if not healthy:
-            errors = []
-            if not connection_ok:
-                errors.append("Connection pool is down")
-            if not data_fetching_ok:
-                errors.append("Data fetching is not working")
-            error_message = "; ".join(errors)
-
-        return IbHealthStatus(
-            healthy=healthy,
-            connection_ok=connection_ok,
-            data_fetching_ok=data_fetching_ok,
-            last_successful_request=last_successful_request,
-            error_message=error_message,
-        )
 
     async def get_connection_resilience_status(self) -> dict[str, Any]:
         """
-        Get basic connection resilience status for new architecture.
+        Get connection resilience status via host service.
 
         Returns:
-            Dictionary with basic resilience metrics
+            Dictionary with basic resilience metrics from host service
         """
-        logger.info("🔍 New architecture: Basic connection resilience status")
+        logger.info("🔍 Getting resilience status from IB host service")
 
         try:
-            # Use new IB connection pool from new architecture
-            from ktrdr.ib.pool_manager import get_shared_ib_pool
-
-            pool = get_shared_ib_pool()
-            pool_stats = pool.get_pool_stats()
+            # Get health status from host service
+            provider = IbDataProvider()
+            health = await provider.health_check()
 
             resilience_status = {
-                "new_architecture_status": "active",
-                "connection_pool_health": {
-                    "total_connections": pool_stats.get("total_connections", 0),
-                    "healthy_connections": pool_stats.get("healthy_connections", 0),
-                    "max_connections": pool_stats.get("max_connections", 5),
-                    "host": pool_stats.get("host", "unknown"),
-                    "port": pool_stats.get("port", 0),
+                "architecture": "host_service",
+                "host_service_health": {
+                    "healthy": health.get("healthy", False),
+                    "connected": health.get("connected", False),
+                    "provider_info": health.get("provider_info", {}),
                 },
                 "features": {
-                    "dedicated_threads": "enabled",
-                    "persistent_event_loops": "enabled",
-                    "auto_cleanup": "enabled",
-                    "idle_timeout": "180s",
+                    "http_communication": "enabled",
+                    "rate_limiting": "handled_by_host_service",
+                    "connection_management": "handled_by_host_service",
                 },
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
-            logger.info("✅ New architecture resilience status completed successfully")
+            logger.info("✅ Resilience status from host service retrieved successfully")
             return resilience_status
 
         except Exception as e:
-            logger.error(f"❌ New architecture resilience status failed: {e}")
+            logger.error(f"❌ Resilience status check failed: {e}")
             return {
                 "error": str(e),
-                "new_architecture_status": "error",
+                "architecture": "host_service",
+                "status": "error",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
@@ -474,48 +346,24 @@ class IbService:
 
     async def cleanup_connections(self) -> dict[str, Any]:
         """
-        Clean up all IB connections.
+        Connection cleanup is handled by the IB host service.
+
+        The backend no longer manages IB connections directly.
+        Connection lifecycle is managed by the host service.
 
         Returns:
-            Dictionary with cleanup results
+            Dictionary indicating cleanup is not needed
         """
-        try:
-            # Use new architecture connection pool cleanup
-            from ktrdr.ib.pool_manager import get_shared_ib_pool
+        logger.info(
+            "Connection cleanup not needed - connections managed by IB host service"
+        )
 
-            pool = get_shared_ib_pool()
-
-            # Get current stats before cleanup
-            stats_before = pool.get_pool_stats()
-            connections_before = stats_before.get("total_connections", 0)
-
-            # Cleanup all connections in pool
-            await pool.cleanup_all()
-
-            # Get stats after cleanup
-            stats_after = pool.get_pool_stats()
-            connections_after = stats_after.get("total_connections", 0)
-            connections_closed = connections_before - connections_after
-
-            logger.info(
-                f"Cleaned up {connections_closed} IB connections via connection pool"
-            )
-
-            return {
-                "success": True,
-                "message": "IB connection pool cleaned up successfully",
-                "connections_closed": connections_closed,
-                "pool_stats_before": stats_before,
-                "pool_stats_after": stats_after,
-            }
-
-        except Exception as e:
-            logger.error(f"Error cleaning up IB connection pool: {e}")
-            return {
-                "success": False,
-                "message": f"Connection pool cleanup failed: {str(e)}",
-                "connections_closed": 0,
-            }
+        return {
+            "success": True,
+            "message": "Connection management delegated to IB host service",
+            "note": "IB connections are managed by the host service and cleaned up automatically",
+            "architecture": "host_service",
+        }
 
     async def update_config(
         self, request: IbConfigUpdateRequest
