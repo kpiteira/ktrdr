@@ -23,7 +23,7 @@ from ktrdr.api.models.ib import (
     IbStatusResponse,
 )
 from ktrdr.config.ib_config import reset_ib_config
-from ktrdr.data.ib_data_adapter import IbDataAdapter
+from ktrdr.data.acquisition.ib_data_provider import IbDataProvider
 from ktrdr.ib import IbPaceManager
 
 logger = get_logger(__name__)
@@ -91,7 +91,7 @@ class IbService:
         from ktrdr.config.ib_config import get_ib_config
         from ktrdr.config.loader import ConfigLoader
         from ktrdr.config.models import IbHostServiceConfig, KtrdrConfig
-        from ktrdr.data.ib_data_adapter import IbDataAdapter
+        from ktrdr.data.acquisition.ib_data_provider import IbDataProvider
 
         # Load host service configuration to determine connection method
         try:
@@ -132,11 +132,8 @@ class IbService:
                 # Use host service for status
                 ib_config = get_ib_config()
 
-                # Create IbDataAdapter in host service mode
-                adapter = IbDataAdapter(
-                    host=ib_config.host,
-                    port=ib_config.port,
-                    use_host_service=True,
+                # Create IbDataProvider for host service communication
+                adapter = IbDataProvider(
                     host_service_url=host_service_config.url,
                 )
 
@@ -662,11 +659,8 @@ class IbService:
             # Get IB connection config for fallback
             ib_config = get_ib_config()
 
-            # Initialize adapter with appropriate mode
-            adapter = IbDataAdapter(
-                host=ib_config.host,
-                port=ib_config.port,
-                use_host_service=host_service_config.enabled,
+            # Initialize provider for host service communication
+            adapter = IbDataProvider(
                 host_service_url=host_service_config.url,
             )
 
