@@ -12,7 +12,7 @@ import json
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from ktrdr import get_logger
 
@@ -30,10 +30,10 @@ class ValidationResult:
 
     is_valid: bool
     symbol: str
-    error_message: Optional[str] = None
-    contract_info: Optional[dict[str, Any]] = None
-    head_timestamps: Optional[dict[str, Any]] = None
-    suggested_symbol: Optional[str] = None
+    error_message: str | None = None
+    contract_info: dict[str, Any] | None = None
+    head_timestamps: dict[str, Any] | None = None
+    suggested_symbol: str | None = None
 
 
 @dataclass

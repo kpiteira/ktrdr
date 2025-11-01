@@ -5,9 +5,8 @@ This module provides service layer functionality for IB operations using the new
 simplified IB architecture with dedicated threads and persistent event loops.
 """
 
-import asyncio
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from ktrdr import get_logger
@@ -175,7 +174,9 @@ class IbService:
                 )
             else:
                 # Host service not enabled - return unavailable status
-                logger.warning("IB host service not enabled - IB functionality unavailable")
+                logger.warning(
+                    "IB host service not enabled - IB functionality unavailable"
+                )
                 return IbStatusResponse(
                     connection=ConnectionInfo(
                         connected=False,
