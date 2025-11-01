@@ -13,7 +13,7 @@ import pytest
 from ktrdr.api.services.data_service import DataService
 from ktrdr.api.services.ib_service import IbService
 from ktrdr.data.data_manager import DataManager
-from ktrdr.data.ib_data_adapter import IbDataAdapter
+from ktrdr.data.acquisition.ib_data_provider import IbDataProvider
 
 
 @pytest.fixture(scope="class")
@@ -47,10 +47,10 @@ class TestIbRefactorValidation:
 
         # Verify external provider is initialized (IB always enabled now)
         assert dm.external_provider is not None
-        assert isinstance(dm.external_provider, IbDataAdapter)
+        assert isinstance(dm.external_provider, IbDataProvider)
 
-        # Verify adapter type
-        assert "IbDataAdapter" in str(type(dm.external_provider))
+        # Verify provider type
+        assert "IbDataProvider" in str(type(dm.external_provider))
 
     def test_data_manager_local_mode(self, shared_data_manager):
         """Test DataManager works in local mode (no IB required)."""
@@ -294,13 +294,13 @@ class TestIbRefactorRegressionPrevention:
         # Test key imports that should continue working
         try:
             from ktrdr.data import DataManager
-            from ktrdr.data.ib_data_adapter import IbDataAdapter
+            from ktrdr.data.acquisition.ib_data_provider import IbDataProvider
             from ktrdr.ib.pool_manager import get_shared_ib_pool
 
             # Should not raise ImportError
             assert DataManager is not None
+            assert IbDataProvider is not None
             assert get_shared_ib_pool is not None
-            assert IbDataAdapter is not None
 
         except ImportError as e:
             pytest.fail(f"Backward compatibility broken: {e}")

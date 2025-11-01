@@ -17,7 +17,7 @@ import pytest
 
 from ktrdr.config.ib_config import get_ib_config
 from ktrdr.data.data_manager import DataManager
-from ktrdr.data.ib_data_adapter import IbDataAdapter
+from ktrdr.data.acquisition.ib_data_provider import IbDataProvider
 from ktrdr.ib import IbConnectionPool, IbErrorClassifier, IbPaceManager
 
 
