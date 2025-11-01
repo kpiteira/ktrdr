@@ -81,7 +81,10 @@ class TestIbDataProviderInitialization(unittest.TestCase):
         # Should NOT have direct IB connection components
         self.assertFalse(hasattr(provider, "symbol_validator"))
         self.assertFalse(hasattr(provider, "data_fetcher"))
-        self.assertFalse(hasattr(provider, "use_host_service"))  # Always HTTP
+
+        # Should have use_host_service=True (for DataManager compatibility)
+        self.assertTrue(hasattr(provider, "use_host_service"))
+        self.assertTrue(provider.use_host_service)
 
 
 class TestIbDataProviderAsyncServiceAdapterMethods(unittest.TestCase):

@@ -58,6 +58,8 @@ class IbDataProvider(ExternalDataProvider, AsyncServiceAdapter):
                              Defaults to http://localhost:5001
         """
         self.host_service_url = host_service_url or "http://localhost:5001"
+        # Always True for HTTP-only provider (required for DataManager context manager check)
+        self.use_host_service = True
 
         # Initialize AsyncServiceAdapter for HTTP communication
         config = HostServiceConfig(
