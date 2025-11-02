@@ -1,6 +1,28 @@
 """
 Data Loading Orchestration Service
 
+⚠️ **DEPRECATED - SCHEDULED FOR REMOVAL IN PHASE 5**
+
+This module will be removed in Phase 5 of the data architecture refactoring.
+Use DataAcquisitionService instead, which provides the same functionality
+with better separation of concerns (Repository + Provider pattern).
+
+**Migration Path**:
+- OLD: DataLoadingOrchestrator.load_with_fallback()
+- NEW: DataAcquisitionService.download_data()
+
+**Why Deprecated**:
+- Tightly coupled to DataManager (will be removed in Phase 5)
+- Functionality duplicated in DataAcquisitionService
+- DataAcquisitionService already implements complete orchestration flow
+
+**Removal Timeline**:
+- Phase 4: Mark as deprecated (current)
+- Phase 5: Delete this file entirely
+
+---
+
+Original Description:
 Extracted from DataManager's _load_with_fallback method to separate
 orchestration logic from primitive data operations.
 """
@@ -21,14 +43,44 @@ logger = get_logger(__name__)
 
 class DataLoadingOrchestrator:
     """
-    Orchestrates complex data loading operations extracted from DataManager.
+    ⚠️ **DEPRECATED** - Orchestrates complex data loading operations extracted from DataManager.
 
+    **DEPRECATION NOTICE**:
+    This class is deprecated and will be removed in Phase 5.
+    Use `DataAcquisitionService.download_data()` instead.
+
+    **Reason**: This class is tightly coupled to DataManager (which will be removed in Phase 5).
+    DataAcquisitionService provides the same functionality with better architecture:
+    - Composes DataRepository (cache operations)
+    - Composes IbDataProvider (external data)
+    - Inherits from ServiceOrchestrator (async operations)
+    - No DataManager dependency
+
+    ---
+
+    Original Description:
     This class handles the _load_with_fallback logic with minimal changes,
     using dependency injection to avoid tight coupling with DataManager.
     """
 
     def __init__(self, data_manager):
-        """Initialize with DataManager reference for access to all methods."""
+        """
+        Initialize with DataManager reference for access to all methods.
+
+        **DEPRECATION WARNING**: This class will be removed in Phase 5.
+        Use DataAcquisitionService.download_data() instead.
+        """
+        # Emit deprecation warning
+        import warnings
+
+        warnings.warn(
+            "DataLoadingOrchestrator is deprecated and will be removed in Phase 5. "
+            "Use DataAcquisitionService.download_data() instead. "
+            "See class docstring for migration path.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         self.data_manager = data_manager
         # Add symbol cache for backend validation caching
         self.symbol_cache = SymbolCache()

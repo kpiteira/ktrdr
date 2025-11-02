@@ -1329,9 +1329,9 @@ if failed_count > 0:
 
 #### TASK 4.5: Integrate DataLoadingOrchestrator
 
-**Status**: 🔴 **NOT STARTED**
+**Status**: ✅ **COMPLETE** (Marked for Deprecation)
 
-**Objective**: Refactor DataLoadingOrchestrator to work with Repository + Provider instead of DataManager.
+**Objective**: ~~Refactor DataLoadingOrchestrator to work with Repository + Provider instead of DataManager.~~ **DECISION: Mark for deprecation in Phase 5.**
 
 **What to REFACTOR**:
 
@@ -1399,13 +1399,54 @@ Since Tasks 4.3-4.4 already integrate gap analysis and segment fetching directly
 4. If not needed, document for Phase 5 removal
 5. Update tests
 
-**Acceptance Criteria**:
-- [ ] Orchestrator dependencies clarified
-- [ ] Either refactored or marked for deprecation
-- [ ] All tests pass
-- [ ] `make quality` passes
+**What Was Actually Done**:
 
-**Estimated Duration**: 1 day
+After thorough analysis, **Option A (Mark for Deprecation)** was implemented:
+
+1. **Analysis Findings**:
+   - DataLoadingOrchestrator is tightly coupled to DataManager (will be deleted in Phase 5)
+   - DataAcquisitionService.download_data() **already implements** the complete orchestration flow:
+     ✅ Cache check via Repository
+     ✅ Head timestamp validation
+     ✅ Gap analysis based on mode
+     ✅ Segment creation and prioritization
+     ✅ Resilient segment fetching
+     ✅ Merge and save to cache
+   - **DUPLICATION**: Both classes implement the same flow (514 lines vs 675 lines)
+   - Refactoring DataLoadingOrchestrator would duplicate existing working code
+
+2. **Decision Rationale**:
+   - DataAcquisitionService IS the orchestrator (inherits from ServiceOrchestrator)
+   - Complete functionality already exists in DataAcquisitionService
+   - Refactoring would be complex and add no value
+   - Clean architecture: eliminate redundancy, reduce maintenance
+
+3. **Actions Taken**:
+   - ✅ Added deprecation notice to module docstring
+   - ✅ Added deprecation warning to class docstring
+   - ✅ Added runtime `DeprecationWarning` to `__init__` method
+   - ✅ Documented migration path (DataLoadingOrchestrator → DataAcquisitionService)
+   - ✅ Updated implementation plan with decision
+
+**Migration Path** (for Phase 5 deletion):
+```python
+# OLD (deprecated):
+orchestrator = DataLoadingOrchestrator(data_manager)
+data = orchestrator.load_with_fallback(symbol, timeframe, mode="tail")
+
+# NEW (use this):
+acquisition_service = DataAcquisitionService()
+result = await acquisition_service.download_data(symbol, timeframe, mode="tail")
+```
+
+**Acceptance Criteria**:
+- [x] Orchestrator dependencies clarified (tightly coupled to DataManager)
+- [x] Marked for deprecation with clear warnings
+- [x] Migration path documented
+- [x] All tests pass (no code changes to tests needed)
+- [x] `make quality` passes
+
+**Estimated Duration**: 1 day → **Actual Duration**: 0.5 days (simpler than refactoring)
 
 ---
 

@@ -102,7 +102,9 @@ class TestDownloadDataBasicFlow:
 
             # Should check cache (called multiple times: initial check + periodic save merges)
             # With SegmentManager integration, load_from_cache is called for periodic saves too
-            assert mock_repo.load_from_cache.call_count >= 1, "Should check cache at least once"
+            assert (
+                mock_repo.load_from_cache.call_count >= 1
+            ), "Should check cache at least once"
 
     @pytest.mark.asyncio
     async def test_download_data_downloads_when_cache_empty(self):
@@ -185,7 +187,9 @@ class TestDownloadDataBasicFlow:
 
             # Should save to cache (may be called multiple times: periodic save + final save)
             # With SegmentManager integration, save_to_cache is called for periodic saves too
-            assert mock_repo.save_to_cache.call_count >= 1, "Should save to cache at least once"
+            assert (
+                mock_repo.save_to_cache.call_count >= 1
+            ), "Should save to cache at least once"
             # Verify it was called with correct symbol and timeframe
             calls = mock_repo.save_to_cache.call_args_list
             assert any(
@@ -234,10 +238,14 @@ class TestDownloadDataBasicFlow:
 
             # Should pass dates to provider (provider uses 'start' and 'end', not 'start_date' and 'end_date')
             # Note: Implementation ensures timezone awareness, so dates will be timezone-aware
-            assert mock_provider.fetch_historical_data.called, "Provider should be called"
+            assert (
+                mock_provider.fetch_historical_data.called
+            ), "Provider should be called"
             call_args = mock_provider.fetch_historical_data.call_args
             # Compare date/time values (implementation may add timezone if not present)
-            assert call_args[1]["start"].replace(tzinfo=None) == start.replace(tzinfo=None)
+            assert call_args[1]["start"].replace(tzinfo=None) == start.replace(
+                tzinfo=None
+            )
             assert call_args[1]["end"].replace(tzinfo=None) == end.replace(tzinfo=None)
 
     @pytest.mark.asyncio
@@ -378,7 +386,9 @@ class TestDownloadDataIntegration:
             # Verify flow (with SegmentManager integration, calls may be multiple due to periodic saves)
             assert result["operation_id"].startswith("op_")
             assert mock_repo.load_from_cache.call_count >= 1, "Should check cache"
-            assert mock_provider.fetch_historical_data.call_count >= 1, "Should fetch data"
+            assert (
+                mock_provider.fetch_historical_data.call_count >= 1
+            ), "Should fetch data"
             assert mock_repo.save_to_cache.call_count >= 1, "Should save to cache"
 
     @pytest.mark.asyncio
