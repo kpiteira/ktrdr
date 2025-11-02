@@ -19,6 +19,7 @@ from ktrdr.async_infrastructure.service_orchestrator import ServiceOrchestrator
 from ktrdr.data.acquisition.gap_analyzer import GapAnalyzer
 from ktrdr.data.acquisition.ib_data_provider import IbDataProvider
 from ktrdr.data.acquisition.segment_manager import SegmentManager
+from ktrdr.data.async_infrastructure.data_progress_renderer import DataProgressRenderer
 from ktrdr.data.components.symbol_cache import SymbolCache
 from ktrdr.data.repository import DataRepository
 from ktrdr.errors.exceptions import DataNotFoundError
@@ -97,13 +98,18 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
         self.max_segment_size = self.MAX_SEGMENT_SIZE
         self.periodic_save_interval = self.PERIODIC_SAVE_INTERVAL
 
+        # Initialize data-specific progress renderer (Task 4.6)
+        # This provides the same progress UX as DataManager
+        self._progress_renderer = DataProgressRenderer()
+
         logger.info(
             f"DataAcquisitionService initialized "
             f"(repository: {type(self.repository).__name__}, "
             f"provider: {type(self.provider).__name__}, "
             f"gap_analyzer: {type(self.gap_analyzer).__name__}, "
             f"symbol_cache: {type(self.symbol_cache).__name__}, "
-            f"segment_manager: {type(self.segment_manager).__name__})"
+            f"segment_manager: {type(self.segment_manager).__name__}, "
+            f"progress_renderer: {type(self._progress_renderer).__name__})"
         )
 
     def _initialize_adapter(self) -> IbDataProvider:
@@ -469,7 +475,18 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
         # Define the download operation function
         async def _download_operation() -> dict[str, Any]:
             """Internal download operation with gap analysis flow."""
+            # Get progress_manager from ServiceOrchestrator context for step tracking
+            progress_manager = self._current_operation_progress
+
             # Step 1: Check cache
+            if progress_manager:
+                progress_manager.start_step(
+                    f"Loading cached data for {symbol} {timeframe}",
+                    step_number=1,
+                    step_percentage=0.0,
+                    step_end_percentage=10.0,
+                )
+
             try:
                 logger.debug(f"Checking cache for {symbol} {timeframe}")
                 existing_data = self.repository.load_from_cache(
@@ -514,6 +531,14 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
                 end_dt = end_dt.replace(tzinfo=timezone.utc)
 
             # Step 2: Validate against head timestamp (with error handling)
+            if progress_manager:
+                progress_manager.start_step(
+                    f"Validating date range for {symbol}",
+                    step_number=2,
+                    step_percentage=10.0,
+                    step_end_percentage=15.0,
+                )
+
             try:
                 is_valid, error_msg, adjusted_start = (
                     await self._validate_request_against_head_timestamp(
@@ -531,6 +556,14 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
                 )
 
             # Step 3: Analyze gaps based on mode (with error handling)
+            if progress_manager:
+                progress_manager.start_step(
+                    f"Analyzing data gaps for {symbol} ({mode} mode)",
+                    step_number=3,
+                    step_percentage=15.0,
+                    step_end_percentage=20.0,
+                )
+
             try:
                 # Convert mode string to DataLoadingMode enum
                 from ktrdr.data.loading_modes import DataLoadingMode  # type: ignore
@@ -569,6 +602,14 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
                     "gaps_filled": 0,
                 }
 
+            if progress_manager:
+                progress_manager.start_step(
+                    f"Creating {len(gaps)} download segments",
+                    step_number=4,
+                    step_percentage=20.0,
+                    step_end_percentage=25.0,
+                )
+
             # Create segments from gaps
             segments = self.segment_manager.create_segments(
                 gaps=gaps,
@@ -584,28 +625,46 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
             )
 
             # Step 5: Download segments with resilience (Task 4.4)
+            if progress_manager:
+                progress_manager.start_step(
+                    f"Downloading {len(segments)} segments from IB",
+                    step_number=5,
+                    step_percentage=25.0,
+                    step_end_percentage=90.0,  # This is the longest step
+                )
+
             # Create periodic save callback
             periodic_save_callback = self._create_periodic_save_callback(
                 symbol, timeframe
             )
 
-            # Use SegmentManager for resilient fetching
-            # Note: progress_manager and cancellation_token are available from
-            # ServiceOrchestrator context via start_managed_operation
+            # Get cancellation_token from ServiceOrchestrator context
+            # (progress_manager already accessed at start of function)
+            cancellation_token = self._current_cancellation_token
+
+            # Use SegmentManager for resilient fetching with progress tracking
             successful_data, successful_count, failed_count = (
                 await self.segment_manager.fetch_segments_with_resilience(
                     symbol=symbol,
                     timeframe=timeframe,
                     segments=segments,
                     external_provider=self.provider,
-                    progress_manager=None,  # Will be injected by ServiceOrchestrator
-                    cancellation_token=None,  # Will be injected by ServiceOrchestrator
+                    progress_manager=progress_manager,  # From ServiceOrchestrator context
+                    cancellation_token=cancellation_token,  # From ServiceOrchestrator context
                     periodic_save_callback=periodic_save_callback,
                     periodic_save_minutes=self.periodic_save_interval,
                 )
             )
 
             # Step 6: Merge and save final data
+            if progress_manager:
+                progress_manager.start_step(
+                    f"Merging and saving {symbol} {timeframe} data",
+                    step_number=6,
+                    step_percentage=90.0,
+                    step_end_percentage=100.0,
+                )
+
             total_rows = 0
             if successful_data:
                 # Combine all downloaded segments
@@ -656,7 +715,7 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
                 "end_date": end_date,
                 "mode": mode,
             },
-            total_steps=5,  # Check cache, validate head, analyze gaps, download, save
+            total_steps=6,  # 1:cache, 2:validate, 3:gaps, 4:segments, 5:download, 6:save
         )
 
     def __repr__(self) -> str:
