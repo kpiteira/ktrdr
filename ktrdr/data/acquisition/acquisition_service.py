@@ -9,11 +9,13 @@ for external data fetching via HTTP.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Optional, Union
 
 from ktrdr.async_infrastructure.service_orchestrator import ServiceOrchestrator
+from ktrdr.data.acquisition.gap_analyzer import GapAnalyzer
 from ktrdr.data.acquisition.ib_data_provider import IbDataProvider
+from ktrdr.data.components.symbol_cache import SymbolCache
 from ktrdr.data.repository import DataRepository
 from ktrdr.errors.exceptions import DataNotFoundError
 
@@ -45,6 +47,8 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
         self,
         repository: Optional[DataRepository] = None,
         provider: Optional[IbDataProvider] = None,
+        gap_analyzer: Optional[GapAnalyzer] = None,
+        symbol_cache: Optional[SymbolCache] = None,
     ) -> None:
         """
         Initialize data acquisition service.
@@ -54,6 +58,10 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
                        If None, creates default instance.
             provider: Optional IbDataProvider instance for external data.
                      If None, creates default instance.
+            gap_analyzer: Optional GapAnalyzer for gap analysis.
+                         If None, creates default instance.
+            symbol_cache: Optional SymbolCache for caching head timestamps.
+                         If None, creates default instance.
         """
         # Store dependencies BEFORE calling super().__init__
         # because _initialize_adapter() will be called during super().__init__
@@ -67,10 +75,16 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
         # Composition: DataRepository for cache operations
         self.repository = self._repository_instance or DataRepository()
 
+        # Gap analysis components (Task 4.3)
+        self.gap_analyzer = gap_analyzer or GapAnalyzer()
+        self.symbol_cache = symbol_cache or SymbolCache()
+
         logger.info(
             f"DataAcquisitionService initialized "
             f"(repository: {type(self.repository).__name__}, "
-            f"provider: {type(self.provider).__name__})"
+            f"provider: {type(self.provider).__name__}, "
+            f"gap_analyzer: {type(self.gap_analyzer).__name__}, "
+            f"symbol_cache: {type(self.symbol_cache).__name__})"
         )
 
     def _initialize_adapter(self) -> IbDataProvider:
@@ -121,29 +135,200 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
         """
         return "IB"
 
+    async def _fetch_head_timestamp(
+        self, symbol: str, timeframe: str
+    ) -> Optional[datetime]:
+        """
+        Fetch head timestamp from provider with caching.
+
+        Extracted from DataManager (Task 4.3).
+
+        Args:
+            symbol: Trading symbol
+            timeframe: Data timeframe
+
+        Returns:
+            Head timestamp datetime or None if failed
+        """
+        # Check cache first
+        cached_info = self.symbol_cache.get(symbol)
+        if cached_info and cached_info.validation_result:
+            # Check if head_timestamps exists and is not None
+            head_timestamps = cached_info.validation_result.get("head_timestamps")
+            if (
+                head_timestamps
+                and isinstance(head_timestamps, dict)
+                and timeframe in head_timestamps
+            ):
+                timestamp_str = head_timestamps[timeframe]
+                logger.debug(
+                    f"📅 Cache hit for {symbol} head timestamp: {timestamp_str}"
+                )
+                # Convert string to datetime if needed
+                if isinstance(timestamp_str, str):
+                    return datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+                return timestamp_str
+
+        # Fetch from provider
+        try:
+            result = await self.provider.get_head_timestamp(
+                symbol=symbol, timeframe=timeframe
+            )
+            logger.debug(f"📅 Fetched head timestamp for {symbol}: {result}")
+
+            # Cache the result if successful
+            if result is not None:
+                from ktrdr.data.components.symbol_cache import ValidationResult
+
+                # Get existing cache or create new
+                cached_info = self.symbol_cache.get(symbol)
+
+                if cached_info and cached_info.validation_result:
+                    # Update existing cache entry
+                    vr = cached_info.validation_result
+                    head_timestamps = vr.get("head_timestamps") or {}
+                    head_timestamps[timeframe] = (
+                        result.isoformat() if isinstance(result, datetime) else result
+                    )
+
+                    validation_result = ValidationResult(
+                        is_valid=vr.get("is_valid", True),
+                        symbol=symbol,
+                        error_message=vr.get("error_message"),
+                        contract_info=vr.get("contract_info"),
+                        head_timestamps=head_timestamps,
+                        suggested_symbol=vr.get("suggested_symbol"),
+                    )
+                else:
+                    # Create new cache entry with just head timestamp
+                    validation_result = ValidationResult(
+                        is_valid=True,
+                        symbol=symbol,
+                        head_timestamps={
+                            timeframe: (
+                                result.isoformat()
+                                if isinstance(result, datetime)
+                                else result
+                            )
+                        },
+                    )
+
+                self.symbol_cache.store(symbol, validation_result)
+
+            return result
+        except Exception as e:
+            logger.error(f"Head timestamp fetch failed for {symbol}: {e}")
+            return None
+
+    async def _validate_request_against_head_timestamp(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_date: datetime,
+        end_date: datetime,
+    ) -> tuple[bool, Optional[str], Optional[datetime]]:
+        """
+        Validate request date range against head timestamp data.
+
+        Extracted from DataManager (Task 4.3).
+
+        Args:
+            symbol: Trading symbol
+            timeframe: Data timeframe
+            start_date: Requested start date
+            end_date: Requested end date
+
+        Returns:
+            Tuple of (is_valid, error_message, adjusted_start_date)
+        """
+        try:
+            # Get head timestamp
+            head_timestamp = await self._fetch_head_timestamp(symbol, timeframe)
+
+            if head_timestamp is None:
+                return True, None, None  # No head timestamp available, assume valid
+
+            # Ensure timezone consistency
+            if head_timestamp.tzinfo is None:
+                head_timestamp = head_timestamp.replace(tzinfo=start_date.tzinfo)
+            elif start_date.tzinfo is None:
+                start_date = start_date.replace(tzinfo=head_timestamp.tzinfo)
+
+            # Check if start_date is before head timestamp
+            if start_date < head_timestamp:
+                error_message = (
+                    f"Requested start date {start_date} is before "
+                    f"earliest available data {head_timestamp}"
+                )
+                logger.warning(f"📅 HEAD TIMESTAMP VALIDATION FAILED: {error_message}")
+                return False, error_message, head_timestamp
+            else:
+                logger.debug(
+                    f"📅 HEAD TIMESTAMP VALIDATION PASSED: {symbol} from {start_date}"
+                )
+                return True, None, None
+
+        except Exception as e:
+            logger.warning(f"Head timestamp validation failed for {symbol}: {e}")
+            # Don't block requests if validation fails
+            return True, None, None
+
+    async def _ensure_symbol_has_head_timestamp(
+        self, symbol: str, timeframe: str
+    ) -> bool:
+        """
+        Ensure symbol has head timestamp data, triggering validation if needed.
+
+        Extracted from DataManager (Task 4.3).
+
+        Args:
+            symbol: Trading symbol
+            timeframe: Data timeframe
+
+        Returns:
+            True if head timestamp is available, False otherwise
+        """
+        try:
+            # Fetch head timestamp (will use cache if available)
+            head_timestamp = await self._fetch_head_timestamp(symbol, timeframe)
+
+            if head_timestamp:
+                logger.info(
+                    f"📅 Successfully obtained head timestamp for {symbol}: {head_timestamp}"
+                )
+                return True
+            else:
+                logger.warning(f"📅 Failed to fetch head timestamp for {symbol}")
+                return False
+
+        except Exception as e:
+            logger.warning(f"Error ensuring head timestamp for {symbol}: {e}")
+            return False
+
     async def download_data(
         self,
         symbol: str,
         timeframe: str,
         start_date: Optional[Union[str, datetime]] = None,
         end_date: Optional[Union[str, datetime]] = None,
+        mode: str = "tail",
     ) -> dict[str, Any]:
         """
-        Download data from external provider (IB).
+        Download data from external provider (IB) with gap analysis.
 
-        Basic download flow:
+        Enhanced download flow (Task 4.3):
         1. Check cache for existing data
-        2. Download from provider (IB)
-        3. Save to cache
-
-        This is a simplified version. Gap analysis and segmentation
-        will be added in future tasks.
+        2. Validate head timestamp
+        3. Analyze gaps based on mode
+        4. Download missing data
+        5. Save to cache
 
         Args:
             symbol: Trading symbol (e.g., 'AAPL', 'EURUSD')
             timeframe: Data timeframe (e.g., '1h', '1d')
             start_date: Optional start date for data range
             end_date: Optional end date for data range
+            mode: Download mode - 'tail' (recent), 'backfill' (historical), 'full' (all gaps)
 
         Returns:
             Dictionary with operation tracking information:
@@ -159,12 +344,18 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
         """
         logger.info(
             f"Starting data download for {symbol} {timeframe} "
-            f"(start: {start_date}, end: {end_date})"
+            f"(mode: {mode}, start: {start_date}, end: {end_date})"
         )
+
+        # Validate mode
+        if mode not in ["tail", "backfill", "full"]:
+            raise ValueError(
+                f"Invalid mode: {mode}. Must be 'tail', 'backfill', or 'full'"
+            )
 
         # Define the download operation function
         async def _download_operation() -> dict[str, Any]:
-            """Internal download operation with cache-check → download → save flow."""
+            """Internal download operation with gap analysis flow."""
             # Step 1: Check cache
             try:
                 logger.debug(f"Checking cache for {symbol} {timeframe}")
@@ -180,10 +371,6 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
                 cache_exists = False
                 existing_data = None
 
-            # Step 2: Download from provider
-            # For now, always download (gap analysis comes in later tasks)
-            logger.info(f"Downloading {symbol} {timeframe} from provider")
-
             # Convert dates if needed and handle defaults
             if start_date is not None:
                 if isinstance(start_date, str):
@@ -192,8 +379,6 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
                     start_dt = start_date
             else:
                 # Default: last 30 days
-                from datetime import timedelta
-
                 start_dt = datetime.now() - timedelta(days=30)
 
             if end_date is not None:
@@ -205,34 +390,115 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
                 # Default: now
                 end_dt = datetime.now()
 
-            # Fetch from provider (uses 'start' and 'end', not 'start_date' and 'end_date')
-            downloaded_data = await self.provider.fetch_historical_data(
-                symbol=symbol,
-                timeframe=timeframe,
-                start=start_dt,
-                end=end_dt,
-            )
+            # Ensure timezone awareness
+            if start_dt.tzinfo is None:
+                from datetime import timezone
 
-            logger.info(
-                f"Downloaded {len(downloaded_data)} rows for {symbol} {timeframe}"
-            )
+                start_dt = start_dt.replace(tzinfo=timezone.utc)
+            if end_dt.tzinfo is None:
+                from datetime import timezone
 
-            # Step 3: Save to cache
-            logger.debug(f"Saving data to cache for {symbol} {timeframe}")
-            self.repository.save_to_cache(symbol, timeframe, downloaded_data)
-            logger.info(f"Data saved to cache for {symbol} {timeframe}")
+                end_dt = end_dt.replace(tzinfo=timezone.utc)
+
+            # Step 2: Validate against head timestamp (with error handling)
+            try:
+                is_valid, error_msg, adjusted_start = (
+                    await self._validate_request_against_head_timestamp(
+                        symbol, timeframe, start_dt, end_dt
+                    )
+                )
+                if not is_valid and adjusted_start:
+                    logger.warning(
+                        f"Adjusting start date from {start_dt} to {adjusted_start}"
+                    )
+                    start_dt = adjusted_start
+            except Exception as e:
+                logger.warning(
+                    f"Head timestamp validation failed: {e}, continuing with requested dates"
+                )
+
+            # Step 3: Analyze gaps based on mode (with error handling)
+            try:
+                # Convert mode string to DataLoadingMode enum
+                from ktrdr.data.data_loading_mode import DataLoadingMode  # type: ignore
+
+                mode_enum = {
+                    "tail": DataLoadingMode.TAIL,
+                    "backfill": DataLoadingMode.BACKFILL,
+                    "full": DataLoadingMode.FULL,
+                }[mode]
+
+                gaps = self.gap_analyzer.analyze_gaps_by_mode(
+                    mode=mode_enum,
+                    existing_data=existing_data,
+                    requested_start=start_dt,
+                    requested_end=end_dt,
+                    timeframe=timeframe,
+                    symbol=symbol,
+                )
+                logger.info(
+                    f"Gap analysis found {len(gaps)} gaps to fill in {mode} mode"
+                )
+            except Exception as e:
+                logger.error(
+                    f"Gap analysis failed: {e}, falling back to full range download"
+                )
+                gaps = [(start_dt, end_dt)]
+
+            # Step 4: Download missing data
+            if not gaps:
+                logger.info("No gaps to fill, using cached data")
+                return {
+                    "symbol": symbol,
+                    "timeframe": timeframe,
+                    "rows_downloaded": 0,
+                    "cache_hit": cache_exists,
+                    "gaps_filled": 0,
+                }
+
+            # Download each gap
+            total_rows = 0
+            import pandas as pd
+
+            for gap_start, gap_end in gaps:
+                logger.info(f"Downloading gap: {gap_start} to {gap_end}")
+                gap_data = await self.provider.fetch_historical_data(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    start=gap_start,
+                    end=gap_end,
+                )
+                total_rows += len(gap_data)
+
+                # Merge with existing and save (simple concat + drop duplicates)
+                if existing_data is not None and not existing_data.empty:
+                    merged_data = pd.concat([existing_data, gap_data])
+                    merged_data = merged_data[
+                        ~merged_data.index.duplicated(keep="last")
+                    ]
+                    merged_data = merged_data.sort_index()
+                else:
+                    merged_data = gap_data
+
+                # Save to cache
+                self.repository.save_to_cache(symbol, timeframe, merged_data)
+                existing_data = merged_data
+
+            logger.info(f"Downloaded {total_rows} rows across {len(gaps)} gaps")
 
             # Return summary
             return {
                 "symbol": symbol,
                 "timeframe": timeframe,
-                "rows_downloaded": len(downloaded_data),
+                "rows_downloaded": total_rows,
                 "cache_hit": cache_exists,
+                "gaps_filled": len(gaps),
+                "mode": mode,
             }
 
         # Use ServiceOrchestrator's start_managed_operation for background execution
         return await self.start_managed_operation(
-            operation_name=f"Download {symbol} {timeframe}",
+            operation_name=f"Download {symbol} {timeframe} ({mode} mode)",
             operation_type="data_load",
             operation_func=_download_operation,
             metadata={
@@ -240,8 +506,9 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
                 "timeframe": timeframe,
                 "start_date": start_date,
                 "end_date": end_date,
+                "mode": mode,
             },
-            total_steps=3,  # Check cache, download, save
+            total_steps=5,  # Check cache, validate head, analyze gaps, download, save
         )
 
     def __repr__(self) -> str:

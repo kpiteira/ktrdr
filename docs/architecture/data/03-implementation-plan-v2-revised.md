@@ -838,10 +838,69 @@ Extract download logic from DataManager into DataAcquisitionService.
 **Current State**:
 - ✅ DataRepository (Phase 2) - cache
 - ✅ IbDataProvider (Phase 3) - IB HTTP
-- ❌ NO DataAcquisitionService
+- ❌ NO DataAcquisitionService (Tasks 4.1-4.2 create shell)
 - ✅ DataManager has ALL download logic
 
 **Strategy**: Extract methods from DataManager incrementally.
+
+### Critical Success Factors
+
+**1. Backward Compatibility During Phase 4**:
+
+**IMPORTANT - Code Deletion Strategy**:
+- ❌ **DO NOT delete extracted code from DataManager during Phase 4**
+- ✅ **Keep both implementations in parallel** for safety
+- ✅ **New endpoints use DataAcquisitionService**
+- ✅ **DataManager code deleted in Phase 5 ONLY**
+
+**Phase 4 Coexistence**:
+- DataManager remains 100% functional throughout Phase 4
+- DataManager's extracted methods (head timestamp, gap analysis, etc.) **stay in DataManager**
+- POST /data/load routes to **DataAcquisitionService** (not DataManager)
+- Both services coexist for rollback safety
+- If DataAcquisitionService has issues, can quickly revert to DataManager
+
+**Phase 5 Deletion**:
+- After Phase 4 validates DataAcquisitionService works correctly
+- Delete DataManager entirely
+- Delete all extracted methods from original location
+- Remove backward compatibility shims
+
+**2. Task Dependency Order**:
+
+```
+Task 4.1 ──> Task 4.2 ──> Task 4.3 ──> Task 4.4 ──> Task 4.7
+                              │                           ▲
+                              │                           │
+                              └──> Task 4.6 ──────────────┘
+                                      │
+                                      (Can run in parallel)
+
+Task 4.5: Independent review (can run anytime)
+```
+
+**Dependencies**:
+- **Task 4.3 MUST complete before 4.4** (provides gap analysis)
+- **Task 4.6 can run in parallel with 4.3-4.5** (independent progress work)
+- **Task 4.7 requires 4.3-4.6 complete** (wires everything together)
+- **Task 4.5 is independent** (review/refactor orchestrator)
+
+**3. Configuration Management**:
+
+All configurable values use environment variable overrides:
+
+```bash
+# Environment variables for DataAcquisitionService
+export DATA_MAX_SEGMENT_SIZE=5000        # Max bars per download segment
+export DATA_PERIODIC_SAVE_MIN=0.5        # Minutes between incremental saves
+```
+
+**4. Error Handling Philosophy**:
+
+- **Fail gracefully**: Head timestamp failures fall back to defaults
+- **Partial success**: Failed segments don't stop entire download
+- **Clear logging**: All errors logged with context
+- **User-friendly**: Error messages explain what happened and next steps
 
 ### Duration
 
@@ -897,11 +956,816 @@ class DataAcquisitionService(ServiceOrchestrator):
 
 ---
 
-#### TASK 4.3-4.7: [Same as previous plan]
+#### TASK 4.3: Integrate Gap Analysis and Mode-Based Logic
 
-Extract validation, progress, gap analysis, segment fetching, etc.
+**Status**: 🔴 **NOT STARTED**
 
-**Total Duration**: 1-2 weeks
+**Objective**: Extract and integrate gap analysis logic from DataManager into DataAcquisitionService.
+
+**What to EXTRACT**:
+
+From DataManager, extract the gap analysis workflow:
+
+1. **Gap Analysis** (`gap_analyzer` component):
+   - Already instantiated as component in DataManager (`__init__` line 137)
+   - Used by `DataLoadingOrchestrator.load_with_fallback()`
+   - Key methods:
+     - `analyze_gaps_by_mode(existing_data, mode, start_date, end_date)` - mode-aware gap detection
+     - `detect_gaps(data, timeframe)` - find internal gaps in data
+     - `prioritize_gaps_by_mode(gaps, mode)` - sort gaps by download mode priority
+
+2. **Mode-Based Download Logic**:
+   - **tail mode**: Download recent data (missing at end)
+   - **backfill mode**: Download historical data (missing at beginning)
+   - **full mode**: Download complete range (fill all gaps)
+
+3. **Head Timestamp Validation**:
+   - `_fetch_head_timestamp_async()` - get earliest available data from provider
+   - `_validate_request_against_head_timestamp()` - validate requested range
+   - `_ensure_symbol_has_head_timestamp()` - cache head timestamps per symbol
+
+**Implementation Pattern**:
+
+```python
+# In DataAcquisitionService
+
+from ktrdr.data.acquisition.gap_analyzer import GapAnalyzer
+from ktrdr.data.components.symbol_cache import SymbolCache
+
+class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
+    def __init__(self, ...):
+        # ... existing code ...
+        self.gap_analyzer = GapAnalyzer()
+        self.symbol_cache = SymbolCache()  # For caching head timestamps
+
+    async def download_data(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        mode: str = "tail",  # tail, backfill, full (NEW PARAMETER)
+        ...
+    ):
+        # 1. Check cache (existing)
+        try:
+            existing_data = self.repository.load_from_cache(symbol, timeframe)
+        except DataNotFoundError:
+            existing_data = None
+
+        # 2. Validate against head timestamp (NEW)
+        head_timestamp = await self._fetch_head_timestamp(symbol, timeframe)
+        await self._validate_request_against_head_timestamp(
+            symbol, timeframe, start_date, end_date, head_timestamp
+        )
+
+        # 3. Analyze gaps based on mode (NEW)
+        gaps = self.gap_analyzer.analyze_gaps_by_mode(
+            existing_data=existing_data,
+            mode=mode,
+            start_date=start_date or head_timestamp,
+            end_date=end_date or datetime.now(),
+            timeframe=timeframe,
+        )
+
+        # 4. Convert gaps to download segments (next task)
+        # 5. Download segments (next task)
+        # 6. Save to cache
+```
+
+**Files Created**:
+- None (uses existing GapAnalyzer)
+
+**Files Modified**:
+- `ktrdr/data/acquisition/acquisition_service.py` - Add gap analysis integration
+
+**Methods to Extract from DataManager**:
+
+1. **`_fetch_head_timestamp_async()`** (lines 953-982):
+   - Calls `provider.get_head_timestamp(symbol, timeframe)`
+   - Caches result in symbol cache
+   - Returns earliest available timestamp
+
+2. **`_validate_request_against_head_timestamp()`** (lines 1001-1061):
+   - Validates requested date range
+   - Adjusts start_date if before head timestamp
+   - Logs warnings for data availability issues
+
+3. **`_ensure_symbol_has_head_timestamp()`** (lines 1093-1122):
+   - Ensures head timestamp is cached for symbol
+   - Fetches if not in cache
+
+**Scope**:
+0. **Add `mode` parameter** to `download_data()` signature (PREREQUISITE)
+1. Add `gap_analyzer` to DataAcquisitionService
+2. Add `symbol_cache` to DataAcquisitionService (for head timestamp caching)
+3. Extract head timestamp methods
+4. Update `download_data()` to use gap analysis
+5. Add mode-based gap detection
+6. Add error handling for head timestamp failures
+7. Add unit tests for gap integration
+8. Add integration tests for mode-based downloads
+
+**Error Handling Strategy**:
+
+```python
+# Error handling for head timestamp fetch
+try:
+    head_timestamp = await self._fetch_head_timestamp(symbol, timeframe)
+except Exception as e:
+    logger.warning(f"Failed to fetch head timestamp for {symbol}: {e}")
+    # Fall back to reasonable default (e.g., 10 years ago)
+    head_timestamp = datetime.now() - timedelta(days=365*10)
+
+# Error handling for gap analysis
+try:
+    gaps = self.gap_analyzer.analyze_gaps_by_mode(...)
+except Exception as e:
+    logger.error(f"Gap analysis failed for {symbol}: {e}")
+    # Fall back to full download
+    gaps = [(start_date or head_timestamp, end_date or datetime.now())]
+```
+
+**Unit Test Specifications** (15+ tests):
+
+**Basic Integration Tests**:
+- `test_gap_analyzer_initialization` - Verify GapAnalyzer instantiated correctly
+- `test_symbol_cache_initialization` - Verify SymbolCache instantiated correctly
+- `test_mode_parameter_added_to_signature` - Verify mode parameter exists with default
+
+**Head Timestamp Tests**:
+- `test_fetch_head_timestamp_caches_result` - First fetch calls provider, second uses cache
+- `test_fetch_head_timestamp_handles_provider_failure` - Falls back gracefully on error
+- `test_validate_request_adjusts_start_date_before_head` - Adjusts start_date if before head timestamp
+- `test_validate_request_logs_warning_for_old_dates` - Warns when requested date very old
+- `test_ensure_symbol_has_head_timestamp_fetches_if_missing` - Fetches when not in cache
+
+**Gap Analysis Tests**:
+- `test_mode_tail_detects_end_gaps` - Tail mode identifies missing recent data
+- `test_mode_backfill_detects_start_gaps` - Backfill mode identifies missing historical data
+- `test_mode_full_detects_all_gaps` - Full mode identifies all missing data ranges
+- `test_gap_analysis_with_no_cache` - Handles case when no cached data exists
+- `test_gap_analysis_with_complete_cache` - Returns empty gaps when cache complete
+
+**Error Handling Tests**:
+- `test_head_timestamp_failure_uses_fallback` - Uses default when head timestamp fails
+- `test_gap_analysis_failure_falls_back_to_full` - Falls back to full download on gap error
+- `test_invalid_mode_raises_error` - Validates mode parameter (tail/backfill/full only)
+
+**Integration Test Scenarios**:
+- D3.1: Download EURUSD 1h (tail mode) - should detect gap at end
+- D3.2: Download AAPL 1d (backfill mode) - should detect gap at beginning
+- D3.3: Download with full mode - should detect all gaps
+
+**Acceptance Criteria**:
+- [ ] GapAnalyzer integrated into DataAcquisitionService
+- [ ] Head timestamp validation works
+- [ ] Mode-based gap detection works (tail, backfill, full)
+- [ ] Gaps correctly prioritized by mode
+- [ ] Unit tests pass (15+ tests)
+- [ ] Integration tests D3.1-D3.3 pass
+- [ ] `make quality` passes
+
+**Estimated Duration**: 2 days
+
+**Branch Strategy**: Continue on `feature/data-architecture-separation`
+
+---
+
+#### TASK 4.4: Integrate Segment Manager for Resilient Downloads
+
+**Status**: 🔴 **NOT STARTED**
+
+**Objective**: Integrate SegmentManager for resilient, progress-tracked segment downloads.
+
+**What to EXTRACT**:
+
+From DataManager's `_fetch_segments_with_component_async()` (lines 708-794):
+
+1. **Segment Creation**:
+   - Convert gaps into download segments
+   - `SegmentManager.create_segments(gaps, max_segment_size)`
+   - `SegmentManager.prioritize_segments(segments, mode)`
+
+2. **Resilient Fetching**:
+   - `SegmentManager.fetch_segments_with_resilience()` with:
+     - Progress tracking via GenericProgressManager
+     - Cancellation token support
+     - Periodic save callback (every 0.5 minutes)
+     - Retry logic with exponential backoff
+     - Error recovery (continue on failed segments)
+
+3. **Periodic Save Logic**:
+   - `_save_periodic_progress()` from DataManager (lines 889-951)
+   - Saves downloaded data incrementally during long operations
+   - Merges with existing cache
+
+**Implementation Pattern**:
+
+```python
+# In DataAcquisitionService
+
+from ktrdr.data.acquisition.segment_manager import SegmentManager
+
+class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
+    def __init__(self, ...):
+        # ... existing code ...
+        self.segment_manager = SegmentManager()
+
+    async def download_data(self, ...):
+        # ... gap analysis from Task 4.3 ...
+
+        # 4. Create download segments (NEW)
+        segments = self.segment_manager.create_segments(
+            gaps=gaps,
+            max_segment_size=5000,  # Max bars per segment
+        )
+
+        segments = self.segment_manager.prioritize_segments(
+            segments=segments,
+            mode=mode,
+        )
+
+        # 5. Download segments with resilience (NEW)
+        # Note: progress_manager and cancellation_token come from ServiceOrchestrator
+        # They are available within the operation_func passed to start_managed_operation()
+        successful_data, successful_count, failed_count = \
+            await self.segment_manager.fetch_segments_with_resilience(
+                symbol=symbol,
+                timeframe=timeframe,
+                segments=segments,
+                external_provider=self.provider,
+                progress_manager=progress_manager,  # From ServiceOrchestrator context
+                cancellation_token=cancellation_token,  # From ServiceOrchestrator context
+                periodic_save_callback=self._create_periodic_save_callback(symbol, timeframe),
+                periodic_save_minutes=self.periodic_save_interval,
+            )
+
+        # 6. Merge and save
+        if successful_data:
+            # Combine all downloaded segments
+            combined = pd.concat(successful_data, ignore_index=False)
+            combined = combined.sort_index()  # Ensure chronological order
+
+            if existing_data is not None and not existing_data.empty:
+                # Merge with existing cache using Repository's merge_data
+                merged_data = self.repository.merge_data(existing_data, combined)
+            else:
+                merged_data = combined
+
+            self.repository.save_to_cache(symbol, timeframe, merged_data)
+```
+
+**Configuration Constants**:
+
+```python
+# In DataAcquisitionService class definition
+class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
+    # Configuration constants with environment variable overrides
+    MAX_SEGMENT_SIZE = int(os.getenv("DATA_MAX_SEGMENT_SIZE", "5000"))
+    PERIODIC_SAVE_INTERVAL = float(os.getenv("DATA_PERIODIC_SAVE_MIN", "0.5"))
+
+    def __init__(self, ...):
+        # Use class constants for configuration
+        self.max_segment_size = self.MAX_SEGMENT_SIZE
+        self.periodic_save_interval = self.PERIODIC_SAVE_INTERVAL
+```
+
+**Files Modified**:
+- `ktrdr/data/acquisition/acquisition_service.py`
+
+**Methods to Extract**:
+
+1. **`_save_periodic_progress()`** (lines 889-951):
+   - Merges downloaded data with existing cache
+   - Saves incrementally during long downloads
+   - Returns count of bars saved
+
+2. **`_create_periodic_save_callback()`** (new wrapper):
+   - Creates callback closure for segment manager
+   - Captures symbol/timeframe context
+
+**Scope**:
+1. Add `segment_manager` to DataAcquisitionService
+2. Extract periodic save logic
+3. Integrate segment fetching into download flow
+4. Add progress updates for segment downloads
+5. Handle failed segments gracefully
+6. Add unit tests for segment integration
+7. Add integration tests for resilient downloads
+
+**Error Handling Strategy**:
+
+```python
+# Handle segment creation failures
+try:
+    segments = self.segment_manager.create_segments(gaps, self.max_segment_size)
+except Exception as e:
+    logger.error(f"Segment creation failed: {e}")
+    # Fall back to single segment covering entire gap
+    segments = [(start_date, end_date)]
+
+# Handle partial segment failures
+if failed_count > 0:
+    logger.warning(
+        f"Download completed with {failed_count} failed segments. "
+        f"Successfully downloaded {successful_count} segments."
+    )
+    # Don't raise error - partial success is acceptable
+```
+
+**Unit Test Specifications** (20+ tests):
+
+**Segment Creation Tests**:
+- `test_segment_manager_initialization` - Verify SegmentManager instantiated
+- `test_create_segments_from_single_gap` - Single gap → multiple segments
+- `test_create_segments_respects_max_size` - Segments don't exceed MAX_SEGMENT_SIZE
+- `test_prioritize_segments_tail_mode` - Tail mode prioritizes recent segments first
+- `test_prioritize_segments_backfill_mode` - Backfill mode prioritizes old segments first
+- `test_prioritize_segments_full_mode` - Full mode uses natural order
+
+**Resilient Fetching Tests**:
+- `test_fetch_segments_with_resilience_retries_failures` - Failed segments retried
+- `test_fetch_segments_exponential_backoff` - Retry delay increases exponentially
+- `test_fetch_segments_max_retries_reached` - Gives up after max retries
+- `test_fetch_segments_partial_success_continues` - Continues after partial failures
+- `test_fetch_segments_cancellation_stops_download` - Cancellation token works
+
+**Periodic Save Tests**:
+- `test_periodic_save_callback_created` - Callback closure captures context
+- `test_periodic_save_merges_with_cache` - Incremental save merges correctly
+- `test_periodic_save_interval_respected` - Saves happen at configured interval
+- `test_periodic_save_handles_merge_failures` - Handles merge errors gracefully
+
+**Data Merging Tests**:
+- `test_merge_multiple_segments_chronologically` - Segments merged in order
+- `test_merge_with_existing_data_removes_duplicates` - Duplicates removed
+- `test_merge_with_no_existing_data` - Handles empty cache case
+- `test_merge_respects_index_order` - Final data sorted chronologically
+
+**Configuration Tests**:
+- `test_max_segment_size_configurable` - MAX_SEGMENT_SIZE can be overridden
+- `test_periodic_save_interval_configurable` - PERIODIC_SAVE_INTERVAL can be overridden
+
+**Integration Test Scenarios**:
+- D3.1: Download with progress tracking - verify incremental saves
+- D3.2: Download with simulated failure - verify retry logic
+- D3.3: Download with cancellation - verify partial save
+
+**Acceptance Criteria**:
+- [ ] SegmentManager integrated into DataAcquisitionService
+- [ ] Segments created from gaps correctly
+- [ ] Resilient fetching with retry works
+- [ ] Periodic save during download works
+- [ ] Failed segments don't stop entire download
+- [ ] Progress tracking shows segment-level detail
+- [ ] Unit tests pass (20+ tests)
+- [ ] Integration tests D3.1-D3.3 pass
+- [ ] `make quality` passes
+
+**Estimated Duration**: 2-3 days
+
+---
+
+#### TASK 4.5: Integrate DataLoadingOrchestrator
+
+**Status**: 🔴 **NOT STARTED**
+
+**Objective**: Refactor DataLoadingOrchestrator to work with Repository + Provider instead of DataManager.
+
+**What to REFACTOR**:
+
+The `DataLoadingOrchestrator` (lines 35-512 in `data_loading_orchestrator.py`) currently:
+
+1. **Takes DataManager reference**:
+   - `__init__(self, data_manager)` - stores reference
+   - Calls `data_manager.load_data()` for cache access
+   - Calls `data_manager.external_provider` for IB access
+
+2. **Orchestrates full download flow**:
+   - `load_with_fallback()` - main method
+   - Cache check → Gap analysis → Segment fetching → Merge → Save
+   - Handles all three modes: tail, backfill, full
+   - Progress tracking integration
+   - Fallback to local on IB failure
+
+**Refactoring Pattern**:
+
+```python
+# BEFORE (current):
+class DataLoadingOrchestrator:
+    def __init__(self, data_manager):
+        self.data_manager = data_manager
+
+    def load_with_fallback(self, ...):
+        # Cache check
+        cached = self.data_manager.load_data(symbol, timeframe, mode="local")
+        # Download
+        self.data_manager.external_provider.fetch_historical_data(...)
+
+# AFTER (refactored):
+class DataLoadingOrchestrator:
+    def __init__(self, repository, provider):
+        self.repository = repository  # DataRepository for cache
+        self.provider = provider      # IbDataProvider for downloads
+
+    def load_with_fallback(self, ...):
+        # Cache check
+        cached = self.repository.load_from_cache(symbol, timeframe)
+        # Download
+        self.provider.fetch_historical_data(...)
+```
+
+**Implementation Strategy**:
+
+Since Tasks 4.3-4.4 already integrate gap analysis and segment fetching directly into DataAcquisitionService, we have two options:
+
+**Option A: Simplify Orchestrator** (RECOMMENDED)
+- DataAcquisitionService directly orchestrates download flow
+- Keep orchestrator as optional advanced fallback logic
+- Remove DataManager dependency
+
+**Option B: Use Orchestrator as Main Flow**
+- DataAcquisitionService delegates to orchestrator
+- Orchestrator takes Repository + Provider + GapAnalyzer + SegmentManager
+- More complex but more modular
+
+**Decision**: Use **Option A** - DataAcquisitionService is already the orchestrator (inherits from ServiceOrchestrator). The `DataLoadingOrchestrator` can be simplified or marked for deprecation in Phase 5.
+
+**Scope**:
+1. Review if orchestrator is still needed post Tasks 4.3-4.4
+2. If needed, refactor to take Repository + Provider
+3. Update DataAcquisitionService to use refactored orchestrator
+4. If not needed, document for Phase 5 removal
+5. Update tests
+
+**Acceptance Criteria**:
+- [ ] Orchestrator dependencies clarified
+- [ ] Either refactored or marked for deprecation
+- [ ] All tests pass
+- [ ] `make quality` passes
+
+**Estimated Duration**: 1 day
+
+---
+
+#### TASK 4.6: Add Enhanced Progress Tracking
+
+**Status**: 🔴 **NOT STARTED**
+
+**Objective**: Add comprehensive progress tracking throughout the download flow.
+
+**What to EXTRACT**:
+
+From DataManager's progress tracking infrastructure:
+
+1. **GenericProgressManager** (already in async_infrastructure):
+   - Used in `_load_data_core_logic()` (lines 379-580)
+   - `start_operation()`, `update_progress()`, `complete_operation()`
+   - Integrates with DataProgressRenderer
+
+2. **DataProgressRenderer** (in `data/async_infrastructure/`):
+   - Data-specific progress display
+   - Shows: symbol, timeframe, bars downloaded, ETA
+   - Used by GenericProgressManager
+
+3. **TimeEstimationEngine** (in `async_infrastructure/`):
+   - Estimates completion time
+   - Learns from historical operations
+
+4. **Progress Context**:
+   - Operation metadata (symbol, timeframe, mode, dates)
+   - Current item detail (e.g., "Downloading segment 3/5")
+   - Step descriptions
+
+**Implementation Pattern**:
+
+**Note**: ServiceOrchestrator's `start_managed_operation()` already creates a progress manager internally. This task focuses on **enhancing** the progress tracking with data-specific context and detailed step updates.
+
+```python
+# In DataAcquisitionService.download_data()
+
+# Option 1: Let ServiceOrchestrator handle progress (RECOMMENDED)
+# - start_managed_operation() creates progress manager automatically
+# - We just need to update `total_steps` and add progress updates within operation_func
+
+# Option 2: Manual progress manager (if needed for custom rendering)
+from ktrdr.async_infrastructure.progress import GenericProgressManager
+from ktrdr.data.async_infrastructure.data_progress_renderer import DataProgressRenderer
+
+progress_manager = GenericProgressManager(
+    callback=progress_callback,  # From parameter or ServiceOrchestrator
+    renderer=DataProgressRenderer()
+)
+
+# Start operation
+progress_manager.start_operation(
+    operation_id=f"download_{symbol}_{timeframe}",
+    total_steps=6,  # cache check, head timestamp, gap analysis, segment creation, download, save
+    context={
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "mode": mode,
+        "operation_type": "data_download",
+    }
+)
+
+# Update throughout flow
+progress_manager.update_progress(
+    step=1,
+    message="Checking cache for existing data",
+    context={"current_item_detail": f"Loading {symbol} {timeframe} from cache"}
+)
+
+progress_manager.update_progress(
+    step=2,
+    message="Validating data range with provider",
+    context={"current_item_detail": "Fetching head timestamp"}
+)
+
+# ... etc for each major step
+
+# Complete
+progress_manager.complete_operation()
+```
+
+**Progress Steps** (6 total):
+1. Check cache for existing data
+2. Fetch and validate head timestamp
+3. Analyze gaps based on mode
+4. Create download segments
+5. Download segments (with sub-progress per segment)
+6. Merge and save to cache
+
+**Files Modified**:
+- `ktrdr/data/acquisition/acquisition_service.py`
+
+**Scope**:
+1. Add DataProgressRenderer to DataAcquisitionService
+2. Add GenericProgressManager integration
+3. Add progress updates for all 6 steps
+4. Add segment-level sub-progress
+5. Add time estimation
+6. Test progress callbacks work correctly
+
+**Acceptance Criteria**:
+- [ ] Progress tracking for all download steps
+- [ ] Segment-level progress detail
+- [ ] Time estimation works
+- [ ] Progress callbacks fire correctly
+- [ ] Progress display shows meaningful context
+- [ ] Integration tests show progress updates
+- [ ] `make quality` passes
+
+**Estimated Duration**: 1-2 days
+
+---
+
+#### TASK 4.7: Wire DataAcquisitionService to API and CLI
+
+**Status**: 🔴 **NOT STARTED**
+
+**Objective**: Create new API endpoints and update CLI to use DataAcquisitionService.
+
+**What to CREATE**:
+
+### API Changes
+
+**1. New Endpoint: POST /data/acquire/download**
+
+```python
+# In ktrdr/api/endpoints/data.py
+
+from ktrdr.api.dependencies import get_acquisition_service
+
+@router.post(
+    "/data/acquire/download",
+    response_model=DataLoadOperationResponse,
+    tags=["Data Acquisition"],
+    summary="Download data from external provider",
+    description="Download market data from external provider (IB) with gap analysis and progress tracking."
+)
+async def download_data(
+    request: DataLoadRequest,
+    acquisition_service: DataAcquisitionService = Depends(get_acquisition_service),
+) -> DataLoadOperationResponse:
+    """
+    Download data from external provider (IB).
+
+    This endpoint uses DataAcquisitionService for:
+    - Intelligent gap analysis
+    - Mode-based downloads (tail, backfill, full)
+    - Progress tracking via Operations service
+    - Resilient segment fetching
+
+    Returns operation_id for tracking progress via GET /operations/{operation_id}
+    """
+    result = await acquisition_service.download_data(
+        symbol=request.symbol,
+        timeframe=request.timeframe,
+        start_date=request.start_date,
+        end_date=request.end_date,
+        mode=request.mode or "tail",
+    )
+
+    return DataLoadOperationResponse(
+        success=True,
+        operation_id=result["operation_id"],
+        status=result["status"],
+        message=f"Started {request.mode} download for {request.symbol} {request.timeframe}",
+    )
+```
+
+**2. Deprecate POST /data/load**
+
+```python
+@router.post(
+    "/data/load",
+    response_model=DataLoadOperationResponse,
+    tags=["Data"],
+    deprecated=True,  # Mark as deprecated
+    summary="[DEPRECATED] Load data - use /data/acquire/download instead",
+)
+async def load_data_deprecated(
+    request: DataLoadRequest,
+    acquisition_service: DataAcquisitionService = Depends(get_acquisition_service),
+) -> DataLoadOperationResponse:
+    """
+    DEPRECATED: Use POST /data/acquire/download instead.
+
+    This endpoint routes to the new acquisition service but is deprecated.
+    """
+    logger.warning(
+        "POST /data/load is deprecated. Use POST /data/acquire/download instead."
+    )
+
+    # Route to new endpoint
+    result = await acquisition_service.download_data(
+        symbol=request.symbol,
+        timeframe=request.timeframe,
+        start_date=request.start_date,
+        end_date=request.end_date,
+        mode=request.mode or "tail",
+    )
+
+    return DataLoadOperationResponse(
+        success=True,
+        operation_id=result["operation_id"],
+        status=result["status"],
+        message=f"[DEPRECATED] Use /data/acquire/download. Started download for {request.symbol}",
+        deprecated=True,
+    )
+```
+
+**3. Add Dependency Injection**
+
+```python
+# In ktrdr/api/dependencies.py
+
+from ktrdr.data.acquisition import DataAcquisitionService
+
+_acquisition_service: Optional[DataAcquisitionService] = None
+
+def get_acquisition_service() -> DataAcquisitionService:
+    """Get or create DataAcquisitionService singleton."""
+    global _acquisition_service
+    if _acquisition_service is None:
+        _acquisition_service = DataAcquisitionService()
+    return _acquisition_service
+```
+
+### CLI Changes
+
+**Update `ktrdr data load` command**:
+
+```python
+# In ktrdr/cli/data_commands.py
+
+@data_app.command("load")
+def load_data(
+    symbol: str,
+    timeframe: str = "1d",
+    mode: str = "tail",  # tail, backfill, full
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+):
+    """
+    Download data from external provider (IB).
+
+    Uses new /data/acquire/download endpoint with DataAcquisitionService.
+
+    Modes:
+    - tail: Download recent data (fill gaps at end)
+    - backfill: Download historical data (fill gaps at beginning)
+    - full: Download complete range (fill all gaps)
+
+    Examples:
+        ktrdr data load AAPL --mode tail
+        ktrdr data load EURUSD --timeframe 1h --mode backfill --start 2024-01-01
+        ktrdr data load MSFT --mode full --start 2023-01-01 --end 2024-12-31
+    """
+    asyncio.run(_load_data_async(symbol, timeframe, mode, start_date, end_date))
+
+async def _load_data_async(symbol, timeframe, mode, start_date, end_date):
+    """Async implementation using new endpoint."""
+    async with AsyncCLIClient() as client:
+        # Call new endpoint
+        response = await client.post(
+            "/data/acquire/download",  # NEW endpoint
+            json={
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "mode": mode,
+                "start_date": start_date,
+                "end_date": end_date,
+            }
+        )
+
+        operation_id = response["operation_id"]
+        console.print(f"[green]Download started: {operation_id}[/green]")
+
+        # Poll for progress (existing logic)
+        await _poll_operation_with_progress(operation_id, client)
+```
+
+**Files Created**:
+- None (modify existing)
+
+**Files Modified**:
+- `ktrdr/api/endpoints/data.py` - Add new endpoint, deprecate old
+- `ktrdr/api/dependencies.py` - Add get_acquisition_service()
+- `ktrdr/api/models/data.py` - Add/update response models if needed
+- `ktrdr/cli/data_commands.py` - Update load command
+
+**Scope**:
+1. Create POST /data/acquire/download endpoint
+2. Deprecate POST /data/load (route to new endpoint with warning)
+3. Add dependency injection for DataAcquisitionService
+4. Update CLI `load` command to use new endpoint
+5. Update CLI help text and examples
+6. Add API tests for new endpoint
+7. Add CLI tests for updated command
+8. Update API documentation
+
+**Integration Test Scenarios**:
+- D3.1: Download via new API endpoint - verify operation tracking
+- D3.2: Download via CLI - verify progress display
+- D3.3: Use deprecated endpoint - verify warning logged
+
+**Acceptance Criteria**:
+- [ ] POST /data/acquire/download endpoint works
+- [ ] POST /data/load shows deprecation warning
+- [ ] CLI `ktrdr data load` uses new endpoint
+- [ ] Operation tracking works end-to-end
+- [ ] Progress updates display in CLI
+- [ ] API tests pass (10+ tests)
+- [ ] CLI tests pass (5+ tests)
+- [ ] Integration tests D3.1-D3.3 pass
+- [ ] API docs updated
+- [ ] `make quality` passes
+
+**Estimated Duration**: 2 days
+
+---
+
+### Phase 4 Summary
+
+**Total Tasks**: 7 tasks (4.1-4.7)
+
+**Total Duration**: 8-10 days (1.5-2 weeks)
+
+**Breakdown**:
+- Task 4.1: ✅ COMPLETE (0.5 days) - Shell created
+- Task 4.2: ✅ COMPLETE (1 day) - Basic download flow
+- Task 4.3: Gap Analysis Integration (2 days) - Mode-based gap detection
+- Task 4.4: Segment Manager Integration (2-3 days) - Resilient downloads
+- Task 4.5: DataLoadingOrchestrator Review (1 day) - Refactor or deprecate
+- Task 4.6: Enhanced Progress Tracking (1-2 days) - Data-specific progress
+- Task 4.7: API/CLI Wiring (2 days) - New endpoints
+
+**Key Improvements in This Version**:
+- ✅ SymbolCache dependency documented (Task 4.3)
+- ✅ Mode parameter added to download_data signature (Task 4.3)
+- ✅ Error handling patterns defined (Tasks 4.3, 4.4)
+- ✅ Unit test specifications detailed (15-20+ tests per task)
+- ✅ Configuration constants with env var overrides (Task 4.4)
+- ✅ Data merging logic clarified (Task 4.4)
+- ✅ Progress manager flow explained (Task 4.6)
+- ✅ Task dependencies visualized (Phase 4 intro)
+- ✅ Backward compatibility strategy (Phase 4 intro)
+- ✅ Cancellation token flow documented (Task 4.4)
+
+**Critical Notes**:
+- See [Critical Success Factors](#critical-success-factors) for dependencies
+- All configuration via environment variables (DATA_MAX_SEGMENT_SIZE, etc.)
+- ServiceOrchestrator provides progress_manager and cancellation_token
+- **IMPORTANT**: DataManager code stays intact during Phase 4 - deletion happens in Phase 5 only
+- Tasks 4.3 → 4.4 sequential, Task 4.6 can run in parallel
+
+**Code Deletion Timeline**:
+- **Phase 4**: Extract and copy code to DataAcquisitionService (DataManager STAYS intact)
+- **Phase 5**: Delete DataManager entirely (~1500 LOC removed)
+- See [Phase 5](#phase-5-cleanup--documentation) for complete deletion list
 
 ---
 
@@ -917,19 +1781,145 @@ Extract validation, progress, gap analysis, segment fetching, etc.
 
 **Total Duration**: 1-2 weeks
 
+### Quick Reference: Common Patterns
+
+**1. Adding New Dependencies**:
+```python
+# In DataAcquisitionService.__init__()
+from ktrdr.data.acquisition.gap_analyzer import GapAnalyzer
+from ktrdr.data.components.symbol_cache import SymbolCache
+
+self.gap_analyzer = GapAnalyzer()
+self.symbol_cache = SymbolCache()
+```
+
+**2. Error Handling Pattern**:
+```python
+try:
+    result = await some_operation()
+except SpecificError as e:
+    logger.warning(f"Operation failed: {e}")
+    # Fall back to safe default
+    result = safe_default_value
+```
+
+**3. Data Merging Pattern**:
+```python
+# Combine segments
+combined = pd.concat(segments, ignore_index=False).sort_index()
+
+# Merge with existing
+if existing_data is not None and not existing_data.empty:
+    merged = self.repository.merge_data(existing_data, combined)
+else:
+    merged = combined
+
+self.repository.save_to_cache(symbol, timeframe, merged)
+```
+
+**4. Configuration Pattern**:
+```python
+class DataAcquisitionService:
+    MAX_SEGMENT_SIZE = int(os.getenv("DATA_MAX_SEGMENT_SIZE", "5000"))
+
+    def __init__(self):
+        self.max_segment_size = self.MAX_SEGMENT_SIZE
+```
+
+**5. ServiceOrchestrator Integration**:
+```python
+# progress_manager and cancellation_token are provided by ServiceOrchestrator
+# within the operation_func passed to start_managed_operation()
+
+async def _download_operation():
+    # These variables are available here:
+    # - progress_manager (from ServiceOrchestrator)
+    # - cancellation_token (from ServiceOrchestrator)
+
+    await segment_manager.fetch_segments_with_resilience(
+        progress_manager=progress_manager,  # Use provided manager
+        cancellation_token=cancellation_token,  # Use provided token
+    )
+```
+
 ---
 
 ## Phase 5: Cleanup & Documentation
 
 ### Goal
 
-Remove DataManager, deprecated code, finalize.
+Remove DataManager, deprecated code, finalize architecture.
+
+### Context
+
+**What Gets Deleted**:
+
+After Phase 4 validates that DataAcquisitionService works correctly, Phase 5 removes the old implementation:
+
+**Files to DELETE**:
+- ✂️ `ktrdr/data/data_manager.py` - **Entire file** (~1500 LOC)
+- ✂️ `ktrdr/data/data_manager_builder.py` - Builder pattern no longer needed
+- ✂️ `ktrdr/data/data_loading_orchestrator.py` - If Task 4.5 marked for deprecation
+
+**Code to DELETE**:
+- ✂️ DataManager's `_fetch_head_timestamp_async()` - Now in DataAcquisitionService
+- ✂️ DataManager's `_validate_request_against_head_timestamp()` - Now in DataAcquisitionService
+- ✂️ DataManager's `_ensure_symbol_has_head_timestamp()` - Now in DataAcquisitionService
+- ✂️ DataManager's `_fetch_segments_with_component_async()` - Now in DataAcquisitionService
+- ✂️ DataManager's `_save_periodic_progress()` - Now in DataAcquisitionService
+- ✂️ DataManager's `_load_data_core_logic()` - Replaced by DataAcquisitionService.download_data()
+- ✂️ All other DataManager methods - **Everything goes**
+
+**Endpoints to DELETE**:
+- ✂️ `POST /data/load` - Deprecated endpoint removed (users must use `/data/acquire/download`)
+
+**Why Delete After Phase 4, Not During**:
+- ✅ **Safety**: Can quickly rollback if issues discovered
+- ✅ **Validation**: Gives time to thoroughly test new implementation
+- ✅ **User migration**: Gives users warning period for deprecated endpoints
+- ✅ **Confidence**: Only delete after 100% confidence in replacement
+
+### Visual Summary: Code Evolution
+
+**Phase 4 (Extraction)** - BOTH exist:
+```
+ktrdr/data/
+├── data_manager.py                    ← Still here! (~1500 LOC)
+│   └── All original methods intact
+├── acquisition/
+│   └── acquisition_service.py         ← NEW! Has extracted copies
+│       ├── download_data()            (extracted from load_data)
+│       ├── _fetch_head_timestamp()    (extracted from DataManager)
+│       ├── gap_analyzer               (extracted reference)
+│       └── segment_manager            (extracted reference)
+└── repository/
+    └── data_repository.py             ← From Phase 2
+```
+
+**Phase 5 (Deletion)** - OLD removed:
+```
+ktrdr/data/
+├── ❌ data_manager.py                 ← DELETED!
+├── ❌ data_manager_builder.py         ← DELETED!
+├── acquisition/
+│   └── acquisition_service.py         ← ONLY implementation now
+│       └── (all methods stay)
+└── repository/
+    └── data_repository.py             ← Stays
+```
 
 ### Duration
 
 **3-4 days** (6 tasks)
 
-Same as previous plan.
+### Tasks
+
+**Task 5.1**: Delete DataManager and builder (0.5 day)
+**Task 5.2**: Remove deprecated API endpoints (0.5 day)
+**Task 5.3**: Remove DataLoadingOrchestrator if deprecated (0.5 day)
+**Task 5.4**: Update all imports and references (1 day)
+**Task 5.5**: Update documentation (1 day)
+**Task 5.6**: Final validation and cleanup (0.5 day)
 
 ---
 
