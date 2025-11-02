@@ -18,7 +18,7 @@ from ktrdr.api.models.gap_analysis import (
     GapAnalysisRequest,
 )
 from ktrdr.api.services.gap_analysis_service import GapAnalysisService
-from ktrdr.ib.gap_filler import get_gap_filler
+from ktrdr.data.acquisition.gap_filler import get_gap_filler
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)

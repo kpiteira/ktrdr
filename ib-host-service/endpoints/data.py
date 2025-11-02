@@ -9,10 +9,12 @@ from datetime import datetime
 from typing import Any, Optional
 
 from fastapi import APIRouter
+
+# Import local IB modules
+from ib.data_fetcher import IbDataFetcher
+from ib.symbol_validator import IbSymbolValidator
 from pydantic import BaseModel, Field
 
-# Import existing ktrdr modules
-from ktrdr.ib import IbDataFetcher, IbSymbolValidator
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
@@ -107,6 +109,17 @@ async def get_historical_data(request: HistoricalDataRequest):
     from IB Gateway, bypassing Docker networking issues.
     """
     try:
+        # Ensure timezone-aware datetimes for consistent processing
+        from datetime import timezone
+
+        if request.start.tzinfo is None:
+            request.start = request.start.replace(tzinfo=timezone.utc)
+            logger.warning("start datetime was naive, assuming UTC")
+
+        if request.end.tzinfo is None:
+            request.end = request.end.replace(tzinfo=timezone.utc)
+            logger.warning("end datetime was naive, assuming UTC")
+
         logger.info(
             f"Fetching historical data: {request.symbol} {request.timeframe} "
             f"{request.start} to {request.end}"

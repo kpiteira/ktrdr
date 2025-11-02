@@ -22,16 +22,16 @@ from ktrdr.async_infrastructure.progress import GenericProgressManager
 from ktrdr.async_infrastructure.time_estimation import TimeEstimationEngine
 from ktrdr.config.loader import ConfigLoader
 from ktrdr.config.models import IbHostServiceConfig, KtrdrConfig
+from ktrdr.data.acquisition.data_loading_orchestrator import DataLoadingOrchestrator
+from ktrdr.data.acquisition.gap_analyzer import GapAnalyzer
+from ktrdr.data.acquisition.gap_classifier import GapClassifier
+from ktrdr.data.acquisition.ib_data_provider import IbDataProvider
+from ktrdr.data.acquisition.segment_manager import SegmentManager
 from ktrdr.data.async_infrastructure.data_progress_renderer import DataProgressRenderer
 from ktrdr.data.components.data_health_checker import DataHealthChecker
 from ktrdr.data.components.data_processor import DataProcessor
-from ktrdr.data.components.data_quality_validator import DataQualityValidator
-from ktrdr.data.components.gap_analyzer import GapAnalyzer
-from ktrdr.data.components.gap_classifier import GapClassifier
-from ktrdr.data.components.segment_manager import SegmentManager
-from ktrdr.data.data_loading_orchestrator import DataLoadingOrchestrator
-from ktrdr.data.ib_data_adapter import IbDataAdapter
 from ktrdr.data.local_data_loader import LocalDataLoader
+from ktrdr.data.repository.data_quality_validator import DataQualityValidator
 from ktrdr.errors import DataError
 
 logger = get_logger(__name__)
@@ -48,7 +48,7 @@ class DataManagerConfiguration:
 
         # IB configuration
         self.ib_host_service_config: Optional[IbHostServiceConfig] = None
-        self.external_provider: Optional[IbDataAdapter] = None
+        self.external_provider: Optional[IbDataProvider] = None
 
         # Component instances (will be created by builder)
         self.data_loader: Optional[LocalDataLoader] = None
@@ -102,11 +102,13 @@ class IbConfigurationLoader:
             env_enabled = os.getenv("USE_IB_HOST_SERVICE", "").lower()
             if env_enabled in ("true", "1", "yes"):
                 host_service_config.enabled = True
-                env_url = os.getenv("IB_HOST_SERVICE_URL")
-                if env_url:
-                    host_service_config.url = env_url
             elif env_enabled in ("false", "0", "no"):
                 host_service_config.enabled = False
+
+            # Always respect IB_HOST_SERVICE_URL if set (IbDataProvider is HTTP-only)
+            env_url = os.getenv("IB_HOST_SERVICE_URL")
+            if env_url:
+                host_service_config.url = env_url
 
             return host_service_config
 
@@ -175,8 +177,8 @@ class DataManagerBuilder:
         """Build the data loader component."""
         return LocalDataLoader(data_dir=self._config.data_dir)
 
-    def _build_ib_adapter(self) -> IbDataAdapter:
-        """Build the IB data adapter with configuration."""
+    def _build_ib_adapter(self) -> IbDataProvider:
+        """Build the IB data provider (HTTP-only)."""
         if self._config.ib_host_service_config is None:
             self._config.ib_host_service_config = (
                 IbConfigurationLoader.load_configuration()
@@ -185,23 +187,17 @@ class DataManagerBuilder:
         config = self._config.ib_host_service_config
 
         try:
-            adapter = IbDataAdapter(
-                use_host_service=config.enabled,
-                host_service_url=config.url,
-            )
+            provider = IbDataProvider(host_service_url=config.url)
 
-            if config.enabled:
-                logger.info(
-                    f"IB integration enabled using host service at {config.url}"
-                )
-            else:
-                logger.info("IB integration enabled (direct connection)")
+            logger.info(f"IB integration enabled using host service at {config.url}")
 
-            return adapter
+            return provider
 
         except Exception as e:
-            logger.warning(f"Failed to initialize IB adapter, using fallback: {e}")
-            return IbDataAdapter()  # Fallback to direct connection
+            logger.warning(f"Failed to initialize IB provider, using fallback: {e}")
+            return (
+                IbDataProvider()
+            )  # Fallback to default URL  # Fallback to direct connection
 
     def _build_core_components(self) -> None:
         """Build all core data processing components."""

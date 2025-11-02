@@ -19,8 +19,8 @@ import pandas as pd
 import pytest
 
 from ktrdr.async_infrastructure.progress import GenericProgressManager
-from ktrdr.data.components.gap_analyzer import GapAnalyzer
-from ktrdr.data.components.gap_classifier import (
+from ktrdr.data.acquisition.gap_analyzer import GapAnalyzer
+from ktrdr.data.acquisition.gap_classifier import (
     GapClassification,
     GapClassifier,
     GapInfo,

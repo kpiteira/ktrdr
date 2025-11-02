@@ -19,7 +19,7 @@ from datetime import datetime
 import pandas as pd
 from ib_insync import Contract, Forex, Stock
 
-from ktrdr.ib.pool_manager import get_shared_ib_pool
+from ib.pool_manager import get_shared_ib_pool
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
@@ -208,7 +208,10 @@ class IbDataFetcher:
             )
 
             # Filter by date range
-            df = df[(df.index >= start) & (df.index <= end)]  # type: ignore[operator,assignment]
+            # Convert Python datetime objects to pandas Timestamps for proper comparison
+            start_pd = pd.Timestamp(start)
+            end_pd = pd.Timestamp(end)
+            df = df[(df.index >= start_pd) & (df.index <= end_pd)]
 
             logger.info(
                 f"Successfully processed {len(df)} bars for {symbol} {timeframe}"
@@ -303,18 +306,22 @@ class IbDataFetcher:
             return "TRADES"
 
     def _calculate_duration(self, start: datetime, end: datetime) -> str:
-        """Calculate IB duration string from datetime range."""
+        """
+        Calculate IB duration string from datetime range.
+
+        IB API only accepts these units: S (seconds), D (days), W (weeks), M (months), Y (years)
+        Note: H (hours) is NOT supported and will cause Error 321
+        """
         delta = end - start
         total_seconds = delta.total_seconds()
         days = delta.days
 
         # Handle very small time ranges (less than 1 day)
+        # IB doesn't support "H" (hours), so use 1 D and rely on date filtering
         if total_seconds < 86400:  # Less than 1 day
-            hours = int(total_seconds // 3600)
-            if hours > 0:
-                return f"{hours} H"
-            else:
-                return "1 H"  # Minimum 1 hour
+            # For sub-day ranges, use 1 D and rely on date filtering (lines 210-214)
+            # IB will return up to 1 day of data, we filter to exact range
+            return "1 D"
 
         # Ensure minimum 1 day for day-based durations
         if days == 0:

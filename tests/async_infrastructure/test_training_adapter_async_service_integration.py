@@ -154,22 +154,22 @@ class TestTrainingAdapterAsyncServiceIntegration(unittest.TestCase):
         self.assertTrue(hasattr(adapter, "errors_encountered"))
 
     def test_consistency_with_ib_data_adapter_patterns(self):
-        """Test that TrainingAdapter follows same patterns as IbDataAdapter."""
-        from ktrdr.data.ib_data_adapter import IbDataAdapter
+        """Test that TrainingAdapter follows same patterns as IbDataProvider."""
+        from ktrdr.data.acquisition.ib_data_provider import IbDataProvider
 
-        ib_adapter = IbDataAdapter(use_host_service=True)
+        ib_provider = IbDataProvider()
         training_adapter = TrainingAdapter(use_host_service=True)
 
         # Both should inherit from AsyncServiceAdapter
-        self.assertIsInstance(ib_adapter, AsyncServiceAdapter)
+        self.assertIsInstance(ib_provider, AsyncServiceAdapter)
         self.assertIsInstance(training_adapter, AsyncServiceAdapter)
 
         # Both should have config
-        self.assertIsInstance(ib_adapter.config, HostServiceConfig)
+        self.assertIsInstance(ib_provider.config, HostServiceConfig)
         self.assertIsInstance(training_adapter.config, HostServiceConfig)
 
         # Both should have same base methods
-        self.assertTrue(hasattr(ib_adapter, "get_service_name"))
+        self.assertTrue(hasattr(ib_provider, "get_service_name"))
         self.assertTrue(hasattr(training_adapter, "get_service_name"))
 
 

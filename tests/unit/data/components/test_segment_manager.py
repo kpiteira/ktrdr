@@ -13,7 +13,7 @@ import pandas as pd
 import pytest
 
 from ktrdr.async_infrastructure.progress import GenericProgressManager
-from ktrdr.data.components.segment_manager import SegmentManager
+from ktrdr.data.acquisition.segment_manager import SegmentManager
 from ktrdr.data.loading_modes import DataLoadingMode
 
 

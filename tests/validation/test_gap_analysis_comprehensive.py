@@ -13,8 +13,8 @@ from unittest.mock import Mock
 import pandas as pd
 import pytest
 
-from ktrdr.data.components.gap_analyzer import GapAnalyzer
-from ktrdr.data.components.gap_classifier import (
+from ktrdr.data.acquisition.gap_analyzer import GapAnalyzer
+from ktrdr.data.acquisition.gap_classifier import (
     GapClassification,
     GapClassifier,
     GapInfo,

@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from ktrdr.data.components.gap_classifier import (
+from ktrdr.data.acquisition.gap_classifier import (
     GapClassification,
     GapClassifier,
     GapInfo,
