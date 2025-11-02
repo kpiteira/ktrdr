@@ -189,29 +189,13 @@ class IbDataProvider(ExternalDataProvider, AsyncServiceAdapter):
                     provider="IB",
                 )
 
-            # Convert response to ValidationResult-like structure
-            # Import here to avoid circular imports
-            from dataclasses import dataclass
+            # Use ValidationResult from symbol_cache (has all required fields)
+            from ktrdr.data.components.symbol_cache import ValidationResult
 
-            @dataclass
-            class ContractInfo:
-                symbol: str
-                exchange: str
-                currency: str
-                instrument_type: str
-
-            @dataclass
-            class ValidationResult:
-                is_valid: bool
-                symbol: str
-                error_message: Optional[str] = None
-                contract_info: Optional[ContractInfo] = None
-                head_timestamps: Optional[dict[str, str]] = None
-
-            contract_info = None
-            if response.get("contract_info"):
-                # Create ContractInfo from response data
-                contract_info = ContractInfo(**response["contract_info"])
+            # Pass contract_info as dict - ValidationResult expects dict[str, Any] | None
+            # (The old ktrdr.ib.ContractInfo had all IB fields, but we deleted ktrdr.ib.
+            #  The backend ValidationResult.contract_info is just a dict, so pass it through.)
+            contract_info = response.get("contract_info")
 
             # Convert ISO timestamps back to datetime objects
             head_timestamps = {}
@@ -237,6 +221,7 @@ class IbDataProvider(ExternalDataProvider, AsyncServiceAdapter):
                 error_message=response.get("error_message"),
                 contract_info=contract_info,
                 head_timestamps=(head_timestamps_str if head_timestamps_str else None),
+                suggested_symbol=response.get("suggested_symbol"),  # Required field
             )
 
             self._update_stats()
@@ -379,27 +364,11 @@ class IbDataProvider(ExternalDataProvider, AsyncServiceAdapter):
                     provider="IB",
                 )
 
-            # Convert response to ValidationResult-like structure
-            from dataclasses import dataclass
+            # Use ValidationResult from symbol_cache (has all required fields)
+            from ktrdr.data.components.symbol_cache import ValidationResult
 
-            @dataclass
-            class ContractInfo:
-                symbol: str
-                exchange: str
-                currency: str
-                instrument_type: str
-
-            @dataclass
-            class ValidationResult:
-                is_valid: bool
-                symbol: str
-                error_message: Optional[str] = None
-                contract_info: Optional[ContractInfo] = None
-                head_timestamps: Optional[dict[str, str]] = None
-
-            contract_info = None
-            if response.get("contract_info"):
-                contract_info = ContractInfo(**response["contract_info"])
+            # Pass contract_info as dict - ValidationResult expects dict[str, Any] | None
+            contract_info = response.get("contract_info")
 
             # Convert ISO timestamps back to datetime objects
             head_timestamps = {}
@@ -425,6 +394,7 @@ class IbDataProvider(ExternalDataProvider, AsyncServiceAdapter):
                 error_message=response.get("error_message"),
                 contract_info=contract_info,
                 head_timestamps=(head_timestamps_str if head_timestamps_str else None),
+                suggested_symbol=response.get("suggested_symbol"),  # Required field
             )
 
             self._update_stats()
