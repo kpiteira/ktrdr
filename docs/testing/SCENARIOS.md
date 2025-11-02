@@ -1123,8 +1123,6 @@ curl -s -X POST http://localhost:5001/data/validate \
 **Duration**: 10-30 seconds
 **Purpose**: Validate end-to-end download via backend API
 
-**⚠️ NOTE**: This scenario uses **DEPRECATED endpoint** `/api/v1/data/load` until Phase 2 implements `/api/v1/data/acquire/download`
-
 ### Prerequisites
 - Backend running
 - IB host service running (port 5001)
@@ -1137,11 +1135,10 @@ curl -s -X POST http://localhost:5001/data/validate \
 
 ### Commands
 
-**1. Start Download (Current Endpoint - Phase 0/1)**
+**1. Start Download (New Endpoint - Phase 4)**
 ```bash
-# Using current endpoint (will be deprecated in Phase 2)
-# CRITICAL: Must include "mode":"tail" to trigger IB download
-RESPONSE=$(curl -s -X POST http://localhost:8000/api/v1/data/load \
+# Using NEW endpoint /data/acquire/download (Task 4.7)
+RESPONSE=$(curl -s -X POST http://localhost:8000/api/v1/data/acquire/download \
   -H "Content-Type: application/json" \
   -d '{
     "symbol": "AAPL",
@@ -1151,7 +1148,7 @@ RESPONSE=$(curl -s -X POST http://localhost:8000/api/v1/data/load \
     "mode": "tail"
   }')
 
-OPERATION_ID=$(echo "$RESPONSE" | jq -r '.data.operation_id')
+OPERATION_ID=$(echo "$RESPONSE" | jq -r '.operation_id')
 echo "Operation ID: $OPERATION_ID"
 ```
 
@@ -1233,8 +1230,8 @@ mv data/EURUSD_1h.csv data/EURUSD_1h.csv.backup 2>/dev/null || echo "No cache to
 
 **Start download with full year of data**
 ```bash
-# CRITICAL: Include "mode":"tail" to trigger IB download
-RESPONSE=$(curl -s -X POST http://localhost:8000/api/v1/data/load \
+# Using NEW endpoint /data/acquire/download (Task 4.7)
+RESPONSE=$(curl -s -X POST http://localhost:8000/api/v1/data/acquire/download \
   -H "Content-Type: application/json" \
   -d '{
     "symbol": "EURUSD",
@@ -1245,7 +1242,7 @@ RESPONSE=$(curl -s -X POST http://localhost:8000/api/v1/data/load \
   }')
 
 echo "$RESPONSE" | jq
-OPERATION_ID=$(echo "$RESPONSE" | jq -r '.data.operation_id')
+OPERATION_ID=$(echo "$RESPONSE" | jq -r '.operation_id')
 echo "Operation ID: $OPERATION_ID"
 ```
 
@@ -1393,13 +1390,15 @@ docker-compose -f docker/docker-compose.yml logs backend --since 60s | \
 ### Commands
 
 ```bash
-curl -i -s -X POST http://localhost:8000/api/v1/data/load \
+# Using NEW endpoint /data/acquire/download (Task 4.7)
+curl -i -s -X POST http://localhost:8000/api/v1/data/acquire/download \
   -H "Content-Type: application/json" \
   -d '{
     "symbol": "INVALID_SYMBOL_XYZ123",
     "timeframe": "1h",
     "start_date": "2024-01-01",
-    "end_date": "2024-12-31"
+    "end_date": "2024-12-31",
+    "mode": "tail"
   }'
 ```
 
@@ -1450,14 +1449,15 @@ curl -i -s -X POST http://localhost:8000/api/v1/data/load \
 curl -s http://localhost:5001/health
 # Should get: Connection refused
 
-# Attempt download
-curl -i -s -X POST http://localhost:8000/api/v1/data/load \
+# Attempt download (using NEW endpoint - Task 4.7)
+curl -i -s -X POST http://localhost:8000/api/v1/data/acquire/download \
   -H "Content-Type: application/json" \
   -d '{
     "symbol": "EURUSD",
     "timeframe": "1h",
     "start_date": "2024-12-01",
-    "end_date": "2024-12-31"
+    "end_date": "2024-12-31",
+    "mode": "tail"
   }'
 ```
 
@@ -1513,14 +1513,15 @@ curl -i -s -X POST http://localhost:8000/api/v1/data/load \
 curl -s http://localhost:5001/health | jq '{ib_connected:.ib_connected}'
 # Should return: ib_connected: false
 
-# Attempt download
-curl -i -s -X POST http://localhost:8000/api/v1/data/load \
+# Attempt download (using NEW endpoint - Task 4.7)
+curl -i -s -X POST http://localhost:8000/api/v1/data/acquire/download \
   -H "Content-Type: application/json" \
   -d '{
     "symbol": "EURUSD",
     "timeframe": "1h",
     "start_date": "2024-12-01",
-    "end_date": "2024-12-31"
+    "end_date": "2024-12-31",
+    "mode": "tail"
   }'
 ```
 
