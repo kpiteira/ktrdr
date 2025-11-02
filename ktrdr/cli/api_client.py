@@ -397,7 +397,7 @@ class KtrdrApiClient:
 
         response = await self._make_request(
             "POST",
-            "/data/load",
+            "/data/acquire/download",
             json_data=payload,
             params=params,
             timeout=request_timeout,
