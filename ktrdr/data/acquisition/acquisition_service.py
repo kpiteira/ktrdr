@@ -123,7 +123,11 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
         if self._provider_instance is not None:
             provider = self._provider_instance
         else:
-            provider = IbDataProvider()
+            # Read IB_HOST_SERVICE_URL from environment (critical for Docker)
+            import os
+
+            host_service_url = os.getenv("IB_HOST_SERVICE_URL")
+            provider = IbDataProvider(host_service_url=host_service_url)
 
         # Store provider as instance attribute for easy access
         self.provider = provider
@@ -478,13 +482,33 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
             # Get progress_manager from ServiceOrchestrator context for step tracking
             progress_manager = self._current_operation_progress
 
+            # Step 0: Validate symbol (Task 4.7 - Bug Fix)
+            if progress_manager:
+                progress_manager.start_step(
+                    f"Validating symbol {symbol}",
+                    step_number=0,
+                    step_percentage=0.0,
+                    step_end_percentage=5.0,
+                )
+
+            # Validate symbol and get metadata
+            # This will raise DataProviderDataError if symbol is invalid
+            logger.info(f"📋 Validating symbol {symbol} via provider")
+            validation_result = await self.provider.validate_and_get_metadata(
+                symbol, [timeframe]
+            )
+            logger.info(f"✅ Symbol {symbol} validated successfully")
+
+            # Cache validation result for future use
+            self.symbol_cache.store(symbol, validation_result)
+
             # Step 1: Check cache
             if progress_manager:
                 progress_manager.start_step(
                     f"Loading cached data for {symbol} {timeframe}",
                     step_number=1,
-                    step_percentage=0.0,
-                    step_end_percentage=10.0,
+                    step_percentage=5.0,
+                    step_end_percentage=15.0,
                 )
 
             try:
@@ -502,14 +526,54 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
                 existing_data = None
 
             # Convert dates if needed and handle defaults
+            # CRITICAL: Smart defaults based on mode (matches DataManager behavior)
             if start_date is not None:
                 if isinstance(start_date, str):
                     start_dt: datetime = datetime.fromisoformat(start_date)
                 else:
                     start_dt = start_date
             else:
-                # Default: last 30 days
-                start_dt = datetime.now() - timedelta(days=30)
+                # Smart default based on mode
+                if mode == "tail":
+                    # Tail mode: recent data (last 30 days)
+                    start_dt = datetime.now() - timedelta(days=30)
+                    logger.debug(
+                        f"📅 TAIL mode: Using default start (last 30 days): {start_dt}"
+                    )
+                elif mode in ["backfill", "full"]:
+                    # Backfill/Full mode: Use head timestamp if available, otherwise IB limits
+                    head_timestamp_used = False
+
+                    # Try to get head timestamp from validation result
+                    if validation_result and validation_result.head_timestamps:
+                        if timeframe in validation_result.head_timestamps:
+                            head_ts_str = validation_result.head_timestamps[timeframe]
+                            if head_ts_str:
+                                try:
+                                    start_dt = datetime.fromisoformat(
+                                        head_ts_str.replace("Z", "+00:00")
+                                    )
+                                    head_timestamp_used = True
+                                    logger.info(
+                                        f"📅 {mode.upper()} mode: Using head timestamp for default start: {start_dt}"
+                                    )
+                                except (ValueError, AttributeError) as e:
+                                    logger.warning(
+                                        f"Failed to parse head timestamp '{head_ts_str}': {e}"
+                                    )
+
+                    # Fallback to IB duration limits if no head timestamp
+                    if not head_timestamp_used:
+                        from ktrdr.config.ib_limits import IbLimitsRegistry
+
+                        max_duration = IbLimitsRegistry.get_duration_limit(timeframe)
+                        start_dt = datetime.now() - max_duration
+                        logger.info(
+                            f"📅 {mode.upper()} mode: Using IB duration limit for default start: {start_dt}"
+                        )
+                else:
+                    # Other modes: default to 30 days
+                    start_dt = datetime.now() - timedelta(days=30)
 
             if end_date is not None:
                 if isinstance(end_date, str):
@@ -530,13 +594,22 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
 
                 end_dt = end_dt.replace(tzinfo=timezone.utc)
 
+            # CRITICAL: Cap end_dt at current time (never load future data)
+            current_time = datetime.now(tz=end_dt.tzinfo)
+            if end_dt > current_time:
+                logger.warning(
+                    f"⚠️ Requested end_date {end_dt} is in the future. "
+                    f"Capping at current time {current_time}"
+                )
+                end_dt = current_time
+
             # Step 2: Validate against head timestamp (with error handling)
             if progress_manager:
                 progress_manager.start_step(
                     f"Validating date range for {symbol}",
                     step_number=2,
-                    step_percentage=10.0,
-                    step_end_percentage=15.0,
+                    step_percentage=15.0,
+                    step_end_percentage=20.0,
                 )
 
             try:
@@ -560,8 +633,8 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
                 progress_manager.start_step(
                     f"Analyzing data gaps for {symbol} ({mode} mode)",
                     step_number=3,
-                    step_percentage=15.0,
-                    step_end_percentage=20.0,
+                    step_percentage=20.0,
+                    step_end_percentage=25.0,
                 )
 
             try:
@@ -574,13 +647,15 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
                     "full": DataLoadingMode.FULL,
                 }[mode]
 
-                gaps = self.gap_analyzer.analyze_gaps_by_mode(
-                    mode=mode_enum,
+                # Use analyze_gaps() - same method as DataManager
+                # This correctly skips internal gap analysis for FULL/BACKFILL modes
+                gaps = self.gap_analyzer.analyze_gaps(
                     existing_data=existing_data,
                     requested_start=start_dt,
                     requested_end=end_dt,
                     timeframe=timeframe,
                     symbol=symbol,
+                    mode=mode_enum,
                 )
                 logger.info(
                     f"Gap analysis found {len(gaps)} gaps to fill in {mode} mode"
@@ -606,8 +681,8 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
                 progress_manager.start_step(
                     f"Creating {len(gaps)} download segments",
                     step_number=4,
-                    step_percentage=20.0,
-                    step_end_percentage=25.0,
+                    step_percentage=25.0,
+                    step_end_percentage=30.0,
                 )
 
             # Create segments from gaps
@@ -629,7 +704,7 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
                 progress_manager.start_step(
                     f"Downloading {len(segments)} segments from IB",
                     step_number=5,
-                    step_percentage=25.0,
+                    step_percentage=30.0,
                     step_end_percentage=90.0,  # This is the longest step
                 )
 
@@ -715,7 +790,7 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
                 "end_date": end_date,
                 "mode": mode,
             },
-            total_steps=6,  # 1:cache, 2:validate, 3:gaps, 4:segments, 5:download, 6:save
+            total_steps=7,  # 0:validate_symbol, 1:cache, 2:validate_dates, 3:gaps, 4:segments, 5:download, 6:save
         )
 
     def __repr__(self) -> str:

@@ -138,25 +138,9 @@ class SegmentManager:
             return sorted(segments, key=lambda seg: seg[0])
 
         elif mode == DataLoadingMode.FULL:
-            # Full mode: Balanced approach - alternate between recent and old
-            sorted_segments = sorted(segments, key=lambda seg: seg[0])
-            if len(sorted_segments) <= 2:
-                return sorted_segments
-
-            # Interleave recent and old segments
-            recent_segments = sorted_segments[len(sorted_segments) // 2 :]
-            old_segments = sorted_segments[: len(sorted_segments) // 2]
-
-            prioritized = []
-            for i in range(max(len(recent_segments), len(old_segments))):
-                if i < len(recent_segments):
-                    prioritized.append(
-                        recent_segments[-(i + 1)]
-                    )  # Most recent first from recent
-                if i < len(old_segments):
-                    prioritized.append(old_segments[i])  # Oldest first from old
-
-            return prioritized
+            # Full mode: Chronological order (oldest first), same as BACKFILL
+            # This matches DataManager behavior: predictable sequential loading
+            return sorted(segments, key=lambda seg: seg[0])
 
         else:
             # Local mode or default: Keep original order

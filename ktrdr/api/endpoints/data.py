@@ -506,16 +506,29 @@ async def download_data_acquire(
     """
     try:
         logger.info(
-            f"📥 NEW ENDPOINT: Data acquisition initiated for {request.symbol} ({request.timeframe})"
+            f"📥 NEW ENDPOINT: /data/acquire/download - Using DataAcquisitionService "
+            f"for {request.symbol} ({request.timeframe}, mode={request.mode or 'tail'})"
+        )
+        logger.info(
+            "🔧 SERVICE: DataAcquisitionService (Repository + Provider pattern) "
+            "- NOT DataManager!"
         )
 
-        # Call DataAcquisitionService
+        # Call DataAcquisitionService (NEW architecture)
+        logger.debug(
+            f"🚀 Calling acquisition_service.download_data() for {request.symbol} {request.timeframe}"
+        )
         result = await acquisition_service.download_data(
             symbol=request.symbol,
             timeframe=request.timeframe,
             start_date=request.start_date,
             end_date=request.end_date,
             mode=request.mode or "tail",
+        )
+
+        logger.info(
+            f"✅ DataAcquisitionService returned: operation_id={result['operation_id']}, "
+            f"status={result['status']}"
         )
 
         return DataAcquisitionResponse(
@@ -597,12 +610,16 @@ async def load_data(
     """
     # Log deprecation warning
     logger.warning(
-        "POST /data/load is deprecated. Use POST /data/acquire/download instead. "
+        "⚠️ DEPRECATED ENDPOINT: POST /data/load - Use POST /data/acquire/download instead! "
         f"Request for {request.symbol} {request.timeframe}"
+    )
+    logger.info(
+        f"🔄 ROUTING: Deprecated endpoint → DataAcquisitionService (Task 4.7) "
+        f"for {request.symbol} {request.timeframe}"
     )
 
     try:
-        # Route to new DataAcquisitionService
+        # Route to new DataAcquisitionService (backward compatibility)
         result = await acquisition_service.download_data(
             symbol=request.symbol,
             timeframe=request.timeframe,
