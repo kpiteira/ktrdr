@@ -9,12 +9,16 @@ for external data fetching via HTTP.
 """
 
 import logging
+import os
 from datetime import datetime, timedelta
-from typing import Any, Optional, Union
+from typing import Any, Callable, Optional, Union
+
+import pandas as pd
 
 from ktrdr.async_infrastructure.service_orchestrator import ServiceOrchestrator
 from ktrdr.data.acquisition.gap_analyzer import GapAnalyzer
 from ktrdr.data.acquisition.ib_data_provider import IbDataProvider
+from ktrdr.data.acquisition.segment_manager import SegmentManager
 from ktrdr.data.components.symbol_cache import SymbolCache
 from ktrdr.data.repository import DataRepository
 from ktrdr.errors.exceptions import DataNotFoundError
@@ -43,12 +47,17 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
     - Uses IbDataProvider for external data fetching
     """
 
+    # Configuration constants with environment variable overrides (Task 4.4)
+    MAX_SEGMENT_SIZE = int(os.getenv("DATA_MAX_SEGMENT_SIZE", "5000"))
+    PERIODIC_SAVE_INTERVAL = float(os.getenv("DATA_PERIODIC_SAVE_MIN", "0.5"))
+
     def __init__(
         self,
         repository: Optional[DataRepository] = None,
         provider: Optional[IbDataProvider] = None,
         gap_analyzer: Optional[GapAnalyzer] = None,
         symbol_cache: Optional[SymbolCache] = None,
+        segment_manager: Optional[SegmentManager] = None,
     ) -> None:
         """
         Initialize data acquisition service.
@@ -62,6 +71,8 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
                          If None, creates default instance.
             symbol_cache: Optional SymbolCache for caching head timestamps.
                          If None, creates default instance.
+            segment_manager: Optional SegmentManager for resilient segment fetching.
+                           If None, creates default instance.
         """
         # Store dependencies BEFORE calling super().__init__
         # because _initialize_adapter() will be called during super().__init__
@@ -79,12 +90,20 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
         self.gap_analyzer = gap_analyzer or GapAnalyzer()
         self.symbol_cache = symbol_cache or SymbolCache()
 
+        # Segment management for resilient downloads (Task 4.4)
+        self.segment_manager = segment_manager or SegmentManager()
+
+        # Configuration constants as instance attributes (Task 4.4)
+        self.max_segment_size = self.MAX_SEGMENT_SIZE
+        self.periodic_save_interval = self.PERIODIC_SAVE_INTERVAL
+
         logger.info(
             f"DataAcquisitionService initialized "
             f"(repository: {type(self.repository).__name__}, "
             f"provider: {type(self.provider).__name__}, "
             f"gap_analyzer: {type(self.gap_analyzer).__name__}, "
-            f"symbol_cache: {type(self.symbol_cache).__name__})"
+            f"symbol_cache: {type(self.symbol_cache).__name__}, "
+            f"segment_manager: {type(self.segment_manager).__name__})"
         )
 
     def _initialize_adapter(self) -> IbDataProvider:
@@ -305,6 +324,100 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
             logger.warning(f"Error ensuring head timestamp for {symbol}: {e}")
             return False
 
+    def _save_periodic_progress(
+        self,
+        successful_data: list[pd.DataFrame],
+        symbol: str,
+        timeframe: str,
+        previous_bars_saved: int,
+    ) -> int:
+        """
+        Save accumulated data progress to cache.
+
+        Extracted from DataManager (Task 4.4).
+
+        This merges the new data with any existing data and saves to cache,
+        allowing downloads to resume from where they left off.
+
+        Args:
+            successful_data: List of DataFrames with newly fetched data
+            symbol: Trading symbol
+            timeframe: Data timeframe
+            previous_bars_saved: Number of bars saved in previous saves (for counting)
+
+        Returns:
+            Number of new bars saved in this operation
+        """
+        if not successful_data:
+            return 0
+
+        try:
+            # Merge newly fetched segments into single DataFrame
+            new_data = pd.concat(successful_data, ignore_index=False).sort_index()
+            new_data = new_data[~new_data.index.duplicated(keep="first")]
+
+            # Load existing data if it exists
+            try:
+                existing_data = self.repository.load_from_cache(symbol, timeframe)
+                if existing_data is not None and not existing_data.empty:
+                    # Merge new data with existing data
+                    combined_data = pd.concat(
+                        [existing_data, new_data], ignore_index=False
+                    )
+                    combined_data = combined_data.sort_index()
+                    combined_data = combined_data[
+                        ~combined_data.index.duplicated(keep="last")
+                    ]
+
+                    # Count only truly new bars (not in existing data)
+                    new_bars_count = len(
+                        new_data[~new_data.index.isin(existing_data.index)]
+                    )
+                else:
+                    combined_data = new_data
+                    new_bars_count = len(new_data)
+            except (DataNotFoundError, FileNotFoundError):
+                # No existing data - this is all new
+                combined_data = new_data
+                new_bars_count = len(new_data)
+
+            # Save the combined data
+            self.repository.save_to_cache(symbol, timeframe, combined_data)
+
+            return new_bars_count
+
+        except Exception as e:
+            logger.error(f"Failed to save periodic progress: {e}")
+            raise
+
+    def _create_periodic_save_callback(
+        self, symbol: str, timeframe: str
+    ) -> Callable[[list[pd.DataFrame]], int]:
+        """
+        Create periodic save callback closure.
+
+        Creates a callback that captures symbol/timeframe context
+        for use by SegmentManager during resilient fetching.
+
+        Args:
+            symbol: Trading symbol
+            timeframe: Data timeframe
+
+        Returns:
+            Callback function for periodic saves
+        """
+
+        def periodic_save_callback(successful_data_list: list[pd.DataFrame]) -> int:
+            """Callback for periodic progress saving during fetch."""
+            return self._save_periodic_progress(
+                successful_data_list,
+                symbol,
+                timeframe,
+                0,  # TODO: Track previous bars properly if needed
+            )
+
+        return periodic_save_callback
+
     async def download_data(
         self,
         symbol: str,
@@ -420,7 +533,7 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
             # Step 3: Analyze gaps based on mode (with error handling)
             try:
                 # Convert mode string to DataLoadingMode enum
-                from ktrdr.data.data_loading_mode import DataLoadingMode  # type: ignore
+                from ktrdr.data.loading_modes import DataLoadingMode  # type: ignore
 
                 mode_enum = {
                     "tail": DataLoadingMode.TAIL,
@@ -445,7 +558,7 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
                 )
                 gaps = [(start_dt, end_dt)]
 
-            # Step 4: Download missing data
+            # Step 4: Create download segments (Task 4.4)
             if not gaps:
                 logger.info("No gaps to fill, using cached data")
                 return {
@@ -456,35 +569,70 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
                     "gaps_filled": 0,
                 }
 
-            # Download each gap
-            total_rows = 0
-            import pandas as pd
+            # Create segments from gaps
+            segments = self.segment_manager.create_segments(
+                gaps=gaps,
+                mode=mode_enum,
+                timeframe=timeframe,
+            )
+            logger.info(f"Created {len(segments)} segments from {len(gaps)} gaps")
 
-            for gap_start, gap_end in gaps:
-                logger.info(f"Downloading gap: {gap_start} to {gap_end}")
-                gap_data = await self.provider.fetch_historical_data(
+            # Prioritize segments based on mode
+            segments = self.segment_manager.prioritize_segments(
+                segments=segments,
+                mode=mode_enum,
+            )
+
+            # Step 5: Download segments with resilience (Task 4.4)
+            # Create periodic save callback
+            periodic_save_callback = self._create_periodic_save_callback(
+                symbol, timeframe
+            )
+
+            # Use SegmentManager for resilient fetching
+            # Note: progress_manager and cancellation_token are available from
+            # ServiceOrchestrator context via start_managed_operation
+            successful_data, successful_count, failed_count = (
+                await self.segment_manager.fetch_segments_with_resilience(
                     symbol=symbol,
                     timeframe=timeframe,
-                    start=gap_start,
-                    end=gap_end,
+                    segments=segments,
+                    external_provider=self.provider,
+                    progress_manager=None,  # Will be injected by ServiceOrchestrator
+                    cancellation_token=None,  # Will be injected by ServiceOrchestrator
+                    periodic_save_callback=periodic_save_callback,
+                    periodic_save_minutes=self.periodic_save_interval,
                 )
-                total_rows += len(gap_data)
+            )
 
-                # Merge with existing and save (simple concat + drop duplicates)
+            # Step 6: Merge and save final data
+            total_rows = 0
+            if successful_data:
+                # Combine all downloaded segments
+                combined = pd.concat(successful_data, ignore_index=False)
+                combined = combined[~combined.index.duplicated(keep="last")]
+                combined = combined.sort_index()
+                total_rows = len(combined)
+
+                # Merge with existing cache if present
                 if existing_data is not None and not existing_data.empty:
-                    merged_data = pd.concat([existing_data, gap_data])
+                    merged_data = pd.concat(
+                        [existing_data, combined], ignore_index=False
+                    )
                     merged_data = merged_data[
                         ~merged_data.index.duplicated(keep="last")
                     ]
                     merged_data = merged_data.sort_index()
                 else:
-                    merged_data = gap_data
+                    merged_data = combined
 
-                # Save to cache
+                # Final save to cache
                 self.repository.save_to_cache(symbol, timeframe, merged_data)
-                existing_data = merged_data
 
-            logger.info(f"Downloaded {total_rows} rows across {len(gaps)} gaps")
+            logger.info(
+                f"Downloaded {total_rows} rows across {successful_count}/{len(segments)} segments "
+                f"({failed_count} failed)"
+            )
 
             # Return summary
             return {
