@@ -10,7 +10,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from ktrdr.api.endpoints.data import router
+from ktrdr.api.endpoints.data import get_acquisition_service, router
 from ktrdr.data.acquisition.acquisition_service import DataAcquisitionService
 
 
@@ -39,8 +39,7 @@ def mock_acquisition_service():
 class TestDataAcquireDownloadEndpoint:
     """Tests for POST /data/acquire/download endpoint."""
 
-    @pytest.mark.asyncio
-    async def test_download_endpoint_exists(self, client):
+    def test_download_endpoint_exists(self, client):
         """Test that the POST /data/acquire/download endpoint exists."""
         # This should fail initially - endpoint doesn't exist yet
         response = client.post(
@@ -56,8 +55,7 @@ class TestDataAcquireDownloadEndpoint:
             response.status_code != 404
         ), "Endpoint /data/acquire/download should exist"
 
-    @pytest.mark.asyncio
-    async def test_download_with_valid_request(self, client, mock_acquisition_service):
+    def test_download_with_valid_request(self, app, mock_acquisition_service):
         """Test download with valid request returns operation info."""
         # Mock the download_data response
         mock_acquisition_service.download_data.return_value = {
@@ -66,18 +64,24 @@ class TestDataAcquireDownloadEndpoint:
             "message": "Download started",
         }
 
-        with patch(
-            "ktrdr.api.endpoints.data.get_acquisition_service",
-            return_value=mock_acquisition_service,
-        ):
-            response = client.post(
-                "/data/acquire/download",
-                json={
-                    "symbol": "AAPL",
-                    "timeframe": "1d",
-                    "mode": "tail",
-                },
-            )
+        # Override the dependency
+        app.dependency_overrides[get_acquisition_service] = (
+            lambda: mock_acquisition_service
+        )
+
+        # Create client AFTER overriding dependencies
+        client = TestClient(app)
+        response = client.post(
+            "/data/acquire/download",
+            json={
+                "symbol": "AAPL",
+                "timeframe": "1d",
+                "mode": "tail",
+            },
+        )
+
+        # Clear override
+        app.dependency_overrides.clear()
 
         assert response.status_code == 200
         data = response.json()
@@ -86,8 +90,7 @@ class TestDataAcquireDownloadEndpoint:
         assert data["operation_id"] == "op_test_123"
         assert data["status"] == "started"
 
-    @pytest.mark.asyncio
-    async def test_download_with_backfill_mode(self, client, mock_acquisition_service):
+    def test_download_with_backfill_mode(self, app, mock_acquisition_service):
         """Test download with backfill mode."""
         mock_acquisition_service.download_data.return_value = {
             "operation_id": "op_backfill_456",
@@ -95,20 +98,25 @@ class TestDataAcquireDownloadEndpoint:
             "message": "Backfill started",
         }
 
-        with patch(
-            "ktrdr.api.endpoints.data.get_acquisition_service",
-            return_value=mock_acquisition_service,
-        ):
-            response = client.post(
-                "/data/acquire/download",
-                json={
-                    "symbol": "EURUSD",
-                    "timeframe": "1h",
-                    "mode": "backfill",
-                    "start_date": "2024-01-01",
-                    "end_date": "2024-12-31",
-                },
-            )
+        # Override the dependency
+        app.dependency_overrides[get_acquisition_service] = (
+            lambda: mock_acquisition_service
+        )
+
+        client = TestClient(app)
+        response = client.post(
+            "/data/acquire/download",
+            json={
+                "symbol": "EURUSD",
+                "timeframe": "1h",
+                "mode": "backfill",
+                "start_date": "2024-01-01",
+                "end_date": "2024-12-31",
+            },
+        )
+
+        # Clear override
+        app.dependency_overrides.clear()
 
         assert response.status_code == 200
         # Verify service was called with correct parameters
@@ -120,8 +128,7 @@ class TestDataAcquireDownloadEndpoint:
             mode="backfill",
         )
 
-    @pytest.mark.asyncio
-    async def test_download_with_full_mode(self, client, mock_acquisition_service):
+    def test_download_with_full_mode(self, app, mock_acquisition_service):
         """Test download with full mode."""
         mock_acquisition_service.download_data.return_value = {
             "operation_id": "op_full_789",
@@ -129,25 +136,29 @@ class TestDataAcquireDownloadEndpoint:
             "message": "Full download started",
         }
 
-        with patch(
-            "ktrdr.api.endpoints.data.get_acquisition_service",
-            return_value=mock_acquisition_service,
-        ):
-            response = client.post(
-                "/data/acquire/download",
-                json={
-                    "symbol": "MSFT",
-                    "timeframe": "1d",
-                    "mode": "full",
-                    "start_date": "2023-01-01",
-                },
-            )
+        # Override the dependency
+        app.dependency_overrides[get_acquisition_service] = (
+            lambda: mock_acquisition_service
+        )
+
+        client = TestClient(app)
+        response = client.post(
+            "/data/acquire/download",
+            json={
+                "symbol": "MSFT",
+                "timeframe": "1d",
+                "mode": "full",
+                "start_date": "2023-01-01",
+            },
+        )
+
+        # Clear override
+        app.dependency_overrides.clear()
 
         assert response.status_code == 200
         mock_acquisition_service.download_data.assert_called_once()
 
-    @pytest.mark.asyncio
-    async def test_download_missing_symbol(self, client):
+    def test_download_missing_symbol(self, client):
         """Test download with missing symbol returns error."""
         response = client.post(
             "/data/acquire/download",
@@ -158,8 +169,7 @@ class TestDataAcquireDownloadEndpoint:
         )
         assert response.status_code == 422  # Validation error
 
-    @pytest.mark.asyncio
-    async def test_download_missing_timeframe(self, client):
+    def test_download_missing_timeframe(self, client):
         """Test download with missing timeframe returns error."""
         response = client.post(
             "/data/acquire/download",
@@ -170,8 +180,7 @@ class TestDataAcquireDownloadEndpoint:
         )
         assert response.status_code == 422  # Validation error
 
-    @pytest.mark.asyncio
-    async def test_download_invalid_mode(self, client, mock_acquisition_service):
+    def test_download_invalid_mode(self, client):
         """Test download with invalid mode returns error."""
         # Invalid mode should either be rejected by request validation
         # or by the service
@@ -186,32 +195,33 @@ class TestDataAcquireDownloadEndpoint:
         # Should return error (either 400 or 422)
         assert response.status_code in [400, 422]
 
-    @pytest.mark.asyncio
-    async def test_download_service_error_handling(
-        self, client, mock_acquisition_service
-    ):
+    def test_download_service_error_handling(self, app, mock_acquisition_service):
         """Test that service errors are properly handled."""
         # Mock service raising an error
         mock_acquisition_service.download_data.side_effect = Exception("Service error")
 
-        with patch(
-            "ktrdr.api.endpoints.data.get_acquisition_service",
-            return_value=mock_acquisition_service,
-        ):
-            response = client.post(
-                "/data/acquire/download",
-                json={
-                    "symbol": "AAPL",
-                    "timeframe": "1d",
-                    "mode": "tail",
-                },
-            )
+        # Override the dependency
+        app.dependency_overrides[get_acquisition_service] = (
+            lambda: mock_acquisition_service
+        )
+
+        client = TestClient(app)
+        response = client.post(
+            "/data/acquire/download",
+            json={
+                "symbol": "AAPL",
+                "timeframe": "1d",
+                "mode": "tail",
+            },
+        )
+
+        # Clear override
+        app.dependency_overrides.clear()
 
         # Should return error status code
         assert response.status_code >= 400
 
-    @pytest.mark.asyncio
-    async def test_download_with_date_range(self, client, mock_acquisition_service):
+    def test_download_with_date_range(self, app, mock_acquisition_service):
         """Test download with custom date range."""
         mock_acquisition_service.download_data.return_value = {
             "operation_id": "op_range_999",
@@ -219,20 +229,25 @@ class TestDataAcquireDownloadEndpoint:
             "message": "Download with date range started",
         }
 
-        with patch(
-            "ktrdr.api.endpoints.data.get_acquisition_service",
-            return_value=mock_acquisition_service,
-        ):
-            response = client.post(
-                "/data/acquire/download",
-                json={
-                    "symbol": "AAPL",
-                    "timeframe": "1h",
-                    "mode": "full",
-                    "start_date": "2024-01-01T00:00:00Z",
-                    "end_date": "2024-12-31T23:59:59Z",
-                },
-            )
+        # Override the dependency
+        app.dependency_overrides[get_acquisition_service] = (
+            lambda: mock_acquisition_service
+        )
+
+        client = TestClient(app)
+        response = client.post(
+            "/data/acquire/download",
+            json={
+                "symbol": "AAPL",
+                "timeframe": "1h",
+                "mode": "full",
+                "start_date": "2024-01-01T00:00:00Z",
+                "end_date": "2024-12-31T23:59:59Z",
+            },
+        )
+
+        # Clear override
+        app.dependency_overrides.clear()
 
         assert response.status_code == 200
         # Verify dates were passed correctly
@@ -245,10 +260,7 @@ class TestDataAcquireDownloadEndpoint:
 class TestDeprecatedDataLoadEndpoint:
     """Tests for deprecated POST /data/load endpoint."""
 
-    @pytest.mark.asyncio
-    async def test_deprecated_endpoint_still_works(
-        self, client, mock_acquisition_service
-    ):
+    def test_deprecated_endpoint_still_works(self, app, mock_acquisition_service):
         """Test that deprecated /data/load endpoint still functions."""
         mock_acquisition_service.download_data.return_value = {
             "operation_id": "op_deprecated_111",
@@ -256,25 +268,29 @@ class TestDeprecatedDataLoadEndpoint:
             "message": "Download started (deprecated endpoint)",
         }
 
-        with patch(
-            "ktrdr.api.endpoints.data.get_acquisition_service",
-            return_value=mock_acquisition_service,
-        ):
-            response = client.post(
-                "/data/load",
-                json={
-                    "symbol": "AAPL",
-                    "timeframe": "1d",
-                    "mode": "tail",
-                },
-            )
+        # Override the dependency
+        app.dependency_overrides[get_acquisition_service] = (
+            lambda: mock_acquisition_service
+        )
+
+        client = TestClient(app)
+        response = client.post(
+            "/data/load",
+            json={
+                "symbol": "AAPL",
+                "timeframe": "1d",
+                "mode": "tail",
+            },
+        )
+
+        # Clear override
+        app.dependency_overrides.clear()
 
         # Should still work (200 OK)
         assert response.status_code == 200
 
-    @pytest.mark.asyncio
-    async def test_deprecated_endpoint_routes_to_acquisition_service(
-        self, client, mock_acquisition_service
+    def test_deprecated_endpoint_routes_to_acquisition_service(
+        self, app, mock_acquisition_service
     ):
         """Test that deprecated endpoint routes to DataAcquisitionService."""
         mock_acquisition_service.download_data.return_value = {
@@ -283,26 +299,30 @@ class TestDeprecatedDataLoadEndpoint:
             "message": "Download started",
         }
 
-        with patch(
-            "ktrdr.api.endpoints.data.get_acquisition_service",
-            return_value=mock_acquisition_service,
-        ):
-            _ = client.post(
-                "/data/load",
-                json={
-                    "symbol": "MSFT",
-                    "timeframe": "1h",
-                    "mode": "backfill",
-                    "start_date": "2024-01-01",
-                },
-            )
+        # Override the dependency
+        app.dependency_overrides[get_acquisition_service] = (
+            lambda: mock_acquisition_service
+        )
+
+        client = TestClient(app)
+        _ = client.post(
+            "/data/load",
+            json={
+                "symbol": "MSFT",
+                "timeframe": "1h",
+                "mode": "backfill",
+                "start_date": "2024-01-01",
+            },
+        )
+
+        # Clear override
+        app.dependency_overrides.clear()
 
         # Verify acquisition service was called
         mock_acquisition_service.download_data.assert_called_once()
 
-    @pytest.mark.asyncio
-    async def test_deprecated_endpoint_includes_deprecation_warning(
-        self, client, mock_acquisition_service
+    def test_deprecated_endpoint_includes_deprecation_warning(
+        self, app, mock_acquisition_service
     ):
         """Test that deprecated endpoint includes deprecation info in response."""
         mock_acquisition_service.download_data.return_value = {
@@ -311,13 +331,13 @@ class TestDeprecatedDataLoadEndpoint:
             "message": "Download started",
         }
 
-        with (
-            patch(
-                "ktrdr.api.endpoints.data.get_acquisition_service",
-                return_value=mock_acquisition_service,
-            ),
-            patch("ktrdr.api.endpoints.data.logger") as mock_logger,
-        ):
+        # Override the dependency
+        app.dependency_overrides[get_acquisition_service] = (
+            lambda: mock_acquisition_service
+        )
+
+        with patch("ktrdr.api.endpoints.data.logger") as mock_logger:
+            client = TestClient(app)
             _ = client.post(
                 "/data/load",
                 json={
@@ -326,6 +346,9 @@ class TestDeprecatedDataLoadEndpoint:
                     "mode": "tail",
                 },
             )
+
+        # Clear override
+        app.dependency_overrides.clear()
 
         # Should log deprecation warning
         mock_logger.warning.assert_called()
