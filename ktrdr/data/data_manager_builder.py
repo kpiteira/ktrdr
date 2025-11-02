@@ -102,11 +102,13 @@ class IbConfigurationLoader:
             env_enabled = os.getenv("USE_IB_HOST_SERVICE", "").lower()
             if env_enabled in ("true", "1", "yes"):
                 host_service_config.enabled = True
-                env_url = os.getenv("IB_HOST_SERVICE_URL")
-                if env_url:
-                    host_service_config.url = env_url
             elif env_enabled in ("false", "0", "no"):
                 host_service_config.enabled = False
+
+            # Always respect IB_HOST_SERVICE_URL if set (IbDataProvider is HTTP-only)
+            env_url = os.getenv("IB_HOST_SERVICE_URL")
+            if env_url:
+                host_service_config.url = env_url
 
             return host_service_config
 
