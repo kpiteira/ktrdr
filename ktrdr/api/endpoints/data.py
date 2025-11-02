@@ -11,9 +11,10 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
 from ktrdr import get_logger
-from ktrdr.api.dependencies import get_data_service
+from ktrdr.api.dependencies import get_acquisition_service, get_data_service
 from ktrdr.api.models.base import ApiResponse
 from ktrdr.api.models.data import (
+    DataAcquisitionResponse,
     DataLoadApiResponse,
     DataLoadOperationResponse,
     DataLoadRequest,
@@ -447,10 +448,97 @@ async def get_cached_data(
 
 
 @router.post(
+    "/data/acquire/download",
+    response_model=DataAcquisitionResponse,
+    tags=["Data Acquisition"],
+    summary="Download data from external provider",
+    description="""
+    Download market data from external provider (IB) with gap analysis and progress tracking.
+
+    This endpoint uses DataAcquisitionService for:
+    - Intelligent gap analysis
+    - Mode-based downloads (tail, backfill, full)
+    - Progress tracking via Operations service
+    - Resilient segment fetching
+
+    Returns operation_id for tracking progress via GET /operations/{operation_id}
+
+    **Loading Modes:**
+    - `tail`: Download recent data (fill gaps at end)
+    - `backfill`: Download historical data (fill gaps at beginning)
+    - `full`: Download complete range (fill all gaps)
+    """,
+)
+async def download_data_acquire(
+    request: DataLoadRequest,
+    acquisition_service=Depends(get_acquisition_service),
+) -> DataAcquisitionResponse:
+    """
+    Download data from external provider (IB) using DataAcquisitionService.
+
+    This is the NEW endpoint that uses DataAcquisitionService with
+    Repository + Provider pattern for cleaner architecture.
+
+    Args:
+        request: Data load request with symbol, timeframe, mode, and optional dates
+
+    Returns:
+        Response with operation ID for tracking progress
+
+    Example request:
+        ```json
+        {
+          "symbol": "AAPL",
+          "timeframe": "1h",
+          "mode": "tail"
+        }
+        ```
+
+    Example response:
+        ```json
+        {
+          "success": true,
+          "operation_id": "op_data_load_20241201_abc123",
+          "status": "started",
+          "message": "Started tail download for AAPL 1h"
+        }
+        ```
+    """
+    try:
+        logger.info(
+            f"📥 NEW ENDPOINT: Data acquisition initiated for {request.symbol} ({request.timeframe})"
+        )
+
+        # Call DataAcquisitionService
+        result = await acquisition_service.download_data(
+            symbol=request.symbol,
+            timeframe=request.timeframe,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            mode=request.mode or "tail",
+        )
+
+        return DataAcquisitionResponse(
+            success=True,
+            operation_id=result["operation_id"],
+            status=result["status"],
+            message=f"Started {request.mode or 'tail'} download for {request.symbol} {request.timeframe}",
+        )
+
+    except Exception as e:
+        logger.error(f"Data acquisition failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Data acquisition failed: {str(e)}",
+        ) from e
+
+
+@router.post(
     "/data/load",
     response_model=DataLoadApiResponse,
     tags=["Data"],
-    summary="Load data via DataManager (CLI/Operations)",
+    deprecated=True,  # Mark as deprecated
+    summary="[DEPRECATED] Load data - use /data/acquire/download instead",
     description="""
     Data loading operations endpoint for CLI and background processes.
 
@@ -473,24 +561,16 @@ async def get_cached_data(
 )
 async def load_data(
     request: DataLoadRequest,
-    data_service: DataService = Depends(get_data_service),
+    acquisition_service=Depends(get_acquisition_service),
 ) -> DataLoadApiResponse:
     """
-    Load data asynchronously using enhanced DataManager with IB integration.
+    DEPRECATED: Use POST /data/acquire/download instead.
 
-    This endpoint uses the enhanced DataManager which provides:
-    - Intelligent gap analysis
-    - Smart segmentation for large ranges
-    - Trading calendar awareness
-    - IB rate limit compliance
-    - Partial failure resilience
-
-    All operations are asynchronous and return an operation ID for tracking.
-    Use GET /operations/{operation_id} to poll for status.
-    Use GET /operations/{operation_id}/results to get final results.
+    This endpoint now routes to DataAcquisitionService but is deprecated.
+    Please migrate to /data/acquire/download for new implementations.
 
     Args:
-        request: Enhanced data loading request with mode support
+        request: Data load request with symbol, timeframe, mode, and optional dates
 
     Returns:
         Response with operation ID for tracking
@@ -515,79 +595,52 @@ async def load_data(
         }
         ```
     """
+    # Log deprecation warning
+    logger.warning(
+        "POST /data/load is deprecated. Use POST /data/acquire/download instead. "
+        f"Request for {request.symbol} {request.timeframe}"
+    )
+
     try:
-        # Log user-initiated operation clearly for CLI visibility
-        logger.info(
-            f"📥 USER OPERATION: Data loading initiated for {request.symbol} ({request.timeframe})"
-        )
-        logger.info(
-            f"Enhanced data loading for {request.symbol} ({request.timeframe}) - mode: {request.mode}"
-        )
-
-        # Validate request
-        if not request.symbol or not request.symbol.strip():
-            raise DataError(
-                message="Symbol is required and cannot be empty",
-                error_code="DATA-InvalidSymbol",
-                details={"symbol": request.symbol},
-            )
-
-        # Clean symbol
-        clean_symbol = request.symbol.strip().upper()
-
-        # Extract filters from request
-        filters_dict = None
-        if request.filters:
-            filters_dict = {
-                "trading_hours_only": request.filters.trading_hours_only,
-                "include_extended": request.filters.include_extended,
-            }
-
-        # Always use async mode - consistent delegation for async operation tracking
-        operation_result = await data_service.load_data_async(
-            symbol=clean_symbol,
+        # Route to new DataAcquisitionService
+        result = await acquisition_service.download_data(
+            symbol=request.symbol,
             timeframe=request.timeframe,
             start_date=request.start_date,
             end_date=request.end_date,
-            mode=request.mode,
-            filters=filters_dict,
+            mode=request.mode or "tail",
         )
 
         # Extract operation ID from ServiceOrchestrator result
-        operation_id = operation_result.get("operation_id") or str(uuid.uuid4())
-        status = operation_result.get("status", "started")
+        operation_id = result.get("operation_id") or str(uuid.uuid4())
+        status = result.get("status", "started")
 
-        # Return operation ID for tracking
+        # Return operation ID for tracking (with deprecated marker)
         response_data = DataLoadOperationResponse(
             operation_id=operation_id,
             status=status,
-            fetched_bars=0,
-            cached_before=False,
-            merged_file="",
-            gaps_analyzed=0,
-            segments_fetched=0,
-            ib_requests_made=0,
-            execution_time_seconds=0.0,
+            fetched_bars=0,  # Not available from new service
+            cached_before=False,  # Not available from new service
+            merged_file="",  # Not available from new service
+            gaps_analyzed=0,  # Not available from new service
+            segments_fetched=0,  # Not available from new service
+            ib_requests_made=0,  # Not available from new service
+            execution_time_seconds=0.0,  # Not available from new service
             error_message=None,
         )
 
-        logger.info(f"Started async data loading operation: {operation_id}")
+        logger.info(
+            f"Started async data loading operation (deprecated endpoint): {operation_id}"
+        )
         return DataLoadApiResponse(success=True, data=response_data, error=None)
 
-    except DataError as e:
-        logger.error(f"Data error loading {request.symbol}: {str(e)}")
-        raise
     except Exception as e:
-        logger.error(f"Unexpected error loading {request.symbol}: {str(e)}")
-        raise DataError(
-            message=f"Failed to load data for {request.symbol} ({request.timeframe})",
-            error_code="DATA-LoadError",
-            details={
-                "symbol": request.symbol,
-                "timeframe": request.timeframe,
-                "mode": request.mode,
-                "error": str(e),
-            },
+        logger.error(
+            f"Unexpected error loading {request.symbol} (deprecated endpoint): {str(e)}"
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Data loading failed: {str(e)}",
         ) from e
 
 

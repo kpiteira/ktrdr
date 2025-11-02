@@ -330,6 +330,25 @@ class DataLoadRequest(BaseModel):
         return self
 
 
+class DataAcquisitionResponse(BaseModel):
+    """
+    Simple response model for data acquisition operations.
+
+    Used by the new /data/acquire/download endpoint.
+
+    Attributes:
+        success (bool): Whether the request was successful
+        operation_id (str): Operation ID for tracking progress
+        status (str): Operation status (e.g., 'started')
+        message (str): Human-readable status message
+    """
+
+    success: bool = Field(..., description="Whether the request was successful")
+    operation_id: str = Field(..., description="Operation ID for tracking progress")
+    status: str = Field(..., description="Operation status")
+    message: str = Field(..., description="Human-readable status message")
+
+
 class DataLoadOperationResponse(BaseModel):
     """
     Response model for data loading operations with enhanced metrics.
