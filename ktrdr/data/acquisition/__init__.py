@@ -5,6 +5,7 @@ This module provides external data acquisition orchestration,
 including gap analysis, segmentation, and provider integration.
 """
 
+from ktrdr.data.acquisition.acquisition_service import DataAcquisitionService
 from ktrdr.data.acquisition.data_loading_orchestrator import DataLoadingOrchestrator
 from ktrdr.data.acquisition.external_data_interface import (
     DataProviderConnectionError,
@@ -21,6 +22,7 @@ from ktrdr.data.acquisition.ib_data_provider import IbDataProvider
 from ktrdr.data.acquisition.segment_manager import SegmentManager
 
 __all__ = [
+    "DataAcquisitionService",
     "DataLoadingOrchestrator",
     "ExternalDataProvider",
     "DataProviderError",
