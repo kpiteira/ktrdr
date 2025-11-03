@@ -55,7 +55,8 @@ class TestDataRepositoryInitialization:
         """Test initializing DataRepository with a valid directory path."""
         repo = DataRepository(data_dir=str(data_dir))
 
-        assert repo.data_dir == str(data_dir)
+        # data_dir is now a property that returns Path from loader
+        assert str(repo.data_dir) == str(data_dir)
         assert repo.loader is not None
         assert repo.validator is not None
 
@@ -674,3 +675,94 @@ class TestPerformance:
 
         # Should be fast (sync operation)
         assert elapsed < 0.3  # <300ms (relaxed from spec's <200ms for safety)
+
+
+class TestDataDirectoryAccess:
+    """Test data_dir property access - Task 4.5.1."""
+
+    def test_data_dir_property_returns_path(self, repository, data_dir):
+        """Test that data_dir property returns the correct data directory path."""
+        # Should return the data directory path
+        assert repository.data_dir is not None
+        assert str(data_dir) in str(repository.data_dir)
+
+    def test_data_dir_delegates_to_loader(self, repository):
+        """Test that data_dir property delegates to loader.data_dir."""
+        # The property should return the loader's data_dir
+        assert repository.data_dir == repository.loader.data_dir
+
+
+class TestGetAvailableDataFiles:
+    """Test get_available_data_files method - Task 4.5.1."""
+
+    def test_get_available_data_files_empty_directory(self, repository):
+        """Test get_available_data_files returns empty list when no files exist."""
+        files = repository.get_available_data_files()
+
+        assert isinstance(files, list)
+        assert files == []
+
+    def test_get_available_data_files_with_single_file(
+        self, repository, sample_dataframe, data_dir
+    ):
+        """Test get_available_data_files with a single data file."""
+        # Save a single file
+        csv_file = data_dir / "AAPL_1d.csv"
+        sample_dataframe.to_csv(csv_file, date_format="%Y-%m-%dT%H:%M:%SZ")
+
+        files = repository.get_available_data_files()
+
+        assert isinstance(files, list)
+        assert len(files) == 1
+        assert ("AAPL", "1d") in files
+
+    def test_get_available_data_files_with_multiple_files(
+        self, repository, sample_dataframe, data_dir
+    ):
+        """Test get_available_data_files with multiple data files."""
+        # Save multiple files
+        files_to_create = [
+            ("AAPL", "1d"),
+            ("GOOGL", "1h"),
+            ("MSFT", "5m"),
+            ("TSLA", "1d"),
+        ]
+
+        for symbol, timeframe in files_to_create:
+            csv_file = data_dir / f"{symbol}_{timeframe}.csv"
+            sample_dataframe.to_csv(csv_file, date_format="%Y-%m-%dT%H:%M:%SZ")
+
+        files = repository.get_available_data_files()
+
+        assert isinstance(files, list)
+        assert len(files) == 4
+        for expected_file in files_to_create:
+            assert expected_file in files
+
+    def test_get_available_data_files_delegates_to_loader(self, repository):
+        """Test that get_available_data_files delegates to loader."""
+        # The method should return the same result as loader.get_available_data_files()
+        loader_result = repository.loader.get_available_data_files()
+        repo_result = repository.get_available_data_files()
+
+        assert repo_result == loader_result
+
+    def test_get_available_data_files_returns_tuples(
+        self, repository, sample_dataframe, data_dir
+    ):
+        """Test that get_available_data_files returns list of (symbol, timeframe) tuples."""
+        # Save a file
+        csv_file = data_dir / "EURUSD_1h.csv"
+        sample_dataframe.to_csv(csv_file, date_format="%Y-%m-%dT%H:%M:%SZ")
+
+        files = repository.get_available_data_files()
+
+        assert isinstance(files, list)
+        assert len(files) > 0
+        # Each item should be a tuple
+        for item in files:
+            assert isinstance(item, tuple)
+            assert len(item) == 2
+            symbol, timeframe = item
+            assert isinstance(symbol, str)
+            assert isinstance(timeframe, str)

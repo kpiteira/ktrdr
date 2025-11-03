@@ -13,6 +13,7 @@ Key characteristics:
 
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional, Union
 
 import pandas as pd
@@ -47,7 +48,6 @@ class DataRepository:
         if data_dir is None:
             data_dir = os.getenv("DATA_DIR", "./data")
 
-        self.data_dir = data_dir
         logger.info(f"Initializing DataRepository with data_dir={data_dir}")
 
         # Compose LocalDataLoader for file I/O
@@ -58,6 +58,11 @@ class DataRepository:
         self.validator = DataQualityValidator(auto_correct=True)
 
         logger.info("DataRepository initialized successfully")
+
+    @property
+    def data_dir(self) -> Path:
+        """Get the data directory path from the loader."""
+        return self.loader.data_dir
 
     def load_from_cache(
         self,
@@ -375,3 +380,20 @@ class DataRepository:
         except Exception as e:
             logger.error(f"Error validating data: {e}")
             raise
+
+    def get_available_data_files(self) -> list[tuple[str, str]]:
+        """
+        Get list of available data files.
+
+        Delegates to LocalDataLoader to discover cached data files.
+
+        Returns:
+            List of (symbol, timeframe) tuples for cached data
+
+        Example:
+            >>> repository = DataRepository()
+            >>> files = repository.get_available_data_files()
+            >>> files
+            [('AAPL', '1d'), ('GOOGL', '1h'), ('MSFT', '5m')]
+        """
+        return self.loader.get_available_data_files()
