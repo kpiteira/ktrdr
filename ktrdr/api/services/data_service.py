@@ -24,8 +24,9 @@ class DataService(BaseService):
     """
     Service for accessing and managing OHLCV data.
 
-    This service adapts the core DataManager functionality for API use,
-    providing data loading, symbol listing, and related operations.
+    This service provides access to cached data via DataRepository,
+    offering symbol listing, data retrieval, and metadata operations.
+    For data downloads, use DataAcquisitionService.
     """
 
     def __init__(self, data_dir: Optional[str] = None):
