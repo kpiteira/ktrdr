@@ -8,8 +8,9 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from ktrdr.data.data_manager import DataManager
+from ktrdr.data.repository import DataRepository
 from ktrdr.decision.orchestrator import DecisionOrchestrator
+from ktrdr.errors.exceptions import DataNotFoundError
 
 # Rich console for formatted output
 console = Console()
@@ -48,10 +49,19 @@ def test_model_signals(
         console.print("[cyan]🧪 KTRDR Model Testing[/cyan]")
         console.print("=" * 50)
 
-        # Load data
+        # Load data from cache
         console.print(f"📊 Loading recent data for {symbol} {timeframe}...")
-        data_manager = DataManager()
-        data = data_manager.load_data(symbol, timeframe, mode=data_mode)
+        repository = DataRepository()
+        try:
+            data = repository.load_from_cache(symbol, timeframe)
+        except DataNotFoundError:
+            console.print(
+                f"[red]❌ Error: No cached data for {symbol} {timeframe}[/red]"
+            )
+            console.print(
+                f"[yellow]💡 Run: ktrdr data load {symbol} --timeframe {timeframe}[/yellow]"
+            )
+            raise typer.Exit(1) from None
 
         if data is None or len(data) < samples:
             console.print(
