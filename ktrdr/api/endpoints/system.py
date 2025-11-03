@@ -3,7 +3,6 @@ System status endpoints for monitoring background services.
 
 Provides endpoints to monitor:
 - IB connection status
-- Gap filling service status
 - Overall system health
 """
 
@@ -13,9 +12,6 @@ from fastapi import APIRouter, HTTPException
 
 from ktrdr import metadata
 from ktrdr.api.models.base import ApiResponse
-
-# Gap filler moved to acquisition layer
-from ktrdr.data.acquisition.gap_filler import get_gap_filler
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
@@ -66,49 +62,6 @@ async def get_ib_status() -> dict[str, Any]:
         ) from e
 
 
-@router.get("/gap-filler-status")
-async def get_gap_filler_status() -> dict[str, Any]:
-    """
-    Get gap filling service status.
-
-    Returns information about the automatic gap filling service
-    including statistics on gaps detected and filled.
-    """
-    try:
-        gap_filler = get_gap_filler()
-        stats = gap_filler.get_stats()
-
-        return {
-            "status": "ok",
-            "gap_filler": {
-                "running": stats["running"],
-                "check_interval": stats["check_interval"],
-                "supported_timeframes": stats["supported_timeframes"],
-                "last_scan_time": (
-                    stats["last_scan_time"].isoformat()
-                    if stats["last_scan_time"]
-                    else None
-                ),
-            },
-            "statistics": {
-                "gaps_detected": stats["gaps_detected"],
-                "gaps_filled": stats["gaps_filled"],
-                "gaps_failed": stats["gaps_failed"],
-                "symbols_processed": stats["symbols_processed"],
-                "recent_errors": [
-                    {"time": error["time"].isoformat(), "error": error["error"]}
-                    for error in stats.get("errors", [])
-                ],
-            },
-        }
-
-    except Exception as e:
-        logger.error(f"Error getting gap filler status: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Error getting gap filler status: {str(e)}"
-        ) from e
-
-
 @router.get("/system-status")
 async def get_system_status() -> dict[str, Any]:
     """
@@ -124,17 +77,8 @@ async def get_system_status() -> dict[str, Any]:
         available_conns = pool_stats.get("available_connections", 0)
         ib_connected = isinstance(available_conns, int) and available_conns > 0
 
-        # Get gap filler status
-        gap_filler = get_gap_filler()
-        gap_filler_stats = gap_filler.get_stats()
-        gap_filler_running = gap_filler_stats["running"]
-
         # Determine overall health
-        overall_health = "healthy"
-        if not ib_connected and not gap_filler_running:
-            overall_health = "critical"
-        elif not ib_connected or not gap_filler_running:
-            overall_health = "degraded"
+        overall_health = "healthy" if ib_connected else "degraded"
 
         return {
             "status": "ok",
@@ -144,16 +88,9 @@ async def get_system_status() -> dict[str, Any]:
                     "status": "connected" if ib_connected else "disconnected",
                     "healthy": ib_connected,
                 },
-                "gap_filler": {
-                    "status": "running" if gap_filler_running else "stopped",
-                    "healthy": gap_filler_running,
-                },
             },
             "summary": {
                 "ib_connected": ib_connected,
-                "gap_filler_running": gap_filler_running,
-                "gaps_filled_today": gap_filler_stats.get("gaps_filled", 0),
-                "symbols_processed": len(gap_filler_stats.get("symbols_processed", [])),
             },
         }
 
@@ -179,11 +116,6 @@ async def get_system_status_standardized() -> ApiResponse:
         available_conns = pool_stats.get("available_connections", 0)
         ib_connected = isinstance(available_conns, int) and available_conns > 0
 
-        # Get gap filler status
-        gap_filler = get_gap_filler()
-        gap_filler_stats = gap_filler.get_stats()
-        gap_filler_running = gap_filler_stats["running"]
-
         # Calculate uptime
         uptime_seconds = pool_stats.get("pool_uptime_seconds", 0)
 
@@ -193,26 +125,15 @@ async def get_system_status_standardized() -> ApiResponse:
                 "version": metadata.VERSION,
                 "environment": "development",  # Could be made configurable
                 "uptime_seconds": uptime_seconds,
-                "health": (
-                    "healthy" if ib_connected and gap_filler_running else "degraded"
-                ),
+                "health": "healthy" if ib_connected else "degraded",
                 "services": {
                     "ib_connection": {
                         "status": "connected" if ib_connected else "disconnected",
                         "healthy": ib_connected,
                     },
-                    "gap_filler": {
-                        "status": "running" if gap_filler_running else "stopped",
-                        "healthy": gap_filler_running,
-                    },
                 },
                 "summary": {
                     "ib_connected": ib_connected,
-                    "gap_filler_running": gap_filler_running,
-                    "gaps_filled_today": gap_filler_stats.get("gaps_filled", 0),
-                    "symbols_processed": len(
-                        gap_filler_stats.get("symbols_processed", [])
-                    ),
                 },
             },
             error=None,
@@ -251,7 +172,6 @@ async def get_system_config() -> ApiResponse:
                 "cors_origins": api_config.cors_origins,
                 "features_enabled": [
                     "ib_integration",
-                    "gap_filling",
                     "symbol_validation",
                     "data_loading",
                     "strategy_management",
@@ -261,7 +181,6 @@ async def get_system_config() -> ApiResponse:
                 ],
                 "services_available": [
                     "connection_pool",
-                    "gap_filler",
                     "pace_manager",
                     "symbol_validator",
                     "data_fetcher",
@@ -274,31 +193,4 @@ async def get_system_config() -> ApiResponse:
         logger.error(f"Error getting system config: {e}")
         raise HTTPException(
             status_code=500, detail=f"Error getting system config: {str(e)}"
-        ) from e
-
-
-@router.post("/gap-filler/force-scan")
-async def force_gap_scan() -> dict[str, Any]:
-    """
-    Force an immediate gap scan.
-
-    Triggers the gap filling service to immediately scan for
-    and attempt to fill data gaps. Useful for testing or
-    when immediate gap filling is needed.
-    """
-    try:
-        gap_filler = get_gap_filler()
-        result = gap_filler.force_scan()
-
-        if "error" in result:
-            raise HTTPException(status_code=400, detail=result["error"])
-
-        return {"status": "ok", "message": "Gap scan completed", "result": result}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error forcing gap scan: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Error forcing gap scan: {str(e)}"
         ) from e

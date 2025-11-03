@@ -124,12 +124,9 @@ class IbLimitsRegistry:
 
     CLIENT_ID_RANGES = {
         # Production API connections
-        "api_singleton": list(
-            range(1, 11)
-        ),  # 1-10: Singleton connections (API, gap filler)
+        "api_singleton": list(range(1, 11)),  # 1-10: Singleton connections (API)
         "api_pool": list(range(11, 51)),  # 11-50: Connection pool for API requests
         # Background services
-        "gap_filler": list(range(101, 111)),  # 101-110: Gap filling service
         "data_manager": list(range(111, 121)),  # 111-120: DataManager IB fallback
         "symbol_validation": list(
             range(121, 131)
@@ -216,7 +213,7 @@ class IbLimitsRegistry:
         Get appropriate client ID for given purpose.
 
         Args:
-            purpose: Purpose category (e.g., 'api_singleton', 'gap_filler')
+            purpose: Purpose category (e.g., 'api_singleton', 'data_manager')
             index: Index within the range (0-based)
 
         Returns:
