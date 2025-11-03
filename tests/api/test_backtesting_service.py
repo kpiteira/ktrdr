@@ -53,10 +53,7 @@ def mock_operations_service():
 @pytest.fixture
 def backtesting_service(mock_operations_service):
     """Create a BacktestingService with mocked dependencies."""
-    with (
-        patch("ktrdr.api.services.backtesting_service.DataManager"),
-        patch("ktrdr.api.services.backtesting_service.ModelLoader"),
-    ):
+    with patch("ktrdr.api.services.backtesting_service.ModelLoader"):
         service = BacktestingService(operations_service=mock_operations_service)
         return service
 
@@ -94,7 +91,8 @@ class TestBacktestingService:
         assert health["service"] == "BacktestingService"
         assert health["status"] == "ok"
         assert health["active_backtests"] == 2
-        assert health["data_manager_ready"] is True
+        # data_manager_ready field has been removed (dead code cleanup)
+        assert "data_manager_ready" not in health
         assert health["model_loader_ready"] is True
 
     @pytest.mark.asyncio
