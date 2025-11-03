@@ -19,7 +19,7 @@ from ktrdr.api.models.indicators import (
     IndicatorType,
 )
 from ktrdr.api.services.base import BaseService
-from ktrdr.data import DataManager
+from ktrdr.data.repository import DataRepository
 from ktrdr.errors import ConfigurationError, DataError, ProcessingError
 from ktrdr.indicators.categories import get_indicator_category
 from ktrdr.indicators.indicator_engine import IndicatorEngine
@@ -40,7 +40,7 @@ class IndicatorService(BaseService):
     def __init__(self):
         """Initialize the indicator service."""
         super().__init__()  # Initialize BaseService
-        self.data_manager = DataManager()
+        self.repository = DataRepository()
         self.logger.info("Initialized IndicatorService")
 
     async def get_available_indicators(self) -> list[IndicatorMetadata]:
@@ -217,10 +217,10 @@ class IndicatorService(BaseService):
             )
 
             try:
-                # Update parameter names to match DataManager's API
-                df = self.data_manager.load(
+                # Load data from cache using DataRepository
+                df = self.repository.load_from_cache(
                     symbol=request.symbol,
-                    interval=request.timeframe,
+                    timeframe=request.timeframe,
                     start_date=start_date,
                     end_date=end_date,
                 )
