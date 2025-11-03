@@ -53,7 +53,8 @@ KTRDR uses **Host Services** to bypass Docker limitations for components requiri
 ┌─────────────────────────────────────────────────────────────┐
 │ Docker Container (Port 8000)                                │
 │  ├─ API Layer (FastAPI)                                     │
-│  ├─ Service Orchestrators (DataManager, TrainingManager)    │
+│  ├─ Service Orchestrators (DataAcquisitionService,          │
+│  │                          TrainingManager)                │
 │  └─ Business Logic                                          │
 └─────────────────────────────────────────────────────────────┘
          │                                    │
@@ -75,7 +76,7 @@ KTRDR uses **Host Services** to bypass Docker limitations for components requiri
 
 ### 3. Service Orchestrator Pattern
 
-All managers (DataManager, TrainingManager) inherit from `ServiceOrchestrator`:
+Service managers (DataAcquisitionService, TrainingManager) inherit from `ServiceOrchestrator`:
 
 - Unified async operation handling
 - Progress tracking with `GenericProgressManager`
@@ -241,12 +242,12 @@ All service managers inherit from ServiceOrchestrator and follow this pattern:
 **Example Pattern**:
 
 ```python
-class DataManager(ServiceOrchestrator):
+class DataAcquisitionService(ServiceOrchestrator):
     def __init__(self):
         # Reads USE_IB_HOST_SERVICE env var
-        self.adapter = self._initialize_adapter()
+        self.provider = self._initialize_provider()
 
-    async def load_data(self, ...):
+    async def download_data(self, ...):
         # Unified async pattern with progress tracking
         return await self._execute_with_progress(...)
 ```
@@ -297,7 +298,10 @@ All long-running operations support cancellation:
 Before working on specific modules:
 
 - **ServiceOrchestrator Pattern**: [ktrdr/async_infrastructure/service_orchestrator.py](ktrdr/async_infrastructure/service_orchestrator.py)
-- **Data Module**: [ktrdr/data/data_manager.py](ktrdr/data/data_manager.py) - Study ServiceOrchestrator inheritance
+- **Data Module**:
+  - [ktrdr/data/repository/data_repository.py](ktrdr/data/repository/data_repository.py) - Cached data access
+  - [ktrdr/data/acquisition/acquisition_service.py](ktrdr/data/acquisition/acquisition_service.py) - Data downloads with ServiceOrchestrator
+  - [ktrdr/data/CLAUDE.md](ktrdr/data/CLAUDE.md) - Data module patterns
 - **Training Module**: [ktrdr/training/training_manager.py](ktrdr/training/training_manager.py) - Host service routing pattern
 - **API Module**: Review FastAPI patterns in [ktrdr/api/](ktrdr/api/)
 - **CLI Async Pattern**: [ktrdr/cli/helpers/async_cli_client.py](ktrdr/cli/helpers/async_cli_client.py)
