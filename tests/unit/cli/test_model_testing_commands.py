@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 import typer
 
-from ktrdr.cli.model_testing_commands import test_model_signals
+from ktrdr.cli.model_testing_commands import show_model_signals
 from ktrdr.errors.exceptions import DataNotFoundError
 
 
@@ -76,7 +76,7 @@ indicators:
                 mock_orchestrator_class.return_value = mock_orchestrator
 
                 # Call the function
-                test_model_signals(
+                show_model_signals(
                     strategy=temp_strategy_file,
                     symbol="AAPL",
                     timeframe="1d",
@@ -114,7 +114,7 @@ indicators:
 
             # Call should raise typer.Exit(1)
             with pytest.raises(typer.Exit) as exc_info:
-                test_model_signals(
+                show_model_signals(
                     strategy=temp_strategy_file,
                     symbol="AAPL",
                     timeframe="1d",
@@ -157,7 +157,7 @@ indicators:
                 mock_orchestrator_class.return_value = mock_orchestrator
 
                 # Call function (data_mode parameter has been removed)
-                test_model_signals(
+                show_model_signals(
                     strategy=temp_strategy_file,
                     symbol="AAPL",
                     timeframe="1d",
@@ -195,7 +195,7 @@ indicators:
 
             # Should raise typer.Exit(1) due to insufficient data
             with pytest.raises(typer.Exit) as exc_info:
-                test_model_signals(
+                show_model_signals(
                     strategy=temp_strategy_file,
                     symbol="AAPL",
                     timeframe="1d",
