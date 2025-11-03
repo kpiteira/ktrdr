@@ -13,7 +13,6 @@ import pandas as pd
 
 from ktrdr import get_logger, log_entry_exit, log_performance
 from ktrdr.api.services.base import BaseService
-from ktrdr.data import DataManager
 from ktrdr.data.repository import DataRepository
 from ktrdr.errors import DataError, DataNotFoundError
 
@@ -37,7 +36,6 @@ class DataService(BaseService):
             data_dir: Optional path to the data directory
         """
         super().__init__()  # Initialize BaseService
-        self.data_manager = DataManager(data_dir=data_dir)
         self.repository = DataRepository(data_dir=data_dir)
         self.logger.info("DataService initialized with DataRepository")
 
@@ -80,85 +78,6 @@ class DataService(BaseService):
             timeframe=timeframe,
             start_date=start_date,
             end_date=end_date,
-        )
-
-    @log_entry_exit(logger=logger, log_args=True)
-    @log_performance(threshold_ms=500, logger=logger)
-    async def load_data_async(
-        self,
-        symbol: str,
-        timeframe: str,
-        start_date: Optional[Union[str, datetime]] = None,
-        end_date: Optional[Union[str, datetime]] = None,
-        mode: str = "local",
-        filters: Optional[dict[str, Any]] = None,
-    ) -> dict[str, Any]:
-        """
-        Load data asynchronously with ServiceOrchestrator operation tracking.
-
-        This method provides consistent delegation to DataManager's ServiceOrchestrator
-        for async operation tracking, returning operation metadata instead of data results.
-
-        Args:
-            symbol: Trading symbol (e.g., 'AAPL', 'EURUSD')
-            timeframe: Data timeframe (e.g., '1d', '1h')
-            start_date: Optional start date for filtering
-            end_date: Optional end date for filtering
-            mode: Loading mode (local, tail, backfill, full)
-            filters: Optional filters for data processing
-
-        Returns:
-            Dictionary with operation tracking info:
-            {
-                "operation_id": "op_xxx",
-                "status": "started",
-                "message": "Started data_load operation"
-            }
-
-        Raises:
-            DataError: For data-related errors
-        """
-        # Delegate to DataManager's ServiceOrchestrator for async operation tracking
-        return await self.data_manager.load_data_async(
-            symbol=symbol,
-            timeframe=timeframe,
-            start_date=start_date,
-            end_date=end_date,
-            mode=mode,
-            filters=filters,
-        )
-
-    async def start_data_loading_operation(
-        self,
-        symbol: str,
-        timeframe: str,
-        start_date: Optional[Union[str, datetime]] = None,
-        end_date: Optional[Union[str, datetime]] = None,
-        mode: str = "tail",
-        filters: Optional[dict[str, Any]] = None,
-    ) -> dict[str, Any]:
-        """
-        Start a data loading operation using simplified delegation to DataManager.
-
-        Args:
-            symbol: Trading symbol (e.g., 'AAPL', 'EURUSD')
-            timeframe: Data timeframe (e.g., '1d', '1h')
-            start_date: Optional start date for filtering
-            end_date: Optional end date for filtering
-            mode: Loading mode (tail, backfill, full)
-            filters: Optional filters (trading_hours_only, include_extended)
-
-        Returns:
-            API response dict with operation_id for async tracking
-        """
-        # Delegate to DataManager's ServiceOrchestrator (same as load_data but async tracked)
-        return await self.data_manager.load_data_async(
-            symbol=symbol,
-            timeframe=timeframe,
-            start_date=start_date,
-            end_date=end_date,
-            mode=mode,
-            filters=filters,
         )
 
     def _convert_df_to_api_format(
@@ -215,8 +134,8 @@ class DataService(BaseService):
         symbols = self.repository.get_available_symbols()
         logger.debug(f"Retrieved {len(symbols)} unique symbols from repository")
 
-        # Get available data files for timeframe mapping (from data_loader)
-        available_files = self.data_manager.data_loader.get_available_data_files()
+        # Get available data files for timeframe mapping
+        available_files = self.repository.get_available_data_files()
 
         # Create a map of symbol to timeframes
         symbol_timeframes: dict[str, list[str]] = {}
@@ -392,8 +311,8 @@ class DataService(BaseService):
         Returns:
             List of available timeframes for this symbol
         """
-        # Get available data files from the data_loader
-        available_files = self.data_manager.data_loader.get_available_data_files()
+        # Get available data files from repository
+        available_files = self.repository.get_available_data_files()
 
         # Filter timeframes for the specified symbol
         timeframes = sorted(
@@ -515,8 +434,8 @@ class DataService(BaseService):
         """
         try:
             # Check if we can access the data directory
-            data_dir = self.data_manager.data_loader.data_dir
-            data_files = self.data_manager.data_loader.get_available_data_files()
+            data_dir = self.repository.data_dir
+            data_files = self.repository.get_available_data_files()
 
             return {
                 "status": "healthy",
