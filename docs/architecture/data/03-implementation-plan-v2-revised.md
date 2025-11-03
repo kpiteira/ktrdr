@@ -2333,14 +2333,14 @@ async def start_data_loading_operation(self, ...): ...  # Dead code
 - Remove tests for deleted async methods
 
 **Acceptance Criteria**:
-- [ ] DataManager import removed
-- [ ] DataManager initialization removed
-- [ ] `load_data_async()` deleted (dead code)
-- [ ] `start_data_loading_operation()` deleted (dead code)
-- [ ] All data_loader access replaced with Repository methods
-- [ ] All API endpoints still work
-- [ ] All API tests pass
-- [ ] `make quality` passes
+- [x] DataManager import removed
+- [x] DataManager initialization removed
+- [x] `load_data_async()` deleted (dead code)
+- [x] `start_data_loading_operation()` deleted (dead code)
+- [x] All data_loader access replaced with Repository methods
+- [x] All API endpoints still work
+- [x] All API tests pass
+- [x] `make quality` passes
 
 ---
 
