@@ -2174,11 +2174,11 @@ except DataNotFoundError:
 - Test error handling when data not cached
 
 **Acceptance Criteria**:
-- [ ] DataManager import removed
-- [ ] DataRepository import added
-- [ ] Clear error message with helpful suggestion
-- [ ] All CLI tests pass
-- [ ] `make quality` passes
+- [x] DataManager import removed
+- [x] DataRepository import added
+- [x] Clear error message with helpful suggestion
+- [x] All CLI tests pass
+- [x] `make quality` passes
 
 ---
 
