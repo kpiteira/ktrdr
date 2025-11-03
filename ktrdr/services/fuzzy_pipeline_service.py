@@ -13,7 +13,7 @@ import pandas as pd
 import yaml
 
 from ktrdr import get_logger
-from ktrdr.data.data_manager import DataManager
+from ktrdr.data.repository import DataRepository
 from ktrdr.errors import ConfigurationError, DataError, ProcessingError
 from ktrdr.fuzzy.indicator_integration import (
     IntegratedFuzzyResult,
@@ -36,7 +36,7 @@ class FuzzyPipelineService:
 
     def __init__(
         self,
-        data_manager: Optional[DataManager] = None,
+        repository: Optional[DataRepository] = None,
         enable_caching: bool = True,
         cache_ttl_seconds: int = 300,
     ):
@@ -44,11 +44,11 @@ class FuzzyPipelineService:
         Initialize the fuzzy pipeline service.
 
         Args:
-            data_manager: Optional DataManager instance (will create if not provided)
+            repository: Optional DataRepository instance (will create if not provided)
             enable_caching: Enable result caching for performance
             cache_ttl_seconds: Cache time-to-live in seconds
         """
-        self.data_manager = data_manager or DataManager()
+        self.repository = repository or DataRepository()
         self.enable_caching = enable_caching
         self.cache_ttl_seconds = cache_ttl_seconds
         self._pipeline_cache: dict[str, Any] = {}
@@ -287,8 +287,10 @@ class FuzzyPipelineService:
 
         for timeframe in timeframes:
             try:
-                # Use data manager to load data
-                data = self.data_manager.load_data(symbol=symbol, timeframe=timeframe)
+                # Use repository to load cached data
+                data = self.repository.load_from_cache(
+                    symbol=symbol, timeframe=timeframe
+                )
 
                 if data is not None and not data.empty:
                     market_data[timeframe] = data
@@ -419,9 +421,9 @@ class FuzzyPipelineService:
     def get_service_health(self) -> dict[str, Any]:
         """Get service health and status information."""
         return {
-            "data_manager": {
-                "initialized": self.data_manager is not None,
-                "type": type(self.data_manager).__name__,
+            "repository": {
+                "initialized": self.repository is not None,
+                "type": type(self.repository).__name__,
             },
             "caching": {
                 "enabled": self.enable_caching,
