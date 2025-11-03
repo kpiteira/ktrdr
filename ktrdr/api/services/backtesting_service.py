@@ -176,7 +176,6 @@ class BacktestingService(BaseService):
                 initial_capital=initial_capital,
                 commission=0.001,
                 slippage=0.0005,
-                data_mode="local",
                 verbose=False,
             )
 
