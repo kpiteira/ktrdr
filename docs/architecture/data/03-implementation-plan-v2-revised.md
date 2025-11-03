@@ -2483,11 +2483,11 @@ async def health_check(self):
 - Update tests if they check for data_manager
 
 **Acceptance Criteria**:
-- [ ] DataManager import deleted
-- [ ] DataManager initialization deleted
-- [ ] Health check updated (removed data_manager_ready)
-- [ ] All backtesting tests pass
-- [ ] `make quality` passes
+- [x] DataManager import deleted
+- [x] DataManager initialization deleted
+- [x] Health check updated (removed data_manager_ready)
+- [x] All backtesting tests pass
+- [x] `make quality` passes
 
 ---
 
