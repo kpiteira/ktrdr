@@ -4,7 +4,6 @@ Data endpoints for the KTRDR API.
 This module implements the API endpoints for accessing market data, symbols, and timeframes.
 """
 
-import uuid
 from datetime import datetime
 from typing import Optional
 
@@ -15,8 +14,6 @@ from ktrdr.api.dependencies import get_acquisition_service, get_data_service
 from ktrdr.api.models.base import ApiResponse
 from ktrdr.api.models.data import (
     DataAcquisitionResponse,
-    DataLoadApiResponse,
-    DataLoadOperationResponse,
     DataLoadRequest,
     DataLoadResponse,
     DataRangeInfo,
@@ -543,121 +540,6 @@ async def download_data_acquire(
         raise HTTPException(
             status_code=500,
             detail=f"Data acquisition failed: {str(e)}",
-        ) from e
-
-
-@router.post(
-    "/data/load",
-    response_model=DataLoadApiResponse,
-    tags=["Data"],
-    deprecated=True,  # Mark as deprecated
-    summary="[DEPRECATED] Load data - use /data/acquire/download instead",
-    description="""
-    Data loading operations endpoint for CLI and background processes.
-
-    This endpoint performs actual data loading operations and returns operational
-    metrics about what was fetched, from where, and how long it took.
-
-    **Loading Modes:**
-    - `tail`: Load recent data from last available timestamp to now
-    - `backfill`: Load historical data before earliest available timestamp
-    - `full`: Load both historical (backfill) and recent (tail) data
-
-    **Features:**
-    - Intelligent gap analysis with trading calendar awareness
-    - Progressive loading for large date ranges
-    - Partial failure resilience (continues with successful segments)
-    - Detailed operation metrics and timing
-
-    **Perfect for:** CLI commands, background jobs, data management operations
-    """,
-)
-async def load_data(
-    request: DataLoadRequest,
-    acquisition_service=Depends(get_acquisition_service),
-) -> DataLoadApiResponse:
-    """
-    DEPRECATED: Use POST /data/acquire/download instead.
-
-    This endpoint now routes to DataAcquisitionService but is deprecated.
-    Please migrate to /data/acquire/download for new implementations.
-
-    Args:
-        request: Data load request with symbol, timeframe, mode, and optional dates
-
-    Returns:
-        Response with operation ID for tracking
-
-    Example request:
-        ```json
-        {
-          "symbol": "AAPL",
-          "timeframe": "1h",
-          "mode": "tail"
-        }
-        ```
-
-    Example response:
-        ```json
-        {
-          "success": true,
-          "data": {
-            "operation_id": "op_data_load_20241201_abc123",
-            "status": "started"
-          }
-        }
-        ```
-    """
-    # Log deprecation warning
-    logger.warning(
-        "⚠️ DEPRECATED ENDPOINT: POST /data/load - Use POST /data/acquire/download instead! "
-        f"Request for {request.symbol} {request.timeframe}"
-    )
-    logger.info(
-        f"🔄 ROUTING: Deprecated endpoint → DataAcquisitionService (Task 4.7) "
-        f"for {request.symbol} {request.timeframe}"
-    )
-
-    try:
-        # Route to new DataAcquisitionService (backward compatibility)
-        result = await acquisition_service.download_data(
-            symbol=request.symbol,
-            timeframe=request.timeframe,
-            start_date=request.start_date,
-            end_date=request.end_date,
-            mode=request.mode or "tail",
-        )
-
-        # Extract operation ID from ServiceOrchestrator result
-        operation_id = result.get("operation_id") or str(uuid.uuid4())
-        status = result.get("status", "started")
-
-        # Return operation ID for tracking (with deprecated marker)
-        response_data = DataLoadOperationResponse(
-            operation_id=operation_id,
-            status=status,
-            fetched_bars=0,  # Not available from new service
-            cached_before=False,  # Not available from new service
-            merged_file="",  # Not available from new service
-            gaps_analyzed=0,  # Not available from new service
-            segments_fetched=0,  # Not available from new service
-            ib_requests_made=0,  # Not available from new service
-            execution_time_seconds=0.0,  # Not available from new service
-            error_message=None,
-        )
-
-        logger.info(
-            f"Started async data loading operation (deprecated endpoint): {operation_id}"
-        )
-        return DataLoadApiResponse(success=True, data=response_data, error=None)
-
-    except Exception as e:
-        logger.error(
-            f"Unexpected error loading {request.symbol} (deprecated endpoint): {str(e)}"
-        )
-        raise HTTPException(
-            status_code=500,
-            detail=f"Data loading failed: {str(e)}",
         ) from e
 
 
