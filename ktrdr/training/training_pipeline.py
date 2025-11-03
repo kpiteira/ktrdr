@@ -26,8 +26,8 @@ from sklearn.metrics import (
 
 from ktrdr import get_logger
 from ktrdr.async_infrastructure.cancellation import CancellationToken
-from ktrdr.data.data_manager import DataManager
 from ktrdr.data.multi_timeframe_coordinator import MultiTimeframeCoordinator
+from ktrdr.data.repository import DataRepository
 from ktrdr.fuzzy.config import FuzzyConfigLoader
 from ktrdr.fuzzy.engine import FuzzyEngine
 from ktrdr.indicators.indicator_engine import IndicatorEngine
@@ -66,8 +66,7 @@ class TrainingPipeline:
         timeframes: list[str],
         start_date: str,
         end_date: str,
-        data_mode: str = "local",
-        data_manager: Optional[DataManager] = None,
+        repository: Optional[DataRepository] = None,
         multi_timeframe_coordinator: Optional[MultiTimeframeCoordinator] = None,
     ) -> dict[str, pd.DataFrame]:
         """
@@ -75,16 +74,15 @@ class TrainingPipeline:
 
         EXTRACTED FROM: StrategyTrainer._load_price_data() (train_strategy.py:563-622)
 
-        This is the EXACT logic from the existing implementation, just extracted
-        into a standalone function.
+        This implementation now uses cached data only (no downloads during training).
+        User must run `ktrdr data load` before training.
 
         Args:
             symbol: Trading symbol
             timeframes: List of timeframes for multi-timeframe training
             start_date: Start date
             end_date: End date
-            data_mode: Data loading mode ('local', 'tail', 'backfill', 'full')
-            data_manager: Optional DataManager instance (will create if not provided)
+            repository: Optional DataRepository instance (will create if not provided)
             multi_timeframe_coordinator: Optional coordinator (will create if not provided)
 
         Returns:
@@ -92,25 +90,25 @@ class TrainingPipeline:
 
         Raises:
             ValueError: If no timeframes successfully loaded
+            DataNotFoundError: If data not cached (must run `ktrdr data load` first)
         """
         # Initialize components if not provided
-        if data_manager is None:
-            data_manager = DataManager()
+        if repository is None:
+            repository = DataRepository()
 
         if multi_timeframe_coordinator is None:
-            multi_timeframe_coordinator = MultiTimeframeCoordinator(data_manager)
+            multi_timeframe_coordinator = MultiTimeframeCoordinator(repository)
 
         # Handle single timeframe case (backward compatibility)
         # EXTRACTED FROM: train_strategy.py:584-592
         if len(timeframes) == 1:
             timeframe = timeframes[0]
-            # Pass dates to DataManager for efficient filtering
-            data = data_manager.load_data(
-                symbol,
-                timeframe,
+            # Load from cache only - training uses pre-downloaded data
+            data = repository.load_from_cache(
+                symbol=symbol,
+                timeframe=timeframe,
                 start_date=start_date,
                 end_date=end_date,
-                mode=data_mode,
             )
 
             return {timeframe: data}
@@ -124,7 +122,6 @@ class TrainingPipeline:
             start_date=start_date,
             end_date=end_date,
             base_timeframe=base_timeframe,
-            mode=data_mode,
         )
 
         # Validate multi-timeframe loading success
@@ -147,7 +144,7 @@ class TrainingPipeline:
         return multi_data
 
     # _filter_data_by_date_range() method removed
-    # Date filtering now handled by DataManager.load_data() which is more efficient
+    # Date filtering now handled by DataRepository.load_from_cache() which is more efficient
     # and provides consistent behavior across local and host execution paths
 
     @staticmethod
@@ -740,10 +737,9 @@ class TrainingPipeline:
         start_date: str,
         end_date: str,
         model_storage,  # ModelStorage instance
-        data_mode: str = "local",
         progress_callback=None,
         cancellation_token: Optional[CancellationToken] = None,
-        data_manager: Optional[DataManager] = None,
+        repository: Optional[DataRepository] = None,
     ) -> dict[str, Any]:
         """
         Complete training pipeline from data to trained model.
@@ -762,10 +758,9 @@ class TrainingPipeline:
             start_date: Start date for training data
             end_date: End date for training data
             model_storage: ModelStorage instance for saving
-            data_mode: Data loading mode ('local', 'tail', 'backfill')
             progress_callback: Optional progress callback (orchestrator-provided)
             cancellation_token: Optional cancellation token (orchestrator-provided)
-            data_manager: Optional DataManager instance
+            repository: Optional DataRepository instance (cached data only)
 
         Returns:
             Standardized result dict with model_path, metrics, artifacts
@@ -773,13 +768,11 @@ class TrainingPipeline:
         logger.info(
             f"🚀 TrainingPipeline.train_strategy() - Starting training for {len(symbols)} symbol(s): {symbols}"
         )
-        logger.info(f"   Timeframes: {timeframes}, Mode: {data_mode}")
+        logger.info(f"   Timeframes: {timeframes}")
 
         # Initialize components if needed
-        if data_manager is None:
-            from ktrdr.data.data_manager import DataManager as DM
-
-            data_manager = DM()
+        if repository is None:
+            repository = DataRepository()
 
         multi_timeframe_coordinator = None
         if len(timeframes) > 1:
@@ -787,7 +780,7 @@ class TrainingPipeline:
                 MultiTimeframeCoordinator as MTC,
             )
 
-            multi_timeframe_coordinator = MTC(data_manager)
+            multi_timeframe_coordinator = MTC(repository)
 
         # Process each symbol
         all_symbols_features = {}
@@ -817,14 +810,13 @@ class TrainingPipeline:
                     },
                 )
 
-            # Step 1: Load market data
+            # Step 1: Load market data (cached data only)
             price_data = TrainingPipeline.load_market_data(
                 symbol=symbol,
                 timeframes=timeframes,
                 start_date=start_date,
                 end_date=end_date,
-                data_mode=data_mode,
-                data_manager=data_manager,
+                repository=repository,
                 multi_timeframe_coordinator=multi_timeframe_coordinator,
             )
 

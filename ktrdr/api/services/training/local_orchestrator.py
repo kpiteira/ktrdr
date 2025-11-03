@@ -103,10 +103,9 @@ class LocalTrainingOrchestrator:
             start_date=self._context.start_date or "2020-01-01",
             end_date=self._context.end_date or "2024-12-31",
             model_storage=self._model_storage,
-            data_mode=self._context.training_config.get("data_mode", "local"),
             progress_callback=progress_callback,
             cancellation_token=self._token,
-            data_manager=None,  # Let pipeline create it
+            repository=None,  # Let pipeline create it (cached data only)
         )
 
         # Step 4: Add session metadata to result
