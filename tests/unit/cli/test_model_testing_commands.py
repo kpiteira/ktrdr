@@ -82,7 +82,6 @@ indicators:
                     timeframe="1d",
                     model=None,
                     samples=10,
-                    data_mode="local",  # This parameter should be ignored after migration
                 )
 
                 # Verify DataRepository was instantiated
@@ -121,7 +120,6 @@ indicators:
                     timeframe="1d",
                     model=None,
                     samples=10,
-                    data_mode="local",
                 )
 
             # Verify exit code is 1
@@ -158,14 +156,13 @@ indicators:
                 mock_orchestrator.make_decision.return_value = mock_decision
                 mock_orchestrator_class.return_value = mock_orchestrator
 
-                # Call with different data_mode values
+                # Call function (data_mode parameter has been removed)
                 test_model_signals(
                     strategy=temp_strategy_file,
                     symbol="AAPL",
                     timeframe="1d",
                     model=None,
                     samples=10,
-                    data_mode="tail",  # Should be ignored
                 )
 
                 # Verify load_from_cache was called (no mode parameter)
@@ -204,7 +201,6 @@ indicators:
                     timeframe="1d",
                     model=None,
                     samples=10,  # Requires 10 samples, but only 5 available
-                    data_mode="local",
                 )
 
             assert exc_info.value.exit_code == 1

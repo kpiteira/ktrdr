@@ -22,7 +22,6 @@ def test_model_signals(
     timeframe: str,
     model: Optional[str] = None,
     samples: int = 10,
-    data_mode: str = "local",
 ):
     """
     Test a trained model on recent data to see what signals it generates.
