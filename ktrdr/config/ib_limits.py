@@ -127,7 +127,9 @@ class IbLimitsRegistry:
         "api_singleton": list(range(1, 11)),  # 1-10: Singleton connections (API)
         "api_pool": list(range(11, 51)),  # 11-50: Connection pool for API requests
         # Background services
-        "data_acquisition": list(range(111, 121)),  # 111-120: Data acquisition operations
+        "data_acquisition": list(
+            range(111, 121)
+        ),  # 111-120: Data acquisition operations
         "symbol_validation": list(
             range(121, 131)
         ),  # 121-130: Symbol validation service

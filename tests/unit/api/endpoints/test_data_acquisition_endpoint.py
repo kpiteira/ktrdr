@@ -4,7 +4,7 @@ Tests for Data Acquisition API endpoint.
 Tests the new POST /data/acquire/download endpoint that uses DataAcquisitionService.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import FastAPI
