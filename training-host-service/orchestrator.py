@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from ktrdr import get_logger
 from ktrdr.async_infrastructure.cancellation import CancellationToken
-from ktrdr.data.data_manager import DataManager
+from ktrdr.data.repository import DataRepository
 from ktrdr.training.model_storage import ModelStorage
 from ktrdr.training.training_pipeline import TrainingPipeline
 
@@ -146,8 +146,8 @@ class HostTrainingOrchestrator:
                 f"date range: {start_date_str} to {end_date_str}"
             )
 
-            # Create DataManager instance
-            data_manager = DataManager()
+            # Create DataRepository instance (cached data only)
+            repository = DataRepository()
 
             # Create session-based cancellation token
             cancellation_token = SessionCancellationToken(self._session)
@@ -188,10 +188,9 @@ class HostTrainingOrchestrator:
                     start_date=start_date_str,
                     end_date=end_date_str,
                     model_storage=self._model_storage,
-                    data_mode="local",
                     progress_callback=progress_callback,
                     cancellation_token=cancellation_token,
-                    data_manager=data_manager,
+                    repository=repository,
                 ),
             )
 
