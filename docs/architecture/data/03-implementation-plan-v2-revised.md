@@ -1885,6 +1885,852 @@ async def _download_operation():
 
 ---
 
+## Phase 4.5: DataManager Elimination (Downstream Migration)
+
+### Goal
+
+**Migrate all remaining DataManager usages** to DataRepository before Phase 5 deletion.
+
+### Why Phase 4.5?
+
+**Critical Discovery**: During Phase 5 preparation, we found **7 components still using DataManager**:
+
+1. ✅ **fuzzy_pipeline_service.py** - Repository-only (simple migration)
+2. ⚠️ **training_pipeline.py** - Variable mode (enforce repository-only)
+3. ⚠️ **model_testing_commands.py** - Variable mode (enforce repository-only)
+4. ⚠️ **data_job_manager.py** - Job queue with mode parameter (enforce repository-only)
+5. ⚠️ **data_service.py** - Mixed usage (complex migration)
+6. 🚩 **gap_filler.py** - **RED FLAG**: Architectural violation (DELETE)
+7. 💀 **backtesting_service.py** - Dead code (DELETE)
+
+**The original Phase 5 did NOT account for these migrations**, which would have caused massive breakage.
+
+### Context
+
+**Current State** (Post Phase 4):
+- ✅ DataRepository working (Phase 2)
+- ✅ DataAcquisitionService working (Phase 4)
+- ❌ 7 components still depend on DataManager
+- ❌ Cannot delete DataManager until all migrated
+
+**Target State** (Phase 4.5 Complete):
+- ✅ ALL components use DataRepository or DataAcquisitionService
+- ✅ DataManager ONLY referenced by itself
+- ✅ Ready for safe deletion in Phase 5
+
+**Policy Decision**: **Repository-Only for All Components**
+- Training, testing, jobs, etc. use **cached data only**
+- Downloads happen via DataAcquisitionService (separate operation)
+- Clear separation: Download → then → Use cached data
+
+### Critical Red Flags Discovered
+
+#### 🚩 RED FLAG #1: gap_filler.py - Architectural Violation
+
+**Location**: `ktrdr/data/acquisition/gap_filler.py` (607 lines)
+
+**Problems**:
+- ❌ Lives in `acquisition/` directory but uses OLD DataManager
+- ❌ Directly accesses `data_manager.external_provider` (line 220)
+- ❌ Directly accesses `data_manager.ib_data_fetcher` (line 222)
+- ❌ Uses `load_data(mode="tail")` for downloads (line 444)
+- ❌ **Code duplication**: Gap filling logic exists in BOTH gap_filler AND DataAcquisitionService
+
+**Why This Is Bad**:
+- Violates new architecture (should use DataAcquisitionService)
+- Duplicate gap analysis, segment fetching, IB provider checks
+- Maintenance nightmare: Two places to update
+- Will break when DataManager deleted
+
+**Resolution**: **DELETE gap_filler.py entirely** - DataAcquisitionService has all this functionality
+
+**Impact**:
+- CLI commands affected: `ktrdr gap start`, `gap stop`, `gap status`, `gap scan-now` (4 commands)
+- API endpoints affected: `/system/gap-filler/*` (in system.py)
+- Tests affected: integration and e2e tests
+
+**Migration Path**:
+- Gap filling → Use DataAcquisitionService directly
+- Scheduled gap fills → Use cron/scheduler calling DataAcquisitionService
+- CLI gap commands → DELETE (functionality in `ktrdr data load`)
+- API gap endpoints → DELETE (functionality in `/data/acquire/download`)
+
+#### 🚩 RED FLAG #2: Code Duplication
+
+Gap analysis exists in **3 places**:
+1. ✅ DataAcquisitionService (new, correct)
+2. ❌ gap_filler.py (old, duplicate) - DELETE
+3. ❌ DataLoadingOrchestrator (marked for deprecation in Task 4.5) - DELETE
+
+**Resolution**: Keep only #1, delete #2 and #3
+
+#### 💀 DEAD CODE: backtesting_service.py
+
+**Location**: `ktrdr/api/services/backtesting_service.py`
+
+**Problem**:
+- Imports DataManager (line 24)
+- Initializes `self.data_manager = DataManager()` (line 36)
+- Only checks if it exists in health check (line 56)
+- **NEVER actually uses it for data operations**
+
+**Resolution**: DELETE the initialization and import
+
+### Duration
+
+**Quality-Focused** (no timeline pressure)
+
+**Estimated**: 8 tasks, can be parallelized
+
+### Tasks
+
+---
+
+#### TASK 4.5.1: Add Missing Methods to DataRepository
+
+**Objective**: Add methods needed by downstream components to DataRepository
+
+**What to ADD**:
+
+1. **get_available_data_files()** - Delegates to LocalDataLoader
+2. **data_dir** property - Returns loader's data_dir
+
+**Implementation**:
+
+```python
+# In ktrdr/data/repository/data_repository.py
+
+@property
+def data_dir(self) -> Path:
+    """Get the data directory path."""
+    return self.loader.data_dir
+
+def get_available_data_files(self) -> list[tuple[str, str]]:
+    """
+    Get list of available data files.
+
+    Returns:
+        List of (symbol, timeframe) tuples for cached data
+    """
+    return self.loader.get_available_data_files()
+```
+
+**Files Modified**:
+- `ktrdr/data/repository/data_repository.py`
+
+**Tests**:
+- Unit tests for new methods (5+ tests)
+- Test `data_dir` returns correct path
+- Test `get_available_data_files()` returns file list
+
+**Acceptance Criteria**:
+- [ ] `data_dir` property added
+- [ ] `get_available_data_files()` method added
+- [ ] Both delegate to LocalDataLoader correctly
+- [ ] Unit tests pass (5+ new tests)
+- [ ] `make quality` passes
+- [ ] No breaking changes to existing Repository API
+
+---
+
+#### TASK 4.5.2: Migrate fuzzy_pipeline_service.py to Repository
+
+**Objective**: Replace DataManager with DataRepository (simplest case)
+
+**Current Usage** (line 291):
+```python
+from ktrdr.data import DataManager
+
+class FuzzyPipelineService:
+    def __init__(self):
+        self.data_manager = DataManager()
+
+    def _load_market_data(self, symbol, timeframe):
+        data = self.data_manager.load_data(symbol=symbol, timeframe=timeframe)
+        # No mode parameter → defaults to "local" → repository-only ✅
+```
+
+**Target**:
+```python
+from ktrdr.data.repository import DataRepository
+
+class FuzzyPipelineService:
+    def __init__(self):
+        self.repository = DataRepository()
+
+    def _load_market_data(self, symbol, timeframe):
+        data = self.repository.load_from_cache(symbol=symbol, timeframe=timeframe)
+```
+
+**Files Modified**:
+- `ktrdr/services/fuzzy_pipeline_service.py`
+
+**Tests**:
+- Update unit tests to mock DataRepository instead of DataManager
+- Verify fuzzy pipeline still works with cached data
+
+**Acceptance Criteria**:
+- [ ] DataManager import removed
+- [ ] DataRepository import added
+- [ ] All usages migrated to `repository.load_from_cache()`
+- [ ] All tests pass
+- [ ] `make quality` passes
+
+---
+
+#### TASK 4.5.3: Migrate training_pipeline.py to Repository-Only
+
+**Objective**: Replace DataManager with DataRepository, enforce cached-data-only
+
+**Current Usage** (line 108):
+```python
+from ktrdr.data.data_manager import DataManager
+
+data = data_manager.load_data(
+    symbol,
+    timeframe,
+    start_date=start_date,
+    end_date=end_date,
+    mode=data_mode,  # ⚠️ Variable mode - what values?
+)
+```
+
+**Analysis Needed**:
+1. Trace where `data_mode` comes from (parameter passed in)
+2. Document possible values
+3. If includes download modes → **Error**: training should use cached data only
+
+**Target** (Repository-Only):
+```python
+from ktrdr.data.repository import DataRepository
+
+# Enforce cached-data-only policy
+repository = DataRepository()
+data = repository.load_from_cache(
+    symbol=symbol,
+    timeframe=timeframe,
+    start_date=start_date,
+    end_date=end_date,
+)
+
+# If data not in cache → raise clear error
+# User must run `ktrdr data load` first
+```
+
+**Policy Enforcement**:
+- Training MUST use cached data only (no downloads during training)
+- If data missing → Fail fast with clear error message
+- User workflow: Download data → Train model (two separate steps)
+
+**Files Modified**:
+- `ktrdr/training/training_pipeline.py`
+
+**Tests**:
+- Update tests to use DataRepository
+- Add test: training fails gracefully if data not cached
+- Verify training still works with cached data
+
+**Acceptance Criteria**:
+- [ ] DataManager import removed
+- [ ] DataRepository import added
+- [ ] `data_mode` parameter removed or ignored
+- [ ] Repository-only policy enforced
+- [ ] Clear error message if data not cached
+- [ ] All training tests pass
+- [ ] `make quality` passes
+
+---
+
+#### TASK 4.5.4: Migrate model_testing_commands.py to Repository-Only
+
+**Objective**: Replace DataManager with DataRepository in CLI model testing
+
+**Current Usage** (line 54):
+```python
+from ktrdr.data.data_manager import DataManager
+
+data_manager = DataManager()
+data = data_manager.load_data(symbol, timeframe, mode=data_mode)
+```
+
+**Target**:
+```python
+from ktrdr.data.repository import DataRepository
+
+repository = DataRepository()
+try:
+    data = repository.load_from_cache(symbol, timeframe)
+except DataNotFoundError:
+    console.print(f"[red]❌ Error: No cached data for {symbol} {timeframe}[/red]")
+    console.print(f"[yellow]💡 Run: ktrdr data load {symbol} --timeframe {timeframe}[/yellow]")
+    raise typer.Exit(1)
+```
+
+**Files Modified**:
+- `ktrdr/cli/model_testing_commands.py`
+
+**Tests**:
+- Update CLI tests
+- Test error handling when data not cached
+
+**Acceptance Criteria**:
+- [ ] DataManager import removed
+- [ ] DataRepository import added
+- [ ] Clear error message with helpful suggestion
+- [ ] All CLI tests pass
+- [ ] `make quality` passes
+
+---
+
+#### TASK 4.5.5: Migrate data_job_manager.py to Repository-Only
+
+**Objective**: Migrate async job queue to use DataRepository, enforce repository-only
+
+**Current Usage** (line 400):
+```python
+from ktrdr.data.data_manager import DataManager
+
+class DataJobManager:
+    def __init__(self):
+        self.data_manager = DataManager()
+
+    def _load_data_for_job(self, job):
+        return self.data_manager.load_data(
+            symbol=job.symbol,
+            timeframe=job.timeframe,
+            start_date=job.start_date,
+            end_date=job.end_date,
+            mode=job.mode,  # ⚠️ Jobs have mode parameter
+            validate=True,
+            repair=False,
+            cancellation_token=job.cancellation_token,
+        )
+```
+
+**Analysis**:
+- `DataLoadingJob` has `mode: str` parameter (line 84)
+- Jobs can have different modes
+- **Policy Decision**: Jobs should only load cached data
+
+**Target**:
+```python
+from ktrdr.data.repository import DataRepository
+
+class DataJobManager:
+    def __init__(self):
+        self.repository = DataRepository()
+
+    def _load_data_for_job(self, job):
+        # Validate mode is "local" only
+        if job.mode != "local":
+            raise ValueError(
+                f"DataJobManager only supports cached data (mode='local'). "
+                f"Got mode='{job.mode}'. Use DataAcquisitionService for downloads."
+            )
+
+        return self.repository.load_from_cache(
+            symbol=job.symbol,
+            timeframe=job.timeframe,
+            start_date=job.start_date,
+            end_date=job.end_date,
+        )
+        # Note: Repository doesn't need cancellation_token (synchronous)
+```
+
+**Scope**:
+1. Replace DataManager with DataRepository
+2. Add mode validation (only "local" allowed)
+3. Remove or deprecate download modes from job API
+4. Update job creation to default mode="local"
+
+**Files Modified**:
+- `ktrdr/data/components/data_job_manager.py`
+
+**Tests**:
+- Update tests to use DataRepository
+- Add test: job fails if mode != "local"
+- Verify job queue still works
+
+**Acceptance Criteria**:
+- [ ] DataManager import removed
+- [ ] DataRepository import added
+- [ ] Mode validation enforced (only "local")
+- [ ] Clear error if invalid mode
+- [ ] All job manager tests pass
+- [ ] `make quality` passes
+
+---
+
+#### TASK 4.5.6: Migrate data_service.py to Repository-Only
+
+**Objective**: Remove DataManager dependency from DataService (complex migration)
+
+**Current Issues**:
+1. Uses `data_manager.load_data_async()` (lines 122, 155)
+2. Uses `data_manager.data_loader.get_available_data_files()` (lines 219, 396, 519)
+3. Uses `data_manager.data_loader.data_dir` (line 518)
+
+**Analysis**:
+
+**Issue 1**: `load_data_async()` methods (lines 122, 155)
+
+```python
+async def load_data_async(self, ..., mode: str = "local", ...):
+    return await self.data_manager.load_data_async(...)
+
+async def start_data_loading_operation(self, ..., mode: str = "tail", ...):
+    return await self.data_manager.load_data_async(...)
+```
+
+**Finding**: These methods are **NOT called by any endpoint**
+- Deprecated `/data/load` now uses DataAcquisitionService directly (line 577 in endpoints/data.py)
+- No other code calls `data_service.load_data_async()` or `start_data_loading_operation()`
+
+**Action**: **DELETE** both methods (dead code)
+
+**Issue 2 & 3**: Direct `data_loader` access
+
+**Action**: Use Repository methods added in Task 4.5.1
+
+**Implementation**:
+
+```python
+# BEFORE (line 40)
+from ktrdr.data import DataManager
+from ktrdr.data.repository import DataRepository
+
+class DataService:
+    def __init__(self, data_dir: Optional[str] = None):
+        self.data_manager = DataManager(data_dir=data_dir)
+        self.repository = DataRepository(data_dir=data_dir)
+
+# AFTER
+from ktrdr.data.repository import DataRepository
+
+class DataService:
+    def __init__(self, data_dir: Optional[str] = None):
+        self.repository = DataRepository(data_dir=data_dir)
+
+# BEFORE (lines 219, 396, 519)
+available_files = self.data_manager.data_loader.get_available_data_files()
+data_dir = self.data_manager.data_loader.data_dir
+
+# AFTER
+available_files = self.repository.get_available_data_files()
+data_dir = self.repository.data_dir
+
+# DELETE (lines 87-129, 131-162)
+async def load_data_async(self, ...): ...  # Dead code
+async def start_data_loading_operation(self, ...): ...  # Dead code
+```
+
+**Files Modified**:
+- `ktrdr/api/services/data_service.py`
+
+**Tests**:
+- Verify all API endpoints still work
+- Update unit tests to mock only Repository
+- Remove tests for deleted async methods
+
+**Acceptance Criteria**:
+- [ ] DataManager import removed
+- [ ] DataManager initialization removed
+- [ ] `load_data_async()` deleted (dead code)
+- [ ] `start_data_loading_operation()` deleted (dead code)
+- [ ] All data_loader access replaced with Repository methods
+- [ ] All API endpoints still work
+- [ ] All API tests pass
+- [ ] `make quality` passes
+
+---
+
+#### TASK 4.5.7: Delete gap_filler.py and All Associated Code
+
+**Objective**: **DELETE** gap_filler entirely - architectural violation and code duplication
+
+**Rationale**:
+- DataAcquisitionService already has ALL gap filling logic
+- gap_filler duplicates: gap analysis, segment fetching, IB provider checks
+- gap_filler uses old DataManager (architectural violation)
+- Scheduled gap fills can be done via cron/scheduler calling DataAcquisitionService
+
+**Files to DELETE**:
+
+1. **Core Implementation**:
+   - `ktrdr/data/acquisition/gap_filler.py` (607 lines)
+
+2. **CLI Commands** (entire file):
+   - `ktrdr/cli/gap_commands.py` (521 lines)
+   - Commands: `gap analyze`, `gap batch`, `gap status`, `gap start`, `gap stop`, `gap scan-now`
+
+3. **API Endpoints** (from system.py):
+   - Remove gap_filler imports and functions (lines with `get_gap_filler()`)
+   - Remove `/system/gap-filler/*` endpoints
+
+4. **Tests**:
+   - Integration tests referencing gap_filler
+   - E2E tests checking gap_filler service
+
+5. **Configuration**:
+   - IB limits config: Remove gap_filler client ID range comment (minor)
+
+**Migration Path for Users**:
+
+```bash
+# OLD (gap_filler approach)
+ktrdr gap start             # Background gap filling service
+ktrdr gap scan-now          # Trigger gap scan
+
+# NEW (DataAcquisitionService approach)
+ktrdr data load EURUSD --timeframe 1h --mode tail    # Fill recent gaps
+ktrdr data load AAPL --timeframe 1d --mode backfill  # Fill historical gaps
+
+# Scheduled gap fills: Use cron/scheduler
+# Example crontab:
+# */30 * * * * ktrdr data load EURUSD --timeframe 1h --mode tail
+```
+
+**Scope**:
+1. Delete gap_filler.py core implementation
+2. Delete gap_commands.py CLI file
+3. Remove gap-filler endpoints from system.py
+4. Delete gap_filler tests
+5. Update CLI main to remove gap command registration
+6. Update API router to remove gap endpoints
+7. Document migration path in CHANGELOG
+
+**Files to MODIFY**:
+- `ktrdr/cli/__init__.py` or CLI main entry - Remove gap command registration
+- `ktrdr/api/endpoints/system.py` - Remove gap_filler endpoints
+- `ktrdr/config/ib_limits.py` - Remove gap_filler comment (optional)
+- `CHANGELOG.md` - Document breaking change
+
+**Files to DELETE**:
+- `ktrdr/data/acquisition/gap_filler.py`
+- `ktrdr/cli/gap_commands.py`
+- Tests: Find and delete gap_filler test files
+
+**Tests**:
+- Verify system still starts without gap_filler
+- Verify API `/system/health` works without gap_filler
+- Verify CLI works without gap commands
+
+**Acceptance Criteria**:
+- [ ] gap_filler.py deleted
+- [ ] gap_commands.py deleted
+- [ ] Gap-filler API endpoints removed from system.py
+- [ ] Gap-filler tests deleted
+- [ ] CLI registration removed
+- [ ] Migration path documented in CHANGELOG
+- [ ] System starts without errors
+- [ ] All remaining tests pass
+- [ ] `make quality` passes
+- [ ] No references to gap_filler in codebase (except CHANGELOG)
+
+**Verification**:
+```bash
+# Should return ZERO results
+grep -r "gap_filler\|GapFiller" ktrdr/ --include="*.py" | grep -v __pycache__
+```
+
+---
+
+#### TASK 4.5.8: Delete Dead Code in backtesting_service.py
+
+**Objective**: Remove unused DataManager initialization
+
+**Current Code**:
+```python
+# Line 24
+from ktrdr.data.data_manager import DataManager
+
+# Line 36
+class BacktestingService:
+    def __init__(self):
+        self.data_manager = DataManager()
+
+# Line 56 - ONLY usage (health check)
+async def health_check(self):
+    return {
+        "status": "healthy",
+        "data_manager_ready": self.data_manager is not None,
+    }
+```
+
+**Target**:
+```python
+# DELETE line 24
+# (no DataManager import)
+
+# Line 36
+class BacktestingService:
+    def __init__(self):
+        pass  # Or remove __init__ if empty
+
+# Line 56 - Update health check
+async def health_check(self):
+    return {
+        "status": "healthy",
+        # data_manager_ready removed (dead code)
+    }
+```
+
+**Files Modified**:
+- `ktrdr/api/services/backtesting_service.py`
+
+**Tests**:
+- Verify backtesting service still works
+- Update tests if they check for data_manager
+
+**Acceptance Criteria**:
+- [ ] DataManager import deleted
+- [ ] DataManager initialization deleted
+- [ ] Health check updated (removed data_manager_ready)
+- [ ] All backtesting tests pass
+- [ ] `make quality` passes
+
+---
+
+#### TASK 4.5.9: Update Dependencies and Verify Zero DataManager Imports
+
+**Objective**: Remove DataManager/DataManagerBuilder from dependency injection and verify
+
+**Files to UPDATE**:
+
+1. **ktrdr/api/dependencies.py**:
+```python
+# DELETE lines 21, 71-78, 117
+from ktrdr.data.data_manager import DataManager
+
+def get_data_manager() -> DataManager:
+    """..."""
+    return DataManager()
+
+DataManagerDep = Annotated[DataManager, Depends(get_data_manager)]
+```
+
+2. **ktrdr/data/__init__.py**:
+```python
+# DELETE DataManager export if present
+from ktrdr.data.data_manager import DataManager
+```
+
+3. **Any other __init__.py files** that export DataManager
+
+**Verification Commands**:
+```bash
+# Should return ZERO results (except in data_manager.py itself)
+grep -r "from ktrdr.data.data_manager import" ktrdr/ --include="*.py" | grep -v __pycache__ | grep -v data_manager.py
+
+grep -r "from ktrdr.data import DataManager" ktrdr/ --include="*.py" | grep -v __pycache__
+
+grep -r "from ktrdr.data.data_manager_builder import" ktrdr/ --include="*.py" | grep -v __pycache__ | grep -v data_manager_builder.py
+```
+
+**Files Modified**:
+- `ktrdr/api/dependencies.py`
+- `ktrdr/data/__init__.py`
+- Any other __init__.py files
+
+**Tests**:
+- Run full test suite (1800+ tests)
+- Verify no import errors
+- Check all API endpoints work
+- Verify CLI commands work
+
+**Acceptance Criteria**:
+- [ ] DataManager import removed from dependencies.py
+- [ ] DataManagerDep removed from dependencies.py
+- [ ] DataManager export removed from data/__init__.py
+- [ ] DataManagerBuilder exports removed from all __init__.py files
+- [ ] Verification commands return ZERO results
+- [ ] All tests pass (1800+ tests)
+- [ ] `make quality` passes
+- [ ] API starts without errors
+- [ ] CLI works without errors
+
+---
+
+#### TASK 4.5.10: Delete DataJobManager (Dead Code)
+
+**Objective**: Remove unused DataJobManager and its tests
+
+**Analysis**: DataJobManager is **dead code** with zero production usage:
+
+**Evidence**:
+- ❌ **Not imported anywhere**: No `from ktrdr.data.components.data_job_manager import` in codebase
+- ❌ **Not called anywhere**: No `get_data_job_manager()` calls found
+- ❌ **Redundant**: Functionality superseded by ServiceOrchestrator + OperationsService
+- ❌ **Dead dependency**: Depends on DataManager (being deleted in Phase 5)
+- ❌ **Historical artifact**: Created as SLICE-2 prototype, never integrated into production
+
+**What DataJobManager Was**:
+- Async job queue for data loading operations
+- Renamed from `AsyncDataLoader` (commit b1c892e)
+- Part of unified cancellation system work
+- **Never integrated** - architectural experiment that remained
+
+**Why It's Redundant**:
+DataJobManager's functionality is **already provided by**:
+1. ✅ **ServiceOrchestrator** - Base class for async operations (DataAcquisitionService, TrainingManager)
+2. ✅ **OperationsService** - Global async operations tracking and management
+3. ✅ **FastAPI BackgroundTasks** - API-level async job execution
+
+**Files to DELETE**:
+
+1. **Core Implementation**:
+   - `ktrdr/data/components/data_job_manager.py` (546 lines)
+
+2. **Tests**:
+   - `tests/unit/data/test_async_data_loader_unified_cancellation.py` (307 lines)
+
+**Total LOC Removed**: 853 lines
+
+**Scope**:
+1. Delete data_job_manager.py
+2. Delete test_async_data_loader_unified_cancellation.py
+3. Verify no references remain
+
+**Files to MODIFY**:
+- None (no code uses DataJobManager)
+
+**Tests**:
+- Verify system still works
+- No tests depend on DataJobManager (it was never integrated)
+
+**Verification Commands**:
+```bash
+# Should return ZERO results
+grep -r "DataJobManager\|DataLoadingJob\|get_data_job_manager" ktrdr/ --include="*.py" | grep -v __pycache__
+```
+
+**Acceptance Criteria**:
+- [ ] data_job_manager.py deleted
+- [ ] test_async_data_loader_unified_cancellation.py deleted
+- [ ] No references to DataJobManager anywhere in codebase
+- [ ] All remaining tests pass (no regressions)
+- [ ] `make quality` passes
+- [ ] System starts and runs normally
+
+**Estimated Duration**: 15 minutes (trivial deletion)
+
+---
+
+### Phase 4.5 Exit Criteria
+
+**Code Quality**:
+- [ ] Zero DataManager usages outside data_manager.py itself
+- [ ] Zero DataManagerBuilder usages outside data_manager_builder.py itself
+- [ ] Zero gap_filler references anywhere
+- [ ] Zero DataJobManager references anywhere
+- [ ] All components use DataRepository (cached data) or DataAcquisitionService (downloads)
+- [ ] No architectural violations
+- [ ] No code duplication between old and new systems
+
+**Testing**:
+- [ ] All unit tests pass (1800+ tests)
+- [ ] All integration tests pass
+- [ ] `make quality` passes (ruff + black + mypy)
+- [ ] API starts and serves requests
+- [ ] CLI commands work
+
+**Verification**:
+```bash
+# All should return ZERO results
+grep -r "from ktrdr.data.data_manager import" ktrdr/ --include="*.py" | grep -v __pycache__ | grep -v data_manager.py
+grep -r "from ktrdr.data import DataManager" ktrdr/ --include="*.py" | grep -v __pycache__
+grep -r "gap_filler\|GapFiller" ktrdr/ --include="*.py" | grep -v __pycache__ | grep -v CHANGELOG
+grep -r "DataJobManager\|DataLoadingJob" ktrdr/ --include="*.py" | grep -v __pycache__
+```
+
+**Documentation**:
+- [ ] Migration path documented in CHANGELOG
+- [ ] gap_filler deletion documented (breaking change)
+- [ ] Repository-only policy documented
+
+**Ready for Phase 5**:
+- [ ] DataManager and DataManagerBuilder are ONLY referenced by themselves
+- [ ] Can safely delete both files without breaking anything
+- [ ] All downstream code migrated to DataRepository or DataAcquisitionService
+
+---
+
+### Red Flags Summary
+
+#### 🚩 Critical Issues Found
+
+1. **gap_filler.py Architectural Violation** - RESOLVED
+   - Status: RED FLAG → DELETE
+   - Issue: Uses DataManager in acquisition/ directory
+   - Impact: Code duplication, architectural inconsistency
+   - Resolution: Task 4.5.7 (Delete entirely)
+
+2. **Code Duplication** - RESOLVED
+   - Status: RED FLAG → DELETE
+   - Issue: Gap analysis logic in 3 places
+   - Impact: Maintenance burden, potential divergence
+   - Resolution: Delete gap_filler and DataLoadingOrchestrator
+
+3. **Dead Code in Production** - RESOLVED
+   - Status: WARNING → DELETE
+   - Issue: backtesting_service initializes but doesn't use DataManager
+   - Impact: Wasted resources, confusion
+   - Resolution: Task 4.5.8 (Delete)
+
+4. **Undocumented Variable Modes** - RESOLVED
+   - Status: WARNING → ENFORCE REPOSITORY-ONLY
+   - Issue: `data_mode` and `job.mode` values not traced
+   - Impact: Unknown migration path
+   - Resolution: Tasks 4.5.3-4.5.5 (Enforce cached-data-only)
+
+5. **DataJobManager Dead Code** - RESOLVED
+   - Status: WARNING → DELETE
+   - Issue: 853 LOC of unused async job queue code
+   - Impact: Maintenance burden, redundant with ServiceOrchestrator
+   - Resolution: Task 4.5.10 (Delete entirely)
+
+---
+
+### Component Migration Summary
+
+| Component | Lines | Type | Target | Tasks |
+|-----------|-------|------|--------|-------|
+| fuzzy_pipeline_service.py | ~400 | ✅ Repo-only | DataRepository | 4.5.2 |
+| training_pipeline.py | ~800 | ⚠️ Variable | DataRepository (enforce "local") | 4.5.3 |
+| model_testing_commands.py | ~200 | ⚠️ Variable | DataRepository (enforce "local") | 4.5.4 |
+| data_service.py | ~533 | ⚠️ Mixed | DataRepository + delete async | 4.5.6 |
+| gap_filler.py | 607 | 🚩 Violation | **DELETE** | 4.5.7 |
+| gap_commands.py | 521 | 🚩 Violation | **DELETE** | 4.5.7 |
+| backtesting_service.py | ~50 | 💀 Dead | Delete init | 4.5.8 |
+| data_job_manager.py | 546 | 💀 Dead | **DELETE** | 4.5.10 |
+| test_async_data_loader*.py | 307 | 💀 Dead | **DELETE** | 4.5.10 |
+
+**Total LOC to Migrate**: ~1,900 lines (removed data_job_manager from migration)
+**Total LOC to DELETE**: ~1,950 lines (gap_filler + gap_commands + DataJobManager + dead code)
+**Net Impact**: ~3,850 LOC cleaned up, leaner maintainable codebase
+
+---
+
+### Task Dependencies
+
+```
+4.5.1 (Add Repository Methods)
+    ↓
+    ├─→ 4.5.2 (Fuzzy Service) ──┐
+    ├─→ 4.5.3 (Training) ───────┤
+    ├─→ 4.5.4 (Model Testing) ──┤
+    ├─→ 4.5.6 (Data Service) ───┼─→ 4.5.9 (Verify)
+    ├─→ 4.5.7 (Delete gap) ─────┤
+    ├─→ 4.5.8 (Delete dead) ────┤
+    └─→ 4.5.10 (Delete JobMgr) ─┘
+```
+
+**Note**: Task 4.5.5 (data_job_manager migration) **removed** - it's dead code, now Task 4.5.10 (delete it)
+
+**Parallelization**: Tasks 4.5.2-4.5.4, 4.5.6-4.5.8, 4.5.10 can run in parallel after 4.5.1 completes
+
+---
+
 ## Phase 5: Cleanup & Documentation
 
 ### Goal
@@ -1972,12 +2818,21 @@ ktrdr/data/
 |-------|----------|-------------|
 | 0 | Done ✅ | Test baseline |
 | 1 | Done ✅ | Host service ready |
-| 2 | 1 week | Repository extracted |
-| 3 | 4-5 days | IB deleted |
-| 4 | 1-2 weeks | Acquisition extracted |
+| 2 | Done ✅ | Repository extracted |
+| 3 | Done ✅ | IB deleted |
+| 4 | Done ✅ | Acquisition extracted |
+| **4.5** | **Quality-focused** | **DataManager elimination** |
 | 5 | 3-4 days | Clean architecture |
 
-**Total**: ~3-4 weeks
+**Total (Original)**: ~3-4 weeks
+**Revised Total (with Phase 4.5)**: Quality-focused, no time pressure
+
+**Phase 4.5 Breakdown** (9 tasks total, 7 can parallelize):
+- Task 4.5.1-4.5.9 + 4.5.10: Migrate downstream components + delete dead code
+- **Delete**: ~1,950 LOC (gap_filler + gap_commands + DataJobManager + backtesting dead code)
+- **Migrate**: ~1,900 LOC to use DataRepository
+- **Net Cleanup**: ~3,850 LOC made clean and maintainable
+- **Result**: Zero DataManager dependencies, ready for Phase 5 deletion
 
 ---
 
