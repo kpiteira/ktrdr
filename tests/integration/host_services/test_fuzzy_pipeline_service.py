@@ -24,9 +24,9 @@ class TestFuzzyPipelineService:
     """Tests for FuzzyPipelineService."""
 
     @pytest.fixture
-    def mock_data_manager(self):
-        """Mock DataManager."""
-        mock_dm = Mock()
+    def mock_repository(self):
+        """Mock DataRepository."""
+        mock_repo = Mock()
 
         # Sample market data
         dates = pd.date_range("2024-01-01", periods=100, freq="1h")
@@ -41,8 +41,8 @@ class TestFuzzyPipelineService:
             index=dates,
         )
 
-        mock_dm.get_data.return_value = sample_data
-        return mock_dm
+        mock_repo.load_from_cache.return_value = sample_data
+        return mock_repo
 
     @pytest.fixture
     def sample_indicator_config_dict(self):
@@ -106,30 +106,30 @@ class TestFuzzyPipelineService:
 
             yield indicator_file, fuzzy_file
 
-    def test_service_initialization(self, mock_data_manager):
+    def test_service_initialization(self, mock_repository):
         """Test service initialization."""
         service = FuzzyPipelineService(
-            data_manager=mock_data_manager, enable_caching=True, cache_ttl_seconds=300
+            repository=mock_repository, enable_caching=True, cache_ttl_seconds=300
         )
 
-        assert service.data_manager == mock_data_manager
+        assert service.repository == mock_repository
         assert service.enable_caching is True
         assert service.cache_ttl_seconds == 300
         assert len(service._pipeline_cache) == 0
         assert len(service._result_cache) == 0
 
-    def test_service_initialization_default_data_manager(self):
-        """Test service initialization with default data manager."""
+    def test_service_initialization_default_repository(self):
+        """Test service initialization with default repository."""
         service = FuzzyPipelineService()
 
-        assert service.data_manager is not None
+        assert service.repository is not None
         assert service.enable_caching is True
 
     @patch("ktrdr.services.fuzzy_pipeline_service.create_integrated_pipeline")
     def test_process_symbol_fuzzy_with_dicts(
         self,
         mock_create_pipeline,
-        mock_data_manager,
+        mock_repository,
         sample_indicator_config_dict,
         sample_fuzzy_config_dict,
     ):
@@ -160,7 +160,7 @@ class TestFuzzyPipelineService:
         mock_pipeline.process_market_data.return_value = mock_integrated_result
 
         # Create service and process
-        service = FuzzyPipelineService(data_manager=mock_data_manager)
+        service = FuzzyPipelineService(repository=mock_repository)
 
         result = service.process_symbol_fuzzy(
             symbol="AAPL",
@@ -176,13 +176,13 @@ class TestFuzzyPipelineService:
         assert result.processing_metadata["service_version"] == "1.0.0"
         assert result.processing_metadata["data_period_days"] == 30
 
-        # Verify data manager was called
-        mock_data_manager.get_data.assert_called_with(
-            symbol="AAPL", timeframe="1h", period_days=30
+        # Verify repository was called with load_from_cache
+        mock_repository.load_from_cache.assert_called_with(
+            symbol="AAPL", timeframe="1h"
         )
 
     def test_process_symbol_fuzzy_with_files(
-        self, mock_data_manager, sample_config_files
+        self, mock_repository, sample_config_files
     ):
         """Test processing symbol with file configurations."""
         indicator_file, fuzzy_file = sample_config_files
@@ -208,7 +208,7 @@ class TestFuzzyPipelineService:
             mock_pipeline.process_market_data.return_value = mock_integrated_result
 
             # Create service and process
-            service = FuzzyPipelineService(data_manager=mock_data_manager)
+            service = FuzzyPipelineService(repository=mock_repository)
 
             result = service.process_symbol_fuzzy(
                 symbol="AAPL",
@@ -218,17 +218,17 @@ class TestFuzzyPipelineService:
 
             assert isinstance(result, IntegratedFuzzyResult)
 
-    def test_load_configuration_invalid_file(self, mock_data_manager):
+    def test_load_configuration_invalid_file(self, mock_repository):
         """Test loading configuration from non-existent file."""
-        service = FuzzyPipelineService(data_manager=mock_data_manager)
+        service = FuzzyPipelineService(repository=mock_repository)
 
         with pytest.raises(ConfigurationError) as exc_info:
             service._load_configuration("/non/existent/file.yaml", "indicator")
         assert "configuration file not found" in str(exc_info.value)
 
-    def test_load_configuration_invalid_type(self, mock_data_manager):
+    def test_load_configuration_invalid_type(self, mock_repository):
         """Test loading configuration with invalid type."""
-        service = FuzzyPipelineService(data_manager=mock_data_manager)
+        service = FuzzyPipelineService(repository=mock_repository)
 
         with pytest.raises(ConfigurationError) as exc_info:
             service._load_configuration(123, "indicator")  # Invalid type
@@ -238,7 +238,7 @@ class TestFuzzyPipelineService:
     def test_process_multiple_symbols(
         self,
         mock_create_pipeline,
-        mock_data_manager,
+        mock_repository,
         sample_indicator_config_dict,
         sample_fuzzy_config_dict,
     ):
@@ -261,7 +261,7 @@ class TestFuzzyPipelineService:
         mock_pipeline.process_market_data.return_value = mock_integrated_result
 
         # Create service and process
-        service = FuzzyPipelineService(data_manager=mock_data_manager)
+        service = FuzzyPipelineService(repository=mock_repository)
 
         results = service.process_multiple_symbols(
             symbols=["AAPL", "GOOGL", "MSFT"],
@@ -281,7 +281,7 @@ class TestFuzzyPipelineService:
     def test_process_multiple_symbols_with_error(
         self,
         mock_create_pipeline,
-        mock_data_manager,
+        mock_repository,
         sample_indicator_config_dict,
         sample_fuzzy_config_dict,
     ):
@@ -294,7 +294,9 @@ class TestFuzzyPipelineService:
         def side_effect(*args, **kwargs):
             # Check if data was requested for GOOGL (will be in market data)
             args[0] if args else kwargs.get("market_data", {})
-            if mock_data_manager.get_data.call_count == 2:  # Second call is for GOOGL
+            if (
+                mock_repository.load_from_cache.call_count == 2
+            ):  # Second call is for GOOGL
                 raise Exception("Failed to process GOOGL")
 
             # Return successful result for other symbols
@@ -311,12 +313,12 @@ class TestFuzzyPipelineService:
         mock_pipeline.process_market_data.side_effect = side_effect
 
         # Create service and process with continue_on_error=True
-        service = FuzzyPipelineService(data_manager=mock_data_manager)
+        service = FuzzyPipelineService(repository=mock_repository)
 
-        # Mock data manager to fail for GOOGL
-        def get_data_side_effect(symbol, timeframe, period_days):
+        # Mock repository to fail for GOOGL
+        def load_from_cache_side_effect(symbol, timeframe):
             if symbol == "GOOGL":
-                raise Exception("Failed to get data for GOOGL")
+                raise Exception("Failed to load data for GOOGL")
             # Return successful data for other symbols
             dates = pd.date_range("2024-01-01", periods=100, freq="1h")
             return pd.DataFrame(
@@ -330,7 +332,7 @@ class TestFuzzyPipelineService:
                 index=dates,
             )
 
-        mock_data_manager.get_data.side_effect = get_data_side_effect
+        mock_repository.load_from_cache.side_effect = load_from_cache_side_effect
 
         results = service.process_multiple_symbols(
             symbols=["AAPL", "GOOGL", "MSFT"],
@@ -345,9 +347,9 @@ class TestFuzzyPipelineService:
         assert "MSFT" in results
         assert "GOOGL" not in results
 
-    def test_create_single_symbol_report(self, mock_data_manager):
+    def test_create_single_symbol_report(self, mock_repository):
         """Test creating summary report for single symbol."""
-        service = FuzzyPipelineService(data_manager=mock_data_manager)
+        service = FuzzyPipelineService(repository=mock_repository)
 
         # Create sample result
         mock_fuzzy_result = MultiTimeframeFuzzyResult(
@@ -412,9 +414,9 @@ class TestFuzzyPipelineService:
         assert performance["indicator_time"] == 0.03
         assert performance["fuzzy_time"] == 0.02
 
-    def test_create_multi_symbol_report(self, mock_data_manager):
+    def test_create_multi_symbol_report(self, mock_repository):
         """Test creating summary report for multiple symbols."""
-        service = FuzzyPipelineService(data_manager=mock_data_manager)
+        service = FuzzyPipelineService(repository=mock_repository)
 
         # Create sample results for multiple symbols
         results = {}
@@ -464,22 +466,22 @@ class TestFuzzyPipelineService:
         assert abs(agg_metrics["avg_processing_time"] - 0.1) < 1e-10
         assert abs(agg_metrics["total_processing_time"] - 0.3) < 1e-10
 
-    def test_get_service_health(self, mock_data_manager):
+    def test_get_service_health(self, mock_repository):
         """Test service health check."""
         service = FuzzyPipelineService(
-            data_manager=mock_data_manager, enable_caching=True, cache_ttl_seconds=300
+            repository=mock_repository, enable_caching=True, cache_ttl_seconds=300
         )
 
         health = service.get_service_health()
 
-        assert "data_manager" in health
+        assert "repository" in health
         assert "caching" in health
         assert "status" in health
 
-        # Verify data manager info
-        dm_info = health["data_manager"]
-        assert dm_info["initialized"] is True
-        assert "type" in dm_info
+        # Verify repository info
+        repo_info = health["repository"]
+        assert repo_info["initialized"] is True
+        assert "type" in repo_info
 
         # Verify caching info
         caching_info = health["caching"]
@@ -500,13 +502,20 @@ class TestFuzzyPipelineService:
         assert service.enable_caching is False
         assert service.cache_ttl_seconds == 600
 
+    @patch("ktrdr.services.fuzzy_pipeline_service.create_integrated_pipeline")
     def test_pipeline_caching(
-        self, mock_data_manager, sample_indicator_config_dict, sample_fuzzy_config_dict
+        self,
+        mock_create_pipeline,
+        mock_repository,
+        sample_indicator_config_dict,
+        sample_fuzzy_config_dict,
     ):
         """Test pipeline caching functionality."""
-        service = FuzzyPipelineService(
-            data_manager=mock_data_manager, enable_caching=True
-        )
+        # Mock pipeline creation
+        mock_pipeline = Mock()
+        mock_create_pipeline.return_value = mock_pipeline
+
+        service = FuzzyPipelineService(repository=mock_repository, enable_caching=True)
 
         # Get pipeline (should create new one)
         pipeline1 = service._get_or_create_pipeline(
@@ -526,20 +535,20 @@ class TestFuzzyPipelineService:
     def test_no_market_data_error(
         self,
         mock_create_pipeline,
-        mock_data_manager,
+        mock_repository,
         sample_indicator_config_dict,
         sample_fuzzy_config_dict,
     ):
         """Test handling when no market data is available."""
         # Mock data manager to return None
-        mock_data_manager.get_data.return_value = None
+        mock_repository.load_from_cache.return_value = None
 
         # Mock pipeline
         mock_pipeline = Mock()
         mock_create_pipeline.return_value = mock_pipeline
         mock_pipeline.get_supported_timeframes.return_value = ["1h"]
 
-        service = FuzzyPipelineService(data_manager=mock_data_manager)
+        service = FuzzyPipelineService(repository=mock_repository)
 
         with pytest.raises(ProcessingError) as exc_info:
             service.process_symbol_fuzzy(

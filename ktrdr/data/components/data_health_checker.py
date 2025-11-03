@@ -8,12 +8,12 @@ components, extracted to keep DataManager lean and maintain separation of concer
 import os
 from typing import TYPE_CHECKING, Any, Optional
 
-from ktrdr.data.components.data_quality_validator import DataQualityValidator
-from ktrdr.data.components.gap_classifier import GapClassifier
+from ktrdr.data.acquisition.gap_classifier import GapClassifier
 from ktrdr.data.local_data_loader import LocalDataLoader
+from ktrdr.data.repository.data_quality_validator import DataQualityValidator
 
 if TYPE_CHECKING:
-    from ktrdr.data.ib_data_adapter import IbDataAdapter
+    from ktrdr.data.acquisition.ib_data_provider import IbDataProvider
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
@@ -33,7 +33,7 @@ class DataHealthChecker:
         data_loader: LocalDataLoader,
         data_validator: DataQualityValidator,
         gap_classifier: GapClassifier,
-        ib_adapter: Optional["IbDataAdapter"] = None,
+        ib_adapter: Optional["IbDataProvider"] = None,
         enable_ib: bool = True,
         max_gap_percentage: float = 5.0,
         default_repair_method: str = "ffill",
@@ -46,7 +46,7 @@ class DataHealthChecker:
             data_loader: LocalDataLoader instance
             data_validator: DataQualityValidator instance
             gap_classifier: GapClassifier instance
-            ib_adapter: Optional IbDataAdapter instance
+            ib_adapter: Optional IbDataProvider instance
             enable_ib: Whether IB integration is enabled
             max_gap_percentage: Max gap percentage configuration
             default_repair_method: Default repair method configuration

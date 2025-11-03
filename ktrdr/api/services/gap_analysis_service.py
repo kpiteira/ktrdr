@@ -18,7 +18,7 @@ from ktrdr.api.models.gap_analysis import (
     GapAnalysisSummary,
     GapInfoModel,
 )
-from ktrdr.data.components.gap_classifier import (
+from ktrdr.data.acquisition.gap_classifier import (
     GapClassification,
     GapClassifier,
     GapInfo,

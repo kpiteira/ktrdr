@@ -13,7 +13,7 @@ import pandas as pd
 
 from ktrdr import get_logger
 from ktrdr.api.services.base import BaseService
-from ktrdr.data import DataManager
+from ktrdr.data.repository import DataRepository
 from ktrdr.errors import (
     ConfigurationError,
     DataError,
@@ -49,7 +49,7 @@ class FuzzyService(BaseService):
             config_path: Optional path to the fuzzy configuration file
         """
         super().__init__()  # Initialize BaseService
-        self.data_manager = DataManager()
+        self.repository = DataRepository()
         self.indicator_engine = IndicatorEngine()
 
         # Declare types for attributes that may be None in error cases
@@ -400,9 +400,9 @@ class FuzzyService(BaseService):
             # Load data
             load_perf = self.track_performance("load_data")
             try:
-                df = self.data_manager.load(
+                df = self.repository.load_from_cache(
                     symbol=symbol,
-                    interval=timeframe,
+                    timeframe=timeframe,
                     start_date=start_date,
                     end_date=end_date,
                 )
@@ -582,9 +582,9 @@ class FuzzyService(BaseService):
             # Load OHLCV data
             load_perf = self.track_performance("load_ohlcv_data")
             try:
-                df = self.data_manager.load(
+                df = self.repository.load_from_cache(
                     symbol=symbol,
-                    interval=timeframe,
+                    timeframe=timeframe,
                     start_date=start_date,
                     end_date=end_date,
                 )

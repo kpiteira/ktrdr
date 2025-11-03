@@ -13,7 +13,7 @@ import pandas as pd
 
 from ktrdr import get_logger, log_entry_exit, log_performance
 from ktrdr.api.services.base import BaseService
-from ktrdr.data import DataManager
+from ktrdr.data.repository import DataRepository
 from ktrdr.errors import DataError, DataNotFoundError
 
 # Setup module-level logger
@@ -24,8 +24,9 @@ class DataService(BaseService):
     """
     Service for accessing and managing OHLCV data.
 
-    This service adapts the core DataManager functionality for API use,
-    providing data loading, symbol listing, and related operations.
+    This service provides access to cached data via DataRepository,
+    offering symbol listing, data retrieval, and metadata operations.
+    For data downloads, use DataAcquisitionService.
     """
 
     def __init__(self, data_dir: Optional[str] = None):
@@ -36,8 +37,8 @@ class DataService(BaseService):
             data_dir: Optional path to the data directory
         """
         super().__init__()  # Initialize BaseService
-        self.data_manager = DataManager(data_dir=data_dir)
-        self.logger.info("DataService initialized")
+        self.repository = DataRepository(data_dir=data_dir)
+        self.logger.info("DataService initialized with DataRepository")
 
     @log_entry_exit(logger=logger, log_args=True)
     @log_performance(threshold_ms=200, logger=logger)
@@ -53,113 +54,31 @@ class DataService(BaseService):
         """
         Load cached data from local storage for frontend visualization.
 
-        This method provides consistent delegation to DataManager while returning
-        a DataFrame for API endpoints that need to apply additional processing
-        like trading hours filtering and format conversion.
+        This method uses DataRepository for fast, synchronous cache reads,
+        returning a DataFrame for API endpoints that need to apply additional
+        processing like trading hours filtering and format conversion.
 
         Args:
             symbol: Trading symbol (e.g., 'AAPL', 'MSFT')
             timeframe: Data timeframe (e.g., '1d', '1h')
             start_date: Optional start date for filtering
             end_date: Optional end date for filtering
-            validate: Whether to validate the data
-            repair: Whether to repair the data
+            validate: Whether to validate the data (not used - Repository always validates)
+            repair: Whether to repair the data (not used - Repository handles repair)
 
         Returns:
             DataFrame with OHLCV data or None if no data found
 
         Raises:
             DataError: For data-related errors
+            DataNotFoundError: If data not found in cache
         """
-        # Delegate to DataManager's sync load_data method
-        # This maintains consistent delegation pattern while returning DataFrame
-        return self.data_manager.load_data(
+        # Delegate to DataRepository for fast, synchronous cache reads
+        return self.repository.load_from_cache(
             symbol=symbol,
             timeframe=timeframe,
             start_date=start_date,
             end_date=end_date,
-            mode="local",  # Force local only - no external operations
-            validate=validate,
-            repair=repair,
-        )
-
-    @log_entry_exit(logger=logger, log_args=True)
-    @log_performance(threshold_ms=500, logger=logger)
-    async def load_data_async(
-        self,
-        symbol: str,
-        timeframe: str,
-        start_date: Optional[Union[str, datetime]] = None,
-        end_date: Optional[Union[str, datetime]] = None,
-        mode: str = "local",
-        filters: Optional[dict[str, Any]] = None,
-    ) -> dict[str, Any]:
-        """
-        Load data asynchronously with ServiceOrchestrator operation tracking.
-
-        This method provides consistent delegation to DataManager's ServiceOrchestrator
-        for async operation tracking, returning operation metadata instead of data results.
-
-        Args:
-            symbol: Trading symbol (e.g., 'AAPL', 'EURUSD')
-            timeframe: Data timeframe (e.g., '1d', '1h')
-            start_date: Optional start date for filtering
-            end_date: Optional end date for filtering
-            mode: Loading mode (local, tail, backfill, full)
-            filters: Optional filters for data processing
-
-        Returns:
-            Dictionary with operation tracking info:
-            {
-                "operation_id": "op_xxx",
-                "status": "started",
-                "message": "Started data_load operation"
-            }
-
-        Raises:
-            DataError: For data-related errors
-        """
-        # Delegate to DataManager's ServiceOrchestrator for async operation tracking
-        return await self.data_manager.load_data_async(
-            symbol=symbol,
-            timeframe=timeframe,
-            start_date=start_date,
-            end_date=end_date,
-            mode=mode,
-            filters=filters,
-        )
-
-    async def start_data_loading_operation(
-        self,
-        symbol: str,
-        timeframe: str,
-        start_date: Optional[Union[str, datetime]] = None,
-        end_date: Optional[Union[str, datetime]] = None,
-        mode: str = "tail",
-        filters: Optional[dict[str, Any]] = None,
-    ) -> dict[str, Any]:
-        """
-        Start a data loading operation using simplified delegation to DataManager.
-
-        Args:
-            symbol: Trading symbol (e.g., 'AAPL', 'EURUSD')
-            timeframe: Data timeframe (e.g., '1d', '1h')
-            start_date: Optional start date for filtering
-            end_date: Optional end date for filtering
-            mode: Loading mode (tail, backfill, full)
-            filters: Optional filters (trading_hours_only, include_extended)
-
-        Returns:
-            API response dict with operation_id for async tracking
-        """
-        # Delegate to DataManager's ServiceOrchestrator (same as load_data but async tracked)
-        return await self.data_manager.load_data_async(
-            symbol=symbol,
-            timeframe=timeframe,
-            start_date=start_date,
-            end_date=end_date,
-            mode=mode,
-            filters=filters,
         )
 
     def _convert_df_to_api_format(
@@ -204,23 +123,20 @@ class DataService(BaseService):
         """
         Get list of available symbols with metadata.
 
+        Uses DataRepository to get cached symbols, then enriches with metadata.
+
         Returns:
             List of symbol information dictionaries
         """
         start_time = time.time()
-        logger.info("Starting get_available_symbols (optimized method)")
+        logger.info("Starting get_available_symbols (using DataRepository)")
 
-        # Get available data files from the data_loader
-        available_files = self.data_manager.data_loader.get_available_data_files()
-        logger.debug(
-            f"Processing {len(available_files)} data files to extract unique symbols"
-        )
+        # Get available symbols from repository
+        symbols = self.repository.get_available_symbols()
+        logger.debug(f"Retrieved {len(symbols)} unique symbols from repository")
 
-        # Extract unique symbols from the available files
-        symbols = sorted({symbol for symbol, _ in available_files})
-        logger.debug(
-            f"Aggregated {len(available_files)} files into {len(symbols)} unique symbols"
-        )
+        # Get available data files for timeframe mapping
+        available_files = self.repository.get_available_data_files()
 
         # Create a map of symbol to timeframes
         symbol_timeframes: dict[str, list[str]] = {}
@@ -237,14 +153,17 @@ class DataService(BaseService):
         for symbol in symbols:
             timeframes = sorted(symbol_timeframes.get(symbol, []))
 
-            # Get date range using the lightweight method (no full data loading)
+            # Get date range using repository
             date_range = None
             if timeframes:
                 try:
-                    # Use the optimized get_data_date_range method which doesn't load full files
-                    date_range = self.data_manager.data_loader.get_data_date_range(
-                        symbol, timeframes[0]
-                    )
+                    # Use repository to get date range
+                    range_info = self.repository.get_data_range(symbol, timeframes[0])
+                    if range_info.get("exists"):
+                        date_range = (
+                            range_info["start_date"],
+                            range_info["end_date"],
+                        )
                 except Exception as e:
                     logger.warning(f"Error getting date range for {symbol}: {str(e)}")
 
@@ -270,14 +189,21 @@ class DataService(BaseService):
             # Add date range if available
             if date_range:
                 start_date, end_date = date_range
-                symbol_info["start_date"] = start_date.isoformat()
-                symbol_info["end_date"] = end_date.isoformat()
+                # Handle both datetime and string formats
+                if isinstance(start_date, str):
+                    symbol_info["start_date"] = start_date
+                else:
+                    symbol_info["start_date"] = start_date.isoformat()
+                if isinstance(end_date, str):
+                    symbol_info["end_date"] = end_date
+                else:
+                    symbol_info["end_date"] = end_date.isoformat()
 
             result.append(symbol_info)
 
         elapsed = time.time() - start_time
         logger.info(
-            f"Retrieved {len(result)} unique symbols (from {len(available_files)} data files) in {elapsed:.3f}s"
+            f"Retrieved {len(result)} unique symbols (from repository) in {elapsed:.3f}s"
         )
         return result
 
@@ -386,8 +312,8 @@ class DataService(BaseService):
         Returns:
             List of available timeframes for this symbol
         """
-        # Get available data files from the data_loader
-        available_files = self.data_manager.data_loader.get_available_data_files()
+        # Get available data files from repository
+        available_files = self.repository.get_available_data_files()
 
         # Filter timeframes for the specified symbol
         timeframes = sorted(
@@ -442,6 +368,8 @@ class DataService(BaseService):
         """
         Get the available date range for a symbol and timeframe.
 
+        Uses DataRepository to get date range information from cache.
+
         Args:
             symbol: Trading symbol
             timeframe: Data timeframe
@@ -453,38 +381,33 @@ class DataService(BaseService):
             DataNotFoundError: If data is not found
         """
         try:
-            # Use lightweight date range method instead of full data summary
-            date_range = self.data_manager.data_loader.get_data_date_range(
-                symbol, timeframe
-            )
+            # Use repository to get date range
+            range_info = self.repository.get_data_range(symbol, timeframe)
 
-            if date_range is None:
+            # Repository returns dict with start_date, end_date, rows, exists
+            if not range_info.get("exists"):
                 raise DataNotFoundError(
                     message=f"Data not found for {symbol} ({timeframe})",
                     error_code="DATA-FileNotFound",
                     details={"symbol": symbol, "timeframe": timeframe},
                 )
 
-            start_date, end_date = date_range
+            # Extract dates (may be datetime or string)
+            start_date = range_info["start_date"]
+            end_date = range_info["end_date"]
 
-            # Calculate estimated point count based on timeframe and date range
-            duration = end_date - start_date
-            if timeframe == "1h":
-                estimated_points = duration.total_seconds() / 3600
-            elif timeframe == "1d":
-                estimated_points = duration.days
-            elif timeframe == "1m":
-                estimated_points = duration.total_seconds() / 60
-            else:
-                # Default fallback for unknown timeframes
-                estimated_points = max(1, duration.days)
+            # Convert to ISO format if needed
+            if not isinstance(start_date, str):
+                start_date = start_date.isoformat()
+            if not isinstance(end_date, str):
+                end_date = end_date.isoformat()
 
             result = {
                 "symbol": symbol,
                 "timeframe": timeframe,
-                "start_date": start_date.isoformat(),
-                "end_date": end_date.isoformat(),
-                "point_count": int(estimated_points),  # Use estimated count
+                "start_date": start_date,
+                "end_date": end_date,
+                "point_count": range_info.get("rows", 0),
             }
 
             logger.info(f"Retrieved date range for {symbol} ({timeframe})")
@@ -512,8 +435,8 @@ class DataService(BaseService):
         """
         try:
             # Check if we can access the data directory
-            data_dir = self.data_manager.data_loader.data_dir
-            data_files = self.data_manager.data_loader.get_available_data_files()
+            data_dir = self.repository.data_dir
+            data_files = self.repository.get_available_data_files()
 
             return {
                 "status": "healthy",

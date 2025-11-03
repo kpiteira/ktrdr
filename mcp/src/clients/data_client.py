@@ -64,7 +64,7 @@ class DataAPIClient(BaseAPIClient):
         if end_date:
             payload["end_date"] = end_date
 
-        response = await self._request("POST", "/data/load", json=payload)
+        response = await self._request("POST", "/data/acquire/download", json=payload)
 
         # CRITICAL: Must have operation_id for tracking
         return self._extract_or_raise(response, operation="data loading")

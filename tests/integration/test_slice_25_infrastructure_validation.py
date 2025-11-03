@@ -292,7 +292,6 @@ class TestSlice25InfrastructureValidation:
 
         Should ONLY exist in:
         - training/data_optimization.py (performance optimization)
-        - ib/gap_filler.py (service lifecycle)
         - ib/connection.py (connection management)
 
         Should NOT be used for async operation cancellation.
@@ -315,7 +314,6 @@ class TestSlice25InfrastructureValidation:
         # Define allowed files for threading.Event usage
         allowed_files = {
             "training/data_optimization.py",
-            "ib/gap_filler.py",
             "ib/connection.py",
         }
 

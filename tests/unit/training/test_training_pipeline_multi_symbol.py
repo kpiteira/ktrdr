@@ -269,7 +269,6 @@ class TestTrainStrategyHighLevel:
             start_date="2024-01-01",
             end_date="2024-12-31",
             model_storage=mock_storage,
-            data_mode="local",
             progress_callback=None,
             cancellation_token=None,
         )

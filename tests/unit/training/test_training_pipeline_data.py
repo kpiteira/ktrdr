@@ -24,8 +24,8 @@ class TestTrainingPipelineDataLoading:
         start_date = "2024-01-01"
         end_date = "2024-01-31"
 
-        # Mock DataManager
-        mock_dm = MagicMock()
+        # Mock DataRepository
+        mock_repo = MagicMock()
         mock_data = pd.DataFrame(
             {
                 "open": [1.10, 1.11, 1.12],
@@ -36,7 +36,7 @@ class TestTrainingPipelineDataLoading:
             },
             index=pd.date_range(start="2024-01-01", periods=3, freq="1h"),
         )
-        mock_dm.load_data.return_value = mock_data
+        mock_repo.load_from_cache.return_value = mock_data
 
         # Act
         result = TrainingPipeline.load_market_data(
@@ -44,17 +44,16 @@ class TestTrainingPipelineDataLoading:
             timeframes=timeframes,
             start_date=start_date,
             end_date=end_date,
-            data_mode="local",
-            data_manager=mock_dm,
+            repository=mock_repo,
         )
 
         # Assert
         assert isinstance(result, dict)
         assert "1h" in result
         assert len(result["1h"]) == 3
-        # Verify dates are passed to load_data for efficient filtering
-        mock_dm.load_data.assert_called_once_with(
-            symbol, "1h", start_date=start_date, end_date=end_date, mode="local"
+        # Verify dates are passed to load_from_cache for efficient filtering
+        mock_repo.load_from_cache.assert_called_once_with(
+            symbol=symbol, timeframe="1h", start_date=start_date, end_date=end_date
         )
 
     def test_load_market_data_multi_timeframe(self):
@@ -65,8 +64,8 @@ class TestTrainingPipelineDataLoading:
         start_date = "2024-01-01"
         end_date = "2024-01-31"
 
-        # Mock DataManager and MultiTimeframeCoordinator
-        mock_dm = MagicMock()
+        # Mock DataRepository and MultiTimeframeCoordinator
+        mock_repo = MagicMock()
         mock_mtc = MagicMock()
 
         # Mock multi-timeframe data
@@ -100,8 +99,7 @@ class TestTrainingPipelineDataLoading:
             timeframes=timeframes,
             start_date=start_date,
             end_date=end_date,
-            data_mode="local",
-            data_manager=mock_dm,
+            repository=mock_repo,
             multi_timeframe_coordinator=mock_mtc,
         )
 
@@ -121,7 +119,7 @@ class TestTrainingPipelineDataLoading:
         start_date = "2024-01-01"
         end_date = "2024-01-31"
 
-        mock_dm = MagicMock()
+        mock_repo = MagicMock()
         mock_mtc = MagicMock()
 
         # Only return 2 out of 3 timeframes (simulating partial failure)
@@ -155,8 +153,7 @@ class TestTrainingPipelineDataLoading:
             timeframes=timeframes,
             start_date=start_date,
             end_date=end_date,
-            data_mode="local",
-            data_manager=mock_dm,
+            repository=mock_repo,
             multi_timeframe_coordinator=mock_mtc,
         )
 
@@ -172,7 +169,7 @@ class TestTrainingPipelineDataLoading:
         start_date = "2024-01-01"
         end_date = "2024-01-31"
 
-        mock_dm = MagicMock()
+        mock_repo = MagicMock()
         mock_mtc = MagicMock()
 
         # Return empty dict (total failure)
@@ -185,13 +182,12 @@ class TestTrainingPipelineDataLoading:
                 timeframes=timeframes,
                 start_date=start_date,
                 end_date=end_date,
-                data_mode="local",
-                data_manager=mock_dm,
+                repository=mock_repo,
                 multi_timeframe_coordinator=mock_mtc,
             )
 
     # test_filter_data_by_date_range() removed
-    # Date filtering is now delegated to DataManager.load_data() directly
+    # Date filtering is now delegated to DataRepository.load_from_cache() directly
 
 
 class TestTrainingPipelineDataValidation:

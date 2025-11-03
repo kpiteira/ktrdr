@@ -13,7 +13,7 @@ import aiohttp
 import pandas as pd
 
 from ktrdr.async_infrastructure.progress import GenericProgressManager
-from ktrdr.data.external_data_interface import ExternalDataProvider
+from ktrdr.data.acquisition.external_data_interface import ExternalDataProvider
 
 logger = logging.getLogger(__name__)
 

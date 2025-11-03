@@ -156,7 +156,7 @@ class TestLoadDataOperation:
             # Verify request payload
             mock_request.assert_called_once_with(
                 "POST",
-                "/data/load",
+                "/data/acquire/download",
                 json={"symbol": "AAPL", "timeframe": "1h", "mode": "local"},
             )
 

@@ -21,7 +21,6 @@ from ktrdr.api.services.base import BaseService
 from ktrdr.api.services.operations_service import OperationsService
 from ktrdr.backtesting.engine import BacktestConfig, BacktestingEngine
 from ktrdr.backtesting.model_loader import ModelLoader
-from ktrdr.data.data_manager import DataManager
 from ktrdr.errors import DataError, ValidationError
 
 logger = get_logger(__name__)
@@ -33,7 +32,6 @@ class BacktestingService(BaseService):
     def __init__(self, operations_service: Optional[OperationsService] = None):
         """Initialize the backtesting service."""
         super().__init__()
-        self.data_manager = DataManager()
         self.model_loader = ModelLoader()
         if operations_service is None:
             raise ValueError("OperationsService must be provided to BacktestingService")
@@ -53,7 +51,6 @@ class BacktestingService(BaseService):
             "service": "BacktestingService",
             "status": "ok",
             "active_backtests": len(active_operations),
-            "data_manager_ready": self.data_manager is not None,
             "model_loader_ready": self.model_loader is not None,
         }
 
@@ -179,7 +176,6 @@ class BacktestingService(BaseService):
                 initial_capital=initial_capital,
                 commission=0.001,
                 slippage=0.0005,
-                data_mode="local",
                 verbose=False,
             )
 

@@ -4,18 +4,16 @@ Data endpoints for the KTRDR API.
 This module implements the API endpoints for accessing market data, symbols, and timeframes.
 """
 
-import uuid
 from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
 from ktrdr import get_logger
-from ktrdr.api.dependencies import get_data_service
+from ktrdr.api.dependencies import get_acquisition_service, get_data_service
 from ktrdr.api.models.base import ApiResponse
 from ktrdr.api.models.data import (
-    DataLoadApiResponse,
-    DataLoadOperationResponse,
+    DataAcquisitionResponse,
     DataLoadRequest,
     DataLoadResponse,
     DataRangeInfo,
@@ -447,53 +445,42 @@ async def get_cached_data(
 
 
 @router.post(
-    "/data/load",
-    response_model=DataLoadApiResponse,
-    tags=["Data"],
-    summary="Load data via DataManager (CLI/Operations)",
+    "/data/acquire/download",
+    response_model=DataAcquisitionResponse,
+    tags=["Data Acquisition"],
+    summary="Download data from external provider",
     description="""
-    Data loading operations endpoint for CLI and background processes.
+    Download market data from external provider (IB) with gap analysis and progress tracking.
 
-    This endpoint performs actual data loading operations and returns operational
-    metrics about what was fetched, from where, and how long it took.
+    This endpoint uses DataAcquisitionService for:
+    - Intelligent gap analysis
+    - Mode-based downloads (tail, backfill, full)
+    - Progress tracking via Operations service
+    - Resilient segment fetching
+
+    Returns operation_id for tracking progress via GET /operations/{operation_id}
 
     **Loading Modes:**
-    - `tail`: Load recent data from last available timestamp to now
-    - `backfill`: Load historical data before earliest available timestamp
-    - `full`: Load both historical (backfill) and recent (tail) data
-
-    **Features:**
-    - Intelligent gap analysis with trading calendar awareness
-    - Progressive loading for large date ranges
-    - Partial failure resilience (continues with successful segments)
-    - Detailed operation metrics and timing
-
-    **Perfect for:** CLI commands, background jobs, data management operations
+    - `tail`: Download recent data (fill gaps at end)
+    - `backfill`: Download historical data (fill gaps at beginning)
+    - `full`: Download complete range (fill all gaps)
     """,
 )
-async def load_data(
+async def download_data_acquire(
     request: DataLoadRequest,
-    data_service: DataService = Depends(get_data_service),
-) -> DataLoadApiResponse:
+    acquisition_service=Depends(get_acquisition_service),
+) -> DataAcquisitionResponse:
     """
-    Load data asynchronously using enhanced DataManager with IB integration.
+    Download data from external provider (IB) using DataAcquisitionService.
 
-    This endpoint uses the enhanced DataManager which provides:
-    - Intelligent gap analysis
-    - Smart segmentation for large ranges
-    - Trading calendar awareness
-    - IB rate limit compliance
-    - Partial failure resilience
-
-    All operations are asynchronous and return an operation ID for tracking.
-    Use GET /operations/{operation_id} to poll for status.
-    Use GET /operations/{operation_id}/results to get final results.
+    This is the NEW endpoint that uses DataAcquisitionService with
+    Repository + Provider pattern for cleaner architecture.
 
     Args:
-        request: Enhanced data loading request with mode support
+        request: Data load request with symbol, timeframe, mode, and optional dates
 
     Returns:
-        Response with operation ID for tracking
+        Response with operation ID for tracking progress
 
     Example request:
         ```json
@@ -508,86 +495,51 @@ async def load_data(
         ```json
         {
           "success": true,
-          "data": {
-            "operation_id": "op_data_load_20241201_abc123",
-            "status": "started"
-          }
+          "operation_id": "op_data_load_20241201_abc123",
+          "status": "started",
+          "message": "Started tail download for AAPL 1h"
         }
         ```
     """
     try:
-        # Log user-initiated operation clearly for CLI visibility
         logger.info(
-            f"📥 USER OPERATION: Data loading initiated for {request.symbol} ({request.timeframe})"
+            f"📥 NEW ENDPOINT: /data/acquire/download - Using DataAcquisitionService "
+            f"for {request.symbol} ({request.timeframe}, mode={request.mode or 'tail'})"
         )
         logger.info(
-            f"Enhanced data loading for {request.symbol} ({request.timeframe}) - mode: {request.mode}"
+            "🔧 SERVICE: DataAcquisitionService (Repository + Provider pattern) "
+            "- NOT DataManager!"
         )
 
-        # Validate request
-        if not request.symbol or not request.symbol.strip():
-            raise DataError(
-                message="Symbol is required and cannot be empty",
-                error_code="DATA-InvalidSymbol",
-                details={"symbol": request.symbol},
-            )
-
-        # Clean symbol
-        clean_symbol = request.symbol.strip().upper()
-
-        # Extract filters from request
-        filters_dict = None
-        if request.filters:
-            filters_dict = {
-                "trading_hours_only": request.filters.trading_hours_only,
-                "include_extended": request.filters.include_extended,
-            }
-
-        # Always use async mode - consistent delegation for async operation tracking
-        operation_result = await data_service.load_data_async(
-            symbol=clean_symbol,
+        # Call DataAcquisitionService (NEW architecture)
+        logger.debug(
+            f"🚀 Calling acquisition_service.download_data() for {request.symbol} {request.timeframe}"
+        )
+        result = await acquisition_service.download_data(
+            symbol=request.symbol,
             timeframe=request.timeframe,
             start_date=request.start_date,
             end_date=request.end_date,
-            mode=request.mode,
-            filters=filters_dict,
+            mode=request.mode or "tail",
         )
 
-        # Extract operation ID from ServiceOrchestrator result
-        operation_id = operation_result.get("operation_id") or str(uuid.uuid4())
-        status = operation_result.get("status", "started")
-
-        # Return operation ID for tracking
-        response_data = DataLoadOperationResponse(
-            operation_id=operation_id,
-            status=status,
-            fetched_bars=0,
-            cached_before=False,
-            merged_file="",
-            gaps_analyzed=0,
-            segments_fetched=0,
-            ib_requests_made=0,
-            execution_time_seconds=0.0,
-            error_message=None,
+        logger.info(
+            f"✅ DataAcquisitionService returned: operation_id={result['operation_id']}, "
+            f"status={result['status']}"
         )
 
-        logger.info(f"Started async data loading operation: {operation_id}")
-        return DataLoadApiResponse(success=True, data=response_data, error=None)
+        return DataAcquisitionResponse(
+            success=True,
+            operation_id=result["operation_id"],
+            status=result["status"],
+            message=f"Started {request.mode or 'tail'} download for {request.symbol} {request.timeframe}",
+        )
 
-    except DataError as e:
-        logger.error(f"Data error loading {request.symbol}: {str(e)}")
-        raise
     except Exception as e:
-        logger.error(f"Unexpected error loading {request.symbol}: {str(e)}")
-        raise DataError(
-            message=f"Failed to load data for {request.symbol} ({request.timeframe})",
-            error_code="DATA-LoadError",
-            details={
-                "symbol": request.symbol,
-                "timeframe": request.timeframe,
-                "mode": request.mode,
-                "error": str(e),
-            },
+        logger.error(f"Data acquisition failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Data acquisition failed: {str(e)}",
         ) from e
 
 

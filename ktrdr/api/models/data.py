@@ -330,51 +330,20 @@ class DataLoadRequest(BaseModel):
         return self
 
 
-class DataLoadOperationResponse(BaseModel):
+class DataAcquisitionResponse(BaseModel):
     """
-    Response model for data loading operations with enhanced metrics.
+    Simple response model for data acquisition operations.
 
-    Provides detailed information about the loading operation including
-    gap analysis results and data source metrics.
+    Used by the new /data/acquire/download endpoint.
 
     Attributes:
-        status (str): Operation status - 'success', 'partial', 'failed', or 'started'
-        operation_id (Optional[str]): Operation ID for async operations
-        fetched_bars (int): Number of bars fetched
-        cached_before (bool): Whether data existed before operation
-        merged_file (str): Path to the merged CSV file
-        gaps_analyzed (int): Number of gaps identified by DataManager
-        segments_fetched (int): Number of segments successfully fetched
-        ib_requests_made (int): Number of IB API calls made
-        execution_time_seconds (float): Total execution time
-        error_message (Optional[str]): Error message if operation failed
+        success (bool): Whether the request was successful
+        operation_id (str): Operation ID for tracking progress
+        status (str): Operation status (e.g., 'started')
+        message (str): Human-readable status message
     """
 
-    status: Literal["success", "partial", "failed", "started"] = Field(
-        ..., description="Operation status"
-    )
-    operation_id: Optional[str] = Field(
-        None, description="Operation ID for async operations"
-    )
-    fetched_bars: int = Field(..., description="Number of bars fetched")
-    cached_before: bool = Field(
-        ..., description="Whether data existed before operation"
-    )
-    merged_file: str = Field(..., description="Path to the merged CSV file")
-    gaps_analyzed: int = Field(
-        ..., description="Number of gaps identified by DataManager"
-    )
-    segments_fetched: int = Field(
-        ..., description="Number of segments successfully fetched"
-    )
-    ib_requests_made: int = Field(..., description="Number of IB API calls made")
-    execution_time_seconds: float = Field(..., description="Total execution time")
-    error_message: Optional[str] = Field(
-        None, description="Error message if operation failed"
-    )
-
-
-class DataLoadApiResponse(ApiResponse[DataLoadOperationResponse]):
-    """API response wrapper for data loading operations."""
-
-    pass
+    success: bool = Field(..., description="Whether the request was successful")
+    operation_id: str = Field(..., description="Operation ID for tracking progress")
+    status: str = Field(..., description="Operation status")
+    message: str = Field(..., description="Human-readable status message")

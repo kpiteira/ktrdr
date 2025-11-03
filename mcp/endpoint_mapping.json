@@ -10,7 +10,7 @@
       "description": "Start neural network training"
     },
     "trigger_data_loading": {
-      "endpoint": "/api/v1/data/load",
+      "endpoint": "/api/v1/data/acquire/download",
       "method": "POST",
       "critical": true,
       "description": "Trigger async data loading operation"

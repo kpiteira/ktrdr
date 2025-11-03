@@ -448,8 +448,8 @@ async def _load_data_async(
             )
 
             # Get operation ID from response
-            if response.get("success") and response.get("data", {}).get("operation_id"):
-                operation_id = response["data"]["operation_id"]
+            if response.get("success") and response.get("operation_id"):
+                operation_id = response["operation_id"]
                 if not quiet:
                     console.print(f"⚡ Started operation: {operation_id}")
             else:

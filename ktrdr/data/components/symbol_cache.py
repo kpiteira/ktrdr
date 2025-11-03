@@ -12,15 +12,28 @@ import json
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from ktrdr import get_logger
 
-# Lazy import to avoid circular dependency
-if TYPE_CHECKING:
-    from ktrdr.ib import ValidationResult
-
 logger = get_logger(__name__)
+
+
+@dataclass
+class ValidationResult:
+    """
+    Generic symbol validation result (provider-agnostic).
+
+    This replaces the IB-specific ValidationResult to maintain
+    provider independence in the data layer.
+    """
+
+    is_valid: bool
+    symbol: str
+    error_message: str | None = None
+    contract_info: dict[str, Any] | None = None
+    head_timestamps: dict[str, Any] | None = None
+    suggested_symbol: str | None = None
 
 
 @dataclass
@@ -35,11 +48,8 @@ class CachedSymbolInfo:
         """Check if cached data has expired."""
         return time.time() - self.cached_at > self.ttl_seconds
 
-    def to_validation_result(self):
+    def to_validation_result(self) -> ValidationResult:
         """Convert back to ValidationResult object."""
-        # Lazy import to avoid circular dependency
-        from ktrdr.ib import ValidationResult
-
         data = self.validation_result
         return ValidationResult(
             is_valid=data["is_valid"],

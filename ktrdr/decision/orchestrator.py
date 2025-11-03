@@ -9,7 +9,6 @@ import yaml
 
 from .. import get_logger
 from ..backtesting.model_loader import ModelLoader
-from ..data.data_manager import DataManager
 from ..fuzzy.engine import FuzzyEngine
 from ..indicators.indicator_engine import IndicatorEngine
 from .base import Position, Signal, TradingDecision
@@ -135,8 +134,7 @@ class DecisionOrchestrator:
         self.strategy_config = self._load_strategy_config(strategy_config_path)
         self.strategy_name = self.strategy_config["name"]
 
-        # Initialize data pipeline components (existing)
-        self.data_manager = DataManager()
+        # Initialize data pipeline components
         self.indicator_engine = IndicatorEngine()
 
         # Initialize fuzzy engine with strategy fuzzy sets

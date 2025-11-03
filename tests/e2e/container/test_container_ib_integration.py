@@ -198,7 +198,6 @@ class TestContainerIbRefactorValidation:
         # Verify IB-related services are reported
         services = status_data["services"]
         assert "ib_connection" in services
-        assert "gap_filler" in services
 
     def test_data_info_integration(self, api_client):
         """Test data info endpoint integration."""

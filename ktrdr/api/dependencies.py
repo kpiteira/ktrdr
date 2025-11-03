@@ -5,7 +5,7 @@ This module provides dependency injection functions for FastAPI routes.
 These dependencies are used to provide services and configuration to API endpoints.
 """
 
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import Depends
 
@@ -17,7 +17,7 @@ from ktrdr.api.services.operations_service import (
     OperationsService,
     get_operations_service,
 )
-from ktrdr.data.data_manager import DataManager
+from ktrdr.data.acquisition.acquisition_service import DataAcquisitionService
 
 
 def get_api_config() -> APIConfig:
@@ -66,15 +66,24 @@ def get_fuzzy_service() -> FuzzyService:
     return FuzzyService()
 
 
-# Data manager dependency
-def get_data_manager() -> DataManager:
+# Data acquisition service dependency (singleton)
+_acquisition_service: Optional[DataAcquisitionService] = None
+
+
+def get_acquisition_service() -> DataAcquisitionService:
     """
-    Dependency for providing the data manager.
+    Dependency for providing the data acquisition service (singleton).
+
+    Returns same instance across requests to maintain internal state
+    and avoid multiple service initializations.
 
     Returns:
-        DataManager: Initialized data manager instance with IB integration
+        DataAcquisitionService: Singleton data acquisition service instance
     """
-    return DataManager()
+    global _acquisition_service
+    if _acquisition_service is None:
+        _acquisition_service = DataAcquisitionService()
+    return _acquisition_service
 
 
 # Operations service dependency
@@ -93,5 +102,7 @@ ConfigDep = Annotated[APIConfig, Depends(get_api_config)]
 DataServiceDep = Annotated[DataService, Depends(get_data_service)]
 IndicatorServiceDep = Annotated[IndicatorService, Depends(get_indicator_service)]
 FuzzyServiceDep = Annotated[FuzzyService, Depends(get_fuzzy_service)]
-DataManagerDep = Annotated[DataManager, Depends(get_data_manager)]
+AcquisitionServiceDep = Annotated[
+    DataAcquisitionService, Depends(get_acquisition_service)
+]
 OperationsServiceDep = Annotated[OperationsService, Depends(get_operations_service_dep)]

@@ -7,7 +7,7 @@ from typing import Any, Optional, cast
 import pandas as pd
 
 from .. import get_logger
-from ..data.data_manager import DataManager
+from ..data.repository import DataRepository
 from ..decision.base import Signal
 from .performance import PerformanceMetrics, PerformanceTracker
 from .position_manager import PositionManager, Trade
@@ -28,7 +28,6 @@ class BacktestConfig:
     initial_capital: float = 100000.0
     commission: float = 0.001  # 0.1%
     slippage: float = 0.0005  # 0.05%
-    data_mode: str = "local"  # Data loading mode
     verbose: bool = False
 
 
@@ -84,7 +83,7 @@ class BacktestingEngine:
         )
 
         # Initialize components
-        self.data_manager = DataManager()
+        self.repository = DataRepository()
         self.position_manager = PositionManager(
             initial_capital=config.initial_capital,
             commission=config.commission,
@@ -683,16 +682,15 @@ class BacktestingEngine:
         return results
 
     def _load_historical_data(self) -> pd.DataFrame:
-        """Load historical data for backtesting.
+        """Load historical data for backtesting from cache.
 
         Returns:
             DataFrame with OHLCV data
         """
-        # Load data using the data manager with specified mode
-        data = self.data_manager.load_data(
+        # Load data from cache (backtesting always uses cached data)
+        data = self.repository.load_from_cache(
             symbol=self.config.symbol,
             timeframe=self.config.timeframe,
-            mode=self.config.data_mode,
         )
 
         # Filter by date range if specified

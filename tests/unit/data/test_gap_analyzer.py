@@ -11,8 +11,8 @@ from unittest.mock import Mock
 import pandas as pd
 import pytest
 
-from ktrdr.data.components.gap_analyzer import GapAnalyzer
-from ktrdr.data.components.gap_classifier import (
+from ktrdr.data.acquisition.gap_analyzer import GapAnalyzer
+from ktrdr.data.acquisition.gap_classifier import (
     GapClassification,
     GapClassifier,
     GapInfo,
@@ -353,32 +353,6 @@ class TestGapAnalyzer:
 
         # Should find the large gap (>7 days rule overrides safeguard)
         assert len(gaps_large) == 1
-
-
-class TestGapAnalyzerIntegration:
-    """Integration tests for GapAnalyzer with DataManager."""
-
-    def test_datamanager_integration(self):
-        """Test that GapAnalyzer integrates properly with DataManager."""
-        # This test will verify that DataManager can use GapAnalyzer
-        # instead of its internal gap analysis methods
-
-        from ktrdr.data.data_manager import DataManager
-
-        dm = DataManager()
-
-        # DataManager should now have a gap_analyzer component
-        assert hasattr(dm, "gap_analyzer")
-        assert dm.gap_analyzer is not None
-        assert hasattr(dm.gap_analyzer, "analyze_gaps")
-
-    def test_backward_compatibility(self):
-        """Test that new implementation produces identical results to original."""
-        # This test compares gap analysis results between original DataManager
-        # and the new GapAnalyzer component
-
-        # Will be implemented after the component is created
-        pytest.skip("Requires both original and new implementations")
 
 
 if __name__ == "__main__":
