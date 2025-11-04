@@ -312,92 +312,81 @@ Expected: 11/11 tests PASS (PositionManager 5, PerformanceTracker 4, Engine 1, S
 
 ---
 
-### 4.1 Task 1.0: Establish Test Foundation **[NEW]**
+### 4.1 Task 1.0: Update Testing Reference Documents **[REVISED]**
 
-**Duration**: 6-8 hours
+**Duration**: 4-6 hours
 
-**Description**: Identify, validate, and document test models and data required for all scenarios.
+**Description**: Add backtesting scenarios to existing testing reference documents used by integration-test-specialist agent.
 
-**Problem Statement**: Scenarios require trained models to run backtests. Must identify existing models or create test models before designing scenarios.
+**Problem Statement**: The integration-test-specialist agent uses `SCENARIOS.md` and `TESTING_GUIDE.md` as their knowledge base. We need to add backtesting patterns to these existing documents, NOT create separate documents.
+
+**Files to Update**:
+1. `docs/testing/SCENARIOS.md` - Add backtesting scenarios (B1.1-B4.3)
+2. `docs/testing/TESTING_GUIDE.md` - Add backtesting API endpoints and test data
+3. `.claude/agents/integration-test-specialist.md` - Update knowledge base section
 
 **Steps**:
 
-1. **Identify Available Models** (2h)
-   - Search `models/` directory for trained models
-   - Check metadata.json for each model (strategy, symbol, timeframe, training_summary)
-   - Verify model files load correctly (torch.load)
-   - Document model characteristics
+1. **Validate Test Foundation** (2h)
+   - Identify available trained models in `models/`
+   - Verify model loads (torch.load) and strategy config exists
+   - Check test data availability (EURUSD, AAPL)
+   - Document test model: `neuro_mean_reversion v21` (63.26% val accuracy)
+   - Document test data: EURUSD 1d (4,762 bars), AAPL 1d (458 bars)
 
-2. **Select Primary Test Model** (1h)
-   - **Criteria**:
-     - Has corresponding strategy config available
-     - Works with available test data (symbol/timeframe match)
-     - Well-trained (validation accuracy > 50% - model actually learned something)
-     - Different test scenarios may need different data ranges:
-       - Initialization tests: Any valid data range
-       - Trade execution tests: Data range where model takes trades
-       - Progress tests: Longer data range to observe progress updates
-   - **Document**: Full path, strategy name, model characteristics, suitable test types
+2. **Add to SCENARIOS.md** (2h)
+   - Add backtesting scenarios table to index (13 scenarios)
+   - Add detailed scenarios B1.1-B4.3 following existing format
+   - Keep scenarios concise like training/data scenarios
+   - Update summary statistics section
 
-3. **Validate Test Data Availability** (2h)
-   - Check `data/` for cached historical data
-   - Identify symbols with sufficient data for tests
-   - Document date ranges available
-   - **Required coverage**:
-     - Fast smoke test: 1 month daily (~20 bars)
-     - Progress test: 3+ months daily (~60+ bars) OR 1 month hourly
+3. **Add to TESTING_GUIDE.md** (1h)
+   - Add backtesting API endpoint (`POST /api/v1/backtests/start`)
+   - Add backtest worker service (port 5003)
+   - Add backtesting test data parameters
+   - Document test model and strategy
 
-4. **Create Prerequisites Document** (2h)
-   - File: `docs/testing/scenarios/backtesting/PREREQUISITES.md`
-   - List all test models with paths and characteristics
-   - List all test data with date ranges and bar counts
-   - Document which model/data combinations are suitable for which test types
-   - Reference from all scenario documents
-
-**Files to Create**:
-- `docs/testing/scenarios/backtesting/PREREQUISITES.md`
+4. **Update integration-test-specialist.md** (30min)
+   - Add backtesting to "Current Testing Knowledge Base"
+   - Update reference document counts
+   - Remove backtesting from "Areas WITHOUT Building Blocks"
 
 **Acceptance Criteria**:
-- ✅ At least 1 test model identified and validated
-- ✅ Model loads successfully (torch.load works)
-- ✅ Strategy config exists for model
-- ✅ Test data available for at least 2 symbols (1 stock, 1 forex)
-- ✅ Date ranges documented
-- ✅ Prerequisites document created
-- ✅ **Validation with agent**: Agent confirms model loads and data exists
+- ✅ At least 1 test model validated (loads successfully)
+- ✅ Strategy config exists
+- ✅ Test data available (EURUSD 1d, AAPL 1d)
+- ✅ 13 backtesting scenarios added to SCENARIOS.md index
+- ✅ 13 detailed scenario sections added (B1.1-B1.3, B2.1-B2.3, B3.1-B3.4, B4.1-B4.3)
+- ✅ TESTING_GUIDE.md includes backtesting endpoints and test data
+- ✅ integration-test-specialist.md updated with backtesting knowledge
+- ✅ All scenarios follow existing format (concise, executable)
 
 **Testing with Agent**:
 ```
-Task: "Validate test foundation for backtesting scenarios"
-Expected:
-- Model file exists and loads
-- Strategy config exists
-- Test data cached
-- All paths documented in PREREQUISITES.md
+NOT APPLICABLE - These are reference documents for the agent to use.
+Agent will use these scenarios starting in Phase 2 when implementation begins.
 ```
 
 **Deliverables**:
-- Test model(s) identified: `models/{strategy}/{version}/model.pt`
-- Strategy path(s): `strategies/{strategy_name}.yaml`
-- Test data confirmed: `data/{SYMBOL}_{TIMEFRAME}.csv` or `.pkl`
-- Prerequisites documented with model/data/test type mapping
+- Updated `docs/testing/SCENARIOS.md` with 13 backtesting scenarios
+- Updated `docs/testing/TESTING_GUIDE.md` with backtesting building blocks
+- Updated `.claude/agents/integration-test-specialist.md`
+- Test model documented: `models/neuro_mean_reversion/1d_v21/model.pt`
+- Test data documented: EURUSD 1d, AAPL 1d
 
-**Note**: If no suitable models exist, stop and ask before creating new ones. We have existing trained models that should be sufficient.
+**Note**: This task creates NO new files. All updates are to existing reference documents.
 
 ---
 
-### 4.2 Task 1.1: Design Backend Scenarios
+### 4.2 Tasks 1.1-1.4: Scenario Design **[CONSOLIDATED INTO TASK 1.0]**
 
-**Duration**: 1 day
+**Status**: These tasks have been consolidated into Task 1.0.
 
-**Description**: Design scenarios for local backtesting (backend isolated, no remote service).
+**What Changed**:
+- ❌ **Old approach**: Create separate scenario documents (BACKEND_SCENARIOS.md, INTEGRATION_SCENARIOS.md, etc.)
+- ✅ **New approach**: Add scenarios directly to existing `SCENARIOS.md` (following training/data patterns)
 
-**Reference Documents**:
-- Template: [SCENARIOS.md](../../testing/SCENARIOS.md) - See training scenarios 1.1-1.4
-- Testing Guide: [TESTING_GUIDE.md](../../testing/TESTING_GUIDE.md)
-- Prerequisites: `docs/testing/scenarios/backtesting/PREREQUISITES.md` (from Task 1.0)
-
-**Scenarios to Design** (4 minimum):
+**Scenarios Added to SCENARIOS.md** (13 total):
 
 | Scenario ID | Name | Purpose | Expected Duration | Must Specify |
 |-------------|------|---------|------------------|--------------|

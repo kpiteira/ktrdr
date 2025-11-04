@@ -36,6 +36,24 @@
 | D4.2 | Error - IB Service Not Running | Error | <1s | ✅ |
 | D4.3 | Error - IB Gateway Disconnected | Error | <1s | ✅📝 |
 
+### Backtesting Scenarios
+
+| ID | Name | Category | Duration | Status |
+|----|------|----------|----------|--------|
+| B1.1 | Local Backtest - Smoke Test | Backend | ~5s | ⏳ |
+| B1.2 | Local Backtest - Progress Tracking | Backend | ~20s | ⏳ |
+| B1.3 | Local Backtest - Cancellation | Backend | ~15s | ⏳ |
+| B2.1 | Backtest via API - Local Mode | Integration | ~10s | ⏳ |
+| B2.2 | API Progress Polling | Integration | ~25s | ⏳ |
+| B2.3 | API Cancellation | Integration | ~15s | ⏳ |
+| B3.1 | Remote Backtest - Direct Start | Remote | ~10s | ⏳ |
+| B3.2 | Backend → Remote Proxy | Remote | ~10s | ⏳ |
+| B3.3 | Remote Progress Updates | Remote | ~25s | ⏳ |
+| B3.4 | Remote Cancellation | Remote | ~15s | ⏳ |
+| B4.1 | Error - Invalid Strategy | Error | ~2s | ⏳ |
+| B4.2 | Error - Missing Data | Error | ~2s | ⏳ |
+| B4.3 | Error - Model Not Found | Error | ~2s | ⏳ |
+
 **Legend**: ✅ Tested & Passed | ❌ Failed | ⏳ Not Yet Tested | ✅📝 Documented (not tested)
 
 **Note**: D4.3 documented but not tested (requires IB Gateway logout which would disrupt session)
@@ -1568,6 +1586,592 @@ tail -f ib-host-service/logs/ib-host-service.log | grep "Connected to"
 
 ---
 
+# BACKTESTING SCENARIOS
+
+## B1.1: Local Backtest - Smoke Test
+
+**Category**: Backend Isolated
+**Duration**: ~5 seconds
+**Purpose**: Quick validation that backtest starts, completes, returns results
+
+### Test Data
+```json
+{
+  "model_path": "models/neuro_mean_reversion/1d_v21/model.pt",
+  "strategy_name": "neuro_mean_reversion",
+  "symbol": "EURUSD",
+  "timeframe": "1d",
+  "start_date": "2024-01-01",
+  "end_date": "2024-01-31"
+}
+```
+**Bars**: ~21 | **Duration**: <5s
+
+### Prerequisites
+- Backend running
+- Local mode (`USE_REMOTE_BACKTEST_SERVICE=false`)
+- Model: neuro_mean_reversion v21
+- Data: EURUSD 1d cached
+
+### Commands
+
+**1. Start Backtest**
+```bash
+RESPONSE=$(curl -s -X POST http://localhost:8000/api/v1/backtests/start \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_path": "models/neuro_mean_reversion/1d_v21/model.pt",
+    "strategy_name": "neuro_mean_reversion",
+    "symbol": "EURUSD",
+    "timeframe": "1d",
+    "start_date": "2024-01-01",
+    "end_date": "2024-01-31"
+  }')
+
+OPERATION_ID=$(echo "$RESPONSE" | jq -r '.operation_id')
+echo "Operation ID: $OPERATION_ID"
+```
+
+**2. Wait & Check Completion**
+```bash
+sleep 5
+curl -s "http://localhost:8000/api/v1/operations/$OPERATION_ID" | \
+  jq '{status:.data.status, bars:.data.result_summary.total_bars, duration:.data.result_summary.execution_time}'
+```
+
+**3. Verify Local Bridge**
+```bash
+docker-compose -f docker/docker-compose.yml logs backend --since 60s | \
+  grep "Registered local.*bridge.*$OPERATION_ID"
+```
+
+### Expected Results
+- HTTP 200, `success: true`
+- Status: `"started"` → `"completed"`
+- Duration: <5 seconds
+- Bars: 21
+- Results: `total_return`, `sharpe_ratio`, `max_drawdown`, `total_trades`, `win_rate`
+- Local bridge logged: ✅
+- NO event loop errors: ✅
+
+### Actual Results
+⏳ **NOT YET TESTED** (Phase 2)
+
+---
+
+## B1.2: Local Backtest - Progress Tracking
+
+**Category**: Backend Isolated
+**Duration**: ~20 seconds
+**Purpose**: Verify ProgressBridge updates during execution
+
+### Test Data
+```json
+{
+  "model_path": "models/neuro_mean_reversion/1d_v21/model.pt",
+  "strategy_name": "neuro_mean_reversion",
+  "symbol": "EURUSD",
+  "timeframe": "1d",
+  "start_date": "2023-01-01",
+  "end_date": "2024-12-31"
+}
+```
+**Bars**: ~520 | **Duration**: ~20s
+
+### Commands
+
+**1. Start Backtest**
+```bash
+RESPONSE=$(curl -s -X POST http://localhost:8000/api/v1/backtests/start \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_path": "models/neuro_mean_reversion/1d_v21/model.pt",
+    "strategy_name": "neuro_mean_reversion",
+    "symbol": "EURUSD",
+    "timeframe": "1d",
+    "start_date": "2023-01-01",
+    "end_date": "2024-12-31"
+  }')
+
+OPERATION_ID=$(echo "$RESPONSE" | jq -r '.operation_id')
+```
+
+**2. Poll Progress (Every 5s)**
+```bash
+for i in {1..5}; do
+  sleep 5
+  curl -s "http://localhost:8000/api/v1/operations/$OPERATION_ID" | \
+    jq '{poll:'"$i"', status:.data.status, pct:.data.progress.percentage, bars:.data.progress.items_processed}'
+done
+```
+
+### Expected Results
+- Progress increases: 0% → 25% → 50% → 75% → 100%
+- `items_processed` increases: 0 → 520
+- `current_step` updates with bar progress
+- Final: 520 bars, ~20s duration
+
+### Actual Results
+⏳ **NOT YET TESTED** (Phase 2)
+
+---
+
+## B1.3: Local Backtest - Cancellation
+
+**Category**: Backend Isolated
+**Duration**: ~15 seconds
+**Purpose**: Verify cancellation token works, stops gracefully
+
+### Commands
+
+**1-2. Start backtest (same as B1.2), wait 10s**
+
+**3. Cancel**
+```bash
+curl -s -X DELETE "http://localhost:8000/api/v1/operations/$OPERATION_ID" | jq
+```
+
+**4. Verify Cancellation**
+```bash
+sleep 2
+curl -s "http://localhost:8000/api/v1/operations/$OPERATION_ID" | jq '.data.status'
+```
+
+### Expected Results
+- Pre-cancel: `status: "running"` (at ~40-60%)
+- Post-cancel: `status: "cancelled"` or `"failed"`
+- Progress frozen
+- Can start new backtest immediately
+
+### Actual Results
+⏳ **NOT YET TESTED** (Phase 2)
+
+---
+
+## B2.1: Backtest via API - Local Mode
+
+**Category**: Integration (Backend + OperationsService)
+**Duration**: ~10 seconds
+**Purpose**: Verify full API workflow
+
+### Test Data
+```json
+{
+  "model_path": "models/neuro_mean_reversion/1d_v21/model.pt",
+  "strategy_name": "neuro_mean_reversion",
+  "symbol": "EURUSD",
+  "timeframe": "1d",
+  "start_date": "2024-01-01",
+  "end_date": "2024-06-30"
+}
+```
+**Bars**: ~125 | **Duration**: ~10s
+
+### Commands
+
+**1. Start Backtest**
+```bash
+RESPONSE=$(curl -s -X POST http://localhost:8000/api/v1/backtests/start \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_path": "models/neuro_mean_reversion/1d_v21/model.pt",
+    "strategy_name": "neuro_mean_reversion",
+    "symbol": "EURUSD",
+    "timeframe": "1d",
+    "start_date": "2024-01-01",
+    "end_date": "2024-06-30"
+  }')
+
+OPERATION_ID=$(echo "$RESPONSE" | jq -r '.operation_id')
+```
+
+**2. Query Status**
+```bash
+sleep 10
+curl -s "http://localhost:8000/api/v1/operations/$OPERATION_ID" | jq
+```
+
+**3. Verify Mode**
+```bash
+docker-compose -f docker/docker-compose.yml logs backend --since 60s | \
+  grep "Registered local.*bridge.*$OPERATION_ID"
+```
+
+### Expected Results
+- HTTP 200, operation_id returned
+- Status: `"completed"`
+- Metadata: `backtest_mode: "local"`, `use_remote_service: false`
+- All result fields present
+- Operation listable via `/operations?operation_type=backtesting`
+
+### Actual Results
+⏳ **NOT YET TESTED** (Phase 2)
+
+---
+
+## B2.2: API Progress Polling
+
+**Category**: Integration
+**Duration**: ~25 seconds
+**Purpose**: Verify progress updates via Operations API
+
+### Test Data
+Same as B1.2 (520 bars, 2 years)
+
+### Commands
+
+**1. Start backtest (same as B2.1 with 2-year range)**
+
+**2. Poll Every 5s**
+```bash
+for i in {1..5}; do
+  sleep 5
+  curl -s "http://localhost:8000/api/v1/operations/$OPERATION_ID" | \
+    jq '{poll:'"$i"', pct:.data.progress.percentage, bars:.data.progress.items_processed, pnl:.data.progress.current_pnl}'
+done
+```
+
+### Expected Results
+- Progress percentage increases monotonically
+- `items_processed` grows 0 → 520
+- `current_pnl` tracked
+- `total_trades` increments
+- `win_rate` updated (0.0-1.0)
+
+### Actual Results
+⏳ **NOT YET TESTED** (Phase 2)
+
+---
+
+## B2.3: API Cancellation
+
+**Category**: Integration
+**Duration**: ~15 seconds
+**Purpose**: Verify DELETE endpoint cancellation
+
+### Commands
+
+**1-2. Start backtest (2-year range), wait 10s**
+
+**3. Cancel via API**
+```bash
+curl -s -X DELETE "http://localhost:8000/api/v1/operations/$OPERATION_ID" | jq
+```
+
+**4. Verify**
+```bash
+sleep 2
+curl -s "http://localhost:8000/api/v1/operations/$OPERATION_ID" | \
+  jq '{status:.data.status, pct:.data.progress.percentage}'
+```
+
+**5. System Stability**
+```bash
+# Start new backtest immediately
+curl -s -X POST http://localhost:8000/api/v1/backtests/start \
+  -H "Content-Type: application/json" \
+  -d '{...}' | jq '.operation_id'
+```
+
+### Expected Results
+- DELETE returns HTTP 200
+- Status becomes `"cancelled"`
+- Progress frozen
+- New operation starts immediately
+
+### Actual Results
+⏳ **NOT YET TESTED** (Phase 2)
+
+---
+
+## B3.1: Remote Backtest - Direct Start
+
+**Category**: Remote Service Isolated
+**Duration**: ~10 seconds
+**Purpose**: Verify remote container runs independently
+
+### Prerequisites
+- Remote backtest service running (port 5003)
+- Remote in local mode: `USE_REMOTE_BACKTEST_SERVICE=false`
+- Volume mounts: data, models, strategies
+
+### Commands
+
+**1. Start Directly on Remote**
+```bash
+RESPONSE=$(curl -s -X POST http://localhost:5003/backtests/start \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_path": "/app/models/neuro_mean_reversion/1d_v21/model.pt",
+    "strategy_name": "neuro_mean_reversion",
+    "symbol": "EURUSD",
+    "timeframe": "1d",
+    "start_date": "2024-01-01",
+    "end_date": "2024-06-30"
+  }')
+
+REMOTE_OP_ID=$(echo "$RESPONSE" | jq -r '.operation_id')
+```
+
+**2. Query Remote Status**
+```bash
+sleep 10
+curl -s "http://localhost:5003/api/v1/operations/$REMOTE_OP_ID" | jq
+```
+
+**3. Verify Local Mode in Remote**
+```bash
+docker logs backtest-worker --since 60s 2>&1 | \
+  grep "Registered local.*bridge.*$REMOTE_OP_ID"
+```
+
+### Expected Results
+- Remote accepts requests directly
+- Status: `"completed"`
+- Remote runs in LOCAL mode internally
+- Model/data accessible via volumes
+
+### Actual Results
+⏳ **NOT YET TESTED** (Phase 3)
+
+---
+
+## B3.2: Backend → Remote Proxy
+
+**Category**: Integration (Backend + Remote)
+**Duration**: ~10 seconds
+**Purpose**: Verify backend proxies to remote via OperationServiceProxy
+
+### Prerequisites
+- Backend in remote mode: `USE_REMOTE_BACKTEST_SERVICE=true`
+- Remote service running (port 5003)
+
+### Commands
+
+**1. Start via Backend**
+```bash
+RESPONSE=$(curl -s -X POST http://localhost:8000/api/v1/backtests/start \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_path": "/app/models/neuro_mean_reversion/1d_v21/model.pt",
+    "strategy_name": "neuro_mean_reversion",
+    "symbol": "EURUSD",
+    "timeframe": "1d",
+    "start_date": "2024-01-01",
+    "end_date": "2024-06-30"
+  }')
+
+BACKEND_OP_ID=$(echo "$RESPONSE" | jq -r '.operation_id')
+```
+
+**2. Extract Remote Operation ID**
+```bash
+REMOTE_OP_ID=$(docker-compose -f docker/docker-compose.yml logs backend --since 30s | \
+  grep "Registered remote proxy.*$BACKEND_OP_ID" | \
+  grep -o 'op_backtest_[0-9_a-f]*' | tail -1)
+echo "Remote ID: $REMOTE_OP_ID"
+```
+
+**3. Verify Proxy (NOT Bridge)**
+```bash
+docker-compose -f docker/docker-compose.yml logs backend --since 30s | \
+  grep "Registered remote proxy.*$BACKEND_OP_ID"
+# Should find entry
+
+docker-compose -f docker/docker-compose.yml logs backend --since 30s | \
+  grep "Registered local.*bridge.*$BACKEND_OP_ID"
+# Should be empty
+```
+
+**4. Verify Remote Has Bridge**
+```bash
+docker logs backtest-worker --since 30s 2>&1 | \
+  grep "Registered local.*bridge.*$REMOTE_OP_ID"
+```
+
+### Expected Results
+- Backend logs: Proxy registration
+- Backend logs: NO local bridge
+- Remote logs: Local bridge
+- Operation ID mapping: Backend ID ↔ Remote ID
+- Both IDs queryable
+
+### Actual Results
+⏳ **NOT YET TESTED** (Phase 3)
+
+---
+
+## B3.3: Remote Progress Updates
+
+**Category**: Integration (Backend + Remote)
+**Duration**: ~25 seconds
+**Purpose**: Verify two-level progress tracking (backend proxies to remote)
+
+### Commands
+
+**1. Start via backend (2-year range)**
+
+**2. Poll via Backend**
+```bash
+for i in {1..5}; do
+  sleep 5
+  curl -s "http://localhost:8000/api/v1/operations/$BACKEND_OP_ID" | \
+    jq '{poll:'"$i"', pct:.data.progress.percentage}'
+done
+```
+
+**3. Poll Remote Directly (verification)**
+```bash
+curl -s "http://localhost:5003/api/v1/operations/$REMOTE_OP_ID" | \
+  jq '{pct:.data.progress.percentage}'
+```
+
+### Expected Results
+- Backend progress matches remote progress (±1%)
+- Progress synchronized
+- Proxy latency low (<500ms)
+- Both show 100% at completion
+
+### Actual Results
+⏳ **NOT YET TESTED** (Phase 3)
+
+---
+
+## B3.4: Remote Cancellation
+
+**Category**: Integration (Backend + Remote)
+**Duration**: ~15 seconds
+**Purpose**: Verify cancellation propagates backend → remote
+
+### Commands
+
+**1-2. Start via backend, wait 10s**
+
+**3. Cancel via Backend**
+```bash
+curl -s -X DELETE "http://localhost:8000/api/v1/operations/$BACKEND_OP_ID"
+```
+
+**4. Verify Both Cancelled**
+```bash
+echo "Backend:"
+curl -s "http://localhost:8000/api/v1/operations/$BACKEND_OP_ID" | jq '.data.status'
+
+echo "Remote:"
+curl -s "http://localhost:5003/api/v1/operations/$REMOTE_OP_ID" | jq '.data.status'
+```
+
+### Expected Results
+- Backend DELETE triggers remote DELETE
+- Both show `"cancelled"` status
+- Progress frozen at both levels
+- System stable, new operations work
+
+### Actual Results
+⏳ **NOT YET TESTED** (Phase 3)
+
+---
+
+## B4.1: Error - Invalid Strategy
+
+**Category**: Error Handling
+**Duration**: ~2 seconds
+**Purpose**: Verify error handling for non-existent strategy
+
+### Commands
+
+```bash
+curl -i -s -X POST http://localhost:8000/api/v1/backtests/start \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_path": "models/neuro_mean_reversion/1d_v21/model.pt",
+    "strategy_name": "nonexistent_strategy_xyz",
+    "symbol": "EURUSD",
+    "timeframe": "1d",
+    "start_date": "2024-01-01",
+    "end_date": "2024-01-31"
+  }'
+```
+
+### Expected Results
+- HTTP 400 or 404, OR
+- Operation fails quickly with clear error
+- Error message: "Strategy file not found: nonexistent_strategy_xyz.yaml"
+- Shows searched paths
+- No stack traces
+- System remains stable
+
+### Actual Results
+⏳ **NOT YET TESTED** (Phase 2)
+
+---
+
+## B4.2: Error - Missing Data
+
+**Category**: Error Handling
+**Duration**: ~2 seconds
+**Purpose**: Verify error handling for invalid symbol
+
+### Commands
+
+```bash
+curl -i -s -X POST http://localhost:8000/api/v1/backtests/start \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_path": "models/neuro_mean_reversion/1d_v21/model.pt",
+    "strategy_name": "neuro_mean_reversion",
+    "symbol": "INVALID_SYMBOL_XYZ",
+    "timeframe": "1d",
+    "start_date": "2024-01-01",
+    "end_date": "2024-01-31"
+  }'
+```
+
+### Expected Results
+- HTTP 404 or 400, OR
+- Operation fails with clear error
+- Error message: "Historical data not found for INVALID_SYMBOL_XYZ (1d)"
+- Shows expected file path
+- System stable
+
+### Actual Results
+⏳ **NOT YET TESTED** (Phase 2)
+
+---
+
+## B4.3: Error - Model Not Found
+
+**Category**: Error Handling
+**Duration**: ~2 seconds
+**Purpose**: Verify error handling for invalid model path
+
+### Commands
+
+```bash
+curl -i -s -X POST http://localhost:8000/api/v1/backtests/start \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_path": "models/nonexistent_model/invalid_v99/model.pt",
+    "strategy_name": "neuro_mean_reversion",
+    "symbol": "EURUSD",
+    "timeframe": "1d",
+    "start_date": "2024-01-01",
+    "end_date": "2024-01-31"
+  }'
+```
+
+### Expected Results
+- HTTP 404 or 400, OR
+- Operation fails early
+- Error message: "Model file not found: models/nonexistent_model/invalid_v99/model.pt"
+- No PyTorch stack traces
+- System stable
+
+### Actual Results
+⏳ **NOT YET TESTED** (Phase 2)
+
+---
+
 ## Summary Statistics
 
 ### Training Scenarios
@@ -1633,9 +2237,32 @@ Data (Phase 0+):
   - D4.2: IB service down - Graceful failure with user-friendly message ✅
   - D4.3: IB Gateway disconnected - Documented behavior (not tested) ✅📝
 
+### Backtesting Scenarios
+- **Total**: 13
+- **Tested**: 0 (0%)
+- **Passed**: 0
+- **Failed**: 0
+
+**Test Coverage by Category**:
+- Backend Isolated: 0/3 ⏳ (Phase 2)
+- Integration (Backend + Operations): 0/3 ⏳ (Phase 2)
+- Remote (Backend + Remote Container): 0/4 ⏳ (Phase 3)
+- Error Handling: 0/3 ⏳ (Phase 2+)
+
+**Key Validations** (when implemented):
+- ⏳ Local backtesting (in backend container)
+- ⏳ ProgressBridge pattern (reuse from training)
+- ⏳ OperationsService integration
+- ⏳ Backend → Remote proxy pattern
+- ⏳ Operation ID mapping
+- ⏳ Two-level progress tracking
+- ⏳ Cancellation support
+- ⏳ Error handling
+
 **Test Execution Dates**:
 - Training: 2025-10-25 ✅ **11/11 PASSED**
 - Data (Backend Cache): 2025-10-28 ✅ **4/4 PASSED**
 - Data (IB Host Service): 2025-10-28 ✅ **3/3 PASSED** (1 bug fixed)
 - Data (Backend + IB Integration): 2025-10-28 ✅ **3/3 PASSED**
 - Data (Error Handling): 2025-10-28 ✅ **3/3 PASSED** (D4.3 documented)
+- Backtesting: ⏳ **NOT YET TESTED** (Phase 1 design complete 2025-11-04)
