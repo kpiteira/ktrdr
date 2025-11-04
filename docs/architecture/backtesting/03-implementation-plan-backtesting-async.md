@@ -2,14 +2,26 @@
 
 ## Document Information
 
-**Date**: 2025-01-03 (Revised)
+**Date**: 2025-01-04 (Revised)
 **Status**: READY FOR IMPLEMENTATION
-**Version**: 3.0 (Pull-Based Operations - Testing-First)
+**Version**: 3.1 (Pull-Based Operations - Testing-First with Model Foundation)
 **Related Documents**:
 - [Design Document](./01-design-backtesting-async.md) - High-level design
 - [Architecture Document](./02-architecture-backtesting-async.md) - Detailed architecture
 - [Testing Guide](../../testing/TESTING_GUIDE.md) - Testing infrastructure
 - [Test Scenarios](../../testing/SCENARIOS.md) - Scenario templates
+
+---
+
+## Changes in Version 3.1
+
+**Key Improvements**:
+1. **Added Task 1.0**: Establish test foundation (models, data validation)
+2. **Refined Phase 1**: Specify scenario REQUIREMENTS not implementations
+3. **Added integration-test-specialist workflow** throughout all phases
+4. **Explicit scenario validation gates** in Phases 2-4
+5. **Model dependency resolution** with existing trained models
+6. **Updated scenario expectations** to match TESTING_GUIDE.md patterns
 
 ---
 
@@ -31,10 +43,10 @@
 
 ### 1.1 Implementation Approach
 
-**REVISED STRATEGY**: Fix first, test continuously, build incrementally, **follow training's pattern exactly**.
+**REVISED STRATEGY**: Fix first, **validate test foundation**, design scenarios, build with continuous testing, **follow training's pattern exactly**.
 
-1. **Phase 0** (Critical): Fix broken backtesting + make OperationsService generic
-2. **Phase 1** (Foundation): Design comprehensive test suite
+1. **Phase 0** (Critical): Fix broken backtesting + make OperationsService generic ✅ **COMPLETE**
+2. **Phase 1** (Foundation): **Validate test models**, design comprehensive test suite
 3. **Phase 2** (Build): Implement async with continuous testing
 4. **Phase 3** (Extend): Add remote execution with testing
 5. **Phase 4** (Polish): Production readiness
@@ -59,11 +71,11 @@
 
 ### 1.4 Success Metrics
 
-- ✅ **Phase 0**: Backtesting works now, OperationsService generic
-- ✅ **Phase 1**: 15+ scenarios documented
-- ✅ **Phase 2**: Local mode works, all tests pass
-- ✅ **Phase 3**: Remote mode works, all tests pass
-- ✅ **Phase 4**: Production deployment successful
+- ✅ **Phase 0**: Backtesting works now, OperationsService generic ✅ **COMPLETE**
+- ✅ **Phase 1**: Test models validated, 17+ scenarios documented
+- ✅ **Phase 2**: Local mode works, all backend+integration scenarios PASS (8/8)
+- ✅ **Phase 3**: Remote mode works, all remote scenarios PASS (12/12 total)
+- ✅ **Phase 4**: **All 17+ scenarios PASS (100%)**, production deployment successful
 
 ### 1.5 Branch Strategy
 
@@ -107,28 +119,51 @@ Fix (Phase 0) → Test Design (Phase 1) → Build + Test (Phases 2-3) → Valida
 
 **Throughout implementation**, use the integration-test-specialist agent for:
 
-1. **Executing baseline tests** (Phase 0)
-2. **Executing incremental tests** (Phases 2-3)
-3. **Executing comprehensive tests** (Phase 4)
+1. **Executing baseline tests** (Phase 0) ✅ **COMPLETE**
+2. **Validating test models** (Phase 1.0)
+3. **Executing incremental tests** (Phases 2-3)
+4. **Executing comprehensive tests** (Phase 4)
 
-### 2.3 Test Categories
+### 2.3 Scenario Validation Requirements
 
-| Category | Examples | Agent Usage |
-|----------|----------|-------------|
-| **Backend Isolated** | Local backtest execution | Execute after each component |
-| **Integration** | Backend + OperationsService | Execute for integration points |
-| **Remote** | Backend → Remote container | Execute when remote ready |
-| **Error Handling** | Invalid configs, cancellation | Execute throughout |
+**NEW**: Each scenario document created in Phase 1 must specify:
+
+| Required Section | Purpose | Example |
+|-----------------|---------|---------|
+| **Prerequisites** | What must be running/available | Backend, model file, data cached |
+| **Test Data** | Exact inputs with justification | Symbol, timeframe, date range, model path |
+| **Commands** | Executable bash/curl/python | Full working examples (not templates) |
+| **Expected Results** | Specific, measurable outcomes | Status codes, field values, performance targets |
+| **Validation Checklist** | Pass/fail criteria | Checkbox list for manual/agent verification |
+| **Actual Results** | Space for test execution findings | Filled during testing (initially empty) |
+
+**Reference**: See [SCENARIOS.md](../../testing/SCENARIOS.md) for training scenario examples (1.1-4.2)
+
+### 2.4 Test Categories
+
+| Category | Examples | Agent Usage | Scenarios Must Pass |
+|----------|----------|-------------|-------------------|
+| **Backend Isolated** | Local backtest execution | Execute after each component | By end of Phase 2 |
+| **Integration** | Backend + OperationsService | Execute for integration points | By end of Phase 2 |
+| **Remote** | Backend → Remote container | Execute when remote ready | By end of Phase 3 |
+| **Error Handling** | Invalid configs, cancellation | Execute throughout | By end of Phase 3 |
 
 ---
 
-## 3. Phase 0: Fix Current System
+## 3. Phase 0: Fix Current System ✅ **COMPLETE**
 
 **Duration**: 1-2 days
 
 **Goal**: Make backtesting work + make OperationsService generic.
 
 **Outcome**: Solid foundation for async implementation.
+
+**Status**: ✅ **COMPLETE** (2025-11-04)
+
+**Results**:
+- ✅ Task 0.1: FeatureCache bug fixed
+- ✅ Task 0.2: OperationsService made generic (type-aware metrics)
+- ✅ Task 0.3: Baseline tests established (23/23 PASSED)
 
 ### 3.1 Task 0.1: Fix FeatureCache Bug
 
@@ -271,247 +306,313 @@ Expected: 11/11 tests PASS (PositionManager 5, PerformanceTracker 4, Engine 1, S
 
 **Duration**: 2-3 days
 
-**Goal**: Design comprehensive test scenarios following established patterns.
+**Goal**: Validate test foundation, design comprehensive test scenarios following established patterns.
 
-**Outcome**: Complete test scenario documents ready for implementation.
+**Outcome**: Test models validated, complete scenario documents ready for implementation.
 
-### 4.1 Task 1.1: Design Backend Scenarios
+---
+
+### 4.1 Task 1.0: Establish Test Foundation **[NEW]**
+
+**Duration**: 6-8 hours
+
+**Description**: Identify, validate, and document test models and data required for all scenarios.
+
+**Problem Statement**: Scenarios require trained models to run backtests. Must identify existing models or create test models before designing scenarios.
+
+**Steps**:
+
+1. **Identify Available Models** (2h)
+   - Search `models/` directory for trained models
+   - Check metadata.json for each model (strategy, symbol, timeframe, training_summary)
+   - Verify model files load correctly (torch.load)
+   - Document model characteristics
+
+2. **Select Primary Test Model** (1h)
+   - **Criteria**:
+     - Has corresponding strategy config available
+     - Works with available test data (symbol/timeframe match)
+     - Well-trained (validation accuracy > 50% - model actually learned something)
+     - Different test scenarios may need different data ranges:
+       - Initialization tests: Any valid data range
+       - Trade execution tests: Data range where model takes trades
+       - Progress tests: Longer data range to observe progress updates
+   - **Document**: Full path, strategy name, model characteristics, suitable test types
+
+3. **Validate Test Data Availability** (2h)
+   - Check `data/` for cached historical data
+   - Identify symbols with sufficient data for tests
+   - Document date ranges available
+   - **Required coverage**:
+     - Fast smoke test: 1 month daily (~20 bars)
+     - Progress test: 3+ months daily (~60+ bars) OR 1 month hourly
+
+4. **Create Prerequisites Document** (2h)
+   - File: `docs/testing/scenarios/backtesting/PREREQUISITES.md`
+   - List all test models with paths and characteristics
+   - List all test data with date ranges and bar counts
+   - Document which model/data combinations are suitable for which test types
+   - Reference from all scenario documents
+
+**Files to Create**:
+- `docs/testing/scenarios/backtesting/PREREQUISITES.md`
+
+**Acceptance Criteria**:
+- ✅ At least 1 test model identified and validated
+- ✅ Model loads successfully (torch.load works)
+- ✅ Strategy config exists for model
+- ✅ Test data available for at least 2 symbols (1 stock, 1 forex)
+- ✅ Date ranges documented
+- ✅ Prerequisites document created
+- ✅ **Validation with agent**: Agent confirms model loads and data exists
+
+**Testing with Agent**:
+```
+Task: "Validate test foundation for backtesting scenarios"
+Expected:
+- Model file exists and loads
+- Strategy config exists
+- Test data cached
+- All paths documented in PREREQUISITES.md
+```
+
+**Deliverables**:
+- Test model(s) identified: `models/{strategy}/{version}/model.pt`
+- Strategy path(s): `strategies/{strategy_name}.yaml`
+- Test data confirmed: `data/{SYMBOL}_{TIMEFRAME}.csv` or `.pkl`
+- Prerequisites documented with model/data/test type mapping
+
+**Note**: If no suitable models exist, stop and ask before creating new ones. We have existing trained models that should be sufficient.
+
+---
+
+### 4.2 Task 1.1: Design Backend Scenarios
 
 **Duration**: 1 day
 
-**Description**: Design scenarios for local backtesting (following SCENARIOS.md pattern).
+**Description**: Design scenarios for local backtesting (backend isolated, no remote service).
 
-**Scenarios to Design**:
+**Reference Documents**:
+- Template: [SCENARIOS.md](../../testing/SCENARIOS.md) - See training scenarios 1.1-1.4
+- Testing Guide: [TESTING_GUIDE.md](../../testing/TESTING_GUIDE.md)
+- Prerequisites: `docs/testing/scenarios/backtesting/PREREQUISITES.md` (from Task 1.0)
 
-```markdown
-## B1.1: Local Backtest - Smoke Test
+**Scenarios to Design** (4 minimum):
 
-**Category**: Backend Isolated
-**Duration**: ~5 seconds
+| Scenario ID | Name | Purpose | Expected Duration | Must Specify |
+|-------------|------|---------|------------------|--------------|
+| **B1.1** | Local Backtest - Smoke Test | Quick validation of basic workflow | ~5 seconds | Model path, 20-bar dataset, expected result fields |
+| **B1.2** | Local Backtest - Progress Tracking | Verify ProgressBridge updates | ~15-30 seconds | 60+ bar dataset, progress checkpoints, percentage milestones |
+| **B1.3** | Local Backtest - Cancellation | Verify cancellation token works | ~10 seconds (cancel mid-run) | When to cancel, expected status transitions, cleanup verification |
+| **B1.4** | Local Backtest - Error Handling | Invalid strategy config | ~2 seconds | Invalid config example, expected error message format |
 
-### Test Data
-- Symbol: AAPL
-- Timeframe: 1d
-- Date Range: 2024-01-01 to 2024-01-31 (20 bars)
-- Strategy: strategies/rsi_mean_reversion.yaml
-- Model: models/rsi_mlp_v1.0.0.pt
+**Requirements for Each Scenario**:
 
-### Commands
-python
-# Create BacktestingService
-service = BacktestingService(operations_service)
+1. **Must Specify Test Model**:
+   - Exact model path from PREREQUISITES.md
+   - Strategy config path
+   - Expected model characteristics (if relevant to test)
 
-# Run backtest (local mode)
-operation_id = await service.run_backtest(
-    symbol="AAPL",
-    timeframe="1d",
-    strategy_config_path="strategies/rsi_mean_reversion.yaml",
-    model_path="models/rsi_mlp_v1.0.0.pt",
-    start_date=datetime(2024, 1, 1),
-    end_date=datetime(2024, 1, 31),
-)
+2. **Must Specify Test Data**:
+   - Symbol, timeframe, exact date range
+   - Expected bar count
+   - Justification for data choice (e.g., "20 bars for fast test")
 
-# Wait for completion
-while True:
-    op = await operations_service.get_operation(operation_id)
-    if op.status in ("COMPLETED", "FAILED"):
-        break
-    await asyncio.sleep(1)
+3. **Must Define Expected Results**:
+   - **Quantitative**: Exact status codes, field presence, performance targets
+   - **Qualitative**: Log messages, error formats
+   - **Performance**: Max duration, memory usage (if applicable)
+   - **HOW to check** (critical):
+     - If checking logs: Exact log message patterns to grep for, which service's logs
+     - If checking status: Which API endpoint, which fields to inspect, expected values
+     - If checking files: File paths, what content to verify
+     - If checking behavior: What actions to take, what responses to expect
 
+4. **Must Include Validation Checklist**:
+   - Checkbox format for manual/agent verification
+   - Each item specifies HOW to verify (not just what)
+   - Example:
+     ```markdown
+     ### Validation Checklist
+     - [ ] Operation created: Check response has HTTP 200 + `operation_id` field
+     - [ ] Status completed: GET /operations/{id}, verify `status: "completed"`
+     - [ ] Duration < 5 seconds: Check `result_summary.execution_time < 5.0`
+     - [ ] All result fields present: Verify response has `total_return`, `sharpe_ratio`, `max_drawdown`
+     - [ ] No errors in logs: `docker-compose logs backend --since 60s | grep -i error` returns empty
+     - [ ] Bridge registered: Backend logs contain `Registered.*bridge.*{operation_id}`
+     ```
 
-### Expected Results
-- Operation created successfully
-- Bridge registered with OperationsService
-- Engine runs in thread
-- Progress updates via bridge
-- Results returned
-- Duration: <5 seconds
-```
-
-**Additional Scenarios**:
-- B1.2: Progress Tracking (verify ProgressBridge updates)
-- B1.3: Cancellation (verify token works)
-- B1.4: Error Handling (invalid config)
+**What NOT to Include** (too much detail):
+- ❌ Full bash command implementations (provide templates/structure only)
+- ❌ Specific operation IDs (these are runtime values)
+- ❌ Implementation details (how code works internally)
 
 **Files to Create**:
 - `docs/testing/scenarios/backtesting/BACKEND_SCENARIOS.md`
 
 **Acceptance Criteria**:
 - ✅ 4+ backend scenarios documented
-- ✅ Following SCENARIOS.md pattern
-- ✅ Test data specified
-- ✅ Commands detailed
+- ✅ Following SCENARIOS.md pattern (all required sections present)
+- ✅ Model paths from PREREQUISITES.md
+- ✅ Test data fully specified (symbol, timeframe, date range, bar count)
+- ✅ Expected results are specific and measurable
+- ✅ Validation checklists provided
+- ✅ Commands are executable templates (not pseudocode)
+
+**Testing with Agent**:
+```
+Task: "Review BACKEND_SCENARIOS.md for completeness"
+Expected:
+- All 4 scenarios have required sections
+- Model paths match PREREQUISITES.md
+- Expected results are specific and measurable
+- Commands are valid bash/curl/python syntax
+```
 
 ---
 
-### 4.2 Task 1.2: Design Integration Scenarios
+### 4.3 Task 1.2: Design Integration Scenarios
 
 **Duration**: 1 day
 
-**Description**: Design scenarios for API integration.
+**Description**: Design scenarios for API integration (backend + OperationsService, local mode).
 
-**Scenarios to Design**:
+**Scenarios to Design** (4 minimum):
 
-```markdown
-## B2.1: Backtest via API - Local Mode
+| Scenario ID | Name | Purpose | Expected Duration | Must Specify |
+|-------------|------|---------|------------------|--------------|
+| **B2.1** | Backtest via API - Local Mode | Full API workflow | ~10 seconds | API endpoint, request payload, response format |
+| **B2.2** | API Progress Polling | Verify progress updates via API | ~20 seconds | Polling interval, expected progress updates |
+| **B2.3** | API Cancellation | Cancel via DELETE endpoint | ~10 seconds | Cancel timing, status transitions, cleanup |
+| **B2.4** | API Error Handling | Missing data error via API | ~2 seconds | Error response format, HTTP status codes |
 
-**Category**: Integration (Backend)
-**Duration**: ~10 seconds
+**Additional Requirements** (beyond Task 1.1 requirements):
 
-### Prerequisites
-- Backend running (port 8000)
-- USE_REMOTE_BACKTEST_SERVICE=false
-- AAPL 1d data available
+1. **Must Specify API Contracts**:
+   - Exact endpoint paths
+   - Request payload format (JSON schema)
+   - Response format (with field types)
+   - HTTP status codes for success/error cases
 
-### Commands
-bash
-# Start backtest
-curl -X POST http://localhost:8000/api/v1/backtests/start \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "symbol": "AAPL",
-    "timeframe": "1d",
-    "strategy_config_path": "strategies/rsi_mean_reversion.yaml",
-    "model_path": "models/rsi_mlp_v1.0.0.pt",
-    "start_date": "2024-01-01",
-    "end_date": "2024-01-31",
-    "initial_capital": 100000.0
-  }'
+2. **Must Specify Service State**:
+   - Backend running (port 8000)
+   - Environment variables (USE_REMOTE_BACKTEST_SERVICE=false)
+   - Data cached (specific files)
 
-# Extract operation_id
-OP_ID=$(... | jq -r '.operation_id')
-
-# Poll progress
-for i in {1..10}; do
-  sleep 2
-  curl "http://localhost:8000/api/v1/operations/$OP_ID" | \
-    jq '{status, progress}'
-done
-
-
-### Expected Results
-- Operation created
-- Status: RUNNING → COMPLETED
-- Progress: 0% → 100%
-- Results include: total_return, sharpe_ratio, max_drawdown
-- Duration: ~10 seconds
-```
-
-**Additional Scenarios**:
-- B2.2: Cancellation via API
-- B2.3: Multiple Concurrent Backtests
-- B2.4: Error Handling (missing data)
+3. **Must Define Progress Expectations**:
+   - Polling intervals (e.g., every 2-5 seconds)
+   - Expected progress milestones (0% → 25% → 50% → 75% → 100%)
+   - Progress update frequency
 
 **Files to Create**:
 - `docs/testing/scenarios/backtesting/INTEGRATION_SCENARIOS.md`
 
 **Acceptance Criteria**:
 - ✅ 4+ integration scenarios documented
-- ✅ API contracts specified
-- ✅ Progress polling detailed
+- ✅ API contracts fully specified (endpoints, payloads, responses)
+- ✅ Environment configuration specified
+- ✅ Progress polling patterns detailed
+- ✅ Following SCENARIOS.md pattern
+
+**Testing with Agent**:
+```
+Task: "Review INTEGRATION_SCENARIOS.md for API completeness"
+Expected:
+- All endpoints documented with full paths
+- Request/response formats specified
+- HTTP status codes defined
+- Progress expectations quantified
+```
 
 ---
 
-### 4.3 Task 1.3: Design Remote Scenarios
+### 4.4 Task 1.3: Design Remote Scenarios
 
 **Duration**: 1 day
 
-**Description**: Design scenarios for remote container execution.
+**Description**: Design scenarios for remote container execution (Phase 3 preparation).
 
-**Scenarios to Design**:
+**Scenarios to Design** (4 minimum):
 
-```markdown
-## B3.1: Remote Backtest - Direct Start
+| Scenario ID | Name | Purpose | Expected Duration | Must Specify |
+|-------------|------|---------|------------------|--------------|
+| **B3.1** | Remote Backtest - Direct Start | Standalone remote service | ~10 seconds | Remote port (5003), data/model accessibility |
+| **B3.2** | Backend → Remote Proxy | Full backend-to-remote flow | ~10 seconds | Proxy registration logs, operation ID mapping |
+| **B3.3** | Remote Progress Updates | Progress polling from backend | ~20 seconds | Two-level progress tracking (backend + remote) |
+| **B3.4** | Remote Cancellation | Cancel remote operation | ~10 seconds | Cancellation propagation, cleanup on both services |
 
-**Category**: Remote Service Isolated
-**Duration**: ~10 seconds
+**Additional Requirements**:
 
-### Prerequisites
-- Remote container running (port 5003)
-- Data/models accessible in remote
+1. **Must Specify Remote Service Configuration**:
+   - Remote container port (5003)
+   - Data/model volume mounts
+   - Environment variables (USE_REMOTE_BACKTEST_SERVICE=true for backend)
 
-### Commands
-bash
-# Direct to remote container
-curl -X POST http://localhost:5003/backtests/start \
-  -H 'Content-Type: application/json' \
-  -d '{...}'
+2. **Must Define Proxy Behavior**:
+   - Backend operation ID format
+   - Remote operation ID format
+   - Operation ID mapping logging
+   - Progress proxying expectations
 
-# Get remote operation_id
-REMOTE_OP_ID=$(... | jq -r '.operation_id')
-
-# Poll remote directly
-curl "http://localhost:5003/api/v1/operations/$REMOTE_OP_ID"
-
-
-### Expected Results
-- Remote OperationsService creates operation
-- Bridge registered in remote
-- Engine runs in remote container
-- Results retrievable
-```
-
-**Additional Scenarios**:
-- B3.2: Backend → Remote Proxy (full flow)
-- B3.3: Remote Progress Updates (polling)
-- B3.4: Remote Cancellation
+3. **Must Specify Two-Level Behavior**:
+   - Backend behavior (proxy mode)
+   - Remote service behavior (local mode within remote)
+   - Expected log messages in both services
 
 **Files to Create**:
 - `docs/testing/scenarios/backtesting/REMOTE_SCENARIOS.md`
 
 **Acceptance Criteria**:
 - ✅ 4+ remote scenarios documented
-- ✅ Remote container patterns specified
+- ✅ Remote container configuration specified
+- ✅ Proxy patterns documented (following training model)
+- ✅ Two-level architecture expectations clear
+- ✅ Operation ID mapping specified
+
+**Testing with Agent**:
+```
+Task: "Review REMOTE_SCENARIOS.md for distributed architecture coverage"
+Expected:
+- Remote service config documented
+- Proxy behavior specified
+- Operation ID mapping defined
+- Two-level expectations clear
+```
 
 ---
 
-### 4.4 Task 1.4: Design Error Handling Scenarios
+### 4.5 Task 1.4: Design Error Handling Scenarios
 
 **Duration**: 4 hours
 
 **Description**: Design scenarios for error conditions and edge cases.
 
-**Scenarios to Design**:
+**Scenarios to Design** (5 minimum):
 
-```markdown
-## B4.1: Invalid Strategy Configuration
+| Scenario ID | Name | Purpose | Expected Duration | Must Specify |
+|-------------|------|---------|------------------|--------------|
+| **B4.1** | Invalid Strategy Config | Missing required fields | ~2 seconds | Invalid config content, expected error message |
+| **B4.2** | Missing Historical Data | Data file not found | ~2 seconds | Non-existent symbol/timeframe, error response |
+| **B4.3** | Cancellation During Execution | Mid-run cancellation | ~10 seconds | Cancel timing, cleanup verification |
+| **B4.4** | Model File Not Found | Invalid model path | ~2 seconds | Invalid path, expected error format |
+| **B4.5** | Insufficient Data | Less than minimum bars | ~2 seconds | Insufficient date range, minimum bar requirement |
 
-**Category**: Error Handling
-**Duration**: ~2 seconds
+**Requirements for Error Scenarios**:
 
-### Test Data
-- Invalid strategy: strategies/invalid_missing_required.yaml (missing 'indicators' field)
+1. **Must Specify Error Trigger**:
+   - Exact invalid input (config content, file path, date range)
+   - Why it should fail (missing field, file not found, insufficient data)
 
-### Commands
+2. **Must Define Expected Error Behavior**:
+   - HTTP status code (400, 404, 500, etc.)
+   - Error message format (specific string or pattern)
+   - Operation status (if operation created before failure)
+   - No partial state corruption
 
-```python
-# Attempt backtest with invalid config
-operation_id = await service.run_backtest(
-    symbol="AAPL",
-    timeframe="1d",
-    strategy_config_path="strategies/invalid_missing_required.yaml",
-    model_path="models/rsi_mlp_v1.0.0.pt",
-    start_date=datetime(2024, 1, 1),
-    end_date=datetime(2024, 1, 31),
-)
-
-# Check operation status
-op = await operations_service.get_operation(operation_id)
-```
-
-### Expected Results
-
-- Operation created but fails immediately
-- Status: FAILED
-- Error message: "ValidationError: Strategy config missing required field 'indicators'"
-- No bridge writes (fails before engine starts)
-```
-
-**Additional Scenarios**:
-- B4.2: Missing Historical Data (data not available for symbol/timeframe/range)
-- B4.3: Cancellation During Execution (cancel while running, verify clean shutdown)
-- B4.4: Model File Not Found (invalid model path)
-- B4.5: Insufficient Data (less than minimum bars required)
+3. **Must Specify Recovery**:
+   - System remains stable after error
+   - No resource leaks
+   - Can run successful operation after error
 
 **Files to Create**:
 - `docs/testing/scenarios/backtesting/ERROR_SCENARIOS.md`
@@ -519,27 +620,54 @@ op = await operations_service.get_operation(operation_id)
 **Acceptance Criteria**:
 - ✅ 5+ error scenarios documented
 - ✅ Cover config, data, cancellation, and file errors
-- ✅ Expected error messages specified
+- ✅ Expected error messages specified (exact strings or patterns)
+- ✅ Error recovery verified
+- ✅ Following SCENARIOS.md pattern
+
+**Testing with Agent**:
+```
+Task: "Review ERROR_SCENARIOS.md for error handling coverage"
+Expected:
+- All error triggers specified
+- Error messages defined
+- Recovery validated
+- No gaps in error coverage
+```
 
 ---
 
-### 4.5 Phase 1 Validation
+### 4.6 Phase 1 Validation
 
 **Gate Criteria**:
 
-- ✅ All scenario categories documented:
+- ✅ **Task 1.0 Complete**: Test models validated, prerequisites documented
+- ✅ **All scenario categories documented**:
   - Backend Isolated (4+)
   - Integration (4+)
   - Remote (4+)
   - Error Handling (5+)
 - ✅ **Total: 17+ test scenarios**
-- ✅ Following SCENARIOS.md pattern
-- ✅ Commands and expected results clear
+- ✅ **All scenarios follow SCENARIOS.md pattern** (verified by agent)
+- ✅ **Model paths specified** (from PREREQUISITES.md)
+- ✅ **Expected results specific and measurable**
+- ✅ **Validation checklists provided**
 
 **Deliverables**:
-- 4 scenario documents
-- Test data specifications
-- Expected results documented
+- `docs/testing/scenarios/backtesting/PREREQUISITES.md`
+- `docs/testing/scenarios/backtesting/BACKEND_SCENARIOS.md`
+- `docs/testing/scenarios/backtesting/INTEGRATION_SCENARIOS.md`
+- `docs/testing/scenarios/backtesting/REMOTE_SCENARIOS.md`
+- `docs/testing/scenarios/backtesting/ERROR_SCENARIOS.md`
+
+**Testing with Agent**:
+```
+Task: "Validate Phase 1 completion - all scenario documents ready for implementation"
+Expected:
+- All 5 documents exist
+- All scenarios follow template
+- Test foundation validated
+- Ready to begin Phase 2 implementation
+```
 
 ---
 
@@ -550,6 +678,8 @@ op = await operations_service.get_operation(operation_id)
 **Goal**: Implement BacktestingService with local execution (following training's pattern).
 
 **Outcome**: Local backtesting works with progress tracking and cancellation.
+
+**NEW REQUIREMENT**: **All Backend + Integration scenarios (B1.x, B2.x) MUST PASS before Phase 2 completion.**
 
 ### 5.1 Task 2.1: Add ProgressBridge Hooks to Engine
 
@@ -598,17 +728,29 @@ class BacktestingEngine:
 - `ktrdr/backtesting/engine.py` (+50 lines)
 
 **Acceptance Criteria**:
-- ✅ Engine accepts bridge parameter
+- ✅ Engine accepts bridge and cancellation_token parameters
 - ✅ Progress updates every 50 bars
 - ✅ Cancellation checked every 100 bars
-- ✅ **Scenario B1.2 PASSES** (with agent)
-- ✅ **Scenario B1.3 PASSES** (with agent)
+- ✅ Unit tests pass
+- ✅ **Scenario B1.2 MUST PASS** (Progress Tracking)
+- ✅ **Scenario B1.3 MUST PASS** (Cancellation)
 
 **Testing with Agent**:
 ```
-Task: "Execute scenario B1.2 (Progress Tracking) and B1.3 (Cancellation)"
-Expected: Both scenarios PASS
+Task: "Execute scenarios B1.2 and B1.3 after ProgressBridge implementation"
+Expected: BOTH scenarios PASS
+If FAIL: Fix code, not scenario (unless requirements changed)
 ```
+
+**Scenario Validation Protocol**:
+1. Run scenario with integration-test-specialist
+2. If PASS: Mark scenario validated, proceed
+3. If FAIL:
+   a. **First**: Investigate code issue (90% of cases)
+   b. **Second**: Check if requirements changed (10% of cases)
+   c. Fix code OR update scenario with justification
+   d. Re-run until PASS
+4. Document results in scenario "Actual Results" section
 
 ---
 
@@ -667,11 +809,12 @@ class BacktestProgressBridge(ProgressBridge):
 - ✅ Implements update_progress()
 - ✅ Thread-safe (via base class)
 - ✅ Unit tests pass
+- ✅ **Scenario B1.1 MUST PASS** (Smoke Test - uses bridge)
 
 **Testing with Agent**:
 ```
-Task: "Execute unit tests for BacktestProgressBridge"
-Expected: All unit tests PASS
+Task: "Execute scenario B1.1 (Smoke Test) with BacktestProgressBridge"
+Expected: Scenario PASSES, progress updates visible
 ```
 
 ---
@@ -743,15 +886,17 @@ class BacktestingService(ServiceOrchestrator):
 - ✅ Inherits from ServiceOrchestrator
 - ✅ Creates operations correctly
 - ✅ Registers bridge with OperationsService
-- ✅ Runs engine in thread
-- ✅ **Scenario B2.1 PASSES** (with agent)
-- ✅ **Scenario B2.2 PASSES** (with agent)
+- ✅ Runs engine in thread (asyncio.to_thread)
+- ✅ Unit tests pass
+- ✅ **Scenarios B2.1 and B2.2 MUST PASS** (API integration)
 
 **Testing with Agent**:
 ```
-Task: "Execute scenarios B2.1 and B2.2 (API integration)"
-Expected: Both scenarios PASS
+Task: "Execute scenarios B2.1 (API Local Mode) and B2.2 (API Cancellation)"
+Expected: BOTH scenarios PASS
 ```
+
+**Critical**: If scenarios fail, follow validation protocol (see Task 2.1)
 
 ---
 
@@ -779,12 +924,14 @@ async def start_backtest(request: BacktestStartRequest):
 **Acceptance Criteria**:
 - ✅ POST /backtests/start works
 - ✅ Returns operation_id
-- ✅ **All Integration scenarios PASS** (B2.1-B2.4, with agent)
+- ✅ API documentation (Swagger) updated
+- ✅ **All Integration scenarios MUST PASS** (B2.1-B2.4)
 
 **Testing with Agent**:
 ```
-Task: "Execute all Integration scenarios (B2.1-B2.4)"
+Task: "Execute all Integration scenarios (B2.1-B2.4) after API implementation"
 Expected: All 4 scenarios PASS
+Regression check: All Backend scenarios (B1.1-B1.4) still PASS
 ```
 
 ---
@@ -813,31 +960,54 @@ async def run_backtest(...):
 - ✅ Shows real-time progress
 - ✅ `ktrdr backtest cancel` works
 - ✅ CLI tests pass
+- ✅ **Manual validation**: Run full workflow via CLI
 
-**Testing with Agent**:
-```
-Task: "Execute CLI scenarios"
-Expected: CLI tests PASS
+**Testing**:
+```bash
+# Manual test workflow
+ktrdr backtest run --symbol AAPL --timeframe 1d \
+  --strategy neuro_mean_reversion \
+  --start-date 2024-01-01 --end-date 2024-01-31
+
+# Verify output matches scenario B2.1 expectations
 ```
 
 ---
 
 ### 5.6 Phase 2 Validation
 
-**Gate Criteria**:
+**Gate Criteria** (STRICT):
 
 - ✅ All unit tests pass (90%+ coverage)
 - ✅ All integration tests pass
-- ✅ **All Backend scenarios PASS** (B1.1-B1.4, with agent)
-- ✅ **All Integration scenarios PASS** (B2.1-B2.4, with agent)
+- ✅ **ALL Backend scenarios PASS** (B1.1-B1.4) - NO EXCEPTIONS
+- ✅ **ALL Integration scenarios PASS** (B2.1-B2.4) - NO EXCEPTIONS
 - ✅ Manual smoke test successful
-- ✅ Performance: No regression (<1% overhead)
+- ✅ Performance: No regression (<1% overhead vs baseline)
 - ✅ Code review approved
+- ✅ No errors in service logs during scenario execution
+
+**Scenario Pass Rate Required**: **8/8 (100%)**
 
 **Testing Report Required**:
 - Scenario execution results (8/8 PASS)
-- Performance metrics
+- Performance metrics (duration, memory)
 - Coverage report (90%+)
+- Integration-test-specialist execution logs
+
+**What to Do if Scenarios Fail**:
+1. **First**: Fix the code (90% of failures)
+2. **Second**: Verify scenario is correct (check against TESTING_GUIDE.md examples)
+3. **Third**: If requirements genuinely changed, update scenario with:
+   - Justification in "Actual Results" section
+   - Version number increment
+   - Review with team
+4. **Never**: Skip failing scenarios or mark them as "known issues"
+
+**Deliverables**:
+- Working code (all Phase 2 tasks)
+- Test report (8/8 scenarios PASS)
+- Updated SCENARIOS.md with actual results
 
 ---
 
@@ -848,6 +1018,8 @@ Expected: CLI tests PASS
 **Goal**: Enable remote execution using OperationServiceProxy (reuse from training).
 
 **Outcome**: Remote backtesting works across machines.
+
+**NEW REQUIREMENT**: **All Remote scenarios (B3.x) MUST PASS before Phase 3 completion.**
 
 ### 6.1 Task 3.1: Add Remote Mode to BacktestingService
 
@@ -890,14 +1062,16 @@ async def _run_remote_backtest(self, operation_id, ...) -> None:
 
 **Acceptance Criteria**:
 - ✅ Remote mode implemented
-- ✅ Uses OperationServiceProxy (no new code!)
+- ✅ Uses OperationServiceProxy (no new proxy code!)
 - ✅ Registers proxy with OperationsService
 - ✅ Integration tests pass
+- ✅ **Scenario B3.2 MUST PASS** (Backend → Remote Proxy)
 
 **Testing with Agent**:
 ```
-Task: "Execute scenario B3.2 (Backend → Remote)"
-Expected: Scenario B3.2 PASS
+Task: "Execute scenario B3.2 (Backend → Remote Proxy)"
+Expected: Scenario PASSES
+Regression check: All Phase 2 scenarios still PASS (B1.x, B2.x)
 ```
 
 ---
@@ -935,14 +1109,14 @@ async def get_operation(operation_id: str):
 - `ktrdr/backtesting/remote_api.py` (~150 lines)
 
 **Acceptance Criteria**:
-- ✅ Remote container runs BacktestingService locally
+- ✅ Remote container runs BacktestingService in LOCAL mode
 - ✅ Exposes OperationsService endpoints
-- ✅ **Scenario B3.1 PASSES** (with agent)
+- ✅ **Scenario B3.1 MUST PASS** (Remote Direct Start)
 
 **Testing with Agent**:
 ```
 Task: "Execute scenario B3.1 (Remote Direct Start)"
-Expected: Scenario B3.1 PASS
+Expected: Scenario PASSES
 ```
 
 ---
@@ -975,12 +1149,13 @@ services:
 **Acceptance Criteria**:
 - ✅ Remote container starts
 - ✅ Backend can connect
-- ✅ **All Remote scenarios PASS** (B3.1-B3.4, with agent)
+- ✅ **ALL Remote scenarios MUST PASS** (B3.1-B3.4)
 
 **Testing with Agent**:
 ```
-Task: "Execute all Remote scenarios (B3.1-B3.4)"
+Task: "Execute all Remote scenarios (B3.1-B3.4) with Docker Compose"
 Expected: All 4 scenarios PASS
+Regression check: All Phase 2 scenarios still PASS
 ```
 
 ---
@@ -1017,19 +1192,28 @@ cd docker && docker-compose up -d backend
 
 ### 6.5 Phase 3 Validation
 
-**Gate Criteria**:
+**Gate Criteria** (STRICT):
 
 - ✅ All unit tests pass
 - ✅ All integration tests pass
-- ✅ **All Remote scenarios PASS** (B3.1-B3.4, with agent)
-- ✅ Manual testing successful
-- ✅ Performance acceptable
+- ✅ **ALL Remote scenarios PASS** (B3.1-B3.4) - NO EXCEPTIONS
+- ✅ **Regression**: All Phase 2 scenarios still PASS (B1.x, B2.x)
+- ✅ Manual testing successful (both modes)
+- ✅ Performance acceptable (remote overhead <20%)
 - ✅ Code review approved
+
+**Scenario Pass Rate Required**: **12/12 (100%)** (8 from Phase 2 + 4 from Phase 3)
 
 **Testing Report Required**:
 - All scenario results (12/12 PASS)
 - Performance metrics (local vs remote)
 - Coverage report
+- Mode switching validation
+
+**Deliverables**:
+- Remote execution working
+- Switch script functional
+- Test report (12/12 scenarios PASS)
 
 ---
 
@@ -1041,7 +1225,34 @@ cd docker && docker-compose up -d backend
 
 **Outcome**: Production-ready system.
 
-### 7.1 Task 4.1: End-to-End Testing
+**NEW REQUIREMENT**: **ALL scenarios including Error Handling (B4.x) MUST PASS.**
+
+---
+
+### 7.1 Task 4.1: Error Scenario Validation
+
+**Duration**: 2 days
+
+**Description**: Execute all error handling scenarios.
+
+**Testing with Agent**:
+```
+Task: "Execute all Error Handling scenarios (B4.1-B4.5)"
+Expected:
+- All 5 scenarios PASS
+- Errors handled gracefully
+- No resource leaks
+- System remains stable after errors
+```
+
+**Acceptance Criteria**:
+- ✅ **ALL Error scenarios PASS** (B4.1-B4.5) - NO EXCEPTIONS
+- ✅ Error recovery verified
+- ✅ No resource leaks
+
+---
+
+### 7.2 Task 4.2: End-to-End Testing
 
 **Duration**: 2 days
 
@@ -1054,14 +1265,14 @@ Expected:
 - Backend scenarios PASS (B1.1-B1.4)
 - Integration scenarios PASS (B2.1-B2.4)
 - Remote scenarios PASS (B3.1-B3.4)
-- Error scenarios PASS (B4.1-B4.3)
-Total: 15+ scenarios, 100% PASS
+- Error scenarios PASS (B4.1-B4.5)
+Total: 17 scenarios, 100% PASS rate
 ```
 
 **Acceptance Criteria**:
-- ✅ **All 15+ scenarios PASS**
+- ✅ **ALL 17 scenarios PASS** - NO EXCEPTIONS
 - ✅ No regressions
-- ✅ Performance acceptable
+- ✅ Performance acceptable across all scenarios
 
 ---
 
@@ -1082,7 +1293,7 @@ Expected:
 
 **Acceptance Criteria**:
 - ✅ All benchmarks meet targets
-- ✅ No performance regressions
+- ✅ No performance regressions vs Phase 0 baseline
 
 ---
 
@@ -1102,7 +1313,8 @@ Expected:
 
 **Acceptance Criteria**:
 - ✅ All documentation complete
-- ✅ Examples tested (with agent)
+- ✅ Examples tested with agent
+- ✅ Links verified
 
 ---
 
@@ -1121,21 +1333,29 @@ Expected:
 
 **Acceptance Criteria**:
 - ✅ Staging deployment successful
-- ✅ **All scenarios PASS in staging**
+- ✅ **ALL 17 scenarios PASS in staging**
 - ✅ Production deployment successful
-- ✅ **Smoke tests PASS in production**
+- ✅ **Smoke tests PASS in production** (B1.1, B2.1, B3.1)
 
 ---
 
 ### 7.5 Phase 4 Validation
 
-**Final Gate Criteria**:
+**Final Gate Criteria** (STRICTEST):
 
-- ✅ **All tests pass** (100% success)
-- ✅ **Performance benchmarks met**
-- ✅ **Documentation complete**
+- ✅ **ALL 17 scenarios PASS** (100% success rate) - NO EXCEPTIONS
+- ✅ **Performance benchmarks met** (all targets)
+- ✅ **Documentation complete** (all 6 documents)
 - ✅ **Production deployment successful**
-- ✅ **Zero incidents** (48 hours)
+- ✅ **Zero incidents** (48 hours post-deployment)
+- ✅ **All Phase 0 baseline tests still PASS** (no regressions to original system)
+
+**Final Deliverables**:
+- Production system deployed
+- All scenario documents with "Actual Results" filled
+- Performance benchmarks documented
+- Complete documentation set
+- Zero known issues
 
 ---
 
@@ -1143,35 +1363,79 @@ Expected:
 
 ### 8.1 Agent Usage Pattern
 
-**For each task completion**:
+**For each task with scenario requirements**:
 
 ```
-1. Implement (Developer)
+1. Developer implements code
    ↓
-2. Validate (integration-test-specialist Agent)
-   - Execute relevant scenarios
-   - Run integration tests
-   - Report results
+2. Developer reviews implementation
    ↓
-3. Review (Developer)
-   - Analyze results
-   - Fix failures
-   - Re-validate
+3. Use integration-test-specialist agent:
+   - Agent reads scenario document
+   - Agent executes all commands
+   - Agent fills "Actual Results" section
+   - Agent reports PASS/FAIL with details
    ↓
-4. Document (Developer)
-   - Update metrics
-   - Mark complete
+4. If FAIL:
+   a. Developer investigates (check logs, debug)
+   b. Developer fixes code (90% of cases)
+   c. OR developer updates scenario with justification (10% of cases)
+   d. Re-run agent until PASS
+   ↓
+5. If PASS:
+   - Mark scenario as validated
+   - Update scenario document with actual results
+   - Proceed to next task
 ```
 
-### 8.2 Example Agent Tasks
+### 8.2 Scenario Failure Protocol
+
+**When scenario fails**:
+
+1. **Investigate** (30 minutes)
+   - Check service logs
+   - Verify prerequisites met
+   - Review error messages
+
+2. **Categorize** (5 minutes)
+   - Code bug (90%): Implementation doesn't match requirements
+   - Scenario bug (5%): Scenario has wrong expectations
+   - Requirements change (5%): Design changed since Phase 1
+
+3. **Fix** (varies)
+   - Code bug: Fix implementation, re-test
+   - Scenario bug: Fix scenario, document correction
+   - Requirements change: Update scenario + design docs, get approval
+
+4. **Validate** (agent)
+   - Re-run scenario with agent
+   - Verify PASS
+   - Check for regressions (other scenarios still PASS)
+
+5. **Document** (5 minutes)
+   - Fill "Actual Results" in scenario
+   - Note any issues found
+   - Mark scenario validated
+
+### 8.3 Example Agent Tasks
 
 **Task 2.3 Completion**:
 ```
 Agent Task: "Execute scenarios B2.1 and B2.2"
 Expected:
-- B2.1: Backtest via API works, progress visible
-- B2.2: Cancellation works
-Agent Report: PASS/FAIL with details
+- B2.1: Backtest via API works, operation_id returned, results correct
+- B2.2: Cancellation works, status transitions correct
+Agent Report: PASS/FAIL with details for each scenario
+```
+
+**Phase 2 Gate**:
+```
+Agent Task: "Execute all Backend and Integration scenarios (B1.1-B2.4)"
+Expected:
+- All 8 scenarios PASS
+- Performance within targets
+- No errors in logs
+Agent Report: Summary table with PASS/FAIL for each scenario
 ```
 
 ---
@@ -1181,24 +1445,30 @@ Agent Report: PASS/FAIL with details
 ### 9.1 Phase Completion Criteria
 
 **Phase 0**:
-- ✅ Backtesting works now
-- ✅ OperationsService generic
-- ✅ Baselines established
+- ✅ Backtesting works now ✅ **COMPLETE**
+- ✅ OperationsService generic ✅ **COMPLETE**
+- ✅ Baselines established ✅ **COMPLETE**
 
 **Phase 1**:
-- ✅ 15+ scenarios documented
+- ✅ Test models validated
+- ✅ 17+ scenarios documented
+- ✅ All scenarios follow SCENARIOS.md template
+- ✅ Prerequisites documented
 
 **Phase 2**:
 - ✅ Local mode works
-- ✅ Backend + Integration scenarios PASS (8/8)
+- ✅ **Backend + Integration scenarios PASS (8/8)** - NO EXCEPTIONS
 
 **Phase 3**:
 - ✅ Remote mode works
-- ✅ Remote scenarios PASS (4/4)
+- ✅ **Remote scenarios PASS (4/4)** - NO EXCEPTIONS
+- ✅ **Phase 2 scenarios still PASS (8/8)** - Regression check
 
 **Phase 4**:
-- ✅ **All 15+ scenarios PASS (100%)**
+- ✅ **ALL 17 scenarios PASS (100%)** - NO EXCEPTIONS
+- ✅ **Error scenarios PASS (5/5)** - NO EXCEPTIONS
 - ✅ **Production deployment successful**
+- ✅ **Zero incidents (48 hours)**
 
 ### 9.2 Overall Success Criteria
 
@@ -1206,17 +1476,33 @@ Agent Report: PASS/FAIL with details
 - ✅ Local and remote backtesting work
 - ✅ Progress tracking via OperationsService
 - ✅ Cancellation support
+- ✅ Error handling robust
 
 **Technical**:
 - ✅ Follows training's pattern exactly
 - ✅ Reuses OperationsService, OperationServiceProxy
 - ✅ 90%+ test coverage
-- ✅ No performance regression
+- ✅ No performance regression vs Phase 0 baseline
 
-**Testing**:
-- ✅ **15+ scenarios executed with agent**
-- ✅ **100% pass rate**
-- ✅ **Continuous validation**
+**Testing** (MOST CRITICAL):
+- ✅ **17 scenarios executed with integration-test-specialist**
+- ✅ **100% pass rate (17/17 PASS)** - NO EXCEPTIONS
+- ✅ **Continuous validation** (scenarios re-run after each phase)
+- ✅ **All scenarios documented with actual results**
+
+**Scenario Pass Requirement**:
+```
+Phase 1: Scenarios designed (17)
+Phase 2: 8/17 scenarios PASS (Backend + Integration)
+Phase 3: 12/17 scenarios PASS (+ Remote)
+Phase 4: 17/17 scenarios PASS (+ Error Handling)
+```
+
+**Zero Tolerance for Scenario Failures**:
+- Cannot proceed to next phase with failing scenarios
+- Cannot mark scenarios as "known issues" or "will fix later"
+- Cannot skip scenario execution
+- All failures must be resolved (code fix or justified scenario update)
 
 ---
 
@@ -1224,27 +1510,38 @@ Agent Report: PASS/FAIL with details
 
 | Decision | Rationale | Impact |
 |----------|-----------|--------|
-| **Reuse OperationsService** | Already proven | 1 small fix needed |
+| **Reuse OperationsService** | Already proven in training | 1 small fix needed (DONE) |
 | **Reuse OperationServiceProxy** | Already generic | Zero changes |
 | **Use ProgressBridge** | Same as training | Fast writes, no async issues |
 | **Client-driven pull** | Current architecture | No polling, simple |
 | **ENV-based mode** | Same as training | Consistent, simple |
+| **Test models first** | Scenarios need models | Prevents Phase 2 blockers |
+| **integration-test-specialist** | Consistent validation | Reproducible results |
+| **100% scenario pass rate** | Quality gate | Ensures production readiness |
 
 ## Appendix B: Code Estimates
 
-| Component | Lines of Code | Complexity |
-|-----------|--------------|------------|
-| **Engine hooks** | +50 | Low |
-| **BacktestProgressBridge** | ~100 | Low |
-| **BacktestingService** | ~300 | Medium |
-| **Remote API** | ~150 | Low |
-| **API endpoints** | ~150 | Low |
-| **CLI commands** | ~200 | Low |
-| **OperationsService fix** | +15 | Low |
-| **Total New** | ~950 | Medium |
+| Component | Lines of Code | Complexity | Scenarios to Validate |
+|-----------|--------------|------------|---------------------|
+| **Engine hooks** | +50 | Low | B1.2, B1.3 |
+| **BacktestProgressBridge** | ~100 | Low | B1.1, B1.2 |
+| **BacktestingService** | ~300 | Medium | B2.1, B2.2, B2.3 |
+| **Remote API** | ~150 | Low | B3.1 |
+| **API endpoints** | ~150 | Low | B2.1-B2.4 |
+| **CLI commands** | ~200 | Low | Manual validation |
+| **Total New** | ~950 | Medium | 17 scenarios |
+
+## Appendix C: Scenario Summary
+
+| Phase | Scenario IDs | Count | Pass Required |
+|-------|-------------|-------|---------------|
+| **Phase 1** | B1.1-B1.4, B2.1-B2.4, B3.1-B3.4, B4.1-B4.5 | 17 | Design only |
+| **Phase 2** | B1.1-B1.4, B2.1-B2.4 | 8 | 8/8 (100%) |
+| **Phase 3** | B1.1-B1.4, B2.1-B2.4, B3.1-B3.4 | 12 | 12/12 (100%) |
+| **Phase 4** | ALL (B1-B4) | 17 | 17/17 (100%) |
 
 ---
 
-**Document Version**: 3.0 (Pull-Based Operations)
-**Last Updated**: 2025-01-03
+**Document Version**: 3.1 (Testing-First with Model Foundation)
+**Last Updated**: 2025-01-04
 **Status**: READY FOR IMPLEMENTATION
