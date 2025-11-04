@@ -696,15 +696,32 @@ class OperationsService:
                 current_item=state.get("current_item"),
             )
 
-            # Append new metrics to operation (if any)
+            # Append new metrics to operation (if any) - TYPE-AWARE
             if new_metrics:
                 if operation.metrics is None:
                     operation.metrics = {}
-                # For training operations, append to epochs list
+
+                # Type-aware metrics storage
                 if operation.operation_type == OperationType.TRAINING:
                     if "epochs" not in operation.metrics:
                         operation.metrics["epochs"] = []
                     operation.metrics["epochs"].extend(new_metrics)
+
+                elif operation.operation_type == OperationType.BACKTESTING:
+                    if "bars" not in operation.metrics:
+                        operation.metrics["bars"] = []
+                    operation.metrics["bars"].extend(new_metrics)
+
+                elif operation.operation_type == OperationType.DATA_LOAD:
+                    if "segments" not in operation.metrics:
+                        operation.metrics["segments"] = []
+                    operation.metrics["segments"].extend(new_metrics)
+
+                else:
+                    # Generic fallback for other operation types
+                    if "history" not in operation.metrics:
+                        operation.metrics["history"] = []
+                    operation.metrics["history"].extend(new_metrics)
 
             # Update cursor for next incremental read
             self._metrics_cursors[operation_id] = new_cursor

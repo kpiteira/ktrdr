@@ -253,3 +253,127 @@ class TestTrainingMetricsTrendAnalysis:
         # Then is_plateaued should be False
         operation = await operations_service.get_operation(operation_id)
         assert operation.metrics["is_plateaued"] is False
+
+
+class TestGenericMetricsHandling:
+    """Test that metrics handling works for all operation types (Phase 0, Task 0.2)."""
+
+    async def test_refresh_from_bridge_handles_backtesting_metrics(
+        self, operations_service
+    ):
+        """Test that _refresh_from_bridge handles BACKTESTING operation type correctly."""
+        from unittest.mock import MagicMock
+
+        # Given a backtesting operation
+        metadata = OperationMetadata(description="Test backtest", user="test")
+        operation = await operations_service.create_operation(
+            operation_type=OperationType.BACKTESTING, metadata=metadata
+        )
+        operation_id = operation.operation_id
+
+        # Create a mock bridge for backtesting
+        mock_bridge = MagicMock()
+        mock_bridge.get_status.return_value = {
+            "percentage": 50.0,
+            "message": "Backtesting AAPL 1h",
+            "current_step": 500,
+            "total_steps": 1000,
+        }
+        # Backtesting metrics should be bar-level data
+        bar_metrics = [
+            {"bar": 450, "pnl": 1500.0, "trades": 5},
+            {"bar": 500, "pnl": 1750.0, "trades": 6},
+        ]
+        mock_bridge.get_metrics.return_value = (bar_metrics, 2)
+
+        # Register the mock bridge
+        operations_service._local_bridges[operation_id] = mock_bridge
+        operations_service._metrics_cursors[operation_id] = 0
+
+        # When refreshing from bridge
+        operations_service._refresh_from_bridge(operation_id)
+
+        # Then metrics should be stored in "bars" key (not "epochs")
+        operation = await operations_service.get_operation(operation_id)
+        assert operation.metrics is not None
+        assert "bars" in operation.metrics
+        assert len(operation.metrics["bars"]) == 2
+        assert operation.metrics["bars"][0]["bar"] == 450
+        assert operation.metrics["bars"][1]["pnl"] == 1750.0
+
+    async def test_refresh_from_bridge_handles_data_load_metrics(
+        self, operations_service
+    ):
+        """Test that _refresh_from_bridge handles DATA_LOAD operation type correctly."""
+        from unittest.mock import MagicMock
+
+        # Given a data loading operation
+        metadata = OperationMetadata(description="Test data load", user="test")
+        operation = await operations_service.create_operation(
+            operation_type=OperationType.DATA_LOAD, metadata=metadata
+        )
+        operation_id = operation.operation_id
+
+        # Create a mock bridge for data loading
+        mock_bridge = MagicMock()
+        mock_bridge.get_status.return_value = {
+            "percentage": 75.0,
+            "message": "Loading AAPL 1h data",
+            "current_step": 75,
+            "total_steps": 100,
+        }
+        # Data loading metrics should be segment-level data
+        segment_metrics = [
+            {"segment": "2024-01-01_2024-03-01", "bars": 1000},
+            {"segment": "2024-03-01_2024-06-01", "bars": 1200},
+        ]
+        mock_bridge.get_metrics.return_value = (segment_metrics, 2)
+
+        # Register the mock bridge
+        operations_service._local_bridges[operation_id] = mock_bridge
+        operations_service._metrics_cursors[operation_id] = 0
+
+        # When refreshing from bridge
+        operations_service._refresh_from_bridge(operation_id)
+
+        # Then metrics should be stored in "segments" key
+        operation = await operations_service.get_operation(operation_id)
+        assert operation.metrics is not None
+        assert "segments" in operation.metrics
+        assert len(operation.metrics["segments"]) == 2
+        assert operation.metrics["segments"][0]["segment"] == "2024-01-01_2024-03-01"
+
+    async def test_refresh_from_bridge_handles_unknown_operation_type(
+        self, operations_service
+    ):
+        """Test that _refresh_from_bridge handles unknown operation types with fallback."""
+        from unittest.mock import MagicMock
+
+        # Given a dummy operation (generic type)
+        metadata = OperationMetadata(description="Test dummy op", user="test")
+        operation = await operations_service.create_operation(
+            operation_type=OperationType.DUMMY, metadata=metadata
+        )
+        operation_id = operation.operation_id
+
+        # Create a mock bridge
+        mock_bridge = MagicMock()
+        mock_bridge.get_status.return_value = {
+            "percentage": 30.0,
+            "message": "Running dummy task",
+        }
+        generic_metrics = [{"iteration": 1, "value": 42}, {"iteration": 2, "value": 43}]
+        mock_bridge.get_metrics.return_value = (generic_metrics, 2)
+
+        # Register the mock bridge
+        operations_service._local_bridges[operation_id] = mock_bridge
+        operations_service._metrics_cursors[operation_id] = 0
+
+        # When refreshing from bridge
+        operations_service._refresh_from_bridge(operation_id)
+
+        # Then metrics should be stored in generic "history" key
+        operation = await operations_service.get_operation(operation_id)
+        assert operation.metrics is not None
+        assert "history" in operation.metrics
+        assert len(operation.metrics["history"]) == 2
