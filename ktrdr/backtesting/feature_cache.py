@@ -34,36 +34,9 @@ class FeatureCache:
 
     def _setup_indicator_engine(self):
         """Setup indicator engine from strategy config."""
+        # Strategy config already has feature_id - just use it directly!
         indicator_configs = self.strategy_config["indicators"]
-        fixed_configs = []
-
-        # Use same mapping as training to ensure consistency
-        name_mapping = {
-            "bollinger_bands": "BollingerBands",
-            "keltner_channels": "KeltnerChannels",
-            "momentum": "Momentum",
-            "volume_sma": "SMA",
-            "atr": "ATR",
-            "rsi": "RSI",
-            "sma": "SMA",
-            "ema": "EMA",
-            "macd": "MACD",
-        }
-
-        for config in indicator_configs:
-            if isinstance(config, dict) and "type" not in config:
-                config = config.copy()
-                indicator_name = config["name"].lower()
-                if indicator_name in name_mapping:
-                    config["type"] = name_mapping[indicator_name]
-                else:
-                    # Fallback: convert snake_case to PascalCase
-                    config["type"] = "".join(
-                        word.capitalize() for word in indicator_name.split("_")
-                    )
-            fixed_configs.append(config)
-
-        self.indicator_engine = IndicatorEngine(indicators=fixed_configs)
+        self.indicator_engine = IndicatorEngine(indicators=indicator_configs)
 
     def _setup_fuzzy_engine(self):
         """Setup fuzzy engine from strategy config."""
