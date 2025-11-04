@@ -75,7 +75,10 @@ class FeatureCache:
             current_bar_indicators = {}
 
             for config in self.strategy_config["indicators"]:
-                original_name = config["name"]
+                # CRITICAL FIX: Use feature_id for fuzzy set lookup, not name
+                # feature_id matches the keys in fuzzy_sets (e.g., "rsi_14")
+                # name is just the indicator type (e.g., "rsi")
+                feature_id = config.get("feature_id", config["name"])
                 indicator_type = config["name"].upper()
 
                 # Find matching columns (same logic as orchestrator)
@@ -88,14 +91,14 @@ class FeatureCache:
                                 and "_signal_" not in col
                                 and "_hist_" not in col
                             ):
-                                current_bar_indicators[original_name] = (
+                                current_bar_indicators[feature_id] = (
                                     self.indicators_df[col].iloc[idx]
                                 )
                                 break
                         else:
                             # Use raw values for all indicators (including SMA/EMA)
                             # Fuzzy engine handles transformations via input_transform
-                            current_bar_indicators[original_name] = self.indicators_df[
+                            current_bar_indicators[feature_id] = self.indicators_df[
                                 col
                             ].iloc[idx]
                             break

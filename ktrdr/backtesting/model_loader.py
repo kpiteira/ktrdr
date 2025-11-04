@@ -56,12 +56,14 @@ class ModelLoader:
             model_type = config["model"]["type"].lower()
 
             if model_type == "mlp":
-                # Rebuild MLP model
+                # Build modern MLPTradingModel
                 mlp_model = MLPTradingModel(config["model"])
                 input_size = metadata.get("input_size")
 
                 if input_size is None:
-                    raise ValueError(f"Model metadata missing input_size: {metadata}")
+                    raise ValueError(
+                        f"Model metadata missing input_size: {metadata}"
+                    )
 
                 mlp_model.model = mlp_model.build_model(input_size)
                 mlp_model.model.load_state_dict(model)

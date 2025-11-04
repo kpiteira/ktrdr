@@ -157,9 +157,12 @@ class ModelStorage:
     ) -> dict[str, Any]:
         """Load a saved model with all metadata.
 
+        UNIVERSAL MODEL SUPPORT: First tries to load universal (symbol-agnostic) models,
+        then falls back to legacy symbol-specific models for backward compatibility.
+
         Args:
             strategy_name: Name of the trading strategy
-            symbol: Trading symbol
+            symbol: Trading symbol (ignored for universal models)
             timeframe: Timeframe
             version: Specific version to load (None for latest)
 
@@ -167,20 +170,40 @@ class ModelStorage:
             Dictionary containing model, config, and metadata
         """
         if version is None:
-            # Load latest version
-            model_dir = self.base_path / strategy_name / f"{symbol}_{timeframe}_latest"
-            if not model_dir.exists():
-                # Fallback: find latest version manually
-                latest_dir = self._find_latest_version(strategy_name, symbol, timeframe)
+            # Try universal path first (new symbol-agnostic models)
+            universal_latest = self.base_path / strategy_name / f"{timeframe}_latest"
+            # Try symbol-specific path (legacy models)
+            symbol_specific_latest = self.base_path / strategy_name / f"{symbol}_{timeframe}_latest"
+
+            if universal_latest.exists():
+                model_dir = universal_latest
+            elif symbol_specific_latest.exists():
+                model_dir = symbol_specific_latest
+            else:
+                # Fallback: find latest version manually (try universal first)
+                latest_dir = self._find_latest_version(strategy_name, None, timeframe)
+                if latest_dir is None:
+                    # Try symbol-specific pattern
+                    latest_dir = self._find_latest_version(strategy_name, symbol, timeframe)
                 if latest_dir is None:
                     raise FileNotFoundError(
-                        f"No models found for {strategy_name}/{symbol}_{timeframe}"
+                        f"No models found for {strategy_name}/{timeframe} "
+                        f"(tried universal and symbol-specific patterns)"
                     )
                 model_dir = latest_dir
         else:
-            model_dir = (
-                self.base_path / strategy_name / f"{symbol}_{timeframe}_{version}"
-            )
+            # Try both patterns for specific version
+            universal_ver = self.base_path / strategy_name / f"{timeframe}_{version}"
+            symbol_specific_ver = self.base_path / strategy_name / f"{symbol}_{timeframe}_{version}"
+
+            if universal_ver.exists():
+                model_dir = universal_ver
+            elif symbol_specific_ver.exists():
+                model_dir = symbol_specific_ver
+            else:
+                raise FileNotFoundError(
+                    f"Model not found: tried {universal_ver} and {symbol_specific_ver}"
+                )
 
         if not model_dir.exists():
             raise FileNotFoundError(f"Model not found: {model_dir}")
@@ -357,14 +380,17 @@ class ModelStorage:
     ):
         """Update the 'latest' symlink to point to the new version.
 
+        UNIVERSAL MODEL SUPPORT: Creates symbol-agnostic symlinks for universal models.
+
         Args:
             strategy_name: Strategy name
-            symbol: Trading symbol
+            symbol: Trading symbol (DEPRECATED for universal models)
             timeframe: Timeframe
             target_dir: Directory to link to
         """
         strategy_dir = self.base_path / strategy_name
-        latest_link = strategy_dir / f"{symbol}_{timeframe}_latest"
+        # Use universal path (symbol-agnostic) for new models
+        latest_link = strategy_dir / f"{timeframe}_latest"
 
         # Remove existing link
         if latest_link.exists():
@@ -374,13 +400,16 @@ class ModelStorage:
         latest_link.symlink_to(target_dir.name)
 
     def _find_latest_version(
-        self, strategy_name: str, symbol: str, timeframe: str
+        self, strategy_name: str, symbol: Optional[str], timeframe: str
     ) -> Optional[Path]:
         """Find the latest version directory.
 
+        UNIVERSAL MODEL SUPPORT: If symbol is None, looks for universal (symbol-agnostic)
+        model directories. Otherwise looks for symbol-specific directories.
+
         Args:
             strategy_name: Strategy name
-            symbol: Trading symbol
+            symbol: Trading symbol (None for universal models)
             timeframe: Timeframe
 
         Returns:
@@ -390,7 +419,13 @@ class ModelStorage:
         if not strategy_dir.exists():
             return None
 
-        pattern = f"{symbol}_{timeframe}_v"
+        # Universal model pattern (symbol-agnostic)
+        if symbol is None:
+            pattern = f"{timeframe}_v"
+        else:
+            # Legacy symbol-specific pattern
+            pattern = f"{symbol}_{timeframe}_v"
+
         versions = []
 
         for path in strategy_dir.iterdir():

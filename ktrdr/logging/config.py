@@ -70,6 +70,9 @@ class SafeRotatingFileHandler(logging.handlers.RotatingFileHandler):
     """
     A robust rotating file handler that gracefully handles file operations
     during log rotation to prevent race conditions and file not found errors.
+
+    This is especially important during hot-reloads and server restarts where
+    the log file stream might be invalidated.
     """
 
     def shouldRollover(self, record):
@@ -79,11 +82,22 @@ class SafeRotatingFileHandler(logging.handlers.RotatingFileHandler):
         Overrides the parent method to safely handle cases where the log file
         might be temporarily unavailable during rotation or external changes.
         """
+        # Check if stream is valid before trying to use it
+        if self.stream is None:
+            return False
+
         try:
             return super().shouldRollover(record)
-        except (OSError, FileNotFoundError):
-            # File might have been moved/deleted externally, trigger rollover
-            return True
+        except (OSError, FileNotFoundError, ValueError):
+            # File might have been moved/deleted externally, or stream is closed
+            # Try to reopen the stream
+            try:
+                if self.stream:
+                    self.stream.close()
+                self.stream = self._open()
+                return False  # Don't rollover after reopening
+            except Exception:
+                return False  # Can't reopen, don't rollover
         except Exception:
             # For any other unexpected errors, don't rollover to avoid issues
             return False
@@ -96,14 +110,23 @@ class SafeRotatingFileHandler(logging.handlers.RotatingFileHandler):
         that can occur during high-volume logging with rotation.
         """
         try:
+            # Ensure stream is valid before emitting
+            if self.stream is None:
+                self.stream = self._open()
             super().emit(record)
-        except (OSError, FileNotFoundError):
+        except (OSError, FileNotFoundError, ValueError):
             # File operations failed, try to reinitialize the stream
             try:
-                self._open()
+                if self.stream:
+                    try:
+                        self.stream.close()
+                    except Exception:
+                        pass
+                self.stream = self._open()
                 super().emit(record)
             except Exception:
                 # If we still can't write, fail silently to prevent log spam
+                # This prevents cascading errors during shutdown/restart
                 pass
         except Exception:
             # Catch any other unexpected errors to prevent breaking the app
@@ -190,7 +213,17 @@ def configure_logging(
     root_logger.setLevel(logging.DEBUG)  # Capture all logs and let handlers filter
 
     # Clear any existing handlers to avoid duplicates if reconfigured
+    # Also replace any standard RotatingFileHandler with SafeRotatingFileHandler
     for handler in root_logger.handlers[:]:
+        # If this is a standard RotatingFileHandler (not our Safe version),
+        # we need to close it properly before removing
+        if isinstance(handler, logging.handlers.RotatingFileHandler) and not isinstance(
+            handler, SafeRotatingFileHandler
+        ):
+            try:
+                handler.close()
+            except Exception:
+                pass  # Ignore errors during cleanup
         root_logger.removeHandler(handler)
 
     # Set up KTRDR root logger
@@ -207,19 +240,28 @@ def configure_logging(
 
     # File Handler (if log directory is provided)
     if log_dir:
-        log_path = Path(log_dir) if isinstance(log_dir, str) else log_dir
-        log_path.mkdir(exist_ok=True, parents=True)
-        log_file = log_path / "ktrdr.log"
+        try:
+            log_path = Path(log_dir) if isinstance(log_dir, str) else log_dir
+            log_path.mkdir(exist_ok=True, parents=True)
+            log_file = log_path / "ktrdr.log"
 
-        file_handler = SafeRotatingFileHandler(
-            filename=log_file,
-            maxBytes=max_file_size_mb * 1024 * 1024,  # Convert MB to bytes
-            backupCount=backup_count,
-        )
-        file_handler.setLevel(file_level)
-        file_format = config.get("file_format", _DEFAULT_FORMAT)
-        file_handler.setFormatter(logging.Formatter(file_format))
-        root_logger.addHandler(file_handler)
+            file_handler = SafeRotatingFileHandler(
+                filename=log_file,
+                maxBytes=max_file_size_mb * 1024 * 1024,  # Convert MB to bytes
+                backupCount=backup_count,
+            )
+            file_handler.setLevel(file_level)
+            file_format = config.get("file_format", _DEFAULT_FORMAT)
+            file_handler.setFormatter(logging.Formatter(file_format))
+            root_logger.addHandler(file_handler)
+        except Exception as e:
+            # If file logging fails, continue with console-only logging
+            # Log to console that file logging failed
+            console_logger = logging.getLogger("ktrdr.logging")
+            console_logger.warning(
+                f"Failed to set up file logging to {log_dir}: {e}. "
+                "Continuing with console-only logging."
+            )
 
     # Log minimal startup message (detailed config at DEBUG level)
     if log_dir:
