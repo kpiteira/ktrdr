@@ -91,9 +91,9 @@ class FeatureCache:
                                 and "_signal_" not in col
                                 and "_hist_" not in col
                             ):
-                                current_bar_indicators[feature_id] = (
-                                    self.indicators_df[col].iloc[idx]
-                                )
+                                current_bar_indicators[feature_id] = self.indicators_df[
+                                    col
+                                ].iloc[idx]
                                 break
                         else:
                             # Use raw values for all indicators (including SMA/EMA)

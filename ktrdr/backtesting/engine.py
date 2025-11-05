@@ -1,5 +1,6 @@
 """Backtesting engine for strategy evaluation."""
 
+import asyncio
 import time
 from dataclasses import dataclass
 from typing import Any, Optional, cast
@@ -7,6 +8,8 @@ from typing import Any, Optional, cast
 import pandas as pd
 
 from .. import get_logger
+from ..async_infrastructure.cancellation import CancellationToken
+from ..async_infrastructure.progress_bridge import ProgressBridge
 from ..data.repository import DataRepository
 from ..decision.base import Signal
 from .performance import PerformanceMetrics, PerformanceTracker
@@ -102,11 +105,22 @@ class BacktestingEngine:
 
         self.strategy_name = self.orchestrator.strategy_name
 
-    def run(self) -> BacktestResults:
+    def run(
+        self,
+        bridge: Optional[ProgressBridge] = None,
+        cancellation_token: Optional[CancellationToken] = None,
+    ) -> BacktestResults:
         """Execute the backtest simulation.
+
+        Args:
+            bridge: Optional ProgressBridge for async operations progress tracking
+            cancellation_token: Optional CancellationToken for operation cancellation
 
         Returns:
             Comprehensive results including trades, metrics, and analysis
+
+        Raises:
+            asyncio.CancelledError: If cancellation is requested via cancellation_token
         """
         start_time = pd.Timestamp.now()
         execution_start = time.time()
@@ -574,6 +588,42 @@ class BacktestingEngine:
                     )
                 except Exception as e:
                     logger.warning(f"Progress callback failed: {e}")
+
+            # NEW: ProgressBridge updates (every 50 bars)
+            if bridge and (idx - start_idx) % 50 == 0:
+                try:
+                    # Calculate win rate from performance tracker
+                    win_rate = 0.0
+                    if hasattr(self.performance_tracker, "calculate_win_rate"):
+                        try:
+                            win_rate = self.performance_tracker.calculate_win_rate(
+                                self.position_manager.get_trade_history()
+                            )
+                        except Exception:
+                            pass
+
+                    # Update bridge with current progress
+                    bridge._update_state(
+                        percentage=((idx - start_idx) / (len(data) - start_idx))
+                        * 100.0,
+                        message=f"Backtesting {self.config.symbol} {self.config.timeframe} [{current_timestamp}]",
+                        current_bar=idx - start_idx,
+                        total_bars=len(data) - start_idx,
+                        current_date=str(current_timestamp),
+                        current_pnl=portfolio_value - self.config.initial_capital,
+                        total_trades=trades_executed,
+                        win_rate=win_rate,
+                    )
+                except Exception as e:
+                    logger.warning(f"ProgressBridge update failed: {e}")
+
+            # NEW: Cancellation checks (every 100 bars)
+            if cancellation_token and (idx - start_idx) % 100 == 0:
+                if cancellation_token.is_cancelled_requested:
+                    logger.info(
+                        f"Backtest cancelled at bar {idx}/{len(data)} ({((idx - start_idx) / (len(data) - start_idx)) * 100:.1f}%)"
+                    )
+                    raise asyncio.CancelledError("Backtest cancelled by user request")
 
         # Force-close any open position at the end of the backtest
         # This prevents unrealized losses from skewing performance metrics

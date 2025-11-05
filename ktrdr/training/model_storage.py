@@ -173,7 +173,9 @@ class ModelStorage:
             # Try universal path first (new symbol-agnostic models)
             universal_latest = self.base_path / strategy_name / f"{timeframe}_latest"
             # Try symbol-specific path (legacy models)
-            symbol_specific_latest = self.base_path / strategy_name / f"{symbol}_{timeframe}_latest"
+            symbol_specific_latest = (
+                self.base_path / strategy_name / f"{symbol}_{timeframe}_latest"
+            )
 
             if universal_latest.exists():
                 model_dir = universal_latest
@@ -184,7 +186,9 @@ class ModelStorage:
                 latest_dir = self._find_latest_version(strategy_name, None, timeframe)
                 if latest_dir is None:
                     # Try symbol-specific pattern
-                    latest_dir = self._find_latest_version(strategy_name, symbol, timeframe)
+                    latest_dir = self._find_latest_version(
+                        strategy_name, symbol, timeframe
+                    )
                 if latest_dir is None:
                     raise FileNotFoundError(
                         f"No models found for {strategy_name}/{timeframe} "
@@ -194,7 +198,9 @@ class ModelStorage:
         else:
             # Try both patterns for specific version
             universal_ver = self.base_path / strategy_name / f"{timeframe}_{version}"
-            symbol_specific_ver = self.base_path / strategy_name / f"{symbol}_{timeframe}_{version}"
+            symbol_specific_ver = (
+                self.base_path / strategy_name / f"{symbol}_{timeframe}_{version}"
+            )
 
             if universal_ver.exists():
                 model_dir = universal_ver
