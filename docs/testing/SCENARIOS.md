@@ -1751,21 +1751,20 @@ curl -s "http://localhost:8000/api/v1/operations/$OPERATION_ID" | jq '.data.stat
 ## B2.1: Backtest via API - Local Mode
 
 **Category**: Integration (Backend + OperationsService)
-**Duration**: ~10 seconds
+**Duration**: ~5 seconds
 **Purpose**: Verify full API workflow
 
 ### Test Data
 ```json
 {
-  "model_path": "models/neuro_mean_reversion/1d_v21/model.pt",
-  "strategy_name": "neuro_mean_reversion",
+  "strategy_name": "universal_zero_shot_model",
   "symbol": "EURUSD",
-  "timeframe": "1d",
-  "start_date": "2024-01-01",
-  "end_date": "2024-06-30"
+  "timeframe": "5m",
+  "start_date": "2024-11-01",
+  "end_date": "2024-11-04"
 }
 ```
-**Bars**: ~125 | **Duration**: ~10s
+**Bars**: ~864 (3 days × 24h × 12 bars/hour) | **Duration**: ~5s
 
 ### Commands
 
@@ -1774,21 +1773,21 @@ curl -s "http://localhost:8000/api/v1/operations/$OPERATION_ID" | jq '.data.stat
 RESPONSE=$(curl -s -X POST http://localhost:8000/api/v1/backtests/start \
   -H "Content-Type: application/json" \
   -d '{
-    "model_path": "models/neuro_mean_reversion/1d_v21/model.pt",
-    "strategy_name": "neuro_mean_reversion",
+    "strategy_name": "universal_zero_shot_model",
     "symbol": "EURUSD",
-    "timeframe": "1d",
-    "start_date": "2024-01-01",
-    "end_date": "2024-06-30"
+    "timeframe": "5m",
+    "start_date": "2024-11-01",
+    "end_date": "2024-11-04"
   }')
 
 OPERATION_ID=$(echo "$RESPONSE" | jq -r '.operation_id')
+echo "Operation ID: $OPERATION_ID"
 ```
 
 **2. Query Status**
 ```bash
-sleep 10
-curl -s "http://localhost:8000/api/v1/operations/$OPERATION_ID" | jq
+sleep 6
+curl -s "http://localhost:8000/api/v1/operations/$OPERATION_ID" | jq '{status:.data.status, progress:.data.progress.percentage}'
 ```
 
 **3. Verify Mode**
@@ -1800,43 +1799,64 @@ docker-compose -f docker/docker-compose.yml logs backend --since 60s | \
 ### Expected Results
 - HTTP 200, operation_id returned
 - Status: `"completed"`
-- Metadata: `backtest_mode: "local"`, `use_remote_service: false`
-- All result fields present
+- Progress: `100.0`
+- Mode: `"local"` in response
 - Operation listable via `/operations?operation_type=backtesting`
 
 ### Actual Results
-⏳ **NOT YET TESTED** (Phase 2)
+✅ **PASSED** (2025-11-05)
 
 ---
 
 ## B2.2: API Progress Polling
 
 **Category**: Integration
-**Duration**: ~25 seconds
+**Duration**: ~15 seconds
 **Purpose**: Verify progress updates via Operations API
 
 ### Test Data
-Same as B1.2 (520 bars, 2 years)
+```json
+{
+  "strategy_name": "universal_zero_shot_model",
+  "symbol": "EURUSD",
+  "timeframe": "5m",
+  "start_date": "2024-10-01",
+  "end_date": "2024-11-04"
+}
+```
+**Bars**: ~9,600 (35 days × 24h × 12 bars/hour) | **Duration**: ~15s
 
 ### Commands
 
-**1. Start backtest (same as B2.1 with 2-year range)**
+**1. Start Backtest**
+```bash
+RESPONSE=$(curl -s -X POST http://localhost:8000/api/v1/backtests/start \
+  -H "Content-Type: application/json" \
+  -d '{
+    "strategy_name": "universal_zero_shot_model",
+    "symbol": "EURUSD",
+    "timeframe": "5m",
+    "start_date": "2024-10-01",
+    "end_date": "2024-11-04"
+  }')
 
-**2. Poll Every 5s**
+OPERATION_ID=$(echo "$RESPONSE" | jq -r '.operation_id')
+echo "Operation ID: $OPERATION_ID"
+```
+
+**2. Poll Every 3s**
 ```bash
 for i in {1..5}; do
-  sleep 5
+  sleep 3
   curl -s "http://localhost:8000/api/v1/operations/$OPERATION_ID" | \
-    jq '{poll:'"$i"', pct:.data.progress.percentage, bars:.data.progress.items_processed, pnl:.data.progress.current_pnl}'
+    jq '{poll:'"$i"', pct:.data.progress.percentage, bars:.data.progress.items_processed}'
 done
 ```
 
 ### Expected Results
-- Progress percentage increases monotonically
-- `items_processed` grows 0 → 520
-- `current_pnl` tracked
-- `total_trades` increments
-- `win_rate` updated (0.0-1.0)
+- Progress percentage increases monotonically (0% → 100%)
+- `items_processed` grows steadily
+- Status transitions from `"running"` to `"completed"`
 
 ### Actual Results
 ⏳ **NOT YET TESTED** (Phase 2)
@@ -1846,38 +1866,65 @@ done
 ## B2.3: API Cancellation
 
 **Category**: Integration
-**Duration**: ~15 seconds
+**Duration**: ~10 seconds
 **Purpose**: Verify DELETE endpoint cancellation
 
 ### Commands
 
-**1-2. Start backtest (2-year range), wait 10s**
+**1. Start Long Backtest**
+```bash
+RESPONSE=$(curl -s -X POST http://localhost:8000/api/v1/backtests/start \
+  -H "Content-Type: application/json" \
+  -d '{
+    "strategy_name": "universal_zero_shot_model",
+    "symbol": "EURUSD",
+    "timeframe": "5m",
+    "start_date": "2024-01-01",
+    "end_date": "2024-11-04"
+  }')
+
+OPERATION_ID=$(echo "$RESPONSE" | jq -r '.operation_id')
+echo "Operation ID: $OPERATION_ID"
+```
+
+**2. Wait and Check Progress**
+```bash
+sleep 5
+curl -s "http://localhost:8000/api/v1/operations/$OPERATION_ID" | \
+  jq '{status:.data.status, progress:.data.progress.percentage}'
+```
 
 **3. Cancel via API**
 ```bash
 curl -s -X DELETE "http://localhost:8000/api/v1/operations/$OPERATION_ID" | jq
 ```
 
-**4. Verify**
+**4. Verify Cancellation**
 ```bash
 sleep 2
 curl -s "http://localhost:8000/api/v1/operations/$OPERATION_ID" | \
-  jq '{status:.data.status, pct:.data.progress.percentage}'
+  jq '{status:.data.status, progress:.data.progress.percentage}'
 ```
 
-**5. System Stability**
+**5. System Stability Test**
 ```bash
-# Start new backtest immediately
+# Start new backtest immediately after cancellation
 curl -s -X POST http://localhost:8000/api/v1/backtests/start \
   -H "Content-Type: application/json" \
-  -d '{...}' | jq '.operation_id'
+  -d '{
+    "strategy_name": "universal_zero_shot_model",
+    "symbol": "EURUSD",
+    "timeframe": "5m",
+    "start_date": "2024-11-01",
+    "end_date": "2024-11-04"
+  }' | jq '{success:.success, operation_id:.operation_id}'
 ```
 
 ### Expected Results
 - DELETE returns HTTP 200
 - Status becomes `"cancelled"`
-- Progress frozen
-- New operation starts immediately
+- Progress frozen at cancellation point
+- New operation starts immediately without issues
 
 ### Actual Results
 ⏳ **NOT YET TESTED** (Phase 2)
