@@ -69,13 +69,12 @@ async def start_backtest(
         end_date = datetime.fromisoformat(request.end_date)
 
         # Call ktrdr.backtesting.BacktestingService (not api.services!)
-        # NOTE: This uses the NEW BacktestingService which requires explicit paths
-        # But we auto-discover them from strategy_name to maintain API compatibility
         strategy_config_path = f"strategies/{request.strategy_name}.yaml"
 
-        # Auto-discover latest model for this strategy/symbol/timeframe
-        # This matches the old behavior where model_path=None
-        model_path = f"{request.symbol}_{request.timeframe}_latest"
+        # Auto-discover model (like old system did)
+        # Pass None to let DecisionOrchestrator find the latest trained model
+        # for this strategy. If user provides explicit model_path, use it.
+        model_path = getattr(request, 'model_path', None)
 
         result = await service.run_backtest(
             symbol=request.symbol,

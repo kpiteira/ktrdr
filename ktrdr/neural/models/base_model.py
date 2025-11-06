@@ -317,7 +317,9 @@ class BaseNeuralModel(ABC):
         with open(load_dir / "metadata.json") as f:
             metadata = json.load(f)
 
-        self.is_trained = metadata["is_trained"]
+        # Default to True for backwards compatibility with old models
+        # that don't have is_trained field in metadata
+        self.is_trained = metadata.get("is_trained", True)
         self.input_size = metadata["input_size"]
 
         # Build and load model

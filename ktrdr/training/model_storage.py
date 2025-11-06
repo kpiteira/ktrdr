@@ -122,6 +122,7 @@ class ModelStorage:
             "symbol": symbol,
             "timeframe": timeframe,
             "created_at": datetime.now().isoformat(),
+            "is_trained": True,  # Mark model as trained (required by BaseNeuralModel.load_model)
             "model_type": model.__class__.__name__,
             "model_version": model_version,
             "architecture_type": "pure_fuzzy" if is_pure_fuzzy else "mixed_features",
