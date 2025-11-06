@@ -1323,23 +1323,404 @@ curl http://localhost:8000/api/v1/operations?operation_type=backtesting
 
 ---
 
-## 7. Phase 4: Production Readiness
+## 7. Phase 4: Production Readiness & Polish
 
 **Duration**: 1 week
 
-**Goal**: E2E testing, documentation, production deployment.
+**Goal**: Complete MCP integration, CLI polish, comprehensive testing, documentation.
 
-**Outcome**: Production-ready system.
+**Outcome**: Production-ready system with full feature parity.
 
-**NEW REQUIREMENT**: **ALL scenarios including Error Handling (B4.x) MUST PASS.**
+**NEW REQUIREMENTS**:
+- MCP tool for backtesting (matching training pattern)
+- CLI displays backtest results (not just progress)
+- **ALL scenarios (B1.x-B4.x) MUST PASS** - 13 total scenarios
 
 ---
 
-### 7.1 Task 4.1: Error Scenario Validation
+### 7.1 Task 4.1: Add MCP Backtesting Tool
+
+**Duration**: 4 hours
+
+**Description**: Create MCP tool to start backtesting operations, following the training pattern.
+
+**Analysis Findings**:
+
+Task 3.6 found that MCP server doesn't need *updates* (operations endpoints unchanged), but there's **NO MCP TOOL** to start backtesting operations. This is a missing feature.
+
+**Current State**:
+- ✅ MCP has `start_training()` tool - starts training via `/api/v1/trainings/start`
+- ❌ MCP has NO backtesting tool
+- ✅ MCP has `get_operation_status()` - works for all operation types
+- ✅ MCP has `list_operations()` - supports `operation_type="backtesting"`
+
+**Implementation Pattern** (follow training tool):
+
+```python
+# mcp/src/server.py
+
+@mcp.tool()
+async def start_backtest(
+    strategy_name: str,
+    symbol: str,
+    timeframe: str,
+    start_date: str,
+    end_date: str,
+    initial_capital: float = 100000.0,
+    commission: float = 0.001,
+    slippage: float = 0.001,
+) -> dict[str, Any]:
+    """
+    Run a backtest on a trading strategy (async).
+
+    Simulates trading a strategy on historical data. Backtest runs in
+    background (can take seconds to minutes). Returns immediately with
+    operation_id for tracking progress.
+
+    Args:
+        strategy_name: Strategy configuration name
+            - Example: "neuro_mean_reversion"
+            - Must exist in config/strategies/ directory
+            - Defines indicators, fuzzy rules, and neural architecture
+        symbol: Trading symbol to backtest
+            - Example: "AAPL", "EURUSD"
+            - Data must be available (use trigger_data_loading first)
+        timeframe: Timeframe for backtest data
+            - Example: "1h", "4h", "1d"
+            - Valid values: 1m, 5m, 15m, 30m, 1h, 4h, 1d
+        start_date: Backtest start date (YYYY-MM-DD)
+            - Example: "2024-01-01"
+        end_date: Backtest end date (YYYY-MM-DD)
+            - Example: "2024-12-31"
+        initial_capital: Starting capital for simulation
+            - Default: 100000.0
+            - In strategy's base currency
+        commission: Commission rate per trade
+            - Default: 0.001 (0.1%)
+            - Applied to each buy/sell
+        slippage: Slippage rate per trade
+            - Default: 0.001 (0.1%)
+            - Simulates price impact
+
+    Returns:
+        Dict with structure:
+        {
+            "success": bool,
+            "operation_id": str,     # Use with get_operation_status()
+            "status": str,           # "started"
+            "message": str,
+            "symbol": str,
+            "timeframe": str,
+            "mode": str              # "local" or "remote"
+        }
+
+    Raises:
+        KTRDRAPIError: If data unavailable, strategy not found, or backend error
+
+    Examples:
+        # Basic backtest
+        result = await start_backtest(
+            strategy_name="neuro_mean_reversion",
+            symbol="EURUSD",
+            timeframe="1d",
+            start_date="2024-01-01",
+            end_date="2024-12-31"
+        )
+        operation_id = result["operation_id"]
+
+        # Check progress
+        status = await get_operation_status(operation_id)
+
+        # Wait for completion
+        while status["data"]["status"] == "running":
+            await asyncio.sleep(2)
+            status = await get_operation_status(operation_id)
+
+        # Get results
+        results = status["data"]["results"]
+        print(f"Total return: {results['total_return']:.2%}")
+
+    Related Tools:
+        - get_operation_status(): Check backtest progress and get results
+        - list_operations(): List all backtests
+        - trigger_data_loading(): Ensure data available before backtest
+
+    Notes:
+        - Backtest results included in operation status when complete
+        - Progress updates show current bar and trade statistics
+        - Can be cancelled via cancel_operation()
+        - Monitoring via get_operation_status() (NOT get_training_status())
+    """
+    try:
+        async with get_api_client() as client:
+            response = await client.post(
+                "/api/v1/backtests/start",
+                json={
+                    "strategy_name": strategy_name,
+                    "symbol": symbol,
+                    "timeframe": timeframe,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "initial_capital": initial_capital,
+                    "commission": commission,
+                    "slippage": slippage,
+                }
+            )
+
+        logger.info(
+            "Backtest started",
+            operation_id=response.get("operation_id"),
+            symbol=symbol,
+            strategy=strategy_name
+        )
+        return response
+
+    except Exception as e:
+        logger.error("Failed to start backtest", error=str(e))
+        raise
+```
+
+**Files Modified**:
+- `mcp/src/server.py` (+80 lines)
+
+**Testing**:
+```python
+# Test MCP tool
+result = await start_backtest(
+    strategy_name="test_e2e_local_pull",
+    symbol="EURUSD",
+    timeframe="1d",
+    start_date="2024-01-01",
+    end_date="2024-06-30"
+)
+
+# Verify returns operation_id
+assert "operation_id" in result
+assert result["success"] is True
+
+# Verify can monitor via operations
+status = await get_operation_status(result["operation_id"])
+assert status["data"]["type"] == "BACKTESTING"
+```
+
+**Acceptance Criteria**:
+- ✅ `start_backtest()` tool created following training pattern
+- ✅ Returns operation_id immediately (async pattern)
+- ✅ Monitoring via `get_operation_status()` (unified pattern)
+- ✅ Results accessible in operation status when complete
+- ✅ Docstring comprehensive with examples
+- ✅ Tool tested and functional
+
+---
+
+### 7.2 Task 4.2: Add CLI Results Display
+
+**Duration**: 3 hours
+
+**Description**: Display backtest results after completion (not just exit code).
+
+**Current State**:
+
+```python
+# ktrdr/cli/backtest_commands.py
+success = await executor.execute_operation(...)
+
+# Exit with appropriate code
+sys.exit(0 if success else 1)  # ❌ No results displayed!
+```
+
+**Problem**: CLI shows progress bar, completes, then exits with 0 or 1. User has NO IDEA what the results were!
+
+**Required Behavior** (follow training CLI pattern):
+
+After backtest completes successfully:
+1. Fetch final operation status to get results
+2. Display results summary in a formatted table
+3. Show key metrics: total return, Sharpe ratio, max drawdown, trade count
+4. Display equity curve info
+5. Provide guidance on viewing full results
+
+**Implementation**:
+
+```python
+# ktrdr/cli/backtest_commands.py
+
+async def _run_backtest_async_impl(...):
+    # ... existing code ...
+
+    # Execute operation - executor handles progress bar
+    success = await executor.execute_operation(
+        adapter=adapter,
+        console=console,
+        progress_callback=format_backtest_progress,
+        show_progress=True,
+    )
+
+    # NEW: Display results if successful
+    if success:
+        await _display_backtest_results(
+            operation_id=executor.operation_id,  # Executor stores this
+            console=console,
+            verbose=verbose
+        )
+
+    # Exit with appropriate code
+    sys.exit(0 if success else 1)
+
+
+async def _display_backtest_results(
+    operation_id: str,
+    console: Console,
+    verbose: bool
+) -> None:
+    """Display backtest results after completion."""
+    from rich.table import Table
+
+    try:
+        # Fetch final operation status to get results
+        async with AsyncCLIClient() as client:
+            operation = await client.get(f"/operations/{operation_id}")
+
+        results = operation.get("data", {}).get("results", {})
+        if not results:
+            console.print("[yellow]⚠️  Backtest completed but no results available[/yellow]")
+            return
+
+        # Display results summary
+        console.print("\n[bold green]✅ Backtest Complete![/bold green]\n")
+
+        # Create results table
+        table = Table(title="Backtest Results")
+        table.add_column("Metric", style="cyan", no_wrap=True)
+        table.add_column("Value", style="magenta")
+
+        # Add key metrics
+        total_return = results.get("total_return", 0.0)
+        sharpe_ratio = results.get("sharpe_ratio", 0.0)
+        max_drawdown = results.get("max_drawdown", 0.0)
+        total_trades = results.get("total_trades", 0)
+        win_rate = results.get("win_rate", 0.0)
+
+        table.add_row("Total Return", f"{total_return:.2%}")
+        table.add_row("Sharpe Ratio", f"{sharpe_ratio:.2f}")
+        table.add_row("Max Drawdown", f"{max_drawdown:.2%}")
+        table.add_row("Total Trades", f"{total_trades}")
+        table.add_row("Win Rate", f"{win_rate:.2%}")
+
+        console.print(table)
+        console.print()
+
+        # Equity curve info
+        equity_curve = results.get("equity_curve", [])
+        if equity_curve:
+            console.print(f"📈 Equity curve: {len(equity_curve)} points")
+
+        # Guidance
+        console.print(f"\n💡 View full results: [cyan]ktrdr operations status {operation_id}[/cyan]")
+
+        if verbose:
+            console.print(f"\n[dim]Full results:[/dim]")
+            console.print(results)
+
+    except Exception as e:
+        console.print(f"[yellow]⚠️  Could not fetch results: {str(e)}[/yellow]")
+```
+
+**Files Modified**:
+- `ktrdr/cli/backtest_commands.py` (+60 lines)
+
+**Acceptance Criteria**:
+- ✅ CLI displays results summary after successful backtest
+- ✅ Shows key metrics: return, Sharpe, drawdown, trades, win rate
+- ✅ Formatted table (Rich library)
+- ✅ Guidance on viewing full results
+- ✅ Graceful handling if results unavailable
+- ✅ Verbose mode shows full results JSON
+
+---
+
+### 7.3 Task 4.3: Validate All Backtesting Scenarios
+
+**Duration**: 1 day
+
+**Description**: Execute and validate ALL backtesting scenarios from SCENARIOS.md (B1.x - B4.x).
+
+**Scenario Inventory** (13 scenarios):
+
+**Phase 1 (Backend - Local Mode):**
+- ⏳ B1.1: Local Backtest - Smoke Test (~5s)
+- ⏳ B1.2: Local Backtest - Progress Tracking (~20s)
+- ⏳ B1.3: Local Backtest - Cancellation (~15s)
+
+**Phase 2 (API Integration - Local Mode):**
+- ⏳ B2.1: Backtest via API - Local Mode (~10s)
+- ⏳ B2.2: API Progress Polling (~25s)
+- ⏳ B2.3: API Cancellation (~15s)
+
+**Phase 3 (Remote Mode):**
+- ✅ B3.1: Remote Backtest - Direct Start (~10s) [TESTED]
+- ✅ B3.2: Backend → Remote Proxy (~10s) [TESTED]
+- ✅ B3.3: Remote Progress Updates (~25s) [TESTED]
+- ⏳ B3.4: Remote Cancellation (~15s)
+
+**Phase 4 (Error Handling):**
+- ⏳ B4.1: Error - Invalid Strategy (~2s)
+- ⏳ B4.2: Error - Missing Data (~2s)
+- ⏳ B4.3: Error - Model Not Found (~2s)
+
+**Current Status**: 3/13 scenarios tested (23%)
+
+**Target**: 13/13 scenarios PASS (100%)
+
+**Testing Approach**:
+
+Use integration-test-specialist agent to execute each scenario group:
+
+```bash
+# Phase 1 scenarios (Backend local)
+integration-test-specialist: "Execute B1.1, B1.2, B1.3 scenarios from SCENARIOS.md"
+
+# Phase 2 scenarios (API local)
+integration-test-specialist: "Execute B2.1, B2.2, B2.3 scenarios from SCENARIOS.md"
+
+# Phase 3 scenarios (Remote)
+integration-test-specialist: "Execute B3.4 scenario from SCENARIOS.md"
+# (B3.1-B3.3 already tested)
+
+# Phase 4 scenarios (Errors)
+integration-test-specialist: "Execute B4.1, B4.2, B4.3 scenarios from SCENARIOS.md"
+```
+
+**Validation Requirements**:
+
+For each scenario:
+1. Execute test commands from SCENARIOS.md
+2. Verify expected results match actual results
+3. Check logs for correct behavior
+4. Document any failures with root cause
+5. Update scenario status in SCENARIOS.md
+
+**Deliverable**: Test report with results for all 13 scenarios
+
+**Files Modified**:
+- `docs/testing/SCENARIOS.md` (update status for each scenario)
+- Create: `/tmp/PHASE_4_SCENARIO_VALIDATION.md` (test report)
+
+**Acceptance Criteria**:
+- ✅ All 13 backtesting scenarios executed
+- ✅ 13/13 scenarios PASSING (100% pass rate)
+- ✅ SCENARIOS.md updated with ✅ status for each
+- ✅ Test report generated with evidence
+- ✅ Any failures root-caused and fixed
+- ✅ Regression: All Phase 3 scenarios still pass
+
+---
+
+### 7.4 Task 4.4: Error Scenario Validation
 
 **Duration**: 2 days
 
-**Description**: Execute all error handling scenarios.
+**Description**: Execute all error handling scenarios (previously Task 4.1, renumbered).
 
 **Testing with Agent**:
 ```
