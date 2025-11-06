@@ -463,31 +463,36 @@ class BacktestingOperationAdapter(OperationAdapter):
         # Display backtest metrics in a formatted table
         table = Table(title="Backtest Results", show_header=True)
         table.add_column("Metric", style="cyan")
-        table.add_column("Value", style="green")
+        table.add_column("Value", style="magenta")
 
-        # Performance metrics
-        total_return = results.get("total_return", 0)
-        table.add_row("Total Return", f"${total_return:,.2f}")
+        # Performance metrics (as percentages)
+        total_return = results.get("total_return", 0.0)
+        table.add_row("Total Return", f"{total_return:.2%}")
 
-        sharpe_ratio = results.get("sharpe_ratio", 0)
-        table.add_row("Sharpe Ratio", f"{sharpe_ratio:.3f}")
+        sharpe_ratio = results.get("sharpe_ratio", 0.0)
+        table.add_row("Sharpe Ratio", f"{sharpe_ratio:.2f}")
 
-        max_drawdown = results.get("max_drawdown", 0)
-        table.add_row("Max Drawdown", f"${max_drawdown:,.2f}")
+        max_drawdown = results.get("max_drawdown", 0.0)
+        table.add_row("Max Drawdown", f"{max_drawdown:.2%}")
 
         # Trade statistics
         total_trades = results.get("total_trades", 0)
-        table.add_row("Total Trades", str(total_trades))
+        table.add_row("Total Trades", f"{total_trades}")
 
-        win_rate = results.get("win_rate", 0)
-        table.add_row("Win Rate", f"{win_rate * 100:.1f}%")
-
-        # Display additional metrics if available
-        if "avg_win" in results:
-            table.add_row("Average Win", f"${results['avg_win']:,.2f}")
-        if "avg_loss" in results:
-            table.add_row("Average Loss", f"${results['avg_loss']:,.2f}")
-        if "final_value" in results:
-            table.add_row("Final Portfolio Value", f"${results['final_value']:,.2f}")
+        win_rate = results.get("win_rate", 0.0)
+        table.add_row("Win Rate", f"{win_rate:.2%}")
 
         console.print(table)
+        console.print()
+
+        # Equity curve info
+        equity_curve = results.get("equity_curve", [])
+        if equity_curve:
+            console.print(f"📈 Equity curve: {len(equity_curve)} points")
+
+        # Guidance on viewing full results
+        operation_id = final_status.get("operation_id")
+        if operation_id:
+            console.print(
+                f"\n💡 View full results: [cyan]ktrdr operations status {operation_id}[/cyan]"
+            )
