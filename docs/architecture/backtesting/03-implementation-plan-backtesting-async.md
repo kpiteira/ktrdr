@@ -1179,7 +1179,124 @@ cd docker && docker-compose up -d backend
 
 ---
 
-### 6.5 Phase 3 Validation
+### 6.5 Task 3.5: Remove Dead Code from Old Implementation
+
+**Duration**: 1-2 hours
+
+**Description**: Remove obsolete code paths that were replaced during Phase 1-3 implementation.
+
+**Analysis Findings**:
+
+During implementation, new async architecture replaced old synchronous patterns, leaving dead code:
+
+1. **Old API Service** (683 lines)
+   - File: `ktrdr/api/services/backtesting_service.py`
+   - Reason: Replaced by `ktrdr/backtesting/backtesting_service.py` (ServiceOrchestrator pattern)
+   - Not imported anywhere
+   - Last modified: Before async migration
+
+2. **Old CLI Commands** (380 lines)
+   - File: `ktrdr/cli/backtesting_commands.py`
+   - Reason: Replaced by `ktrdr/cli/backtest_commands.py` (AsyncOperationExecutor pattern)
+   - Not imported in `ktrdr/cli/__init__.py`
+   - Uses obsolete `get_api_client` pattern
+
+3. **Old Service Tests** (15KB)
+   - File: `tests/api/test_backtesting_service.py`
+   - Reason: Tests obsolete service, replaced by `tests/unit/backtesting/test_backtesting_service.py`
+   - Imports dead `ktrdr.api.services.backtesting_service`
+
+4. **Backup File**
+   - File: `tests/api/test_backtesting_endpoints.py.bak`
+   - Reason: Development artifact, should not be in repo
+
+**Files to Delete**:
+```bash
+rm ktrdr/api/services/backtesting_service.py
+rm ktrdr/cli/backtesting_commands.py
+rm tests/api/test_backtesting_service.py
+rm tests/api/test_backtesting_endpoints.py.bak
+```
+
+**Verification Steps**:
+
+1. Search codebase for imports of deleted files:
+
+   ```bash
+   grep -r "from ktrdr.api.services.backtesting_service import" .
+   grep -r "from ktrdr.cli.backtesting_commands import" .
+   ```
+
+   Should return: No results
+
+2. Run all tests to ensure no regressions:
+
+   ```bash
+   make test-unit
+   ```
+
+3. Check for any other references:
+
+   ```bash
+   grep -r "BacktestingService" . --include="*.py" | grep "api.services.backtesting"
+   ```
+
+**Acceptance Criteria**:
+- ✅ All 4 dead code files removed
+- ✅ No import errors after deletion
+- ✅ All unit tests still passing
+- ✅ No references to deleted files in codebase
+
+---
+
+### 6.6 Task 3.6: Update MCP Server (If Needed)
+
+**Duration**: 30 minutes
+
+**Description**: Verify MCP server doesn't need updates for new backtesting architecture.
+
+**Analysis Findings**:
+
+MCP server was checked for backtesting endpoint usage:
+
+1. **MCP Server Current State**:
+   - File: `mcp/src/server.py`
+   - Uses generic operations endpoints: `/api/v1/operations/*`
+   - No direct backtesting endpoint calls
+   - Only mentions "backtesting" as operation_type filter option
+
+2. **Endpoint Changes**:
+   - Old: Unknown (no documented old endpoints)
+   - New: `/api/v1/backtests/start` (returns operation_id)
+   - Operations endpoints: UNCHANGED (`/api/v1/operations/*`)
+
+3. **Impact Assessment**:
+   - ✅ MCP uses operations endpoints (unchanged)
+   - ✅ No MCP tools call backtesting-specific endpoints
+   - ✅ MCP `list_operations()` supports `operation_type="backtesting"` (still valid)
+
+**Conclusion**: NO MCP UPDATES NEEDED
+
+**Verification Steps**:
+
+```bash
+# Verify MCP doesn't import backtesting endpoints
+grep -r "backtests/start" mcp/
+# Should return: No results
+
+# Verify operations endpoints still work
+curl http://localhost:8000/api/v1/operations?operation_type=backtesting
+```
+
+**Acceptance Criteria**:
+
+- ✅ MCP server verified to not use backtesting-specific endpoints
+- ✅ Operations endpoints still functional
+- ✅ No MCP code changes required
+
+---
+
+### 6.7 Phase 3 Validation
 
 **Gate Criteria** (STRICT):
 
