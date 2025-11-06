@@ -58,6 +58,10 @@ services:
       # Set to true to enable GPU training host service, false for Docker-only training
       - USE_TRAINING_HOST_SERVICE=${USE_TRAINING_HOST_SERVICE:-true}
       - TRAINING_HOST_SERVICE_URL=http://host.docker.internal:5002
+      # Backtesting Remote Service configuration (Phase 3)
+      # Set to true to enable remote backtesting (via backtest-worker), false for local backtesting
+      - USE_REMOTE_BACKTEST_SERVICE=${USE_REMOTE_BACKTEST_SERVICE:-false}
+      - REMOTE_BACKTEST_SERVICE_URL=http://backtest-worker:5003
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:

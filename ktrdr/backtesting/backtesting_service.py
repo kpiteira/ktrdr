@@ -364,11 +364,14 @@ class BacktestingService(ServiceOrchestrator[None]):
         remote_url = self._get_remote_service_url()
 
         # (1) Start backtest on remote service
+        # Extract strategy_name from strategy_config_path (e.g., "strategies/test.yaml" -> "test")
+        import os
+        strategy_name = os.path.splitext(os.path.basename(strategy_config_path))[0]
+
         request_payload = {
+            "strategy_name": strategy_name,  # Remote API expects strategy_name, not path
             "symbol": symbol,
             "timeframe": timeframe,
-            "strategy_config_path": strategy_config_path,
-            "model_path": model_path,
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
             "initial_capital": initial_capital,
