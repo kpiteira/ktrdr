@@ -403,7 +403,7 @@ class BacktestingOperationAdapter(OperationAdapter):
 
     def get_start_endpoint(self) -> str:
         """Return the backtesting start endpoint."""
-        return "/api/v1/backtests/start"
+        return "/backtests/start"
 
     def get_start_payload(self) -> dict[str, Any]:
         """Construct backtesting request payload."""

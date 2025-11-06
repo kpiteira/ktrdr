@@ -77,9 +77,9 @@ class TestBacktestingOperationAdapter:
         )
 
         endpoint = adapter.get_start_endpoint()
-        assert endpoint == "/api/v1/backtests/start"
+        assert endpoint == "/backtests/start"
         assert isinstance(endpoint, str)
-        assert endpoint.startswith("/api/v1/")
+        assert endpoint.startswith("/")
 
     def test_get_start_payload_returns_complete_payload(self):
         """Verify get_start_payload returns all required fields."""
