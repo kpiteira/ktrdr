@@ -1,6 +1,6 @@
 """Backtesting API client"""
 
-from typing import Any
+from typing import Any, Optional
 
 from .base import BaseAPIClient
 
@@ -10,19 +10,18 @@ class BacktestingAPIClient(BaseAPIClient):
 
     async def start_backtest(
         self,
-        model_path: str,
         strategy_name: str,
         symbol: str,
         timeframe: str,
         start_date: str,
         end_date: str,
+        model_path: Optional[str] = None,
         initial_capital: float = 100000.0,
         commission: float = 0.001,
         slippage: float = 0.001,
     ) -> dict[str, Any]:
         """Start backtest operation (async, returns operation_id)"""
         payload = {
-            "model_path": model_path,
             "strategy_name": strategy_name,
             "symbol": symbol,
             "timeframe": timeframe,
@@ -32,6 +31,10 @@ class BacktestingAPIClient(BaseAPIClient):
             "commission": commission,
             "slippage": slippage,
         }
+
+        # Only include model_path if explicitly provided
+        if model_path is not None:
+            payload["model_path"] = model_path
 
         response = await self._request("POST", "/backtests/start", json=payload)
 

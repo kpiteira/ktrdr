@@ -1104,12 +1104,12 @@ async def start_training(
 
 @mcp.tool()
 async def start_backtest(
-    model_path: str,
     strategy_name: str,
     symbol: str,
     timeframe: str,
     start_date: str,
     end_date: str,
+    model_path: Optional[str] = None,
     initial_capital: float = 100000.0,
     commission: float = 0.001,
     slippage: float = 0.001,
@@ -1122,10 +1122,6 @@ async def start_backtest(
     operation_id for tracking progress.
 
     Args:
-        model_path: Path to trained model file
-            - Example: "models/neuro_mean_reversion/1d_v2/model.pt"
-            - Must be a valid model file trained for the strategy
-            - Relative to project root directory
         strategy_name: Strategy configuration name
             - Example: "neuro_mean_reversion"
             - Must exist in config/strategies/ directory
@@ -1140,6 +1136,11 @@ async def start_backtest(
             - Example: "2024-01-01"
         end_date: Backtest end date (YYYY-MM-DD)
             - Example: "2024-12-31"
+        model_path: Optional path to trained model file
+            - Example: "models/neuro_mean_reversion/1d_v2/model.pt"
+            - If not provided, backend will use latest model for strategy
+            - Use this to test specific model versions
+            - Relative to project root directory
         initial_capital: Starting capital for simulation
             - Default: 100000.0
             - In strategy's base currency
@@ -1166,9 +1167,8 @@ async def start_backtest(
         KTRDRAPIError: If data unavailable, strategy not found, or backend error
 
     Examples:
-        # Basic backtest
+        # Basic backtest (uses latest model for strategy)
         result = await start_backtest(
-            model_path="models/neuro_mean_reversion/1d_v2/model.pt",
             strategy_name="neuro_mean_reversion",
             symbol="EURUSD",
             timeframe="1d",
@@ -1176,6 +1176,16 @@ async def start_backtest(
             end_date="2024-12-31"
         )
         operation_id = result["operation_id"]
+
+        # Backtest with specific model version
+        result = await start_backtest(
+            strategy_name="neuro_mean_reversion",
+            symbol="EURUSD",
+            timeframe="1d",
+            start_date="2024-01-01",
+            end_date="2024-12-31",
+            model_path="models/neuro_mean_reversion/1d_v2/model.pt"
+        )
 
         # Check progress
         status = await get_operation_status(operation_id)
@@ -1207,12 +1217,12 @@ async def start_backtest(
     try:
         async with get_api_client() as client:
             result = await client.backtesting.start_backtest(
-                model_path=model_path,
                 strategy_name=strategy_name,
                 symbol=symbol,
                 timeframe=timeframe,
                 start_date=start_date,
                 end_date=end_date,
+                model_path=model_path,
                 initial_capital=initial_capital,
                 commission=commission,
                 slippage=slippage,

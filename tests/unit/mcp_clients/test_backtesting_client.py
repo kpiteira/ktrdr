@@ -28,7 +28,6 @@ class TestBacktestingAPIClient:
 
             # Act
             result = await client.start_backtest(
-                model_path="models/neuro_mean_reversion/1d_v2/model.pt",
                 strategy_name="neuro_mean_reversion",
                 symbol="EURUSD",
                 timeframe="1d",
@@ -36,12 +35,11 @@ class TestBacktestingAPIClient:
                 end_date="2024-01-31"
             )
 
-            # Assert - default values are included
+            # Assert - default values are included, model_path NOT included when None
             mock_request.assert_called_once_with(
                 "POST",
                 "/backtests/start",
                 json={
-                    "model_path": "models/neuro_mean_reversion/1d_v2/model.pt",
                     "strategy_name": "neuro_mean_reversion",
                     "symbol": "EURUSD",
                     "timeframe": "1d",
@@ -50,6 +48,7 @@ class TestBacktestingAPIClient:
                     "initial_capital": 100000.0,  # default value included
                     "commission": 0.001,  # default value included
                     "slippage": 0.001,  # default value included
+                    # model_path not included when None
                 }
             )
             assert result["operation_id"] == "op_backtest_12345"
@@ -67,12 +66,12 @@ class TestBacktestingAPIClient:
 
             # Act
             await client.start_backtest(
-                model_path="models/test.pt",
                 strategy_name="test_strategy",
                 symbol="AAPL",
                 timeframe="1h",
                 start_date="2024-01-01",
                 end_date="2024-12-31",
+                model_path="models/test.pt",
                 initial_capital=50000.0,
                 commission=0.002,
                 slippage=0.001
@@ -81,6 +80,7 @@ class TestBacktestingAPIClient:
             # Assert
             call_args = mock_request.call_args
             payload = call_args[1]["json"]
+            assert payload["model_path"] == "models/test.pt"
             assert payload["initial_capital"] == 50000.0
             assert payload["commission"] == 0.002
             assert payload["slippage"] == 0.001
