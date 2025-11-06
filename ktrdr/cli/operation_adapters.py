@@ -460,35 +460,44 @@ class BacktestingOperationAdapter(OperationAdapter):
             console.print("[yellow]⚠️  No results available[/yellow]")
             return
 
+        # Extract metrics (they're nested under "metrics" key)
+        metrics = results.get("metrics", {})
+
+        if not metrics:
+            console.print("[yellow]⚠️  No metrics available in results[/yellow]")
+            return
+
         # Display backtest metrics in a formatted table
         table = Table(title="Backtest Results", show_header=True)
         table.add_column("Metric", style="cyan")
         table.add_column("Value", style="magenta")
 
         # Performance metrics (as percentages)
-        total_return = results.get("total_return", 0.0)
-        table.add_row("Total Return", f"{total_return:.2%}")
+        # Note: metrics has both total_return (dollar value) and total_return_pct (percentage)
+        total_return_pct = metrics.get("total_return_pct", 0.0)
+        table.add_row("Total Return", f"{total_return_pct:.2%}")
 
-        sharpe_ratio = results.get("sharpe_ratio", 0.0)
+        sharpe_ratio = metrics.get("sharpe_ratio", 0.0)
         table.add_row("Sharpe Ratio", f"{sharpe_ratio:.2f}")
 
-        max_drawdown = results.get("max_drawdown", 0.0)
-        table.add_row("Max Drawdown", f"{max_drawdown:.2%}")
+        # max_drawdown_pct is the percentage version
+        max_drawdown_pct = metrics.get("max_drawdown_pct", 0.0)
+        table.add_row("Max Drawdown", f"{max_drawdown_pct:.2%}")
 
         # Trade statistics
-        total_trades = results.get("total_trades", 0)
+        total_trades = metrics.get("total_trades", 0)
         table.add_row("Total Trades", f"{total_trades}")
 
-        win_rate = results.get("win_rate", 0.0)
+        win_rate = metrics.get("win_rate", 0.0)
         table.add_row("Win Rate", f"{win_rate:.2%}")
 
         console.print(table)
         console.print()
 
-        # Equity curve info
-        equity_curve = results.get("equity_curve", [])
-        if equity_curve:
-            console.print(f"📈 Equity curve: {len(equity_curve)} points")
+        # Equity curve info (length is at top level of results)
+        equity_curve_length = results.get("equity_curve_length", 0)
+        if equity_curve_length > 0:
+            console.print(f"📈 Equity curve: {equity_curve_length} points")
 
         # Guidance on viewing full results
         operation_id = final_status.get("operation_id")
