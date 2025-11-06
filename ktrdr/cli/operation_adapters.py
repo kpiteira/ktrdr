@@ -453,8 +453,8 @@ class BacktestingOperationAdapter(OperationAdapter):
             "\n✅ [green bold]Backtest completed successfully![/green bold]\n"
         )
 
-        # Get results from final status
-        results = final_status.get("results", {})
+        # Get results from final status (field name is "result_summary" not "results")
+        results = final_status.get("result_summary", {})
 
         if not results:
             console.print("[yellow]⚠️  No results available[/yellow]")
