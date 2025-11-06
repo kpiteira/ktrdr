@@ -69,6 +69,51 @@ services:
     networks:
       - ktrdr-network
 
+  # Backtesting Remote Worker - For distributed backtesting (Phase 3)
+  backtest-worker:
+    image: ktrdr-backend:dev  # Same image as backend
+    container_name: ktrdr-backtest-worker
+    restart: unless-stopped
+    ports:
+      - "5003:5003"
+    volumes:
+      # Mount source code for consistency with backend
+      - ../ktrdr:/app/ktrdr
+      # Mount data directory (read-only - uses cached data)
+      - ../data:/app/data:ro
+      # Mount models directory (read-only - uses trained models)
+      - ../models:/app/models:ro
+      # Mount strategies directory (read-only)
+      - ../strategies:/app/strategies:ro
+      # Mount config as read-only
+      - ../config:/app/config:ro
+      # Mount logs directory for worker logs
+      - ../logs:/app/logs
+      # Cache directories for pip and uv
+      - pip-cache:/root/.cache/pip
+      - uv-cache:/root/.cache/uv
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+      - PYTHONPATH=/app
+      # Force LOCAL mode (this service should never use remote mode)
+      - USE_REMOTE_BACKTEST_SERVICE=false
+      # IB configuration (for data access if needed)
+      - USE_IB_HOST_SERVICE=${USE_IB_HOST_SERVICE:-true}
+      - IB_HOST_SERVICE_URL=http://host.docker.internal:5001
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - ktrdr-network
+    # Run the remote backtesting API
+    command: ["uvicorn", "ktrdr.backtesting.remote_api:app", "--host", "0.0.0.0", "--port", "5003", "--reload"]
+
   # Frontend React/TypeScript service - Development configuration
   frontend:
     build:
