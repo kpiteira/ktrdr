@@ -40,19 +40,19 @@
 
 | ID | Name | Category | Duration | Status |
 |----|------|----------|----------|--------|
-| B1.1 | Local Backtest - Smoke Test | Backend | ~5s | ⏳ |
-| B1.2 | Local Backtest - Progress Tracking | Backend | ~20s | ⏳ |
-| B1.3 | Local Backtest - Cancellation | Backend | ~15s | ⏳ |
-| B2.1 | Backtest via API - Local Mode | Integration | ~10s | ⏳ |
-| B2.2 | API Progress Polling | Integration | ~25s | ⏳ |
-| B2.3 | API Cancellation | Integration | ~15s | ⏳ |
-| B3.1 | Remote Backtest - Direct Start | Remote | ~10s | ⏳ |
-| B3.2 | Backend → Remote Proxy | Remote | ~10s | ⏳ |
-| B3.3 | Remote Progress Updates | Remote | ~25s | ⏳ |
-| B3.4 | Remote Cancellation | Remote | ~15s | ⏳ |
-| B4.1 | Error - Invalid Strategy | Error | ~2s | ⏳ |
-| B4.2 | Error - Missing Data | Error | ~2s | ⏳ |
-| B4.3 | Error - Model Not Found | Error | ~2s | ⏳ |
+| B1.1 | Local Backtest - Smoke Test | Backend | ~5s | ✅ |
+| B1.2 | Local Backtest - Progress Tracking | Backend | ~20s | ✅ |
+| B1.3 | Local Backtest - Cancellation | Backend | ~15s | ✅ |
+| B2.1 | Backtest via API - Local Mode | Integration | ~10s | ✅ |
+| B2.2 | API Progress Polling | Integration | ~25s | ✅ |
+| B2.3 | API Cancellation | Integration | ~15s | ✅ |
+| B3.1 | Remote Backtest - Direct Start | Remote | ~10s | ✅ |
+| B3.2 | Backend → Remote Proxy | Remote | ~10s | ✅ |
+| B3.3 | Remote Progress Updates | Remote | ~25s | ✅ |
+| B3.4 | Remote Cancellation | Remote | ~15s | ✅ |
+| B4.1 | Error - Invalid Strategy | Error | ~2s | ✅ |
+| B4.2 | Error - Missing Data | Error | ~2s | ✅ |
+| B4.3 | Error - Model Not Found | Error | ~2s | ✅ |
 
 **Legend**: ✅ Tested & Passed | ❌ Failed | ⏳ Not Yet Tested | ✅📝 Documented (not tested)
 
