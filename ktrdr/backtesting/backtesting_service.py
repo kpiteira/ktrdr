@@ -98,7 +98,7 @@ class BacktestingService(ServiceOrchestrator[None]):
         symbol: str,
         timeframe: str,
         strategy_config_path: str,
-        model_path: str,
+        model_path: Optional[str],
         start_date: datetime,
         end_date: datetime,
         initial_capital: float = 100000.0,
@@ -366,6 +366,7 @@ class BacktestingService(ServiceOrchestrator[None]):
         # (1) Start backtest on remote service
         # Extract strategy_name from strategy_config_path (e.g., "strategies/test.yaml" -> "test")
         import os
+
         strategy_name = os.path.splitext(os.path.basename(strategy_config_path))[0]
 
         request_payload = {

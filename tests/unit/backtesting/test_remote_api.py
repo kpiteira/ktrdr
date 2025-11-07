@@ -4,7 +4,6 @@ Unit tests for Backtesting Remote API.
 Tests the remote container FastAPI application (Task 3.2).
 """
 
-from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -36,15 +35,17 @@ def mock_backtesting_service():
 def test_client(mock_operations_service, mock_backtesting_service):
     """Create FastAPI test client with mocked services."""
     with patch("ktrdr.backtesting.remote_api.get_operations_service") as mock_get_ops:
-        with patch("ktrdr.backtesting.remote_api.get_backtest_service") as mock_get_backtest:
+        with patch(
+            "ktrdr.backtesting.remote_api.get_backtest_service"
+        ) as mock_get_backtest:
             mock_get_ops.return_value = mock_operations_service
             mock_get_backtest.return_value = mock_backtesting_service
 
             # Import app after patching
-            from ktrdr.backtesting.remote_api import app
-
             # Manually set module-level variables for the test
             import ktrdr.backtesting.remote_api as remote_api_module
+            from ktrdr.backtesting.remote_api import app
+
             remote_api_module._operations_service = mock_operations_service
             remote_api_module._backtesting_service = mock_backtesting_service
 
@@ -65,8 +66,12 @@ class TestRemoteAPIInitialization:
     def test_startup_forces_local_mode(self):
         """Test startup event forces USE_REMOTE_BACKTEST_SERVICE=false."""
         with patch.dict("os.environ", {}, clear=True):
-            with patch("ktrdr.backtesting.remote_api.get_operations_service") as mock_get_ops:
-                with patch("ktrdr.backtesting.remote_api.get_backtest_service") as mock_get_backtest:
+            with patch(
+                "ktrdr.backtesting.remote_api.get_operations_service"
+            ) as mock_get_ops:
+                with patch(
+                    "ktrdr.backtesting.remote_api.get_backtest_service"
+                ) as mock_get_backtest:
                     mock_ops = MagicMock()
                     mock_ops._cache_ttl = 1.0
                     mock_get_ops.return_value = mock_ops
@@ -75,14 +80,16 @@ class TestRemoteAPIInitialization:
                     mock_backtest._use_remote = False
                     mock_get_backtest.return_value = mock_backtest
 
-                    from ktrdr.backtesting.remote_api import startup_event
                     import asyncio
+
+                    from ktrdr.backtesting.remote_api import startup_event
 
                     # Run startup
                     asyncio.run(startup_event())
 
                     # Verify environment was forced to local
                     import os
+
                     assert os.environ.get("USE_REMOTE_BACKTEST_SERVICE") == "false"
 
 
@@ -153,10 +160,14 @@ class TestBacktestStartEndpoint:
         assert call_kwargs["symbol"] == "AAPL"
         assert call_kwargs["timeframe"] == "1h"
 
-    def test_start_backtest_validation_error(self, test_client, mock_backtesting_service):
+    def test_start_backtest_validation_error(
+        self, test_client, mock_backtesting_service
+    ):
         """Test backtest start with validation error."""
         # Mock service to raise ValueError
-        mock_backtesting_service.run_backtest.side_effect = ValueError("Invalid configuration")
+        mock_backtesting_service.run_backtest.side_effect = ValueError(
+            "Invalid configuration"
+        )
 
         # Make request
         response = test_client.post(
@@ -223,7 +234,9 @@ class TestOperationsEndpoints:
             force_refresh=False,
         )
 
-    def test_get_operation_with_force_refresh(self, test_client, mock_operations_service):
+    def test_get_operation_with_force_refresh(
+        self, test_client, mock_operations_service
+    ):
         """Test GET /api/v1/operations/{id} with force_refresh=true."""
         mock_operations_service.get_operation.return_value = {
             "operation_id": "op_test_123",
@@ -278,7 +291,9 @@ class TestOperationsEndpoints:
     def test_get_metrics_not_found(self, test_client, mock_operations_service):
         """Test GET /api/v1/operations/{id}/metrics when operation not found."""
         # Mock service to raise KeyError
-        mock_operations_service.get_operation_metrics.side_effect = KeyError("Operation not found")
+        mock_operations_service.get_operation_metrics.side_effect = KeyError(
+            "Operation not found"
+        )
 
         # Make request
         response = test_client.get("/api/v1/operations/nonexistent/metrics")
@@ -310,7 +325,9 @@ class TestOperationsEndpoints:
     def test_cancel_operation_not_found(self, test_client, mock_operations_service):
         """Test DELETE /api/v1/operations/{id}/cancel when operation not found."""
         # Mock service to raise KeyError
-        mock_operations_service.cancel_operation.side_effect = KeyError("Operation not found")
+        mock_operations_service.cancel_operation.side_effect = KeyError(
+            "Operation not found"
+        )
 
         # Make request
         response = test_client.delete("/api/v1/operations/nonexistent/cancel")
@@ -340,16 +357,18 @@ class TestOperationsEndpoints:
         """Test GET /api/v1/operations with filters."""
         mock_operations_service.list_operations.return_value = ([], 0, 0)
 
-        # Make request with filters
+        # Make request with filters (use lowercase enum value)
         response = test_client.get(
-            "/api/v1/operations?operation_type=BACKTESTING&active_only=true&limit=50"
+            "/api/v1/operations?operation_type=backtesting&active_only=true&limit=50"
         )
 
         assert response.status_code == 200
 
-        # Verify filters were passed
+        # Verify filters were passed (FastAPI converts to OperationType enum)
+        from ktrdr.api.models.operations import OperationType
+
         mock_operations_service.list_operations.assert_called_once_with(
-            operation_type="BACKTESTING",
+            operation_type=OperationType.BACKTESTING,
             active_only=True,
             limit=50,
             offset=0,

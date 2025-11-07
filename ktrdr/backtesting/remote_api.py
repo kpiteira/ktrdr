@@ -22,14 +22,18 @@ Usage:
 import logging
 import os
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from ktrdr.api.models.backtesting import BacktestStartRequest, BacktestStartResponse
+from ktrdr.api.models.operations import OperationType
 from ktrdr.api.services.operations_service import get_operations_service
 from ktrdr.backtesting.backtesting_service import BacktestingService
+
+if TYPE_CHECKING:
+    from ktrdr.api.services.operations_service import OperationsService
 
 # Configure logging
 logging.basicConfig(
@@ -55,8 +59,8 @@ app.add_middleware(
 )
 
 # Service singletons (initialized on startup)
-_operations_service = None
-_backtesting_service = None
+_operations_service: Optional["OperationsService"] = None
+_backtesting_service: Optional[BacktestingService] = None
 
 
 def get_backtest_service() -> BacktestingService:
@@ -87,11 +91,15 @@ async def startup_event():
 
     # Initialize BacktestingService (will run in local mode)
     backtest_service = get_backtest_service()
-    logger.info(f"✅ BacktestingService initialized (mode: {'remote' if backtest_service._use_remote else 'local'})")
+    logger.info(
+        f"✅ BacktestingService initialized (mode: {'remote' if backtest_service._use_remote else 'local'})"
+    )
 
     logger.info("")
     logger.info("📡 Available Endpoints:")
-    logger.info("  POST /backtests/start               - Start backtest (domain-specific)")
+    logger.info(
+        "  POST /backtests/start               - Start backtest (domain-specific)"
+    )
     logger.info("  GET  /api/v1/operations             - List operations")
     logger.info("  GET  /api/v1/operations/{id}        - Get operation status")
     logger.info("  GET  /api/v1/operations/{id}/metrics - Get operation metrics")
@@ -114,7 +122,8 @@ async def shutdown_event():
 @app.get("/")
 async def root():
     """Root endpoint with service info."""
-    backtest_service = get_backtest_service()
+    # Trigger service initialization
+    get_backtest_service()
     return {
         "service": "Backtesting Remote Service",
         "version": "1.0.0",
@@ -170,7 +179,9 @@ async def start_backtest(request: BacktestStartRequest) -> BacktestStartResponse
         strategy_config_path = f"strategies/{request.strategy_name}.yaml"
 
         # Call BacktestingService (will run in LOCAL mode)
-        logger.info(f"Starting backtest: {request.symbol} {request.timeframe} ({request.start_date} to {request.end_date})")
+        logger.info(
+            f"Starting backtest: {request.symbol} {request.timeframe} ({request.start_date} to {request.end_date})"
+        )
 
         result = await service.run_backtest(
             symbol=request.symbol,
@@ -198,10 +209,12 @@ async def start_backtest(request: BacktestStartRequest) -> BacktestStartResponse
 
     except ValueError as e:
         logger.error(f"Validation error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Internal error starting backtest: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Internal server error: {str(e)}"
+        ) from e
 
 
 # ============================================================================
@@ -211,7 +224,7 @@ async def start_backtest(request: BacktestStartRequest) -> BacktestStartResponse
 
 @app.get("/api/v1/operations")
 async def list_operations(
-    operation_type: Optional[str] = Query(None),
+    operation_type: Optional[OperationType] = Query(None),
     active_only: bool = Query(False),
     limit: int = Query(100),
     offset: int = Query(0),
@@ -222,6 +235,7 @@ async def list_operations(
     This allows the backend to query all operations running on this remote service.
     """
     try:
+        assert _operations_service is not None, "OperationsService not initialized"
         operations, total, filtered = await _operations_service.list_operations(
             operation_type=operation_type,
             active_only=active_only,
@@ -238,7 +252,7 @@ async def list_operations(
         }
     except Exception as e:
         logger.error(f"Error listing operations: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/api/v1/operations/{operation_id}")
@@ -261,13 +275,16 @@ async def get_operation(
         Operation status dictionary
     """
     try:
+        assert _operations_service is not None, "OperationsService not initialized"
         operation = await _operations_service.get_operation(
             operation_id=operation_id,
             force_refresh=force_refresh,
         )
 
         if operation is None:
-            raise HTTPException(status_code=404, detail=f"Operation not found: {operation_id}")
+            raise HTTPException(
+                status_code=404, detail=f"Operation not found: {operation_id}"
+            )
 
         return operation
 
@@ -275,7 +292,7 @@ async def get_operation(
         raise
     except Exception as e:
         logger.error(f"Error getting operation {operation_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/api/v1/operations/{operation_id}/metrics")
@@ -296,6 +313,7 @@ async def get_operation_metrics(
         Dictionary with metrics and new cursor
     """
     try:
+        assert _operations_service is not None, "OperationsService not initialized"
         metrics, new_cursor = await _operations_service.get_operation_metrics(
             operation_id=operation_id,
             cursor=cursor,
@@ -306,11 +324,13 @@ async def get_operation_metrics(
             "cursor": new_cursor,
         }
 
-    except KeyError:
-        raise HTTPException(status_code=404, detail=f"Operation not found: {operation_id}")
+    except KeyError as e:
+        raise HTTPException(
+            status_code=404, detail=f"Operation not found: {operation_id}"
+        ) from e
     except Exception as e:
         logger.error(f"Error getting metrics for {operation_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.delete("/api/v1/operations/{operation_id}/cancel")
@@ -325,11 +345,14 @@ async def cancel_operation(operation_id: str):
         Cancellation confirmation
     """
     try:
+        assert _operations_service is not None, "OperationsService not initialized"
         result = await _operations_service.cancel_operation(operation_id=operation_id)
         return result
 
-    except KeyError:
-        raise HTTPException(status_code=404, detail=f"Operation not found: {operation_id}")
+    except KeyError as e:
+        raise HTTPException(
+            status_code=404, detail=f"Operation not found: {operation_id}"
+        ) from e
     except Exception as e:
         logger.error(f"Error cancelling operation {operation_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e

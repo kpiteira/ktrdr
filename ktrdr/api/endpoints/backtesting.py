@@ -74,7 +74,7 @@ async def start_backtest(
         # Auto-discover model (like old system did)
         # Pass None to let DecisionOrchestrator find the latest trained model
         # for this strategy. If user provides explicit model_path, use it.
-        model_path = getattr(request, 'model_path', None)
+        model_path = getattr(request, "model_path", None)
 
         result = await service.run_backtest(
             symbol=request.symbol,
