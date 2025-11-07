@@ -353,3 +353,155 @@ class DummyOperationAdapter(OperationAdapter):
             f"\n[yellow]✓ Cancellation confirmed - "
             f"Completed {iterations_completed}/{total_iterations} iterations[/yellow]"
         )
+
+
+class BacktestingOperationAdapter(OperationAdapter):
+    """
+    Adapter for backtesting operations.
+
+    Knows how to:
+    - Start backtest via /api/v1/backtests/start
+    - Parse backtest response to extract operation_id
+    - Fetch and display backtest performance metrics
+    """
+
+    def __init__(
+        self,
+        strategy_name: str,
+        symbol: str,
+        timeframe: str,
+        start_date: str,
+        end_date: str,
+        initial_capital: float,
+        commission: float = 0.001,
+        slippage: float = 0.001,
+        model_path: Optional[str] = None,
+    ):
+        """
+        Initialize backtesting operation adapter.
+
+        Args:
+            strategy_name: Name of the strategy to backtest
+            symbol: Trading symbol (e.g., AAPL, EURUSD)
+            timeframe: Data timeframe (e.g., 1h, 1d)
+            start_date: Backtest start date (YYYY-MM-DD)
+            end_date: Backtest end date (YYYY-MM-DD)
+            initial_capital: Initial capital for backtest
+            commission: Commission rate (default: 0.001)
+            slippage: Slippage rate (default: 0.001)
+            model_path: Optional path to trained model
+        """
+        self.strategy_name = strategy_name
+        self.symbol = symbol
+        self.timeframe = timeframe
+        self.start_date = start_date
+        self.end_date = end_date
+        self.initial_capital = initial_capital
+        self.commission = commission
+        self.slippage = slippage
+        self.model_path = model_path
+
+    def get_start_endpoint(self) -> str:
+        """Return the backtesting start endpoint."""
+        return "/backtests/start"
+
+    def get_start_payload(self) -> dict[str, Any]:
+        """Construct backtesting request payload."""
+        payload: dict[str, Any] = {
+            "strategy_name": self.strategy_name,
+            "symbol": self.symbol,
+            "timeframe": self.timeframe,
+            "start_date": self.start_date,
+            "end_date": self.end_date,
+            "initial_capital": self.initial_capital,
+            "commission": self.commission,
+            "slippage": self.slippage,
+        }
+
+        # Add optional model path if provided
+        if self.model_path:
+            payload["model_path"] = self.model_path
+
+        return payload
+
+    def parse_start_response(self, response: dict) -> str:
+        """
+        Extract operation_id from backtest start response.
+
+        The backtest API returns operation_id directly in the response,
+        with a fallback to nested data.operation_id format.
+        """
+        # Try direct operation_id first
+        if "operation_id" in response:
+            return response["operation_id"]
+        # Fallback to nested format
+        return response["data"]["operation_id"]
+
+    async def display_results(
+        self,
+        final_status: dict,
+        console: Console,
+        http_client: AsyncClient,
+    ) -> None:
+        """
+        Display backtest results with performance metrics.
+
+        Shows a formatted table with key metrics like total return,
+        Sharpe ratio, max drawdown, win rate, and trade statistics.
+        """
+        console.print(
+            "\n✅ [green bold]Backtest completed successfully![/green bold]\n"
+        )
+
+        # Get results from final status (field name is "result_summary" not "results")
+        results = final_status.get("result_summary", {})
+
+        if not results:
+            console.print("[yellow]⚠️  No results available[/yellow]")
+            return
+
+        # Extract metrics (they're nested under "metrics" key)
+        metrics = results.get("metrics", {})
+
+        if not metrics:
+            console.print("[yellow]⚠️  No metrics available in results[/yellow]")
+            return
+
+        # Display backtest metrics in a formatted table
+        table = Table(title="Backtest Results", show_header=True)
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", style="magenta")
+
+        # Performance metrics (as percentages)
+        # Note: metrics has both total_return (dollar value) and total_return_pct (percentage)
+        total_return_pct = metrics.get("total_return_pct", 0.0)
+        table.add_row("Total Return", f"{total_return_pct:.2%}")
+
+        sharpe_ratio = metrics.get("sharpe_ratio", 0.0)
+        table.add_row("Sharpe Ratio", f"{sharpe_ratio:.2f}")
+
+        # max_drawdown_pct is the percentage version
+        max_drawdown_pct = metrics.get("max_drawdown_pct", 0.0)
+        table.add_row("Max Drawdown", f"{max_drawdown_pct:.2%}")
+
+        # Trade statistics
+        total_trades = metrics.get("total_trades", 0)
+        table.add_row("Total Trades", f"{total_trades}")
+
+        win_rate = metrics.get("win_rate", 0.0)
+        table.add_row("Win Rate", f"{win_rate:.2%}")
+
+        console.print(table)
+        console.print()
+
+        # Equity curve info (length is at top level of results)
+        equity_curve_length = results.get("equity_curve_length", 0)
+        if equity_curve_length > 0:
+            console.print(f"📈 Equity curve: {equity_curve_length} points")
+
+        # Guidance on viewing full results
+        operation_id = final_status.get("operation_id")
+        if operation_id:
+            console.print(
+                f"\n💡 View full results: [cyan]ktrdr operations status {operation_id}[/cyan]"
+            )

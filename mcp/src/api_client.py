@@ -10,6 +10,7 @@ from typing import Any, Optional
 import structlog
 
 from .clients import (
+    BacktestingAPIClient,
     DataAPIClient,
     IndicatorsAPIClient,
     KTRDRAPIError,
@@ -46,6 +47,7 @@ class KTRDRAPIClient:
         # Domain-specific clients (new pattern)
         self.data = DataAPIClient(base_url, timeout)
         self.training = TrainingAPIClient(base_url, timeout)
+        self.backtesting = BacktestingAPIClient(base_url, timeout)
         self.operations = OperationsAPIClient(base_url, timeout)
         self.system = SystemAPIClient(base_url, timeout)
         self.indicators = IndicatorsAPIClient(base_url, timeout)
@@ -57,6 +59,7 @@ class KTRDRAPIClient:
         """Enter async context - initialize all domain clients"""
         await self.data.__aenter__()
         await self.training.__aenter__()
+        await self.backtesting.__aenter__()
         await self.operations.__aenter__()
         await self.system.__aenter__()
         await self.indicators.__aenter__()
@@ -67,6 +70,7 @@ class KTRDRAPIClient:
         """Exit async context - cleanup all domain clients"""
         await self.data.__aexit__(exc_type, exc_val, exc_tb)
         await self.training.__aexit__(exc_type, exc_val, exc_tb)
+        await self.backtesting.__aexit__(exc_type, exc_val, exc_tb)
         await self.operations.__aexit__(exc_type, exc_val, exc_tb)
         await self.system.__aexit__(exc_type, exc_val, exc_tb)
         await self.indicators.__aexit__(exc_type, exc_val, exc_tb)

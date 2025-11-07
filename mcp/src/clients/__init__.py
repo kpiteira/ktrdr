@@ -1,6 +1,7 @@
 """Domain-specific API clients for KTRDR backend"""
 
 # Using relative imports - appropriate for package-internal modules
+from .backtesting_client import BacktestingAPIClient
 from .base import BaseAPIClient, KTRDRAPIError
 from .data_client import DataAPIClient
 from .indicators_client import IndicatorsAPIClient
@@ -12,6 +13,7 @@ from .training_client import TrainingAPIClient
 __all__ = [
     "BaseAPIClient",
     "KTRDRAPIError",
+    "BacktestingAPIClient",
     "DataAPIClient",
     "TrainingAPIClient",
     "OperationsAPIClient",

@@ -262,8 +262,18 @@ class TestBacktestingEngine:
         self.strategy_config = {
             "name": "test_backtest_strategy",
             "indicators": [
-                {"name": "rsi", "period": 14, "source": "close"},
-                {"name": "sma", "period": 20, "source": "close"},
+                {
+                    "name": "rsi",
+                    "feature_id": "rsi_14",
+                    "period": 14,
+                    "source": "close",
+                },
+                {
+                    "name": "sma",
+                    "feature_id": "sma_20",
+                    "period": 20,
+                    "source": "close",
+                },
             ],
             "fuzzy_sets": {
                 "rsi": {

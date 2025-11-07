@@ -1,141 +1,30 @@
 """
 Backtesting endpoints for the KTRDR API.
 
-This module implements the API endpoints for running backtests and retrieving results.
+This module implements the API endpoints for running backtests following
+the async operations architecture pattern (Phase 2 Task 2.4).
+
+Key Design Principles:
+- POST /backtests/start returns operation_id immediately
+- All status tracking via existing /operations/* endpoints
+- Uses BacktestingService from ktrdr.backtesting (not ktrdr.api.services)
+- Follows same pattern as training endpoints
 """
 
+from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from pydantic import BaseModel, field_validator
+from fastapi import APIRouter, Depends, HTTPException
 
 from ktrdr import get_logger
-from ktrdr.api.services.backtesting_service import BacktestingService
-from ktrdr.api.services.operations_service import get_operations_service
+from ktrdr.api.models.backtesting import BacktestStartRequest, BacktestStartResponse
+from ktrdr.backtesting.backtesting_service import BacktestingService
 from ktrdr.errors import DataError, ValidationError
 
 logger = get_logger(__name__)
 
 # Create router for backtesting endpoints
 router = APIRouter(prefix="/backtests")
-
-
-# Request/Response models
-class BacktestRequest(BaseModel):
-    """Request model for starting a backtest."""
-
-    strategy_name: str
-    symbol: str
-    timeframe: str
-    start_date: str
-    end_date: str
-    initial_capital: float = 100000.0
-    commission: float = 0.001
-    slippage: float = 0.0005
-    data_mode: str = "local"
-
-    @field_validator("strategy_name", "symbol", "timeframe", "start_date", "end_date")
-    @classmethod
-    def validate_non_empty_strings(cls, v: str) -> str:
-        """Validate that required string fields are not empty."""
-        if not v or not v.strip():
-            raise ValueError("Field cannot be empty")
-        return v.strip()
-
-
-class BacktestStartResponse(BaseModel):
-    """Response model for backtest start."""
-
-    success: bool
-    backtest_id: str
-    status: str
-    message: str
-
-
-class BacktestStatusResponse(BaseModel):
-    """Response model for backtest status."""
-
-    success: bool
-    backtest_id: str
-    strategy_name: str
-    symbol: str
-    timeframe: str
-    status: str
-    progress: int
-    started_at: str
-    completed_at: Optional[str] = None
-    error: Optional[str] = None
-
-
-class BacktestMetrics(BaseModel):
-    """Backtest performance metrics."""
-
-    total_return: float
-    annualized_return: float
-    sharpe_ratio: float
-    max_drawdown: float
-    win_rate: float
-    profit_factor: float
-    total_trades: int
-
-
-class BacktestSummary(BaseModel):
-    """Backtest summary information."""
-
-    initial_capital: float
-    final_value: float
-    total_pnl: float
-    winning_trades: int
-    losing_trades: int
-
-
-class BacktestResultsResponse(BaseModel):
-    """Response model for backtest results."""
-
-    success: bool
-    backtest_id: str
-    strategy_name: str
-    symbol: str
-    timeframe: str
-    start_date: str
-    end_date: str
-    metrics: BacktestMetrics
-    summary: BacktestSummary
-
-
-class TradeRecord(BaseModel):
-    """Individual trade record."""
-
-    trade_id: Optional[str] = None
-    entry_time: str
-    exit_time: str
-    side: str
-    entry_price: float
-    exit_price: float
-    quantity: float
-    pnl: float
-    pnl_percent: float
-    entry_reason: Optional[str] = None
-    exit_reason: Optional[str] = None
-
-
-class BacktestTradesResponse(BaseModel):
-    """Response model for backtest trades."""
-
-    success: bool
-    backtest_id: str
-    trades: list[TradeRecord]
-
-
-class EquityCurveResponse(BaseModel):
-    """Response model for equity curve data."""
-
-    success: bool
-    backtest_id: str
-    timestamps: list[str]
-    values: list[float]
-    drawdowns: list[float]
-
 
 # Singleton backtesting service instance
 _backtesting_service: Optional[BacktestingService] = None
@@ -146,173 +35,78 @@ async def get_backtesting_service() -> BacktestingService:
     """Get backtesting service instance (singleton)."""
     global _backtesting_service
     if _backtesting_service is None:
-        _backtesting_service = BacktestingService(
-            operations_service=get_operations_service()
-        )
+        _backtesting_service = BacktestingService()
     return _backtesting_service
 
 
-@router.post("/", response_model=BacktestStartResponse)
+@router.post("/start", response_model=BacktestStartResponse)
 async def start_backtest(
-    request: BacktestRequest,
-    background_tasks: BackgroundTasks,
+    request: BacktestStartRequest,
     service: BacktestingService = Depends(get_backtesting_service),
 ) -> BacktestStartResponse:
     """
-    Start a new backtest run.
+    Start a new backtest operation.
 
-    This endpoint initiates a backtest for a specified strategy and returns
-    immediately with a backtest ID. The actual backtest runs asynchronously
-    in the background.
+    This endpoint initiates a backtest and returns immediately with an operation_id.
+    The actual backtest runs asynchronously in the background (local or remote mode).
+
+    Progress/status tracking:
+      GET /api/v1/operations/{operation_id}
+
+    Args:
+        request: Backtest configuration
+        service: BacktestingService dependency
+
+    Returns:
+        BacktestStartResponse with operation_id and status
+
+    Raises:
+        HTTPException: 400 for validation errors, 500 for internal errors
     """
     try:
-        result = await service.start_backtest(
-            strategy_name=request.strategy_name,
+        # Parse dates
+        start_date = datetime.fromisoformat(request.start_date)
+        end_date = datetime.fromisoformat(request.end_date)
+
+        # Call ktrdr.backtesting.BacktestingService (not api.services!)
+        strategy_config_path = f"strategies/{request.strategy_name}.yaml"
+
+        # Auto-discover model (like old system did)
+        # Pass None to let DecisionOrchestrator find the latest trained model
+        # for this strategy. If user provides explicit model_path, use it.
+        model_path = getattr(request, "model_path", None)
+
+        result = await service.run_backtest(
             symbol=request.symbol,
             timeframe=request.timeframe,
-            start_date=request.start_date,
-            end_date=request.end_date,
+            strategy_config_path=strategy_config_path,
+            model_path=model_path,
+            start_date=start_date,
+            end_date=end_date,
             initial_capital=request.initial_capital,
+            commission=request.commission,
+            slippage=request.slippage,
         )
 
         return BacktestStartResponse(
-            success=True,
-            backtest_id=result["backtest_id"],
+            success=result["success"],
+            operation_id=result["operation_id"],
             status=result["status"],
             message=result["message"],
+            symbol=result["symbol"],
+            timeframe=result["timeframe"],
+            mode=result.get("mode"),
         )
 
     except ValidationError as e:
+        logger.error(f"Validation error starting backtest: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except DataError as e:
+        logger.error(f"Data error starting backtest: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    except ValueError as e:
+        logger.error(f"Value error starting backtest: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Failed to start backtest: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to start backtest") from e
-
-
-@router.get("/{backtest_id}", response_model=BacktestStatusResponse)
-async def get_backtest_status(
-    backtest_id: str, service: BacktestingService = Depends(get_backtesting_service)
-) -> BacktestStatusResponse:
-    """
-    Get the current status of a backtest.
-
-    This endpoint returns the current status and progress of a running or
-    completed backtest.
-    """
-    try:
-        status = await service.get_backtest_status(backtest_id)
-
-        return BacktestStatusResponse(
-            success=True,
-            backtest_id=status["backtest_id"],
-            strategy_name=status["strategy_name"],
-            symbol=status["symbol"],
-            timeframe=status["timeframe"],
-            status=status["status"],
-            progress=status["progress"],
-            started_at=status["started_at"],
-            completed_at=status["completed_at"],
-            error=status["error"],
-        )
-
-    except ValidationError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-    except Exception as e:
-        logger.error(f"Failed to get backtest status: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail="Failed to get backtest status"
-        ) from e
-
-
-@router.get("/{backtest_id}/results", response_model=BacktestResultsResponse)
-async def get_backtest_results(
-    backtest_id: str, service: BacktestingService = Depends(get_backtesting_service)
-) -> BacktestResultsResponse:
-    """
-    Get the full results of a completed backtest.
-
-    This endpoint returns detailed performance metrics and summary statistics
-    for a completed backtest.
-    """
-    try:
-        results = await service.get_backtest_results(backtest_id)
-
-        return BacktestResultsResponse(
-            success=True,
-            backtest_id=results["backtest_id"],
-            strategy_name=results["strategy_name"],
-            symbol=results["symbol"],
-            timeframe=results["timeframe"],
-            start_date=results["start_date"],
-            end_date=results["end_date"],
-            metrics=BacktestMetrics(**results["metrics"]),
-            summary=BacktestSummary(**results["summary"]),
-        )
-
-    except ValidationError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-    except DataError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except Exception as e:
-        logger.error(f"Failed to get backtest results: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail="Failed to get backtest results"
-        ) from e
-
-
-@router.get("/{backtest_id}/trades", response_model=BacktestTradesResponse)
-async def get_backtest_trades(
-    backtest_id: str, service: BacktestingService = Depends(get_backtesting_service)
-) -> BacktestTradesResponse:
-    """
-    Get the list of trades from a backtest.
-
-    This endpoint returns all trades executed during a backtest, including
-    entry/exit times, prices, and P&L information.
-    """
-    try:
-        trades = await service.get_backtest_trades(backtest_id)
-
-        return BacktestTradesResponse(
-            success=True,
-            backtest_id=backtest_id,
-            trades=[TradeRecord(**trade) for trade in trades],
-        )
-
-    except ValidationError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-    except Exception as e:
-        logger.error(f"Failed to get backtest trades: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail="Failed to get backtest trades"
-        ) from e
-
-
-@router.get("/{backtest_id}/equity_curve", response_model=EquityCurveResponse)
-async def get_equity_curve(
-    backtest_id: str, service: BacktestingService = Depends(get_backtesting_service)
-) -> EquityCurveResponse:
-    """
-    Get the equity curve data from a backtest.
-
-    This endpoint returns time series data showing the portfolio value
-    and drawdowns over the course of the backtest.
-    """
-    try:
-        equity_data = await service.get_equity_curve(backtest_id)
-
-        return EquityCurveResponse(
-            success=True,
-            backtest_id=backtest_id,
-            timestamps=equity_data["timestamps"],
-            values=equity_data["values"],
-            drawdowns=equity_data["drawdowns"],
-        )
-
-    except ValidationError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-    except DataError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except Exception as e:
-        logger.error(f"Failed to get equity curve: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to get equity curve") from e

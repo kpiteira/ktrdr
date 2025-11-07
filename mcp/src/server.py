@@ -1102,6 +1102,143 @@ async def start_training(
         raise
 
 
+@mcp.tool()
+async def start_backtest(
+    strategy_name: str,
+    symbol: str,
+    timeframe: str,
+    start_date: str,
+    end_date: str,
+    model_path: Optional[str] = None,
+    initial_capital: float = 100000.0,
+    commission: float = 0.001,
+    slippage: float = 0.001,
+) -> dict[str, Any]:
+    """
+    Run a backtest on a trading strategy (async).
+
+    Simulates trading a strategy on historical data. Backtest runs in
+    background (can take seconds to minutes). Returns immediately with
+    operation_id for tracking progress.
+
+    Args:
+        strategy_name: Strategy configuration name
+            - Example: "neuro_mean_reversion"
+            - Must exist in config/strategies/ directory
+            - Defines indicators, fuzzy rules, and neural architecture
+        symbol: Trading symbol to backtest
+            - Example: "AAPL", "EURUSD"
+            - Data must be available (use trigger_data_loading first)
+        timeframe: Timeframe for backtest data
+            - Example: "1h", "4h", "1d"
+            - Valid values: 1m, 5m, 15m, 30m, 1h, 4h, 1d
+        start_date: Backtest start date (YYYY-MM-DD)
+            - Example: "2024-01-01"
+        end_date: Backtest end date (YYYY-MM-DD)
+            - Example: "2024-12-31"
+        model_path: Optional path to trained model file
+            - Example: "models/neuro_mean_reversion/1d_v2/model.pt"
+            - If not provided, backend will use latest model for strategy
+            - Use this to test specific model versions
+            - Relative to project root directory
+        initial_capital: Starting capital for simulation
+            - Default: 100000.0
+            - In strategy's base currency
+        commission: Commission rate per trade
+            - Default: 0.001 (0.1%)
+            - Applied to each buy/sell
+        slippage: Slippage rate per trade
+            - Default: 0.001 (0.1%)
+            - Simulates price impact
+
+    Returns:
+        Dict with structure:
+        {
+            "success": bool,
+            "operation_id": str,     # Use with get_operation_status()
+            "status": str,           # "started"
+            "message": str,
+            "symbol": str,
+            "timeframe": str,
+            "mode": str              # "local" or "remote"
+        }
+
+    Raises:
+        KTRDRAPIError: If data unavailable, strategy not found, or backend error
+
+    Examples:
+        # Basic backtest (uses latest model for strategy)
+        result = await start_backtest(
+            strategy_name="neuro_mean_reversion",
+            symbol="EURUSD",
+            timeframe="1d",
+            start_date="2024-01-01",
+            end_date="2024-12-31"
+        )
+        operation_id = result["operation_id"]
+
+        # Backtest with specific model version
+        result = await start_backtest(
+            strategy_name="neuro_mean_reversion",
+            symbol="EURUSD",
+            timeframe="1d",
+            start_date="2024-01-01",
+            end_date="2024-12-31",
+            model_path="models/neuro_mean_reversion/1d_v2/model.pt"
+        )
+
+        # Check progress
+        status = await get_operation_status(operation_id)
+
+        # Wait for completion
+        while status["data"]["status"] == "running":
+            await asyncio.sleep(2)
+            status = await get_operation_status(operation_id)
+
+        # Get results
+        results = status["data"]["results"]
+        print(f"Total return: {results['total_return']:.2%}")
+        print(f"Sharpe ratio: {results['sharpe_ratio']:.2f}")
+        print(f"Max drawdown: {results['max_drawdown']:.2%}")
+
+    See Also:
+        - get_operation_status(): Monitor backtest progress
+        - get_operation_results(): Get detailed metrics after completion
+        - get_available_strategies(): List valid strategy names
+        - trigger_data_loading(): Ensure data is available first
+
+    Notes:
+        - Backtest duration: 5 seconds - 5 minutes depending on data size
+        - Progress updates every 50 bars
+        - Results saved automatically on completion
+        - Can be cancelled mid-backtest
+        - Local or remote execution based on backend configuration
+    """
+    try:
+        async with get_api_client() as client:
+            result = await client.backtesting.start_backtest(
+                strategy_name=strategy_name,
+                symbol=symbol,
+                timeframe=timeframe,
+                start_date=start_date,
+                end_date=end_date,
+                model_path=model_path,
+                initial_capital=initial_capital,
+                commission=commission,
+                slippage=slippage,
+            )
+            logger.info(
+                "Backtest started",
+                symbol=symbol,
+                strategy_name=strategy_name,
+                operation_id=result.get("operation_id"),
+            )
+            return result
+    except Exception as e:
+        logger.error("Failed to start backtest", error=str(e))
+        raise
+
+
 class KTRDRMCPServer:
     """MCP Server for KTRDR trading strategy research"""
 

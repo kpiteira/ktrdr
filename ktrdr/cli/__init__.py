@@ -6,6 +6,7 @@ including commands for data inspection, indicator calculation, and visualization
 """
 
 from ktrdr.cli.async_model_commands import async_models_app as models_app
+from ktrdr.cli.backtest_commands import backtest_app
 from ktrdr.cli.commands import cli_app
 from ktrdr.cli.data_commands import data_app
 from ktrdr.cli.dummy_commands import dummy_app
@@ -20,6 +21,9 @@ from ktrdr.cli.strategy_commands import strategies_app
 
 # Register command subgroups following industry best practices
 cli_app.add_typer(data_app, name="data", help="Data management commands")
+cli_app.add_typer(
+    backtest_app, name="backtest", help="Backtesting commands for trading strategies"
+)
 cli_app.add_typer(
     dummy_app, name="dummy", help="Dummy service commands with beautiful UX"
 )

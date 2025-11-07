@@ -56,7 +56,7 @@ class ModelLoader:
             model_type = config["model"]["type"].lower()
 
             if model_type == "mlp":
-                # Rebuild MLP model
+                # Build modern MLPTradingModel
                 mlp_model = MLPTradingModel(config["model"])
                 input_size = metadata.get("input_size")
 

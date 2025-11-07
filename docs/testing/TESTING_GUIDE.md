@@ -89,14 +89,36 @@ This guide provides all the building blocks needed to create and execute test sc
   **CRITICAL**: Must include `"mode":"tail"` to trigger IB download. Without mode parameter, defaults to `"local"` (cache-only, no IB download).
   Response: `{operation_id, status: "started"}`
 
+### Backtesting
+- **Start Backtest**: `POST /api/v1/backtests/start` *(Available in Phase 2+)*
+  ```json
+  {
+    "model_path": "models/neuro_mean_reversion/1d_v21/model.pt",
+    "strategy_name": "neuro_mean_reversion",
+    "symbol": "EURUSD",
+    "timeframe": "1d",
+    "start_date": "2024-01-01",
+    "end_date": "2024-01-31"
+  }
+  ```
+  Response: `{operation_id, status: "started"}`
+
+  **Note**: operation_id follows pattern `op_backtest_YYYYMMDD_HHMMSS_xxxxxxxx`
+
 ### Operations
 - **Get Status**: `GET /api/v1/operations/{operation_id}`
 - **List Operations**: `GET /api/v1/operations?status=running&limit=10`
+- **Filter by Type**: `GET /api/v1/operations?operation_type=backtesting`
 - **Cancel**: `DELETE /api/v1/operations/{operation_id}`
 
 ### Host Service Operations
-- **Get Status**: `GET http://localhost:5002/api/v1/operations/{operation_id}`
-- **Health**: `GET http://localhost:5002/health`
+- **Training Host** (port 5002):
+  - Get Status: `GET http://localhost:5002/api/v1/operations/{operation_id}`
+  - Health: `GET http://localhost:5002/health`
+- **Backtest Worker** (port 5003, Phase 3+):
+  - Start Backtest: `POST http://localhost:5003/backtests/start`
+  - Get Status: `GET http://localhost:5003/api/v1/operations/{operation_id}`
+  - Health: `GET http://localhost:5003/health`
 
 ### IB Host Service (Port 5001)
 - **Health**: `GET http://localhost:5001/health`
@@ -269,9 +291,27 @@ done
 - Historical data availability
 - Time of day (market hours vs off-hours)
 
-**Strategy**: `test_e2e_local_pull` (location: `strategies/test_e2e_local_pull.yaml`)
-- 10 epochs
-- Minimal architecture for fast testing
+**Backtesting Tests** *(Available Phase 2+)*:
+| Purpose | Symbol | Timeframe | Date Range | Bars | Duration | Use For |
+|---------|--------|-----------|------------|------|----------|---------|
+| Smoke Test | EURUSD | 1d | 2024-01-01 to 2024-01-31 | ~21 | ~5s | Quick validation |
+| Integration | EURUSD | 1d | 2024-01-01 to 2024-06-30 | ~125 | ~10s | API workflow |
+| Progress Test | EURUSD | 1d | 2023-01-01 to 2024-12-31 | ~520 | ~20s | Progress tracking |
+
+**Backtest Models**:
+- **Primary**: `models/neuro_mean_reversion/1d_v21/model.pt`
+  - Strategy: `neuro_mean_reversion.yaml`
+  - Trained on: EURUSD 1d
+  - Validation accuracy: 63.26%
+  - Use for: All backtesting scenarios
+
+**Training Strategies**:
+- `test_e2e_local_pull` (location: `strategies/test_e2e_local_pull.yaml`)
+  - 10 epochs
+  - Minimal architecture for fast testing
+- `neuro_mean_reversion` (location: `strategies/neuro_mean_reversion.yaml`)
+  - RSI + MACD fuzzy logic
+  - For backtesting scenarios
 
 ---
 

@@ -84,7 +84,7 @@ class FuzzyNeuralProcessor:
 
         self.feature_names = feature_names
 
-        logger.info(
+        logger.debug(
             f"Prepared {feature_matrix.shape[1]} pure fuzzy features for neural network"
         )
         return torch.FloatTensor(feature_matrix), feature_names
