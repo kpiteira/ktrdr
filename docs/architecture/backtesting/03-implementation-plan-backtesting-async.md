@@ -6,6 +6,7 @@
 **Status**: READY FOR IMPLEMENTATION
 **Version**: 3.1 (Pull-Based Operations - Testing-First with Model Foundation)
 **Related Documents**:
+
 - [Design Document](./01-design-backtesting-async.md) - High-level design
 - [Architecture Document](./02-architecture-backtesting-async.md) - Detailed architecture
 - [Testing Guide](../../testing/TESTING_GUIDE.md) - Testing infrastructure
@@ -16,6 +17,7 @@
 ## Changes in Version 3.1
 
 **Key Improvements**:
+
 1. **Added Task 1.0**: Establish test foundation (models, data validation)
 2. **Refined Phase 1**: Specify scenario REQUIREMENTS not implementations
 3. **Added integration-test-specialist workflow** throughout all phases
@@ -54,6 +56,7 @@
 ### 1.2 Key Architectural Decisions
 
 **Following Training's Pattern**:
+
 - ✅ **Reuse OperationsService** (1 fix needed)
 - ✅ **Reuse OperationServiceProxy** (no changes)
 - ✅ **Use ProgressBridge** (not callbacks)
@@ -161,6 +164,7 @@ Fix (Phase 0) → Test Design (Phase 1) → Build + Test (Phases 2-3) → Valida
 **Status**: ✅ **COMPLETE** (2025-11-04)
 
 **Results**:
+
 - ✅ Task 0.1: FeatureCache bug fixed
 - ✅ Task 0.2: OperationsService made generic (type-aware metrics)
 - ✅ Task 0.3: Baseline tests established (23/23 PASSED)
@@ -174,6 +178,7 @@ Fix (Phase 0) → Test Design (Phase 1) → Build + Test (Phases 2-3) → Valida
 **Problem**: `FeatureCache._setup_indicator_engine()` creates IndicatorConfig without required `feature_id` field → ValidationError.
 
 **Fix**:
+
 ```python
 # ktrdr/backtesting/feature_cache.py lines 35-66
 def _setup_indicator_engine(self):
@@ -184,14 +189,17 @@ def _setup_indicator_engine(self):
 ```
 
 **Files Changed**:
+
 - `ktrdr/backtesting/feature_cache.py` (simplify lines 35-66)
 
 **Acceptance Criteria**:
+
 - ✅ FeatureCache initializes without error
 - ✅ BacktestingEngine can be instantiated
 - ✅ Test `test_backtesting_engine_initialization` passes
 
 **Testing with Agent**:
+
 ```
 Task: "Run backtesting initialization test and verify FeatureCache fix"
 Expected: test_backtesting_engine_initialization PASSES
@@ -208,6 +216,7 @@ Expected: test_backtesting_engine_initialization PASSES
 **Problem**: Lines 704-707 in `operations_service.py` only handle TRAINING type.
 
 **Current Code**:
+
 ```python
 # ❌ TRAINING-ONLY:
 if operation.operation_type == OperationType.TRAINING:
@@ -217,6 +226,7 @@ if operation.operation_type == OperationType.TRAINING:
 ```
 
 **Fixed Code**:
+
 ```python
 # ✅ GENERIC (type-aware):
 if new_metrics:
@@ -246,14 +256,17 @@ if new_metrics:
 ```
 
 **Files Changed**:
+
 - `ktrdr/api/services/operations_service.py` (lines 704-707, expand to ~720)
 
 **Acceptance Criteria**:
+
 - ✅ Code updated with type-aware metrics storage
 - ✅ Training tests still pass (no regression)
 - ✅ Ready for backtesting metrics
 
 **Testing with Agent**:
+
 ```
 Task: "Run training tests to verify OperationsService changes didn't break anything"
 Expected: All training tests PASS, no regressions
@@ -268,17 +281,20 @@ Expected: All training tests PASS, no regressions
 **Description**: Run all existing backtesting tests, establish baselines.
 
 **Baselines to Establish**:
+
 1. **Functionality**: All tests pass
 2. **Performance**: Execution time
 3. **Coverage**: Current % (aim to maintain/improve)
 
 **Testing with Agent**:
+
 ```
 Task: "Execute all backtesting tests and document baseline metrics"
 Expected: 11/11 tests PASS (PositionManager 5, PerformanceTracker 4, Engine 1, Service 1)
 ```
 
 **Acceptance Criteria**:
+
 - ✅ All 11 existing tests pass
 - ✅ Baselines documented (time, coverage)
 - ✅ No regressions
@@ -296,6 +312,7 @@ Expected: 11/11 tests PASS (PositionManager 5, PerformanceTracker 4, Engine 1, S
 - ✅ No regressions
 
 **Deliverables**:
+
 - Fixed code (2 files)
 - Test baseline report
 - Green CI/CD
@@ -321,6 +338,7 @@ Expected: 11/11 tests PASS (PositionManager 5, PerformanceTracker 4, Engine 1, S
 **Problem Statement**: The integration-test-specialist agent uses `SCENARIOS.md` and `TESTING_GUIDE.md` as their knowledge base. We need to add backtesting patterns to these existing documents, NOT create separate documents.
 
 **Files to Update**:
+
 1. `docs/testing/SCENARIOS.md` - Add backtesting scenarios (B1.1-B4.3)
 2. `docs/testing/TESTING_GUIDE.md` - Add backtesting API endpoints and test data
 3. `.claude/agents/integration-test-specialist.md` - Update knowledge base section
@@ -352,6 +370,7 @@ Expected: 11/11 tests PASS (PositionManager 5, PerformanceTracker 4, Engine 1, S
    - Remove backtesting from "Areas WITHOUT Building Blocks"
 
 **Acceptance Criteria**:
+
 - ✅ At least 1 test model validated (loads successfully)
 - ✅ Strategy config exists
 - ✅ Test data available (EURUSD 1d, AAPL 1d)
@@ -362,12 +381,14 @@ Expected: 11/11 tests PASS (PositionManager 5, PerformanceTracker 4, Engine 1, S
 - ✅ All scenarios follow existing format (concise, executable)
 
 **Testing with Agent**:
+
 ```
 NOT APPLICABLE - These are reference documents for the agent to use.
 Agent will use these scenarios starting in Phase 2 when implementation begins.
 ```
 
 **Deliverables**:
+
 - Updated `docs/testing/SCENARIOS.md` with 13 backtesting scenarios
 - Updated `docs/testing/TESTING_GUIDE.md` with backtesting building blocks
 - Updated `.claude/agents/integration-test-specialist.md`
@@ -383,6 +404,7 @@ Agent will use these scenarios starting in Phase 2 when implementation begins.
 **Status**: These tasks have been consolidated into Task 1.0.
 
 **What Changed**:
+
 - ❌ **Old approach**: Create separate scenario documents (BACKEND_SCENARIOS.md, INTEGRATION_SCENARIOS.md, etc.)
 - ✅ **New approach**: Add scenarios directly to existing `SCENARIOS.md` (following training/data patterns)
 
@@ -421,6 +443,7 @@ Agent will use these scenarios starting in Phase 2 when implementation begins.
    - Checkbox format for manual/agent verification
    - Each item specifies HOW to verify (not just what)
    - Example:
+
      ```markdown
      ### Validation Checklist
      - [ ] Operation created: Check response has HTTP 200 + `operation_id` field
@@ -432,14 +455,17 @@ Agent will use these scenarios starting in Phase 2 when implementation begins.
      ```
 
 **What NOT to Include** (too much detail):
+
 - ❌ Full bash command implementations (provide templates/structure only)
 - ❌ Specific operation IDs (these are runtime values)
 - ❌ Implementation details (how code works internally)
 
 **Files to Create**:
+
 - `docs/testing/scenarios/backtesting/BACKEND_SCENARIOS.md`
 
 **Acceptance Criteria**:
+
 - ✅ 4+ backend scenarios documented
 - ✅ Following SCENARIOS.md pattern (all required sections present)
 - ✅ Model paths from PREREQUISITES.md
@@ -449,6 +475,7 @@ Agent will use these scenarios starting in Phase 2 when implementation begins.
 - ✅ Commands are executable templates (not pseudocode)
 
 **Testing with Agent**:
+
 ```
 Task: "Review BACKEND_SCENARIOS.md for completeness"
 Expected:
@@ -494,9 +521,11 @@ Expected:
    - Progress update frequency
 
 **Files to Create**:
+
 - `docs/testing/scenarios/backtesting/INTEGRATION_SCENARIOS.md`
 
 **Acceptance Criteria**:
+
 - ✅ 4+ integration scenarios documented
 - ✅ API contracts fully specified (endpoints, payloads, responses)
 - ✅ Environment configuration specified
@@ -504,6 +533,7 @@ Expected:
 - ✅ Following SCENARIOS.md pattern
 
 **Testing with Agent**:
+
 ```
 Task: "Review INTEGRATION_SCENARIOS.md for API completeness"
 Expected:
@@ -549,9 +579,11 @@ Expected:
    - Expected log messages in both services
 
 **Files to Create**:
+
 - `docs/testing/scenarios/backtesting/REMOTE_SCENARIOS.md`
 
 **Acceptance Criteria**:
+
 - ✅ 4+ remote scenarios documented
 - ✅ Remote container configuration specified
 - ✅ Proxy patterns documented (following training model)
@@ -559,6 +591,7 @@ Expected:
 - ✅ Operation ID mapping specified
 
 **Testing with Agent**:
+
 ```
 Task: "Review REMOTE_SCENARIOS.md for distributed architecture coverage"
 Expected:
@@ -604,9 +637,11 @@ Expected:
    - Can run successful operation after error
 
 **Files to Create**:
+
 - `docs/testing/scenarios/backtesting/ERROR_SCENARIOS.md`
 
 **Acceptance Criteria**:
+
 - ✅ 5+ error scenarios documented
 - ✅ Cover config, data, cancellation, and file errors
 - ✅ Expected error messages specified (exact strings or patterns)
@@ -614,6 +649,7 @@ Expected:
 - ✅ Following SCENARIOS.md pattern
 
 **Testing with Agent**:
+
 ```
 Task: "Review ERROR_SCENARIOS.md for error handling coverage"
 Expected:
@@ -642,6 +678,7 @@ Expected:
 - ✅ **Validation checklists provided**
 
 **Deliverables**:
+
 - `docs/testing/scenarios/backtesting/PREREQUISITES.md`
 - `docs/testing/scenarios/backtesting/BACKEND_SCENARIOS.md`
 - `docs/testing/scenarios/backtesting/INTEGRATION_SCENARIOS.md`
@@ -649,6 +686,7 @@ Expected:
 - `docs/testing/scenarios/backtesting/ERROR_SCENARIOS.md`
 
 **Testing with Agent**:
+
 ```
 Task: "Validate Phase 1 completion - all scenario documents ready for implementation"
 Expected:
@@ -677,6 +715,7 @@ Expected:
 **Description**: Add ProgressBridge parameter and writes to BacktestingEngine.
 
 **Changes**:
+
 ```python
 # ktrdr/backtesting/engine.py
 
@@ -714,9 +753,11 @@ class BacktestingEngine:
 ```
 
 **Files Changed**:
+
 - `ktrdr/backtesting/engine.py` (+50 lines)
 
 **Acceptance Criteria**:
+
 - ✅ Engine accepts bridge and cancellation_token parameters
 - ✅ Progress updates every 50 bars
 - ✅ Cancellation checked every 100 bars
@@ -725,6 +766,7 @@ class BacktestingEngine:
 - ✅ **Scenario B1.3 MUST PASS** (Cancellation)
 
 **Testing with Agent**:
+
 ```
 Task: "Execute scenarios B1.2 and B1.3 after ProgressBridge implementation"
 Expected: BOTH scenarios PASS
@@ -732,6 +774,7 @@ If FAIL: Fix code, not scenario (unless requirements changed)
 ```
 
 **Scenario Validation Protocol**:
+
 1. Run scenario with integration-test-specialist
 2. If PASS: Mark scenario validated, proceed
 3. If FAIL:
@@ -750,6 +793,7 @@ If FAIL: Fix code, not scenario (unless requirements changed)
 **Description**: Create ProgressBridge subclass for backtesting.
 
 **Implementation**:
+
 ```python
 # ktrdr/backtesting/progress_bridge.py
 
@@ -791,9 +835,11 @@ class BacktestProgressBridge(ProgressBridge):
 ```
 
 **Files Created**:
+
 - `ktrdr/backtesting/progress_bridge.py` (~100 lines)
 
 **Acceptance Criteria**:
+
 - ✅ Inherits from ProgressBridge
 - ✅ Implements update_progress()
 - ✅ Thread-safe (via base class)
@@ -801,6 +847,7 @@ class BacktestProgressBridge(ProgressBridge):
 - ✅ **Scenario B1.1 MUST PASS** (Smoke Test - uses bridge)
 
 **Testing with Agent**:
+
 ```
 Task: "Execute scenario B1.1 (Smoke Test) with BacktestProgressBridge"
 Expected: Scenario PASSES, progress updates visible
@@ -815,6 +862,7 @@ Expected: Scenario PASSES, progress updates visible
 **Description**: Create BacktestingService following training's pattern exactly.
 
 **Implementation**:
+
 ```python
 # ktrdr/backtesting/backtesting_service.py
 
@@ -869,9 +917,11 @@ class BacktestingService(ServiceOrchestrator):
 ```
 
 **Files Created**:
+
 - `ktrdr/backtesting/backtesting_service.py` (~300 lines, local mode only in Phase 2)
 
 **Acceptance Criteria**:
+
 - ✅ Inherits from ServiceOrchestrator
 - ✅ Creates operations correctly
 - ✅ Registers bridge with OperationsService
@@ -880,6 +930,7 @@ class BacktestingService(ServiceOrchestrator):
 - ✅ **Scenarios B2.1 and B2.2 MUST PASS** (API integration)
 
 **Testing with Agent**:
+
 ```
 Task: "Execute scenarios B2.1 (API Local Mode) and B2.2 (API Cancellation)"
 Expected: BOTH scenarios PASS
@@ -896,10 +947,12 @@ Expected: BOTH scenarios PASS
 **Description**: Add FastAPI endpoints for backtesting.
 
 **Files Created**:
+
 - `ktrdr/api/endpoints/backtesting.py` (~150 lines)
 - `ktrdr/api/models/backtesting.py` (~100 lines)
 
 **Endpoints**:
+
 ```python
 @router.post("/api/v1/backtests/start")
 async def start_backtest(request: BacktestStartRequest):
@@ -911,12 +964,14 @@ async def start_backtest(request: BacktestStartRequest):
 ```
 
 **Acceptance Criteria**:
+
 - ✅ POST /backtests/start works
 - ✅ Returns operation_id
 - ✅ API documentation (Swagger) updated
 - ✅ **All Integration scenarios MUST PASS** (B2.1-B2.4)
 
 **Testing with Agent**:
+
 ```
 Task: "Execute all Integration scenarios (B2.1-B2.4) after API implementation"
 Expected: All 4 scenarios PASS
@@ -932,9 +987,11 @@ Regression check: All Backend scenarios (B1.1-B1.4) still PASS
 **Description**: Add async CLI commands for backtesting.
 
 **Files Modified**:
+
 - `ktrdr/cli/backtest_commands.py` (+200 lines)
 
 **Commands**:
+
 ```python
 @backtest.command("run")
 async def run_backtest(...):
@@ -945,6 +1002,7 @@ async def run_backtest(...):
 ```
 
 **Acceptance Criteria**:
+
 - ✅ `ktrdr backtest run` works
 - ✅ Shows real-time progress
 - ✅ `ktrdr backtest cancel` works
@@ -952,6 +1010,7 @@ async def run_backtest(...):
 - ✅ **Manual validation**: Run full workflow via CLI
 
 **Testing**:
+
 ```bash
 # Manual test workflow
 ktrdr backtest run --symbol AAPL --timeframe 1d \
@@ -979,12 +1038,14 @@ ktrdr backtest run --symbol AAPL --timeframe 1d \
 **Scenario Pass Rate Required**: **8/8 (100%)**
 
 **Testing Report Required**:
+
 - Scenario execution results (8/8 PASS)
 - Performance metrics (duration, memory)
 - Coverage report (90%+)
 - Integration-test-specialist execution logs
 
 **What to Do if Scenarios Fail**:
+
 1. **First**: Fix the code (90% of failures)
 2. **Second**: Verify scenario is correct (check against TESTING_GUIDE.md examples)
 3. **Third**: If requirements genuinely changed, update scenario with:
@@ -994,6 +1055,7 @@ ktrdr backtest run --symbol AAPL --timeframe 1d \
 4. **Never**: Skip failing scenarios or mark them as "known issues"
 
 **Deliverables**:
+
 - Working code (all Phase 2 tasks)
 - Test report (8/8 scenarios PASS)
 - Updated SCENARIOS.md with actual results
@@ -1017,6 +1079,7 @@ ktrdr backtest run --symbol AAPL --timeframe 1d \
 **Description**: Add `_run_remote_backtest()` method (follows training's pattern).
 
 **Implementation**:
+
 ```python
 # ktrdr/backtesting/backtesting_service.py
 
@@ -1047,9 +1110,11 @@ async def _run_remote_backtest(self, operation_id, ...) -> None:
 ```
 
 **Files Modified**:
+
 - `ktrdr/backtesting/backtesting_service.py` (+100 lines)
 
 **Acceptance Criteria**:
+
 - ✅ Remote mode implemented
 - ✅ Uses OperationServiceProxy (no new proxy code!)
 - ✅ Registers proxy with OperationsService
@@ -1057,6 +1122,7 @@ async def _run_remote_backtest(self, operation_id, ...) -> None:
 - ✅ **Scenario B3.2 MUST PASS** (Backend → Remote Proxy)
 
 **Testing with Agent**:
+
 ```
 Task: "Execute scenario B3.2 (Backend → Remote Proxy)"
 Expected: Scenario PASSES
@@ -1072,6 +1138,7 @@ Regression check: All Phase 2 scenarios still PASS (B1.x, B2.x)
 **Description**: Create FastAPI app for remote container.
 
 **Implementation**:
+
 ```python
 # ktrdr/backtesting/remote_api.py
 
@@ -1095,14 +1162,17 @@ async def get_operation(operation_id: str):
 ```
 
 **Files Created**:
+
 - `ktrdr/backtesting/remote_api.py` (~150 lines)
 
 **Acceptance Criteria**:
+
 - ✅ Remote container runs BacktestingService in LOCAL mode
 - ✅ Exposes OperationsService endpoints
 - ✅ **Scenario B3.1 MUST PASS** (Remote Direct Start)
 
 **Testing with Agent**:
+
 ```
 Task: "Execute scenario B3.1 (Remote Direct Start)"
 Expected: Scenario PASSES
@@ -1117,9 +1187,11 @@ Expected: Scenario PASSES
 **Description**: Add remote container to Docker Compose.
 
 **Files Modified**:
+
 - `docker/docker-compose.yml` (+15 lines)
 
 **Configuration**:
+
 ```yaml
 services:
   backtest-worker:
@@ -1136,11 +1208,13 @@ services:
 ```
 
 **Acceptance Criteria**:
+
 - ✅ Remote container starts
 - ✅ Backend can connect
 - ✅ **ALL Remote scenarios MUST PASS** (B3.1-B3.4)
 
 **Testing with Agent**:
+
 ```
 Task: "Execute all Remote scenarios (B3.1-B3.4) with Docker Compose"
 Expected: All 4 scenarios PASS
@@ -1156,9 +1230,11 @@ Regression check: All Phase 2 scenarios still PASS
 **Description**: Create mode switching script (follows training's pattern).
 
 **Files Created**:
+
 - `scripts/switch-backtest-mode.sh` (~50 lines, copy from training script)
 
 **Script**:
+
 ```bash
 #!/bin/bash
 case "$1" in
@@ -1173,6 +1249,7 @@ cd docker && docker-compose up -d backend
 ```
 
 **Acceptance Criteria**:
+
 - ✅ Script switches modes
 - ✅ Backend restarts with new config
 - ✅ Mode switch works
@@ -1211,6 +1288,7 @@ During implementation, new async architecture replaced old synchronous patterns,
    - Reason: Development artifact, should not be in repo
 
 **Files to Delete**:
+
 ```bash
 rm ktrdr/api/services/backtesting_service.py
 rm ktrdr/cli/backtesting_commands.py
@@ -1242,6 +1320,7 @@ rm tests/api/test_backtesting_endpoints.py.bak
    ```
 
 **Acceptance Criteria**:
+
 - ✅ All 4 dead code files removed
 - ✅ No import errors after deletion
 - ✅ All unit tests still passing
@@ -1311,12 +1390,14 @@ curl http://localhost:8000/api/v1/operations?operation_type=backtesting
 **Scenario Pass Rate Required**: **12/12 (100%)** (8 from Phase 2 + 4 from Phase 3)
 
 **Testing Report Required**:
+
 - All scenario results (12/12 PASS)
 - Performance metrics (local vs remote)
 - Coverage report
 - Mode switching validation
 
 **Deliverables**:
+
 - Remote execution working
 - Switch script functional
 - Test report (12/12 scenarios PASS)
@@ -1332,6 +1413,7 @@ curl http://localhost:8000/api/v1/operations?operation_type=backtesting
 **Outcome**: Production-ready system with full feature parity.
 
 **NEW REQUIREMENTS**:
+
 - MCP tool for backtesting (matching training pattern)
 - CLI displays backtest results (not just progress)
 - **ALL scenarios (B1.x-B4.x) MUST PASS** - 13 total scenarios
@@ -1349,6 +1431,7 @@ curl http://localhost:8000/api/v1/operations?operation_type=backtesting
 Task 3.6 found that MCP server doesn't need *updates* (operations endpoints unchanged), but there's **NO MCP TOOL** to start backtesting operations. This is a missing feature.
 
 **Current State**:
+
 - ✅ MCP has `start_training()` tool - starts training via `/api/v1/trainings/start`
 - ❌ MCP has NO backtesting tool
 - ✅ MCP has `get_operation_status()` - works for all operation types
@@ -1481,9 +1564,11 @@ async def start_backtest(
 ```
 
 **Files Modified**:
+
 - `mcp/src/server.py` (+80 lines)
 
 **Testing**:
+
 ```python
 # Test MCP tool
 result = await start_backtest(
@@ -1504,6 +1589,7 @@ assert status["data"]["type"] == "BACKTESTING"
 ```
 
 **Acceptance Criteria**:
+
 - ✅ `start_backtest()` tool created following training pattern
 - ✅ Returns operation_id immediately (async pattern)
 - ✅ Monitoring via `get_operation_status()` (unified pattern)
@@ -1534,6 +1620,7 @@ sys.exit(0 if success else 1)  # ❌ No results displayed!
 **Required Behavior** (follow training CLI pattern):
 
 After backtest completes successfully:
+
 1. Fetch final operation status to get results
 2. Display results summary in a formatted table
 3. Show key metrics: total return, Sharpe ratio, max drawdown, trade count
@@ -1627,9 +1714,11 @@ async def _display_backtest_results(
 ```
 
 **Files Modified**:
+
 - `ktrdr/cli/backtest_commands.py` (+60 lines)
 
 **Acceptance Criteria**:
+
 - ✅ CLI displays results summary after successful backtest
 - ✅ Shows key metrics: return, Sharpe, drawdown, trades, win rate
 - ✅ Formatted table (Rich library)
@@ -1648,22 +1737,26 @@ async def _display_backtest_results(
 **Scenario Inventory** (13 scenarios):
 
 **Phase 1 (Backend - Local Mode):**
+
 - ⏳ B1.1: Local Backtest - Smoke Test (~5s)
 - ⏳ B1.2: Local Backtest - Progress Tracking (~20s)
 - ⏳ B1.3: Local Backtest - Cancellation (~15s)
 
 **Phase 2 (API Integration - Local Mode):**
+
 - ⏳ B2.1: Backtest via API - Local Mode (~10s)
 - ⏳ B2.2: API Progress Polling (~25s)
 - ⏳ B2.3: API Cancellation (~15s)
 
 **Phase 3 (Remote Mode):**
+
 - ✅ B3.1: Remote Backtest - Direct Start (~10s) [TESTED]
 - ✅ B3.2: Backend → Remote Proxy (~10s) [TESTED]
 - ✅ B3.3: Remote Progress Updates (~25s) [TESTED]
 - ⏳ B3.4: Remote Cancellation (~15s)
 
 **Phase 4 (Error Handling):**
+
 - ⏳ B4.1: Error - Invalid Strategy (~2s)
 - ⏳ B4.2: Error - Missing Data (~2s)
 - ⏳ B4.3: Error - Model Not Found (~2s)
@@ -1694,6 +1787,7 @@ integration-test-specialist: "Execute B4.1, B4.2, B4.3 scenarios from SCENARIOS.
 **Validation Requirements**:
 
 For each scenario:
+
 1. Execute test commands from SCENARIOS.md
 2. Verify expected results match actual results
 3. Check logs for correct behavior
@@ -1703,10 +1797,12 @@ For each scenario:
 **Deliverable**: Test report with results for all 13 scenarios
 
 **Files Modified**:
+
 - `docs/testing/SCENARIOS.md` (update status for each scenario)
 - Create: `/tmp/PHASE_4_SCENARIO_VALIDATION.md` (test report)
 
 **Acceptance Criteria**:
+
 - ✅ All 13 backtesting scenarios executed
 - ✅ 13/13 scenarios PASSING (100% pass rate)
 - ✅ SCENARIOS.md updated with ✅ status for each
@@ -1723,6 +1819,7 @@ For each scenario:
 **Description**: Execute all error handling scenarios (previously Task 4.1, renumbered).
 
 **Testing with Agent**:
+
 ```
 Task: "Execute all Error Handling scenarios (B4.1-B4.5)"
 Expected:
@@ -1733,64 +1830,21 @@ Expected:
 ```
 
 **Acceptance Criteria**:
+
 - ✅ **ALL Error scenarios PASS** (B4.1-B4.5) - NO EXCEPTIONS
 - ✅ Error recovery verified
 - ✅ No resource leaks
 
 ---
 
-### 7.2 Task 4.2: End-to-End Testing
-
-**Duration**: 2 days
-
-**Description**: Execute all scenarios with agent.
-
-**Testing with Agent**:
-```
-Task: "Execute complete scenario suite (all categories)"
-Expected:
-- Backend scenarios PASS (B1.1-B1.4)
-- Integration scenarios PASS (B2.1-B2.4)
-- Remote scenarios PASS (B3.1-B3.4)
-- Error scenarios PASS (B4.1-B4.5)
-Total: 17 scenarios, 100% PASS rate
-```
-
-**Acceptance Criteria**:
-- ✅ **ALL 17 scenarios PASS** - NO EXCEPTIONS
-- ✅ No regressions
-- ✅ Performance acceptable across all scenarios
-
----
-
-### 7.2 Task 4.2: Performance Benchmarking
-
-**Duration**: 1-2 days
-
-**Description**: Benchmark with agent.
-
-**Testing with Agent**:
-```
-Task: "Execute performance benchmarks"
-Expected:
-- Local mode: <1% overhead
-- Bridge writes: <1μs
-- Remote HTTP: <5ms per request
-```
-
-**Acceptance Criteria**:
-- ✅ All benchmarks meet targets
-- ✅ No performance regressions vs Phase 0 baseline
-
----
-
-### 7.3 Task 4.3: Documentation
+### 7.3 Task 4.5: Documentation
 
 **Duration**: 2 days
 
 **Description**: Complete documentation.
 
 **Documents to Create/Update**:
+
 1. User guide
 2. API documentation
 3. CLI documentation
@@ -1799,30 +1853,10 @@ Expected:
 6. Migration guide
 
 **Acceptance Criteria**:
+
 - ✅ All documentation complete
 - ✅ Examples tested with agent
 - ✅ Links verified
-
----
-
-### 7.4 Task 4.4: Production Deployment
-
-**Duration**: 1 day
-
-**Description**: Deploy with agent validation.
-
-**Steps**:
-1. Deploy to staging
-2. Execute all scenarios in staging (with agent)
-3. Monitor 24 hours
-4. Deploy to production
-5. Execute smoke tests (with agent)
-
-**Acceptance Criteria**:
-- ✅ Staging deployment successful
-- ✅ **ALL 17 scenarios PASS in staging**
-- ✅ Production deployment successful
-- ✅ **Smoke tests PASS in production** (B1.1, B2.1, B3.1)
 
 ---
 
@@ -1838,6 +1872,7 @@ Expected:
 - ✅ **All Phase 0 baseline tests still PASS** (no regressions to original system)
 
 **Final Deliverables**:
+
 - Production system deployed
 - All scenario documents with "Actual Results" filled
 - Performance benchmarks documented
@@ -1907,6 +1942,7 @@ Expected:
 ### 8.3 Example Agent Tasks
 
 **Task 2.3 Completion**:
+
 ```
 Agent Task: "Execute scenarios B2.1 and B2.2"
 Expected:
@@ -1916,6 +1952,7 @@ Agent Report: PASS/FAIL with details for each scenario
 ```
 
 **Phase 2 Gate**:
+
 ```
 Agent Task: "Execute all Backend and Integration scenarios (B1.1-B2.4)"
 Expected:
@@ -1932,26 +1969,31 @@ Agent Report: Summary table with PASS/FAIL for each scenario
 ### 9.1 Phase Completion Criteria
 
 **Phase 0**:
+
 - ✅ Backtesting works now ✅ **COMPLETE**
 - ✅ OperationsService generic ✅ **COMPLETE**
 - ✅ Baselines established ✅ **COMPLETE**
 
 **Phase 1**:
+
 - ✅ Test models validated
 - ✅ 17+ scenarios documented
 - ✅ All scenarios follow SCENARIOS.md template
 - ✅ Prerequisites documented
 
 **Phase 2**:
+
 - ✅ Local mode works
 - ✅ **Backend + Integration scenarios PASS (8/8)** - NO EXCEPTIONS
 
 **Phase 3**:
+
 - ✅ Remote mode works
 - ✅ **Remote scenarios PASS (4/4)** - NO EXCEPTIONS
 - ✅ **Phase 2 scenarios still PASS (8/8)** - Regression check
 
 **Phase 4**:
+
 - ✅ **ALL 17 scenarios PASS (100%)** - NO EXCEPTIONS
 - ✅ **Error scenarios PASS (5/5)** - NO EXCEPTIONS
 - ✅ **Production deployment successful**
@@ -1960,24 +2002,28 @@ Agent Report: Summary table with PASS/FAIL for each scenario
 ### 9.2 Overall Success Criteria
 
 **Functional**:
+
 - ✅ Local and remote backtesting work
 - ✅ Progress tracking via OperationsService
 - ✅ Cancellation support
 - ✅ Error handling robust
 
 **Technical**:
+
 - ✅ Follows training's pattern exactly
 - ✅ Reuses OperationsService, OperationServiceProxy
 - ✅ 90%+ test coverage
 - ✅ No performance regression vs Phase 0 baseline
 
 **Testing** (MOST CRITICAL):
+
 - ✅ **17 scenarios executed with integration-test-specialist**
 - ✅ **100% pass rate (17/17 PASS)** - NO EXCEPTIONS
 - ✅ **Continuous validation** (scenarios re-run after each phase)
 - ✅ **All scenarios documented with actual results**
 
 **Scenario Pass Requirement**:
+
 ```
 Phase 1: Scenarios designed (17)
 Phase 2: 8/17 scenarios PASS (Backend + Integration)
@@ -1986,6 +2032,7 @@ Phase 4: 17/17 scenarios PASS (+ Error Handling)
 ```
 
 **Zero Tolerance for Scenario Failures**:
+
 - Cannot proceed to next phase with failing scenarios
 - Cannot mark scenarios as "known issues" or "will fix later"
 - Cannot skip scenario execution
