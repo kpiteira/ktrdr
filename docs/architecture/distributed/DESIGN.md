@@ -59,8 +59,8 @@ This design enables **distributed parallel execution** of training and backtesti
 ### Development Environment (Mac)
 
 **Infrastructure**: Docker Compose (no Swarm)
-**Workers**: Docker containers on same network
-**Discovery**: Docker API or simple DNS-based service names
+**Workers**: Docker containers that self-register on startup
+**Registration**: Workers call `POST /workers/register` on startup
 **Scaling**: `docker-compose up --scale backtest-worker=N`
 
 **Rationale**:
@@ -68,20 +68,22 @@ This design enables **distributed parallel execution** of training and backtesti
 - No need for Swarm complexity in development
 - Fast iteration with volume mounts (hot reload)
 - Simple scaling for testing concurrent operations
+- Workers auto-register, no discovery needed
 
 ### Production Environment (Proxmox)
 
 **Infrastructure**: Proxmox LXC containers
-**Workers**: LXC containers with static IPs
-**Discovery**: Proxmox API (automatic) or manual configuration
+**Workers**: LXC containers that self-register on startup
+**Registration**: Workers call `POST /workers/register` on startup
 **Scaling**: Clone LXC template, assign IP, start service
 
 **Rationale**:
 - Leverage existing Proxmox infrastructure
 - Lower overhead than Docker for long-running CPU workloads
-- Consistent with existing GPU host service pattern (manual orchestration)
+- Consistent with existing GPU host service pattern
 - Full OS environment for debugging and monitoring
 - Proxmox management tools (backups, snapshots, monitoring)
+- Workers auto-register, infrastructure-agnostic
 
 ---
 
@@ -132,26 +134,21 @@ Training Request
 
 ---
 
-### Decision 3: Unified Abstraction (WorkerRegistry)
+### Decision 3: Push-Based Worker Registration
 
-**Choice**: Environment-aware WorkerRegistry that abstracts discovery
+**Choice**: Workers register themselves with backend on startup
 
-**Modes**:
-- **Docker Mode** (Dev): Discovers workers via Docker API or DNS
-- **Proxmox Mode** (Prod): Discovers workers via Proxmox API
-- **Manual Mode** (GPU hosts): Static configuration
+**Registration Flow**:
+1. **Worker Starts** → Calls `POST /workers/register`
+2. **Backend** → Adds worker to registry
+3. **Worker Re-registers** → Updates existing registration (idempotent)
 
 **Rationale**:
-- Same backend code works in both environments
-- Discovery mechanism configurable via environment variable
-- Backend logic (routing, health checks, load balancing) identical
-- Easy to add new discovery modes (Kubernetes, cloud APIs, etc.)
-
-**Configuration-Driven**:
-```
-Dev:   WORKER_DISCOVERY_MODE=docker
-Prod:  WORKER_DISCOVERY_MODE=proxmox
-```
+- **Infrastructure-agnostic**: Works with Docker, LXC, bare metal, cloud VMs, anything
+- **Faster**: Immediate registration on startup (no discovery loop delay)
+- **Simpler**: No infrastructure-specific discovery code (no Docker API, Proxmox API)
+- **Self-healing**: Workers automatically re-register when they come back online
+- **Cloud-native**: Standard pattern used by Kubernetes, Consul, service meshes
 
 ---
 
@@ -191,6 +188,29 @@ Prod:  WORKER_DISCOVERY_MODE=proxmox
 
 ## System Flows
 
+### Worker Startup & Registration
+
+```
+Worker Container Starts
+  │
+  ├─> Worker service starts (uvicorn ...)
+  │
+  └─> POST /workers/register
+      │ {
+      │   "worker_id": "backtest-worker-1",
+      │   "worker_type": "backtesting",
+      │   "endpoint_url": "http://192.168.1.201:5003",
+      │   "capabilities": {"cores": 4, "memory_gb": 8}
+      │ }
+      │
+      ▼
+  Backend WorkerRegistry
+      │
+      ├─> Add to registry
+      ├─> Status: AVAILABLE
+      └─> Start health monitoring
+```
+
 ### Backtesting Flow (Development)
 
 ```
@@ -203,15 +223,12 @@ Client
       │
       ├─> Create operation in OperationsService
       ├─> WorkerRegistry.select_worker(type=BACKTESTING)
-      │   └─> Discovery mode: docker
-      │       └─> Returns: "http://backtest-worker:5003"
-      │           (Docker Compose service name)
+      │   └─> Query registered workers
+      │       └─> Returns: "http://backtest-worker-1:5003"
+      │           (Previously registered worker)
       │
-      └─> POST http://backtest-worker:5003/backtests/start
+      └─> POST http://backtest-worker-1:5003/backtests/start
           │
-          ▼
-      Docker Network
-          │ (Docker resolves service name to container IP)
           ▼
       Backtest Worker Container
           │
@@ -241,12 +258,11 @@ Client
       │
       ├─> Create operation in OperationsService
       ├─> WorkerRegistry.select_worker(type=BACKTESTING)
-      │   └─> Discovery mode: proxmox
-      │       └─> Query Proxmox API for LXC containers
-      │           with tag "ktrdr-backtest-worker"
+      │   └─> Query registered workers
       │       └─> Filter: status=AVAILABLE
       │       └─> Round-robin select: worker-3
       │       └─> Returns: "http://192.168.1.203:5003"
+      │           (Previously registered LXC worker)
       │
       └─> POST http://192.168.1.203:5003/backtests/start
           │
@@ -306,65 +322,88 @@ Client
 The system uses **manual orchestration** for all worker types, which means:
 
 **Backend Responsibilities**:
-- Maintain registry of workers (GPU hosts, LXC containers, Docker containers)
+- Accept worker registrations (workers push on startup)
+- Maintain registry of workers
 - Health check workers periodically (every 10 seconds)
 - Select worker based on availability and capabilities
 - Dispatch operations to specific workers
 - Handle worker rejection (busy, unhealthy)
 - Retry logic with different workers
+- Remove dead workers after threshold (5 minutes)
 
-**Why Manual?**
-1. **Consistency**: GPU hosts already require manual orchestration (no auto-discovery)
-2. **Simplicity**: Same pattern for all worker types (GPU, LXC, Docker)
-3. **Control**: Explicit worker selection and load balancing logic
-4. **Flexibility**: Easy to implement custom routing (priority, capabilities, affinity)
+**Why This Pattern?**
+1. **Infrastructure-agnostic**: Works with any infrastructure (Docker, LXC, bare metal, cloud)
+2. **Self-healing**: Workers automatically re-register when they come back
+3. **Simple**: No infrastructure-specific discovery code needed
+4. **Fast**: Immediate registration on startup (no discovery loop delay)
+5. **Standard**: Cloud-native pattern used by Kubernetes, Consul, service meshes
 
 **What's "Manual"?**
 - Worker creation/destruction (not automatic)
-- Worker registration (via discovery or configuration)
 - Load balancing logic (backend implements round-robin)
-- Health monitoring (backend implements polling)
+- Removal threshold configuration (5 minutes by default)
 
 **What's "Automatic"?**
-- Worker discovery (via Docker API or Proxmox API)
+- Worker registration (workers self-register on startup)
+- Worker re-registration (on recovery)
 - Health checks (background task)
+- Dead worker cleanup (after threshold)
 - Retry on failure (backend logic)
 - Progress tracking (existing OperationsService pattern)
 
 ---
 
-### Discovery Mechanisms
+### Worker Lifecycle
 
-#### Development (Docker)
+The system uses a **push-based registration and health monitoring** pattern.
 
-**Option A: Service Name Discovery** (Simplest)
-- Workers registered as Docker Compose services
-- Backend uses service names: `http://backtest-worker:5003`
-- Docker's internal DNS resolves to container IP
-- Works with scaled services (Docker load balances)
+#### 1. Worker Registration (Startup)
 
-**Option B: Docker API Discovery** (More Control)
-- Backend queries Docker API for running containers
-- Filters by labels: `ktrdr.worker.type=backtesting`
-- Tracks individual container IPs
-- Backend implements load balancing
+**When worker starts**:
+1. Worker service starts (uvicorn/FastAPI)
+2. Worker waits for service to be ready (health check passes)
+3. Worker calls `POST /workers/register` with:
+   - Worker ID (unique identifier)
+   - Worker type (backtesting, training)
+   - Endpoint URL (HTTP address)
+   - Capabilities (cores, memory, GPU, etc.)
+4. Backend adds worker to registry with status `AVAILABLE`
 
-**Recommended**: Option A for simplicity (leverages Docker's built-in DNS)
+**Re-registration**: If worker ID already exists, backend updates registration (idempotent)
 
-#### Production (Proxmox)
+#### 2. Health Monitoring (Continuous)
 
-**Option A: Proxmox API Discovery** (Automatic)
-- Backend queries Proxmox API on interval (every 30 seconds)
-- Finds LXC containers with tags: `ktrdr-backtest-worker`, `ktrdr-training-worker`
-- Reads IP addresses from container configs
-- Automatically updates worker registry
+**Backend health check loop** (every 10 seconds):
+- Queries each worker's `/health` endpoint
+- Timeout: 5 seconds
+- Successful response (200) → Worker healthy, update status from response
+- Failed response → Increment failure counter
 
-**Option B: Manual Configuration** (Simple)
-- Static configuration file with worker IPs
-- Backend loads on startup
-- Manual update when adding/removing workers
+**Health failure threshold**: 3 consecutive failures
+- Worker marked as `TEMPORARILY_UNAVAILABLE`
+- Worker excluded from selection (no operations routed)
+- Health checks continue
 
-**Recommended**: Option A for dynamic discovery, Option B as fallback
+#### 3. Worker Removal (Cleanup)
+
+**Removal threshold**: 5 minutes of unavailability
+- If worker remains `TEMPORARILY_UNAVAILABLE` for > 5 minutes
+- Worker removed from registry entirely
+- Rationale: In Proxmox infrastructure, unreachable worker likely means host is down
+
+**Cleanup task** (runs every 60 seconds):
+- Checks all `TEMPORARILY_UNAVAILABLE` workers
+- Calculates unavailable duration
+- Removes workers exceeding threshold
+
+#### 4. Worker Recovery (Re-registration)
+
+**When worker comes back online**:
+- Worker restarts and calls `POST /workers/register`
+- Backend either:
+  - Updates existing worker (if still in registry, marked unavailable)
+  - Adds as new worker (if was removed)
+- Worker immediately available for operations
 
 ---
 
@@ -479,38 +518,40 @@ Each worker maintains simple state:
 
 **Tasks**:
 1. Create `docker-compose.dev.yml` with backend + workers
-2. Implement Docker-based worker discovery
-3. Test local scaling: `docker-compose up --scale backtest-worker=3`
-4. Validate concurrent operations (3 backtests simultaneously)
+2. Implement worker registration API (`POST /workers/register`)
+3. Add worker startup scripts with registration logic
+4. Test local scaling: `docker-compose up --scale backtest-worker=3`
+5. Validate concurrent operations (3 backtests simultaneously)
 
 **Deliverables**:
 - [ ] Docker Compose configuration
-- [ ] Workers discoverable via Docker network
-- [ ] Backend routes operations to workers
+- [ ] Worker registration API implemented
+- [ ] Workers self-register on startup
+- [ ] Backend routes operations to registered workers
 - [ ] Progress tracking works end-to-end
 
-**Success Criteria**: Can run 3 concurrent backtests on Mac
+**Success Criteria**: Can run 3 concurrent backtests on Mac, workers visible in registry
 
 ---
 
 ### Phase 2: Worker Registry Foundation (Week 2)
 
-**Goal**: Abstract worker discovery for multi-environment support
+**Goal**: Implement worker lifecycle management
 
 **Tasks**:
-1. Implement `WorkerRegistry` class with discovery modes
-2. Implement Docker discovery mode
-3. Implement manual configuration mode (for GPU hosts)
-4. Add health checking background task
-5. Add round-robin load balancing
+1. Implement `WorkerRegistry` class with registration
+2. Implement health checking background task (10s interval)
+3. Implement cleanup task (remove dead workers after 5min)
+4. Add round-robin load balancing
+5. Add worker list API for monitoring
 
 **Deliverables**:
-- [ ] WorkerRegistry with pluggable discovery
-- [ ] Docker discovery working in dev
-- [ ] Manual config for GPU hosts (existing pattern)
+- [ ] WorkerRegistry with push-based registration
 - [ ] Health checks running every 10s
+- [ ] Dead worker cleanup after 5min unavailability
+- [ ] Worker re-registration working (idempotent)
 
-**Success Criteria**: Backend discovers workers automatically, health status visible
+**Success Criteria**: Workers auto-register, health status tracked, dead workers removed
 
 ---
 
@@ -520,18 +561,18 @@ Each worker maintains simple state:
 
 **Tasks**:
 1. Create LXC template with KTRDR environment
-2. Clone template to create workers (3 training, 5 backtesting)
-3. Configure static IPs and tags
-4. Implement Proxmox API discovery mode
+2. Add worker startup script with registration logic
+3. Clone template to create workers (3 training, 5 backtesting)
+4. Configure systemd services for auto-start
 5. Deploy backend to Proxmox
 
 **Deliverables**:
-- [ ] LXC template ready
+- [ ] LXC template ready with registration script
 - [ ] 8 LXC workers running (3 training, 5 backtesting)
-- [ ] Proxmox discovery working
-- [ ] Backend discovers LXC workers automatically
+- [ ] Workers self-register on startup
+- [ ] Backend accepts LXC worker registrations
 
-**Success Criteria**: Production backend routes to LXC workers, concurrent operations work
+**Success Criteria**: Production backend routes to LXC workers, workers auto-register on start
 
 ---
 
@@ -610,19 +651,21 @@ Training and backtesting are CPU/memory intensive. Running multiple operations p
 
 ---
 
-### Trade-off 4: Environment Parity
+### Trade-off 4: Push-Based Registration
 
-**Decision**: Different infrastructure for dev (Docker) and prod (LXC)
+**Decision**: Workers self-register (push) vs. backend discovers workers (pull)
 
 **Trade-offs**:
-- ❌ Different deployment mechanisms (docker-compose vs LXC cloning)
-- ❌ Different discovery modes (Docker API vs Proxmox API)
-- ✅ Same backend code (abstracted via WorkerRegistry)
-- ✅ Optimal for each environment (Docker on Mac, LXC on Proxmox)
-- ✅ Same user experience (operations work identically)
+- ❌ Workers need registration logic on startup
+- ❌ Workers must know backend URL (configuration)
+- ✅ Infrastructure-agnostic (works anywhere)
+- ✅ Faster registration (immediate, no loop delay)
+- ✅ Simpler backend (no discovery code needed)
+- ✅ Self-healing (workers auto re-register)
+- ✅ Same pattern in dev and prod
 
 **Rationale**:
-Perfect infrastructure parity is impossible (Mac vs Linux, Docker vs Proxmox). Instead, use abstraction to provide functional parity. Backend code is identical, only discovery mechanism differs.
+Push-based registration is cloud-native standard (Kubernetes, Consul). Eliminates infrastructure-specific discovery code. Workers knowing backend URL is acceptable trade-off for simplicity and portability.
 
 ---
 

@@ -36,8 +36,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 import asyncio
 import httpx
-import docker  # for Docker discovery mode
-from proxmoxer import ProxmoxAPI  # for Proxmox discovery mode
+import logging
+
+logger = logging.getLogger(__name__)
 ```
 
 **Data Models**:
@@ -51,21 +52,22 @@ class WorkerType(Enum):
 
 class WorkerStatus(Enum):
     """Worker availability status."""
-    AVAILABLE = "available"   # Idle and healthy
-    BUSY = "busy"            # Running operation
-    UNHEALTHY = "unhealthy"  # Health check failed
-    UNKNOWN = "unknown"      # Not yet checked
+    AVAILABLE = "available"             # Idle and healthy
+    BUSY = "busy"                      # Running operation
+    TEMPORARILY_UNAVAILABLE = "temporarily_unavailable"  # Health checks failing
+    UNKNOWN = "unknown"                # Not yet checked
 
 @dataclass
 class WorkerEndpoint:
-    """Represents a discovered worker endpoint."""
+    """Represents a registered worker endpoint."""
     worker_id: str                    # Unique identifier
     worker_type: WorkerType          # Type of worker
     endpoint_url: str                # HTTP endpoint (e.g., "http://192.168.1.201:5003")
     status: WorkerStatus             # Current status
     current_operation_id: Optional[str]  # Operation ID if busy
     capabilities: Dict[str, Any]     # Worker capabilities (gpu, memory, etc.)
-    last_health_check: datetime      # Last successful health check
+    last_health_check: datetime      # Last health check attempt
+    last_healthy_at: datetime        # Last time worker was healthy
     health_check_failures: int       # Consecutive failures
     metadata: Dict[str, Any]         # Additional metadata (node, container ID, etc.)
 ```
