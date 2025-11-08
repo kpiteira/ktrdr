@@ -94,24 +94,22 @@ This design enables **distributed parallel execution** of training and backtesti
 **Choice**: GPU host services (bare metal/LXC) + CPU containerized workers
 
 **Training Routing Priority**:
-1. **GPU Required/Preferred** → Check GPU host availability
-2. **GPU Available** → Route to GPU host (highest priority)
-3. **GPU Unavailable or Not Needed** → Route to CPU worker (fallback)
+1. **Try GPU First** → Check GPU host availability (10x-100x faster)
+2. **GPU Available** → Route to GPU host
+3. **GPU Unavailable** → Route to CPU worker (always works)
 
 **Rationale**:
 - Preserves existing GPU capability (CUDA/MPS access)
 - Adds horizontal scaling via CPU workers
-- Flexible: can run training on either GPU or CPU based on availability
+- Flexible: maximizes GPU utilization while ensuring operations always succeed
 - Future-proof: can migrate GPU hosts to containers later if needed
 
 **Visual**:
 ```
 Training Request
-    └─> Backend checks requirements
-        ├─> GPU needed? → Try GPU hosts (Priority: HIGH)
-        │   ├─> GPU available → Dispatch to GPU host
-        │   └─> GPU busy → Fallback to CPU worker (or queue/fail)
-        └─> CPU acceptable → Dispatch to CPU worker
+    └─> Backend selects worker
+        ├─> GPU available? → Dispatch to GPU host (10x-100x faster)
+        └─> GPU busy/unavailable → Dispatch to CPU worker (always works)
 ```
 
 ---

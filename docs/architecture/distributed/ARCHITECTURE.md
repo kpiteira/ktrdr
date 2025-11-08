@@ -221,7 +221,7 @@ class ServiceOrchestrator(ABC, Generic[T]):
         Each service defines its own worker selection logic:
 
         TrainingService:
-            1. Try GPU hosts (if GPU preferred/required)
+            1. Try GPU hosts first (if GPU preferred)
             2. Fallback to CPU workers
             3. Fail if no workers available
 
@@ -250,22 +250,16 @@ class ServiceOrchestrator(ABC, Generic[T]):
 ```python
 class TrainingService(ServiceOrchestrator):
     def _select_worker(self, context: TrainingContext):
-        requires_gpu = context.training_config.get("force_gpu", False)
-        prefers_gpu = context.training_config.get("prefer_gpu", True)
+        # Try GPU first (10x-100x faster)
+        gpu_workers = self.worker_registry.get_available_workers(
+            worker_type=WorkerType.GPU_HOST,
+            capabilities={"gpu": True}
+        )
 
-        # Priority 1: GPU hosts (if needed/preferred)
-        if requires_gpu or prefers_gpu:
-            gpu_workers = self.worker_registry.get_available_workers(
-                worker_type=WorkerType.GPU_HOST,
-                capabilities={"gpu": True}
-            )
+        if gpu_workers:
+            return gpu_workers[0]  # Round-robin selection
 
-            if gpu_workers:
-                return gpu_workers[0]  # Round-robin selection
-            elif requires_gpu:
-                raise NoGPUWorkersAvailableError()
-
-        # Priority 2: CPU workers (fallback)
+        # Fallback to CPU workers (always available)
         cpu_workers = self.worker_registry.get_available_workers(
             worker_type=WorkerType.CPU_TRAINING
         )
@@ -273,7 +267,7 @@ class TrainingService(ServiceOrchestrator):
         return cpu_workers[0] if cpu_workers else None
 ```
 
-This pattern enables **hybrid execution**: GPU operations prefer GPU hosts, but can fallback to CPU if configured; backtesting uses any available worker.
+This pattern enables **hybrid execution**: Training operations prefer GPU hosts for performance, but always fallback to CPU workers; backtesting uses any available worker.
 
 ### Worker API Architecture
 
@@ -472,19 +466,15 @@ Training Request
     │
     ▼
 ┌─────────────────┐
-│ GPU Required?   │──YES──> Select GPU Host ──(none available)──> FAIL
+│ GPU Available?  │──YES──> Select GPU Host (10x-100x faster)
 └────────┬────────┘
          │ NO
          ▼
-┌─────────────────┐
-│ GPU Preferred?  │──YES──> Try GPU Host ──(none available)──> CPU Worker
-└────────┬────────┘
-         │ NO
-         ▼
-   CPU Worker
+    CPU Worker
+  (always works)
 ```
 
-**Architectural Benefit**: Maximizes GPU utilization (high-value resource) while maintaining CPU scalability (low-cost resource).
+**Architectural Benefit**: Maximizes GPU utilization (high-value resource) while ensuring operations always succeed by falling back to CPU workers (unlimited scalability).
 
 Backtesting has no GPU benefit → Always uses containerized workers (simpler).
 
