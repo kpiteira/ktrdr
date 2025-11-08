@@ -17,8 +17,8 @@
 6. [Orchestration Patterns](#orchestration-patterns)
 7. [Worker Exclusivity](#worker-exclusivity)
 8. [State Management](#state-management)
-9. [Deployment Strategy](#deployment-strategy)
-10. [Trade-offs & Rationale](#trade-offs--rationale)
+9. [Trade-offs & Rationale](#trade-offs--rationale)
+10. [Success Criteria](#success-criteria)
 
 ---
 
@@ -510,93 +510,6 @@ Each worker maintains simple state:
 
 ---
 
-## Deployment Strategy
-
-### Phase 1: Development Setup (Week 1)
-
-**Goal**: Enable local development with worker scaling
-
-**Tasks**:
-1. Create `docker-compose.dev.yml` with backend + workers
-2. Implement worker registration API (`POST /workers/register`)
-3. Add worker startup scripts with registration logic
-4. Test local scaling: `docker-compose up --scale backtest-worker=3`
-5. Validate concurrent operations (3 backtests simultaneously)
-
-**Deliverables**:
-- [ ] Docker Compose configuration
-- [ ] Worker registration API implemented
-- [ ] Workers self-register on startup
-- [ ] Backend routes operations to registered workers
-- [ ] Progress tracking works end-to-end
-
-**Success Criteria**: Can run 3 concurrent backtests on Mac, workers visible in registry
-
----
-
-### Phase 2: Worker Registry Foundation (Week 2)
-
-**Goal**: Implement worker lifecycle management
-
-**Tasks**:
-1. Implement `WorkerRegistry` class with registration
-2. Implement health checking background task (10s interval)
-3. Implement cleanup task (remove dead workers after 5min)
-4. Add round-robin load balancing
-5. Add worker list API for monitoring
-
-**Deliverables**:
-- [ ] WorkerRegistry with push-based registration
-- [ ] Health checks running every 10s
-- [ ] Dead worker cleanup after 5min unavailability
-- [ ] Worker re-registration working (idempotent)
-
-**Success Criteria**: Workers auto-register, health status tracked, dead workers removed
-
----
-
-### Phase 3: Production LXC Setup (Week 3)
-
-**Goal**: Deploy to Proxmox with LXC workers
-
-**Tasks**:
-1. Create LXC template with KTRDR environment
-2. Add worker startup script with registration logic
-3. Clone template to create workers (3 training, 5 backtesting)
-4. Configure systemd services for auto-start
-5. Deploy backend to Proxmox
-
-**Deliverables**:
-- [ ] LXC template ready with registration script
-- [ ] 8 LXC workers running (3 training, 5 backtesting)
-- [ ] Workers self-register on startup
-- [ ] Backend accepts LXC worker registrations
-
-**Success Criteria**: Production backend routes to LXC workers, workers auto-register on start
-
----
-
-### Phase 4: Integration & Testing (Week 4)
-
-**Goal**: Validate entire system end-to-end
-
-**Tasks**:
-1. End-to-end testing (dev and prod)
-2. Load testing (10 concurrent training + 20 concurrent backtesting)
-3. Failure testing (worker crashes, network issues)
-4. Performance tuning (cache TTL, health check intervals)
-5. Documentation updates
-
-**Deliverables**:
-- [ ] All tests passing
-- [ ] Load test results documented
-- [ ] Failure recovery validated
-- [ ] Performance baseline established
-
-**Success Criteria**: System handles expected load, recovers from failures gracefully
-
----
-
 ## Trade-offs & Rationale
 
 ### Trade-off 1: Manual vs Automatic Orchestration
@@ -691,11 +604,15 @@ Push-based registration is cloud-native standard (Kubernetes, Consul). Eliminate
 
 ## Next Steps
 
-1. **Review & Approve** this design
-2. **Read Architecture Document** for technical implementation details
-3. **Begin Phase 1**: Development environment setup
-4. **Iterative Implementation**: Follow 4-week deployment strategy
-5. **Validate**: Test after each phase before proceeding
+1. **Review & Approve** this design document
+2. **Review ARCHITECTURE.md** for technical implementation specifications
+3. **Create Implementation Plan** based on architecture decisions
+4. **Begin Implementation** following approved plan
+
+**Related Documents**:
+- **ARCHITECTURE.md** - Technical implementation specifications
+- **IMPLEMENTATION_PLAN.md** - Phased deployment plan (draft, to be finalized after architecture review)
+- **PUSH_REGISTRATION_SUMMARY.md** - Summary of push-based registration approach
 
 ---
 
