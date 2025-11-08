@@ -65,8 +65,9 @@ services:
     environment:
       - PYTHONPATH=/app
       - LOG_LEVEL=INFO
-      - BACKEND_URL=http://backend:8000
+      - KTRDR_API_URL=http://backend:8000
       - WORKER_TYPE=backtesting
+      - WORKER_PORT=5003
       # Worker ID will be auto-generated from hostname
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5003/health"]
