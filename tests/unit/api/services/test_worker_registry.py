@@ -1,5 +1,6 @@
 """Unit tests for WorkerRegistry."""
 
+import asyncio
 from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
@@ -640,3 +641,145 @@ class TestWorkerHealthChecks:
         # Verify failure counted
         worker = registry.get_worker("worker-1")
         assert worker.health_check_failures == 1
+
+
+class TestBackgroundHealthCheckTask:
+    """Tests for background health check task lifecycle."""
+
+    @pytest.mark.asyncio
+    async def test_start_creates_background_task(self):
+        """Test start() creates background health check task."""
+        registry = WorkerRegistry()
+
+        # Initially no task
+        assert registry._health_check_task is None
+
+        # Start background task
+        await registry.start()
+
+        # Task should be created
+        assert registry._health_check_task is not None
+        assert not registry._health_check_task.done()
+
+        # Cleanup
+        await registry.stop()
+
+    @pytest.mark.asyncio
+    async def test_stop_cancels_background_task(self):
+        """Test stop() cancels background health check task."""
+        registry = WorkerRegistry()
+
+        # Start task
+        await registry.start()
+        assert registry._health_check_task is not None
+
+        # Stop task
+        await registry.stop()
+
+        # Task should be cancelled and cleared
+        assert registry._health_check_task is None
+
+    @pytest.mark.asyncio
+    async def test_stop_without_task_is_safe(self):
+        """Test stop() without running task doesn't raise error."""
+        registry = WorkerRegistry()
+
+        # Should not raise exception
+        await registry.stop()
+
+    @pytest.mark.asyncio
+    async def test_start_twice_does_not_create_duplicate_task(self):
+        """Test calling start() twice doesn't create duplicate tasks."""
+        registry = WorkerRegistry()
+
+        # Start first time
+        await registry.start()
+        first_task = registry._health_check_task
+
+        # Start second time
+        await registry.start()
+        second_task = registry._health_check_task
+
+        # Should be same task
+        assert first_task is second_task
+
+        # Cleanup
+        await registry.stop()
+
+    @pytest.mark.asyncio
+    async def test_health_check_loop_runs_periodically(self):
+        """Test background loop health checks all workers periodically."""
+        registry = WorkerRegistry()
+        registry._health_check_interval = 0.1  # Fast for testing
+
+        # Register workers
+        registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://worker-1:5003",
+        )
+        registry.register_worker(
+            worker_id="worker-2",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://worker-2:5003",
+        )
+
+        # Track health check calls
+        health_check_calls = []
+
+        async def mock_health_check(worker_id):
+            health_check_calls.append(worker_id)
+            return True
+
+        # Patch health_check_worker
+        with patch.object(registry, "health_check_worker", side_effect=mock_health_check):
+            # Start background task
+            await registry.start()
+
+            # Wait for at least one round of health checks
+            await asyncio.sleep(0.2)
+
+            # Stop background task
+            await registry.stop()
+
+        # Verify health checks were called for all workers
+        assert "worker-1" in health_check_calls
+        assert "worker-2" in health_check_calls
+
+    @pytest.mark.asyncio
+    async def test_health_check_loop_handles_exceptions(self):
+        """Test background loop continues despite health check exceptions."""
+        registry = WorkerRegistry()
+        registry._health_check_interval = 0.1  # Fast for testing
+
+        # Register worker
+        registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://worker-1:5003",
+        )
+
+        call_count = 0
+
+        async def mock_health_check_with_error(worker_id):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise Exception("First call fails")
+            return True
+
+        # Patch health_check_worker
+        with patch.object(
+            registry, "health_check_worker", side_effect=mock_health_check_with_error
+        ):
+            # Start background task
+            await registry.start()
+
+            # Wait for multiple rounds
+            await asyncio.sleep(0.3)
+
+            # Stop background task
+            await registry.stop()
+
+        # Verify loop continued after exception
+        assert call_count >= 2

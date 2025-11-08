@@ -4,6 +4,7 @@ This module provides the WorkerRegistry class which manages the lifecycle of
 worker nodes in the distributed training and backtesting architecture.
 """
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Optional
@@ -32,6 +33,8 @@ class WorkerRegistry:
     def __init__(self):
         """Initialize an empty worker registry."""
         self._workers: dict[str, WorkerEndpoint] = {}
+        self._health_check_task: Optional[asyncio.Task] = None
+        self._health_check_interval: int = 10  # seconds
 
     def register_worker(
         self,
@@ -311,3 +314,69 @@ class WorkerRegistry:
             )
 
         return False
+
+    async def start(self) -> None:
+        """
+        Start background health check task.
+
+        Creates an asyncio task that continuously health checks all registered
+        workers at regular intervals.
+
+        Example:
+            >>> registry = WorkerRegistry()
+            >>> await registry.start()  # Starts background task
+        """
+        if self._health_check_task is None:
+            self._health_check_task = asyncio.create_task(self._health_check_loop())
+            logger.info("Worker registry started - background health checks enabled")
+
+    async def stop(self) -> None:
+        """
+        Stop background health check task.
+
+        Cancels the background task and waits for it to finish cleanup.
+
+        Example:
+            >>> registry = WorkerRegistry()
+            >>> await registry.start()
+            >>> await registry.stop()  # Stops background task
+        """
+        if self._health_check_task:
+            self._health_check_task.cancel()
+            try:
+                await self._health_check_task
+            except asyncio.CancelledError:
+                pass
+            self._health_check_task = None
+            logger.info("Worker registry stopped - background health checks disabled")
+
+    async def _health_check_loop(self) -> None:
+        """
+        Background task to continuously health check all workers.
+
+        This loop runs indefinitely until cancelled. It health checks all
+        registered workers, then sleeps for the configured interval.
+
+        The loop handles exceptions gracefully to ensure it continues running
+        even if individual health checks fail.
+        """
+        logger.info(
+            f"Background health check loop started (interval: {self._health_check_interval}s)"
+        )
+
+        while True:
+            try:
+                # Health check all workers
+                for worker_id in list(self._workers.keys()):
+                    await self.health_check_worker(worker_id)
+
+                # Wait before next round
+                await asyncio.sleep(self._health_check_interval)
+
+            except asyncio.CancelledError:
+                logger.info("Background health check loop cancelled")
+                break
+            except Exception as e:
+                logger.error(f"Error in health check loop: {e}", exc_info=True)
+                # Continue after error
+                await asyncio.sleep(self._health_check_interval)
