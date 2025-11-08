@@ -9,7 +9,6 @@ This test verifies the complete flow:
 
 import asyncio
 import os
-from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -89,9 +88,7 @@ class TestWorkerEndToEnd:
             assert retrieved_worker.last_healthy_at is not None
 
             # 8. Backend: Filter workers by type
-            backtest_workers = registry.list_workers(
-                worker_type=WorkerType.BACKTESTING
-            )
+            backtest_workers = registry.list_workers(worker_type=WorkerType.BACKTESTING)
             assert len(backtest_workers) == 1
             assert backtest_workers[0].worker_id == "backtest-worker-1"
 

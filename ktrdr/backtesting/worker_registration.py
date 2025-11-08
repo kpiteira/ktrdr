@@ -100,9 +100,7 @@ class WorkerRegistration:
             "capabilities": capabilities,
         }
 
-        logger.info(
-            f"Attempting to register worker {self.worker_id} at {endpoint_url}"
-        )
+        logger.info(f"Attempting to register worker {self.worker_id} at {endpoint_url}")
         logger.debug(f"Registration data: {registration_data}")
 
         for attempt in range(1, self.max_retries + 1):

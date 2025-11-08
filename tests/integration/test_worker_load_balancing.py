@@ -34,6 +34,7 @@ class TestWorkerLoadBalancing:
 
         # Simulate 30 concurrent operations
         selections = []
+
         async def select_worker():
             worker = registry.select_worker(WorkerType.BACKTESTING)
             if worker:
@@ -46,6 +47,7 @@ class TestWorkerLoadBalancing:
         # Verify distribution is relatively even
         # With 30 operations and 3 workers, expect ~10 per worker
         from collections import Counter
+
         distribution = Counter(selections)
 
         assert len(distribution) == 3, "All 3 workers should be selected"
@@ -88,6 +90,7 @@ class TestWorkerLoadBalancing:
 
         # They should be distributed evenly
         from collections import Counter
+
         distribution = Counter(selections)
         assert distribution["worker-4"] == 5
         assert distribution["worker-5"] == 5
@@ -193,6 +196,7 @@ class TestWorkerLoadBalancing:
 
         # Distribution should be very even (25 per worker)
         from collections import Counter
+
         distribution = Counter(selections)
 
         assert len(distribution) == 4
@@ -293,6 +297,7 @@ class TestWorkerLoadBalancing:
 
         # Verify work was distributed (not perfectly even due to varying durations)
         from collections import Counter
+
         distribution = Counter(completed_operations)
         assert len(distribution) == 3
 

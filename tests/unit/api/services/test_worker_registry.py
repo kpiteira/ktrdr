@@ -450,7 +450,9 @@ class TestWorkerHealthChecks:
     """Tests for worker health check functionality."""
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="Async httpx mocking complex - covered in integration tests")
+    @pytest.mark.skip(
+        reason="Async httpx mocking complex - covered in integration tests"
+    )
     async def test_health_check_worker_success(self):
         """Test successful health check updates worker state."""
         registry = WorkerRegistry()
@@ -488,7 +490,9 @@ class TestWorkerHealthChecks:
         assert worker.last_healthy_at is not None
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="Async httpx mocking complex - covered in integration tests")
+    @pytest.mark.skip(
+        reason="Async httpx mocking complex - covered in integration tests"
+    )
     async def test_health_check_worker_busy_status(self):
         """Test health check updates worker to busy when indicated."""
         registry = WorkerRegistry()
@@ -571,7 +575,9 @@ class TestWorkerHealthChecks:
         assert worker.health_check_failures == 3
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="Async httpx mocking complex - covered in integration tests")
+    @pytest.mark.skip(
+        reason="Async httpx mocking complex - covered in integration tests"
+    )
     async def test_health_check_worker_resets_failures_on_success(self):
         """Test successful health check resets failure counter."""
         registry = WorkerRegistry()
@@ -732,7 +738,9 @@ class TestBackgroundHealthCheckTask:
             return True
 
         # Patch health_check_worker
-        with patch.object(registry, "health_check_worker", side_effect=mock_health_check):
+        with patch.object(
+            registry, "health_check_worker", side_effect=mock_health_check
+        ):
             # Start background task
             await registry.start()
 
@@ -955,7 +963,9 @@ class TestDeadWorkerCleanup:
         async def mock_health_check(worker_id):
             return False  # Simulate failed health check
 
-        with patch.object(registry, "health_check_worker", side_effect=mock_health_check):
+        with patch.object(
+            registry, "health_check_worker", side_effect=mock_health_check
+        ):
             # Start background task
             await registry.start()
 
