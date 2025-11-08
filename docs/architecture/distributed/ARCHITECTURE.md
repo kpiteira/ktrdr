@@ -1,514 +1,259 @@
 # Distributed Training & Backtesting Architecture
-## Technical Implementation Specification
 
 **Version**: 2.0
-**Status**: Implementation Ready
+**Status**: Architecture Approved
 **Date**: 2025-11-08
 
 ---
 
 ## Table of Contents
 
-1. [Component Specifications](#component-specifications)
-2. [Worker Registry Implementation](#worker-registry-implementation)
-3. [Service Orchestrator Enhancements](#service-orchestrator-enhancements)
-4. [Worker API Specifications](#worker-api-specifications)
-5. [Configuration Management](#configuration-management)
-6. [Docker Compose Setup](#docker-compose-setup)
-7. [Proxmox LXC Setup](#proxmox-lxc-setup)
-8. [Testing Specifications](#testing-specifications)
+1. [System Context](#system-context)
+2. [Architectural Overview](#architectural-overview)
+3. [Architectural Layers](#architectural-layers)
+4. [Core Components](#core-components)
+5. [Key Architectural Patterns](#key-architectural-patterns)
+6. [Component Interactions](#component-interactions)
+7. [Environment-Specific Architecture](#environment-specific-architecture)
+8. [Cross-Cutting Concerns](#cross-cutting-concerns)
+9. [Scalability and Performance](#scalability-and-performance)
+10. [Trade-offs and Design Decisions](#trade-offs-and-design-decisions)
 
 ---
 
-## Component Specifications
+## System Context
+
+### Purpose
+
+The distributed architecture enables KTRDR to scale training and backtesting operations horizontally across multiple compute nodes while preserving the existing async infrastructure and progress tracking capabilities.
+
+### Key Requirements
+
+- **Horizontal Scalability**: Add more compute capacity by adding more workers
+- **Worker Exclusivity**: Each worker processes only one operation at a time
+- **Hybrid Execution**: Support both GPU host services (for GPU access) and containerized workers (for CPU operations)
+- **Unified Progress Tracking**: Maintain existing OperationsService pattern with remote proxy support
+- **Environment Flexibility**: Work seamlessly in both development (Docker Compose) and production (Proxmox LXC) environments
+- **Minimal Disruption**: Preserve existing ServiceOrchestrator and async infrastructure patterns
+
+### Architecture Drivers
+
+1. **GPU Access Constraint**: Docker containers cannot efficiently access GPU (CUDA/MPS), requiring native host services
+2. **Development Parity**: Development on Mac requires different infrastructure (Docker) than production (Proxmox)
+3. **Operational Simplicity**: Push-based registration eliminates infrastructure-specific discovery complexity
+4. **Self-Healing**: Workers must automatically recover from failures and re-register
+
+---
+
+## Architectural Overview
+
+### System Topology
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        KTRDR Backend                            │
+│                      (Central Orchestrator)                     │
+│                                                                 │
+│  ┌────────────────┐      ┌──────────────────┐                  │
+│  │ TrainingService│      │BacktestingService│                  │
+│  │ (Orchestrator) │      │   (Orchestrator) │                  │
+│  └────────┬───────┘      └────────┬─────────┘                  │
+│           │                       │                            │
+│           └───────────┬───────────┘                            │
+│                       │                                        │
+│              ┌────────▼────────┐                               │
+│              │ WorkerRegistry  │                               │
+│              │  (Push-based)   │                               │
+│              └────────┬────────┘                               │
+└───────────────────────┼────────────────────────────────────────┘
+                        │
+        ┌───────────────┼───────────────┐
+        │               │               │
+        ▼               ▼               ▼
+  ┌──────────┐   ┌──────────┐   ┌──────────┐
+  │GPU Host  │   │Training  │   │Backtest  │
+  │Service   │   │Worker    │   │Worker    │
+  │(Native)  │   │(Container)│  │(Container)│
+  └──────────┘   └──────────┘   └──────────┘
+   CUDA/MPS       CPU-only       CPU-only
+```
+
+### Architectural Principles
+
+1. **Separation of Concerns**: Backend orchestrates, workers execute
+2. **Push-Based Discovery**: Workers self-register (cloud-native pattern)
+3. **Stateless Workers**: Workers hold no persistent state; all state in backend
+4. **Environment Abstraction**: Same backend code works in dev and prod
+5. **Graceful Degradation**: System continues with partial worker availability
+
+---
+
+## Architectural Layers
+
+The system is organized into three primary architectural layers:
+
+### 1. Orchestration Layer (Backend)
+
+**Responsibility**: Receives user requests, selects workers, dispatches operations, tracks progress
+
+**Key Components**:
+- Service Orchestrators (TrainingService, BacktestingService)
+- WorkerRegistry (worker lifecycle management)
+- OperationsService (operation state and progress tracking)
+
+**Characteristics**:
+- Stateful (maintains operation records and worker registry)
+- Single instance (centralized coordination)
+- Environment-agnostic (works with any worker infrastructure)
+
+### 2. Worker Layer
+
+**Responsibility**: Execute training/backtesting operations, report progress, maintain exclusivity
+
+**Key Components**:
+- Training Worker API (CPU training execution)
+- Backtest Worker API (backtesting execution)
+- GPU Host Services (GPU training execution)
+- Local OperationsService instance (worker-local state)
+
+**Characteristics**:
+- Stateless (no persistent data)
+- Horizontally scalable (add more workers = more capacity)
+- Self-registering (push-based discovery)
+- Environment-specific (Docker Compose in dev, LXC in prod, native for GPU)
+
+### 3. Infrastructure Layer
+
+**Responsibility**: Container/VM orchestration, networking, resource allocation
+
+**Implementations**:
+- **Development**: Docker Compose (Mac)
+- **Production**: Proxmox LXC (Linux hosts)
+- **GPU**: Native processes (direct hardware access)
+
+---
+
+## Core Components
 
 ### WorkerRegistry
 
-**Purpose**: Centralized registry for worker discovery, health checking, and selection
+**Architectural Role**: Central service discovery and worker lifecycle management
 
-**Location**: `ktrdr/api/services/worker_registry.py`
+**Key Responsibilities**:
+1. Accept push-based worker registrations
+2. Maintain real-time worker health status
+3. Select optimal worker for operations (round-robin load balancing)
+4. Remove dead workers after threshold exceeded
+5. Track worker capabilities (GPU, memory, cores)
 
-**Dependencies**:
+**Design Pattern**: **Registry Pattern** with **Health Monitoring**
+
+**Core Concepts**:
+
 ```python
-from enum import Enum
-from typing import List, Optional, Dict, Any
-from dataclasses import dataclass
-from datetime import datetime, timedelta
-import asyncio
-import httpx
-import logging
+# Worker lifecycle states
+WorkerStatus = AVAILABLE | BUSY | TEMPORARILY_UNAVAILABLE
 
-logger = logging.getLogger(__name__)
+# Worker registration (push-based)
+POST /workers/register
+{
+    "worker_id": "lxc-worker-301",
+    "worker_type": "backtesting",
+    "endpoint_url": "http://192.168.1.201:5003",
+    "capabilities": {"cores": 4, "memory_gb": 8}
+}
+
+# Backend maintains registry
+registry = {
+    "worker_id": WorkerEndpoint(
+        status=AVAILABLE,
+        last_health_check=datetime,
+        health_check_failures=0,
+        ...
+    )
+}
 ```
 
-**Data Models**:
+**Health Monitoring Strategy**:
+- Background task polls workers every 10 seconds
+- 3 consecutive failures → TEMPORARILY_UNAVAILABLE
+- 5 minutes unavailable → REMOVED from registry
+- Workers re-register on startup (idempotent)
+
+**Worker Selection Algorithm**:
+1. Filter by worker type (training vs backtesting)
+2. Filter by required capabilities (e.g., GPU)
+3. Filter by status (AVAILABLE only)
+4. Select least-recently-used (round-robin fairness)
+
+### ServiceOrchestrator (Enhanced)
+
+**Architectural Role**: Base abstraction for service managers with distributed dispatch capability
+
+**Existing Responsibilities** (preserved):
+- Async operation lifecycle management
+- Progress tracking via GenericProgressManager
+- Cancellation token integration
+- OperationsService integration
+
+**New Responsibilities** (added):
+- Worker selection strategy (service-specific)
+- Remote worker dispatch
+- Proxy registration for progress bridging
+
+**Design Pattern**: **Template Method Pattern** with **Strategy Pattern** for worker selection
+
+**Architecture Enhancement**:
 
 ```python
-class WorkerType(Enum):
-    """Types of workers in the system."""
-    GPU_HOST = "gpu_host"           # Native host service with GPU
-    CPU_TRAINING = "cpu_training"   # Container-based CPU training
-    BACKTESTING = "backtesting"     # Container-based backtesting
-
-class WorkerStatus(Enum):
-    """Worker availability status."""
-    AVAILABLE = "available"             # Idle and healthy
-    BUSY = "busy"                      # Running operation
-    TEMPORARILY_UNAVAILABLE = "temporarily_unavailable"  # Health checks failing
-    UNKNOWN = "unknown"                # Not yet checked
-
-@dataclass
-class WorkerEndpoint:
-    """Represents a registered worker endpoint."""
-    worker_id: str                    # Unique identifier
-    worker_type: WorkerType          # Type of worker
-    endpoint_url: str                # HTTP endpoint (e.g., "http://192.168.1.201:5003")
-    status: WorkerStatus             # Current status
-    current_operation_id: Optional[str]  # Operation ID if busy
-    capabilities: Dict[str, Any]     # Worker capabilities (gpu, memory, etc.)
-    last_health_check: datetime      # Last health check attempt
-    last_healthy_at: datetime        # Last time worker was healthy
-    health_check_failures: int       # Consecutive failures
-    metadata: Dict[str, Any]         # Additional metadata (node, container ID, etc.)
-```
-
-**Class Interface**:
-
-```python
-class WorkerRegistry:
-    """
-    Central registry for worker discovery and management.
-
-    Supports multiple discovery modes:
-    - docker: Discover workers via Docker API (dev)
-    - proxmox: Discover workers via Proxmox API (prod)
-    - manual: Static configuration (GPU hosts)
-    """
-
-    def __init__(
-        self,
-        discovery_mode: str,
-        config: Dict[str, Any],
-        health_check_interval: int = 10,
-        health_check_timeout: int = 5,
-        health_failure_threshold: int = 3
-    ):
-        """
-        Initialize worker registry.
-
-        Args:
-            discovery_mode: "docker", "proxmox", or "manual"
-            config: Mode-specific configuration
-            health_check_interval: Seconds between health checks
-            health_check_timeout: Timeout for health check requests
-            health_failure_threshold: Failures before marking unhealthy
-        """
-        self._discovery_mode = discovery_mode
-        self._config = config
-        self._workers: Dict[str, WorkerEndpoint] = {}
-        self._health_check_interval = health_check_interval
-        self._health_check_timeout = health_check_timeout
-        self._health_failure_threshold = health_failure_threshold
-        self._last_selection: Dict[WorkerType, int] = {}  # For round-robin
-        self._http_client: Optional[httpx.AsyncClient] = None
-
-    async def start(self):
-        """Start background tasks (discovery, health checks)."""
-        self._http_client = httpx.AsyncClient(timeout=self._health_check_timeout)
-
-        # Initial discovery
-        await self.discover_workers()
-
-        # Start background tasks
-        asyncio.create_task(self._discovery_loop())
-        asyncio.create_task(self._health_check_loop())
-
-    async def stop(self):
-        """Stop background tasks and cleanup."""
-        if self._http_client:
-            await self._http_client.aclose()
-
-    # Discovery methods
-
-    async def discover_workers(self):
-        """Discover workers based on configured mode."""
-        if self._discovery_mode == "docker":
-            await self._discover_docker_workers()
-        elif self._discovery_mode == "proxmox":
-            await self._discover_proxmox_workers()
-        elif self._discovery_mode == "manual":
-            await self._discover_manual_workers()
-        else:
-            raise ValueError(f"Unknown discovery mode: {self._discovery_mode}")
-
-    async def _discover_docker_workers(self):
-        """Discover workers via Docker API or DNS."""
-        # Implementation varies based on approach (see Docker Compose Setup)
-        pass
-
-    async def _discover_proxmox_workers(self):
-        """Discover workers via Proxmox API."""
-        # Implementation in Proxmox LXC Setup section
-        pass
-
-    async def _discover_manual_workers(self):
-        """Load workers from static configuration."""
-        # Used for GPU hosts
-        pass
-
-    # Worker selection
-
-    def get_available_workers(
-        self,
-        worker_type: WorkerType,
-        capabilities: Optional[Dict[str, Any]] = None
-    ) -> List[WorkerEndpoint]:
-        """
-        Get all available workers matching criteria.
-
-        Args:
-            worker_type: Type of worker to find
-            capabilities: Required capabilities (e.g., {"gpu": True})
-
-        Returns:
-            List of available workers, sorted by least recently used
-        """
-        workers = [
-            w for w in self._workers.values()
-            if w.worker_type == worker_type
-            and w.status == WorkerStatus.AVAILABLE
-        ]
-
-        # Filter by capabilities
-        if capabilities:
-            workers = [
-                w for w in workers
-                if all(w.capabilities.get(k) == v for k, v in capabilities.items())
-            ]
-
-        # Sort by last selection (least recently used first)
-        workers.sort(key=lambda w: w.metadata.get("last_selected", 0))
-
-        return workers
-
-    def select_worker(
-        self,
-        worker_type: WorkerType,
-        capabilities: Optional[Dict[str, Any]] = None
-    ) -> Optional[WorkerEndpoint]:
-        """
-        Select a worker using round-robin algorithm.
-
-        Returns None if no workers available.
-        """
-        workers = self.get_available_workers(worker_type, capabilities)
-
-        if not workers:
-            return None
-
-        # Round-robin: select first (least recently used)
-        worker = workers[0]
-
-        # Mark selection time for future round-robin
-        worker.metadata["last_selected"] = datetime.utcnow().timestamp()
-
-        return worker
-
-    # Worker state management
-
-    def mark_busy(self, worker_id: str, operation_id: str):
-        """Mark worker as busy with operation."""
-        if worker_id in self._workers:
-            self._workers[worker_id].status = WorkerStatus.BUSY
-            self._workers[worker_id].current_operation_id = operation_id
-
-    def mark_available(self, worker_id: str):
-        """Mark worker as available."""
-        if worker_id in self._workers:
-            self._workers[worker_id].status = WorkerStatus.AVAILABLE
-            self._workers[worker_id].current_operation_id = None
-
-    def mark_unhealthy(self, worker_id: str):
-        """Mark worker as unhealthy."""
-        if worker_id in self._workers:
-            self._workers[worker_id].status = WorkerStatus.UNHEALTHY
-
-    # Health checking
-
-    async def health_check_worker(self, worker_id: str) -> bool:
-        """
-        Perform health check on worker.
-
-        Returns True if healthy, False otherwise.
-        """
-        if worker_id not in self._workers:
-            return False
-
-        worker = self._workers[worker_id]
-
-        try:
-            response = await self._http_client.get(
-                f"{worker.endpoint_url}/health",
-                timeout=self._health_check_timeout
-            )
-
-            if response.status_code == 200:
-                # Parse response to get worker status
-                data = response.json()
-                worker_status = data.get("worker_status", "idle")
-
-                # Update worker status
-                if worker_status == "busy":
-                    worker.status = WorkerStatus.BUSY
-                    worker.current_operation_id = data.get("current_operation")
-                elif worker_status == "idle":
-                    worker.status = WorkerStatus.AVAILABLE
-                    worker.current_operation_id = None
-
-                # Reset failure counter
-                worker.health_check_failures = 0
-                worker.last_health_check = datetime.utcnow()
-
-                return True
-            else:
-                worker.health_check_failures += 1
-
-        except Exception as e:
-            worker.health_check_failures += 1
-
-        # Mark unhealthy if threshold exceeded
-        if worker.health_check_failures >= self._health_failure_threshold:
-            worker.status = WorkerStatus.UNHEALTHY
-
-        return False
-
-    async def _health_check_loop(self):
-        """Background task to check worker health."""
-        while True:
-            try:
-                # Check all workers
-                for worker_id in list(self._workers.keys()):
-                    await self.health_check_worker(worker_id)
-
-                await asyncio.sleep(self._health_check_interval)
-
-            except Exception as e:
-                # Log error but keep running
-                await asyncio.sleep(self._health_check_interval)
-
-    async def _discovery_loop(self):
-        """Background task to rediscover workers."""
-        # Run discovery every 30 seconds (workers may be added/removed)
-        while True:
-            await asyncio.sleep(30)
-            try:
-                await self.discover_workers()
-            except Exception as e:
-                # Log error but keep running
-                pass
-
-    # Utility methods
-
-    def get_worker(self, worker_id: str) -> Optional[WorkerEndpoint]:
-        """Get worker by ID."""
-        return self._workers.get(worker_id)
-
-    def list_workers(
-        self,
-        worker_type: Optional[WorkerType] = None,
-        status: Optional[WorkerStatus] = None
-    ) -> List[WorkerEndpoint]:
-        """List all workers, optionally filtered."""
-        workers = list(self._workers.values())
-
-        if worker_type:
-            workers = [w for w in workers if w.worker_type == worker_type]
-
-        if status:
-            workers = [w for w in workers if w.status == status]
-
-        return workers
-```
-
----
-
-## Service Orchestrator Enhancements
-
-**Location**: `ktrdr/async_infrastructure/service_orchestrator.py`
-
-**New Abstract Methods**:
-
-```python
-from abc import ABC, abstractmethod
-from typing import Generic, TypeVar, Optional, Dict, Any
-from ktrdr.api.services.worker_registry import WorkerRegistry, WorkerEndpoint
-
-T = TypeVar('T')
-
 class ServiceOrchestrator(ABC, Generic[T]):
     """
-    Base class for service orchestrators with worker registry support.
+    Base class for all service managers.
 
-    Existing methods preserved, new methods added for worker-based dispatch.
+    Existing: Operation lifecycle, progress tracking, cancellation
+    New: Worker selection and remote dispatch
     """
 
-    def __init__(
-        self,
-        operations_service: OperationsService,
-        worker_registry: Optional[WorkerRegistry] = None  # NEW
-    ):
-        self.operations_service = operations_service
-        self.worker_registry = worker_registry
-
-    # NEW: Worker selection (service-specific)
-
+    # NEW: Service-specific worker selection strategy
     @abstractmethod
-    def _select_worker(
-        self,
-        operation_context: Any
-    ) -> Optional[WorkerEndpoint]:
+    def _select_worker(self, operation_context) -> Optional[WorkerEndpoint]:
         """
-        Select optimal worker for operation.
+        Each service defines its own worker selection logic:
 
-        Implementation varies by service:
-        - TrainingService: Priority GPU hosts, fallback CPU workers
-        - BacktestingService: Any available backtest worker
+        TrainingService:
+            1. Try GPU hosts (if GPU preferred/required)
+            2. Fallback to CPU workers
+            3. Fail if no workers available
 
-        Returns None if no workers available.
-        """
-        pass
-
-    @abstractmethod
-    def _get_required_capabilities(
-        self,
-        operation_context: Any
-    ) -> Dict[str, Any]:
-        """
-        Return required worker capabilities for operation.
-
-        Examples:
-        - {"gpu": True, "min_memory_gb": 16}
-        - {} (no special requirements)
+        BacktestingService:
+            1. Select any available backtest worker
+            2. Fail if none available
         """
         pass
 
-    # NEW: Worker dispatch
-
-    async def _dispatch_to_worker(
-        self,
-        worker: WorkerEndpoint,
-        operation_context: Any,
-        max_retries: int = 3
-    ) -> str:
+    # ENHANCED: Unified operation start flow
+    async def start_managed_operation(self, operation_func, context):
         """
-        Dispatch operation to worker with retry logic.
+        Orchestration flow:
 
-        Args:
-            worker: Selected worker endpoint
-            operation_context: Operation-specific context
-            max_retries: Max retry attempts
-
-        Returns:
-            Remote operation ID
-
-        Raises:
-            NoWorkersAvailableError: All workers busy/unavailable
-            WorkerDispatchError: Failed to dispatch after retries
+        1. Create operation record (OperationsService)
+        2. Select worker (service-specific strategy)
+        3. Dispatch to worker (HTTP request)
+        4. Register proxy (for progress tracking)
+        5. Mark worker busy (WorkerRegistry)
+        6. Return operation_id
         """
-        pass
-
-    # ENHANCED: Start managed operation with worker dispatch
-
-    async def start_managed_operation(
-        self,
-        operation_func: Callable,
-        operation_context: Any,
-        **kwargs
-    ) -> Dict[str, Any]:
-        """
-        Enhanced flow with worker selection and dispatch.
-
-        1. Create operation record
-        2. Select worker
-        3. Dispatch to worker
-        4. Register proxy for progress tracking
-        5. Return operation_id
-        """
-        # 1. Create operation
-        operation_id = await self.operations_service.create_operation(
-            operation_type=self._get_operation_type(),
-            metadata=self._build_metadata(operation_context)
-        )
-
-        try:
-            # 2. Select worker
-            worker = self._select_worker(operation_context)
-
-            if not worker:
-                await self.operations_service.fail_operation(
-                    operation_id,
-                    error="No workers available"
-                )
-                raise NoWorkersAvailableError(
-                    f"No {self._get_operation_type()} workers available"
-                )
-
-            # 3. Dispatch to worker
-            remote_operation_id = await self._dispatch_to_worker(
-                worker,
-                operation_context
-            )
-
-            # 4. Register proxy
-            proxy = OperationServiceProxy(base_url=worker.endpoint_url)
-            await self.operations_service.register_remote_proxy(
-                backend_operation_id=operation_id,
-                proxy=proxy,
-                host_operation_id=remote_operation_id
-            )
-
-            # 5. Mark worker busy
-            if self.worker_registry:
-                self.worker_registry.mark_busy(worker.worker_id, operation_id)
-
-            return {
-                "operation_id": operation_id,
-                "worker_id": worker.worker_id,
-                "worker_url": worker.endpoint_url
-            }
-
-        except Exception as e:
-            await self.operations_service.fail_operation(
-                operation_id,
-                error=str(e)
-            )
-            raise
 ```
 
-**Training Service Implementation**:
+**Worker Selection Example** (Training Service):
 
 ```python
-# ktrdr/api/services/training_service.py
-
 class TrainingService(ServiceOrchestrator):
-    """Training service with hybrid GPU/CPU routing."""
+    def _select_worker(self, context: TrainingContext):
+        requires_gpu = context.training_config.get("force_gpu", False)
+        prefers_gpu = context.training_config.get("prefer_gpu", True)
 
-    def _select_worker(
-        self,
-        operation_context: TrainingOperationContext
-    ) -> Optional[WorkerEndpoint]:
-        """
-        Priority-based worker selection.
-
-        1. Check if GPU required/preferred
-        2. Try GPU hosts (high priority)
-        3. Fallback to CPU workers
-        4. Return None if no workers available
-        """
-        requires_gpu = operation_context.training_config.get("force_gpu", False)
-        prefers_gpu = operation_context.training_config.get("prefer_gpu", True)
-
-        # PRIORITY 1: GPU hosts
+        # Priority 1: GPU hosts (if needed/preferred)
         if requires_gpu or prefers_gpu:
             gpu_workers = self.worker_registry.get_available_workers(
                 worker_type=WorkerType.GPU_HOST,
@@ -516,1016 +261,800 @@ class TrainingService(ServiceOrchestrator):
             )
 
             if gpu_workers:
-                # Select GPU host (round-robin)
-                return gpu_workers[0]
-
+                return gpu_workers[0]  # Round-robin selection
             elif requires_gpu:
-                # GPU required but none available → fail
-                raise NoGPUWorkersAvailableError(
-                    "GPU training requested but no GPU workers available"
-                )
+                raise NoGPUWorkersAvailableError()
 
-        # PRIORITY 2: CPU training workers
+        # Priority 2: CPU workers (fallback)
         cpu_workers = self.worker_registry.get_available_workers(
             worker_type=WorkerType.CPU_TRAINING
         )
 
-        if cpu_workers:
-            return cpu_workers[0]
-
-        # No workers available
-        return None
-
-    def _get_required_capabilities(
-        self,
-        operation_context: TrainingOperationContext
-    ) -> Dict[str, Any]:
-        """Return required capabilities for training."""
-        return {
-            "gpu": operation_context.training_config.get("force_gpu", False),
-            "min_memory_gb": 8
-        }
+        return cpu_workers[0] if cpu_workers else None
 ```
 
-**Backtesting Service Implementation**:
+This pattern enables **hybrid execution**: GPU operations prefer GPU hosts, but can fallback to CPU if configured; backtesting uses any available worker.
 
-```python
-# ktrdr/api/services/backtesting_service.py
+### Worker API Architecture
 
-class BacktestingService(ServiceOrchestrator):
-    """Backtesting service with simple worker selection."""
+**Architectural Role**: Standardized interface for workers to receive operations and report status
 
-    def _select_worker(
-        self,
-        operation_context: BacktestOperationContext
-    ) -> Optional[WorkerEndpoint]:
-        """
-        Simple worker selection for backtesting.
+**Design Pattern**: **REST API** with **State Machine** (idle → busy → idle)
 
-        Returns any available backtest worker.
-        """
-        workers = self.worker_registry.get_available_workers(
-            worker_type=WorkerType.BACKTESTING
-        )
+**Core Responsibilities**:
+1. Accept operation requests
+2. Enforce exclusivity (reject if busy)
+3. Execute operation in background
+4. Report health and status
+5. Track progress via local OperationsService
 
-        if not workers:
-            return None
+**Worker State Machine**:
 
-        # Round-robin selection
-        return workers[0]
-
-    def _get_required_capabilities(
-        self,
-        operation_context: BacktestOperationContext
-    ) -> Dict[str, Any]:
-        """Backtesting has no special requirements."""
-        return {}
+```
+        ┌──────┐
+        │ IDLE │ ◄────────────────┐
+        └──┬───┘                  │
+           │                      │
+           │ POST /training/start │
+           ▼                      │
+        ┌──────┐                  │
+        │ BUSY │                  │
+        └──┬───┘                  │
+           │                      │
+           │ operation completes  │
+           └──────────────────────┘
 ```
 
----
-
-## Worker API Specifications
-
-### Training Worker API
-
-**Location**: `ktrdr/training/training_worker_api.py` (NEW)
-
-**Purpose**: FastAPI service for CPU training workers
+**Exclusivity Enforcement** (critical for resource management):
 
 ```python
-from fastapi import FastAPI, HTTPException, BackgroundTasks
-from pydantic import BaseModel
-from typing import Optional
-import uuid
-import os
-import asyncio
-from datetime import datetime
-
-app = FastAPI(title="KTRDR Training Worker")
-
-# Worker state
-worker_state = {
-    "status": "idle",  # idle | busy | error
-    "current_operation_id": None,
-    "worker_id": os.getenv("WORKER_ID", "unknown"),
-    "started_at": datetime.utcnow().isoformat(),
-    "capabilities": {
-        "gpu": False,
-        "worker_type": "cpu_training",
-        "cores": os.cpu_count(),
-        "memory_gb": 8  # Estimate
-    }
-}
-
-# Request/Response models
-
-class TrainingStartRequest(BaseModel):
-    """Request to start training operation."""
-    strategy_name: str
-    symbols: list[str]
-    timeframes: list[str]
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
-    training_config: dict = {}
-
-class TrainingStartResponse(BaseModel):
-    """Response from training start."""
-    operation_id: str
-    worker_id: str
-    status: str
-    message: str
-
-# Endpoints
-
-@app.get("/health")
-async def health():
-    """Health check endpoint."""
-    return {
-        "status": "healthy",
-        "worker_status": worker_state["status"],
-        "current_operation": worker_state["current_operation_id"],
-        "worker_id": worker_state["worker_id"],
-        "capabilities": worker_state["capabilities"],
-        "uptime_seconds": (
-            datetime.utcnow() - datetime.fromisoformat(worker_state["started_at"])
-        ).total_seconds()
-    }
-
-@app.post("/training/start", response_model=TrainingStartResponse)
-async def start_training(
-    request: TrainingStartRequest,
-    background_tasks: BackgroundTasks
-):
-    """
-    Start training operation.
-
-    Rejects if worker is already busy.
-    """
-    # Check if busy
+@app.post("/training/start")
+async def start_training(request: TrainingStartRequest):
+    # EXCLUSIVITY CHECK
     if worker_state["status"] == "busy":
         raise HTTPException(
-            status_code=503,
+            status_code=503,  # Service Unavailable
             detail={
                 "error": "Worker busy",
                 "current_operation": worker_state["current_operation_id"]
             }
         )
 
-    # Generate operation ID
+    # Accept operation
     operation_id = str(uuid.uuid4())
-
-    # Mark busy
     worker_state["status"] = "busy"
     worker_state["current_operation_id"] = operation_id
 
-    # Start training in background
-    background_tasks.add_task(
-        run_training_operation,
-        operation_id=operation_id,
-        request=request
-    )
+    # Execute in background
+    background_tasks.add_task(run_training, operation_id, request)
 
-    return TrainingStartResponse(
-        operation_id=operation_id,
-        worker_id=worker_state["worker_id"],
-        status="started",
-        message=f"Training started for {request.symbols}"
-    )
-
-async def run_training_operation(
-    operation_id: str,
-    request: TrainingStartRequest
-):
-    """
-    Background task to run training.
-
-    Uses existing TrainingService infrastructure.
-    """
-    from ktrdr.api.services.training.local_orchestrator import LocalTrainingOrchestrator
-    from ktrdr.api.services.operations_service import get_operations_service
-
-    operations_service = get_operations_service()
-
-    try:
-        # Register operation with local OperationsService
-        await operations_service.create_operation(
-            operation_type=OperationType.TRAINING,
-            metadata={"symbols": request.symbols, "timeframes": request.timeframes}
-        )
-
-        # Run training (same as backend local mode)
-        orchestrator = LocalTrainingOrchestrator(
-            operation_id=operation_id,
-            # ... pass request parameters
-        )
-
-        result = await orchestrator.run()
-
-        # Mark operation complete
-        await operations_service.complete_operation(
-            operation_id,
-            result=result
-        )
-
-        # Mark worker idle
-        worker_state["status"] = "idle"
-        worker_state["current_operation_id"] = None
-
-    except Exception as e:
-        # Mark operation failed
-        await operations_service.fail_operation(
-            operation_id,
-            error=str(e)
-        )
-
-        # Mark worker error (will return to idle on next operation)
-        worker_state["status"] = "error"
-        worker_state["error"] = str(e)
+    return {"operation_id": operation_id}
 ```
 
-### Backtest Worker API Enhancement
+When backend receives 503, it **automatically retries with a different worker** (handled by ServiceOrchestrator dispatch logic).
 
-**Location**: `ktrdr/backtesting/remote_api.py` (ENHANCE EXISTING)
+### Remote Progress Tracking Architecture
 
-**Add worker state tracking**:
+**Architectural Challenge**: How does backend track progress of operations running on remote workers?
 
-```python
-# Add at module level (after imports)
+**Solution**: **Proxy Pattern** with **Pull-Based Polling**
 
-worker_state = {
-    "status": "idle",
-    "current_operation_id": None,
-    "worker_id": os.getenv("WORKER_ID", "unknown"),
-    "started_at": datetime.utcnow().isoformat()
-}
+**Architecture**:
 
-# Enhance health endpoint
-@app.get("/health")
-async def health():
-    """Enhanced health check with worker status."""
-    return {
-        "status": "healthy",
-        "worker_status": worker_state["status"],
-        "current_operation": worker_state["current_operation_id"],
-        "worker_id": worker_state["worker_id"],
-        "uptime_seconds": (
-            datetime.utcnow() - datetime.fromisoformat(worker_state["started_at"])
-        ).total_seconds()
-    }
-
-# Enhance start endpoint
-@app.post("/backtests/start")
-async def start_backtest(request: BacktestStartRequest):
-    """Enhanced with busy rejection."""
-
-    # Check if busy
-    if worker_state["status"] == "busy":
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "error": "Worker busy",
-                "current_operation": worker_state["current_operation_id"]
-            }
-        )
-
-    # Generate operation ID
-    operation_id = str(uuid.uuid4())
-
-    # Mark busy
-    worker_state["status"] = "busy"
-    worker_state["current_operation_id"] = operation_id
-
-    # ... existing logic to start backtest ...
-
-    # On completion (in background task):
-    # worker_state["status"] = "idle"
-    # worker_state["current_operation_id"] = None
 ```
+Backend                           Worker
+┌────────────────────┐           ┌─────────────────────┐
+│ OperationsService  │           │ Local               │
+│  (Backend State)   │           │ OperationsService   │
+│                    │           │  (Worker State)     │
+│  operation_id: XYZ │◄─polling──│  operation_id: ABC  │
+│  status: running   │           │  status: running    │
+│  progress: 45%     │           │  progress: 45%      │
+└────────────────────┘           └─────────────────────┘
+         ▲                                │
+         │                                │
+         │         ┌─────────────────┐    │
+         └─────────┤OperationService │────┘
+                   │     Proxy       │
+                   └─────────────────┘
+                   GET /operations/ABC
+                   every 1 second
+```
+
+**Flow**:
+1. Backend creates operation record (operation_id: XYZ)
+2. Backend dispatches to worker, gets remote operation_id (ABC)
+3. Backend registers proxy mapping: XYZ → (worker_url, ABC)
+4. Backend polls worker every 1s: `GET worker_url/operations/ABC`
+5. Backend updates local operation state from worker response
+6. User polls backend: `GET /operations/XYZ` (served from cache)
+
+**Key Properties**:
+- **Decoupling**: Workers don't need to know about backend
+- **Simplicity**: Standard REST polling (no websockets, no pub/sub)
+- **Caching**: 1s cache TTL on backend prevents excessive polling
+- **Transparency**: Users see unified operation state regardless of execution location
 
 ---
 
-## Configuration Management
+## Key Architectural Patterns
 
-### Configuration Files
+### 1. Push-Based Service Registration
 
-**Development** (`config/workers.dev.yaml`):
+**Pattern**: Workers self-register with backend on startup
 
-```yaml
-# Worker discovery configuration for development (Mac)
+**Why This Pattern**:
+- **Infrastructure Agnostic**: Works with Docker, LXC, VMs, bare metal, cloud
+- **Simpler**: No infrastructure-specific discovery code (no Docker API, no Proxmox API)
+- **Faster**: Immediate registration (no discovery loop delay)
+- **Cloud-Native**: Standard pattern used by Kubernetes, Consul, Eureka
 
-discovery_mode: docker
+**Implementation Concept**:
 
-docker:
-  # Use Docker service names (simplest)
-  use_service_names: true
+```python
+# Worker startup script
+async def on_startup():
+    """Called when worker starts"""
+    await register_with_backend()
 
-  services:
-    - name: backtest-worker
-      port: 5003
-      type: backtesting
-
-    - name: training-worker
-      port: 5004
-      type: training
-
-# No GPU hosts in development
-gpu_hosts: []
-
-# Health check configuration
-health_check:
-  interval_seconds: 10
-  timeout_seconds: 5
-  failure_threshold: 3
+async def register_with_backend():
+    """Push registration to backend"""
+    async with httpx.AsyncClient() as client:
+        await client.post(
+            f"{BACKEND_URL}/workers/register",
+            json={
+                "worker_id": socket.gethostname(),
+                "worker_type": "backtesting",
+                "endpoint_url": f"http://{get_ip()}:5003",
+                "capabilities": get_system_capabilities()
+            }
+        )
 ```
 
-**Production** (`config/workers.prod.yaml`):
+**Registration is Idempotent**: Workers can re-register after restarts; backend updates existing record.
+
+### 2. Health-Based Availability
+
+**Pattern**: Backend continuously monitors worker health; marks unavailable if health checks fail
+
+**State Transitions**:
+
+```
+AVAILABLE ──(3 failed checks)──> TEMPORARILY_UNAVAILABLE ──(5 min)──> REMOVED
+    ▲                                        │
+    │                                        │
+    └────────(successful health check)──────┘
+```
+
+**Health Check Design**:
+
+```python
+# Backend polls worker
+async def health_check_worker(worker_id: str) -> bool:
+    response = await http_client.get(f"{worker.endpoint_url}/health")
+
+    if response.status_code == 200:
+        data = response.json()
+
+        # Update worker status from health response
+        worker.status = parse_status(data["worker_status"])  # idle → AVAILABLE
+        worker.current_operation_id = data.get("current_operation")
+        worker.health_check_failures = 0  # Reset counter
+
+        return True
+    else:
+        worker.health_check_failures += 1
+
+        if worker.health_check_failures >= 3:
+            worker.status = TEMPORARILY_UNAVAILABLE
+
+        return False
+```
+
+**Why 3 Failures**: Tolerates transient network issues (e.g., brief switch failure)
+
+**Why 5 Minutes Before Removal**: In Proxmox environment, unreachable worker typically means host is down (user's infrastructure knowledge). 5 minutes is reasonable grace period before assuming permanent failure.
+
+### 3. Hybrid Orchestration (GPU + Containers)
+
+**Pattern**: Service-specific worker selection strategies enable GPU priority with container fallback
+
+**Architectural Rationale**:
+
+Training operations can run on either GPU or CPU, but GPU is strongly preferred for performance:
+- GPU training: 10x-100x faster
+- CPU training: Always available (can add unlimited workers)
+
+**Strategy**:
+
+```
+Training Request
+    │
+    ▼
+┌─────────────────┐
+│ GPU Required?   │──YES──> Select GPU Host ──(none available)──> FAIL
+└────────┬────────┘
+         │ NO
+         ▼
+┌─────────────────┐
+│ GPU Preferred?  │──YES──> Try GPU Host ──(none available)──> CPU Worker
+└────────┬────────┘
+         │ NO
+         ▼
+   CPU Worker
+```
+
+**Architectural Benefit**: Maximizes GPU utilization (high-value resource) while maintaining CPU scalability (low-cost resource).
+
+Backtesting has no GPU benefit → Always uses containerized workers (simpler).
+
+### 4. Environment Abstraction
+
+**Pattern**: Backend code is environment-agnostic; worker infrastructure varies by environment
+
+**Architecture**:
+
+```python
+# Backend (same everywhere)
+class WorkerRegistry:
+    def __init__(self, config: WorkerConfig):
+        self.workers: Dict[str, WorkerEndpoint] = {}
+        # Worker registration is ALWAYS via POST /workers/register
+        # No environment-specific code in backend
+
+# Workers register themselves (environment-specific startup)
+
+# Development (docker-compose.yml)
+services:
+  backtest-worker:
+    command: ["uvicorn", "ktrdr.backtesting.remote_api:app", ...]
+    # Worker calls BACKEND_URL/workers/register on startup
+
+# Production (LXC systemd service)
+[Service]
+ExecStart=/opt/ktrdr/uv run uvicorn ktrdr.backtesting.remote_api:app
+# Worker calls BACKEND_URL/workers/register on startup
+```
+
+**Key Insight**: Push-based registration eliminates all environment-specific logic from backend. Backend only cares about HTTP endpoints, not how workers are deployed.
+
+### 5. Round-Robin Load Balancing
+
+**Pattern**: Distribute operations evenly across available workers
+
+**Algorithm**:
+
+```python
+def select_worker(worker_type: WorkerType) -> WorkerEndpoint:
+    # 1. Get all available workers of requested type
+    workers = [w for w in registry.workers.values()
+               if w.worker_type == worker_type
+               and w.status == AVAILABLE]
+
+    # 2. Sort by last selection time (least recently used first)
+    workers.sort(key=lambda w: w.metadata.get("last_selected", 0))
+
+    # 3. Select first (LRU = round-robin fairness)
+    selected = workers[0]
+
+    # 4. Mark selection time for next round
+    selected.metadata["last_selected"] = time.time()
+
+    return selected
+```
+
+**Properties**:
+- **Fairness**: All workers get equal share of operations (assuming equal capacity)
+- **Simplicity**: No complex scheduling logic
+- **Stateless**: Selection state is just a timestamp (survives backend restarts)
+
+**Future Enhancement**: Could add weighted round-robin based on worker capabilities (cores, memory).
+
+---
+
+## Component Interactions
+
+### Operation Dispatch Flow
+
+**Sequence**: User starts training operation
+
+```
+User                  Backend                WorkerRegistry         Worker
+ │                      │                          │                  │
+ │──POST /training──────>│                          │                  │
+ │                      │                          │                  │
+ │                      │──select_worker()────────>│                  │
+ │                      │<─────worker──────────────│                  │
+ │                      │                          │                  │
+ │                      │──POST /training/start──────────────────────>│
+ │                      │<──operation_id─────────────────────────────│
+ │                      │                          │                  │
+ │                      │──mark_busy()────────────>│                  │
+ │                      │                          │                  │
+ │<──operation_id───────│                          │                  │
+ │                      │                          │                  │
+ │                      │                          │                  │
+ │  (poll progress)     │                          │                  │
+ │──GET /operations/123─>│                          │                  │
+ │                      │──proxy.get_status()────────────────────────>│
+ │                      │<──progress──────────────────────────────────│
+ │<──progress───────────│                          │                  │
+```
+
+**Key Steps**:
+1. Backend selects worker (round-robin from registry)
+2. Backend dispatches operation to worker (HTTP POST)
+3. Worker starts operation, returns remote operation_id
+4. Backend registers proxy for progress polling
+5. Backend marks worker as BUSY
+6. User polls backend for progress
+7. Backend polls worker (via proxy), caches result, serves user
+
+### Worker Registration Flow
+
+**Sequence**: New worker comes online
+
+```
+Worker                     Backend
+  │                          │
+  │──POST /workers/register─>│
+  │  {worker_id, url, ...}   │
+  │                          │──(add to registry)
+  │<──200 OK─────────────────│
+  │                          │
+  │                          │
+  │      (every 10s)         │
+  │<──GET /health────────────│
+  │                          │
+  │──200 OK─────────────────>│
+  │  {status: idle}          │──(update status: AVAILABLE)
+```
+
+**Idempotency**: If worker re-registers (after restart), backend updates existing record instead of creating duplicate.
+
+### Worker Failure Recovery Flow
+
+**Sequence**: Worker becomes unavailable
+
+```
+Time  Backend Health Check              Worker State    Registry State
+────────────────────────────────────────────────────────────────────────
+T+0s  GET /health ──> 200 OK            Running         AVAILABLE
+T+10s GET /health ──> timeout (1/3)     Crashed         AVAILABLE
+T+20s GET /health ──> timeout (2/3)     Crashed         AVAILABLE
+T+30s GET /health ──> timeout (3/3)     Crashed         TEMPORARILY_UNAVAILABLE
+...
+T+5m  Cleanup task runs                 Crashed         REMOVED
+
+(Worker restarts)
+T+5m  POST /workers/register ──> 200     Restarted       AVAILABLE (re-registered)
+```
+
+**Key Properties**:
+- **Grace Period**: 3 failures (30s) before marking unavailable
+- **Removal Threshold**: 5 minutes before removing from registry
+- **Auto-Recovery**: Worker re-registers on restart (no manual intervention)
+
+---
+
+## Environment-Specific Architecture
+
+### Development Environment (Docker Compose)
+
+**Infrastructure**: Docker Compose on Mac
+
+**Topology**:
+
+```
+┌─────────────────────────────────────────┐
+│ Docker Network (ktrdr-network)          │
+│                                         │
+│  ┌──────────────┐                       │
+│  │   Backend    │ :8000                 │
+│  │  (FastAPI)   │                       │
+│  └──────┬───────┘                       │
+│         │                               │
+│    ┌────┴────┐                          │
+│    │         │                          │
+│    ▼         ▼                          │
+│ ┌─────┐  ┌─────┐                        │
+│ │Train│  │Back │  (1-N instances via    │
+│ │Work │  │Work │   docker-compose scale)│
+│ └─────┘  └─────┘                        │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+**Worker Discovery**: DNS-based (Docker Compose service names)
+
+**Scaling**:
+```bash
+# Add more workers dynamically
+docker-compose up -d --scale backtest-worker=5
+```
+
+Each worker:
+- Calls `POST http://backend:8000/workers/register` on startup
+- Uses service name `backend` (Docker DNS resolution)
+- Receives unique hostname from Docker (e.g., `backtest-worker_1`, `backtest-worker_2`)
+
+**Configuration** (`docker-compose.yml`):
 
 ```yaml
-# Worker discovery configuration for production (Proxmox)
+services:
+  backend:
+    ports: ["8000:8000"]
+    networks: [ktrdr-network]
 
-discovery_mode: proxmox
+  training-worker:
+    command: ["uvicorn", "ktrdr.training.training_worker_api:app", ...]
+    environment:
+      BACKEND_URL: http://backend:8000
+      WORKER_TYPE: training
+    networks: [ktrdr-network]
+    # Scale: docker-compose up -d --scale training-worker=3
+```
 
-proxmox:
-  api_url: "https://proxmox.local:8006"
-  user: "ktrdr@pve"
-  token_name: "worker-discovery"
-  token_value: "${PROXMOX_TOKEN}"  # From environment variable
-  verify_ssl: false
+### Production Environment (Proxmox LXC)
 
-  # Tags to identify workers
-  worker_tags:
-    backtest: "ktrdr-backtest-worker"
-    training: "ktrdr-training-worker"
+**Infrastructure**: Proxmox cluster with LXC containers
 
-# GPU hosts (manual configuration)
+**Topology**:
+
+```
+┌────────────────────────────────────────────────────────────┐
+│ Proxmox Cluster                                            │
+│                                                            │
+│  Node 1                    Node 2                          │
+│  ┌────────────────┐        ┌────────────────┐             │
+│  │ Backend VM     │        │ GPU Host       │             │
+│  │ 192.168.1.100  │        │ 192.168.1.101  │             │
+│  └────────────────┘        └────────────────┘             │
+│                                                            │
+│  ┌────────────────┐        ┌────────────────┐             │
+│  │ LXC 301        │        │ LXC 302        │             │
+│  │ Backtest Worker│        │ Backtest Worker│             │
+│  │ 192.168.1.201  │        │ 192.168.1.202  │             │
+│  └────────────────┘        └────────────────┘             │
+│                                                            │
+│  ┌────────────────┐        ┌────────────────┐             │
+│  │ LXC 401        │        │ LXC 402        │             │
+│  │ Training Worker│        │ Training Worker│             │
+│  │ 192.168.1.211  │        │ 192.168.1.212  │             │
+│  └────────────────┘        └────────────────┘             │
+└────────────────────────────────────────────────────────────┘
+```
+
+**Worker Discovery**: Push-based registration (workers call backend URL)
+
+**LXC Container Configuration**:
+- Cloned from template (pre-installed KTRDR, uv, Python)
+- Static IP assignment
+- Systemd service auto-starts worker on boot
+- Tagged for organizational purposes (not used for discovery)
+
+**Worker Startup** (systemd service):
+
+```ini
+[Service]
+ExecStart=/opt/ktrdr/uv run uvicorn ktrdr.backtesting.remote_api:app \
+    --host 0.0.0.0 --port 5003
+Environment="BACKEND_URL=http://192.168.1.100:8000"
+Environment="WORKER_TYPE=backtesting"
+Environment="WORKER_ID=%H"  # Hostname
+```
+
+On startup, worker calls:
+```
+POST http://192.168.1.100:8000/workers/register
+{
+    "worker_id": "ktrdr-backtest-worker-1",
+    "endpoint_url": "http://192.168.1.201:5003",
+    ...
+}
+```
+
+**Scaling**: Clone more LXC containers from template, assign IPs, start services
+
+### GPU Host Services (Both Environments)
+
+**Infrastructure**: Native processes on host with GPU
+
+**Rationale**: Docker containers cannot efficiently access CUDA/MPS → Run as host service
+
+**Architecture**:
+
+```
+Backend ──(HTTP)──> GPU Host Service :5002 ──(direct)──> CUDA/MPS
+                    (Native Python Process)
+```
+
+**Discovery**: Manual configuration (static endpoints in config file)
+
+```yaml
+# config/workers.prod.yaml
 gpu_hosts:
   - id: "gpu-host-1"
-    url: "http://192.168.1.100:5002"
-    capabilities:
-      gpu: true
-      gpu_type: "CUDA"
-      gpu_memory_gb: 24
-      device_name: "NVIDIA RTX 4090"
-
-  - id: "gpu-host-2"
     url: "http://192.168.1.101:5002"
     capabilities:
       gpu: true
       gpu_type: "CUDA"
-      gpu_memory_gb: 16
-      device_name: "NVIDIA RTX 3080"
+      gpu_memory_gb: 24
+```
 
-# Health check configuration
+Backend registers GPU hosts on startup (no push registration from GPU hosts, since they're pre-existing services).
+
+---
+
+## Cross-Cutting Concerns
+
+### Error Handling
+
+**Architectural Strategy**: Graceful degradation with automatic retry
+
+**Scenarios**:
+
+1. **No Workers Available**:
+   - Backend fails operation immediately with clear error
+   - User sees: "No workers available for training"
+   - Operation state: FAILED
+
+2. **Worker Busy** (503 response):
+   - Backend automatically retries with different worker (up to 3 attempts)
+   - If all workers busy: Fail with "All workers busy, retry later"
+   - Operation state: FAILED
+
+3. **Worker Crashes During Operation**:
+   - Health checks detect failure (worker stops responding)
+   - Backend marks worker TEMPORARILY_UNAVAILABLE
+   - Operation state: RUNNING (worker may have completed before crash)
+   - User polls operation: Eventually times out or worker recovers and reports result
+
+4. **Network Partition** (worker unreachable):
+   - Health checks fail, worker marked TEMPORARILY_UNAVAILABLE
+   - After 5 minutes: Worker removed from registry
+   - When network recovers: Worker re-registers automatically
+   - In-flight operations: Lost (operation shows RUNNING indefinitely)
+   - **Future Enhancement**: Operation timeout detection
+
+### Security
+
+**Current Architecture**: Trusted network (no authentication)
+
+**Assumptions**:
+- All workers run on trusted infrastructure (private network)
+- No external access to worker endpoints
+- Backend is only public-facing component
+
+**Production Considerations**:
+- Backend should enforce authentication (existing pattern)
+- Worker-to-backend communication over private network
+- No worker-to-worker communication required
+
+**Future Enhancements** (if needed):
+- Mutual TLS between backend and workers
+- API tokens for worker registration
+- Rate limiting on worker registration endpoint
+
+### Monitoring and Observability
+
+**Architectural Hooks**:
+
+1. **Worker Registry State**: Expose `/workers` endpoint listing all workers, status, health
+   ```json
+   {
+       "total_workers": 8,
+       "available": 5,
+       "busy": 2,
+       "unavailable": 1,
+       "workers": [...]
+   }
+   ```
+
+2. **Health Check Metrics**: Track health check success/failure rates
+3. **Operation Metrics**: Track operation dispatch time, completion rate
+4. **Worker Utilization**: Track busy vs idle time per worker
+
+**Logging Strategy**:
+- Backend logs: Worker registration, selection, dispatch, health check failures
+- Worker logs: Operation start/complete, errors
+- Structured logging with correlation IDs (operation_id, worker_id)
+
+### Configuration Management
+
+**Architectural Principle**: Environment-specific configuration, not hardcoded
+
+**Configuration Files**:
+
+```
+config/
+  workers.dev.yaml      # Development (Docker Compose)
+  workers.prod.yaml     # Production (Proxmox LXC)
+```
+
+**Environment Variable**: `WORKER_CONFIG` specifies which config to load
+
+**Configuration Schema**:
+
+```yaml
+# Minimal config (push-based registration)
 health_check:
   interval_seconds: 10
   timeout_seconds: 5
   failure_threshold: 3
+  removal_threshold_seconds: 300
+
+# Optional: GPU hosts (manual registration)
+gpu_hosts:
+  - id: "gpu-host-1"
+    url: "http://192.168.1.101:5002"
+    capabilities: {gpu: true, gpu_type: "CUDA"}
 ```
 
-### Configuration Loading
-
-**Location**: `ktrdr/api/services/worker_config.py` (NEW)
-
-```python
-import os
-import yaml
-from typing import Dict, Any
-
-def load_worker_config() -> Dict[str, Any]:
-    """
-    Load worker configuration based on environment.
-
-    Defaults to dev config, can override with WORKER_CONFIG env var.
-    """
-    config_file = os.getenv(
-        "WORKER_CONFIG",
-        "config/workers.dev.yaml"
-    )
-
-    with open(config_file, 'r') as f:
-        config = yaml.safe_load(f)
-
-    # Substitute environment variables
-    config = _substitute_env_vars(config)
-
-    return config
-
-def _substitute_env_vars(config: Dict[str, Any]) -> Dict[str, Any]:
-    """Recursively substitute ${VAR} with environment variables."""
-    if isinstance(config, dict):
-        return {k: _substitute_env_vars(v) for k, v in config.items()}
-    elif isinstance(config, list):
-        return [_substitute_env_vars(item) for item in config]
-    elif isinstance(config, str) and config.startswith("${") and config.endswith("}"):
-        var_name = config[2:-1]
-        return os.getenv(var_name, config)
-    else:
-        return config
-```
+**No Worker Endpoints in Config**: Workers self-register (push-based), so config doesn't specify worker URLs.
 
 ---
 
-## Docker Compose Setup
+## Scalability and Performance
 
-### Development Environment
+### Horizontal Scalability
 
-**File**: `docker/docker-compose.dev.yml`
+**Training Operations**:
+- **GPU-bound**: Limited by number of GPU hosts (expensive, specialized hardware)
+- **CPU fallback**: Unlimited scaling (add more LXC containers)
+- Scaling factor: 1 operation per worker
 
-```yaml
-version: "3.8"
+**Backtesting Operations**:
+- **CPU-only**: Unlimited scaling (add more LXC containers)
+- Scaling factor: 1 operation per worker
 
-services:
-  backend:
-    build:
-      context: ..
-      dockerfile: docker/backend/Dockerfile.dev
-    image: ktrdr-backend:dev
-    container_name: ktrdr-backend
-    ports:
-      - "8000:8000"
-    volumes:
-      - ../ktrdr:/app/ktrdr
-      - ../data:/app/data
-      - ../models:/app/models
-      - ../strategies:/app/strategies
-      - ../config:/app/config
-      - ../logs:/app/logs
-    environment:
-      - PYTHONPATH=/app
-      - LOG_LEVEL=INFO
-      - WORKER_CONFIG=/app/config/workers.dev.yaml
-      - USE_IB_HOST_SERVICE=true
-      - IB_HOST_SERVICE_URL=http://host.docker.internal:5001
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    networks:
-      - ktrdr-network
-    depends_on:
-      - training-worker
-      - backtest-worker
+**Example Capacity**:
+- 3 GPU hosts → 3 concurrent GPU training operations
+- 5 CPU training workers → 5 concurrent CPU training operations
+- 10 backtest workers → 10 concurrent backtesting operations
 
-  training-worker:
-    image: ktrdr-backend:dev
-    command: ["uvicorn", "ktrdr.training.training_worker_api:app", "--host", "0.0.0.0", "--port", "5004", "--reload"]
-    expose:
-      - "5004"
-    volumes:
-      - ../ktrdr:/app/ktrdr
-      - ../data:/app/data:ro
-      - ../models:/app/models
-      - ../strategies:/app/strategies:ro
-      - ../config:/app/config:ro
-      - ../logs:/app/logs
-    environment:
-      - PYTHONPATH=/app
-      - WORKER_TYPE=training
-      - WORKER_ID=${HOSTNAME}
-      - USE_TRAINING_HOST_SERVICE=false
-      - USE_IB_HOST_SERVICE=true
-      - IB_HOST_SERVICE_URL=http://host.docker.internal:5001
-      - LOG_LEVEL=INFO
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    networks:
-      - ktrdr-network
-    labels:
-      - "ktrdr.worker.type=training"
+**Total**: 18 concurrent operations (with simple resource addition)
 
-  backtest-worker:
-    image: ktrdr-backend:dev
-    command: ["uvicorn", "ktrdr.backtesting.remote_api:app", "--host", "0.0.0.0", "--port", "5003", "--reload"]
-    expose:
-      - "5003"
-    volumes:
-      - ../ktrdr:/app/ktrdr
-      - ../data:/app/data:ro
-      - ../models:/app/models:ro
-      - ../strategies:/app/strategies:ro
-      - ../config:/app/config:ro
-      - ../logs:/app/logs
-    environment:
-      - PYTHONPATH=/app
-      - WORKER_TYPE=backtesting
-      - WORKER_ID=${HOSTNAME}
-      - USE_REMOTE_BACKTEST_SERVICE=false
-      - USE_IB_HOST_SERVICE=true
-      - IB_HOST_SERVICE_URL=http://host.docker.internal:5001
-      - LOG_LEVEL=INFO
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    networks:
-      - ktrdr-network
-    labels:
-      - "ktrdr.worker.type=backtesting"
+### Performance Characteristics
 
-networks:
-  ktrdr-network:
-    driver: bridge
-```
+**Operation Dispatch Latency**:
+- Worker selection: O(n) where n = number of workers (~10-100 workers → <1ms)
+- Worker dispatch: 1 HTTP request (~10-50ms local network)
+- Total overhead: <100ms (negligible compared to operation duration)
 
-### Docker Discovery Implementation
+**Progress Polling Overhead**:
+- Backend polls workers every 1s (cached)
+- User polls backend (served from cache)
+- Network overhead: Minimal (1 request/worker/second)
 
-**Location**: `ktrdr/api/services/worker_registry.py`
+**Health Check Overhead**:
+- 1 request per worker every 10s
+- For 20 workers: 2 requests/second
+- Negligible network/CPU impact
 
-```python
-async def _discover_docker_workers(self):
-    """
-    Discover workers via Docker service names (simple approach).
+### Bottlenecks and Mitigations
 
-    Uses Docker Compose service DNS resolution.
-    """
-    services = self._config.get("docker", {}).get("services", [])
+**Potential Bottleneck**: Backend becomes single point of contention
 
-    for service in services:
-        service_name = service["name"]
-        port = service["port"]
-        worker_type_str = service["type"]
+**Current Mitigation**:
+- Async I/O (FastAPI) → Handles thousands of concurrent requests
+- Caching (1s TTL) → Reduces worker polling frequency
+- Stateless workers → No backend-to-worker state synchronization
 
-        # Map to WorkerType enum
-        if worker_type_str == "backtesting":
-            worker_type = WorkerType.BACKTESTING
-        elif worker_type_str == "training":
-            worker_type = WorkerType.CPU_TRAINING
-        else:
-            continue
+**Future Scaling** (if needed):
+- Multiple backend instances with shared database (PostgreSQL)
+- Distributed worker registry (Redis-backed)
+- Load balancer in front of backend instances
 
-        # Create worker endpoint using service name
-        # Docker Compose creates DNS entry for service name
-        worker_id = f"docker-service-{service_name}"
-
-        self._workers[worker_id] = WorkerEndpoint(
-            worker_id=worker_id,
-            worker_type=worker_type,
-            endpoint_url=f"http://{service_name}:{port}",
-            status=WorkerStatus.UNKNOWN,
-            current_operation_id=None,
-            capabilities={},
-            last_health_check=datetime.utcnow(),
-            health_check_failures=0,
-            metadata={"service_name": service_name}
-        )
-```
-
-### Scaling Workers
-
-```bash
-# Start dev environment
-docker-compose -f docker/docker-compose.dev.yml up -d
-
-# Scale backtest workers
-docker-compose -f docker/docker-compose.dev.yml up -d --scale backtest-worker=3
-
-# Scale training workers
-docker-compose -f docker/docker-compose.dev.yml up -d --scale training-worker=2
-
-# View logs
-docker-compose -f docker/docker-compose.dev.yml logs -f backtest-worker
-
-# Stop
-docker-compose -f docker/docker-compose.dev.yml down
-```
+**Estimated Capacity** (single backend instance):
+- 100+ workers
+- 1000+ operations/hour
+- Limited by operation duration, not backend throughput
 
 ---
 
-## Proxmox LXC Setup
+## Trade-offs and Design Decisions
 
-### LXC Template Creation
+### Decision 1: Push vs Pull Registration
 
-**Script**: `scripts/create-lxc-template.sh`
+**Chosen**: Push-based (workers register with backend)
 
-```bash
-#!/bin/bash
-# Create LXC template for KTRDR workers
+**Alternative**: Pull-based (backend discovers workers via infrastructure APIs)
 
-set -e
+**Trade-offs**:
 
-TEMPLATE_ID=200
-PROXMOX_NODE="pve"  # Your Proxmox node name
-STORAGE="local-lvm"
-TEMPLATE_NAME="ktrdr-worker-template"
+| Aspect | Push-Based (Chosen) | Pull-Based |
+|--------|---------------------|------------|
+| **Complexity** | Simple (no infrastructure API integration) | Complex (Docker API, Proxmox API, etc.) |
+| **Environment Portability** | Works everywhere (infrastructure-agnostic) | Requires environment-specific code |
+| **Startup Latency** | Immediate (worker registers on startup) | Delayed (waits for discovery loop) |
+| **Failure Recovery** | Automatic (worker re-registers) | Requires discovery loop to detect |
+| **Security** | Requires trust (anyone can register) | More controlled (backend controls discovery) |
 
-echo "Creating LXC template ${TEMPLATE_ID}..."
+**Rationale**: Simplicity and portability outweigh security concerns (trusted network assumption).
 
-# Create container from Ubuntu template
-pct create ${TEMPLATE_ID} local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst \
-  --hostname ${TEMPLATE_NAME} \
-  --memory 2048 \
-  --cores 2 \
-  --net0 name=eth0,bridge=vmbr0,ip=dhcp \
-  --storage ${STORAGE} \
-  --rootfs ${STORAGE}:8 \
-  --unprivileged 1 \
-  --features nesting=1
+### Decision 2: Worker Exclusivity (1 Operation Per Worker)
 
-echo "Starting container for configuration..."
-pct start ${TEMPLATE_ID}
+**Chosen**: Each worker handles exactly 1 operation at a time
 
-# Wait for container to boot
-sleep 10
+**Alternative**: Workers handle multiple concurrent operations
 
-echo "Installing dependencies..."
-pct exec ${TEMPLATE_ID} -- bash -c '
-  apt update
-  apt install -y python3.11 python3-pip git curl wget
+**Trade-offs**:
 
-  # Install uv
-  curl -LsSf https://astral.sh/uv/install.sh | sh
+| Aspect | Exclusive (Chosen) | Concurrent |
+|--------|-------------------|------------|
+| **Resource Predictability** | Guaranteed resources per operation | Resource contention |
+| **Scheduling Complexity** | Simple (worker is available or not) | Complex (worker capacity tracking) |
+| **Operation Performance** | Consistent (no interference) | Variable (depends on other operations) |
+| **Worker Utilization** | Lower (idle between operations) | Higher (always processing) |
+| **Scalability** | Horizontal (add more workers) | Vertical (bigger workers) |
 
-  # Clone KTRDR repo
-  mkdir -p /opt
-  cd /opt
-  git clone https://github.com/yourusername/ktrdr.git
-  cd ktrdr
+**Rationale**: Training and backtesting are resource-intensive; guaranteed resources ensure consistent performance. Horizontal scaling (cheap containers) is easier than managing concurrency.
 
-  # Install dependencies
-  /root/.cargo/bin/uv sync
+### Decision 3: Health Check Intervals
 
-  # Create systemd service template
-  cat > /etc/systemd/system/ktrdr-worker@.service <<EOF
-[Unit]
-Description=KTRDR Worker (%i)
-After=network.target
+**Chosen**: 10s polling interval, 3 failures threshold, 5min removal
 
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/opt/ktrdr
-Environment="PYTHONPATH=/opt/ktrdr"
-Environment="WORKER_ID=%H"
-ExecStart=/root/.cargo/bin/uv run uvicorn ktrdr.%i.remote_api:app --host 0.0.0.0 --port %p
-Restart=always
-RestartSec=10
+**Trade-offs**:
 
-[Install]
-WantedBy=multi-user.target
-EOF
+| Interval | Detection Speed | Network Overhead | False Positives |
+|----------|----------------|------------------|-----------------|
+| 1s | Very fast | High | High (transient issues) |
+| **10s (Chosen)** | **Fast (30s)** | **Low** | **Low** |
+| 60s | Slow (3min) | Very low | Very low |
 
-  systemctl daemon-reload
-'
+**Rationale**: 10s balances fast failure detection with low overhead. 3 failures (30s) tolerates transient network issues. 5min removal matches user's infrastructure characteristics (Proxmox host failure scenarios).
 
-echo "Stopping container..."
-pct stop ${TEMPLATE_ID}
+### Decision 4: 1s Cache TTL (OperationsService)
 
-echo "Converting to template..."
-pct template ${TEMPLATE_ID}
+**Chosen**: Keep existing 1s cache for operation status
 
-echo "Template created successfully!"
-echo "Template ID: ${TEMPLATE_ID}"
-echo "Next: Clone this template to create workers"
-```
+**Alternative**: Real-time websockets or Server-Sent Events
 
-### Worker Deployment Script
+**Trade-offs**:
 
-**Script**: `scripts/deploy-lxc-workers.sh`
+| Aspect | 1s Cache (Chosen) | Real-time (Websockets) |
+|--------|-------------------|------------------------|
+| **Complexity** | Simple (HTTP polling) | Complex (connection management) |
+| **Latency** | Up to 1s delay | Immediate updates |
+| **Scalability** | Excellent (stateless HTTP) | Limited (stateful connections) |
+| **Browser Compatibility** | Universal | Good (modern browsers) |
+| **Infrastructure** | Standard HTTP | Requires websocket support |
 
-```bash
-#!/bin/bash
-# Deploy LXC workers from template
+**Rationale**: 1s delay is acceptable for training/backtesting operations (minutes to hours duration). Simplicity and scalability are more valuable than real-time updates.
 
-set -e
+### Decision 5: Stateless Workers
 
-TEMPLATE_ID=200
-PROXMOX_NODE="pve"
+**Chosen**: Workers hold no persistent state; all state in backend
 
-# Deploy backtest workers
-echo "Deploying backtest workers..."
-for i in {1..5}; do
-  VMID=$((300 + i))
-  IP="192.168.1.$((200 + i))"
-  HOSTNAME="ktrdr-backtest-worker-${i}"
+**Alternative**: Workers maintain local operation history/state
 
-  echo "Creating ${HOSTNAME} (${VMID})..."
+**Trade-offs**:
 
-  # Clone from template
-  pct clone ${TEMPLATE_ID} ${VMID} \
-    --hostname ${HOSTNAME} \
-    --description "KTRDR Backtest Worker ${i}"
+| Aspect | Stateless (Chosen) | Stateful |
+|--------|--------------------|----------|
+| **Worker Failure Recovery** | Simple (just re-register) | Complex (state recovery) |
+| **Worker Replacement** | Trivial (clone new worker) | Requires data migration |
+| **State Consistency** | Single source of truth (backend) | Distributed state (sync issues) |
+| **Query Performance** | Backend lookup only | Could be faster (local state) |
 
-  # Set static IP
-  pct set ${VMID} --net0 name=eth0,bridge=vmbr0,ip=${IP}/24,gw=192.168.1.1
-
-  # Add tag for discovery
-  pct set ${VMID} --tags ktrdr-backtest-worker
-
-  # Start container
-  pct start ${VMID}
-
-  # Wait for boot
-  sleep 5
-
-  # Start worker service
-  pct exec ${VMID} -- bash -c '
-    cd /opt/ktrdr
-    git pull
-    systemctl enable ktrdr-worker@backtesting.service
-    systemctl start ktrdr-worker@backtesting.service
-  '
-
-  echo "✓ ${HOSTNAME} deployed and started"
-done
-
-# Deploy training workers
-echo "Deploying training workers..."
-for i in {1..3}; do
-  VMID=$((400 + i))
-  IP="192.168.1.$((210 + i))"
-  HOSTNAME="ktrdr-training-worker-${i}"
-
-  echo "Creating ${HOSTNAME} (${VMID})..."
-
-  pct clone ${TEMPLATE_ID} ${VMID} \
-    --hostname ${HOSTNAME} \
-    --description "KTRDR Training Worker ${i}"
-
-  pct set ${VMID} --net0 name=eth0,bridge=vmbr0,ip=${IP}/24,gw=192.168.1.1
-  pct set ${VMID} --tags ktrdr-training-worker
-
-  pct start ${VMID}
-  sleep 5
-
-  pct exec ${VMID} -- bash -c '
-    cd /opt/ktrdr
-    git pull
-    systemctl enable ktrdr-worker@training.service
-    systemctl start ktrdr-worker@training.service
-  '
-
-  echo "✓ ${HOSTNAME} deployed and started"
-done
-
-echo ""
-echo "Deployment complete!"
-echo "Backtest workers: 301-305"
-echo "Training workers: 401-403"
-```
-
-### Proxmox Discovery Implementation
-
-**Location**: `ktrdr/api/services/worker_registry.py`
-
-```python
-async def _discover_proxmox_workers(self):
-    """
-    Discover workers via Proxmox API.
-
-    Finds LXC containers with specific tags.
-    """
-    from proxmoxer import ProxmoxAPI
-
-    proxmox_config = self._config.get("proxmox", {})
-
-    # Initialize Proxmox API client
-    proxmox = ProxmoxAPI(
-        proxmox_config["api_url"].replace("https://", "").replace(":8006", ""),
-        user=proxmox_config["user"],
-        token_name=proxmox_config["token_name"],
-        token_value=proxmox_config["token_value"],
-        verify_ssl=proxmox_config.get("verify_ssl", False)
-    )
-
-    worker_tags = proxmox_config.get("worker_tags", {})
-    backtest_tag = worker_tags.get("backtest", "ktrdr-backtest-worker")
-    training_tag = worker_tags.get("training", "ktrdr-training-worker")
-
-    # Iterate through all Proxmox nodes
-    for node in proxmox.nodes.get():
-        node_name = node['node']
-
-        # Get all LXC containers on this node
-        try:
-            containers = proxmox.nodes(node_name).lxc.get()
-        except Exception as e:
-            continue
-
-        for container in containers:
-            vmid = container['vmid']
-            status = container.get('status', 'unknown')
-
-            # Skip if not running
-            if status != 'running':
-                continue
-
-            # Get container config
-            try:
-                config = proxmox.nodes(node_name).lxc(vmid).config.get()
-            except Exception as e:
-                continue
-
-            # Parse tags
-            tags = config.get('tags', '').split(',')
-            tags = [t.strip() for t in tags]
-
-            # Determine worker type
-            worker_type = None
-            port = None
-
-            if backtest_tag in tags:
-                worker_type = WorkerType.BACKTESTING
-                port = 5003
-            elif training_tag in tags:
-                worker_type = WorkerType.CPU_TRAINING
-                port = 5004
-            else:
-                continue  # Not a KTRDR worker
-
-            # Parse IP address from net0
-            net0 = config.get('net0', '')
-            # Format: "name=eth0,bridge=vmbr0,ip=192.168.1.201/24,gw=192.168.1.1"
-            ip_match = re.search(r'ip=(\d+\.\d+\.\d+\.\d+)', net0)
-
-            if not ip_match:
-                continue
-
-            ip_address = ip_match.group(1)
-
-            # Register worker
-            worker_id = f"lxc-{node_name}-{vmid}"
-            hostname = config.get('hostname', f"ct-{vmid}")
-
-            self._workers[worker_id] = WorkerEndpoint(
-                worker_id=worker_id,
-                worker_type=worker_type,
-                endpoint_url=f"http://{ip_address}:{port}",
-                status=WorkerStatus.UNKNOWN,
-                current_operation_id=None,
-                capabilities={
-                    "cores": config.get('cores', 2),
-                    "memory_gb": config.get('memory', 2048) / 1024
-                },
-                last_health_check=datetime.utcnow(),
-                health_check_failures=0,
-                metadata={
-                    "vmid": vmid,
-                    "node": node_name,
-                    "hostname": hostname,
-                    "ip": ip_address
-                }
-            )
-```
+**Rationale**: Stateless workers are simpler to manage, replace, and scale. Backend is already stateful (OperationsService), so no additional complexity.
 
 ---
 
-## Testing Specifications
+## Summary
 
-### Unit Tests
+This architecture enables KTRDR to scale training and backtesting operations horizontally while preserving existing async infrastructure patterns. The key architectural principles are:
 
-**Location**: `tests/unit/api/services/test_worker_registry.py`
+1. **Push-Based Registration**: Workers self-register, making the system infrastructure-agnostic
+2. **Health Monitoring**: Continuous health checks with automatic failure detection and recovery
+3. **Hybrid Execution**: GPU host services for performance, containerized workers for scalability
+4. **Environment Abstraction**: Same backend code works in dev (Docker) and prod (LXC)
+5. **Stateless Workers**: All state in backend, workers are ephemeral and replaceable
+6. **Round-Robin Load Balancing**: Fair distribution of operations across available workers
 
-```python
-import pytest
-from ktrdr.api.services.worker_registry import (
-    WorkerRegistry,
-    WorkerType,
-    WorkerStatus,
-    WorkerEndpoint
-)
+The architecture is designed for **operational simplicity** (minimal manual intervention), **horizontal scalability** (add more workers = more capacity), and **graceful degradation** (system continues with partial worker availability).
 
-@pytest.fixture
-def worker_registry():
-    """Create worker registry with manual mode."""
-    config = {
-        "manual": {
-            "workers": []
-        }
-    }
-    return WorkerRegistry(discovery_mode="manual", config=config)
+For implementation details, see `IMPLEMENTATION_PLAN.md`.
 
-def test_register_worker(worker_registry):
-    """Test manual worker registration."""
-    worker = WorkerEndpoint(
-        worker_id="test-worker-1",
-        worker_type=WorkerType.BACKTESTING,
-        endpoint_url="http://localhost:5003",
-        status=WorkerStatus.AVAILABLE,
-        current_operation_id=None,
-        capabilities={},
-        last_health_check=datetime.utcnow(),
-        health_check_failures=0,
-        metadata={}
-    )
-
-    worker_registry._workers[worker.worker_id] = worker
-
-    assert len(worker_registry.list_workers()) == 1
-    assert worker_registry.get_worker("test-worker-1") == worker
-
-def test_select_worker_round_robin(worker_registry):
-    """Test round-robin worker selection."""
-    # Register 3 workers
-    for i in range(3):
-        worker = WorkerEndpoint(
-            worker_id=f"worker-{i}",
-            worker_type=WorkerType.BACKTESTING,
-            endpoint_url=f"http://localhost:500{i}",
-            status=WorkerStatus.AVAILABLE,
-            current_operation_id=None,
-            capabilities={},
-            last_health_check=datetime.utcnow(),
-            health_check_failures=0,
-            metadata={"last_selected": 0}
-        )
-        worker_registry._workers[worker.worker_id] = worker
-
-    # Select workers (should round-robin)
-    selected = []
-    for _ in range(6):
-        worker = worker_registry.select_worker(WorkerType.BACKTESTING)
-        selected.append(worker.worker_id)
-
-    # Should cycle through all workers
-    assert selected == ["worker-0", "worker-1", "worker-2", "worker-0", "worker-1", "worker-2"]
-
-def test_mark_busy(worker_registry):
-    """Test marking worker as busy."""
-    worker = WorkerEndpoint(
-        worker_id="test-worker",
-        worker_type=WorkerType.BACKTESTING,
-        endpoint_url="http://localhost:5003",
-        status=WorkerStatus.AVAILABLE,
-        current_operation_id=None,
-        capabilities={},
-        last_health_check=datetime.utcnow(),
-        health_check_failures=0,
-        metadata={}
-    )
-    worker_registry._workers[worker.worker_id] = worker
-
-    # Mark busy
-    worker_registry.mark_busy("test-worker", "op-123")
-
-    # Verify
-    worker = worker_registry.get_worker("test-worker")
-    assert worker.status == WorkerStatus.BUSY
-    assert worker.current_operation_id == "op-123"
-
-    # Should not be in available list
-    available = worker_registry.get_available_workers(WorkerType.BACKTESTING)
-    assert len(available) == 0
-```
-
-### Integration Tests
-
-**Location**: `tests/integration/distributed/test_worker_dispatch.py`
-
-```python
-import pytest
-from httpx import AsyncClient
-from ktrdr.api.main import app
-
-@pytest.mark.asyncio
-async def test_backtest_dispatch_to_docker_worker():
-    """Test backtesting operation dispatched to Docker worker."""
-    async with AsyncClient(app=app, base_url="http://test") as client:
-        # Start backtest
-        response = await client.post("/api/v1/backtests/start", json={
-            "strategy_name": "test_strategy",
-            "symbol": "AAPL",
-            "timeframe": "1h",
-            "start_date": "2024-01-01",
-            "end_date": "2024-06-30"
-        })
-
-        assert response.status_code == 200
-        data = response.json()
-
-        operation_id = data["operation_id"]
-        assert operation_id is not None
-
-        # Poll for completion
-        for _ in range(30):  # 30 seconds max
-            response = await client.get(f"/api/v1/operations/{operation_id}")
-            data = response.json()
-
-            if data["status"] == "completed":
-                break
-
-            await asyncio.sleep(1)
-
-        assert data["status"] == "completed"
-        assert "total_return" in data["results"]
-
-@pytest.mark.asyncio
-async def test_training_dispatch_cpu_worker():
-    """Test CPU training dispatched to training worker."""
-    async with AsyncClient(app=app, base_url="http://test") as client:
-        response = await client.post("/api/v1/trainings/start", json={
-            "symbols": ["AAPL"],
-            "timeframes": ["1d"],
-            "strategy_name": "test_strategy",
-            "force_gpu": False  # Force CPU
-        })
-
-        assert response.status_code == 200
-        data = response.json()
-
-        operation_id = data["operation_id"]
-
-        # Verify routed to CPU worker (not GPU host)
-        # Check via worker_id or logs
-```
-
----
-
-**Document End**
-
-This architecture document provides all technical implementation details needed to build the distributed system. Refer to DESIGN.md for high-level design rationale and patterns.
+For design rationale and high-level concepts, see `DESIGN.md`.
