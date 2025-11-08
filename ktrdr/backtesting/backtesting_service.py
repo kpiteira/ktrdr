@@ -9,16 +9,20 @@ import asyncio
 import logging
 import os
 from datetime import datetime
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import httpx
 
 from ktrdr.api.models.operations import OperationMetadata, OperationType
+from ktrdr.api.models.workers import WorkerType
 from ktrdr.api.services.adapters.operation_service_proxy import OperationServiceProxy
 from ktrdr.api.services.operations_service import get_operations_service
 from ktrdr.async_infrastructure import ServiceOrchestrator
 from ktrdr.backtesting.engine import BacktestConfig, BacktestingEngine
 from ktrdr.backtesting.progress_bridge import BacktestProgressBridge
+
+if TYPE_CHECKING:
+    from ktrdr.api.services.worker_registry import WorkerRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -37,13 +41,32 @@ class BacktestingService(ServiceOrchestrator[None]):
     (no GPU requirements), so the generic type is None.
     """
 
-    def __init__(self) -> None:
-        """Initialize backtesting service."""
+    def __init__(self, worker_registry: Optional["WorkerRegistry"] = None) -> None:
+        """Initialize backtesting service.
+
+        Args:
+            worker_registry: Optional WorkerRegistry for distributed worker selection.
+                           Required when USE_REMOTE_BACKTEST_SERVICE=true.
+        """
         super().__init__()
         self.operations_service = get_operations_service()
         self._use_remote = self._should_use_remote_service()
+        self.worker_registry = worker_registry
+
+        # Track which worker is handling which operation for cleanup
+        # operation_id → worker_id mapping
+        self._operation_workers: dict[str, str] = {}
+
+        # Validate that worker_registry is provided if using remote mode
+        if self._use_remote and worker_registry is None:
+            logger.warning(
+                "Remote backtest mode enabled but no WorkerRegistry provided. "
+                "Will fall back to hardcoded URL (not recommended for production)."
+            )
+
         logger.info(
-            f"Backtesting service initialized (mode: {'remote' if self._use_remote else 'local'})"
+            f"Backtesting service initialized (mode: {'remote' if self._use_remote else 'local'}, "
+            f"worker_registry: {'enabled' if worker_registry else 'disabled'})"
         )
 
     def _initialize_adapter(self) -> None:
@@ -92,6 +115,33 @@ class BacktestingService(ServiceOrchestrator[None]):
             "active_backtests": len(active_operations),
             "mode": "remote" if self._use_remote else "local",
         }
+
+    def cleanup_worker(self, operation_id: str) -> None:
+        """
+        Mark worker as available after operation completes.
+
+        This is a manual cleanup method. In normal operation, workers are
+        automatically cleaned up by the health check system (workers report
+        idle status when operations complete).
+
+        Args:
+            operation_id: Operation identifier
+        """
+        if operation_id not in self._operation_workers:
+            logger.debug(f"No worker mapping found for operation {operation_id}")
+            return
+
+        worker_id = self._operation_workers[operation_id]
+
+        if self.worker_registry is not None:
+            self.worker_registry.mark_available(worker_id)
+            logger.info(
+                f"Manually marked worker {worker_id} as AVAILABLE "
+                f"after operation {operation_id} completed"
+            )
+
+        # Remove from tracking
+        del self._operation_workers[operation_id]
 
     async def run_backtest(
         self,
@@ -340,11 +390,12 @@ class BacktestingService(ServiceOrchestrator[None]):
         Run backtest on remote service using proxy pattern.
 
         Follows training's remote pattern:
-        1. Start backtest on remote service (HTTP POST)
-        2. Get remote operation ID
-        3. Create OperationServiceProxy
-        4. Register proxy with OperationsService
-        5. Return immediately (no waiting)
+        1. Select available worker from WorkerRegistry
+        2. Start backtest on remote service (HTTP POST)
+        3. Get remote operation ID
+        4. Create OperationServiceProxy
+        5. Register proxy with OperationsService
+        6. Return immediately (no waiting)
 
         Args:
             operation_id: Backend operation identifier
@@ -360,8 +411,34 @@ class BacktestingService(ServiceOrchestrator[None]):
 
         Returns:
             Dictionary with status="started" (remote operation continues independently)
+
+        Raises:
+            RuntimeError: If no workers are available
         """
-        remote_url = self._get_remote_service_url()
+        # (1) Select worker from registry
+        worker_id: Optional[str] = None
+        remote_url: str
+
+        if self.worker_registry is not None:
+            worker = self.worker_registry.select_worker(WorkerType.BACKTESTING)
+            if not worker:
+                raise RuntimeError(
+                    "No available backtest workers. All workers are busy or unavailable."
+                )
+
+            worker_id = worker.worker_id
+            remote_url = worker.endpoint_url
+            logger.info(
+                f"Selected worker {worker_id} for operation {operation_id} "
+                f"(symbol={symbol}, timeframe={timeframe})"
+            )
+        else:
+            # Fallback to hardcoded URL if no registry (backward compatibility)
+            remote_url = self._get_remote_service_url()
+            logger.warning(
+                f"No WorkerRegistry available, using hardcoded URL: {remote_url} "
+                f"for operation {operation_id}"
+            )
 
         # (1) Start backtest on remote service
         # Extract strategy_name from strategy_config_path (e.g., "strategies/test.yaml" -> "test")
@@ -401,10 +478,22 @@ class BacktestingService(ServiceOrchestrator[None]):
             f"remote_op={remote_operation_id}"
         )
 
-        # (3) Create OperationServiceProxy for remote service
+        # (3) Mark worker as busy (if using registry)
+        if self.worker_registry is not None and worker_id is not None:
+            self.worker_registry.mark_busy(worker_id, operation_id)
+            self._operation_workers[operation_id] = worker_id
+            logger.info(
+                f"Marked worker {worker_id} as BUSY for operation {operation_id}"
+            )
+            logger.info(
+                "Worker cleanup will be handled by health check system "
+                "(worker reports idle when backtest completes)"
+            )
+
+        # (4) Create OperationServiceProxy for remote service
         proxy = OperationServiceProxy(base_url=remote_url)
 
-        # (4) Register proxy with OperationsService
+        # (5) Register proxy with OperationsService
         self.operations_service.register_remote_proxy(
             backend_operation_id=operation_id,
             proxy=proxy,
@@ -413,11 +502,13 @@ class BacktestingService(ServiceOrchestrator[None]):
 
         logger.info(f"Registered remote proxy: {operation_id} → {remote_operation_id}")
 
-        # (5) Return immediately with status="started"
+        # (6) Return immediately with status="started"
         # Backend doesn't know completion status - client discovers via queries
+        # TODO: Add callback to mark worker as available when operation completes
         return {
             "remote_operation_id": remote_operation_id,
             "backend_operation_id": operation_id,
             "status": "started",
             "message": f"Backtest started on remote service: {symbol} {timeframe}",
+            "worker_id": worker_id,  # Include worker_id in response for visibility
         }

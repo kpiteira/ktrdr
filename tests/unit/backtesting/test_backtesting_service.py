@@ -10,6 +10,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from ktrdr.api.models.workers import WorkerStatus, WorkerType
+from ktrdr.api.services.worker_registry import WorkerRegistry
 from ktrdr.backtesting.backtesting_service import BacktestingService
 from ktrdr.backtesting.progress_bridge import BacktestProgressBridge
 
@@ -307,3 +309,258 @@ class TestBacktestingServiceErrorHandling:
                     end_date=datetime(2024, 12, 31),
                     initial_capital=100000.0,
                 )
+
+
+class TestBacktestingServiceWorkerRegistry:
+    """Test WorkerRegistry integration for distributed backtesting."""
+
+    def test_init_accepts_worker_registry(self):
+        """Test BacktestingService can be initialized with WorkerRegistry."""
+        registry = WorkerRegistry()
+        service = BacktestingService(worker_registry=registry)
+
+        assert service.worker_registry is registry
+        assert isinstance(service._operation_workers, dict)
+
+    def test_init_without_registry_uses_none(self):
+        """Test BacktestingService works without WorkerRegistry (backward compat)."""
+        service = BacktestingService()
+
+        assert service.worker_registry is None
+
+    @pytest.mark.asyncio
+    async def test_remote_backtest_selects_worker_from_registry(self):
+        """Test remote backtest selects worker from WorkerRegistry."""
+        # Create registry and register a worker
+        registry = WorkerRegistry()
+        registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://worker-1:5003",
+        )
+
+        # Create service with registry
+        with patch.dict("os.environ", {"USE_REMOTE_BACKTEST_SERVICE": "true"}):
+            service = BacktestingService(worker_registry=registry)
+
+        operation_id = "op_test_123"
+        remote_operation_id = "remote_op_456"
+
+        with patch(
+            "ktrdr.backtesting.backtesting_service.httpx.AsyncClient"
+        ) as MockClient:
+            with patch("ktrdr.backtesting.backtesting_service.OperationServiceProxy"):
+                # Mock HTTP response from remote service
+                mock_response = MagicMock()
+                mock_response.json.return_value = {"operation_id": remote_operation_id}
+                mock_response.raise_for_status = MagicMock()
+
+                mock_client = MockClient.return_value.__aenter__.return_value
+                mock_client.post = AsyncMock(return_value=mock_response)
+
+                # Mock operations service
+                mock_ops = MagicMock()
+                mock_ops.register_remote_proxy = MagicMock()
+                service.operations_service = mock_ops
+
+                result = await service._run_remote_backtest(
+                    operation_id=operation_id,
+                    symbol="AAPL",
+                    timeframe="1h",
+                    strategy_config_path="strategies/test.yaml",
+                    model_path="models/test.pt",
+                    start_date=datetime(2024, 1, 1),
+                    end_date=datetime(2024, 12, 31),
+                    initial_capital=100000.0,
+                )
+
+                # Verify worker was selected and used
+                assert result["worker_id"] == "worker-1"
+                # Verify HTTP request went to worker's endpoint
+                mock_client.post.assert_called_once()
+                call_args = mock_client.post.call_args
+                assert call_args[0][0] == "http://worker-1:5003/backtests/start"
+
+    @pytest.mark.asyncio
+    async def test_remote_backtest_marks_worker_busy(self):
+        """Test remote backtest marks worker as busy."""
+        # Create registry and register a worker
+        registry = WorkerRegistry()
+        registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://worker-1:5003",
+        )
+
+        # Create service with registry
+        with patch.dict("os.environ", {"USE_REMOTE_BACKTEST_SERVICE": "true"}):
+            service = BacktestingService(worker_registry=registry)
+
+        operation_id = "op_test_123"
+        remote_operation_id = "remote_op_456"
+
+        with patch(
+            "ktrdr.backtesting.backtesting_service.httpx.AsyncClient"
+        ) as MockClient:
+            with patch("ktrdr.backtesting.backtesting_service.OperationServiceProxy"):
+                # Mock HTTP response
+                mock_response = MagicMock()
+                mock_response.json.return_value = {"operation_id": remote_operation_id}
+                mock_response.raise_for_status = MagicMock()
+
+                mock_client = MockClient.return_value.__aenter__.return_value
+                mock_client.post = AsyncMock(return_value=mock_response)
+
+                # Mock operations service
+                mock_ops = MagicMock()
+                service.operations_service = mock_ops
+
+                # Worker should start as AVAILABLE
+                worker = registry.get_worker("worker-1")
+                assert worker.status == WorkerStatus.AVAILABLE
+
+                await service._run_remote_backtest(
+                    operation_id=operation_id,
+                    symbol="AAPL",
+                    timeframe="1h",
+                    strategy_config_path="strategies/test.yaml",
+                    model_path="models/test.pt",
+                    start_date=datetime(2024, 1, 1),
+                    end_date=datetime(2024, 12, 31),
+                    initial_capital=100000.0,
+                )
+
+                # Worker should now be BUSY
+                assert worker.status == WorkerStatus.BUSY
+                assert worker.current_operation_id == operation_id
+
+                # Mapping should be stored
+                assert service._operation_workers[operation_id] == "worker-1"
+
+    @pytest.mark.asyncio
+    async def test_remote_backtest_raises_when_no_workers_available(self):
+        """Test remote backtest raises error when no workers available."""
+        # Create registry with no workers
+        registry = WorkerRegistry()
+
+        # Create service with registry
+        with patch.dict("os.environ", {"USE_REMOTE_BACKTEST_SERVICE": "true"}):
+            service = BacktestingService(worker_registry=registry)
+
+        operation_id = "op_test_123"
+
+        # Mock operations service
+        mock_ops = MagicMock()
+        service.operations_service = mock_ops
+
+        with pytest.raises(
+            RuntimeError,
+            match="No available backtest workers",
+        ):
+            await service._run_remote_backtest(
+                operation_id=operation_id,
+                symbol="AAPL",
+                timeframe="1h",
+                strategy_config_path="strategies/test.yaml",
+                model_path="models/test.pt",
+                start_date=datetime(2024, 1, 1),
+                end_date=datetime(2024, 12, 31),
+                initial_capital=100000.0,
+            )
+
+    @pytest.mark.asyncio
+    async def test_remote_backtest_fallback_to_hardcoded_url_without_registry(self):
+        """Test remote backtest falls back to hardcoded URL without registry."""
+        # Create service without registry
+        with patch.dict("os.environ", {"USE_REMOTE_BACKTEST_SERVICE": "true"}):
+            service = BacktestingService(worker_registry=None)
+
+        operation_id = "op_test_123"
+        remote_operation_id = "remote_op_456"
+
+        with patch(
+            "ktrdr.backtesting.backtesting_service.httpx.AsyncClient"
+        ) as MockClient:
+            with patch("ktrdr.backtesting.backtesting_service.OperationServiceProxy"):
+                # Mock HTTP response
+                mock_response = MagicMock()
+                mock_response.json.return_value = {"operation_id": remote_operation_id}
+                mock_response.raise_for_status = MagicMock()
+
+                mock_client = MockClient.return_value.__aenter__.return_value
+                mock_client.post = AsyncMock(return_value=mock_response)
+
+                # Mock operations service
+                mock_ops = MagicMock()
+                service.operations_service = mock_ops
+
+                result = await service._run_remote_backtest(
+                    operation_id=operation_id,
+                    symbol="AAPL",
+                    timeframe="1h",
+                    strategy_config_path="strategies/test.yaml",
+                    model_path="models/test.pt",
+                    start_date=datetime(2024, 1, 1),
+                    end_date=datetime(2024, 12, 31),
+                    initial_capital=100000.0,
+                )
+
+                # Verify fallback to hardcoded URL
+                mock_client.post.assert_called_once()
+                call_args = mock_client.post.call_args
+                assert call_args[0][0] == "http://localhost:5003/backtests/start"
+
+                # worker_id should be None in result
+                assert result["worker_id"] is None
+
+    def test_cleanup_worker_marks_available(self):
+        """Test cleanup_worker marks worker as available."""
+        # Create registry and register a worker
+        registry = WorkerRegistry()
+        registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://worker-1:5003",
+        )
+
+        service = BacktestingService(worker_registry=registry)
+
+        # Mark worker as busy
+        operation_id = "op_test_123"
+        registry.mark_busy("worker-1", operation_id)
+        service._operation_workers[operation_id] = "worker-1"
+
+        # Verify worker is busy
+        worker = registry.get_worker("worker-1")
+        assert worker.status == WorkerStatus.BUSY
+
+        # Cleanup
+        service.cleanup_worker(operation_id)
+
+        # Verify worker is available
+        assert worker.status == WorkerStatus.AVAILABLE
+        assert worker.current_operation_id is None
+
+        # Verify mapping is removed
+        assert operation_id not in service._operation_workers
+
+    def test_cleanup_worker_handles_missing_operation(self):
+        """Test cleanup_worker handles missing operation gracefully."""
+        registry = WorkerRegistry()
+        service = BacktestingService(worker_registry=registry)
+
+        # Should not raise error for nonexistent operation
+        service.cleanup_worker("nonexistent_op")
+
+    def test_cleanup_worker_without_registry(self):
+        """Test cleanup_worker works without registry."""
+        service = BacktestingService(worker_registry=None)
+
+        # Store a mapping (shouldn't happen in practice, but test it)
+        service._operation_workers["op_test"] = "worker-1"
+
+        # Should not raise error
+        service.cleanup_worker("op_test")
+
+        # Mapping should be removed
+        assert "op_test" not in service._operation_workers

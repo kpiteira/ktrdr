@@ -17,6 +17,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 
 from ktrdr import get_logger
+from ktrdr.api.endpoints.workers import get_worker_registry
 from ktrdr.api.models.backtesting import BacktestStartRequest, BacktestStartResponse
 from ktrdr.backtesting.backtesting_service import BacktestingService
 from ktrdr.errors import DataError, ValidationError
@@ -35,7 +36,9 @@ async def get_backtesting_service() -> BacktestingService:
     """Get backtesting service instance (singleton)."""
     global _backtesting_service
     if _backtesting_service is None:
-        _backtesting_service = BacktestingService()
+        # Inject WorkerRegistry for distributed worker selection
+        worker_registry = get_worker_registry()
+        _backtesting_service = BacktestingService(worker_registry=worker_registry)
     return _backtesting_service
 
 
