@@ -940,32 +940,601 @@ make quality
 
 ---
 
-## Phase 4: Production Readiness (Optional/Deferred)
+## Phase 4: Production Deployment & Continuous Delivery
 
-**Goal**: LXC templates, monitoring, configuration management
+**Goal**: Production-ready deployment with continuous delivery pipeline
 
-**Note**: Can be done in later sprint
+**Why This Fourth**: MVP works, now make it production-ready with automated deployment
 
-- LXC template creation scripts
-- Proxmox deployment automation
-- Configuration files (dev/prod)
-- Monitoring endpoints
+**End State**:
+- LXC template for base environment (OS, Python, dependencies)
+- Automated code deployment (separate from template - enables CD!)
+- Configuration management (dev/prod environments)
+- Monitoring and observability
+- **TESTABLE**: Deploy code update to all workers with one command
 
-**Total Phase 4 Time**: ~9 hours (deferred)
+**Key Insight**: Template = environment (changes rarely). Code = deployed separately (changes frequently). This enables continuous deployment without template rebuilding!
+
+---
+
+### Task 4.1: LXC Base Template Creation
+
+**Objective**: Create reusable LXC template with base environment (NOT code!)
+
+**Why Template Doesn't Include Code**:
+- Template changes are slow (rebuild, redeploy all workers)
+- Code changes are frequent (every commit/PR)
+- Solution: Template = base environment, code deployed separately
+
+**TDD Approach**:
+- Automation script testing
+- Template validation
+
+**Implementation**:
+
+1. Create `scripts/proxmox/create-base-template.sh`:
+   ```bash
+   #!/bin/bash
+   # Creates Proxmox LXC template with base environment
+
+   TEMPLATE_ID=9000
+   TEMPLATE_NAME="ktrdr-worker-base"
+   STORAGE="local-lvm"
+
+   # Create LXC container
+   pct create $TEMPLATE_ID local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst \
+     --hostname ktrdr-worker-template \
+     --memory 2048 \
+     --cores 2 \
+     --storage $STORAGE \
+     --net0 name=eth0,bridge=vmbr0,ip=dhcp
+
+   # Start container
+   pct start $TEMPLATE_ID
+   sleep 5
+
+   # Install base environment (NOT code!)
+   pct exec $TEMPLATE_ID -- bash <<'EOF'
+   # Update system
+   apt-get update
+   apt-get upgrade -y
+
+   # Install Python and system dependencies
+   apt-get install -y python3.12 python3-pip git curl
+
+   # Install uv
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+
+   # Create app directory (code will be deployed here)
+   mkdir -p /opt/ktrdr
+   chown -R root:root /opt/ktrdr
+
+   # Install systemd service template (code-agnostic)
+   cat > /etc/systemd/system/ktrdr-worker@.service <<'SYSTEMD'
+   [Unit]
+   Description=KTRDR %i Worker
+   After=network.target
+
+   [Service]
+   Type=simple
+   WorkingDirectory=/opt/ktrdr
+   ExecStartPre=/opt/ktrdr/scripts/update-code.sh
+   ExecStart=/opt/ktrdr/scripts/start-worker.sh %i
+   Restart=always
+   RestartSec=10
+
+   [Install]
+   WantedBy=multi-user.target
+   SYSTEMD
+
+   # Clean up
+   apt-get clean
+   EOF
+
+   # Stop container
+   pct stop $TEMPLATE_ID
+
+   # Convert to template
+   pct template $TEMPLATE_ID
+
+   echo "✓ Template $TEMPLATE_NAME created (ID: $TEMPLATE_ID)"
+   ```
+
+2. Create `scripts/proxmox/validate-template.sh`:
+   - Clone template
+   - Verify environment
+   - Clean up
+
+**Quality Gate**:
+```bash
+# Run on Proxmox host
+./scripts/proxmox/create-base-template.sh
+./scripts/proxmox/validate-template.sh
+
+make test-unit  # Still passes
+make quality
+```
+
+**Commit**: `feat(proxmox): create LXC base template for workers`
+
+**Estimated Time**: 2 hours
+
+---
+
+### Task 4.2: Code Deployment Scripts (CD-Friendly!)
+
+**Objective**: Deploy code to workers WITHOUT rebuilding templates
+
+**Why Separate**: Enables continuous deployment - update code on all workers with one command!
+
+**TDD Approach**:
+- Script testing with mocks
+- Integration test on test LXC
+
+**Implementation**:
+
+1. Create `scripts/deploy/update-code.sh` (runs ON each worker):
+   ```bash
+   #!/bin/bash
+   # Updates code on worker (called by systemd service or deployment script)
+
+   KTRDR_DIR="/opt/ktrdr"
+   REPO_URL="${KTRDR_REPO_URL:-https://github.com/yourorg/ktrdr.git}"
+   BRANCH="${KTRDR_BRANCH:-main}"
+
+   cd $KTRDR_DIR
+
+   if [ ! -d ".git" ]; then
+     # First deployment - clone repo
+     git clone $REPO_URL .
+     git checkout $BRANCH
+   else
+     # Update existing repo
+     git fetch origin
+     git checkout $BRANCH
+     git reset --hard origin/$BRANCH
+   fi
+
+   # Install/update dependencies
+   /root/.cargo/bin/uv sync
+
+   echo "✓ Code updated to $(git rev-parse --short HEAD)"
+   ```
+
+2. Create `scripts/deploy/deploy-to-workers.sh` (runs FROM control machine):
+   ```bash
+   #!/bin/bash
+   # Deploys code update to all workers
+
+   WORKERS_FILE="${1:-config/workers.prod.txt}"
+
+   # Read worker list (format: worker_id,ip_address,worker_type)
+   while IFS=',' read -r worker_id ip worker_type; do
+     echo "Deploying to $worker_id ($ip)..."
+
+     # SSH to worker and update code
+     ssh root@$ip "bash /opt/ktrdr/scripts/deploy/update-code.sh"
+
+     # Restart worker service
+     ssh root@$ip "systemctl restart ktrdr-worker@${worker_type}"
+
+     echo "✓ $worker_id updated and restarted"
+   done < "$WORKERS_FILE"
+
+   echo "✓ Deployment complete!"
+   ```
+
+3. Create `config/workers.prod.txt` (example):
+   ```
+   ktrdr-backtest-1,192.168.1.201,backtesting
+   ktrdr-backtest-2,192.168.1.202,backtesting
+   ktrdr-training-1,192.168.1.211,training
+   ```
+
+**Quality Gate**:
+```bash
+# Test on one LXC worker
+./scripts/deploy/update-code.sh  # Run on worker
+./scripts/deploy/deploy-to-workers.sh config/workers.test.txt  # Run from control
+
+make test-unit
+make quality
+```
+
+**Commit**: `feat(deploy): add continuous deployment scripts for workers`
+
+**Estimated Time**: 2 hours
+
+---
+
+### Task 4.3: Worker Provisioning Automation
+
+**Objective**: Automate creating new workers from template
+
+**Implementation**:
+
+1. Create `scripts/proxmox/provision-worker.sh`:
+   ```bash
+   #!/bin/bash
+   # Provisions new worker from template
+
+   WORKER_ID=$1
+   WORKER_TYPE=$2  # backtesting or training
+   IP_ADDRESS=$3
+
+   TEMPLATE_ID=9000
+   NEXT_ID=$(pvesh get /cluster/nextid)
+
+   # Clone template
+   pct clone $TEMPLATE_ID $NEXT_ID \
+     --hostname ktrdr-${WORKER_TYPE}-${WORKER_ID} \
+     --storage local-lvm
+
+   # Configure network
+   pct set $NEXT_ID --net0 name=eth0,bridge=vmbr0,ip=${IP_ADDRESS}/24,gw=192.168.1.1
+
+   # Set environment variables
+   pct set $NEXT_ID --features nesting=1
+
+   # Start worker
+   pct start $NEXT_ID
+   sleep 5
+
+   # Deploy code
+   ssh root@$IP_ADDRESS "bash /opt/ktrdr/scripts/deploy/update-code.sh"
+
+   # Configure and start service
+   pct exec $NEXT_ID -- bash <<EOF
+   # Set worker configuration
+   cat > /opt/ktrdr/.env <<ENVFILE
+   BACKEND_URL=http://192.168.1.100:8000
+   WORKER_TYPE=${WORKER_TYPE}
+   WORKER_ID=ktrdr-${WORKER_TYPE}-${WORKER_ID}
+   ENVFILE
+
+   # Enable and start service
+   systemctl enable ktrdr-worker@${WORKER_TYPE}
+   systemctl start ktrdr-worker@${WORKER_TYPE}
+   EOF
+
+   echo "✓ Worker provisioned: ktrdr-${WORKER_TYPE}-${WORKER_ID} (ID: $NEXT_ID, IP: $IP_ADDRESS)"
+   ```
+
+2. Create `scripts/proxmox/provision-fleet.sh`:
+   - Provisions multiple workers from config file
+   - Parallel provisioning for speed
+
+**Quality Gate**:
+```bash
+# Provision one test worker
+./scripts/proxmox/provision-worker.sh 1 backtesting 192.168.1.201
+
+# Verify worker registers with backend
+curl http://192.168.1.100:8000/api/v1/workers | jq '.total'
+
+make test-unit
+make quality
+```
+
+**Commit**: `feat(proxmox): add worker provisioning automation`
+
+**Estimated Time**: 2 hours
+
+---
+
+### Task 4.4: Configuration Management
+
+**Objective**: Environment-specific configuration (dev vs prod)
+
+**Implementation**:
+
+1. Create `config/workers.dev.yaml`:
+   ```yaml
+   backend_url: http://localhost:8000
+
+   health_check:
+     interval_seconds: 10
+     timeout_seconds: 5
+     failure_threshold: 3
+     removal_threshold_seconds: 300
+
+   # Docker Compose manages workers
+   deployment:
+     type: docker-compose
+     scale:
+       backtesting: 3
+       training: 2
+   ```
+
+2. Create `config/workers.prod.yaml`:
+   ```yaml
+   backend_url: http://192.168.1.100:8000
+
+   health_check:
+     interval_seconds: 10
+     timeout_seconds: 5
+     failure_threshold: 3
+     removal_threshold_seconds: 300
+
+   # Proxmox LXC workers
+   deployment:
+     type: proxmox-lxc
+     template_id: 9000
+     network:
+       subnet: 192.168.1.0/24
+       gateway: 192.168.1.1
+
+   workers:
+     backtesting:
+       count: 5
+       cores: 4
+       memory_mb: 8192
+       ip_range: 192.168.1.201-205
+
+     training:
+       count: 3
+       cores: 8
+       memory_mb: 16384
+       ip_range: 192.168.1.211-213
+   ```
+
+3. Create `ktrdr/config/worker_config.py`:
+   ```python
+   from pathlib import Path
+   import yaml
+   import os
+
+   def load_worker_config() -> dict:
+       """Load environment-specific worker configuration."""
+       env = os.getenv("KTRDR_ENV", "dev")
+       config_path = Path(f"config/workers.{env}.yaml")
+
+       with open(config_path) as f:
+           return yaml.safe_load(f)
+   ```
+
+**Quality Gate**:
+```bash
+make test-unit
+make quality
+```
+
+**Commit**: `feat(config): add environment-specific worker configuration`
+
+**Estimated Time**: 1 hour
+
+---
+
+### Task 4.5: Monitoring Endpoints
+
+**Objective**: Expose metrics for observability
+
+**Implementation**:
+
+1. Create `ktrdr/api/endpoints/metrics.py`:
+   ```python
+   from fastapi import APIRouter, Depends
+   from ktrdr.api.endpoints.workers import get_worker_registry
+
+   router = APIRouter(prefix="/metrics", tags=["monitoring"])
+
+   @router.get("/workers")
+   async def worker_metrics(registry = Depends(get_worker_registry)):
+       """Worker health and status metrics."""
+       workers = registry.list_workers()
+
+       # Aggregate by status
+       by_status = {}
+       for worker in workers:
+           status = worker.status.value
+           by_status[status] = by_status.get(status, 0) + 1
+
+       # Aggregate by type
+       by_type = {}
+       for worker in workers:
+           wtype = worker.worker_type.value
+           by_type[wtype] = by_type.get(wtype, 0) + 1
+
+       return {
+           "total_workers": len(workers),
+           "by_status": by_status,
+           "by_type": by_type,
+           "workers": [
+               {
+                   "id": w.worker_id,
+                   "type": w.worker_type.value,
+                   "status": w.status.value,
+                   "current_operation": w.current_operation_id,
+                   "health_failures": w.health_check_failures
+               }
+               for w in workers
+           ]
+       }
+
+   @router.get("/prometheus")
+   async def prometheus_metrics(registry = Depends(get_worker_registry)):
+       """Prometheus-compatible metrics."""
+       workers = registry.list_workers()
+
+       # Count by status
+       available = sum(1 for w in workers if w.status.value == "available")
+       busy = sum(1 for w in workers if w.status.value == "busy")
+       unavailable = sum(1 for w in workers if w.status.value == "temporarily_unavailable")
+
+       lines = [
+           "# HELP ktrdr_workers_total Total number of registered workers",
+           "# TYPE ktrdr_workers_total gauge",
+           f"ktrdr_workers_total {len(workers)}",
+           "",
+           "# HELP ktrdr_workers_available Workers in available state",
+           "# TYPE ktrdr_workers_available gauge",
+           f"ktrdr_workers_available {available}",
+           "",
+           "# HELP ktrdr_workers_busy Workers in busy state",
+           "# TYPE ktrdr_workers_busy gauge",
+           f"ktrdr_workers_busy {busy}",
+           "",
+           "# HELP ktrdr_workers_unavailable Workers in unavailable state",
+           "# TYPE ktrdr_workers_unavailable gauge",
+           f"ktrdr_workers_unavailable {unavailable}",
+       ]
+
+       return "\n".join(lines)
+   ```
+
+2. Add to `ktrdr/api/main.py`:
+   ```python
+   from ktrdr.api.endpoints import metrics
+   app.include_router(metrics.router, prefix="/api/v1")
+   ```
+
+**Quality Gate**:
+```bash
+make test-unit
+make quality
+
+# Manual test
+curl http://localhost:8000/api/v1/metrics/workers | jq
+curl http://localhost:8000/api/v1/metrics/prometheus
+```
+
+**Commit**: `feat(monitoring): add worker metrics endpoints`
+
+**Estimated Time**: 1.5 hours
+
+---
+
+### Task 4.6: CI/CD Pipeline Documentation
+
+**Objective**: Document deployment workflow
+
+**Implementation**:
+
+1. Create `docs/deployment/DEPLOYMENT_GUIDE.md`:
+   ```markdown
+   # KTRDR Distributed Workers - Deployment Guide
+
+   ## Continuous Deployment Workflow
+
+   ### 1. One-Time Setup (Per Environment)
+
+   **Create base template** (once):
+   ```bash
+   ./scripts/proxmox/create-base-template.sh
+   ```
+
+   **Provision workers** (once per worker):
+   ```bash
+   ./scripts/proxmox/provision-fleet.sh config/workers.prod.yaml
+   ```
+
+   ### 2. Deploy Code Updates (Every Commit/PR)
+
+   **Automatic deployment** (CI/CD):
+   ```bash
+   # In your CI/CD pipeline (GitHub Actions, GitLab CI, etc.)
+   ./scripts/deploy/deploy-to-workers.sh config/workers.prod.txt
+   ```
+
+   **Manual deployment**:
+   ```bash
+   # Deploy to all workers
+   ./scripts/deploy/deploy-to-workers.sh
+
+   # Deploy to specific worker
+   ssh root@192.168.1.201 "bash /opt/ktrdr/scripts/deploy/update-code.sh && systemctl restart ktrdr-worker@backtesting"
+   ```
+
+   ### 3. Monitoring
+
+   ```bash
+   # Check worker status
+   curl http://192.168.1.100:8000/api/v1/workers | jq
+
+   # Prometheus metrics
+   curl http://192.168.1.100:8000/api/v1/metrics/prometheus
+   ```
+
+   ## Key Concepts
+
+   - **Template**: Base environment (OS, Python, uv) - rarely changes
+   - **Code deployment**: Git pull + uv sync - changes frequently
+   - **No template rebuilds needed for code updates!**
+   ```
+
+2. Create `.github/workflows/deploy-workers.yml` (example):
+   ```yaml
+   name: Deploy to Workers
+
+   on:
+     push:
+       branches: [main]
+
+   jobs:
+     deploy:
+       runs-on: ubuntu-latest
+       steps:
+         - uses: actions/checkout@v3
+
+         - name: Deploy to production workers
+           env:
+             SSH_KEY: ${{ secrets.PROXMOX_SSH_KEY }}
+           run: |
+             echo "$SSH_KEY" > key.pem
+             chmod 600 key.pem
+             ./scripts/deploy/deploy-to-workers.sh
+   ```
+
+**Quality Gate**:
+```bash
+make quality  # Docs linting
+```
+
+**Commit**: `docs(deployment): add deployment guide and CI/CD examples`
+
+**Estimated Time**: 1.5 hours
+
+---
+
+**Phase 4 Checkpoint**:
+✅ LXC base template created (environment only, no code)
+✅ Code deployment separate from template (enables CD!)
+✅ Worker provisioning automated
+✅ Configuration management (dev/prod)
+✅ Monitoring endpoints
+✅ **TESTABLE**: Deploy code update to all workers with one command
+✅ **CI/CD Ready**: No template rebuilds for code changes
+
+**Total Phase 4 Time**: ~10 hours
 
 ---
 
 ## Summary
 
-### Total Implementation Time (MVP)
+### Total Implementation Time
 
 | Phase | Focus | Tasks | Time | Testable? |
 |-------|-------|-------|------|-----------|
 | Phase 1: Single Worker E2E | Docker + 1 backtest worker | 6 tasks | ~8.5 hours | ✅ Yes! |
 | Phase 2: Multi-Worker + Health | Scaling + reliability | 6 tasks | ~8 hours | ✅ Yes! |
 | Phase 3: Training Workers | Training support | 3 tasks | ~5 hours | ✅ Yes! |
-| **Total (MVP)** | **Distributed system** | **15 tasks** | **~21.5 hours** | **✅ Every phase!** |
-| Phase 4: Production (Optional) | LXC, monitoring | ~4 tasks | ~9 hours | Deferred |
+| **Subtotal (MVP)** | **Distributed system (dev)** | **15 tasks** | **~21.5 hours** | **✅ Every phase!** |
+| Phase 4: Production & CD | LXC, deployment, monitoring | 6 tasks | ~10 hours | ✅ Yes! |
+| **Total (Complete)** | **Production-ready system** | **21 tasks** | **~31.5 hours** | **✅ Full CD pipeline!** |
+
+### Implementation Strategy
+
+**MVP First (Phases 1-3, ~21.5 hours)**:
+- Complete distributed system working in Docker Compose
+- Fully functional for development and testing
+- All core features implemented
+- **You can use it!**
+
+**Production Ready (Phase 4, ~10 hours)**:
+- Proxmox LXC deployment automation
+- Continuous delivery pipeline (no template rebuilds!)
+- Monitoring and observability
+- **You can deploy it!**
 
 ### Key Improvements Over Previous Plan
 
