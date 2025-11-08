@@ -1,0 +1,91 @@
+version: "3.8"
+
+# Distributed Workers Development Environment
+# This docker-compose file is for developing and testing the distributed workers architecture
+# For production, workers will run in Proxmox LXC containers
+
+services:
+  # Backend service - Central orchestrator
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/backend/Dockerfile.dev
+    image: ktrdr-backend:dev
+    container_name: ktrdr-backend-distributed
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount source code for hot-reloading
+      - ../ktrdr:/app/ktrdr
+      - ../tests:/app/tests
+      - ../data:/app/data
+      - ../logs:/app/logs
+      - ../config:/app/config:ro
+      - ../strategies:/app/strategies:ro
+      - ../models:/app/models
+      # Cache directories
+      - pip-cache:/root/.cache/pip
+      - uv-cache:/root/.cache/uv
+    environment:
+      - PYTHONPATH=/app
+      - LOG_LEVEL=INFO
+      - ENVIRONMENT=development
+      # Disable remote services for this environment
+      - USE_IB_HOST_SERVICE=false
+      - USE_TRAINING_HOST_SERVICE=false
+      - USE_REMOTE_BACKTEST_SERVICE=false
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - ktrdr-network
+    command: ["uvicorn", "ktrdr.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  # Backtest worker - Executes backtesting operations
+  # Can be scaled with: docker-compose -f docker/docker-compose.dev.yml up -d --scale backtest-worker=3
+  backtest-worker:
+    build:
+      context: ..
+      dockerfile: docker/backend/Dockerfile.dev
+    image: ktrdr-backend:dev
+    ports:
+      - "5003"  # Dynamic port mapping for scaling
+    volumes:
+      - ../ktrdr:/app/ktrdr
+      - ../data:/app/data:ro
+      - ../models:/app/models:ro
+      - ../strategies:/app/strategies:ro
+      - ../config:/app/config:ro
+      - ../logs:/app/logs
+      - pip-cache:/root/.cache/pip
+      - uv-cache:/root/.cache/uv
+    environment:
+      - PYTHONPATH=/app
+      - LOG_LEVEL=INFO
+      - BACKEND_URL=http://backend:8000
+      - WORKER_TYPE=backtesting
+      # Worker ID will be auto-generated from hostname
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - ktrdr-network
+    depends_on:
+      backend:
+        condition: service_healthy
+    # Run the backtesting worker API
+    command: ["uvicorn", "ktrdr.backtesting.remote_api:app", "--host", "0.0.0.0", "--port", "5003", "--reload"]
+
+networks:
+  ktrdr-network:
+    driver: bridge
+
+volumes:
+  pip-cache:
+  uv-cache:
