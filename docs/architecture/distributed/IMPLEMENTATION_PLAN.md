@@ -1,6 +1,6 @@
 # Distributed Training & Backtesting Implementation Plan
 
-**Version**: 1.0
+**Version**: 2.0 - Vertical Slices
 **Status**: Ready for Implementation
 **Date**: 2025-11-08
 
@@ -8,11 +8,15 @@
 
 ## Overview
 
-This implementation plan uses **Test-Driven Development** with strict quality gates. Each task must:
+This implementation plan uses **Test-Driven Development** with **vertical slices**. Each phase delivers a complete, testable feature.
+
+**Quality Gates** (every task):
 - Write tests FIRST (TDD)
 - Pass ALL unit tests: `make test-unit`
 - Pass quality checks: `make quality`
 - Result in ONE commit
+
+**Vertical Approach**: Each phase ends with a working, testable system feature.
 
 All work will be done on a single feature branch: `claude/containerize-training-service-*`
 
@@ -20,38 +24,159 @@ All work will be done on a single feature branch: `claude/containerize-training-
 
 ## Phase Structure
 
-- **Phase**: A complete, integrated feature. System MUST work at end of phase.
-- **Task**: A single, testable unit of work. System SHOULD work, but transient breakage acceptable if building infrastructure.
+- **Phase**: A complete **vertical slice** delivering end-to-end functionality
+- **Task**: A single, testable unit of work building toward the phase goal
+- **Key**: Each phase ends with something you can **actually test and use**
 
 ---
 
-## Phase 1: Foundation - Worker Registry Infrastructure
+## Phase 1: Single Backtesting Worker End-to-End
 
-**Goal**: Add worker registry foundation without breaking existing system
+**Goal**: Get ONE backtesting worker running in Docker, accepting operations, completing them
 
-**End State**: WorkerRegistry exists, can register workers, select workers. All existing functionality still works.
+**Why This First**: Establishes the complete vertical stack with minimal infrastructure. We can test it works!
 
-### Task 1.1: Worker Data Models
+**End State**:
+- Docker Compose with backend + 1 backtest worker
+- Worker self-registers on startup
+- Can submit a backtest → worker executes it → returns results
+- **TESTABLE**: Run `docker-compose up`, submit backtest via API, see it complete
 
-**Objective**: Define core data models for workers
+---
+
+### Task 1.1: Docker Compose Foundation
+
+**Objective**: Get basic Docker Compose environment working with backend + 1 backtest worker
 
 **TDD Approach**:
-1. Create `tests/unit/api/services/test_worker_models.py`
-2. Write tests for:
-   - `WorkerType` enum (GPU_HOST, CPU_TRAINING, BACKTESTING)
-   - `WorkerStatus` enum (AVAILABLE, BUSY, TEMPORARILY_UNAVAILABLE)
-   - `WorkerEndpoint` dataclass (all fields, validation)
-   - Serialization/deserialization to/from dict
+- Manual testing (Docker Compose itself)
+- Validation: Backend starts, worker starts, both accessible
 
 **Implementation**:
-1. Create `ktrdr/api/models/workers.py`
-2. Define enums and dataclass
-3. Add to/from dict methods for JSON serialization
+1. Create `docker/docker-compose.dev.yml`:
+   ```yaml
+   version: "3.8"
+
+   services:
+     backend:
+       build:
+         context: ..
+         dockerfile: docker/backend/Dockerfile
+       ports:
+         - "8000:8000"
+       environment:
+         - PYTHONPATH=/app
+         - LOG_LEVEL=INFO
+       networks:
+         - ktrdr-network
+
+     backtest-worker:
+       build:
+         context: ..
+         dockerfile: docker/backend/Dockerfile
+       command: ["uv", "run", "uvicorn", "ktrdr.backtesting.remote_api:app", "--host", "0.0.0.0", "--port", "5003"]
+       environment:
+         - PYTHONPATH=/app
+         - BACKEND_URL=http://backend:8000
+         - WORKER_TYPE=backtesting
+         - LOG_LEVEL=INFO
+       networks:
+         - ktrdr-network
+
+   networks:
+     ktrdr-network:
+       driver: bridge
+   ```
+
+2. Test:
+   ```bash
+   docker-compose -f docker/docker-compose.dev.yml up -d
+   curl http://localhost:8000/health  # Backend should respond
+   docker-compose -f docker/docker-compose.dev.yml logs backtest-worker  # Should see startup
+   docker-compose -f docker/docker-compose.dev.yml down
+   ```
 
 **Quality Gate**:
 ```bash
-make test-unit  # All tests pass (including existing + new)
-make quality    # Lint, format, typecheck pass
+# Manual verification
+docker-compose -f docker/docker-compose.dev.yml up -d
+docker-compose -f docker/docker-compose.dev.yml ps  # Both running
+docker-compose -f docker/docker-compose.dev.yml down
+
+make test-unit  # All existing tests still pass
+make quality
+```
+
+**Commit**: `feat(docker): add Docker Compose dev environment with backend + backtest worker`
+
+**Estimated Time**: 1 hour
+
+---
+
+### Task 1.2: Worker Data Models
+
+**Objective**: Define minimal data models needed for worker registration
+
+**TDD Approach**:
+1. Create `tests/unit/api/models/test_workers.py`
+2. Write tests for:
+   - `WorkerType` enum (BACKTESTING, CPU_TRAINING, GPU_HOST)
+   - `WorkerStatus` enum (AVAILABLE, BUSY, TEMPORARILY_UNAVAILABLE)
+   - `WorkerEndpoint` dataclass
+   - to_dict() / from_dict() serialization
+
+**Implementation**:
+1. Create `ktrdr/api/models/workers.py`:
+   ```python
+   from enum import Enum
+   from dataclasses import dataclass, asdict
+   from datetime import datetime
+   from typing import Dict, Any, Optional
+
+   class WorkerType(str, Enum):
+       BACKTESTING = "backtesting"
+       CPU_TRAINING = "cpu_training"
+       GPU_HOST = "gpu_host"
+
+   class WorkerStatus(str, Enum):
+       AVAILABLE = "available"
+       BUSY = "busy"
+       TEMPORARILY_UNAVAILABLE = "temporarily_unavailable"
+
+   @dataclass
+   class WorkerEndpoint:
+       worker_id: str
+       worker_type: WorkerType
+       endpoint_url: str
+       status: WorkerStatus
+       current_operation_id: Optional[str] = None
+       capabilities: Dict[str, Any] = None
+       last_health_check: Optional[datetime] = None
+       last_healthy_at: Optional[datetime] = None
+       health_check_failures: int = 0
+       metadata: Dict[str, Any] = None
+
+       def __post_init__(self):
+           if self.capabilities is None:
+               self.capabilities = {}
+           if self.metadata is None:
+               self.metadata = {}
+
+       def to_dict(self) -> Dict[str, Any]:
+           data = asdict(self)
+           data['worker_type'] = self.worker_type.value
+           data['status'] = self.status.value
+           if self.last_health_check:
+               data['last_health_check'] = self.last_health_check.isoformat()
+           if self.last_healthy_at:
+               data['last_healthy_at'] = self.last_healthy_at.isoformat()
+           return data
+   ```
+
+**Quality Gate**:
+```bash
+make test-unit
+make quality
 ```
 
 **Commit**: `feat(workers): add worker data models and types`
@@ -60,27 +185,83 @@ make quality    # Lint, format, typecheck pass
 
 ---
 
-### Task 1.2: WorkerRegistry - Basic Structure
+### Task 1.3: Minimal WorkerRegistry
 
-**Objective**: Create WorkerRegistry class with in-memory storage (no background tasks yet)
+**Objective**: Create WorkerRegistry that can register and retrieve workers (no health checks yet)
 
 **TDD Approach**:
 1. Create `tests/unit/api/services/test_worker_registry.py`
 2. Write tests for:
-   - `__init__()` - initialization
-   - `register_worker()` - add worker to registry
-   - `get_worker(worker_id)` - retrieve by ID
-   - `list_workers()` - list all workers
-   - `list_workers(worker_type=...)` - filter by type
-   - `list_workers(status=...)` - filter by status
+   - `register_worker()` - adds worker
+   - `register_worker()` again - updates (idempotent)
+   - `get_worker(worker_id)` - retrieves
+   - `list_workers()` - lists all
 
 **Implementation**:
-1. Create `ktrdr/api/services/worker_registry.py`
-2. Implement WorkerRegistry class:
-   - In-memory dict storage: `_workers: Dict[str, WorkerEndpoint]`
-   - Registration (idempotent - updates if exists)
-   - Retrieval and listing methods
-3. NO background tasks yet (health checks come later)
+1. Create `ktrdr/api/services/worker_registry.py`:
+   ```python
+   from typing import Dict, Optional, List
+   from ktrdr.api.models.workers import WorkerEndpoint, WorkerType, WorkerStatus
+   from datetime import datetime
+   import logging
+
+   logger = logging.getLogger(__name__)
+
+   class WorkerRegistry:
+       """Minimal worker registry - just registration and retrieval."""
+
+       def __init__(self):
+           self._workers: Dict[str, WorkerEndpoint] = {}
+
+       def register_worker(
+           self,
+           worker_id: str,
+           worker_type: WorkerType,
+           endpoint_url: str,
+           capabilities: Optional[Dict] = None
+       ) -> WorkerEndpoint:
+           """Register or update a worker (idempotent)."""
+           if worker_id in self._workers:
+               # Update existing
+               worker = self._workers[worker_id]
+               worker.endpoint_url = endpoint_url
+               worker.capabilities = capabilities or {}
+               worker.status = WorkerStatus.AVAILABLE
+               logger.info(f"Worker {worker_id} re-registered")
+           else:
+               # Create new
+               worker = WorkerEndpoint(
+                   worker_id=worker_id,
+                   worker_type=worker_type,
+                   endpoint_url=endpoint_url,
+                   status=WorkerStatus.AVAILABLE,
+                   capabilities=capabilities or {},
+                   last_healthy_at=datetime.utcnow()
+               )
+               self._workers[worker_id] = worker
+               logger.info(f"Worker {worker_id} registered ({worker_type})")
+
+           return worker
+
+       def get_worker(self, worker_id: str) -> Optional[WorkerEndpoint]:
+           """Get worker by ID."""
+           return self._workers.get(worker_id)
+
+       def list_workers(
+           self,
+           worker_type: Optional[WorkerType] = None,
+           status: Optional[WorkerStatus] = None
+       ) -> List[WorkerEndpoint]:
+           """List workers with optional filters."""
+           workers = list(self._workers.values())
+
+           if worker_type:
+               workers = [w for w in workers if w.worker_type == worker_type]
+           if status:
+               workers = [w for w in workers if w.status == status]
+
+           return workers
+   ```
 
 **Quality Gate**:
 ```bash
@@ -88,42 +269,9 @@ make test-unit
 make quality
 ```
 
-**Commit**: `feat(workers): add WorkerRegistry with basic registration`
+**Commit**: `feat(workers): add minimal WorkerRegistry for registration and retrieval`
 
-**Estimated Time**: 2 hours
-
----
-
-### Task 1.3: WorkerRegistry - Worker Selection
-
-**Objective**: Add round-robin worker selection logic
-
-**TDD Approach**:
-1. Add tests to `tests/unit/api/services/test_worker_registry.py`:
-   - `select_worker(worker_type)` - returns least recently used
-   - Round-robin behavior (select 3 workers sequentially, verify order)
-   - Filtering by capabilities: `select_worker(worker_type, capabilities={"gpu": True})`
-   - Returns None if no workers available
-   - Returns None if all workers are BUSY
-
-**Implementation**:
-1. Add to WorkerRegistry:
-   - `get_available_workers(worker_type, capabilities)` - filter logic
-   - `select_worker(worker_type, capabilities)` - round-robin selection
-   - Track `last_selected` timestamp in worker metadata
-2. Add worker state management:
-   - `mark_busy(worker_id, operation_id)`
-   - `mark_available(worker_id)`
-
-**Quality Gate**:
-```bash
-make test-unit
-make quality
-```
-
-**Commit**: `feat(workers): add worker selection with round-robin load balancing`
-
-**Estimated Time**: 2 hours
+**Estimated Time**: 1.5 hours
 
 ---
 
@@ -133,25 +281,78 @@ make quality
 
 **TDD Approach**:
 1. Create `tests/unit/api/endpoints/test_workers.py`
-2. Write tests for:
-   - POST `/api/v1/workers/register` - successful registration
-   - Returns 200 with worker info
-   - Idempotent (re-registration updates existing)
-   - Validation errors (missing fields, invalid worker_type)
-3. Add integration test in `tests/integration/api/test_worker_registration.py`:
-   - Full API call via TestClient
+2. Write tests for successful registration, idempotency, validation
 
 **Implementation**:
-1. Create `ktrdr/api/endpoints/workers.py`
-2. Define Pydantic models:
-   - `WorkerRegistrationRequest`
-   - `WorkerRegistrationResponse`
-3. Implement endpoint:
-   - Validates input
-   - Calls `worker_registry.register_worker()`
-   - Returns worker info
-4. Add router to `ktrdr/api/main.py`
-5. Create dependency injection for WorkerRegistry (singleton pattern)
+1. Create `ktrdr/api/endpoints/workers.py`:
+   ```python
+   from fastapi import APIRouter, Depends
+   from pydantic import BaseModel
+   from typing import Dict, Any, Optional
+   from ktrdr.api.models.workers import WorkerType
+   from ktrdr.api.services.worker_registry import WorkerRegistry
+
+   router = APIRouter(prefix="/workers", tags=["workers"])
+
+   # Singleton registry
+   _worker_registry: Optional[WorkerRegistry] = None
+
+   def get_worker_registry() -> WorkerRegistry:
+       global _worker_registry
+       if _worker_registry is None:
+           _worker_registry = WorkerRegistry()
+       return _worker_registry
+
+   class WorkerRegistrationRequest(BaseModel):
+       worker_id: str
+       worker_type: WorkerType
+       endpoint_url: str
+       capabilities: Dict[str, Any] = {}
+
+   class WorkerRegistrationResponse(BaseModel):
+       worker_id: str
+       worker_type: WorkerType
+       status: str
+       message: str
+
+   @router.post("/register", response_model=WorkerRegistrationResponse)
+   async def register_worker(
+       request: WorkerRegistrationRequest,
+       registry: WorkerRegistry = Depends(get_worker_registry)
+   ):
+       """Register a worker with the backend."""
+       worker = registry.register_worker(
+           worker_id=request.worker_id,
+           worker_type=request.worker_type,
+           endpoint_url=request.endpoint_url,
+           capabilities=request.capabilities
+       )
+
+       return WorkerRegistrationResponse(
+           worker_id=worker.worker_id,
+           worker_type=worker.worker_type,
+           status=worker.status.value,
+           message=f"Worker {worker.worker_id} registered successfully"
+       )
+
+   @router.get("")
+   async def list_workers(
+       registry: WorkerRegistry = Depends(get_worker_registry)
+   ):
+       """List all registered workers."""
+       workers = registry.list_workers()
+       return {
+           "total": len(workers),
+           "workers": [w.to_dict() for w in workers]
+       }
+   ```
+
+2. Add to `ktrdr/api/main.py`:
+   ```python
+   from ktrdr.api.endpoints import workers
+
+   app.include_router(workers.router, prefix="/api/v1")
+   ```
 
 **Quality Gate**:
 ```bash
@@ -161,301 +362,207 @@ make quality
 
 **Commit**: `feat(workers): add worker registration API endpoint`
 
-**Estimated Time**: 2 hours
+**Estimated Time**: 1.5 hours
 
 ---
 
-### Task 1.5: Worker List API Endpoint
+### Task 1.5: Worker Self-Registration on Startup
 
-**Objective**: Add GET /workers endpoint for monitoring
-
-**TDD Approach**:
-1. Add tests to `tests/unit/api/endpoints/test_workers.py`:
-   - GET `/api/v1/workers` - list all workers
-   - Filter by `worker_type` query param
-   - Filter by `status` query param
-   - Returns correct JSON structure
-
-**Implementation**:
-1. Add to `ktrdr/api/endpoints/workers.py`:
-   - `WorkerListResponse` Pydantic model
-   - GET endpoint with optional filters
-   - Calls `worker_registry.list_workers()`
-
-**Quality Gate**:
-```bash
-make test-unit
-make quality
-```
-
-**Commit**: `feat(workers): add worker list API endpoint for monitoring`
-
-**Estimated Time**: 1 hour
-
----
-
-**Phase 1 Checkpoint**:
-- WorkerRegistry exists with registration and selection
-- API endpoints for registration and listing
-- All existing tests still pass
-- System works (no functionality changed, only added)
-
-**Total Phase 1 Time**: ~8 hours
-
----
-
-## Phase 2: Backtesting Worker Integration
-
-**Goal**: Enable distributed backtesting with containerized workers
-
-**End State**: Backtesting operations can be dispatched to remote workers. Progress tracking works. All existing tests pass.
-
-### Task 2.1: Enhance BacktestingService - Worker Selection
-
-**Objective**: Add worker selection to BacktestingService
-
-**TDD Approach**:
-1. Create `tests/unit/api/services/test_backtesting_service_workers.py`
-2. Write tests for:
-   - `_select_worker(context)` - selects available backtest worker
-   - Returns None if no workers available
-   - Raises appropriate error if no workers
-
-**Implementation**:
-1. Modify `ktrdr/api/services/backtesting_service.py`:
-   - Add `worker_registry` parameter to `__init__`
-   - Implement `_select_worker()` method (required by ServiceOrchestrator)
-   - Implement `_get_required_capabilities()` - returns empty dict (no special needs)
-2. Keep existing local execution mode working (backward compatibility)
-
-**Quality Gate**:
-```bash
-make test-unit
-make quality
-```
-
-**Commit**: `feat(backtesting): add worker selection to BacktestingService`
-
-**Estimated Time**: 2 hours
-
----
-
-### Task 2.2: ServiceOrchestrator - Worker Dispatch Support
-
-**Objective**: Add worker dispatch logic to ServiceOrchestrator base class
-
-**TDD Approach**:
-1. Create `tests/unit/async_infrastructure/test_service_orchestrator_dispatch.py`
-2. Write tests for:
-   - `_dispatch_to_worker(worker, context)` - dispatches operation
-   - Retry logic (max 3 attempts)
-   - 503 response triggers retry with different worker
-   - Returns remote operation_id
-
-**Implementation**:
-1. Modify `ktrdr/async_infrastructure/service_orchestrator.py`:
-   - Add abstract methods:
-     - `_select_worker(operation_context) -> Optional[WorkerEndpoint]`
-     - `_get_required_capabilities(operation_context) -> Dict[str, Any]`
-   - Add `_dispatch_to_worker(worker, context, max_retries=3)` method
-   - Add `worker_registry` to `__init__` (optional, for backward compatibility)
-2. Dispatch flow:
-   - POST to `worker.endpoint_url/<operation_endpoint>`
-   - Parse response for remote operation_id
-   - Handle 503 (worker busy) → retry with different worker
-   - Handle other errors → fail operation
-
-**Quality Gate**:
-```bash
-make test-unit
-make quality
-```
-
-**Commit**: `feat(orchestrator): add worker dispatch support to ServiceOrchestrator`
-
-**Estimated Time**: 3 hours
-
----
-
-### Task 2.3: Enhance Backtest Worker API - Registration on Startup
-
-**Objective**: Make backtest worker self-register with backend
+**Objective**: Make backtest worker call POST /workers/register when it starts
 
 **TDD Approach**:
 1. Create `tests/unit/backtesting/test_worker_registration.py`
-2. Write tests for:
-   - `register_with_backend()` - sends POST to backend
-   - Retry logic (max 5 attempts with backoff)
-   - Environment variable configuration (BACKEND_URL, WORKER_ID)
+2. Mock httpx to test registration logic
 
 **Implementation**:
 1. Modify `ktrdr/backtesting/remote_api.py`:
-   - Add startup event handler `on_startup()`
-   - Implement `register_with_backend()` function
-   - Read config from environment:
-     - `BACKEND_URL` (required)
-     - `WORKER_ID` (default: hostname)
-     - `WORKER_TYPE` (default: "backtesting")
-   - Send POST to `{BACKEND_URL}/api/v1/workers/register`
-2. Add worker state to health endpoint (already exists, enhance):
-   - Return `worker_status: "idle" | "busy"`
-   - Return `current_operation: str | None`
+   ```python
+   import os
+   import httpx
+   import asyncio
+   import socket
+   from fastapi import FastAPI
+
+   app = FastAPI(title="KTRDR Backtest Worker")
+
+   # Worker state
+   WORKER_ID = os.getenv("WORKER_ID", socket.gethostname())
+   BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+   WORKER_TYPE = "backtesting"
+
+   worker_state = {
+       "status": "idle",
+       "current_operation_id": None
+   }
+
+   async def register_with_backend():
+       """Register this worker with the backend."""
+       registration_url = f"{BACKEND_URL}/api/v1/workers/register"
+
+       payload = {
+           "worker_id": WORKER_ID,
+           "worker_type": WORKER_TYPE,
+           "endpoint_url": f"http://{WORKER_ID}:5003",  # In Docker, use hostname
+           "capabilities": {}
+       }
+
+       max_retries = 5
+       for attempt in range(max_retries):
+           try:
+               async with httpx.AsyncClient(timeout=10.0) as client:
+                   response = await client.post(registration_url, json=payload)
+                   response.raise_for_status()
+                   print(f"✓ Worker {WORKER_ID} registered with backend")
+                   return
+           except Exception as e:
+               wait_time = 2 ** attempt  # Exponential backoff
+               print(f"✗ Registration attempt {attempt+1}/{max_retries} failed: {e}")
+               if attempt < max_retries - 1:
+                   print(f"  Retrying in {wait_time}s...")
+                   await asyncio.sleep(wait_time)
+
+       print(f"✗ Failed to register after {max_retries} attempts")
+
+   @app.on_event("startup")
+   async def on_startup():
+       """Startup event handler."""
+       await register_with_backend()
+
+   @app.get("/health")
+   async def health():
+       """Health check endpoint."""
+       return {
+           "status": "healthy",
+           "worker_status": worker_state["status"],
+           "current_operation": worker_state["current_operation_id"],
+           "worker_id": WORKER_ID
+       }
+
+   # ... rest of existing backtest API code ...
+   ```
 
 **Quality Gate**:
 ```bash
 make test-unit
 make quality
+
+# Manual Docker test
+docker-compose -f docker/docker-compose.dev.yml up -d
+sleep 5
+curl http://localhost:8000/api/v1/workers  # Should see registered worker
+docker-compose -f docker/docker-compose.dev.yml down
 ```
 
 **Commit**: `feat(backtesting): add self-registration on worker startup`
-
-**Estimated Time**: 2 hours
-
----
-
-### Task 2.4: Backtest Worker - Exclusivity Enforcement
-
-**Objective**: Ensure backtest worker rejects requests when busy
-
-**TDD Approach**:
-1. Add tests to `tests/unit/backtesting/test_remote_api.py`:
-   - POST `/backtests/start` when idle → 200
-   - POST `/backtests/start` when busy → 503
-   - Worker state transitions: idle → busy → idle
-
-**Implementation**:
-1. Modify `ktrdr/backtesting/remote_api.py`:
-   - Add module-level worker state:
-     ```python
-     worker_state = {
-         "status": "idle",  # idle | busy
-         "current_operation_id": None
-     }
-     ```
-   - Modify `/backtests/start` endpoint:
-     - Check if busy → return 503
-     - Mark busy before starting operation
-     - Mark idle when operation completes (in background task)
-
-**Quality Gate**:
-```bash
-make test-unit
-make quality
-```
-
-**Commit**: `feat(backtesting): enforce worker exclusivity (reject when busy)`
 
 **Estimated Time**: 1.5 hours
 
 ---
 
-### Task 2.5: BacktestingService - Remote Dispatch Integration
+### Task 1.6: End-to-End Test - Single Backtest
 
-**Objective**: Wire up BacktestingService to dispatch to workers
+**Objective**: Submit a backtest, verify worker executes it, returns results
 
 **TDD Approach**:
-1. Add integration test in `tests/integration/backtesting/test_distributed_backtest.py`:
-   - Start mock worker (httpx mock or actual test server)
-   - Register worker
-   - Start backtest via BacktestingService
-   - Verify dispatched to worker
-   - Verify proxy registered for progress tracking
+1. Create `tests/e2e/test_single_backtest_worker.py`
+2. Use Docker Compose test fixtures
 
 **Implementation**:
-1. Modify `ktrdr/api/services/backtesting_service.py`:
-   - Modify `start_backtest()` method:
-     - If `worker_registry` is None: Use local execution (existing code path)
-     - If `worker_registry` exists:
-       - Select worker via `_select_worker()`
-       - Dispatch to worker via `_dispatch_to_worker()`
-       - Register proxy via `operations_service.register_remote_proxy()`
-       - Mark worker busy via `worker_registry.mark_busy()`
-2. Maintain backward compatibility (no worker registry = local mode)
+1. Write E2E test that:
+   - Starts Docker Compose (backend + 1 worker)
+   - Waits for worker registration
+   - Submits backtest via API
+   - Polls for completion
+   - Verifies results
+   - Cleans up
 
 **Quality Gate**:
 ```bash
 make test-unit
+make test-e2e  # This E2E test
 make quality
 ```
 
-**Commit**: `feat(backtesting): integrate worker dispatch into BacktestingService`
-
-**Estimated Time**: 3 hours
-
----
-
-### Task 2.6: End-to-End Test - Distributed Backtesting
-
-**Objective**: Full integration test with real worker
-
-**TDD Approach**:
-1. Create `tests/e2e/test_distributed_backtesting.py`
-2. Test flow:
-   - Start backend (FastAPI app)
-   - Start backtest worker (separate process)
-   - Worker registers with backend
-   - Submit backtest via API
-   - Poll for progress
-   - Verify completion
-   - Verify results
-
-**Implementation**:
-1. Write comprehensive E2E test
-2. May use pytest fixtures to manage processes
-3. Verify progress tracking works end-to-end
-
-**Quality Gate**:
-```bash
-make test-unit
-make test-e2e  # This specific E2E test
-make quality
-```
-
-**Commit**: `test(backtesting): add end-to-end distributed backtesting test`
+**Commit**: `test(e2e): add end-to-end test for single backtest worker`
 
 **Estimated Time**: 2 hours
 
 ---
 
-**Phase 2 Checkpoint**:
-- Backtesting workers can register with backend
-- BacktestingService dispatches to workers
-- Progress tracking works remotely
-- Worker exclusivity enforced
-- All existing tests pass
-- E2E test validates entire flow
+**Phase 1 Checkpoint**:
+✅ Docker Compose works with backend + 1 worker
+✅ Worker self-registers on startup
+✅ Can submit backtest → worker executes → completes
+✅ **TESTABLE**: Real end-to-end workflow works!
 
-**Total Phase 2 Time**: ~13.5 hours
+**Total Phase 1 Time**: ~8.5 hours
 
 ---
 
-## Phase 3: Training Worker Support
+## Phase 2: Multiple Workers + Health Monitoring
 
-**Goal**: Enable distributed CPU training with containerized workers
+**Goal**: Scale to multiple workers, add health monitoring, test concurrent operations
 
-**End State**: Training operations can be dispatched to CPU workers with GPU fallback. All existing tests pass.
+**Why This Second**: Builds on working system, adds reliability and concurrency
 
-### Task 3.1: Training Worker API - New Module
+**End State**:
+- Can scale workers: `docker-compose up --scale backtest-worker=3`
+- Health checks monitor worker status
+- Round-robin load balancing
+- Dead workers automatically removed
+- **TESTABLE**: Run 5 concurrent backtests across 3 workers
 
-**Objective**: Create new training worker API (similar to backtest worker)
+---
+
+### Task 2.1: Worker Selection (Round-Robin)
+
+**Objective**: Add logic to select worker for dispatch
 
 **TDD Approach**:
-1. Create `tests/unit/training/test_training_worker_api.py`
-2. Write tests for:
-   - Health endpoint returns worker status
-   - POST `/training/start` - starts training
-   - POST `/training/start` when busy → 503
-   - Worker state machine (idle → busy → idle)
+1. Add tests to `test_worker_registry.py`:
+   - `select_worker(worker_type)` - returns least recently used
+   - Round-robin behavior over multiple calls
 
 **Implementation**:
-1. Create `ktrdr/training/training_worker_api.py`
-2. Implement FastAPI app:
-   - Health endpoint
-   - POST `/training/start` endpoint
-   - Worker state management
-   - Exclusivity enforcement (reject if busy)
-   - Background task execution (uses existing training code)
-3. Registration on startup (similar to backtest worker)
+1. Add to WorkerRegistry:
+   ```python
+   def get_available_workers(
+       self,
+       worker_type: WorkerType
+   ) -> List[WorkerEndpoint]:
+       """Get available workers of given type, sorted by last selection."""
+       workers = [
+           w for w in self._workers.values()
+           if w.worker_type == worker_type
+           and w.status == WorkerStatus.AVAILABLE
+       ]
+
+       # Sort by last_selected (least recently used first)
+       workers.sort(key=lambda w: w.metadata.get("last_selected", 0))
+       return workers
+
+   def select_worker(self, worker_type: WorkerType) -> Optional[WorkerEndpoint]:
+       """Select worker using round-robin."""
+       workers = self.get_available_workers(worker_type)
+       if not workers:
+           return None
+
+       worker = workers[0]
+       worker.metadata["last_selected"] = datetime.utcnow().timestamp()
+       return worker
+
+   def mark_busy(self, worker_id: str, operation_id: str):
+       """Mark worker as busy."""
+       if worker_id in self._workers:
+           self._workers[worker_id].status = WorkerStatus.BUSY
+           self._workers[worker_id].current_operation_id = operation_id
+
+   def mark_available(self, worker_id: str):
+       """Mark worker as available."""
+       if worker_id in self._workers:
+           self._workers[worker_id].status = WorkerStatus.AVAILABLE
+           self._workers[worker_id].current_operation_id = None
+   ```
 
 **Quality Gate**:
 ```bash
@@ -463,46 +570,62 @@ make test-unit
 make quality
 ```
 
-**Commit**: `feat(training): create training worker API for CPU execution`
+**Commit**: `feat(workers): add round-robin worker selection`
 
-**Estimated Time**: 3 hours
+**Estimated Time**: 1.5 hours
 
 ---
 
-### Task 3.2: TrainingService - Hybrid Worker Selection
+### Task 2.2: Health Check Infrastructure
 
-**Objective**: Add GPU-first, CPU-fallback worker selection to TrainingService
+**Objective**: Add health checking without background task yet
 
 **TDD Approach**:
-1. Create `tests/unit/api/services/test_training_service_workers.py`
-2. Write tests for:
-   - `_select_worker()` - tries GPU first, falls back to CPU
-   - GPU available → returns GPU host
-   - GPU unavailable → returns CPU worker
-   - No workers available → returns None
+1. Add tests for `health_check_worker(worker_id)`
+2. Mock httpx calls
 
 **Implementation**:
-1. Modify `ktrdr/api/services/training_service.py`:
-   - Add `worker_registry` to `__init__`
-   - Implement `_select_worker()`:
-     ```python
-     def _select_worker(self, context):
-         # Try GPU first
-         gpu_workers = self.worker_registry.get_available_workers(
-             worker_type=WorkerType.GPU_HOST,
-             capabilities={"gpu": True}
-         )
-         if gpu_workers:
-             return gpu_workers[0]
+1. Add to WorkerRegistry:
+   ```python
+   async def health_check_worker(self, worker_id: str) -> bool:
+       """Perform health check on a worker."""
+       if worker_id not in self._workers:
+           return False
 
-         # Fallback to CPU workers
-         cpu_workers = self.worker_registry.get_available_workers(
-             worker_type=WorkerType.CPU_TRAINING
-         )
-         return cpu_workers[0] if cpu_workers else None
-     ```
-   - Implement `_get_required_capabilities()` - returns empty dict
-2. Maintain backward compatibility (no worker registry = local mode)
+       worker = self._workers[worker_id]
+
+       try:
+           async with httpx.AsyncClient(timeout=5.0) as client:
+               response = await client.get(f"{worker.endpoint_url}/health")
+
+               if response.status_code == 200:
+                   data = response.json()
+
+                   # Update status from health response
+                   worker_status = data.get("worker_status", "idle")
+                   if worker_status == "busy":
+                       worker.status = WorkerStatus.BUSY
+                       worker.current_operation_id = data.get("current_operation")
+                   else:
+                       worker.status = WorkerStatus.AVAILABLE
+                       worker.current_operation_id = None
+
+                   worker.health_check_failures = 0
+                   worker.last_health_check = datetime.utcnow()
+                   worker.last_healthy_at = datetime.utcnow()
+                   return True
+
+       except Exception as e:
+           logger.warning(f"Health check failed for {worker_id}: {e}")
+
+       worker.health_check_failures += 1
+       worker.last_health_check = datetime.utcnow()
+
+       if worker.health_check_failures >= 3:
+           worker.status = WorkerStatus.TEMPORARILY_UNAVAILABLE
+
+       return False
+   ```
 
 **Quality Gate**:
 ```bash
@@ -510,169 +633,73 @@ make test-unit
 make quality
 ```
 
-**Commit**: `feat(training): add hybrid GPU/CPU worker selection`
+**Commit**: `feat(workers): add health check logic`
 
-**Estimated Time**: 2 hours
+**Estimated Time**: 1.5 hours
 
 ---
 
-### Task 3.3: TrainingService - Remote Dispatch Integration
+### Task 2.3: Background Health Check Task
 
-**Objective**: Wire up TrainingService to dispatch to workers
+**Objective**: Start background task that continuously health checks workers
 
 **TDD Approach**:
-1. Add integration test in `tests/integration/training/test_distributed_training.py`:
-   - Register CPU training worker
-   - Start training via TrainingService
-   - Verify dispatched to worker
-   - Verify proxy registered
+1. Test start() and stop() methods
+2. Test background task runs checks
 
 **Implementation**:
-1. Modify `ktrdr/api/services/training_service.py`:
-   - Modify `start_training()` method:
-     - If `worker_registry` is None: Use existing GPU host or local
-     - If `worker_registry` exists:
-       - Select worker (GPU first, CPU fallback)
-       - Dispatch to worker
-       - Register proxy
-       - Mark worker busy
-2. Maintain all existing functionality
+1. Add to WorkerRegistry:
+   ```python
+   def __init__(self):
+       self._workers: Dict[str, WorkerEndpoint] = {}
+       self._health_check_task: Optional[asyncio.Task] = None
+       self._health_check_interval = 10  # seconds
 
-**Quality Gate**:
-```bash
-make test-unit
-make quality
-```
+   async def start(self):
+       """Start background health check task."""
+       if self._health_check_task is None:
+           self._health_check_task = asyncio.create_task(self._health_check_loop())
+           logger.info("Worker registry started")
 
-**Commit**: `feat(training): integrate worker dispatch into TrainingService`
+   async def stop(self):
+       """Stop background health check task."""
+       if self._health_check_task:
+           self._health_check_task.cancel()
+           try:
+               await self._health_check_task
+           except asyncio.CancelledError:
+               pass
+           self._health_check_task = None
+           logger.info("Worker registry stopped")
 
-**Estimated Time**: 3 hours
+   async def _health_check_loop(self):
+       """Background task to health check all workers."""
+       while True:
+           try:
+               for worker_id in list(self._workers.keys()):
+                   await self.health_check_worker(worker_id)
+               await asyncio.sleep(self._health_check_interval)
+           except asyncio.CancelledError:
+               break
+           except Exception as e:
+               logger.error(f"Health check loop error: {e}")
+               await asyncio.sleep(self._health_check_interval)
+   ```
 
----
+2. Integrate into API startup (modify `ktrdr/api/main.py`):
+   ```python
+   from ktrdr.api.endpoints.workers import get_worker_registry
 
-### Task 3.4: End-to-End Test - Distributed Training
+   @app.on_event("startup")
+   async def startup():
+       registry = get_worker_registry()
+       await registry.start()
 
-**Objective**: Full integration test with CPU training worker
-
-**TDD Approach**:
-1. Create `tests/e2e/test_distributed_training.py`
-2. Test flow:
-   - Start backend
-   - Start CPU training worker
-   - Worker registers
-   - Submit training via API
-   - Poll for progress
-   - Verify completion
-
-**Implementation**:
-1. Write comprehensive E2E test
-2. Verify progress tracking works
-3. Verify results are stored correctly
-
-**Quality Gate**:
-```bash
-make test-unit
-make test-e2e
-make quality
-```
-
-**Commit**: `test(training): add end-to-end distributed training test`
-
-**Estimated Time**: 2 hours
-
----
-
-**Phase 3 Checkpoint**:
-- Training workers can register with backend
-- TrainingService dispatches to CPU workers with GPU fallback
-- Progress tracking works remotely
-- Worker exclusivity enforced
-- All existing tests pass
-- E2E test validates entire flow
-
-**Total Phase 3 Time**: ~10 hours
-
----
-
-## Phase 4: Health Monitoring & Reliability
-
-**Goal**: Add health checks, failure detection, and automatic recovery
-
-**End State**: Workers are monitored, dead workers removed, system self-heals. All tests pass.
-
-### Task 4.1: WorkerRegistry - Health Check Infrastructure
-
-**Objective**: Add background task for worker health checking
-
-**TDD Approach**:
-1. Add tests to `tests/unit/api/services/test_worker_registry.py`:
-   - `health_check_worker(worker_id)` - performs health check
-   - Successful check → resets failure counter
-   - Failed check → increments failure counter
-   - 3 consecutive failures → marks TEMPORARILY_UNAVAILABLE
-   - Mock httpx calls for testing
-
-**Implementation**:
-1. Modify `ktrdr/api/services/worker_registry.py`:
-   - Add `health_check_worker(worker_id)` method:
-     - GET `{worker.endpoint_url}/health`
-     - Parse response for worker_status
-     - Update worker status (idle → AVAILABLE, busy → BUSY)
-     - Update health_check_failures counter
-     - Mark TEMPORARILY_UNAVAILABLE after threshold
-   - Add configuration:
-     - `health_check_interval: int = 10` (seconds)
-     - `health_check_timeout: int = 5` (seconds)
-     - `health_failure_threshold: int = 3` (failures)
-2. No background task yet (next task)
-
-**Quality Gate**:
-```bash
-make test-unit
-make quality
-```
-
-**Commit**: `feat(workers): add health check logic to WorkerRegistry`
-
-**Estimated Time**: 2 hours
-
----
-
-### Task 4.2: WorkerRegistry - Background Health Check Task
-
-**Objective**: Start background asyncio task for continuous health monitoring
-
-**TDD Approach**:
-1. Add tests for:
-   - `start()` - starts background task
-   - `stop()` - stops background task cleanly
-   - Background task runs health checks on interval
-   - Use asyncio testing utilities (pytest-asyncio)
-
-**Implementation**:
-1. Modify WorkerRegistry:
-   - Add `start()` method:
-     - Creates httpx.AsyncClient
-     - Starts `_health_check_loop()` background task
-   - Add `stop()` method:
-     - Closes httpx client
-     - Cancels background task
-   - Add `_health_check_loop()`:
-     ```python
-     async def _health_check_loop(self):
-         while True:
-             try:
-                 for worker_id in list(self._workers.keys()):
-                     await self.health_check_worker(worker_id)
-                 await asyncio.sleep(self._health_check_interval)
-             except Exception as e:
-                 logger.error(f"Health check error: {e}")
-                 await asyncio.sleep(self._health_check_interval)
-     ```
-2. Integrate into API startup:
-   - Modify `ktrdr/api/main.py`:
-     - Start WorkerRegistry on app startup
-     - Stop on shutdown
+   @app.on_event("shutdown")
+   async def shutdown():
+       registry = get_worker_registry()
+       await registry.stop()
+   ```
 
 **Quality Gate**:
 ```bash
@@ -682,30 +709,53 @@ make quality
 
 **Commit**: `feat(workers): add background health check task`
 
-**Estimated Time**: 2.5 hours
+**Estimated Time**: 2 hours
 
 ---
 
-### Task 4.3: WorkerRegistry - Dead Worker Cleanup
+### Task 2.4: Dead Worker Cleanup
 
-**Objective**: Remove workers that are unavailable for > 5 minutes
+**Objective**: Remove workers unavailable for > 5 minutes
 
 **TDD Approach**:
-1. Add tests for:
-   - Worker unavailable < 5min → kept in registry
-   - Worker unavailable >= 5min → removed from registry
-   - Timestamp tracking (last_healthy_at)
+1. Test cleanup logic with mocked timestamps
 
 **Implementation**:
-1. Modify WorkerRegistry:
-   - Track `last_healthy_at` timestamp
-   - Add `_cleanup_dead_workers()` method:
-     - Finds workers with TEMPORARILY_UNAVAILABLE status
-     - Checks time since last_healthy_at
-     - Removes if > removal_threshold (300 seconds)
-   - Call `_cleanup_dead_workers()` in health check loop
-2. Add configuration:
-   - `removal_threshold_seconds: int = 300` (5 minutes)
+1. Add to WorkerRegistry:
+   ```python
+   def __init__(self):
+       # ... existing init ...
+       self._removal_threshold_seconds = 300  # 5 minutes
+
+   def _cleanup_dead_workers(self):
+       """Remove workers that have been unavailable for too long."""
+       now = datetime.utcnow()
+       to_remove = []
+
+       for worker_id, worker in self._workers.items():
+           if worker.status == WorkerStatus.TEMPORARILY_UNAVAILABLE:
+               if worker.last_healthy_at:
+                   time_unavailable = (now - worker.last_healthy_at).total_seconds()
+                   if time_unavailable > self._removal_threshold_seconds:
+                       to_remove.append(worker_id)
+
+       for worker_id in to_remove:
+           del self._workers[worker_id]
+           logger.info(f"Removed dead worker: {worker_id}")
+
+   async def _health_check_loop(self):
+       """Background task with cleanup."""
+       while True:
+           try:
+               for worker_id in list(self._workers.keys()):
+                   await self.health_check_worker(worker_id)
+
+               # Cleanup after health checks
+               self._cleanup_dead_workers()
+
+               await asyncio.sleep(self._health_check_interval)
+           # ... rest unchanged ...
+   ```
 
 **Quality Gate**:
 ```bash
@@ -715,29 +765,115 @@ make quality
 
 **Commit**: `feat(workers): auto-remove dead workers after 5 minutes`
 
+**Estimated Time**: 1 hour
+
+---
+
+### Task 2.5: Docker Compose Scaling
+
+**Objective**: Update Docker Compose to support worker scaling
+
+**Implementation**:
+1. Update `docker-compose.dev.yml`:
+   ```yaml
+   backtest-worker:
+     # ... existing config ...
+     environment:
+       - WORKER_ID=${HOSTNAME}  # Docker generates unique hostnames when scaling
+   ```
+
+2. Test scaling:
+   ```bash
+   docker-compose -f docker/docker-compose.dev.yml up -d --scale backtest-worker=3
+   curl http://localhost:8000/api/v1/workers  # Should see 3 workers
+   ```
+
+**Quality Gate**:
+```bash
+# Manual test
+docker-compose -f docker/docker-compose.dev.yml up -d --scale backtest-worker=3
+sleep 10
+curl http://localhost:8000/api/v1/workers | jq '.total'  # Should be 3
+docker-compose -f docker/docker-compose.dev.yml down
+
+make test-unit
+make quality
+```
+
+**Commit**: `feat(docker): enable worker scaling in Docker Compose`
+
+**Estimated Time**: 0.5 hours
+
+---
+
+### Task 2.6: Load Test - Concurrent Operations
+
+**Objective**: Test multiple concurrent backtests across multiple workers
+
+**TDD Approach**:
+1. Create `tests/load/test_concurrent_backtests.py`
+2. Submit 5 backtests concurrently, verify all complete
+
+**Implementation**:
+1. Write load test with asyncio concurrent submissions
+
+**Quality Gate**:
+```bash
+# Start environment with 3 workers
+docker-compose -f docker/docker-compose.dev.yml up -d --scale backtest-worker=3
+
+# Run load test
+pytest tests/load/test_concurrent_backtests.py -v
+
+docker-compose -f docker/docker-compose.dev.yml down
+
+make test-unit
+make quality
+```
+
+**Commit**: `test(load): add concurrent backtesting load test`
+
 **Estimated Time**: 1.5 hours
 
 ---
 
-### Task 4.4: Worker Failure Handling - Operation Marking
+**Phase 2 Checkpoint**:
+✅ Multiple workers running (scalable via Docker Compose)
+✅ Health checks monitor all workers
+✅ Dead workers automatically removed
+✅ Round-robin load balancing works
+✅ **TESTABLE**: 5 concurrent backtests across 3 workers complete successfully
 
-**Objective**: When worker fails during operation, mark operation as failed
+**Total Phase 2 Time**: ~8 hours
+
+---
+
+## Phase 3: Training Workers (Vertical Slice)
+
+**Goal**: Add training worker support with GPU/CPU fallback
+
+**Why This Third**: Applies same pattern to training, adds hybrid GPU/CPU logic
+
+**End State**:
+- Training workers in Docker Compose
+- GPU host configuration (manual)
+- Hybrid worker selection (GPU first, CPU fallback)
+- **TESTABLE**: Submit training → executes on CPU worker → completes
+
+---
+
+### Task 3.1: Training Worker API
+
+**Objective**: Create training worker API (similar to backtest)
 
 **TDD Approach**:
-1. Create `tests/integration/workers/test_worker_failure_handling.py`
-2. Test scenarios:
-   - Worker crashes mid-operation
-   - Health check detects failure
-   - Operation marked as failed (or left as running - depends on detection)
-   - User sees appropriate error message
+1. Create `tests/unit/training/test_training_worker_api.py`
+2. Test health, start training, exclusivity
 
 **Implementation**:
-1. Consider options:
-   - **Option A**: Leave operation as RUNNING (worker may have completed before crash)
-   - **Option B**: Mark operation as FAILED when worker becomes unavailable
-   - **Recommendation**: Option A (simpler, matches existing pattern)
-2. Document behavior in user-facing docs
-3. May add operation timeout in future (not this phase)
+1. Create `ktrdr/training/training_worker_api.py` (similar structure to backtest worker)
+2. Add self-registration on startup
+3. Add to Docker Compose
 
 **Quality Gate**:
 ```bash
@@ -745,254 +881,103 @@ make test-unit
 make quality
 ```
 
-**Commit**: `docs(workers): document worker failure behavior for operations`
+**Commit**: `feat(training): create training worker API for CPU execution`
 
-**Estimated Time**: 1 hour
+**Estimated Time**: 2 hours
 
 ---
 
-### Task 4.5: Integration Test - Health Check & Recovery
+### Task 3.2: Hybrid Worker Selection (Training)
 
-**Objective**: Validate health check system end-to-end
+**Objective**: Add GPU-first, CPU-fallback selection logic
 
 **TDD Approach**:
-1. Create `tests/integration/workers/test_health_monitoring.py`
-2. Test scenarios:
-   - Worker registers → shows as AVAILABLE
-   - Stop worker → health checks fail → marks TEMPORARILY_UNAVAILABLE
-   - Restart worker → re-registers → shows as AVAILABLE
-   - Worker down 5min → removed from registry
+1. Create `tests/unit/api/services/test_training_worker_selection.py`
+2. Test GPU first, CPU fallback, none available
 
 **Implementation**:
-1. Write comprehensive integration tests
-2. Use real worker processes or sophisticated mocks
-3. Test timing with accelerated intervals (use test config)
+1. Add method to WorkerRegistry for hybrid selection
+2. Or add to TrainingService (depending on architecture)
 
 **Quality Gate**:
 ```bash
 make test-unit
-make test-integration
 make quality
 ```
 
-**Commit**: `test(workers): add health monitoring integration tests`
+**Commit**: `feat(training): add hybrid GPU/CPU worker selection`
 
-**Estimated Time**: 2 hours
-
----
-
-**Phase 4 Checkpoint**:
-- Health checks run every 10 seconds
-- Failed workers marked TEMPORARILY_UNAVAILABLE after 3 failures
-- Dead workers removed after 5 minutes
-- Workers can re-register and recover
-- All tests pass
-
-**Total Phase 4 Time**: ~9 hours
+**Estimated Time**: 1.5 hours
 
 ---
 
-## Phase 5: Development Environment (Docker Compose)
+### Task 3.3: End-to-End Test - Training
 
-**Goal**: Enable multi-worker scaling in development with Docker Compose
-
-**End State**: Can scale workers in dev environment, test concurrent operations. All tests pass.
-
-### Task 5.1: Docker Compose Configuration
-
-**Objective**: Create docker-compose.dev.yml with backend + workers
-
-**TDD Approach**:
-1. Manual testing (no automated tests for Docker Compose itself)
-2. Validation checklist:
-   - Backend starts and is accessible
-   - Workers start and register
-   - Can scale workers: `docker-compose up --scale backtest-worker=3`
+**Objective**: Submit training operation, verify completes on CPU worker
 
 **Implementation**:
-1. Create `docker/docker-compose.dev.yml`:
-   ```yaml
-   services:
-     backend:
-       build: ../
-       ports: ["8000:8000"]
-       environment:
-         - WORKER_REGISTRY_ENABLED=true
-       networks: [ktrdr-network]
-
-     training-worker:
-       build: ../
-       command: ["uvicorn", "ktrdr.training.training_worker_api:app", ...]
-       environment:
-         - BACKEND_URL=http://backend:8000
-         - WORKER_TYPE=training
-       networks: [ktrdr-network]
-
-     backtest-worker:
-       build: ../
-       command: ["uvicorn", "ktrdr.backtesting.remote_api:app", ...]
-       environment:
-         - BACKEND_URL=http://backend:8000
-         - WORKER_TYPE=backtesting
-       networks: [ktrdr-network]
-
-   networks:
-     ktrdr-network:
-   ```
-2. Update Dockerfile if needed for worker mode
+1. Create E2E test similar to backtest E2E
 
 **Quality Gate**:
 ```bash
-docker-compose -f docker/docker-compose.dev.yml up -d
-docker-compose -f docker/docker-compose.dev.yml ps  # Verify all running
-curl http://localhost:8000/api/v1/workers  # Verify workers registered
-docker-compose -f docker/docker-compose.dev.yml down
-```
-
-**Commit**: `feat(docker): add Docker Compose configuration for distributed workers`
-
-**Estimated Time**: 2 hours
-
----
-
-### Task 5.2: Worker Scaling Documentation
-
-**Objective**: Document how to use Docker Compose for development
-
-**Implementation**:
-1. Create or update `docker/README.md`:
-   - How to start environment
-   - How to scale workers
-   - How to view logs
-   - How to test concurrent operations
-2. Add to main README.md
-
-**Quality Gate**:
-```bash
-make quality  # Markdown linting if configured
-```
-
-**Commit**: `docs(docker): add documentation for Docker Compose development`
-
-**Estimated Time**: 1 hour
-
----
-
-### Task 5.3: Load Testing - Concurrent Operations
-
-**Objective**: Validate system handles concurrent operations
-
-**TDD Approach**:
-1. Create `tests/load/test_concurrent_operations.py`
-2. Test scenarios:
-   - 5 concurrent backtests
-   - 3 concurrent training operations
-   - All complete successfully
-   - Progress tracking works for all
-
-**Implementation**:
-1. Write load test script
-2. Use asyncio to submit concurrent operations
-3. Verify all complete
-4. Measure performance (time to completion)
-
-**Quality Gate**:
-```bash
-# Start Docker Compose with scaled workers first
-docker-compose -f docker/docker-compose.dev.yml up -d --scale backtest-worker=5 --scale training-worker=3
-
-# Run load test
-pytest tests/load/test_concurrent_operations.py -v
-
+make test-unit
+make test-e2e
 make quality
 ```
 
-**Commit**: `test(load): add concurrent operations load test`
+**Commit**: `test(e2e): add end-to-end test for training workers`
 
-**Estimated Time**: 2 hours
-
----
-
-**Phase 5 Checkpoint**:
-- Docker Compose environment works
-- Can scale workers dynamically
-- Load testing validates concurrent operations
-- Documentation complete
-
-**Total Phase 5 Time**: ~5 hours
+**Estimated Time**: 1.5 hours
 
 ---
 
-## Phase 6: Configuration & Production Preparation (Optional)
+**Phase 3 Checkpoint**:
+✅ Training workers running in Docker
+✅ Hybrid GPU/CPU selection works
+✅ **TESTABLE**: Training operation completes on CPU worker
 
-**Goal**: Production-ready configuration, LXC templates, monitoring
-
-**Note**: This phase can be deferred to later sprint. Included for completeness.
-
-### Task 6.1: Configuration Management
-
-**Objective**: Environment-based configuration files
-
-**Implementation**:
-1. Create `config/workers.dev.yaml`
-2. Create `config/workers.prod.yaml`
-3. Add configuration loader: `ktrdr/api/services/worker_config.py`
-4. Support environment variable substitution
-
-**Commit**: `feat(config): add environment-based worker configuration`
-
-**Estimated Time**: 2 hours
+**Total Phase 3 Time**: ~5 hours
 
 ---
 
-### Task 6.2: LXC Template Scripts
+## Phase 4: Production Readiness (Optional/Deferred)
 
-**Objective**: Automation scripts for Proxmox LXC deployment
+**Goal**: LXC templates, monitoring, configuration management
 
-**Implementation**:
-1. Create `scripts/proxmox/create-lxc-template.sh`
-2. Create `scripts/proxmox/deploy-lxc-workers.sh`
-3. Add systemd service templates
-4. Documentation
+**Note**: Can be done in later sprint
 
-**Commit**: `feat(proxmox): add LXC deployment automation scripts`
+- LXC template creation scripts
+- Proxmox deployment automation
+- Configuration files (dev/prod)
+- Monitoring endpoints
 
-**Estimated Time**: 4 hours
-
----
-
-### Task 6.3: Monitoring Endpoints
-
-**Objective**: Expose metrics for monitoring
-
-**Implementation**:
-1. Add `/metrics` endpoint (Prometheus format)
-2. Track worker metrics (count, status distribution)
-3. Track operation metrics (dispatch time, completion rate)
-
-**Commit**: `feat(monitoring): add Prometheus metrics endpoints`
-
-**Estimated Time**: 3 hours
-
----
-
-**Phase 6 Total**: ~9 hours (optional, can be done later)
+**Total Phase 4 Time**: ~9 hours (deferred)
 
 ---
 
 ## Summary
 
-### Total Implementation Time
+### Total Implementation Time (MVP)
 
-| Phase | Tasks | Time | Status |
-|-------|-------|------|--------|
-| Phase 1: Foundation | 5 tasks | ~8 hours | Required |
-| Phase 2: Backtesting | 6 tasks | ~13.5 hours | Required |
-| Phase 3: Training | 4 tasks | ~10 hours | Required |
-| Phase 4: Health & Reliability | 5 tasks | ~9 hours | Required |
-| Phase 5: Docker Compose | 3 tasks | ~5 hours | Required |
-| **Total (Phases 1-5)** | **23 tasks** | **~45.5 hours** | **MVP** |
-| Phase 6: Production (Optional) | 3 tasks | ~9 hours | Deferred |
+| Phase | Focus | Tasks | Time | Testable? |
+|-------|-------|-------|------|-----------|
+| Phase 1: Single Worker E2E | Docker + 1 backtest worker | 6 tasks | ~8.5 hours | ✅ Yes! |
+| Phase 2: Multi-Worker + Health | Scaling + reliability | 6 tasks | ~8 hours | ✅ Yes! |
+| Phase 3: Training Workers | Training support | 3 tasks | ~5 hours | ✅ Yes! |
+| **Total (MVP)** | **Distributed system** | **15 tasks** | **~21.5 hours** | **✅ Every phase!** |
+| Phase 4: Production (Optional) | LXC, monitoring | ~4 tasks | ~9 hours | Deferred |
+
+### Key Improvements Over Previous Plan
+
+**Vertical Slices**:
+- ✅ Phase 1 ends with working distributed backtesting (testable!)
+- ✅ Phase 2 ends with scaled, reliable system (testable!)
+- ✅ Phase 3 ends with training support (testable!)
+
+**Not Horizontal Layers**:
+- ❌ No "build all models first" phase
+- ❌ No "build all services first" phase
+- ✅ Each phase delivers complete functionality
 
 ### Quality Standards
 
@@ -1002,44 +987,12 @@ make test-unit      # All unit tests (existing + new)
 make quality        # Lint + format + typecheck
 ```
 
-Selected tasks also require:
-```bash
-make test-integration  # Integration tests
-make test-e2e          # End-to-end tests
-```
-
 ### Git Workflow
 
 - **One branch**: All work on `claude/containerize-training-service-*`
 - **One commit per task**: Clear, descriptive commit messages
 - **TDD**: Write tests first, then implementation
-- **Incremental**: Each task builds on previous
-
-### Risk Mitigation
-
-**Low Risk** (well-understood):
-- Data models and basic CRUD
-- API endpoints (existing patterns)
-- Docker Compose configuration
-
-**Medium Risk** (new patterns):
-- Worker dispatch retry logic
-- Health check timing and thresholds
-- Background asyncio tasks
-
-**Mitigation Strategy**:
-- Start with simple implementation
-- Add complexity incrementally
-- Comprehensive testing at each step
-- Manual testing in Docker environment
-
-### Success Criteria
-
-**Phase 1-3**: Distributed backtesting and training work end-to-end
-**Phase 4**: System self-heals from worker failures
-**Phase 5**: Development environment supports multi-worker scaling
-
-**Overall**: System is production-ready for Proxmox LXC deployment
+- **Vertical**: Each phase builds complete feature
 
 ---
 
@@ -1047,9 +1000,11 @@ make test-e2e          # End-to-end tests
 
 1. ✅ Review and approve DESIGN.md
 2. ✅ Review and approve ARCHITECTURE.md
-3. ✅ Review and approve IMPLEMENTATION_PLAN.md (this document)
+3. ✅ Review and approve IMPLEMENTATION_PLAN.md (this document - v2.0)
 4. 🚀 Begin Phase 1, Task 1.1
 
 ---
 
-**Ready to implement!** 🎯
+**Ready to implement with vertical slices!** 🎯
+
+Each phase delivers working, testable functionality from day one.
