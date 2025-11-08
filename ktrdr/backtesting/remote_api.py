@@ -31,6 +31,7 @@ from ktrdr.api.models.backtesting import BacktestStartRequest, BacktestStartResp
 from ktrdr.api.models.operations import OperationType
 from ktrdr.api.services.operations_service import get_operations_service
 from ktrdr.backtesting.backtesting_service import BacktestingService
+from ktrdr.backtesting.worker_registration import WorkerRegistration
 
 if TYPE_CHECKING:
     from ktrdr.api.services.operations_service import OperationsService
@@ -94,6 +95,24 @@ async def startup_event():
     logger.info(
         f"✅ BacktestingService initialized (mode: {'remote' if backtest_service._use_remote else 'local'})"
     )
+
+    # Register with backend (self-registration)
+    logger.info("")
+    logger.info("📝 Registering worker with backend...")
+    worker_registration = WorkerRegistration()
+    registration_success = await worker_registration.register()
+
+    if registration_success:
+        logger.info(
+            f"✅ Worker registered successfully: {worker_registration.worker_id}"
+        )
+    else:
+        logger.warning(
+            f"⚠️  Worker registration failed: {worker_registration.worker_id}"
+        )
+        logger.warning(
+            "   Worker will continue running but may not receive tasks from backend"
+        )
 
     logger.info("")
     logger.info("📡 Available Endpoints:")
