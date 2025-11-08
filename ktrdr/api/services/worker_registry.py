@@ -8,6 +8,8 @@ import logging
 from datetime import datetime
 from typing import Optional
 
+import httpx
+
 from ktrdr.api.models.workers import WorkerEndpoint, WorkerStatus, WorkerType
 
 logger = logging.getLogger(__name__)
@@ -240,3 +242,72 @@ class WorkerRegistry:
             worker.status = WorkerStatus.AVAILABLE
             worker.current_operation_id = None
             logger.info(f"Worker {worker_id} marked as AVAILABLE")
+
+    async def health_check_worker(self, worker_id: str) -> bool:
+        """
+        Perform health check on a worker.
+
+        This method calls the worker's /health endpoint and updates the worker's
+        status based on the response. It tracks consecutive failures and marks
+        workers as temporarily unavailable after 3 failures.
+
+        Args:
+            worker_id: ID of the worker to health check
+
+        Returns:
+            True if health check successful, False otherwise
+
+        Example:
+            >>> registry = WorkerRegistry()
+            >>> success = await registry.health_check_worker("backtest-1")
+        """
+        if worker_id not in self._workers:
+            logger.warning(f"Cannot health check nonexistent worker: {worker_id}")
+            return False
+
+        worker = self._workers[worker_id]
+
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.get(f"{worker.endpoint_url}/health")
+
+                if response.status_code == 200:
+                    data = response.json()
+
+                    # Update status from health response
+                    worker_status = data.get("worker_status", "idle")
+                    if worker_status == "busy":
+                        worker.status = WorkerStatus.BUSY
+                        worker.current_operation_id = data.get("current_operation")
+                    else:
+                        worker.status = WorkerStatus.AVAILABLE
+                        worker.current_operation_id = None
+
+                    # Reset failure counter and update timestamps
+                    worker.health_check_failures = 0
+                    worker.last_health_check = datetime.utcnow()
+                    worker.last_healthy_at = datetime.utcnow()
+
+                    logger.debug(f"Health check passed for {worker_id}")
+                    return True
+                else:
+                    logger.warning(
+                        f"Health check failed for {worker_id}: HTTP {response.status_code}"
+                    )
+
+        except Exception as e:
+            logger.warning(f"Health check failed for {worker_id}: {e}")
+
+        # Health check failed - increment failure counter
+        worker.health_check_failures += 1
+        worker.last_health_check = datetime.utcnow()
+
+        # Mark as unavailable if threshold exceeded
+        if worker.health_check_failures >= 3:
+            worker.status = WorkerStatus.TEMPORARILY_UNAVAILABLE
+            logger.warning(
+                f"Worker {worker_id} marked TEMPORARILY_UNAVAILABLE "
+                f"after {worker.health_check_failures} failures"
+            )
+
+        return False
