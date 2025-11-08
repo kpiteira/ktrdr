@@ -480,7 +480,7 @@ Each worker maintains simple state:
 **Lifecycle**:
 1. Created → Backend creates operation record
 2. Running → Backend dispatches to worker, registers proxy
-3. Progress → Backend polls worker on demand (cache miss)
+3. Progress → Client polls backend; backend queries worker only on cache miss (EXISTING pattern)
 4. Completed → Backend marks complete, unregisters proxy
 
 **Worker Failure**:

@@ -331,42 +331,47 @@ When backend receives 503, it **automatically retries with a different worker** 
 
 **Architectural Challenge**: How does backend track progress of operations running on remote workers?
 
-**Solution**: **Proxy Pattern** with **Pull-Based Polling**
+**Solution**: **Proxy Pattern** with **Cache-Based Pull** (EXISTING pattern preserved)
 
 **Architecture**:
 
 ```
-Backend                           Worker
-┌────────────────────┐           ┌─────────────────────┐
-│ OperationsService  │           │ Local               │
-│  (Backend State)   │           │ OperationsService   │
-│                    │           │  (Worker State)     │
-│  operation_id: XYZ │◄─polling──│  operation_id: ABC  │
-│  status: running   │           │  status: running    │
-│  progress: 45%     │           │  progress: 45%      │
-└────────────────────┘           └─────────────────────┘
-         ▲                                │
-         │                                │
-         │         ┌─────────────────┐    │
-         └─────────┤OperationService │────┘
-                   │     Proxy       │
-                   └─────────────────┘
-                   GET /operations/ABC
-                   every 1 second
+Client                 Backend (OperationsService)        Worker
+  │                           │                             │
+  │  GET /operations/XYZ      │                             │
+  ├──────────────────────────>│                             │
+  │                           │ Check cache (1s TTL)        │
+  │                           ├─ Cache fresh? ─> Return     │
+  │                           │    (age < 1s)   immediately │
+  │                           │                             │
+  │                           │ Cache stale? ───────────────>│
+  │                           │    (age >= 1s)  GET /ops/ABC│
+  │                           │<─────────────────────────────│
+  │                           │ Update cache                │
+  │                           │ Update operation state      │
+  │<──────────────────────────┤                             │
+  │  Return operation         │                             │
+  │                           │                             │
+  │  (repeat every N seconds) │                             │
 ```
 
-**Flow**:
+**Flow** (EXISTING OperationsService pattern):
 1. Backend creates operation record (operation_id: XYZ)
 2. Backend dispatches to worker, gets remote operation_id (ABC)
 3. Backend registers proxy mapping: XYZ → (worker_url, ABC)
-4. Backend polls worker every 1s: `GET worker_url/operations/ABC`
-5. Backend updates local operation state from worker response
-6. User polls backend: `GET /operations/XYZ` (served from cache)
+4. **Client polls backend**: `GET /operations/XYZ`
+5. **Backend checks cache**:
+   - If cache fresh (< 1s): Return immediately (no worker query)
+   - If cache stale (>= 1s): Query worker via proxy
+6. Backend updates cache and operation state
+7. Backend returns to client
 
 **Key Properties**:
+- **Preserves Existing Pattern**: No changes to OperationsService caching logic
+- **No Active Polling**: Backend only queries worker on-demand when client requests status
+- **1s Cache TTL**: Existing cache prevents excessive worker queries (OPERATIONS_CACHE_TTL)
 - **Decoupling**: Workers don't need to know about backend
-- **Simplicity**: Standard REST polling (no websockets, no pub/sub)
-- **Caching**: 1s cache TTL on backend prevents excessive polling
+- **Simplicity**: Standard REST with caching (no websockets, no pub/sub)
 - **Transparency**: Users see unified operation state regardless of execution location
 
 ---
@@ -575,10 +580,12 @@ User                  Backend                WorkerRegistry         Worker
 1. Backend selects worker (round-robin from registry)
 2. Backend dispatches operation to worker (HTTP POST)
 3. Worker starts operation, returns remote operation_id
-4. Backend registers proxy for progress polling
+4. Backend registers proxy for progress tracking
 5. Backend marks worker as BUSY
-6. User polls backend for progress
-7. Backend polls worker (via proxy), caches result, serves user
+6. **User polls backend** for progress
+7. Backend checks cache:
+   - Cache fresh: Return immediately
+   - Cache stale: Query worker via proxy, update cache, return to user
 
 ### Worker Registration Flow
 
@@ -912,10 +919,11 @@ gpu_hosts:
 - Worker dispatch: 1 HTTP request (~10-50ms local network)
 - Total overhead: <100ms (negligible compared to operation duration)
 
-**Progress Polling Overhead**:
-- Backend polls workers every 1s (cached)
-- User polls backend (served from cache)
-- Network overhead: Minimal (1 request/worker/second)
+**Progress Tracking Overhead**:
+- **Client polls backend** (user-initiated)
+- Backend serves from cache if fresh (< 1s)
+- Backend queries worker only when cache stale (>= 1s)
+- Network overhead: Minimal (at most 1 request/worker/second per active operation, only when client polls)
 
 **Health Check Overhead**:
 - 1 request per worker every 10s
@@ -928,7 +936,7 @@ gpu_hosts:
 
 **Current Mitigation**:
 - Async I/O (FastAPI) → Handles thousands of concurrent requests
-- Caching (1s TTL) → Reduces worker polling frequency
+- Caching (1s TTL) → Reduces backend-to-worker queries (only on cache miss)
 - Stateless workers → No backend-to-worker state synchronization
 
 **Future Scaling** (if needed):
