@@ -999,15 +999,31 @@ make quality
    apt-get update
    apt-get upgrade -y
 
-   # Install Python and system dependencies
-   apt-get install -y python3.12 python3-pip git curl
+   # Install Python 3.13 and system dependencies
+   apt-get install -y software-properties-common git curl
+   add-apt-repository ppa:deadsnakes/ppa -y
+   apt-get update
+   apt-get install -y python3.13 python3.13-venv python3.13-dev
 
    # Install uv
    curl -LsSf https://astral.sh/uv/install.sh | sh
 
-   # Create app directory (code will be deployed here)
+   # Create app directory
    mkdir -p /opt/ktrdr
    chown -R root:root /opt/ktrdr
+
+   # PRELOAD PACKAGES: Clone repo, install all dependencies, then remove code
+   cd /opt/ktrdr
+   git clone https://github.com/kpiteira/ktrdr.git .
+
+   # Install ALL packages (PyTorch, CUDA, everything - happens once in template)
+   /root/.cargo/bin/uv sync
+
+   # Remove code but KEEP .venv with installed packages
+   rm -rf .git
+   find . -type f -name "*.py" -delete
+   find . -type f -name "*.sh" -delete
+   # Keep: .venv/, pyproject.toml, uv.lock (needed for delta updates)
 
    # Install systemd service template (code-agnostic)
    cat > /etc/systemd/system/ktrdr-worker@.service <<'SYSTEMD'
@@ -1018,8 +1034,8 @@ make quality
    [Service]
    Type=simple
    WorkingDirectory=/opt/ktrdr
-   ExecStartPre=/opt/ktrdr/scripts/update-code.sh
-   ExecStart=/opt/ktrdr/scripts/start-worker.sh %i
+   ExecStartPre=/opt/ktrdr/scripts/deploy/update-code.sh
+   ExecStart=/root/.cargo/bin/uv run python -m ktrdr.workers.%i
    Restart=always
    RestartSec=10
 
