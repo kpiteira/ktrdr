@@ -144,3 +144,99 @@ class WorkerRegistry:
             workers = [w for w in workers if w.status == status]
 
         return workers
+
+    def get_available_workers(self, worker_type: WorkerType) -> list[WorkerEndpoint]:
+        """
+        Get available workers of given type, sorted by last selection (LRU).
+
+        Args:
+            worker_type: Type of workers to retrieve
+
+        Returns:
+            List of available workers sorted by least recently used first
+
+        Example:
+            >>> registry = WorkerRegistry()
+            >>> workers = registry.get_available_workers(WorkerType.BACKTESTING)
+        """
+        workers = [
+            w
+            for w in self._workers.values()
+            if w.worker_type == worker_type and w.status == WorkerStatus.AVAILABLE
+        ]
+
+        # Sort by last_selected (least recently used first)
+        # Workers without last_selected get 0.0 (will be selected first)
+        workers.sort(key=lambda w: w.metadata.get("last_selected", 0.0))
+
+        return workers
+
+    def select_worker(self, worker_type: WorkerType) -> Optional[WorkerEndpoint]:
+        """
+        Select an available worker using round-robin (least recently used).
+
+        This implements round-robin load balancing by selecting the worker
+        that was least recently used.
+
+        Args:
+            worker_type: Type of worker to select
+
+        Returns:
+            Selected worker, or None if no workers available
+
+        Example:
+            >>> registry = WorkerRegistry()
+            >>> worker = registry.select_worker(WorkerType.BACKTESTING)
+            >>> if worker:
+            ...     # Dispatch operation to this worker
+            ...     registry.mark_busy(worker.worker_id, "op-123")
+        """
+        workers = self.get_available_workers(worker_type)
+        if not workers:
+            return None
+
+        # Select first worker (least recently used)
+        worker = workers[0]
+
+        # Update selection timestamp
+        worker.metadata["last_selected"] = datetime.utcnow().timestamp()
+
+        logger.debug(f"Selected worker {worker.worker_id} for {worker_type}")
+        return worker
+
+    def mark_busy(self, worker_id: str, operation_id: str) -> None:
+        """
+        Mark a worker as busy with the given operation.
+
+        Args:
+            worker_id: ID of the worker to mark busy
+            operation_id: ID of the operation the worker is executing
+
+        Example:
+            >>> registry = WorkerRegistry()
+            >>> registry.mark_busy("backtest-1", "op-123")
+        """
+        if worker_id in self._workers:
+            worker = self._workers[worker_id]
+            worker.status = WorkerStatus.BUSY
+            worker.current_operation_id = operation_id
+            logger.info(
+                f"Worker {worker_id} marked as BUSY (operation: {operation_id})"
+            )
+
+    def mark_available(self, worker_id: str) -> None:
+        """
+        Mark a worker as available (operation completed).
+
+        Args:
+            worker_id: ID of the worker to mark available
+
+        Example:
+            >>> registry = WorkerRegistry()
+            >>> registry.mark_available("backtest-1")
+        """
+        if worker_id in self._workers:
+            worker = self._workers[worker_id]
+            worker.status = WorkerStatus.AVAILABLE
+            worker.current_operation_id = None
+            logger.info(f"Worker {worker_id} marked as AVAILABLE")

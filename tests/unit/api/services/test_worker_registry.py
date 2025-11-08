@@ -224,3 +224,219 @@ class TestWorkerRegistry:
 
         assert worker.last_healthy_at is not None
         assert before <= worker.last_healthy_at <= after
+
+    def test_get_available_workers_returns_only_available(self):
+        """Test that get_available_workers returns only available workers."""
+        registry = WorkerRegistry()
+
+        # Register multiple workers
+        registry.register_worker(
+            worker_id="backtest-1",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://localhost:5003",
+        )
+        worker2 = registry.register_worker(
+            worker_id="backtest-2",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://localhost:5004",
+        )
+        registry.register_worker(
+            worker_id="training-1",
+            worker_type=WorkerType.CPU_TRAINING,
+            endpoint_url="http://localhost:5005",
+        )
+
+        # Mark one backtest worker as busy
+        worker2.status = WorkerStatus.BUSY
+
+        # Get available backtesting workers
+        available = registry.get_available_workers(WorkerType.BACKTESTING)
+
+        assert len(available) == 1
+        assert available[0].worker_id == "backtest-1"
+        assert available[0].status == WorkerStatus.AVAILABLE
+
+    def test_get_available_workers_sorted_by_last_selected(self):
+        """Test that get_available_workers sorts by last_selected."""
+        registry = WorkerRegistry()
+
+        # Register multiple workers
+        registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://localhost:5003",
+        )
+        registry.register_worker(
+            worker_id="worker-2",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://localhost:5004",
+        )
+        registry.register_worker(
+            worker_id="worker-3",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://localhost:5005",
+        )
+
+        # Manually set selection times (worker-2 selected most recently)
+        registry.get_worker("worker-1").metadata["last_selected"] = 100.0
+        registry.get_worker("worker-2").metadata["last_selected"] = 300.0  # Most recent
+        registry.get_worker("worker-3").metadata["last_selected"] = 200.0
+
+        # Get available workers - should be sorted by least recently used
+        available = registry.get_available_workers(WorkerType.BACKTESTING)
+
+        assert len(available) == 3
+        assert available[0].worker_id == "worker-1"  # Least recently used
+        assert available[1].worker_id == "worker-3"
+        assert available[2].worker_id == "worker-2"  # Most recently used
+
+    def test_select_worker_returns_least_recently_used(self):
+        """Test that select_worker returns least recently used worker."""
+        registry = WorkerRegistry()
+
+        # Register workers
+        registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://localhost:5003",
+        )
+        registry.register_worker(
+            worker_id="worker-2",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://localhost:5004",
+        )
+
+        # Set selection times
+        registry.get_worker("worker-1").metadata["last_selected"] = 100.0
+        registry.get_worker("worker-2").metadata["last_selected"] = 200.0
+
+        # Select worker - should return least recently used
+        worker = registry.select_worker(WorkerType.BACKTESTING)
+
+        assert worker is not None
+        assert worker.worker_id == "worker-1"
+
+        # Verify last_selected was updated (should be > 200.0)
+        assert worker.metadata["last_selected"] > 200.0
+
+    def test_select_worker_round_robin_behavior(self):
+        """Test that select_worker implements round-robin."""
+        registry = WorkerRegistry()
+
+        # Register 3 workers
+        registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://localhost:5003",
+        )
+        registry.register_worker(
+            worker_id="worker-2",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://localhost:5004",
+        )
+        registry.register_worker(
+            worker_id="worker-3",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://localhost:5005",
+        )
+
+        # Select workers multiple times - should rotate
+        selected_ids = []
+        for _ in range(6):
+            worker = registry.select_worker(WorkerType.BACKTESTING)
+            assert worker is not None
+            selected_ids.append(worker.worker_id)
+
+        # Should cycle through all workers (not necessarily in order, but all should appear)
+        # Each worker should be selected exactly twice in 6 selections
+        from collections import Counter
+
+        counts = Counter(selected_ids)
+        assert len(counts) == 3  # All 3 workers selected
+        assert all(count == 2 for count in counts.values())  # Each selected twice
+
+    def test_select_worker_returns_none_when_no_workers(self):
+        """Test that select_worker returns None when no workers available."""
+        registry = WorkerRegistry()
+
+        worker = registry.select_worker(WorkerType.BACKTESTING)
+
+        assert worker is None
+
+    def test_select_worker_returns_none_when_all_busy(self):
+        """Test that select_worker returns None when all workers busy."""
+        registry = WorkerRegistry()
+
+        # Register workers
+        worker1 = registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://localhost:5003",
+        )
+        worker2 = registry.register_worker(
+            worker_id="worker-2",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://localhost:5004",
+        )
+
+        # Mark all as busy
+        worker1.status = WorkerStatus.BUSY
+        worker2.status = WorkerStatus.BUSY
+
+        # Should return None
+        worker = registry.select_worker(WorkerType.BACKTESTING)
+
+        assert worker is None
+
+    def test_mark_busy_sets_status_and_operation(self):
+        """Test that mark_busy sets worker status and operation_id."""
+        registry = WorkerRegistry()
+
+        # Register worker
+        registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://localhost:5003",
+        )
+
+        # Mark as busy
+        registry.mark_busy("worker-1", "op-123")
+
+        # Verify status changed
+        worker = registry.get_worker("worker-1")
+        assert worker.status == WorkerStatus.BUSY
+        assert worker.current_operation_id == "op-123"
+
+    def test_mark_busy_nonexistent_worker_does_nothing(self):
+        """Test that mark_busy on nonexistent worker doesn't crash."""
+        registry = WorkerRegistry()
+
+        # Should not raise exception
+        registry.mark_busy("nonexistent", "op-123")
+
+    def test_mark_available_clears_status_and_operation(self):
+        """Test that mark_available clears worker status and operation_id."""
+        registry = WorkerRegistry()
+
+        # Register and mark busy
+        registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://localhost:5003",
+        )
+        registry.mark_busy("worker-1", "op-123")
+
+        # Mark as available
+        registry.mark_available("worker-1")
+
+        # Verify status cleared
+        worker = registry.get_worker("worker-1")
+        assert worker.status == WorkerStatus.AVAILABLE
+        assert worker.current_operation_id is None
+
+    def test_mark_available_nonexistent_worker_does_nothing(self):
+        """Test that mark_available on nonexistent worker doesn't crash."""
+        registry = WorkerRegistry()
+
+        # Should not raise exception
+        registry.mark_available("nonexistent")
