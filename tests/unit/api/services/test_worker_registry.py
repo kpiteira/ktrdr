@@ -1,7 +1,7 @@
 """Unit tests for WorkerRegistry."""
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -783,3 +783,188 @@ class TestBackgroundHealthCheckTask:
 
         # Verify loop continued after exception
         assert call_count >= 2
+
+
+class TestDeadWorkerCleanup:
+    """Tests for dead worker cleanup functionality."""
+
+    def test_cleanup_removes_workers_unavailable_for_threshold(self):
+        """Test that workers unavailable for > 5 minutes are removed."""
+        registry = WorkerRegistry()
+
+        # Register worker
+        worker = registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://worker-1:5003",
+        )
+
+        # Mark as unavailable
+        worker.status = WorkerStatus.TEMPORARILY_UNAVAILABLE
+
+        # Set last_healthy_at to 6 minutes ago
+        worker.last_healthy_at = datetime.utcnow() - timedelta(minutes=6)
+
+        # Run cleanup
+        registry._cleanup_dead_workers()
+
+        # Worker should be removed
+        assert registry.get_worker("worker-1") is None
+        assert len(registry.list_workers()) == 0
+
+    def test_cleanup_keeps_workers_unavailable_below_threshold(self):
+        """Test that workers unavailable for < 5 minutes are kept."""
+        registry = WorkerRegistry()
+
+        # Register worker
+        worker = registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://worker-1:5003",
+        )
+
+        # Mark as unavailable
+        worker.status = WorkerStatus.TEMPORARILY_UNAVAILABLE
+
+        # Set last_healthy_at to 4 minutes ago (below threshold)
+        worker.last_healthy_at = datetime.utcnow() - timedelta(minutes=4)
+
+        # Run cleanup
+        registry._cleanup_dead_workers()
+
+        # Worker should still exist
+        assert registry.get_worker("worker-1") is not None
+        assert len(registry.list_workers()) == 1
+
+    def test_cleanup_keeps_available_workers(self):
+        """Test that available workers are never removed."""
+        registry = WorkerRegistry()
+
+        # Register worker
+        worker = registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://worker-1:5003",
+        )
+
+        # Keep as available
+        worker.status = WorkerStatus.AVAILABLE
+
+        # Set last_healthy_at to 10 minutes ago (way past threshold)
+        worker.last_healthy_at = datetime.utcnow() - timedelta(minutes=10)
+
+        # Run cleanup
+        registry._cleanup_dead_workers()
+
+        # Worker should still exist (it's available)
+        assert registry.get_worker("worker-1") is not None
+        assert len(registry.list_workers()) == 1
+
+    def test_cleanup_keeps_busy_workers(self):
+        """Test that busy workers are never removed."""
+        registry = WorkerRegistry()
+
+        # Register worker
+        worker = registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://worker-1:5003",
+        )
+
+        # Mark as busy
+        worker.status = WorkerStatus.BUSY
+
+        # Set last_healthy_at to 10 minutes ago (way past threshold)
+        worker.last_healthy_at = datetime.utcnow() - timedelta(minutes=10)
+
+        # Run cleanup
+        registry._cleanup_dead_workers()
+
+        # Worker should still exist (it's busy)
+        assert registry.get_worker("worker-1") is not None
+        assert len(registry.list_workers()) == 1
+
+    def test_cleanup_handles_missing_last_healthy_at(self):
+        """Test cleanup handles workers without last_healthy_at gracefully."""
+        registry = WorkerRegistry()
+
+        # Register worker
+        worker = registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://worker-1:5003",
+        )
+
+        # Mark as unavailable but clear last_healthy_at
+        worker.status = WorkerStatus.TEMPORARILY_UNAVAILABLE
+        worker.last_healthy_at = None
+
+        # Run cleanup - should not crash
+        registry._cleanup_dead_workers()
+
+        # Worker should still exist (no timestamp to compare)
+        assert registry.get_worker("worker-1") is not None
+
+    def test_cleanup_removes_multiple_dead_workers(self):
+        """Test cleanup removes multiple dead workers in one pass."""
+        registry = WorkerRegistry()
+
+        # Register 3 workers
+        for i in range(1, 4):
+            worker = registry.register_worker(
+                worker_id=f"worker-{i}",
+                worker_type=WorkerType.BACKTESTING,
+                endpoint_url=f"http://worker-{i}:5003",
+            )
+            worker.status = WorkerStatus.TEMPORARILY_UNAVAILABLE
+            worker.last_healthy_at = datetime.utcnow() - timedelta(minutes=6)
+
+        # Register 1 healthy worker
+        registry.register_worker(
+            worker_id="worker-4",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://worker-4:5003",
+        )
+
+        assert len(registry.list_workers()) == 4
+
+        # Run cleanup
+        registry._cleanup_dead_workers()
+
+        # Only healthy worker should remain
+        assert len(registry.list_workers()) == 1
+        assert registry.get_worker("worker-4") is not None
+
+    @pytest.mark.asyncio
+    async def test_health_check_loop_runs_cleanup(self):
+        """Test that health check loop runs cleanup after health checks."""
+        registry = WorkerRegistry()
+        registry._health_check_interval = 0.1  # Fast for testing
+        registry._removal_threshold_seconds = 1  # 1 second for testing
+
+        # Register worker and mark as unavailable with old timestamp
+        worker = registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://worker-1:5003",
+        )
+        worker.status = WorkerStatus.TEMPORARILY_UNAVAILABLE
+        worker.last_healthy_at = datetime.utcnow() - timedelta(seconds=2)
+
+        # Mock health_check_worker to prevent it from updating timestamps
+        async def mock_health_check(worker_id):
+            return False  # Simulate failed health check
+
+        with patch.object(registry, "health_check_worker", side_effect=mock_health_check):
+            # Start background task
+            await registry.start()
+
+            # Wait for health check loop to run
+            await asyncio.sleep(0.3)
+
+            # Stop background task
+            await registry.stop()
+
+        # Worker should be removed by cleanup
+        assert registry.get_worker("worker-1") is None
+        assert len(registry.list_workers()) == 0

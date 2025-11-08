@@ -35,6 +35,7 @@ class WorkerRegistry:
         self._workers: dict[str, WorkerEndpoint] = {}
         self._health_check_task: Optional[asyncio.Task] = None
         self._health_check_interval: int = 10  # seconds
+        self._removal_threshold_seconds: int = 300  # 5 minutes
 
     def register_worker(
         self,
@@ -315,6 +316,37 @@ class WorkerRegistry:
 
         return False
 
+    def _cleanup_dead_workers(self) -> None:
+        """
+        Remove workers that have been unavailable for too long.
+
+        Workers marked as TEMPORARILY_UNAVAILABLE for longer than the removal
+        threshold (default 5 minutes) are removed from the registry.
+
+        This method is called periodically by the background health check loop.
+
+        Example:
+            >>> registry = WorkerRegistry()
+            >>> # Worker becomes unavailable...
+            >>> # After 5+ minutes of being unavailable...
+            >>> registry._cleanup_dead_workers()  # Worker is removed
+        """
+        now = datetime.utcnow()
+        to_remove = []
+
+        for worker_id, worker in self._workers.items():
+            # Only consider workers that are temporarily unavailable
+            if worker.status == WorkerStatus.TEMPORARILY_UNAVAILABLE:
+                if worker.last_healthy_at:
+                    time_unavailable = (now - worker.last_healthy_at).total_seconds()
+                    if time_unavailable > self._removal_threshold_seconds:
+                        to_remove.append(worker_id)
+
+        # Remove dead workers
+        for worker_id in to_remove:
+            del self._workers[worker_id]
+            logger.info(f"Removed dead worker: {worker_id}")
+
     async def start(self) -> None:
         """
         Start background health check task.
@@ -369,6 +401,9 @@ class WorkerRegistry:
                 # Health check all workers
                 for worker_id in list(self._workers.keys()):
                     await self.health_check_worker(worker_id)
+
+                # Cleanup dead workers after health checks
+                self._cleanup_dead_workers()
 
                 # Wait before next round
                 await asyncio.sleep(self._health_check_interval)
