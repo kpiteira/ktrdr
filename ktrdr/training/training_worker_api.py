@@ -237,23 +237,78 @@ async def start_training(
             },
         )
 
+    # IMMEDIATELY register operation to prevent race condition
+    # This ensures the next request will see this operation and reject with 503
+    import socket
+    import uuid
+    from datetime import datetime
+
+    from ktrdr.api.models.operations import OperationMetadata
+
+    worker_id = os.getenv("WORKER_ID") or f"training-{socket.gethostname()}"
+
+    # Generate or use provided operation_id
+    operation_id = task_id or f"worker_training_{uuid.uuid4().hex[:12]}"
+
+    # Parse date strings to datetime objects
+    start_dt = None
+    end_dt = None
+    if start_date:
+        try:
+            start_dt = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+        except (ValueError, AttributeError):
+            start_dt = None
+    if end_date:
+        try:
+            end_dt = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
+        except (ValueError, AttributeError):
+            end_dt = None
+
+    # Create operation immediately as "in_progress" to claim this worker
+    metadata = OperationMetadata(
+        symbol=symbols[0] if symbols else "MULTI",
+        timeframe=timeframes[0] if timeframes else None,
+        mode="training",
+        start_date=start_dt,
+        end_date=end_dt,
+        parameters={
+            "symbols": symbols,
+            "timeframes": timeframes,
+            "strategy_name": strategy_name,
+            "worker_id": worker_id,
+        },
+    )
+
+    await ops_service.create_operation(
+        operation_type=OperationType.TRAINING,
+        metadata=metadata,
+        operation_id=operation_id,
+    )
+
+    # Mark operation as started (in-progress) immediately
+    # Create a dummy task just for marking it as started
+    import asyncio
+
+    dummy_task = asyncio.create_task(asyncio.sleep(0))
+    await ops_service.start_operation(operation_id, dummy_task)
+
+    logger.info(
+        f"🔵 WORKER {worker_id}: Registered and started operation {operation_id} "
+        f"(training {symbols} {timeframes} {strategy_name})"
+    )
+
     try:
         training_manager = get_training_manager()
 
-        # Get worker ID for logging
-        import socket
-
-        worker_id = os.getenv("WORKER_ID") or f"training-{socket.gethostname()}"
-
         # Call TrainingManager (will run in LOCAL mode)
-        logger.info(
-            f"🔵 WORKER {worker_id}: Starting training {symbols} {timeframes} {strategy_name}"
-        )
+        logger.info(f"🔵 WORKER {worker_id}: Executing training for {operation_id}")
 
         # Build strategy config path
         strategy_config_path = f"strategies/{strategy_name}.yaml"
 
-        result = await training_manager.train_multi_symbol_strategy(
+        # Execute training (will create its own operation, but we ignore it)
+        # We use our pre-registered operation_id for worker exclusivity
+        await training_manager.train_multi_symbol_strategy(
             strategy_config_path=strategy_config_path,
             symbols=symbols,
             timeframes=timeframes,
@@ -262,9 +317,6 @@ async def start_training(
             validation_split=0.2,
             data_mode="local",
         )
-
-        # Extract operation/task ID from result
-        operation_id = result.get("operation_id") or task_id
 
         logger.info(
             f"🔵 WORKER {worker_id}: Operation started - operation_id={operation_id}"
@@ -282,9 +334,13 @@ async def start_training(
 
     except ValueError as e:
         logger.error(f"Validation error: {str(e)}")
+        # Mark operation as failed
+        await ops_service.fail_operation(operation_id, str(e))
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Internal error starting training: {str(e)}", exc_info=True)
+        # Mark operation as failed
+        await ops_service.fail_operation(operation_id, str(e))
         raise HTTPException(
             status_code=500, detail=f"Internal server error: {str(e)}"
         ) from e
