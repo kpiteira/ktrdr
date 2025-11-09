@@ -858,22 +858,114 @@ make quality
 - Training workers in Docker Compose
 - GPU host configuration (manual)
 - Hybrid worker selection (GPU first, CPU fallback)
+- Worker exclusivity enforced (503 rejection when busy)
+- TrainingService integrated with WorkerRegistry
 - **TESTABLE**: Submit training → executes on CPU worker → completes
 
 ---
 
-### Task 3.1: Training Worker API
+### Task 3.1: Training Worker API & Self-Registration
 
-**Objective**: Create training worker API (similar to backtest)
+**Objective**: Create training worker API with self-registration (similar to backtest worker)
 
 **TDD Approach**:
 1. Create `tests/unit/training/test_training_worker_api.py`
-2. Test health, start training, exclusivity
+2. Test worker startup, registration, basic endpoints
 
 **Implementation**:
-1. Create `ktrdr/training/training_worker_api.py` (similar structure to backtest worker)
-2. Add self-registration on startup
-3. Add to Docker Compose
+1. Create `ktrdr/training/training_worker_api.py`:
+   ```python
+   # Similar structure to ktrdr/backtesting/remote_api.py
+   # - FastAPI app
+   # - /health endpoint
+   # - /training/start endpoint
+   # - Self-registration on startup
+   ```
+
+2. Create `ktrdr/training/worker_registration.py` (or reuse backtest pattern)
+
+3. Add to `docker/docker-compose.dev.yml`:
+   ```yaml
+   training-worker:
+     image: ktrdr-backend:dev
+     environment:
+       - WORKER_TYPE=training
+       - WORKER_PORT=5004
+       - KTRDR_API_URL=http://backend:8000
+     command: ["uvicorn", "ktrdr.training.training_worker_api:app", "--host", "0.0.0.0", "--port", "5004"]
+   ```
+
+**Quality Gate**:
+```bash
+make test-unit
+make quality
+
+# Manual test
+docker-compose -f docker/docker-compose.dev.yml up -d training-worker
+curl http://localhost:8000/api/v1/workers  # Should see training worker registered
+```
+
+**Commit**: `feat(training): create training worker API with self-registration`
+
+**Estimated Time**: 2.5 hours
+
+---
+
+### Task 3.2: Training Worker Exclusivity & Health Status
+
+**Objective**: Workers reject requests with 503 when busy, health reports actual status
+
+**TDD Approach**:
+1. Add tests for exclusivity enforcement
+2. Test health endpoint reports 'busy' vs 'idle'
+
+**Implementation**:
+1. Modify `/training/start` endpoint in `training_worker_api.py`:
+   ```python
+   @app.post("/training/start")
+   async def start_training(request: TrainingStartRequest):
+       # EXCLUSIVITY CHECK: Reject if worker already busy
+       ops_service = get_operations_service()
+       active_ops, _, _ = await ops_service.list_operations(
+           operation_type=OperationType.TRAINING,
+           active_only=True
+       )
+
+       if active_ops:
+           current_operation = active_ops[0].operation_id
+           raise HTTPException(
+               status_code=503,  # Service Unavailable
+               detail={
+                   "error": "Worker busy",
+                   "message": f"Worker executing operation {current_operation}",
+                   "current_operation": current_operation,
+               }
+           )
+
+       # Accept operation and execute...
+   ```
+
+2. Update `/health` endpoint to report actual status:
+   ```python
+   @app.get("/health")
+   async def health_check():
+       ops_service = get_operations_service()
+       active_ops, _, _ = await ops_service.list_operations(
+           operation_type=OperationType.TRAINING,
+           active_only=True
+       )
+
+       worker_status = "busy" if active_ops else "idle"
+       current_operation = active_ops[0].operation_id if active_ops else None
+
+       return {
+           "healthy": True,
+           "service": "training-worker",
+           "worker_status": worker_status,  # Used by backend health checks
+           "current_operation": current_operation,
+           "active_operations_count": len(active_ops),
+       }
+   ```
 
 **Quality Gate**:
 ```bash
@@ -881,23 +973,74 @@ make test-unit
 make quality
 ```
 
-**Commit**: `feat(training): create training worker API for CPU execution`
+**Commit**: `feat(training): add worker exclusivity with 503 rejection and health status reporting`
 
 **Estimated Time**: 2 hours
 
 ---
 
-### Task 3.2: Hybrid Worker Selection (Training)
+### Task 3.3: Integrate TrainingService with WorkerRegistry
 
-**Objective**: Add GPU-first, CPU-fallback selection logic
+**Objective**: TrainingService uses WorkerRegistry for worker selection with GPU/CPU hybrid logic
 
 **TDD Approach**:
-1. Create `tests/unit/api/services/test_training_worker_selection.py`
-2. Test GPU first, CPU fallback, none available
+1. Create `tests/unit/training/test_training_service_integration.py`
+2. Test worker selection (GPU first, CPU fallback)
+3. Test 503 retry logic
+4. Test no workers available scenario
 
 **Implementation**:
-1. Add method to WorkerRegistry for hybrid selection
-2. Or add to TrainingService (depending on architecture)
+1. Modify `ktrdr/training/training_manager.py`:
+   ```python
+   def __init__(self, worker_registry: Optional[WorkerRegistry] = None):
+       super().__init__()
+       self.operations_service = get_operations_service()
+       self.worker_registry = worker_registry
+
+       # Check GPU host service
+       self.use_gpu_host = os.getenv("USE_TRAINING_HOST_SERVICE", "false").lower() in ("true", "1", "yes")
+
+       if self.use_gpu_host:
+           self.adapter = TrainingHostAdapter(...)
+       elif not worker_registry:
+           logger.warning("No GPU host and no WorkerRegistry - will fail if training requested")
+
+   async def run_training(...):
+       if self.use_gpu_host:
+           # Dispatch to GPU host service
+           return await self._run_on_gpu_host(...)
+       else:
+           # Dispatch to CPU workers via registry
+           return await self._run_on_worker(...)
+
+   async def _run_on_worker(...):
+       # Similar to BacktestingService._run_remote_backtest()
+       # 1. Select worker (CPU training workers)
+       # 2. Dispatch with retry on 503
+       # 3. Register remote proxy
+       # 4. Mark worker busy
+       # 5. Return immediately
+   ```
+
+2. Add hybrid selection logic:
+   ```python
+   def select_training_worker(self) -> Optional[WorkerEndpoint]:
+       """
+       Select training worker with GPU-first, CPU-fallback logic.
+
+       For now: Only CPU workers (WorkerType.TRAINING)
+       Future: Check worker capabilities for GPU support
+       """
+       if self.worker_registry:
+           return self.worker_registry.select_worker(WorkerType.TRAINING)
+       return None
+   ```
+
+3. Implement 503 retry logic (same pattern as BacktestingService):
+   - Try selected worker
+   - On 503, select different worker
+   - Max 3 retries
+   - Clear error if all workers busy
 
 **Quality Gate**:
 ```bash
@@ -905,18 +1048,42 @@ make test-unit
 make quality
 ```
 
-**Commit**: `feat(training): add hybrid GPU/CPU worker selection`
+**Commit**: `feat(training): integrate TrainingService with WorkerRegistry for distributed execution`
 
-**Estimated Time**: 1.5 hours
+**Estimated Time**: 3 hours
 
 ---
 
-### Task 3.3: End-to-End Test - Training
+### Task 3.4: End-to-End Test - Training Workers
 
 **Objective**: Submit training operation, verify completes on CPU worker
 
+**TDD Approach**:
+1. Create `tests/e2e/test_training_workers.py`
+2. Test scenarios:
+   - Training with CPU worker → succeeds
+   - Multiple concurrent training requests → distributed across workers
+   - 4th request when 3 workers busy → retries and fails gracefully
+
 **Implementation**:
-1. Create E2E test similar to backtest E2E
+```python
+@pytest.mark.e2e
+async def test_training_on_cpu_worker():
+    """Training succeeds with CPU workers available."""
+    # Start backend + training-worker
+    # Submit training operation
+    # Poll for completion
+    # Verify results
+    # Verify worker was used (not local execution)
+
+@pytest.mark.e2e
+async def test_training_worker_exclusivity():
+    """Training workers enforce one operation at a time."""
+    # Start backend + 1 training-worker
+    # Submit 2 training operations
+    # First accepted, second rejected with 503
+    # Second retries and waits for first to complete
+```
 
 **Quality Gate**:
 ```bash
@@ -925,18 +1092,22 @@ make test-e2e
 make quality
 ```
 
-**Commit**: `test(e2e): add end-to-end test for training workers`
+**Commit**: `test(e2e): add end-to-end tests for training workers`
 
-**Estimated Time**: 1.5 hours
+**Estimated Time**: 2 hours
 
 ---
 
 **Phase 3 Checkpoint**:
 ✅ Training workers running in Docker
-✅ Hybrid GPU/CPU selection works
+✅ Worker exclusivity enforced (503 rejection)
+✅ Health checks report actual worker status
+✅ TrainingService integrated with WorkerRegistry
+✅ Hybrid GPU/CPU selection logic (GPU host first, then CPU workers)
+✅ 503 retry logic with different workers
 ✅ **TESTABLE**: Training operation completes on CPU worker
 
-**Total Phase 3 Time**: ~5 hours
+**Total Phase 3 Time**: ~9.5 hours
 
 ---
 
@@ -1812,20 +1983,21 @@ make quality  # Docs linting
 |-------|-------|-------|------|-----------|
 | Phase 1: Single Worker E2E | Docker + 1 backtest worker | 6 tasks | ~8.5 hours | ✅ Yes! |
 | Phase 2: Multi-Worker + Health | Scaling + reliability | 6 tasks | ~8 hours | ✅ Yes! |
-| Phase 3: Training Workers | Training support | 3 tasks | ~5 hours | ✅ Yes! |
-| **Subtotal (MVP - Hybrid)** | **Distributed + local modes** | **15 tasks** | **~21.5 hours** | **✅ Every phase!** |
+| Phase 3: Training Workers | Training support + integration | 4 tasks | ~9.5 hours | ✅ Yes! |
+| **Subtotal (MVP - Hybrid)** | **Distributed + local modes** | **16 tasks** | **~26 hours** | **✅ Every phase!** |
 | Phase 4: Pure Distributed | Remove local execution | 5 tasks | ~8.5 hours | ✅ Yes! |
-| **Subtotal (Clean Architecture)** | **Pure distributed system** | **20 tasks** | **~30 hours** | **✅ Production-ready!** |
+| **Subtotal (Clean Architecture)** | **Pure distributed system** | **21 tasks** | **~34.5 hours** | **✅ Production-ready!** |
 | Phase 5: Production & CD | LXC, deployment, monitoring | 6 tasks | ~10 hours | ✅ Yes! |
-| **Total (Complete)** | **Full production system** | **26 tasks** | **~40 hours** | **✅ Full CD pipeline!** |
+| **Total (Complete)** | **Full production system** | **27 tasks** | **~44.5 hours** | **✅ Full CD pipeline!** |
 
 ### Implementation Strategy
 
-**MVP First (Phases 1-3, ~21.5 hours)**:
+**MVP First (Phases 1-3, ~26 hours)**:
 - Complete distributed system working in Docker Compose
 - Supports both local and remote execution (hybrid)
 - Fully functional for development and testing
-- All core features implemented
+- All core features implemented (backtesting + training workers)
+- Worker exclusivity, 503 rejection, retry logic
 - **You can use it!**
 
 **Clean Architecture (Phase 4, ~8.5 hours)**:
