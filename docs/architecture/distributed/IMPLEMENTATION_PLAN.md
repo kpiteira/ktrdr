@@ -940,11 +940,290 @@ make quality
 
 ---
 
-## Phase 4: Production Deployment & Continuous Delivery
+## Phase 4: Remove Local Execution Mode (Pure Distributed Architecture)
+
+**Goal**: Eliminate local/remote duality - all operations execute on workers or host services
+
+**Why This Fourth**: Clean up architecture, enforce distributed-only execution model
+
+**End State**:
+- No `USE_REMOTE_*_SERVICE` flags - always distributed
+- Backend is orchestrator only, never executes operations
+- BacktestingService always uses WorkerRegistry (no fallback)
+- TrainingService always uses workers or host service (no local execution)
+- Simplified codebase with single execution path
+- **TESTABLE**: All operations require workers, fail gracefully if none available
+
+**Architectural Benefit**: Cleaner separation of concerns - backend orchestrates, workers execute
+
+---
+
+### Task 4.1: Remove Local Backtesting Execution
+
+**Objective**: BacktestingService requires WorkerRegistry, removes local execution code path
+
+**TDD Approach**:
+1. Update existing tests to expect RuntimeError when no workers available
+2. Remove tests for local execution mode
+3. Verify all tests pass with distributed-only mode
+
+**Implementation**:
+1. Modify `ktrdr/backtesting/backtesting_service.py`:
+   ```python
+   def __init__(self, worker_registry: WorkerRegistry):  # No Optional - required!
+       """Initialize backtesting service (distributed-only mode)."""
+       super().__init__()
+       self.operations_service = get_operations_service()
+       self.worker_registry = worker_registry  # Required, not optional
+       self._operation_workers: dict[str, str] = {}
+
+       logger.info("Backtesting service initialized (distributed mode)")
+
+   # Remove _use_remote flag
+   # Remove _should_use_remote_service() method
+   # Remove _run_local_backtest() method
+   # Rename _run_remote_backtest() → run_backtest_on_worker()
+   ```
+
+2. Update `ktrdr/api/endpoints/backtesting.py`:
+   ```python
+   async def get_backtesting_service() -> BacktestingService:
+       global _backtesting_service
+       if _backtesting_service is None:
+           worker_registry = get_worker_registry()  # Always required
+           _backtesting_service = BacktestingService(worker_registry=worker_registry)
+       return _backtesting_service
+   ```
+
+3. Remove environment variable handling:
+   - Delete `USE_REMOTE_BACKTEST_SERVICE` checks
+   - Delete `REMOTE_BACKTEST_SERVICE_URL` (use WorkerRegistry instead)
+
+**Quality Gate**:
+```bash
+make test-unit
+make quality
+
+# Manual test - should fail gracefully with no workers
+docker-compose -f docker/docker-compose.dev.yml up -d backend
+# (no workers started)
+# Try to start backtest -> Should get clear error: "No workers available"
+```
+
+**Commit**: `refactor(backtesting): remove local execution mode, require distributed workers`
+
+**Estimated Time**: 2 hours
+
+---
+
+### Task 4.2: Remove Local Training Execution
+
+**Objective**: TrainingService requires workers or host service, removes local execution
+
+**TDD Approach**:
+1. Update tests for distributed-only mode
+2. Verify graceful degradation when no workers available
+
+**Implementation**:
+1. Modify `ktrdr/training/training_manager.py`:
+   ```python
+   def __init__(self):
+       """Initialize training service (distributed-only mode)."""
+       super().__init__()
+
+       # Check if GPU host service is configured
+       self.use_gpu_host = os.getenv("USE_TRAINING_HOST_SERVICE", "false").lower() in ("true", "1", "yes")
+
+       if self.use_gpu_host:
+           # GPU host service mode
+           self.adapter = TrainingHostAdapter(...)
+       else:
+           # CPU worker mode - require WorkerRegistry
+           worker_registry = get_worker_registry()
+           if not worker_registry:
+               raise RuntimeError(
+                   "Training requires either GPU host service or CPU workers. "
+                   "Neither configured. Set USE_TRAINING_HOST_SERVICE=true or start training workers."
+               )
+           self.worker_registry = worker_registry
+           # Use worker dispatch instead of local execution
+
+       logger.info(f"Training service initialized (mode: {'gpu-host' if self.use_gpu_host else 'cpu-workers'})")
+
+   # Remove local thread-based training execution
+   # Training must go to either GPU host or CPU workers
+   ```
+
+2. Remove environment variable:
+   - Delete local fallback when `USE_TRAINING_HOST_SERVICE=false`
+   - Must explicitly choose: GPU host service OR CPU workers
+
+**Quality Gate**:
+```bash
+make test-unit
+make quality
+```
+
+**Commit**: `refactor(training): remove local execution mode, require distributed workers or host service`
+
+**Estimated Time**: 2 hours
+
+---
+
+### Task 4.3: Clean Up Environment Variables
+
+**Objective**: Remove `USE_REMOTE_*` flags, simplify configuration
+
+**Implementation**:
+1. Update `docker/docker-compose.dev.yml`:
+   ```yaml
+   backend:
+     environment:
+       - PYTHONPATH=/app
+       - LOG_LEVEL=INFO
+       - ENVIRONMENT=development
+       # Removed: USE_REMOTE_BACKTEST_SERVICE (always distributed)
+       # Removed: USE_IB_HOST_SERVICE (keep for now - Phase 0)
+       # Kept: USE_TRAINING_HOST_SERVICE (choose GPU host vs CPU workers)
+   ```
+
+2. Update `docker/docker-compose.yml` (main dev environment):
+   ```yaml
+   backend:
+     environment:
+       # Remove USE_REMOTE_BACKTEST_SERVICE
+       # Backtesting always uses workers (if docker-compose includes backtest-worker)
+       # Or fails gracefully if no workers
+   ```
+
+3. Update documentation:
+   - Remove references to "local vs remote" mode
+   - Document "Backend orchestrates, workers execute"
+   - Update architecture diagrams
+
+**Quality Gate**:
+```bash
+make quality
+
+# Manual verification
+grep -r "USE_REMOTE_BACKTEST_SERVICE" . --exclude-dir=.git
+# Should only find docs/history, not active code
+```
+
+**Commit**: `refactor(config): remove local/remote mode flags, enforce distributed-only architecture`
+
+**Estimated Time**: 1 hour
+
+---
+
+### Task 4.4: Update Documentation
+
+**Objective**: Document pure distributed architecture, remove local execution references
+
+**Implementation**:
+1. Update `CLAUDE.md`:
+   ```markdown
+   ## Distributed Architecture (Phase 4+)
+
+   **Backend Role**: Orchestrator only
+   - Selects workers via WorkerRegistry
+   - Dispatches operations to workers
+   - Tracks progress via proxy pattern
+   - Never executes operations locally
+
+   **Worker Role**: Execution only
+   - Self-registers on startup
+   - Accepts operations (or rejects with 503 if busy)
+   - Reports progress via OperationsService API
+   - One operation at a time (exclusive execution)
+
+   **Host Services**: Special workers for hardware access
+   - GPU training: training-host-service (MPS/CUDA access)
+   - IB Gateway: ib-host-service (direct TCP connection)
+   ```
+
+2. Update `docs/architecture/distributed/ARCHITECTURE.md`:
+   - Add section: "Pure Distributed Architecture (Phase 4)"
+   - Remove references to local execution fallback
+   - Clarify: Backend = Orchestrator, Workers = Executors
+
+3. Update `README.md`:
+   - Document that workers are required
+   - Explain graceful degradation (clear errors if no workers)
+
+**Quality Gate**:
+```bash
+make quality
+```
+
+**Commit**: `docs: update for pure distributed architecture, remove local execution references`
+
+**Estimated Time**: 1.5 hours
+
+---
+
+### Task 4.5: Integration Test - Pure Distributed Mode
+
+**Objective**: End-to-end test verifying distributed-only operation
+
+**TDD Approach**:
+1. Create `tests/e2e/test_distributed_only.py`
+2. Test scenarios:
+   - Backtest with workers → succeeds
+   - Backtest without workers → fails with clear error
+   - Training with GPU host → succeeds
+   - Training with CPU workers → succeeds
+   - Training without either → fails with clear error
+
+**Implementation**:
+```python
+@pytest.mark.e2e
+async def test_backtest_requires_workers():
+    """Backtest fails gracefully when no workers available."""
+    # Start backend only (no workers)
+    # Try to start backtest
+    # Expect: RuntimeError("No workers available")
+
+@pytest.mark.e2e
+async def test_backtest_with_workers():
+    """Backtest succeeds with workers available."""
+    # Start backend + workers
+    # Start backtest
+    # Expect: Success, operation completes
+```
+
+**Quality Gate**:
+```bash
+make test-e2e
+make test-unit
+make quality
+```
+
+**Commit**: `test(e2e): add distributed-only mode integration tests`
+
+**Estimated Time**: 2 hours
+
+---
+
+**Phase 4 Checkpoint**:
+✅ No local execution mode in BacktestingService
+✅ No local execution mode in TrainingService
+✅ Backend is orchestrator-only (never executes operations)
+✅ Simplified codebase with single execution path
+✅ Clear error messages when workers unavailable
+✅ **TESTABLE**: All operations require workers/host services, fail gracefully otherwise
+
+**Total Phase 4 Time**: ~8.5 hours
+
+**Architectural Achievement**: Clean separation - Backend orchestrates, Workers execute
+
+---
+
+## Phase 5: Production Deployment & Continuous Delivery
 
 **Goal**: Production-ready deployment with continuous delivery pipeline
 
-**Why This Fourth**: MVP works, now make it production-ready with automated deployment
+**Why This Fifth**: Architecture is clean, now make it production-ready with automated deployment
 
 **End State**:
 - LXC template for base environment (OS, Python, dependencies)
@@ -957,7 +1236,7 @@ make quality
 
 ---
 
-### Task 4.1: LXC Base Template Creation
+### Task 5.1: LXC Base Template Creation
 
 **Objective**: Create reusable LXC template with base environment (NOT code!)
 
@@ -1077,7 +1356,7 @@ make quality
 
 ---
 
-### Task 4.2: Code Deployment Scripts (CD-Friendly!)
+### Task 5.2: Code Deployment Scripts (CD-Friendly!)
 
 **Objective**: Deploy code to workers WITHOUT rebuilding templates
 
@@ -1163,7 +1442,7 @@ make quality
 
 ---
 
-### Task 4.3: Worker Provisioning Automation
+### Task 5.3: Worker Provisioning Automation
 
 **Objective**: Automate creating new workers from template
 
@@ -1238,7 +1517,7 @@ make quality
 
 ---
 
-### Task 4.4: Configuration Management
+### Task 5.4: Configuration Management
 
 **Objective**: Environment-specific configuration (dev vs prod)
 
@@ -1321,7 +1600,7 @@ make quality
 
 ---
 
-### Task 4.5: Monitoring Endpoints
+### Task 5.5: Monitoring Endpoints
 
 **Objective**: Expose metrics for observability
 
@@ -1420,7 +1699,7 @@ curl http://localhost:8000/api/v1/metrics/prometheus
 
 ---
 
-### Task 4.6: CI/CD Pipeline Documentation
+### Task 5.6: CI/CD Pipeline Documentation
 
 **Objective**: Document deployment workflow
 
@@ -1512,7 +1791,7 @@ make quality  # Docs linting
 
 ---
 
-**Phase 4 Checkpoint**:
+**Phase 5 Checkpoint**:
 ✅ LXC base template created (environment only, no code)
 ✅ Code deployment separate from template (enables CD!)
 ✅ Worker provisioning automated
@@ -1521,7 +1800,7 @@ make quality  # Docs linting
 ✅ **TESTABLE**: Deploy code update to all workers with one command
 ✅ **CI/CD Ready**: No template rebuilds for code changes
 
-**Total Phase 4 Time**: ~10 hours
+**Total Phase 5 Time**: ~10 hours
 
 ---
 
@@ -1534,19 +1813,28 @@ make quality  # Docs linting
 | Phase 1: Single Worker E2E | Docker + 1 backtest worker | 6 tasks | ~8.5 hours | ✅ Yes! |
 | Phase 2: Multi-Worker + Health | Scaling + reliability | 6 tasks | ~8 hours | ✅ Yes! |
 | Phase 3: Training Workers | Training support | 3 tasks | ~5 hours | ✅ Yes! |
-| **Subtotal (MVP)** | **Distributed system (dev)** | **15 tasks** | **~21.5 hours** | **✅ Every phase!** |
-| Phase 4: Production & CD | LXC, deployment, monitoring | 6 tasks | ~10 hours | ✅ Yes! |
-| **Total (Complete)** | **Production-ready system** | **21 tasks** | **~31.5 hours** | **✅ Full CD pipeline!** |
+| **Subtotal (MVP - Hybrid)** | **Distributed + local modes** | **15 tasks** | **~21.5 hours** | **✅ Every phase!** |
+| Phase 4: Pure Distributed | Remove local execution | 5 tasks | ~8.5 hours | ✅ Yes! |
+| **Subtotal (Clean Architecture)** | **Pure distributed system** | **20 tasks** | **~30 hours** | **✅ Production-ready!** |
+| Phase 5: Production & CD | LXC, deployment, monitoring | 6 tasks | ~10 hours | ✅ Yes! |
+| **Total (Complete)** | **Full production system** | **26 tasks** | **~40 hours** | **✅ Full CD pipeline!** |
 
 ### Implementation Strategy
 
 **MVP First (Phases 1-3, ~21.5 hours)**:
 - Complete distributed system working in Docker Compose
+- Supports both local and remote execution (hybrid)
 - Fully functional for development and testing
 - All core features implemented
 - **You can use it!**
 
-**Production Ready (Phase 4, ~10 hours)**:
+**Clean Architecture (Phase 4, ~8.5 hours)**:
+- Remove local execution mode entirely
+- Backend orchestrates only, never executes
+- Simplified codebase with single execution path
+- **You can trust it!**
+
+**Production Ready (Phase 5, ~10 hours)**:
 - Proxmox LXC deployment automation
 - Continuous delivery pipeline (no template rebuilds!)
 - Monitoring and observability

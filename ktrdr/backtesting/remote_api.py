@@ -155,12 +155,31 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """Basic health check endpoint."""
+    """
+    Health check endpoint that reports worker status.
+
+    Returns worker_status as 'busy' if there are active operations,
+    'idle' otherwise. This is used by the backend's health check system
+    to determine worker availability.
+    """
+    # Check if there are active backtest operations
+    ops_service = get_operations_service()
+    active_ops, _, _ = await ops_service.list_operations(
+        operation_type=OperationType.BACKTESTING,
+        active_only=True
+    )
+
+    worker_status = "busy" if active_ops else "idle"
+    current_operation = active_ops[0].operation_id if active_ops else None
+
     return {
         "healthy": True,
         "service": "backtest-remote",
         "timestamp": datetime.utcnow().isoformat(),
         "status": "operational",
+        "worker_status": worker_status,  # 'busy' or 'idle' - used by backend health checks
+        "current_operation": current_operation,
+        "active_operations_count": len(active_ops),
     }
 
 
@@ -185,8 +204,30 @@ async def start_backtest(request: BacktestStartRequest) -> BacktestStartResponse
         BacktestStartResponse with operation_id for tracking
 
     Raises:
-        HTTPException: 400 for validation errors, 500 for internal errors
+        HTTPException: 400 for validation errors, 500 for internal errors, 503 if worker busy
     """
+    # EXCLUSIVITY CHECK: Reject if worker is already busy
+    ops_service = get_operations_service()
+    active_ops, _, _ = await ops_service.list_operations(
+        operation_type=OperationType.BACKTESTING,
+        active_only=True
+    )
+
+    if active_ops:
+        current_operation = active_ops[0].operation_id
+        logger.warning(
+            f"⛔ Worker BUSY - Rejecting new backtest request (current operation: {current_operation})"
+        )
+        raise HTTPException(
+            status_code=503,  # Service Unavailable
+            detail={
+                "error": "Worker busy",
+                "message": f"Worker is currently executing operation {current_operation}",
+                "current_operation": current_operation,
+                "active_operations_count": len(active_ops),
+            }
+        )
+
     try:
         service = get_backtest_service()
 
@@ -197,9 +238,13 @@ async def start_backtest(request: BacktestStartRequest) -> BacktestStartResponse
         # Build strategy config path
         strategy_config_path = f"strategies/{request.strategy_name}.yaml"
 
+        # Get worker ID for logging
+        import socket
+        worker_id = os.getenv("WORKER_ID") or f"backtest-{socket.gethostname()}"
+
         # Call BacktestingService (will run in LOCAL mode)
         logger.info(
-            f"Starting backtest: {request.symbol} {request.timeframe} ({request.start_date} to {request.end_date})"
+            f"🔵 WORKER {worker_id}: Starting backtest {request.symbol} {request.timeframe} ({request.start_date} to {request.end_date})"
         )
 
         result = await service.run_backtest(
@@ -214,7 +259,7 @@ async def start_backtest(request: BacktestStartRequest) -> BacktestStartResponse
             slippage=request.slippage,
         )
 
-        logger.info(f"Backtest started: operation_id={result['operation_id']}")
+        logger.info(f"🔵 WORKER {worker_id}: Operation started - operation_id={result['operation_id']}")
 
         return BacktestStartResponse(
             success=result["success"],

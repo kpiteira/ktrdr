@@ -30,10 +30,10 @@ services:
       - PYTHONPATH=/app
       - LOG_LEVEL=INFO
       - ENVIRONMENT=development
-      # Disable remote services for this environment
+      # Enable distributed workers architecture
       - USE_IB_HOST_SERVICE=false
       - USE_TRAINING_HOST_SERVICE=false
-      - USE_REMOTE_BACKTEST_SERVICE=false
+      - USE_REMOTE_BACKTEST_SERVICE=true
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
       interval: 30s

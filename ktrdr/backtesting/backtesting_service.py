@@ -415,23 +415,42 @@ class BacktestingService(ServiceOrchestrator[None]):
         Raises:
             RuntimeError: If no workers are available
         """
-        # (1) Select worker from registry
+        # (1) Select worker from registry with retry on 503 (worker busy)
         worker_id: Optional[str] = None
         remote_url: str
+        max_retries = 3
+        attempted_workers = []
 
         if self.worker_registry is not None:
-            worker = self.worker_registry.select_worker(WorkerType.BACKTESTING)
-            if not worker:
-                raise RuntimeError(
-                    "No available backtest workers. All workers are busy or unavailable."
-                )
+            for attempt in range(max_retries):
+                worker = self.worker_registry.select_worker(WorkerType.BACKTESTING)
+                if not worker:
+                    if attempt == 0:
+                        raise RuntimeError(
+                            "No available backtest workers. All workers are busy or unavailable."
+                        )
+                    # All workers have been tried, none available
+                    raise RuntimeError(
+                        f"All backtest workers are busy. Tried {len(attempted_workers)} workers: {attempted_workers}"
+                    )
 
-            worker_id = worker.worker_id
-            remote_url = worker.endpoint_url
-            logger.info(
-                f"Selected worker {worker_id} for operation {operation_id} "
-                f"(symbol={symbol}, timeframe={timeframe})"
-            )
+                # Skip workers we've already tried
+                if worker.worker_id in attempted_workers:
+                    continue
+
+                worker_id = worker.worker_id
+                remote_url = worker.endpoint_url
+                attempted_workers.append(worker_id)
+
+                logger.info(
+                    f"Selected worker {worker_id} for operation {operation_id} "
+                    f"(symbol={symbol}, timeframe={timeframe}, attempt={attempt + 1}/{max_retries})"
+                )
+                break  # Worker selected, exit retry loop to try dispatching
+            else:
+                raise RuntimeError(
+                    f"Could not select unique worker after {max_retries} attempts"
+                )
         else:
             # Fallback to hardcoded URL if no registry (backward compatibility)
             remote_url = self._get_remote_service_url()
@@ -440,7 +459,7 @@ class BacktestingService(ServiceOrchestrator[None]):
                 f"for operation {operation_id}"
             )
 
-        # (1) Start backtest on remote service
+        # (2) Dispatch to worker with retry on 503
         # Extract strategy_name from strategy_config_path (e.g., "strategies/test.yaml" -> "test")
         import os
 
@@ -457,21 +476,72 @@ class BacktestingService(ServiceOrchestrator[None]):
             "slippage": slippage,
         }
 
-        logger.info(f"Starting remote backtest at {remote_url}/backtests/start")
+        remote_response = None
+        remote_operation_id = None
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{remote_url}/backtests/start",
-                json=request_payload,
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            remote_response = response.json()
+        # Retry loop: Try selected worker, if 503 (busy), select different worker
+        for retry_attempt in range(max_retries):
+            try:
+                logger.info(
+                    f"Dispatching backtest to worker {worker_id} at {remote_url}/backtests/start "
+                    f"(attempt {retry_attempt + 1}/{max_retries})"
+                )
 
-        # (2) Get remote operation ID
-        remote_operation_id = remote_response.get("operation_id")
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        f"{remote_url}/backtests/start",
+                        json=request_payload,
+                        timeout=30.0,
+                    )
+                    response.raise_for_status()
+                    remote_response = response.json()
+
+                # Success! Break retry loop
+                remote_operation_id = remote_response.get("operation_id")
+                if not remote_operation_id:
+                    raise RuntimeError("Remote service did not return operation_id")
+
+                logger.info(
+                    f"✅ Backtest accepted by worker {worker_id}: remote_op={remote_operation_id}"
+                )
+                break
+
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 503:
+                    # Worker is busy, try different worker
+                    logger.warning(
+                        f"Worker {worker_id} is busy (503), selecting different worker "
+                        f"(attempt {retry_attempt + 1}/{max_retries})"
+                    )
+
+                    if retry_attempt < max_retries - 1:
+                        # Select a different worker for next attempt
+                        if self.worker_registry is not None:
+                            worker = self.worker_registry.select_worker(WorkerType.BACKTESTING)
+                            if worker and worker.worker_id not in attempted_workers:
+                                worker_id = worker.worker_id
+                                remote_url = worker.endpoint_url
+                                attempted_workers.append(worker_id)
+                                logger.info(f"Retrying with worker {worker_id}")
+                                continue  # Retry with new worker
+                            else:
+                                # No more unique workers available
+                                raise RuntimeError(
+                                    f"All workers busy or unavailable after {retry_attempt + 1} attempts. "
+                                    f"Tried workers: {attempted_workers}"
+                                )
+                    else:
+                        # Last retry failed
+                        raise RuntimeError(
+                            f"All workers busy after {max_retries} attempts. "
+                            f"Tried workers: {attempted_workers}"
+                        )
+                else:
+                    # Other HTTP error, don't retry
+                    raise
+
         if not remote_operation_id:
-            raise RuntimeError("Remote service did not return operation_id")
+            raise RuntimeError("Failed to start backtest on any worker")
 
         logger.info(
             f"Remote backtest started: backend_op={operation_id}, "
