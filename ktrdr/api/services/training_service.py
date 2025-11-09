@@ -6,10 +6,11 @@ Provides neural network training functionality for the API layer.
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from ktrdr import get_logger
 from ktrdr.api.models.operations import OperationType
+from ktrdr.api.models.workers import WorkerType
 from ktrdr.api.services.operations_service import get_operations_service
 from ktrdr.api.services.training import (
     TrainingOperationContext,
@@ -26,6 +27,9 @@ from ktrdr.errors import ValidationError
 from ktrdr.training.model_storage import ModelStorage
 from ktrdr.training.training_adapter import TrainingAdapter
 
+if TYPE_CHECKING:
+    from ktrdr.api.services.worker_registry import WorkerRegistry
+
 logger = get_logger(__name__)
 
 # In-memory storage for loaded models (in production, use proper model registry)
@@ -39,14 +43,29 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter | None]):
     Adapter is TrainingAdapter for host service mode.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, worker_registry: Optional["WorkerRegistry"] = None) -> None:
+        """Initialize training service.
+
+        Args:
+            worker_registry: Optional WorkerRegistry for distributed worker selection.
+                           Required when using distributed training workers.
+        """
         super().__init__()
         # Override progress renderer with training-specific renderer
         self._progress_renderer = TrainingProgressRenderer()
         self.model_storage = ModelStorage()
         self.model_loader = ModelLoader()
         self.operations_service = get_operations_service()
-        logger.info("Training service initialized with TrainingProgressRenderer")
+        self.worker_registry = worker_registry
+
+        # Track which worker is handling which operation for cleanup
+        # operation_id → worker_id mapping
+        self._operation_workers: dict[str, str] = {}
+
+        logger.info(
+            f"Training service initialized with TrainingProgressRenderer "
+            f"(worker_registry: {'enabled' if worker_registry else 'disabled'})"
+        )
 
     def _initialize_adapter(self) -> TrainingAdapter | None:
         """Initialize training adapter only for host service mode.
@@ -229,38 +248,50 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter | None]):
         self, *, context: TrainingOperationContext
     ) -> dict[str, Any]:
         """
-        Run host-service backed training using proxy pattern (TASK 3.1).
+        Run training on distributed workers or host service using proxy pattern.
+
+        If WorkerRegistry is available, selects a worker and communicates directly.
+        Otherwise, falls back to TrainingAdapter for host service mode (backward compatibility).
 
         Backend acts as pure proxy:
-        1. Starts training on host service
+        1. Starts training on remote worker/service
         2. Registers OperationServiceProxy for client queries
         3. Returns immediately (no waiting, no polling)
 
         Progress tracking happens via client-driven queries:
         - Client queries backend (GET /api/v1/operations/{backend_op_id})
-        - Backend pulls from host via proxy (cached with TTL)
+        - Backend pulls from worker via proxy (cached with TTL)
         - Completion discovered when client queries, not through background polling
 
         Architecture:
-        - NO bridge creation (bridge lives on host service)
+        - NO bridge creation (bridge lives on worker service)
         - NO backend polling (client-driven pull architecture)
-        - Backend operation ID != Host operation ID (mapped via proxy)
+        - Backend operation ID != Worker operation ID (mapped via proxy)
         """
+        # Get backend operation ID
+        backend_operation_id = context.operation_id
+        if not backend_operation_id:
+            raise RuntimeError("Operation ID required for remote training")
+
+        from datetime import UTC
+
+        start_date = context.start_date or "2020-01-01"
+        end_date = context.end_date or datetime.now(UTC).strftime("%Y-%m-%d")
+
+        # DISTRIBUTED WORKERS MODE: Use WorkerRegistry for worker selection
+        if self.worker_registry is not None:
+            return await self._run_distributed_worker_training(
+                context=context,
+                backend_operation_id=backend_operation_id,
+                start_date=start_date,
+                end_date=end_date,
+            )
+
+        # LEGACY MODE: Use TrainingAdapter for single host service
         # Type assertion: adapter is guaranteed to be TrainingAdapter in host service mode
         assert (
             self.adapter is not None
         ), "Adapter should not be None in host service mode"
-
-        # Get backend operation ID
-        backend_operation_id = context.operation_id
-        if not backend_operation_id:
-            raise RuntimeError("Operation ID required for host training")
-
-        # (1) Start training on host service
-        from datetime import UTC, datetime
-
-        start_date = context.start_date or "2020-01-01"
-        end_date = context.end_date or datetime.now(UTC).strftime("%Y-%m-%d")
 
         logger.info(
             "Starting host training for strategy=%s symbols=%s timeframes=%s",
@@ -326,6 +357,213 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter | None]):
             "backend_operation_id": backend_operation_id,
             "status": "started",
             "message": f"Training started on host service (session: {session_id})",
+        }
+
+    async def _run_distributed_worker_training(
+        self,
+        *,
+        context: TrainingOperationContext,
+        backend_operation_id: str,
+        start_date: str,
+        end_date: str,
+    ) -> dict[str, Any]:
+        """
+        Run training on distributed workers using proxy pattern.
+
+        Follows backtesting's remote pattern:
+        1. Select available worker from WorkerRegistry
+        2. Start training on remote worker (HTTP POST)
+        3. Get remote operation ID
+        4. Create OperationServiceProxy
+        5. Register proxy with OperationsService
+        6. Return immediately (no waiting)
+
+        Args:
+            context: Training operation context
+            backend_operation_id: Backend operation identifier
+            start_date: Training start date
+            end_date: Training end date
+
+        Returns:
+            Dictionary with status="started" (remote operation continues independently)
+
+        Raises:
+            RuntimeError: If no workers are available
+        """
+        # (1) Select worker from registry with retry on 503 (worker busy)
+        worker_id: Optional[str] = None
+        remote_url: str
+        max_retries = 3
+        attempted_workers: list[str] = []
+
+        if self.worker_registry is not None:
+            for attempt in range(max_retries):
+                worker = self.worker_registry.select_worker(WorkerType.TRAINING)
+                if not worker:
+                    if attempt == 0:
+                        raise RuntimeError(
+                            "No available training workers. All workers are busy or unavailable."
+                        )
+                    # All workers have been tried, none available
+                    raise RuntimeError(
+                        f"All training workers are busy. Tried {len(attempted_workers)} workers: {attempted_workers}"
+                    )
+
+                # Skip workers we've already tried
+                if worker.worker_id in attempted_workers:
+                    continue
+
+                worker_id = worker.worker_id
+                remote_url = worker.endpoint_url
+                attempted_workers.append(worker_id)
+
+                logger.info(
+                    f"Selected worker {worker_id} for operation {backend_operation_id} "
+                    f"(symbols={context.symbols}, timeframes={context.timeframes}, "
+                    f"strategy={context.strategy_name}, attempt={attempt + 1}/{max_retries})"
+                )
+                break  # Worker selected, exit retry loop to try dispatching
+            else:
+                raise RuntimeError(
+                    f"Could not select unique worker after {max_retries} attempts"
+                )
+        else:
+            raise RuntimeError(
+                "WorkerRegistry is required for distributed worker training"
+            )
+
+        # (2) Dispatch to worker with retry on 503
+        # Extract strategy_name from strategy_path
+        import os
+
+        strategy_name = os.path.splitext(os.path.basename(str(context.strategy_path)))[
+            0
+        ]
+
+        request_payload = {
+            "symbols": context.symbols,
+            "timeframes": context.timeframes,
+            "strategy_name": strategy_name,
+            "start_date": start_date,
+            "end_date": end_date,
+            "task_id": backend_operation_id,
+            "detailed_analytics": context.analytics_enabled,
+        }
+
+        remote_response = None
+        remote_operation_id = None
+
+        # Retry loop: Try selected worker, if 503 (busy), select different worker
+        for retry_attempt in range(max_retries):
+            try:
+                logger.info(
+                    f"Dispatching training to worker {worker_id} at {remote_url}/training/start "
+                    f"(attempt {retry_attempt + 1}/{max_retries})"
+                )
+
+                import httpx
+
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        f"{remote_url}/training/start",
+                        json=request_payload,
+                        timeout=30.0,
+                    )
+                    response.raise_for_status()
+                    remote_response = response.json()
+
+                # Success! Break retry loop
+                remote_operation_id = remote_response.get("task_id")
+                if not remote_operation_id:
+                    raise RuntimeError("Remote worker did not return task_id")
+
+                logger.info(
+                    f"✅ Training accepted by worker {worker_id}: remote_op={remote_operation_id}"
+                )
+                break
+
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 503:
+                    # Worker is busy, try different worker
+                    logger.warning(
+                        f"Worker {worker_id} is busy (503), selecting different worker "
+                        f"(attempt {retry_attempt + 1}/{max_retries})"
+                    )
+
+                    if retry_attempt < max_retries - 1:
+                        # Select a different worker for next attempt
+                        if self.worker_registry is not None:
+                            worker = self.worker_registry.select_worker(
+                                WorkerType.TRAINING
+                            )
+                            if worker and worker.worker_id not in attempted_workers:
+                                worker_id = worker.worker_id
+                                remote_url = worker.endpoint_url
+                                attempted_workers.append(worker_id)
+                                logger.info(f"Retrying with worker {worker_id}")
+                                continue  # Retry with new worker
+                            else:
+                                # No more unique workers available
+                                raise RuntimeError(
+                                    f"All workers busy or unavailable after {retry_attempt + 1} attempts. "
+                                    f"Tried workers: {attempted_workers}"
+                                ) from e
+                    else:
+                        # Last retry failed
+                        raise RuntimeError(
+                            f"All workers busy after {max_retries} attempts. "
+                            f"Tried workers: {attempted_workers}"
+                        ) from e
+                else:
+                    # Other HTTP error, don't retry
+                    raise
+
+        if not remote_operation_id:
+            raise RuntimeError("Failed to start training on any worker")
+
+        logger.info(
+            f"Remote training started: backend_op={backend_operation_id}, "
+            f"remote_op={remote_operation_id}, worker={worker_id}"
+        )
+
+        # (3) Mark worker as busy (if using registry)
+        if self.worker_registry is not None and worker_id is not None:
+            self.worker_registry.mark_busy(worker_id, backend_operation_id)
+            self._operation_workers[backend_operation_id] = worker_id
+            logger.info(
+                f"Marked worker {worker_id} as BUSY for operation {backend_operation_id}"
+            )
+            logger.info(
+                "Worker cleanup will be handled by health check system "
+                "(worker reports idle when training completes)"
+            )
+
+        # (4) Create OperationServiceProxy for remote worker
+        from ktrdr.api.services.adapters.operation_service_proxy import (
+            OperationServiceProxy,
+        )
+
+        proxy = OperationServiceProxy(base_url=remote_url)
+
+        # (5) Register proxy with OperationsService
+        self.operations_service.register_remote_proxy(
+            backend_operation_id=backend_operation_id,
+            proxy=proxy,
+            host_operation_id=remote_operation_id,
+        )
+
+        logger.info(
+            f"Registered remote proxy: {backend_operation_id} → {remote_operation_id}"
+        )
+
+        # (6) Return immediately with status="started"
+        # Backend doesn't know completion status - client discovers via queries
+        return {
+            "remote_operation_id": remote_operation_id,
+            "backend_operation_id": backend_operation_id,
+            "status": "started",
+            "message": f"Training started on worker {worker_id}: {', '.join(context.symbols)} ({context.strategy_name})",
+            "worker_id": worker_id,  # Include worker_id in response for visibility
         }
 
     async def get_model_performance(self, task_id: str) -> dict[str, Any]:
