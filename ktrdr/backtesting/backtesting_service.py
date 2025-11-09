@@ -419,7 +419,7 @@ class BacktestingService(ServiceOrchestrator[None]):
         worker_id: Optional[str] = None
         remote_url: str
         max_retries = 3
-        attempted_workers = []
+        attempted_workers: list[str] = []
 
         if self.worker_registry is not None:
             for attempt in range(max_retries):
@@ -517,7 +517,9 @@ class BacktestingService(ServiceOrchestrator[None]):
                     if retry_attempt < max_retries - 1:
                         # Select a different worker for next attempt
                         if self.worker_registry is not None:
-                            worker = self.worker_registry.select_worker(WorkerType.BACKTESTING)
+                            worker = self.worker_registry.select_worker(
+                                WorkerType.BACKTESTING
+                            )
                             if worker and worker.worker_id not in attempted_workers:
                                 worker_id = worker.worker_id
                                 remote_url = worker.endpoint_url
@@ -529,13 +531,13 @@ class BacktestingService(ServiceOrchestrator[None]):
                                 raise RuntimeError(
                                     f"All workers busy or unavailable after {retry_attempt + 1} attempts. "
                                     f"Tried workers: {attempted_workers}"
-                                )
+                                ) from e
                     else:
                         # Last retry failed
                         raise RuntimeError(
                             f"All workers busy after {max_retries} attempts. "
                             f"Tried workers: {attempted_workers}"
-                        )
+                        ) from e
                 else:
                     # Other HTTP error, don't retry
                     raise

@@ -14,7 +14,10 @@ class WorkerType(str, Enum):
     """Types of workers in the distributed system."""
 
     BACKTESTING = "backtesting"
-    CPU_TRAINING = "cpu_training"
+    TRAINING = (
+        "training"  # CPU/GPU training workers (capabilities determine GPU support)
+    )
+    CPU_TRAINING = "cpu_training"  # Deprecated - use TRAINING with capabilities
     GPU_HOST = "gpu_host"
 
 

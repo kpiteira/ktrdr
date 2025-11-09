@@ -83,6 +83,45 @@ services:
     # Run the backtesting worker API
     command: ["uvicorn", "ktrdr.backtesting.remote_api:app", "--host", "0.0.0.0", "--port", "5003", "--reload"]
 
+  # Training worker - Executes training operations
+  # Can be scaled with: docker-compose -f docker/docker-compose.dev.yml up -d --scale training-worker=2
+  training-worker:
+    build:
+      context: ..
+      dockerfile: docker/backend/Dockerfile.dev
+    image: ktrdr-backend:dev
+    ports:
+      - "5004"  # Dynamic port mapping for scaling
+    volumes:
+      - ../ktrdr:/app/ktrdr
+      - ../data:/app/data:ro
+      - ../models:/app/models
+      - ../strategies:/app/strategies:ro
+      - ../config:/app/config:ro
+      - ../logs:/app/logs
+      - pip-cache:/root/.cache/pip
+      - uv-cache:/root/.cache/uv
+    environment:
+      - PYTHONPATH=/app
+      - LOG_LEVEL=INFO
+      - KTRDR_API_URL=http://backend:8000
+      - WORKER_TYPE=training
+      - WORKER_PORT=5004
+      # Worker ID will be auto-generated from hostname
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - ktrdr-network
+    depends_on:
+      backend:
+        condition: service_healthy
+    # Run the training worker API
+    command: ["uvicorn", "ktrdr.training.training_worker_api:app", "--host", "0.0.0.0", "--port", "5004", "--reload"]
+
 networks:
   ktrdr-network:
     driver: bridge

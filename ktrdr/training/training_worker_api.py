@@ -1,22 +1,22 @@
 """
-Remote Backtesting API - FastAPI Application for Remote Container.
+Training Worker API - FastAPI Application for Training Worker Container.
 
-This module provides a FastAPI application that runs BacktestingService in LOCAL mode
+This module provides a FastAPI application that runs TrainingManager in LOCAL mode
 within a remote container. The backend treats this as "remote", but this service
-itself runs locally (from its own perspective).
+itself runs training locally (from its own perspective).
 
 Key Design:
-- Runs BacktestingService in LOCAL mode (not remote mode!)
+- Runs TrainingManager in LOCAL mode (not remote mode!)
 - Exposes same OperationsService endpoints as backend
 - Backend proxies to this service via OperationServiceProxy
-- Two-level caching: backend cache + this service's cache
+- One training operation at a time (worker exclusivity)
 
 Usage:
     # Run directly for development
-    uvicorn ktrdr.backtesting.remote_api:app --host 0.0.0.0 --port 5003
+    uvicorn ktrdr.training.training_worker_api:app --host 0.0.0.0 --port 5004
 
     # Or via Docker
-    docker run -p 5003:5003 ktrdr-backend uvicorn ktrdr.backtesting.remote_api:app ...
+    docker run -p 5004:5004 ktrdr-backend uvicorn ktrdr.training.training_worker_api:app ...
 """
 
 import logging
@@ -27,11 +27,10 @@ from typing import TYPE_CHECKING, Optional
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-from ktrdr.api.models.backtesting import BacktestStartRequest, BacktestStartResponse
 from ktrdr.api.models.operations import OperationType
 from ktrdr.api.services.operations_service import get_operations_service
-from ktrdr.backtesting.backtesting_service import BacktestingService
-from ktrdr.backtesting.worker_registration import WorkerRegistration
+from ktrdr.training.training_manager import TrainingManager
+from ktrdr.training.worker_registration import WorkerRegistration
 
 if TYPE_CHECKING:
     from ktrdr.api.services.operations_service import OperationsService
@@ -45,8 +44,8 @@ logger = logging.getLogger(__name__)
 
 # Create FastAPI app
 app = FastAPI(
-    title="Backtesting Remote Service",
-    description="Remote backtest execution service for KTRDR (runs BacktestingService in local mode)",
+    title="Training Worker Service",
+    description="Training worker execution service for KTRDR (runs TrainingManager in local mode)",
     version="1.0.0",
 )
 
@@ -61,15 +60,15 @@ app.add_middleware(
 
 # Service singletons (initialized on startup)
 _operations_service: Optional["OperationsService"] = None
-_backtesting_service: Optional[BacktestingService] = None
+_training_manager: Optional[TrainingManager] = None
 
 
-def get_backtest_service() -> BacktestingService:
-    """Get backtesting service singleton."""
-    global _backtesting_service
-    if _backtesting_service is None:
-        _backtesting_service = BacktestingService()
-    return _backtesting_service
+def get_training_manager() -> TrainingManager:
+    """Get training manager singleton."""
+    global _training_manager
+    if _training_manager is None:
+        _training_manager = TrainingManager()
+    return _training_manager
 
 
 @app.on_event("startup")
@@ -78,11 +77,11 @@ async def startup_event():
     global _operations_service
 
     logger.info("=" * 80)
-    logger.info("🚀 Starting Backtesting Remote Service")
+    logger.info("🚀 Starting Training Worker Service")
     logger.info("=" * 80)
 
     # Force local mode (this service should never use remote mode)
-    os.environ["USE_REMOTE_BACKTEST_SERVICE"] = "false"
+    os.environ["USE_TRAINING_HOST_SERVICE"] = "false"
 
     # Initialize OperationsService
     _operations_service = get_operations_service()
@@ -90,11 +89,9 @@ async def startup_event():
         f"✅ OperationsService initialized (cache_ttl={_operations_service._cache_ttl}s)"
     )
 
-    # Initialize BacktestingService (will run in local mode)
-    backtest_service = get_backtest_service()
-    logger.info(
-        f"✅ BacktestingService initialized (mode: {'remote' if backtest_service._use_remote else 'local'})"
-    )
+    # Initialize TrainingManager (will run in local mode)
+    get_training_manager()
+    logger.info("✅ TrainingManager initialized (mode: local)")
 
     # Register with backend (self-registration)
     logger.info("")
@@ -117,20 +114,20 @@ async def startup_event():
     logger.info("")
     logger.info("📡 Available Endpoints:")
     logger.info(
-        "  POST /backtests/start               - Start backtest (domain-specific)"
+        "  POST /training/start              - Start training (domain-specific)"
     )
-    logger.info("  GET  /api/v1/operations             - List operations")
-    logger.info("  GET  /api/v1/operations/{id}        - Get operation status")
+    logger.info("  GET  /api/v1/operations           - List operations")
+    logger.info("  GET  /api/v1/operations/{id}      - Get operation status")
     logger.info("  GET  /api/v1/operations/{id}/metrics - Get operation metrics")
     logger.info("  DELETE /api/v1/operations/{id}/cancel - Cancel operation")
-    logger.info("  GET  /health                        - Health check")
+    logger.info("  GET  /health                      - Health check")
     logger.info("=" * 80)
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown."""
-    logger.info("Shutting down Backtesting Remote Service...")
+    logger.info("Shutting down Training Worker Service...")
 
 
 # ============================================================================
@@ -142,14 +139,14 @@ async def shutdown_event():
 async def root():
     """Root endpoint with service info."""
     # Trigger service initialization
-    get_backtest_service()
+    get_training_manager()
     return {
-        "service": "Backtesting Remote Service",
+        "service": "Training Worker Service",
         "version": "1.0.0",
         "status": "running",
         "timestamp": datetime.utcnow().isoformat(),
         "mode": "local",  # This service always runs in local mode
-        "note": "Runs BacktestingService in LOCAL mode (backend treats this as remote)",
+        "note": "Runs TrainingManager in LOCAL mode (backend treats this as remote)",
     }
 
 
@@ -162,10 +159,10 @@ async def health_check():
     'idle' otherwise. This is used by the backend's health check system
     to determine worker availability.
     """
-    # Check if there are active backtest operations
+    # Check if there are active training operations
     ops_service = get_operations_service()
     active_ops, _, _ = await ops_service.list_operations(
-        operation_type=OperationType.BACKTESTING, active_only=True
+        operation_type=OperationType.TRAINING, active_only=True
     )
 
     worker_status = "busy" if active_ops else "idle"
@@ -173,7 +170,7 @@ async def health_check():
 
     return {
         "healthy": True,
-        "service": "backtest-remote",
+        "service": "training-worker",
         "timestamp": datetime.utcnow().isoformat(),
         "status": "operational",
         "worker_status": worker_status,  # 'busy' or 'idle' - used by backend health checks
@@ -183,103 +180,10 @@ async def health_check():
 
 
 # ============================================================================
-# Backtesting Endpoints (Domain-Specific)
+# Training Endpoints (Domain-Specific) - Will be implemented in Task 3.2
 # ============================================================================
 
-
-@app.post("/backtests/start", response_model=BacktestStartResponse)
-async def start_backtest(request: BacktestStartRequest) -> BacktestStartResponse:
-    """
-    Start a backtest on this remote container.
-
-    This endpoint runs BacktestingService in LOCAL mode (from this container's
-    perspective). The backend service treats this as "remote", but this service
-    itself doesn't know or care - it just runs backtests locally.
-
-    Args:
-        request: Backtest configuration
-
-    Returns:
-        BacktestStartResponse with operation_id for tracking
-
-    Raises:
-        HTTPException: 400 for validation errors, 500 for internal errors, 503 if worker busy
-    """
-    # EXCLUSIVITY CHECK: Reject if worker is already busy
-    ops_service = get_operations_service()
-    active_ops, _, _ = await ops_service.list_operations(
-        operation_type=OperationType.BACKTESTING, active_only=True
-    )
-
-    if active_ops:
-        current_operation = active_ops[0].operation_id
-        logger.warning(
-            f"⛔ Worker BUSY - Rejecting new backtest request (current operation: {current_operation})"
-        )
-        raise HTTPException(
-            status_code=503,  # Service Unavailable
-            detail={
-                "error": "Worker busy",
-                "message": f"Worker is currently executing operation {current_operation}",
-                "current_operation": current_operation,
-                "active_operations_count": len(active_ops),
-            },
-        )
-
-    try:
-        service = get_backtest_service()
-
-        # Parse dates
-        start_date = datetime.fromisoformat(request.start_date)
-        end_date = datetime.fromisoformat(request.end_date)
-
-        # Build strategy config path
-        strategy_config_path = f"strategies/{request.strategy_name}.yaml"
-
-        # Get worker ID for logging
-        import socket
-
-        worker_id = os.getenv("WORKER_ID") or f"backtest-{socket.gethostname()}"
-
-        # Call BacktestingService (will run in LOCAL mode)
-        logger.info(
-            f"🔵 WORKER {worker_id}: Starting backtest {request.symbol} {request.timeframe} ({request.start_date} to {request.end_date})"
-        )
-
-        result = await service.run_backtest(
-            symbol=request.symbol,
-            timeframe=request.timeframe,
-            strategy_config_path=strategy_config_path,
-            model_path=None,  # Auto-discovery
-            start_date=start_date,
-            end_date=end_date,
-            initial_capital=request.initial_capital,
-            commission=request.commission,
-            slippage=request.slippage,
-        )
-
-        logger.info(
-            f"🔵 WORKER {worker_id}: Operation started - operation_id={result['operation_id']}"
-        )
-
-        return BacktestStartResponse(
-            success=result["success"],
-            operation_id=result["operation_id"],
-            status=result["status"],
-            message=result["message"],
-            symbol=result["symbol"],
-            timeframe=result["timeframe"],
-            mode="local",  # This service always runs locally
-        )
-
-    except ValueError as e:
-        logger.error(f"Validation error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except Exception as e:
-        logger.error(f"Internal error starting backtest: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500, detail=f"Internal server error: {str(e)}"
-        ) from e
+# Placeholder for /training/start endpoint - will be implemented in next task
 
 
 # ============================================================================
