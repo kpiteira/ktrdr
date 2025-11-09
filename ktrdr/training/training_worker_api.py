@@ -180,10 +180,114 @@ async def health_check():
 
 
 # ============================================================================
-# Training Endpoints (Domain-Specific) - Will be implemented in Task 3.2
+# Training Endpoints (Domain-Specific)
 # ============================================================================
 
-# Placeholder for /training/start endpoint - will be implemented in next task
+
+@app.post("/training/start")
+async def start_training(
+    symbols: list[str],
+    timeframes: list[str],
+    strategy_name: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    task_id: Optional[str] = None,
+    detailed_analytics: bool = False,
+):
+    """
+    Start a training operation on this worker.
+
+    This endpoint runs TrainingManager in LOCAL mode (from this container's
+    perspective). The backend service treats this as "remote", but this service
+    itself doesn't know or care - it just runs training locally.
+
+    Args:
+        symbols: List of symbols to train on
+        timeframes: List of timeframes to train on
+        strategy_name: Name of strategy configuration file
+        start_date: Optional start date for training data
+        end_date: Optional end date for training data
+        task_id: Optional task ID for tracking
+        detailed_analytics: Whether to include detailed analytics
+
+    Returns:
+        Training start response with operation_id for tracking
+
+    Raises:
+        HTTPException: 400 for validation errors, 500 for internal errors, 503 if worker busy
+    """
+    # EXCLUSIVITY CHECK: Reject if worker is already busy
+    ops_service = get_operations_service()
+    active_ops, _, _ = await ops_service.list_operations(
+        operation_type=OperationType.TRAINING, active_only=True
+    )
+
+    if active_ops:
+        current_operation = active_ops[0].operation_id
+        logger.warning(
+            f"⛔ Worker BUSY - Rejecting new training request (current operation: {current_operation})"
+        )
+        raise HTTPException(
+            status_code=503,  # Service Unavailable
+            detail={
+                "error": "Worker busy",
+                "message": f"Worker is currently executing operation {current_operation}",
+                "current_operation": current_operation,
+                "active_operations_count": len(active_ops),
+            },
+        )
+
+    try:
+        training_manager = get_training_manager()
+
+        # Get worker ID for logging
+        import socket
+
+        worker_id = os.getenv("WORKER_ID") or f"training-{socket.gethostname()}"
+
+        # Call TrainingManager (will run in LOCAL mode)
+        logger.info(
+            f"🔵 WORKER {worker_id}: Starting training {symbols} {timeframes} {strategy_name}"
+        )
+
+        # Build strategy config path
+        strategy_config_path = f"strategies/{strategy_name}.yaml"
+
+        result = await training_manager.train_multi_symbol_strategy(
+            strategy_config_path=strategy_config_path,
+            symbols=symbols,
+            timeframes=timeframes,
+            start_date=start_date or "2024-01-01",
+            end_date=end_date or "2024-12-31",
+            validation_split=0.2,
+            data_mode="local",
+        )
+
+        # Extract operation/task ID from result
+        operation_id = result.get("operation_id") or task_id
+
+        logger.info(
+            f"🔵 WORKER {worker_id}: Operation started - operation_id={operation_id}"
+        )
+
+        return {
+            "success": True,
+            "task_id": operation_id,
+            "status": "started",
+            "message": "Training started successfully",
+            "symbols": symbols,
+            "timeframes": timeframes,
+            "strategy_name": strategy_name,
+        }
+
+    except ValueError as e:
+        logger.error(f"Validation error: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        logger.error(f"Internal error starting training: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Internal server error: {str(e)}"
+        ) from e
 
 
 # ============================================================================
