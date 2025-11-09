@@ -266,6 +266,63 @@ class DataAcquisitionService(ServiceOrchestrator):
 - `IB_HOST_SERVICE_URL=http://localhost:5001` (default)
 - `TRAINING_HOST_SERVICE_URL=http://localhost:5002` (default)
 
+### WorkerAPIBase Pattern
+
+**Location**: [ktrdr/workers/base.py](ktrdr/workers/base.py)
+
+**Source**: Extracted from training-host-service (~670 lines) to provide proven working infrastructure for all worker types.
+
+All workers inherit from WorkerAPIBase and get these features for free:
+
+1. **OperationsService singleton** - Worker-local operation tracking
+2. **Operations proxy endpoints** (374 lines):
+   - `GET /api/v1/operations/{id}` - Get operation status
+   - `GET /api/v1/operations/{id}/metrics` - Get operation metrics
+   - `GET /api/v1/operations` - List operations
+   - `DELETE /api/v1/operations/{id}/cancel` - Cancel operation
+3. **Health endpoint** - Reports busy/idle status (`GET /health`)
+4. **FastAPI app with CORS** - Ready for Docker communication
+5. **Self-registration** - Worker registration with backend (placeholder)
+
+**Key Pattern Elements**:
+- **Operation ID Synchronization**: Accepts optional `task_id` from backend, returns same `operation_id`
+- **Progress Tracking**: Workers register progress bridges in their OperationsService
+- **Remote Queryability**: Backend can query worker's operations endpoints directly (1s cache TTL)
+
+**Worker Implementations**:
+
+- **BacktestWorker** ([ktrdr/backtesting/backtest_worker.py](ktrdr/backtesting/backtest_worker.py)):
+  - Adds `/backtests/start` endpoint
+  - Calls BacktestingEngine directly via `asyncio.to_thread`
+  - Registers BacktestProgressBridge
+
+- **TrainingWorker** ([ktrdr/training/training_worker.py](ktrdr/training/training_worker.py)):
+  - Adds `/training/start` endpoint
+  - Calls TrainingManager directly (async)
+  - Simplified progress tracking
+
+**Code Reuse**: ~570 lines eliminated per worker by using WorkerAPIBase!
+
+**Example Pattern**:
+
+```python
+class BacktestWorker(WorkerAPIBase):
+    def __init__(self, worker_port=5003, backend_url="http://backend:8000"):
+        super().__init__(
+            worker_type=WorkerType.BACKTESTING,
+            operation_type=OperationType.BACKTESTING,
+            worker_port=worker_port,
+            backend_url=backend_url,
+        )
+
+        # Register domain-specific endpoint
+        @self.app.post("/backtests/start")
+        async def start_backtest(request: BacktestStartRequest):
+            operation_id = request.task_id or f"worker_backtest_{uuid.uuid4().hex[:12]}"
+            result = await self._execute_backtest_work(operation_id, request)
+            return {"success": True, "operation_id": operation_id, **result}
+```
+
 ### Async Operations Pattern (CLI Commands)
 
 **Recent Migration**: All CLI commands migrated from sync to async (commit 8d9ca93)
