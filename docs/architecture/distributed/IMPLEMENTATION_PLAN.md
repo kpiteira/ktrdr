@@ -1111,7 +1111,817 @@ make quality
 
 ---
 
-## Phase 4: Remove Local Execution Mode (Pure Distributed Architecture)
+## Phase 4: Worker Base Class Extraction (From Training Host Service)
+
+**Goal**: Extract proven working pattern from training-host-service into reusable `WorkerAPIBase` class
+
+**Why This Fourth**: training-host-service already solves all worker infrastructure problems. Extract this working code before adding more workers.
+
+**Source**: training-host-service (port 5002) - **670 lines of proven working code**
+
+**End State**:
+- `WorkerAPIBase` containing 670 lines extracted from training-host-service
+- BacktestWorker reduced to ~100 lines (domain logic only)
+- TrainingWorker reduced to ~100 lines (domain logic only)
+- All workers follow identical pattern from training-host-service
+- **TESTABLE**: Workers function identically to training-host-service
+
+**Architectural Benefit**:
+- Copy what works (training-host-service pattern already proven)
+- DRY principle (374 lines of operations endpoints used once!)
+- Consistency (all workers identical infrastructure from training-host-service)
+- Bug prevention (fixes applied once benefit all workers)
+
+**Critical Success Factor**: **Copy verbatim from training-host-service. Don't invent, don't "improve", just extract!**
+
+---
+
+### Task 4.1: Extract WorkerAPIBase from Training Host Service
+
+**Objective**: Create `ktrdr/workers/base.py` by extracting working code from training-host-service
+
+**Source Files** (copy from training-host-service):
+1. `training-host-service/services/operations.py` (41 lines)
+2. `training-host-service/endpoints/operations.py` (374 lines!)
+3. `training-host-service/endpoints/health.py` (~50 lines)
+4. `training-host-service/main.py` (FastAPI setup, ~200 lines)
+
+**TDD Approach**:
+1. Write tests for WorkerAPIBase with mock worker subclass
+2. Verify operations endpoints work (all 4 endpoints)
+3. Verify health endpoint reports busy/idle correctly
+4. Verify FastAPI app setup with CORS
+5. Test with mypy --strict
+
+**Implementation Steps**:
+
+**Step 1: Create `ktrdr/workers/base.py`** (~670 lines total)
+
+```python
+"""
+Worker API Base Class - Extracted from training-host-service
+
+This module provides the complete worker infrastructure pattern that's proven
+to work in training-host-service. It's extracted verbatim to ensure consistency.
+
+Source: training-host-service/
+- services/operations.py (41 lines)
+- endpoints/operations.py (374 lines)
+- endpoints/health.py (~50 lines)
+- main.py (FastAPI setup, ~200 lines)
+"""
+
+import os
+from datetime import datetime
+from typing import Optional, Any
+
+from fastapi import FastAPI, Depends, HTTPException, Path, Query
+from fastapi.middleware.cors import CORSMiddleware
+
+from ktrdr.api.models.operations import (
+    OperationListResponse,
+    OperationMetricsResponse,
+    OperationStatus,
+    OperationStatusResponse,
+    OperationSummary,
+    OperationType,
+)
+from ktrdr.api.models.workers import WorkerType
+from ktrdr.api.services.operations_service import OperationsService
+from ktrdr.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+class WorkerAPIBase:
+    """
+    Base class for all worker APIs.
+
+    Extracted from training-host-service to provide proven working pattern.
+
+    Provides:
+    - OperationsService singleton
+    - Operations proxy endpoints (/api/v1/operations/*)
+    - Health endpoint (/health)
+    - FastAPI app setup with CORS
+    - Self-registration on startup
+    """
+
+    def __init__(
+        self,
+        worker_type: WorkerType,
+        operation_type: OperationType,
+        worker_port: int,
+        backend_url: str,
+    ):
+        """
+        Initialize worker API base.
+
+        Args:
+            worker_type: Type of worker (backtesting, training, etc.)
+            operation_type: Type of operations this worker handles
+            worker_port: Port for this worker service
+            backend_url: URL of backend service for registration
+        """
+        self.worker_type = worker_type
+        self.operation_type = operation_type
+        self.worker_port = worker_port
+        self.backend_url = backend_url
+
+        # Worker ID (from environment or generate)
+        self.worker_id = os.getenv("WORKER_ID", f"{worker_type.value}-worker-{os.urandom(4).hex()}")
+
+        # Initialize OperationsService singleton (CRITICAL!)
+        # Each worker MUST have its own instance for remote queryability
+        self._operations_service: Optional[OperationsService] = None
+        self._initialize_operations_service()
+
+        # Create FastAPI app
+        self.app = FastAPI(
+            title=f"{worker_type.value.title()} Worker Service",
+            description=f"{worker_type.value.title()} worker execution service",
+            version="1.0.0",
+        )
+
+        # Add CORS middleware (for Docker communication)
+        self.app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+
+        # Register common endpoints
+        self._register_operations_endpoints()
+        self._register_health_endpoint()
+        self._register_root_endpoint()
+        self._register_startup_event()
+
+    def _initialize_operations_service(self) -> None:
+        """
+        Initialize OperationsService singleton.
+
+        Source: training-host-service/services/operations.py (verbatim copy)
+        """
+        if self._operations_service is None:
+            self._operations_service = OperationsService()
+            logger.info(f"Operations service initialized in {self.worker_type.value} worker")
+
+    def get_operations_service(self) -> OperationsService:
+        """Get or create OperationsService singleton."""
+        if self._operations_service is None:
+            self._initialize_operations_service()
+        return self._operations_service
+
+    def _register_operations_endpoints(self) -> None:
+        """
+        Register operations proxy endpoints.
+
+        Source: training-host-service/endpoints/operations.py (374 lines - verbatim copy)
+
+        These endpoints expose worker's OperationsService for backend queries.
+        """
+
+        @self.app.get(
+            "/api/v1/operations/{operation_id}",
+            response_model=OperationStatusResponse,
+            summary="Get operation status",
+        )
+        async def get_operation_status(
+            operation_id: str = Path(..., description="Unique operation identifier"),
+            force_refresh: bool = Query(False, description="Force refresh from bridge"),
+        ) -> OperationStatusResponse:
+            """Get detailed status information for a specific operation."""
+            try:
+                operation = await self._operations_service.get_operation(
+                    operation_id, force_refresh=force_refresh
+                )
+
+                if not operation:
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"Operation not found: {operation_id}",
+                    )
+
+                return OperationStatusResponse(
+                    success=True,
+                    data=operation,
+                )
+
+            except KeyError:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Operation not found: {operation_id}",
+                )
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"Error getting operation status: {str(e)}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to get operation status: {str(e)}",
+                )
+
+        @self.app.get(
+            "/api/v1/operations/{operation_id}/metrics",
+            response_model=OperationMetricsResponse,
+            summary="Get operation metrics",
+        )
+        async def get_operation_metrics(
+            operation_id: str = Path(..., description="Unique operation identifier"),
+            cursor: int = Query(0, ge=0, description="Cursor position"),
+        ) -> OperationMetricsResponse:
+            """Get domain-specific metrics for an operation."""
+            try:
+                operation = await self._operations_service.get_operation(operation_id)
+
+                if not operation:
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"Operation not found: {operation_id}",
+                    )
+
+                metrics = await self._operations_service.get_operation_metrics(
+                    operation_id, cursor=cursor
+                )
+
+                return OperationMetricsResponse(
+                    success=True,
+                    data={
+                        "operation_id": operation_id,
+                        "operation_type": operation.operation_type.value,
+                        "metrics": metrics or [],
+                        "cursor": cursor,
+                    },
+                )
+
+            except KeyError:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Operation not found: {operation_id}",
+                )
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"Error getting operation metrics: {str(e)}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to get operation metrics: {str(e)}",
+                )
+
+        @self.app.get(
+            "/api/v1/operations",
+            response_model=OperationListResponse,
+            summary="List operations",
+        )
+        async def list_operations(
+            status: Optional[OperationStatus] = Query(None, description="Filter by status"),
+            operation_type: Optional[OperationType] = Query(None, description="Filter by type"),
+            limit: int = Query(10, ge=1, le=1000, description="Maximum number"),
+            offset: int = Query(0, ge=0, description="Number to skip"),
+            active_only: bool = Query(False, description="Show only active operations"),
+        ) -> OperationListResponse:
+            """List all operations with optional filtering."""
+            try:
+                (operations, total_count, active_count) = await self._operations_service.list_operations(
+                    status=status,
+                    operation_type=operation_type,
+                    limit=limit,
+                    offset=offset,
+                    active_only=active_only,
+                )
+
+                operation_summaries = [
+                    OperationSummary(
+                        operation_id=op.operation_id,
+                        operation_type=op.operation_type,
+                        status=op.status,
+                        created_at=op.created_at,
+                        progress_percentage=op.progress.percentage,
+                        current_step=op.progress.current_step,
+                        symbol=op.metadata.symbol,
+                        duration_seconds=op.duration_seconds,
+                    )
+                    for op in operations
+                ]
+
+                return OperationListResponse(
+                    success=True,
+                    data=operation_summaries,
+                    total_count=total_count,
+                    active_count=active_count,
+                )
+
+            except Exception as e:
+                logger.error(f"Error listing operations: {str(e)}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to list operations: {str(e)}",
+                )
+
+        @self.app.delete(
+            "/api/v1/operations/{operation_id}/cancel",
+            summary="Cancel operation",
+        )
+        async def cancel_operation(
+            operation_id: str = Path(..., description="Unique operation identifier"),
+            reason: Optional[str] = Query(None, description="Cancellation reason"),
+        ) -> dict:
+            """Cancel a running operation."""
+            try:
+                result = await self._operations_service.cancel_operation(operation_id, reason)
+
+                return {
+                    "success": True,
+                    "data": result,
+                }
+
+            except KeyError:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Operation not found: {operation_id}",
+                )
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"Error cancelling operation: {str(e)}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to cancel operation: {str(e)}",
+                )
+
+    def _register_health_endpoint(self) -> None:
+        """
+        Register health check endpoint.
+
+        Source: training-host-service/endpoints/health.py (verbatim copy)
+        """
+
+        @self.app.get("/health")
+        async def health_check():
+            """Health check endpoint - reports worker busy/idle status."""
+            try:
+                active_ops, _, _ = await self._operations_service.list_operations(
+                    operation_type=self.operation_type,
+                    active_only=True
+                )
+
+                return {
+                    "healthy": True,
+                    "service": f"{self.worker_type.value}-worker",
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "status": "operational",
+                    "worker_status": "busy" if active_ops else "idle",
+                    "current_operation": active_ops[0].operation_id if active_ops else None,
+                }
+
+            except Exception as e:
+                logger.error(f"Health check error: {str(e)}")
+                return {
+                    "healthy": False,
+                    "service": f"{self.worker_type.value}-worker",
+                    "error": str(e),
+                }
+
+    def _register_root_endpoint(self) -> None:
+        """Register root endpoint."""
+
+        @self.app.get("/")
+        async def root():
+            return {
+                "service": f"{self.worker_type.value.title()} Worker Service",
+                "version": "1.0.0",
+                "status": "running",
+                "timestamp": datetime.utcnow().isoformat(),
+                "worker_id": self.worker_id,
+            }
+
+    def _register_startup_event(self) -> None:
+        """Register startup event for self-registration."""
+
+        @self.app.on_event("startup")
+        async def startup():
+            logger.info(f"Starting {self.worker_type.value} worker...")
+            logger.info(f"Worker ID: {self.worker_id}")
+            logger.info(f"Worker port: {self.worker_port}")
+            logger.info(f"✅ OperationsService initialized (cache_ttl={self._operations_service._cache_ttl}s)")
+
+            # Self-register with backend
+            await self.self_register()
+
+    async def self_register(self) -> None:
+        """
+        Register this worker with backend.
+
+        Pattern from training-host-service worker registration.
+        """
+        # Import here to avoid circular dependencies
+        from ktrdr.workers.worker_registration import WorkerRegistration
+
+        # Set environment variables for WorkerRegistration
+        os.environ["WORKER_ID"] = self.worker_id
+        os.environ["WORKER_PORT"] = str(self.worker_port)
+        os.environ["KTRDR_API_URL"] = self.backend_url
+
+        worker_registration = WorkerRegistration(worker_type=self.worker_type.value)
+        success = await worker_registration.register()
+
+        if success:
+            logger.info(f"✅ Worker registered successfully: {self.worker_id}")
+        else:
+            logger.warning(f"⚠️  Worker registration failed: {self.worker_id}")
+```
+
+**Step 2: Create comprehensive tests** in `tests/unit/workers/test_base.py`:
+
+```python
+"""Tests for WorkerAPIBase extracted from training-host-service pattern."""
+
+import pytest
+from fastapi.testclient import TestClient
+
+from ktrdr.api.models.workers import WorkerType
+from ktrdr.api.models.operations import OperationType
+from ktrdr.workers.base import WorkerAPIBase
+
+
+class MockWorker(WorkerAPIBase):
+    """Mock worker for testing base class."""
+
+    def __init__(self):
+        super().__init__(
+            worker_type=WorkerType.BACKTESTING,
+            operation_type=OperationType.BACKTESTING,
+            worker_port=5003,
+            backend_url="http://backend:8000",
+        )
+
+
+@pytest.mark.asyncio
+class TestWorkerAPIBase:
+    """Test WorkerAPIBase extracted from training-host-service."""
+
+    def test_operations_service_initialized(self):
+        """Test OperationsService is initialized on worker creation."""
+        worker = MockWorker()
+        assert worker._operations_service is not None
+
+    def test_operations_endpoints_registered(self):
+        """Test operations proxy endpoints are registered."""
+        worker = MockWorker()
+        client = TestClient(worker.app)
+
+        # Test GET /api/v1/operations
+        response = client.get("/api/v1/operations")
+        assert response.status_code == 200
+
+        # Test health endpoint
+        response = client.get("/health")
+        assert response.status_code == 200
+
+    def test_health_reports_idle(self):
+        """Test health endpoint reports 'idle' when no operations."""
+        worker = MockWorker()
+        client = TestClient(worker.app)
+
+        response = client.get("/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["worker_status"] == "idle"
+        assert data["current_operation"] is None
+
+    # ... more tests
+```
+
+**Step 3: Verify extraction with mypy**:
+```bash
+mypy --strict ktrdr/workers/base.py
+```
+
+**Quality Gate**:
+```bash
+make test-unit  # All tests pass
+make quality    # Linting, formatting, type checking pass
+```
+
+**Commit**: `feat(workers): extract WorkerAPIBase from training-host-service pattern`
+
+**Estimated Time**: 4 hours (extraction + testing)
+
+---
+
+### Task 4.2: Implement BacktestWorker Using WorkerAPIBase
+
+**Objective**: Create minimal BacktestWorker following training-host-service pattern
+
+**Pattern Source**: training-host-service/endpoints/training.py + services/training_service.py
+
+**Implementation**:
+
+**Create `ktrdr/backtesting/backtest_worker.py`** (~100 lines):
+
+```python
+"""
+Backtest Worker - Following training-host-service pattern.
+
+This worker implements the same pattern as training-host-service but for
+backtesting operations.
+"""
+
+import os
+import uuid
+from datetime import datetime
+from typing import Any
+
+from fastapi import FastAPI
+from pydantic import BaseModel, Field
+
+from ktrdr.api.models.operations import OperationMetadata, OperationType
+from ktrdr.api.models.workers import WorkerType
+from ktrdr.backtesting.engine import BacktestConfig, BacktestingEngine
+from ktrdr.backtesting.progress_bridge import BacktestProgressBridge
+from ktrdr.logging import get_logger
+from ktrdr.workers.base import WorkerAPIBase
+
+logger = get_logger(__name__)
+
+
+class BacktestStartRequest(BaseModel):
+    """Request to start a backtest (following training-host pattern)."""
+
+    task_id: Optional[str] = Field(
+        default=None,
+        description="Optional task ID from backend (for operation ID synchronization)"
+    )
+    symbol: str
+    timeframe: str
+    strategy_name: str
+    start_date: str
+    end_date: str
+    initial_capital: float = 100000.0
+    commission: float = 0.001
+    slippage: float = 0.0
+
+
+class BacktestWorker(WorkerAPIBase):
+    """Backtest worker using WorkerAPIBase."""
+
+    def __init__(
+        self,
+        worker_port: int = 5003,
+        backend_url: str = "http://backend:8000",
+    ):
+        """Initialize backtest worker."""
+        super().__init__(
+            worker_type=WorkerType.BACKTESTING,
+            operation_type=OperationType.BACKTESTING,
+            worker_port=worker_port,
+            backend_url=backend_url,
+        )
+
+        # Force local mode (this service should never use remote mode)
+        os.environ["USE_REMOTE_BACKTEST_SERVICE"] = "false"
+
+        # Register domain-specific endpoint
+        @self.app.post("/backtests/start")
+        async def start_backtest(request: BacktestStartRequest):
+            """
+            Start a backtest operation.
+
+            Follows training-host-service pattern:
+            - Accepts task_id from backend for ID synchronization
+            - Returns operation_id back to backend
+            """
+            # Use backend's task_id if provided, generate if not
+            operation_id = request.task_id or f"worker_backtest_{uuid.uuid4().hex[:12]}"
+
+            # Execute work following training-host pattern
+            result = await self._execute_backtest_work(operation_id, request)
+
+            return {
+                "success": True,
+                "operation_id": operation_id,  # ← Return same ID to backend!
+                "status": "started",
+                **result,
+            }
+
+    async def _execute_backtest_work(
+        self,
+        operation_id: str,
+        request: BacktestStartRequest,
+    ) -> dict[str, Any]:
+        """
+        Execute backtest work.
+
+        Follows training-host-service pattern:
+        1. Create operation in worker's OperationsService
+        2. Create and register progress bridge
+        3. Execute actual work (Engine, not Service!)
+        4. Complete operation
+        """
+
+        # Parse dates
+        start_date = datetime.fromisoformat(request.start_date)
+        end_date = datetime.fromisoformat(request.end_date)
+
+        # Build strategy config path
+        strategy_config_path = f"strategies/{request.strategy_name}.yaml"
+
+        # 1. Create operation in worker's OperationsService
+        await self._operations_service.create_operation(
+            operation_id=operation_id,
+            operation_type=OperationType.BACKTESTING,
+            metadata=OperationMetadata(
+                symbol=request.symbol,
+                timeframe=request.timeframe,
+                mode="backtesting",
+                start_date=start_date,
+                end_date=end_date,
+                parameters={
+                    "strategy_name": request.strategy_name,
+                    "initial_capital": request.initial_capital,
+                    "commission": request.commission,
+                    "slippage": request.slippage,
+                    "worker_id": self.worker_id,
+                },
+            ),
+        )
+
+        # 2. Create and register progress bridge
+        days = (end_date - start_date).days
+        bars_per_day = {"1h": 24, "4h": 6, "1d": 1, "5m": 288, "1w": 0.2}
+        total_bars = int(days * bars_per_day.get(request.timeframe, 1))
+
+        bridge = BacktestProgressBridge(
+            operation_id=operation_id,
+            symbol=request.symbol,
+            timeframe=request.timeframe,
+            total_bars=max(total_bars, 100),
+        )
+
+        self._operations_service.register_local_bridge(operation_id, bridge)
+        logger.info(f"Registered backtest bridge for operation {operation_id}")
+
+        # 3. Execute actual work (Engine, not Service!)
+        try:
+            # Build engine configuration
+            engine_config = BacktestConfig(
+                symbol=request.symbol,
+                timeframe=request.timeframe,
+                strategy_config_path=strategy_config_path,
+                model_path=None,  # Auto-discovery
+                start_date=start_date.isoformat(),
+                end_date=end_date.isoformat(),
+                initial_capital=request.initial_capital,
+                commission=request.commission,
+                slippage=request.slippage,
+            )
+
+            # Create engine
+            engine = BacktestingEngine(config=engine_config)
+
+            # Get cancellation token
+            cancellation_token = self._operations_service.get_cancellation_token(operation_id)
+
+            # Run engine in thread pool (blocking operation)
+            import asyncio
+            results = await asyncio.to_thread(
+                engine.run,
+                bridge=bridge,
+                cancellation_token=cancellation_token,
+            )
+
+            # 4. Complete operation
+            results_dict = results.to_dict()
+            await self._operations_service.complete_operation(
+                operation_id,
+                results_dict,
+            )
+
+            logger.info(
+                f"Backtest completed for {request.symbol} {request.timeframe}: "
+                f"{results_dict.get('total_return', 0):.2%} return"
+            )
+
+            return {
+                "result_summary": results_dict.get("result_summary", {}),
+            }
+
+        except Exception as e:
+            # Fail operation on error
+            await self._operations_service.fail_operation(operation_id, str(e))
+            raise
+
+
+# Create worker instance
+worker = BacktestWorker(
+    worker_port=int(os.getenv("WORKER_PORT", "5003")),
+    backend_url=os.getenv("KTRDR_API_URL", "http://backend:8000"),
+)
+
+# Export FastAPI app for uvicorn
+app: FastAPI = worker.app
+```
+
+**Update Docker Compose**:
+```yaml
+backtest-worker:
+  command: ["uvicorn", "ktrdr.backtesting.backtest_worker:app", ...]
+```
+
+**Quality Gate**:
+```bash
+make test-unit               # All tests pass
+make test-integration        # Integration tests pass
+make quality                 # Linting, formatting pass
+
+# Manual test
+docker-compose up -d backtest-worker
+# Submit backtest operation -> should work identically
+```
+
+**Commit**: `feat(backtesting): implement backtest worker using WorkerAPIBase`
+
+**Estimated Time**: 2 hours
+
+---
+
+### Task 4.3: Implement TrainingWorker Using WorkerAPIBase
+
+**Objective**: Create minimal TrainingWorker following training-host-service pattern
+
+**Implementation**: Similar to Task 4.2 but for training operations
+
+**Create `ktrdr/training/training_worker.py`** (~100 lines):
+- Same pattern as BacktestWorker
+- Calls TrainingManager instead of BacktestingEngine
+- Follows training-host-service pattern exactly
+
+**Commit**: `feat(training): implement training worker using WorkerAPIBase`
+
+**Estimated Time**: 2 hours
+
+---
+
+### Task 4.4: Update Docker Compose & Documentation
+
+**Objective**: Update configuration and docs
+
+**Implementation**:
+
+1. **Update `docker/docker-compose.yml`**:
+   - Point to new worker files
+   - Verify environment variables
+
+2. **Update CLAUDE.md**:
+   - Document WorkerAPIBase pattern
+   - Add reference to training-host-service as source
+   - Update worker architecture diagrams
+
+3. **Run full E2E test suite**:
+   ```bash
+   make test-e2e --run-container-e2e
+   ```
+
+**Commit**: `docs(workers): update documentation for WorkerAPIBase pattern`
+
+**Estimated Time**: 1 hour
+
+---
+
+### Phase 4 Verification
+
+**Manual Tests**:
+1. Start Docker Compose with workers
+2. Submit backtest operation → should complete successfully with progress
+3. Submit training operation → should complete successfully with progress
+4. Query worker's `/api/v1/operations/{id}` → should return status
+5. Check worker health endpoints → should report busy/idle correctly
+
+**Success Criteria**:
+✅ WorkerAPIBase extracted from training-host-service (~670 lines)
+✅ BacktestWorker implemented (~100 lines)
+✅ TrainingWorker implemented (~100 lines)
+✅ Total: ~870 lines (vs. ~1340 if duplicated)
+✅ **Savings**: ~470 lines for 2 workers
+✅ All unit tests pass
+✅ All integration tests pass
+✅ All E2E tests pass
+✅ Progress tracking works (verified manually)
+✅ Worker behavior identical to training-host-service pattern
+
+**Total Phase 4 Time**: ~9 hours
+
+**Key Learnings**:
+- ✅ Training-host-service pattern works - copy it!
+- ✅ 374 lines of operations endpoints are identical - extract once!
+- ✅ Operation ID synchronization via optional task_id parameter
+- ✅ Progress bridge registration in worker's OperationsService
+- ✅ Call Engine directly, not Service (avoids nested operations)
+
+---
+## Phase 5: Remove Local Execution Mode (Pure Distributed Architecture)
 
 **Goal**: Eliminate local/remote duality - all operations execute on workers or host services
 

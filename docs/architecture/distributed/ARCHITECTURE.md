@@ -327,6 +327,328 @@ async def start_training(request: TrainingStartRequest):
 
 When backend receives 503, it **automatically retries with a different worker** (handled by ServiceOrchestrator dispatch logic).
 
+### WorkerAPIBase (Common Infrastructure)
+
+**Architectural Role**: Extracted from training-host-service to provide reusable worker infrastructure
+
+**Source**: training-host-service (port 5002) - **proven working pattern in production**
+
+**Problem Solved**:
+- training-host-service has ~670 lines of worker infrastructure
+- Backtesting workers would duplicate this code
+- Operations proxy endpoints alone are 374 lines (identical code!)
+- Need to extract pattern into reusable base class
+
+**What's Extracted from Training Host Service**:
+
+```python
+┌──────────────────────────────────────────────────────────────┐
+│                     WorkerAPIBase                            │
+│         (Extracted from training-host-service)               │
+│                                                              │
+│  From training-host-service/services/operations.py:         │
+│  ├─ OperationsService singleton (41 lines)                  │
+│  │  └─ get_operations_service() factory                     │
+│                                                              │
+│  From training-host-service/endpoints/operations.py:        │
+│  ├─ Operations proxy endpoints (374 lines!)                 │
+│  │  ├─ GET /api/v1/operations/{operation_id}               │
+│  │  ├─ GET /api/v1/operations/{operation_id}/metrics       │
+│  │  ├─ GET /api/v1/operations                              │
+│  │  └─ DELETE /api/v1/operations/{operation_id}/cancel     │
+│                                                              │
+│  From training-host-service/endpoints/health.py:            │
+│  ├─ Health endpoint (/health)                               │
+│  │  └─ Reports busy/idle based on active operations        │
+│                                                              │
+│  From training-host-service/main.py:                        │
+│  ├─ FastAPI app setup                                       │
+│  ├─ CORS middleware                                         │
+│  ├─ Startup/shutdown events                                 │
+│  └─ OperationsService initialization                        │
+│                                                              │
+│  Worker registration pattern:                               │
+│  └─ Self-registration with backend on startup               │
+│                                                              │
+│  Total: ~670 lines extracted                                │
+└──────────────────────────────────────────────────────────────┘
+                            │
+                            │ inherits
+              ┌─────────────┴─────────────┐
+              │                           │
+              ▼                           ▼
+    ┌──────────────────┐        ┌──────────────────┐
+    │ TrainingWorker   │        │ BacktestWorker   │
+    │ (~100 lines)     │        │ (~100 lines)     │
+    │                  │        │                  │
+    │ Implements:      │        │ Implements:      │
+    │ - POST /training/│        │ - POST /backtests│
+    │   start          │        │   /start         │
+    │ - _execute_work()│        │ - _execute_work()│
+    │                  │        │                  │
+    └──────────────────┘        └──────────────────┘
+```
+
+**Core Components** (copied from training-host-service):
+
+**1. OperationsService Singleton**
+
+Source: `training-host-service/services/operations.py` (41 lines - copy verbatim)
+
+```python
+from ktrdr.api.services.operations_service import OperationsService
+
+_operations_service: Optional[OperationsService] = None
+
+def get_operations_service() -> OperationsService:
+    global _operations_service
+    if _operations_service is None:
+        _operations_service = OperationsService()
+        logger.info("Operations service initialized in worker")
+    return _operations_service
+```
+
+**Why Critical**: Each worker needs its own OperationsService to:
+- Track operations running on this worker
+- Register progress bridges for operations
+- Expose `/api/v1/operations/*` endpoints for backend queries
+- Support backend's OperationServiceProxy pattern
+
+**2. Operations Proxy Endpoints**
+
+Source: `training-host-service/endpoints/operations.py` (374 lines - **copy verbatim!**)
+
+These endpoints are **IDENTICAL** across all workers:
+
+```python
+@app.get("/api/v1/operations/{operation_id}")
+async def get_operation_status(
+    operation_id: str,
+    force_refresh: bool = Query(False),
+    operations_service: OperationsService = Depends(get_operations_service),
+):
+    """Get operation status from worker's OperationsService."""
+    operation = await operations_service.get_operation(
+        operation_id, force_refresh=force_refresh
+    )
+    if not operation:
+        raise HTTPException(status_code=404, ...)
+    return OperationStatusResponse(success=True, data=operation)
+
+@app.get("/api/v1/operations/{operation_id}/metrics")
+async def get_operation_metrics(...):
+    """Get operation metrics (incremental with cursor)."""
+    # 50+ lines of metrics handling
+    ...
+
+@app.get("/api/v1/operations")
+async def list_operations(...):
+    """List all operations on this worker."""
+    # 40+ lines of filtering and pagination
+    ...
+
+@app.delete("/api/v1/operations/{operation_id}/cancel")
+async def cancel_operation(...):
+    """Cancel operation on this worker."""
+    # 30+ lines of cancellation logic
+    ...
+```
+
+**Why 374 Lines**: Comprehensive implementation with proper error handling, query parameters, response models, pagination, filtering, etc.
+
+**3. Health Endpoint**
+
+Source: `training-host-service/endpoints/health.py`
+
+```python
+@app.get("/health")
+async def health_check():
+    """Health check that reports worker status."""
+    active_ops, _, _ = await operations_service.list_operations(
+        operation_type=self.operation_type,
+        active_only=True
+    )
+
+    return {
+        "healthy": True,
+        "service": f"{worker_type}-worker",
+        "timestamp": datetime.utcnow().isoformat(),
+        "status": "operational",
+        "worker_status": "busy" if active_ops else "idle",  # ← Backend uses this!
+        "current_operation": active_ops[0].operation_id if active_ops else None,
+    }
+```
+
+**4. FastAPI App Setup**
+
+Source: `training-host-service/main.py`
+
+```python
+# FastAPI app with CORS
+app = FastAPI(
+    title=f"{worker_type.title()} Worker Service",
+    description=f"{worker_type} worker execution service",
+    version="1.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Register routers
+app.include_router(operations_router)  # /api/v1/operations/*
+app.include_router(domain_router)      # /{worker_type}/start
+
+# Startup event
+@app.on_event("startup")
+async def startup():
+    # Initialize OperationsService
+    ops_service = get_operations_service()
+    logger.info(f"✅ OperationsService initialized (cache_ttl={ops_service._cache_ttl}s)")
+
+    # Self-register with backend
+    await self_register()
+```
+
+**Worker-Specific Components** (what subclasses implement):
+
+Based on training-host-service pattern:
+
+**1. Domain-Specific Endpoint**
+
+Follows training-host-service pattern from `endpoints/training.py`:
+
+```python
+class BacktestWorker(WorkerAPIBase):
+    def __init__(self):
+        super().__init__(...)
+
+        @self.app.post("/backtests/start")
+        async def start_backtest(request: BacktestStartRequest):
+            # Accept task_id from backend (operation ID synchronization!)
+            operation_id = request.task_id or f"worker_bt_{uuid.uuid4().hex[:12]}"
+
+            # Execute work following training-host pattern
+            result = await self._execute_backtest_work(operation_id, request)
+
+            return {
+                "success": True,
+                "operation_id": operation_id,  # ← Return same ID to backend!
+                "status": "started",
+                **result
+            }
+```
+
+**2. Work Execution** (following training-host-service pattern)
+
+Source: `training-host-service/services/training_service.py:_create_operation_and_bridge`
+
+```python
+async def _execute_backtest_work(
+    self, operation_id: str, request: BacktestStartRequest
+):
+    """
+    Execute backtest following training-host-service pattern.
+
+    Pattern from training-host-service/services/training_service.py:
+    1. Create operation in worker's OperationsService
+    2. Create and register progress bridge
+    3. Execute actual work (Engine, not Service!)
+    4. Complete operation
+    """
+
+    # 1. Create operation in worker's OperationsService
+    await self._operations_service.create_operation(
+        operation_id=operation_id,
+        operation_type=OperationType.BACKTESTING,
+        metadata=self._build_metadata(request),
+    )
+
+    # 2. Create and register progress bridge
+    bridge = BacktestProgressBridge(
+        operation_id=operation_id,
+        symbol=request.symbol,
+        timeframe=request.timeframe,
+        total_bars=estimated_bars,
+    )
+    self._operations_service.register_local_bridge(operation_id, bridge)
+
+    # 3. Execute actual work (Engine, not Service!)
+    try:
+        engine = BacktestingEngine(config=...)
+        cancellation_token = self._operations_service.get_cancellation_token(operation_id)
+
+        result = await asyncio.to_thread(
+            engine.run,
+            bridge=bridge,
+            cancellation_token=cancellation_token,
+        )
+
+        # 4. Complete operation
+        await self._operations_service.complete_operation(operation_id, result.to_dict())
+
+        return {"result_summary": result.to_dict().get("result_summary", {})}
+
+    except Exception as e:
+        await self._operations_service.fail_operation(operation_id, str(e))
+        raise
+```
+
+**Critical Pattern - Operation ID Synchronization**:
+
+From training-host-service:
+
+```python
+# Backend passes its operation_id as session_id/task_id
+class TrainingStartRequest(BaseModel):
+    session_id: Optional[str] = Field(default=None)  # ← Backend's operation_id!
+    ...
+
+# Worker uses backend's ID if provided
+session_id = request.session_id or generate_id()
+
+# Worker creates operation with SAME ID
+await ops_service.create_operation(operation_id=session_id, ...)
+
+# Returns same ID to backend
+return {"session_id": session_id, ...}
+```
+
+**Result**: Backend operation `A` and worker operation `A` are synchronized!
+
+**Code Metrics**:
+
+| Source File | Lines | Goes Into |
+|-------------|-------|-----------|
+| `training-host-service/services/operations.py` | 41 | WorkerAPIBase |
+| `training-host-service/endpoints/operations.py` | 374 | WorkerAPIBase |
+| `training-host-service/endpoints/health.py` | ~50 | WorkerAPIBase |
+| `training-host-service/main.py` (setup code) | ~200 | WorkerAPIBase |
+| **Total extracted** | **~670 lines** | **WorkerAPIBase** |
+| **Worker-specific code** | | **~100 lines** |
+
+**Benefits**:
+
+| Aspect | Before (Duplication) | After (Extraction) |
+|--------|---------------------|-------------------|
+| Operations endpoints | 374 lines × N workers | 374 lines (once) |
+| OperationsService | 41 lines × N workers | 41 lines (once) |
+| Health/FastAPI setup | ~250 lines × N workers | ~250 lines (once) |
+| **Total per worker** | **~670 lines** | **~100 lines** |
+| **For 2 workers** | **~1340 lines** | **~770 lines total** |
+| **Savings** | **-** | **~570 lines!** |
+
+**Rationale**:
+- **Proven Pattern**: Extracted from working training-host-service code
+- **No Invention**: Copy verbatim, don't reinvent
+- **Massive DRY**: 374 lines of operations endpoints used once
+- **Consistency**: All workers use identical infrastructure
+- **Maintainability**: Bug fixes applied once, benefit all workers
+
 ### Remote Progress Tracking Architecture
 
 **Architectural Challenge**: How does backend track progress of operations running on remote workers?
