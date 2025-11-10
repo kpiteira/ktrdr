@@ -46,6 +46,8 @@ services:
       - ENVIRONMENT=development
       - LOG_LEVEL=INFO
       - PYTHONPATH=/app
+      # Backend API URL (explicit - no default in code)
+      - KTRDR_API_URL=http://backend:8000
       # IB Gateway configuration - testing bridge gateway IP
       - IB_HOST=172.17.0.1
       - IB_PORT=4002
@@ -94,6 +96,11 @@ services:
       - ENVIRONMENT=development
       - LOG_LEVEL=INFO
       - PYTHONPATH=/app
+      # Backend API URL (explicit - no default in code)
+      - KTRDR_API_URL=http://backend:8000
+      - WORKER_PORT=5003
+      - WORKER_IP=0.0.0.0  # Bind to all interfaces (Docker default)
+      # WORKER_ENDPOINT_URL not set - will auto-detect via hostname
       # IB configuration (for data access if needed)
       - USE_IB_HOST_SERVICE=${USE_IB_HOST_SERVICE:-true}
       - IB_HOST_SERVICE_URL=http://host.docker.internal:5001

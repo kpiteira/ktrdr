@@ -4,7 +4,8 @@ import asyncio
 import os
 import platform
 import socket
-from typing import Any
+from typing import Any, Optional
+from urllib.parse import urlparse
 
 import httpx
 
@@ -27,11 +28,22 @@ class WorkerRegistration:
         Args:
             max_retries: Maximum number of registration retry attempts
             retry_delay: Delay in seconds between retry attempts
+
+        Raises:
+            RuntimeError: If KTRDR_API_URL environment variable is not set
         """
         self.worker_id = os.getenv("WORKER_ID") or self._generate_worker_id()
         self.worker_type = "training"
         self.port = int(os.getenv("WORKER_PORT", "5004"))
-        self.backend_url = os.getenv("KTRDR_API_URL", "http://backend:8000")
+
+        # Backend URL is REQUIRED (no default)
+        self.backend_url = os.getenv("KTRDR_API_URL")
+        if not self.backend_url:
+            raise RuntimeError(
+                "KTRDR_API_URL environment variable is required for worker registration. "
+                "Example: KTRDR_API_URL=http://192.168.1.100:8000"
+            )
+
         self.max_retries = max_retries
         self.retry_delay = retry_delay
 
@@ -47,13 +59,61 @@ class WorkerRegistration:
 
     def get_endpoint_url(self) -> str:
         """
-        Get the endpoint URL where this worker can be reached.
+        Get endpoint URL - IP-based for cross-network compatibility.
+
+        Priority:
+        1. WORKER_ENDPOINT_URL env var (explicit configuration)
+        2. Auto-detected IP address (for multi-host)
+        3. Hostname (for Docker Compose fallback)
 
         Returns:
             str: HTTP URL for this worker
         """
+        # 1. Explicit configuration (Proxmox/cloud deployments)
+        if endpoint_url := os.getenv("WORKER_ENDPOINT_URL"):
+            return endpoint_url
+
+        # 2. Auto-detect IP address (for multi-host deployments)
+        if ip_address := self._detect_ip_address():
+            return f"http://{ip_address}:{self.port}"
+
+        # 3. Fallback to hostname (for Docker Compose)
         hostname = socket.gethostname()
+        logger.warning(
+            f"Using hostname for endpoint URL: {hostname}. "
+            f"This may not work in multi-host deployments. "
+            f"Set WORKER_ENDPOINT_URL=http://<IP>:{self.port} for production."
+        )
         return f"http://{hostname}:{self.port}"
+
+    def _detect_ip_address(self) -> Optional[str]:
+        """
+        Detect worker's IP address visible to backend.
+
+        Uses dummy socket connection to backend to discover which
+        local IP address would be used for communication.
+
+        Returns:
+            Optional[str]: Detected IP address, or None if detection fails
+        """
+        try:
+            # Parse backend host from URL
+            backend_host = urlparse(self.backend_url).hostname or "8.8.8.8"
+
+            # Create dummy socket to backend
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect((backend_host, 80))
+
+            # Get local IP used for connection
+            ip = s.getsockname()[0]
+            s.close()
+
+            logger.info(f"Auto-detected worker IP address: {ip}")
+            return ip
+
+        except Exception as e:
+            logger.warning(f"Failed to auto-detect IP address: {e}")
+            return None
 
     def get_capabilities(self) -> dict[str, Any]:
         """
