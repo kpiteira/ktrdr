@@ -9,9 +9,6 @@ import os
 import subprocess
 from pathlib import Path
 
-import pytest
-
-
 SCRIPT_PATH = Path("scripts/lxc/create-template.sh")
 
 
@@ -41,15 +38,14 @@ class TestLXCTemplateScriptStructure:
         with open(SCRIPT_PATH) as f:
             content = f.read()
         # Check for comment block near the top
-        assert "# Create base LXC template" in content or "LXC template" in content, \
-            "Script should have documentation header"
+        assert (
+            "# Create base LXC template" in content or "LXC template" in content
+        ), "Script should have documentation header"
 
     def test_script_syntax_is_valid(self):
         """Script should pass bash syntax check."""
         result = subprocess.run(
-            ["bash", "-n", str(SCRIPT_PATH)],
-            capture_output=True,
-            text=True
+            ["bash", "-n", str(SCRIPT_PATH)], capture_output=True, text=True
         )
         assert result.returncode == 0, f"Syntax error: {result.stderr}"
 
@@ -61,7 +57,9 @@ class TestLXCTemplateScriptContent:
         """Script should use pct create command."""
         with open(SCRIPT_PATH) as f:
             content = f.read()
-        assert "pct create" in content, "Script must use 'pct create' to create LXC container"
+        assert (
+            "pct create" in content
+        ), "Script must use 'pct create' to create LXC container"
 
     def test_installs_python_313(self):
         """Script should install Python 3.13."""
@@ -91,8 +89,9 @@ class TestLXCTemplateScriptContent:
         """Script should destroy source container after template creation."""
         with open(SCRIPT_PATH) as f:
             content = f.read()
-        assert "pct destroy" in content or "pct delete" in content, \
-            "Script should clean up source container"
+        assert (
+            "pct destroy" in content or "pct delete" in content
+        ), "Script should clean up source container"
 
 
 class TestLXCTemplateScriptErrorHandling:
@@ -114,11 +113,13 @@ class TestLXCTemplateScriptDocumentation:
         with open(SCRIPT_PATH) as f:
             content = f.read()
         # Should have comments explaining purpose
-        has_docs = any([
-            "Create base LXC template" in content,
-            "Base template" in content,
-            "KTRDR worker" in content,
-        ])
+        has_docs = any(
+            [
+                "Create base LXC template" in content,
+                "Base template" in content,
+                "KTRDR worker" in content,
+            ]
+        )
         assert has_docs, "Script should have documentation explaining purpose"
 
     def test_documents_template_contents(self):
@@ -127,9 +128,7 @@ class TestLXCTemplateScriptDocumentation:
             content = f.read()
         # Should mention key components
         mentions_components = (
-            "Ubuntu" in content or
-            "Python" in content or
-            "dependencies" in content
+            "Ubuntu" in content or "Python" in content or "dependencies" in content
         )
         assert mentions_components, "Script should document template contents"
 
@@ -147,4 +146,6 @@ class TestLXCTemplateScriptConfiguration:
         """Script should define output template filename."""
         with open(SCRIPT_PATH) as f:
             content = f.read()
-        assert "ktrdr-worker-base" in content, "Script should name template 'ktrdr-worker-base'"
+        assert (
+            "ktrdr-worker-base" in content
+        ), "Script should name template 'ktrdr-worker-base'"
