@@ -29,20 +29,26 @@ KTRDR supports two primary deployment models:
 - Local development
 - Testing and integration
 - Single-host deployments
-- Small-scale production (< 20 workers)
+- Multi-host Docker deployments
+- Small-scale production (< 50 workers)
 
 **Characteristics**:
 - Quick setup (`docker-compose up`)
 - Dynamic worker scaling
-- DNS-based service discovery
+- DNS-based service discovery (single-host) or IP-based (multi-host)
 - Runs on Mac, Windows, Linux
+- Flexible deployment: single machine or distributed across multiple machines
+
+**Deployment Modes**:
+- **Single-Host**: All containers on one machine (simplest, for development)
+- **Multi-Host**: Backend and workers on separate machines (more scalable)
+- **Hybrid**: Mix of Docker and native workers (maximum flexibility)
 
 **Limitations**:
-- Single host (all containers on same machine)
 - Docker overhead for CPU-intensive workloads
-- Limited to Docker resource allocation
+- Network configuration required for multi-host setups
 
-**When to Use**: Development, testing, small deployments
+**When to Use**: Development, testing, small-to-medium deployments
 
 ### Proxmox LXC (Production)
 
@@ -232,6 +238,249 @@ docker-compose -f docker/docker-compose.yml stop training-worker
 # Stop and remove
 docker-compose -f docker/docker-compose.yml rm -f training-worker
 ```
+
+---
+
+## Multi-Host Docker Deployment
+
+**When to Use Multi-Host**:
+- Scale beyond single machine capacity
+- Distribute workers across multiple physical machines
+- Mix Docker workers on different hosts
+- Hybrid deployments (Docker + native workers)
+
+**Key Concept**: Each machine configures its own `KTRDR_API_URL` based on where the backend is located. Workers use IP addresses (not hostnames) to register themselves so the backend can reach them back.
+
+### Architecture Overview
+
+```
+Machine A (192.168.1.100) - Backend Host
+├─ Backend Container (port 8000) ← Main orchestrator
+└─ Local Workers (optional) → Use http://backend:8000
+
+Machine B (192.168.1.101) - Remote Workers
+└─ Worker Containers → Use http://192.168.1.100:8000
+
+Machine C (192.168.1.102) - More Remote Workers
+└─ Worker Containers → Use http://192.168.1.100:8000
+```
+
+### Step 1: Backend Machine Configuration
+
+**Machine A (192.168.1.100)** - Runs backend + optional local workers:
+
+```yaml
+# docker-compose.yml on Machine A
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/backend/Dockerfile.dev
+    ports:
+      - "8000:8000"  # ← CRITICAL: Expose to host network!
+    environment:
+      - KTRDR_API_URL=http://backend:8000  # ← DNS works within this Docker network
+    networks:
+      - ktrdr-network
+
+  # OPTIONAL: Local workers on same machine
+  backtest-worker:
+    image: ktrdr-backend:dev
+    ports:
+      - "5003:5003"  # Expose for external health checks
+    environment:
+      - KTRDR_API_URL=http://backend:8000  # ← Same Docker network, DNS works
+      - WORKER_PORT=5003
+    command: ["uvicorn", "ktrdr.backtesting.backtest_worker:app", "--host", "0.0.0.0", "--port", "5003"]
+    networks:
+      - ktrdr-network
+
+networks:
+  ktrdr-network:
+    driver: bridge
+```
+
+**Start Backend**:
+```bash
+# On Machine A
+cd /path/to/ktrdr
+docker-compose -f docker/docker-compose.yml up -d backend
+
+# Verify backend is accessible from host network
+curl http://localhost:8000/api/v1/health
+curl http://192.168.1.100:8000/api/v1/health  # From another machine
+```
+
+### Step 2: Remote Worker Machine Configuration
+
+**Machine B (192.168.1.101)** - Runs only workers:
+
+```yaml
+# docker-compose.yml on Machine B
+services:
+  backtest-worker-1:
+    image: ktrdr-backend:dev
+    ports:
+      - "5003:5003"
+    environment:
+      - KTRDR_API_URL=http://192.168.1.100:8000  # ← Backend's IP address!
+      - WORKER_PORT=5003
+      - WORKER_ID=machine-b-backtest-1
+    command: ["uvicorn", "ktrdr.backtesting.backtest_worker:app", "--host", "0.0.0.0", "--port", "5003"]
+
+  backtest-worker-2:
+    image: ktrdr-backend:dev
+    ports:
+      - "5004:5003"  # Different host port, same container port
+    environment:
+      - KTRDR_API_URL=http://192.168.1.100:8000  # ← Backend's IP address!
+      - WORKER_PORT=5003  # Container port
+      - WORKER_ID=machine-b-backtest-2
+    command: ["uvicorn", "ktrdr.backtesting.backtest_worker:app", "--host", "0.0.0.0", "--port", "5003"]
+```
+
+**Start Remote Workers**:
+```bash
+# On Machine B
+docker-compose up -d
+
+# Verify workers can reach backend
+docker exec backtest-worker-1 curl http://192.168.1.100:8000/api/v1/health
+```
+
+### Step 3: Verify Multi-Host Setup
+
+**Check Worker Registration** (from any machine):
+```bash
+# Query backend for registered workers
+curl http://192.168.1.100:8000/api/v1/workers | jq
+
+# Expected output:
+# {
+#   "workers": [
+#     {
+#       "worker_id": "machine-a-backtest-1",
+#       "worker_type": "backtesting",
+#       "endpoint_url": "http://172.18.0.3:5003",  # Auto-detected IP
+#       "status": "available"
+#     },
+#     {
+#       "worker_id": "machine-b-backtest-1",
+#       "worker_type": "backtesting",
+#       "endpoint_url": "http://192.168.1.101:5003",  # Auto-detected IP
+#       "status": "available"
+#     }
+#   ]
+# }
+```
+
+### Network Requirements
+
+**Firewall Rules** (Machine A - Backend Host):
+```bash
+# Allow incoming connections on port 8000 (backend API)
+sudo ufw allow 8000/tcp
+
+# Allow incoming health checks from backend to workers (if needed)
+sudo ufw allow from 192.168.1.0/24 to any port 5003:5010
+```
+
+**Firewall Rules** (Machine B, C - Worker Hosts):
+```bash
+# Allow incoming connections on worker ports
+sudo ufw allow 5003:5010/tcp  # Worker port range
+
+# Allow outgoing to backend
+# (Usually allowed by default)
+```
+
+**Network Connectivity Test**:
+```bash
+# From worker machine, test backend reachability
+curl http://192.168.1.100:8000/api/v1/health
+
+# From backend machine, test worker reachability (after registration)
+curl http://192.168.1.101:5003/health
+```
+
+### Hybrid Deployment (Docker + Native)
+
+You can mix Docker workers with native workers (LXC, bare metal):
+
+**Machine C (192.168.1.102)** - Native Worker (LXC/Bare Metal):
+```bash
+# /opt/ktrdr/.env
+KTRDR_API_URL=http://192.168.1.100:8000  # Backend IP
+WORKER_ENDPOINT_URL=http://192.168.1.102:5003  # Explicit worker IP
+WORKER_PORT=5003
+WORKER_ID=machine-c-native-1
+
+# Start worker
+cd /opt/ktrdr
+uv run uvicorn ktrdr.backtesting.backtest_worker:app --host 0.0.0.0 --port 5003
+```
+
+**Result**: Backend orchestrates operations across:
+- Local Docker workers (Machine A)
+- Remote Docker workers (Machine B)
+- Native workers (Machine C)
+
+All workers register automatically and appear in the WorkerRegistry!
+
+### Troubleshooting Multi-Host
+
+**Problem**: Workers not registering with backend
+
+```bash
+# Check worker logs
+docker logs backtest-worker-1
+
+# Look for:
+# - "RuntimeError: KTRDR_API_URL environment variable is required"
+#   → Fix: Set KTRDR_API_URL in docker-compose.yml
+#
+# - "Connection refused" to backend
+#   → Fix: Check firewall, verify backend port 8000 is exposed and accessible
+#
+# - "Failed to register worker... after 5 attempts"
+#   → Fix: Check network connectivity, DNS resolution
+```
+
+**Problem**: Backend can't reach workers for health checks
+
+```bash
+# From backend machine, test worker endpoint
+curl http://192.168.1.101:5003/health
+
+# If fails:
+# - Check worker port is exposed (5003:5003 in docker-compose.yml)
+# - Check firewall allows incoming on port 5003
+# - Check worker is actually running: docker ps
+```
+
+**Problem**: Worker registering with wrong IP address
+
+Workers auto-detect their IP by connecting to the backend. If the wrong IP is detected:
+
+```bash
+# Force explicit worker endpoint URL
+# In docker-compose.yml:
+environment:
+  - KTRDR_API_URL=http://192.168.1.100:8000
+  - WORKER_ENDPOINT_URL=http://192.168.1.101:5003  # ← Explicit IP
+  - WORKER_PORT=5003
+```
+
+### Performance Considerations
+
+**Network Latency**:
+- Local workers (same machine): ~1ms latency
+- Remote workers (same LAN): ~1-5ms latency
+- Remote workers (WAN/cloud): 20-100ms+ latency
+
+**Recommendation**: Keep backend and workers on same LAN for production deployments.
+
+**Bandwidth**: Minimal - worker registration and health checks are lightweight (<1KB/s per worker).
 
 ---
 

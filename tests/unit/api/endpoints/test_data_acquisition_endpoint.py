@@ -39,9 +39,17 @@ def mock_acquisition_service():
 class TestDataAcquireDownloadEndpoint:
     """Tests for POST /data/acquire/download endpoint."""
 
-    def test_download_endpoint_exists(self, client):
+    def test_download_endpoint_exists(self, app, mock_acquisition_service):
         """Test that the POST /data/acquire/download endpoint exists."""
-        # This should fail initially - endpoint doesn't exist yet
+        # Override the dependency to avoid real service initialization
+        app.dependency_overrides[get_acquisition_service] = (
+            lambda: mock_acquisition_service
+        )
+
+        # Create client AFTER overriding dependencies
+        client = TestClient(app)
+
+        # Test endpoint exists
         response = client.post(
             "/data/acquire/download",
             json={

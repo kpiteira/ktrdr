@@ -33,7 +33,10 @@ class TestWorkerRegistration:
         with patch.dict(
             os.environ, {"KTRDR_API_URL": "http://backend:8000"}, clear=True
         ):
-            with patch("socket.gethostname", return_value="container-abc123"):
+            with patch(
+                "ktrdr.backtesting.worker_registration.socket.gethostname",
+                return_value="container-abc123",
+            ):
                 registration = WorkerRegistration()
 
                 assert registration.worker_id == "backtest-container-abc123"
@@ -47,7 +50,10 @@ class TestWorkerRegistration:
             os.environ,
             {"WORKER_ID": "backtest-1", "KTRDR_API_URL": "http://backend:8000"},
         ):
-            with patch("socket.gethostname", return_value="worker-host"):
+            with patch(
+                "ktrdr.backtesting.worker_registration.socket.gethostname",
+                return_value="worker-host",
+            ):
                 registration = WorkerRegistration()
                 endpoint_url = registration.get_endpoint_url()
 
@@ -55,7 +61,9 @@ class TestWorkerRegistration:
 
     def test_get_capabilities_default(self):
         """Test getting default capabilities."""
-        with patch.dict(os.environ, {"KTRDR_API_URL": "http://backend:8000"}):
+        with patch.dict(
+            os.environ, {"KTRDR_API_URL": "http://backend:8000"}, clear=False
+        ):
             registration = WorkerRegistration()
             capabilities = registration.get_capabilities()
 
