@@ -270,34 +270,229 @@ curl -X POST http://localhost:8000/api/v1/workers/register \
 
 ---
 
-### Task 5.4: Update Documentation
+### Task 5.4: Distributed Workers Documentation (Comprehensive)
 
-**Objective**: Update docs to reflect distributed-only architecture
+**Objective**: Create comprehensive documentation for distributed workers architecture across all audience types
+
+**Why Comprehensive Documentation Needed**:
+
+- **Architectural complexity**: WorkerAPIBase, self-registration, GPU-first routing - needs clear explanation
+- **Multiple audiences**: Developers extending workers, operators deploying, users understanding errors
+- **Docker deployment ready**: Document current Docker Compose deployment before Proxmox (Phase 6)
+- **Foundation for Phase 6**: Proxmox docs will extend/reference these base documents
 
 **Implementation**:
 
-1. Update `CLAUDE.md`:
-   - Remove references to local execution mode
-   - Update architecture diagrams
-   - Document worker requirement
+#### **Part A: Architecture Overview** (~2 hours)
 
-2. Update `README.md`:
-   - Add "Starting Workers" section
-   - Update docker-compose instructions
+Create `docs/architecture-overviews/distributed-workers.md`:
 
-3. Update API docs:
-   - `/docs` endpoint should mention worker requirement
-   - Error responses should be documented
+**Purpose**: High-level understanding of distributed architecture for technical stakeholders
+
+**Note**: Written to `docs/architecture-overviews/` temporarily. During future documentation refactoring, this folder will be renamed to `docs/architecture/` (after current `docs/architecture/` is renamed to `docs/specifications/`).
+
+**Content** (~3-4 pages):
+
+1. **Executive Summary**
+   - What is the distributed workers architecture?
+   - Why did we build it this way? (GPU access, horizontal scaling, Docker limitations)
+
+2. **Key Components**
+   - WorkerAPIBase (~670 lines of reusable infrastructure)
+   - WorkerRegistry (worker tracking and selection)
+   - Backend as orchestrator (never executes operations)
+   - Self-registration pattern (push-based)
+
+3. **Worker Types & Capabilities**
+   - BacktestWorker (CPU-only, containerized)
+   - TrainingWorker (CPU, containerized)
+   - Training Host Service (GPU, bare metal/LXC)
+   - Capability-based routing (GPU-first, CPU-fallback)
+
+4. **Communication Patterns**
+   - Worker → Backend registration (POST /workers/register)
+   - Backend → Worker dispatch (POST /worker/backtests/start)
+   - Backend → Worker status query (GET /worker/operations/{id})
+   - Health checks and dead worker removal
+
+5. **Deployment Models**
+   - Docker Compose (development)
+   - Proxmox LXC (production) - reference to Phase 6 docs
+   - Hybrid GPU architecture (host services + containers)
+
+6. **Design Decisions & Trade-offs**
+   - Why push-based registration vs pull-based discovery
+   - Why WorkerAPIBase pattern
+   - Why distributed-only (no local execution)
+
+**Extract from**: Existing specs in DESIGN.md and ARCHITECTURE.md
+
+**Temporary Location**: This document will live in `docs/architecture-overviews/` until the documentation refactoring (see `docs/architecture/docs-updates/`), at which point `docs/architecture-overviews/` becomes `docs/architecture/`.
+
+**Audience**: Technical stakeholders, architects, senior developers
+
+---
+
+#### **Part B: Developer Guide** (~2.5 hours)
+
+Create `docs/developer/distributed-workers-guide.md`:
+
+**Purpose**: How to work with, extend, and debug distributed workers
+
+**Content** (~4-5 pages):
+
+1. **Understanding Workers**
+   - Worker lifecycle (startup → register → accept work → report → shutdown)
+   - WorkerAPIBase inheritance pattern
+   - Operations tracking via OperationsService
+   - Progress reporting via ProgressBridge
+
+2. **Creating a New Worker Type**
+   - Step-by-step guide (use BacktestWorker as example)
+   - Required components (domain logic, endpoints, progress tracking)
+   - Testing your worker locally
+   - Integration with backend
+
+3. **Worker Development Patterns**
+   - Operation ID synchronization (backend task_id → worker operation_id)
+   - Accepting optional task_id, returning same operation_id
+   - Registering progress bridges
+   - Handling cancellation tokens
+   - Error handling and recovery
+
+4. **Testing Workers**
+   - Unit testing worker endpoints
+   - Integration testing with backend
+   - Manual testing with curl
+   - E2E testing scenarios
+
+5. **Debugging Workers**
+   - Common issues (registration failures, connection errors, busy workers)
+   - Checking worker registry (GET /api/v1/workers)
+   - Checking operation status (GET /api/v1/operations/{id})
+   - Log locations and what to look for
+   - Health check debugging
+
+6. **Worker API Reference**
+   - Standard endpoints (from WorkerAPIBase)
+   - Domain-specific endpoints (example: /backtests/start)
+   - Request/response formats
+   - Error responses
+
+**Source Material**: Implementation details from IMPLEMENTATION_PLAN, BacktestWorker/TrainingWorker code
+
+**Audience**: Developers extending workers, debugging issues, or adding new worker types
+
+---
+
+#### **Part C: Deployment Guide (Docker)** (~2 hours)
+
+Create `docs/user-guides/deployment.md`:
+
+**Purpose**: How to deploy and operate KTRDR with distributed workers (Docker focus)
+
+**Content** (~3 pages):
+
+1. **Docker Compose Deployment**
+   - Prerequisites (Docker, docker-compose, uv)
+   - Starting the system (backend + workers)
+   - Scaling workers (`docker-compose up --scale backtest-worker=3`)
+   - Stopping the system
+
+2. **Worker Configuration**
+   - Environment variables (KTRDR_API_URL, WORKER_PORT, etc.)
+   - Worker capabilities (GPU vs CPU)
+   - Docker Compose worker service definitions
+
+3. **Verifying Deployment**
+   - Check worker registration (curl /api/v1/workers)
+   - Check worker health (curl /worker/health)
+   - Test backtest execution
+   - Test training execution
+
+4. **Monitoring Workers**
+   - Worker status endpoints
+   - Operation progress tracking
+   - Health check monitoring
+   - Dead worker detection and removal
+
+5. **Troubleshooting**
+   - Workers not registering (network issues, env vars)
+   - Workers showing as dead (health check failures)
+   - Operations failing to dispatch (no workers available)
+   - Connection errors (backend URL configuration)
+
+6. **Operations Guide**
+   - Starting/stopping workers without affecting backend
+   - Adding workers dynamically
+   - Removing workers gracefully
+   - Viewing worker logs
+
+**Note**: This covers Docker Compose deployment. Proxmox LXC deployment will be documented in Phase 6.
+
+**Audience**: Operators, DevOps, users deploying KTRDR
+
+---
+
+#### **Part D: Update Existing Docs** (~1.5 hours)
+
+1. **Update `CLAUDE.md`** (~30 min):
+   - Section: "Host Service Architecture" → Update to include workers
+   - Section: "WorkerAPIBase Pattern" → Add reference to new docs
+   - Remove references to local execution mode for backtesting/training
+   - Add distributed workers to architectural principles
+   - Update example patterns to show worker requirement
+
+2. **Update `README.md`** (~30 min):
+   - Section: "Starting Workers" → Add before/alongside "Launching KTRDR"
+   - Quick start section → Mention worker requirement
+   - Link to comprehensive deployment guide (docs/user-guides/deployment.md)
+   - Update feature list to mention distributed execution
+
+3. **Update API Documentation** (~30 min):
+   - Add section about worker requirement in API overview
+   - Document worker management endpoints (/api/v1/workers)
+   - Document error responses when no workers available
+   - Add worker health endpoints to API reference
+
+---
 
 **Quality Gate**:
 
 ```bash
-# Manual review - docs are accurate and complete
+# Verify all new documents exist
+test -f docs/architecture-overviews/distributed-workers.md
+test -f docs/developer/distributed-workers-guide.md
+test -f docs/user-guides/deployment.md
+
+# Verify CLAUDE.md and README.md updated
+grep -q "WorkerAPIBase" CLAUDE.md
+grep -q "Starting Workers" README.md
+
+# Manual review checklist:
+# ✅ Architecture overview is clear and high-level
+# ✅ Developer guide has actionable examples
+# ✅ Deployment guide covers Docker Compose setup
+# ✅ All documents cross-reference each other appropriately
+# ✅ No broken links
+# ✅ Consistent terminology throughout
 ```
 
-**Commit**: `docs(distributed): update documentation for distributed-only architecture`
+**Commits**:
 
-**Estimated Time**: 1.5 hours
+```bash
+# Commit each major document separately for clear history
+git commit -m "docs(distributed): add distributed workers architecture overview"
+git commit -m "docs(distributed): add distributed workers developer guide"
+git commit -m "docs(distributed): add Docker deployment guide"
+git commit -m "docs(distributed): update CLAUDE.md and README.md for distributed workers"
+```
+
+**Estimated Time**: 8 hours (2 + 2.5 + 2 + 1.5)
+
+**Dependencies**: None (can be done independently of code tasks)
+
+**Note**: This task documents the Docker Compose deployment (current state). Proxmox LXC deployment will be documented in Phase 6 (Task 6.6 expansion).
 
 ---
 
@@ -1042,19 +1237,209 @@ curl http://192.168.1.204:5003/health
 
 ---
 
-### Task 6.6: CI/CD Pipeline Documentation
+### Task 6.6: Proxmox Deployment Documentation (Comprehensive)
 
-**Objective**: Document deployment process and automation
+**Objective**: Document Proxmox LXC deployment, operations, and CI/CD for production environments
+
+**Why Comprehensive Documentation Needed**:
+
+- **Production deployment**: Proxmox is primary production environment (not Docker)
+- **Complex setup**: LXC templates, networking, worker provisioning needs clear documentation
+- **Operations runbook**: Production support requires clear operational procedures
+- **Builds on Task 5.4**: Extends Docker deployment docs with Proxmox-specific details
 
 **Implementation**:
 
-1. Create deployment runbook
-2. Document rollback procedures
-3. Create troubleshooting guide
+#### **Part A: Proxmox Deployment Guide** (~3 hours)
 
-**Commit**: `docs(deploy): add CI/CD pipeline documentation`
+Create `docs/user-guides/deployment-proxmox.md`:
 
-**Estimated Time**: 2 hours
+**Purpose**: How to deploy and operate KTRDR on Proxmox LXC infrastructure
+
+**Content** (~5-6 pages):
+
+1. **Proxmox Infrastructure Overview**
+   - Why Proxmox? (Lower overhead, full OS, management tools)
+   - Architecture: Backend LXC + Worker LXCs + GPU host services
+   - Network topology (IPs, ports, connectivity)
+
+2. **Prerequisites**
+   - Proxmox VE 8.x
+   - Network configuration (static IPs, firewall rules)
+   - Shared storage (for templates, models, data)
+   - GPU host machine (for training)
+
+3. **Initial Setup**
+   - Creating LXC base template (reference Task 6.1 scripts)
+   - Backend LXC provisioning
+   - Worker LXC provisioning from template
+   - GPU host service setup (training-host-service)
+   - IB host service setup (ib-host-service)
+
+4. **Worker Deployment**
+   - Cloning LXC template
+   - Code deployment (reference Task 6.2 scripts)
+   - Environment configuration (IPs, endpoints, capabilities)
+   - Worker startup and registration verification
+   - Scaling workers (adding/removing capacity)
+
+5. **Network Configuration** (Task 5.7 details)
+   - Worker endpoint URLs (IP-based, not hostnames)
+   - Backend URL configuration (KTRDR_API_URL)
+   - Port binding (specific IPs, not 0.0.0.0)
+   - Firewall rules and security
+
+6. **Verification & Testing**
+   - Check all LXCs are running
+   - Verify worker registration (curl /api/v1/workers)
+   - Test backtest execution across workers
+   - Test GPU training on host service
+   - Test CPU training on worker LXCs
+   - End-to-end system test
+
+7. **Monitoring & Maintenance**
+   - Health check monitoring (Task 6.5 endpoints)
+   - Log locations on LXC containers
+   - Disk space management
+   - Template updates and worker refresh
+   - Backup and restore procedures
+
+8. **Troubleshooting Proxmox-Specific Issues**
+   - LXC networking problems
+   - Worker registration failures (cross-host communication)
+   - GPU host service connectivity
+   - Storage mount issues
+   - Performance problems
+
+**Reference Material**: Tasks 6.1-6.5 implementation, Task 5.7 networking details
+
+**Audience**: DevOps, production operators, system administrators
+
+---
+
+#### **Part B: CI/CD & Operations Runbook** (~2 hours)
+
+Create `docs/developer/cicd-operations-runbook.md`:
+
+**Purpose**: Production deployment automation and operational procedures
+
+**Content** (~3-4 pages):
+
+1. **Continuous Deployment Pipeline**
+   - Code deployment workflow (Task 6.2 automation)
+   - Deploy to dev environment (Docker Compose)
+   - Promote to staging (Proxmox test LXCs)
+   - Deploy to production (Proxmox production LXCs)
+   - Rollback procedures
+
+2. **Deployment Automation**
+   - One-command deployment (`deploy-to-proxmox.sh`)
+   - Worker updates without downtime
+   - Configuration management (Task 6.4)
+   - Secrets management
+   - Environment validation
+
+3. **Operations Procedures**
+   - Starting/stopping the system
+   - Adding workers during high load
+   - Removing workers for maintenance
+   - Upgrading Python dependencies
+   - Template rebuilds and propagation
+   - Model deployment (trained models → LXCs)
+
+4. **Monitoring & Alerting**
+   - Worker health monitoring (automated checks)
+   - Dead worker alerts
+   - Operation failure rates
+   - System resource monitoring
+   - Performance metrics (Task 6.5 endpoints)
+
+5. **Incident Response**
+   - Worker down: recovery procedures
+   - Backend down: failover procedures
+   - GPU host down: CPU fallback verification
+   - Network partition: diagnosis and recovery
+   - Disk full: cleanup procedures
+
+6. **Rollback Procedures**
+   - Code rollback (revert to previous version)
+   - Configuration rollback
+   - Template rollback (restore LXC snapshot)
+   - Testing rollback before production
+   - Communication procedures
+
+7. **Common Operational Tasks**
+   - Viewing logs across all LXCs
+   - Checking system status
+   - Draining a worker (graceful shutdown)
+   - Emergency stop procedures
+   - Performance tuning
+
+**Reference Material**: Scripts from Tasks 6.1-6.4, monitoring from Task 6.5
+
+**Audience**: DevOps, SRE, production support, senior developers
+
+---
+
+#### **Part C: Update Existing Docs** (~1 hour)
+
+1. **Update `docs/user-guides/deployment.md`** (~20 min):
+   - Add "Deployment Options" section at top
+   - Docker Compose (development/testing) - existing content
+   - Proxmox LXC (production) - link to deployment-proxmox.md
+   - Clear guidance on which to use when
+
+2. **Update `CLAUDE.md`** (~20 min):
+   - Add "Proxmox Production Deployment" section
+   - Reference new Proxmox deployment guide
+   - Update architecture diagrams to show Proxmox option
+
+3. **Update `README.md`** (~20 min):
+   - Mention Proxmox as production deployment option
+   - Link to comprehensive Proxmox guide
+
+---
+
+**Quality Gate**:
+
+```bash
+# Verify all new documents exist
+test -f docs/user-guides/deployment-proxmox.md
+test -f docs/developer/cicd-operations-runbook.md
+
+# Verify existing docs updated
+grep -q "Proxmox LXC" docs/user-guides/deployment.md
+grep -q "Proxmox Production Deployment" CLAUDE.md
+
+# Manual review checklist:
+# ✅ Proxmox deployment guide is complete and actionable
+# ✅ CI/CD runbook covers all operational scenarios
+# ✅ Troubleshooting sections address real issues
+# ✅ All scripts from Tasks 6.1-6.5 are referenced
+# ✅ Clear distinction between Docker (dev) and Proxmox (prod)
+# ✅ No broken links or references
+```
+
+**Commits**:
+
+```bash
+# Commit each major document separately
+git commit -m "docs(proxmox): add comprehensive Proxmox LXC deployment guide"
+git commit -m "docs(ops): add CI/CD pipeline and operations runbook"
+git commit -m "docs(deployment): update deployment guide with Docker vs Proxmox guidance"
+```
+
+**Estimated Time**: 6 hours (3 + 2 + 1)
+
+**Dependencies**:
+
+- Task 5.4 (Docker deployment docs) - foundation
+- Task 6.1 (LXC template scripts) - reference
+- Task 6.2 (deployment scripts) - reference
+- Task 6.4 (configuration management) - reference
+- Task 6.5 (monitoring endpoints) - reference
+
+**Note**: This task completes the documentation trilogy: Docker (Task 5.4) → Proxmox (Task 6.6) → Operations (Task 6.6)
 
 ---
 
@@ -1064,23 +1449,31 @@ curl http://192.168.1.204:5003/health
 ✅ Worker provisioning automation
 ✅ Configuration management
 ✅ Production monitoring
+✅ Comprehensive Proxmox deployment documentation
+✅ CI/CD operations runbook
 ✅ **READY FOR**: Production deployment!
 
-**Total Phase 6 Time**: ~15 hours
+**Total Phase 6 Time**: ~19 hours (was 15 hours, +4 hours for comprehensive Task 6.6 documentation)
 
 ---
 
 ## Summary
 
 ### Phase 5: Distributed-Only Architecture
-- **Tasks 5.1-5.5** (Docker): 8.5 hours
-- **Task 5.6** (Multi-host - OPTIONAL): 6 hours
-- **Total**: 8.5-14.5 hours
+
+- **Tasks 5.1-5.3** (Code refactoring): 5 hours
+- **Task 5.4** (Comprehensive documentation): 8 hours
+- **Tasks 5.5-5.6** (Testing + migration): 5.5 hours
+- **Task 5.7** (Multi-host - OPTIONAL): 6 hours
+- **Total**: 18.5 hours (or 24.5 with multi-host)
 
 ### Phase 6: Production Deployment
-- **Tasks 6.1-6.6**: 15 hours
 
-### Grand Total: 23.5-29.5 hours
+- **Tasks 6.1-6.5** (Infrastructure + monitoring): 13 hours
+- **Task 6.6** (Comprehensive Proxmox docs): 6 hours
+- **Total**: 19 hours
+
+### Grand Total: 37.5-43.5 hours (was 23.5-29.5, +14 hours for comprehensive documentation)
 
 ---
 
