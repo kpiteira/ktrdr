@@ -1,8 +1,17 @@
-# Distributed Training & Backtesting Implementation Plan
+# Distributed Training & Backtesting Implementation Plan - Phases 1-4
 
 **Version**: 2.0 - Vertical Slices
-**Status**: Ready for Implementation
+**Status**: ✅ **COMPLETED** - Phase 4 Done!
 **Date**: 2025-11-08
+**Phases Covered**: 1-4 (WorkerAPIBase pattern extraction)
+
+---
+
+## 📋 Plan Navigation
+
+- **This Document**: Phases 1-4 (COMPLETED ✅)
+- **Next Steps**: [Phases 5-6](IMPLEMENTATION_PLAN_PHASES_5-6.md) - Production Deployment 🚀
+- **Advanced Topics**: [Production Enhancements](../advanced/PRODUCTION_ENHANCEMENTS.md) - Security, observability, load testing
 
 ---
 
@@ -11,6 +20,7 @@
 This implementation plan uses **Test-Driven Development** with **vertical slices**. Each phase delivers a complete, testable feature.
 
 **Quality Gates** (every task):
+
 - Write tests FIRST (TDD)
 - Pass ALL unit tests: `make test-unit`
 - Pass quality checks: `make quality`
@@ -37,6 +47,7 @@ All work will be done on a single feature branch: `claude/containerize-training-
 **Why This First**: Establishes the complete vertical stack with minimal infrastructure. We can test it works!
 
 **End State**:
+
 - Docker Compose with backend + 1 backtest worker
 - Worker self-registers on startup
 - Can submit a backtest → worker executes it → returns results
@@ -49,11 +60,14 @@ All work will be done on a single feature branch: `claude/containerize-training-
 **Objective**: Get basic Docker Compose environment working with backend + 1 backtest worker
 
 **TDD Approach**:
+
 - Manual testing (Docker Compose itself)
 - Validation: Backend starts, worker starts, both accessible
 
 **Implementation**:
+
 1. Create `docker/docker-compose.dev.yml`:
+
    ```yaml
    version: "3.8"
 
@@ -89,6 +103,7 @@ All work will be done on a single feature branch: `claude/containerize-training-
    ```
 
 2. Test:
+
    ```bash
    docker-compose -f docker/docker-compose.dev.yml up -d
    curl http://localhost:8000/health  # Backend should respond
@@ -97,6 +112,7 @@ All work will be done on a single feature branch: `claude/containerize-training-
    ```
 
 **Quality Gate**:
+
 ```bash
 # Manual verification
 docker-compose -f docker/docker-compose.dev.yml up -d
@@ -118,6 +134,7 @@ make quality
 **Objective**: Define minimal data models needed for worker registration
 
 **TDD Approach**:
+
 1. Create `tests/unit/api/models/test_workers.py`
 2. Write tests for:
    - `WorkerType` enum (BACKTESTING, CPU_TRAINING, GPU_HOST)
@@ -126,7 +143,9 @@ make quality
    - to_dict() / from_dict() serialization
 
 **Implementation**:
+
 1. Create `ktrdr/api/models/workers.py`:
+
    ```python
    from enum import Enum
    from dataclasses import dataclass, asdict
@@ -174,6 +193,7 @@ make quality
    ```
 
 **Quality Gate**:
+
 ```bash
 make test-unit
 make quality
@@ -190,6 +210,7 @@ make quality
 **Objective**: Create WorkerRegistry that can register and retrieve workers (no health checks yet)
 
 **TDD Approach**:
+
 1. Create `tests/unit/api/services/test_worker_registry.py`
 2. Write tests for:
    - `register_worker()` - adds worker
@@ -198,7 +219,9 @@ make quality
    - `list_workers()` - lists all
 
 **Implementation**:
+
 1. Create `ktrdr/api/services/worker_registry.py`:
+
    ```python
    from typing import Dict, Optional, List
    from ktrdr.api.models.workers import WorkerEndpoint, WorkerType, WorkerStatus
@@ -264,6 +287,7 @@ make quality
    ```
 
 **Quality Gate**:
+
 ```bash
 make test-unit
 make quality
@@ -280,11 +304,14 @@ make quality
 **Objective**: Add POST /workers/register endpoint
 
 **TDD Approach**:
+
 1. Create `tests/unit/api/endpoints/test_workers.py`
 2. Write tests for successful registration, idempotency, validation
 
 **Implementation**:
+
 1. Create `ktrdr/api/endpoints/workers.py`:
+
    ```python
    from fastapi import APIRouter, Depends
    from pydantic import BaseModel
@@ -348,6 +375,7 @@ make quality
    ```
 
 2. Add to `ktrdr/api/main.py`:
+
    ```python
    from ktrdr.api.endpoints import workers
 
@@ -355,6 +383,7 @@ make quality
    ```
 
 **Quality Gate**:
+
 ```bash
 make test-unit
 make quality
@@ -371,11 +400,14 @@ make quality
 **Objective**: Make backtest worker call POST /workers/register when it starts
 
 **TDD Approach**:
+
 1. Create `tests/unit/backtesting/test_worker_registration.py`
 2. Mock httpx to test registration logic
 
 **Implementation**:
+
 1. Modify `ktrdr/backtesting/remote_api.py`:
+
    ```python
    import os
    import httpx
@@ -442,6 +474,7 @@ make quality
    ```
 
 **Quality Gate**:
+
 ```bash
 make test-unit
 make quality
@@ -464,10 +497,12 @@ docker-compose -f docker/docker-compose.dev.yml down
 **Objective**: Submit a backtest, verify worker executes it, returns results
 
 **TDD Approach**:
+
 1. Create `tests/e2e/test_single_backtest_worker.py`
 2. Use Docker Compose test fixtures
 
 **Implementation**:
+
 1. Write E2E test that:
    - Starts Docker Compose (backend + 1 worker)
    - Waits for worker registration
@@ -477,6 +512,7 @@ docker-compose -f docker/docker-compose.dev.yml down
    - Cleans up
 
 **Quality Gate**:
+
 ```bash
 make test-unit
 make test-e2e  # This E2E test
@@ -506,6 +542,7 @@ make quality
 **Why This Second**: Builds on working system, adds reliability and concurrency
 
 **End State**:
+
 - Can scale workers: `docker-compose up --scale backtest-worker=3`
 - Health checks monitor worker status
 - Round-robin load balancing
@@ -519,12 +556,15 @@ make quality
 **Objective**: Add logic to select worker for dispatch
 
 **TDD Approach**:
+
 1. Add tests to `test_worker_registry.py`:
    - `select_worker(worker_type)` - returns least recently used
    - Round-robin behavior over multiple calls
 
 **Implementation**:
+
 1. Add to WorkerRegistry:
+
    ```python
    def get_available_workers(
        self,
@@ -565,6 +605,7 @@ make quality
    ```
 
 **Quality Gate**:
+
 ```bash
 make test-unit
 make quality
@@ -581,11 +622,14 @@ make quality
 **Objective**: Add health checking without background task yet
 
 **TDD Approach**:
+
 1. Add tests for `health_check_worker(worker_id)`
 2. Mock httpx calls
 
 **Implementation**:
+
 1. Add to WorkerRegistry:
+
    ```python
    async def health_check_worker(self, worker_id: str) -> bool:
        """Perform health check on a worker."""
@@ -628,6 +672,7 @@ make quality
    ```
 
 **Quality Gate**:
+
 ```bash
 make test-unit
 make quality
@@ -644,11 +689,14 @@ make quality
 **Objective**: Start background task that continuously health checks workers
 
 **TDD Approach**:
+
 1. Test start() and stop() methods
 2. Test background task runs checks
 
 **Implementation**:
+
 1. Add to WorkerRegistry:
+
    ```python
    def __init__(self):
        self._workers: Dict[str, WorkerEndpoint] = {}
@@ -687,6 +735,7 @@ make quality
    ```
 
 2. Integrate into API startup (modify `ktrdr/api/main.py`):
+
    ```python
    from ktrdr.api.endpoints.workers import get_worker_registry
 
@@ -702,6 +751,7 @@ make quality
    ```
 
 **Quality Gate**:
+
 ```bash
 make test-unit
 make quality
@@ -718,10 +768,13 @@ make quality
 **Objective**: Remove workers unavailable for > 5 minutes
 
 **TDD Approach**:
+
 1. Test cleanup logic with mocked timestamps
 
 **Implementation**:
+
 1. Add to WorkerRegistry:
+
    ```python
    def __init__(self):
        # ... existing init ...
@@ -758,6 +811,7 @@ make quality
    ```
 
 **Quality Gate**:
+
 ```bash
 make test-unit
 make quality
@@ -774,7 +828,9 @@ make quality
 **Objective**: Update Docker Compose to support worker scaling
 
 **Implementation**:
+
 1. Update `docker-compose.dev.yml`:
+
    ```yaml
    backtest-worker:
      # ... existing config ...
@@ -783,12 +839,14 @@ make quality
    ```
 
 2. Test scaling:
+
    ```bash
    docker-compose -f docker/docker-compose.dev.yml up -d --scale backtest-worker=3
    curl http://localhost:8000/api/v1/workers  # Should see 3 workers
    ```
 
 **Quality Gate**:
+
 ```bash
 # Manual test
 docker-compose -f docker/docker-compose.dev.yml up -d --scale backtest-worker=3
@@ -811,13 +869,16 @@ make quality
 **Objective**: Test multiple concurrent backtests across multiple workers
 
 **TDD Approach**:
+
 1. Create `tests/load/test_concurrent_backtests.py`
 2. Submit 5 backtests concurrently, verify all complete
 
 **Implementation**:
+
 1. Write load test with asyncio concurrent submissions
 
 **Quality Gate**:
+
 ```bash
 # Start environment with 3 workers
 docker-compose -f docker/docker-compose.dev.yml up -d --scale backtest-worker=3
@@ -855,6 +916,7 @@ make quality
 **Why This Third**: Applies same pattern to training, adds hybrid GPU/CPU logic
 
 **End State**:
+
 - Training workers in Docker Compose
 - GPU host configuration (manual)
 - Hybrid worker selection (GPU first, CPU fallback)
@@ -869,11 +931,14 @@ make quality
 **Objective**: Create training worker API with self-registration (similar to backtest worker)
 
 **TDD Approach**:
+
 1. Create `tests/unit/training/test_training_worker_api.py`
 2. Test worker startup, registration, basic endpoints
 
 **Implementation**:
+
 1. Create `ktrdr/training/training_worker_api.py`:
+
    ```python
    # Similar structure to ktrdr/backtesting/remote_api.py
    # - FastAPI app
@@ -885,6 +950,7 @@ make quality
 2. Create `ktrdr/training/worker_registration.py` (or reuse backtest pattern)
 
 3. Add to `docker/docker-compose.dev.yml`:
+
    ```yaml
    training-worker:
      image: ktrdr-backend:dev
@@ -896,6 +962,7 @@ make quality
    ```
 
 **Quality Gate**:
+
 ```bash
 make test-unit
 make quality
@@ -916,11 +983,14 @@ curl http://localhost:8000/api/v1/workers  # Should see training worker register
 **Objective**: Workers reject requests with 503 when busy, health reports actual status
 
 **TDD Approach**:
+
 1. Add tests for exclusivity enforcement
 2. Test health endpoint reports 'busy' vs 'idle'
 
 **Implementation**:
+
 1. Modify `/training/start` endpoint in `training_worker_api.py`:
+
    ```python
    @app.post("/training/start")
    async def start_training(request: TrainingStartRequest):
@@ -946,6 +1016,7 @@ curl http://localhost:8000/api/v1/workers  # Should see training worker register
    ```
 
 2. Update `/health` endpoint to report actual status:
+
    ```python
    @app.get("/health")
    async def health_check():
@@ -968,6 +1039,7 @@ curl http://localhost:8000/api/v1/workers  # Should see training worker register
    ```
 
 **Quality Gate**:
+
 ```bash
 make test-unit
 make quality
@@ -984,13 +1056,16 @@ make quality
 **Objective**: TrainingService uses WorkerRegistry for worker selection with GPU/CPU hybrid logic
 
 **TDD Approach**:
+
 1. Create `tests/unit/training/test_training_service_integration.py`
 2. Test worker selection (GPU first, CPU fallback)
 3. Test 503 retry logic
 4. Test no workers available scenario
 
 **Implementation**:
+
 1. Modify `ktrdr/training/training_manager.py`:
+
    ```python
    def __init__(self, worker_registry: Optional[WorkerRegistry] = None):
        super().__init__()
@@ -1023,6 +1098,7 @@ make quality
    ```
 
 2. Add hybrid selection logic:
+
    ```python
    def select_training_worker(self) -> Optional[WorkerEndpoint]:
        """
@@ -1043,6 +1119,7 @@ make quality
    - Clear error if all workers busy
 
 **Quality Gate**:
+
 ```bash
 make test-unit
 make quality
@@ -1059,6 +1136,7 @@ make quality
 **Objective**: Submit training operation, verify completes on CPU worker
 
 **TDD Approach**:
+
 1. Create `tests/e2e/test_training_workers.py`
 2. Test scenarios:
    - Training with CPU worker → succeeds
@@ -1066,6 +1144,7 @@ make quality
    - 4th request when 3 workers busy → retries and fails gracefully
 
 **Implementation**:
+
 ```python
 @pytest.mark.e2e
 async def test_training_on_cpu_worker():
@@ -1086,6 +1165,7 @@ async def test_training_worker_exclusivity():
 ```
 
 **Quality Gate**:
+
 ```bash
 make test-unit
 make test-e2e
@@ -1120,6 +1200,7 @@ make quality
 **Source**: training-host-service (port 5002) - **670 lines of proven working code**
 
 **End State**:
+
 - `WorkerAPIBase` containing 670 lines extracted from training-host-service
 - BacktestWorker reduced to ~100 lines (domain logic only)
 - TrainingWorker reduced to ~100 lines (domain logic only)
@@ -1127,6 +1208,7 @@ make quality
 - **TESTABLE**: Workers function identically to training-host-service
 
 **Architectural Benefit**:
+
 - Copy what works (training-host-service pattern already proven)
 - DRY principle (374 lines of operations endpoints used once!)
 - Consistency (all workers identical infrastructure from training-host-service)
@@ -1141,12 +1223,14 @@ make quality
 **Objective**: Create `ktrdr/workers/base.py` by extracting working code from training-host-service
 
 **Source Files** (copy from training-host-service):
+
 1. `training-host-service/services/operations.py` (41 lines)
 2. `training-host-service/endpoints/operations.py` (374 lines!)
 3. `training-host-service/endpoints/health.py` (~50 lines)
 4. `training-host-service/main.py` (FastAPI setup, ~200 lines)
 
 **TDD Approach**:
+
 1. Write tests for WorkerAPIBase with mock worker subclass
 2. Verify operations endpoints work (all 4 endpoints)
 3. Verify health endpoint reports busy/idle correctly
@@ -1595,11 +1679,13 @@ class TestWorkerAPIBase:
 ```
 
 **Step 3: Verify extraction with mypy**:
+
 ```bash
 mypy --strict ktrdr/workers/base.py
 ```
 
 **Quality Gate**:
+
 ```bash
 make test-unit  # All tests pass
 make quality    # Linting, formatting, type checking pass
@@ -1825,12 +1911,14 @@ app: FastAPI = worker.app
 ```
 
 **Update Docker Compose**:
+
 ```yaml
 backtest-worker:
   command: ["uvicorn", "ktrdr.backtesting.backtest_worker:app", ...]
 ```
 
 **Quality Gate**:
+
 ```bash
 make test-unit               # All tests pass
 make test-integration        # Integration tests pass
@@ -1854,6 +1942,7 @@ docker-compose up -d backtest-worker
 **Implementation**: Similar to Task 4.2 but for training operations
 
 **Create `ktrdr/training/training_worker.py`** (~100 lines):
+
 - Same pattern as BacktestWorker
 - Calls TrainingManager instead of BacktestingEngine
 - Follows training-host-service pattern exactly
@@ -1880,6 +1969,7 @@ docker-compose up -d backtest-worker
    - Update worker architecture diagrams
 
 3. **Run full E2E test suite**:
+
    ```bash
    make test-e2e --run-container-e2e
    ```
@@ -1893,6 +1983,7 @@ docker-compose up -d backtest-worker
 ### Phase 4 Verification
 
 **Manual Tests**:
+
 1. Start Docker Compose with workers
 2. Submit backtest operation → should complete successfully with progress
 3. Submit training operation → should complete successfully with progress
@@ -1914,6 +2005,7 @@ docker-compose up -d backtest-worker
 **Total Phase 4 Time**: ~9 hours
 
 **Key Learnings**:
+
 - ✅ Training-host-service pattern works - copy it!
 - ✅ 374 lines of operations endpoints are identical - extract once!
 - ✅ Operation ID synchronization via optional task_id parameter
@@ -1921,6 +2013,7 @@ docker-compose up -d backtest-worker
 - ✅ Call Engine directly, not Service (avoids nested operations)
 
 ---
+
 ## Phase 5: Remove Local Execution Mode (Pure Distributed Architecture)
 
 **Goal**: Eliminate local/remote duality - all operations execute on workers or host services
@@ -1928,6 +2021,7 @@ docker-compose up -d backtest-worker
 **Why This Fourth**: Clean up architecture, enforce distributed-only execution model
 
 **End State**:
+
 - No `USE_REMOTE_*_SERVICE` flags - always distributed
 - Backend is orchestrator only, never executes operations
 - BacktestingService always uses WorkerRegistry (no fallback)
@@ -1939,17 +2033,20 @@ docker-compose up -d backtest-worker
 
 ---
 
-### Task 4.1: Remove Local Backtesting Execution
+### Task 5.1: Remove Local Backtesting Execution
 
 **Objective**: BacktestingService requires WorkerRegistry, removes local execution code path
 
 **TDD Approach**:
+
 1. Update existing tests to expect RuntimeError when no workers available
 2. Remove tests for local execution mode
 3. Verify all tests pass with distributed-only mode
 
 **Implementation**:
+
 1. Modify `ktrdr/backtesting/backtesting_service.py`:
+
    ```python
    def __init__(self, worker_registry: WorkerRegistry):  # No Optional - required!
        """Initialize backtesting service (distributed-only mode)."""
@@ -1967,6 +2064,7 @@ docker-compose up -d backtest-worker
    ```
 
 2. Update `ktrdr/api/endpoints/backtesting.py`:
+
    ```python
    async def get_backtesting_service() -> BacktestingService:
        global _backtesting_service
@@ -1981,6 +2079,7 @@ docker-compose up -d backtest-worker
    - Delete `REMOTE_BACKTEST_SERVICE_URL` (use WorkerRegistry instead)
 
 **Quality Gate**:
+
 ```bash
 make test-unit
 make quality
@@ -1997,16 +2096,19 @@ docker-compose -f docker/docker-compose.dev.yml up -d backend
 
 ---
 
-### Task 4.2: Remove Local Training Execution
+### Task 5.2: Remove Local Training Execution
 
 **Objective**: TrainingService requires workers or host service, removes local execution
 
 **TDD Approach**:
+
 1. Update tests for distributed-only mode
 2. Verify graceful degradation when no workers available
 
 **Implementation**:
+
 1. Modify `ktrdr/training/training_manager.py`:
+
    ```python
    def __init__(self):
        """Initialize training service (distributed-only mode)."""
@@ -2040,6 +2142,7 @@ docker-compose -f docker/docker-compose.dev.yml up -d backend
    - Must explicitly choose: GPU host service OR CPU workers
 
 **Quality Gate**:
+
 ```bash
 make test-unit
 make quality
@@ -2051,12 +2154,14 @@ make quality
 
 ---
 
-### Task 4.3: Clean Up Environment Variables
+### Task 5.3: Clean Up Environment Variables
 
 **Objective**: Remove `USE_REMOTE_*` flags, simplify configuration
 
 **Implementation**:
+
 1. Update `docker/docker-compose.dev.yml`:
+
    ```yaml
    backend:
      environment:
@@ -2069,6 +2174,7 @@ make quality
    ```
 
 2. Update `docker/docker-compose.yml` (main dev environment):
+
    ```yaml
    backend:
      environment:
@@ -2083,6 +2189,7 @@ make quality
    - Update architecture diagrams
 
 **Quality Gate**:
+
 ```bash
 make quality
 
@@ -2097,12 +2204,14 @@ grep -r "USE_REMOTE_BACKTEST_SERVICE" . --exclude-dir=.git
 
 ---
 
-### Task 4.4: Update Documentation
+### Task 5.4: Update Documentation
 
 **Objective**: Document pure distributed architecture, remove local execution references
 
 **Implementation**:
+
 1. Update `CLAUDE.md`:
+
    ```markdown
    ## Distributed Architecture (Phase 4+)
 
@@ -2133,6 +2242,7 @@ grep -r "USE_REMOTE_BACKTEST_SERVICE" . --exclude-dir=.git
    - Explain graceful degradation (clear errors if no workers)
 
 **Quality Gate**:
+
 ```bash
 make quality
 ```
@@ -2143,11 +2253,12 @@ make quality
 
 ---
 
-### Task 4.5: Integration Test - Pure Distributed Mode
+### Task 5.5: Integration Test - Pure Distributed Mode
 
 **Objective**: End-to-end test verifying distributed-only operation
 
 **TDD Approach**:
+
 1. Create `tests/e2e/test_distributed_only.py`
 2. Test scenarios:
    - Backtest with workers → succeeds
@@ -2157,6 +2268,7 @@ make quality
    - Training without either → fails with clear error
 
 **Implementation**:
+
 ```python
 @pytest.mark.e2e
 async def test_backtest_requires_workers():
@@ -2174,6 +2286,7 @@ async def test_backtest_with_workers():
 ```
 
 **Quality Gate**:
+
 ```bash
 make test-e2e
 make test-unit
@@ -2186,7 +2299,7 @@ make quality
 
 ---
 
-**Phase 4 Checkpoint**:
+**Phase 5 Checkpoint**:
 ✅ No local execution mode in BacktestingService
 ✅ No local execution mode in TrainingService
 ✅ Backend is orchestrator-only (never executes operations)
@@ -2200,13 +2313,14 @@ make quality
 
 ---
 
-## Phase 5: Production Deployment & Continuous Delivery
+## Phase 6: Production Deployment & Continuous Delivery
 
 **Goal**: Production-ready deployment with continuous delivery pipeline
 
 **Why This Fifth**: Architecture is clean, now make it production-ready with automated deployment
 
 **End State**:
+
 - LXC template for base environment (OS, Python, dependencies)
 - Automated code deployment (separate from template - enables CD!)
 - Configuration management (dev/prod environments)
@@ -2217,22 +2331,25 @@ make quality
 
 ---
 
-### Task 5.1: LXC Base Template Creation
+### Task 6.1: LXC Base Template Creation
 
 **Objective**: Create reusable LXC template with base environment (NOT code!)
 
 **Why Template Doesn't Include Code**:
+
 - Template changes are slow (rebuild, redeploy all workers)
 - Code changes are frequent (every commit/PR)
 - Solution: Template = base environment, code deployed separately
 
 **TDD Approach**:
+
 - Automation script testing
 - Template validation
 
 **Implementation**:
 
 1. Create `scripts/proxmox/create-base-template.sh`:
+
    ```bash
    #!/bin/bash
    # Creates Proxmox LXC template with base environment
@@ -2322,6 +2439,7 @@ make quality
    - Clean up
 
 **Quality Gate**:
+
 ```bash
 # Run on Proxmox host
 ./scripts/proxmox/create-base-template.sh
@@ -2337,19 +2455,21 @@ make quality
 
 ---
 
-### Task 5.2: Code Deployment Scripts (CD-Friendly!)
+### Task 6.2: Code Deployment Scripts (CD-Friendly!)
 
 **Objective**: Deploy code to workers WITHOUT rebuilding templates
 
 **Why Separate**: Enables continuous deployment - update code on all workers with one command!
 
 **TDD Approach**:
+
 - Script testing with mocks
 - Integration test on test LXC
 
 **Implementation**:
 
 1. Create `scripts/deploy/update-code.sh` (runs ON each worker):
+
    ```bash
    #!/bin/bash
    # Updates code on worker (called by systemd service or deployment script)
@@ -2378,6 +2498,7 @@ make quality
    ```
 
 2. Create `scripts/deploy/deploy-to-workers.sh` (runs FROM control machine):
+
    ```bash
    #!/bin/bash
    # Deploys code update to all workers
@@ -2401,6 +2522,7 @@ make quality
    ```
 
 3. Create `config/workers.prod.txt` (example):
+
    ```
    ktrdr-backtest-1,192.168.1.201,backtesting
    ktrdr-backtest-2,192.168.1.202,backtesting
@@ -2408,6 +2530,7 @@ make quality
    ```
 
 **Quality Gate**:
+
 ```bash
 # Test on one LXC worker
 ./scripts/deploy/update-code.sh  # Run on worker
@@ -2423,13 +2546,14 @@ make quality
 
 ---
 
-### Task 5.3: Worker Provisioning Automation
+### Task 6.3: Worker Provisioning Automation
 
 **Objective**: Automate creating new workers from template
 
 **Implementation**:
 
 1. Create `scripts/proxmox/provision-worker.sh`:
+
    ```bash
    #!/bin/bash
    # Provisions new worker from template
@@ -2481,6 +2605,7 @@ make quality
    - Parallel provisioning for speed
 
 **Quality Gate**:
+
 ```bash
 # Provision one test worker
 ./scripts/proxmox/provision-worker.sh 1 backtesting 192.168.1.201
@@ -2498,13 +2623,14 @@ make quality
 
 ---
 
-### Task 5.4: Configuration Management
+### Task 6.4: Configuration Management
 
 **Objective**: Environment-specific configuration (dev vs prod)
 
 **Implementation**:
 
 1. Create `config/workers.dev.yaml`:
+
    ```yaml
    backend_url: http://localhost:8000
 
@@ -2523,6 +2649,7 @@ make quality
    ```
 
 2. Create `config/workers.prod.yaml`:
+
    ```yaml
    backend_url: http://192.168.1.100:8000
 
@@ -2555,6 +2682,7 @@ make quality
    ```
 
 3. Create `ktrdr/config/worker_config.py`:
+
    ```python
    from pathlib import Path
    import yaml
@@ -2570,6 +2698,7 @@ make quality
    ```
 
 **Quality Gate**:
+
 ```bash
 make test-unit
 make quality
@@ -2581,13 +2710,14 @@ make quality
 
 ---
 
-### Task 5.5: Monitoring Endpoints
+### Task 6.5: Monitoring Endpoints
 
 **Objective**: Expose metrics for observability
 
 **Implementation**:
 
 1. Create `ktrdr/api/endpoints/metrics.py`:
+
    ```python
    from fastapi import APIRouter, Depends
    from ktrdr.api.endpoints.workers import get_worker_registry
@@ -2659,12 +2789,14 @@ make quality
    ```
 
 2. Add to `ktrdr/api/main.py`:
+
    ```python
    from ktrdr.api.endpoints import metrics
    app.include_router(metrics.router, prefix="/api/v1")
    ```
 
 **Quality Gate**:
+
 ```bash
 make test-unit
 make quality
@@ -2680,13 +2812,14 @@ curl http://localhost:8000/api/v1/metrics/prometheus
 
 ---
 
-### Task 5.6: CI/CD Pipeline Documentation
+### Task 6.6: CI/CD Pipeline Documentation
 
 **Objective**: Document deployment workflow
 
 **Implementation**:
 
 1. Create `docs/deployment/DEPLOYMENT_GUIDE.md`:
+
    ```markdown
    # KTRDR Distributed Workers - Deployment Guide
 
@@ -2700,6 +2833,7 @@ curl http://localhost:8000/api/v1/metrics/prometheus
    ```
 
    **Provision workers** (once per worker):
+
    ```bash
    ./scripts/proxmox/provision-fleet.sh config/workers.prod.yaml
    ```
@@ -2707,12 +2841,14 @@ curl http://localhost:8000/api/v1/metrics/prometheus
    ### 2. Deploy Code Updates (Every Commit/PR)
 
    **Automatic deployment** (CI/CD):
+
    ```bash
    # In your CI/CD pipeline (GitHub Actions, GitLab CI, etc.)
    ./scripts/deploy/deploy-to-workers.sh config/workers.prod.txt
    ```
 
    **Manual deployment**:
+
    ```bash
    # Deploy to all workers
    ./scripts/deploy/deploy-to-workers.sh
@@ -2736,9 +2872,11 @@ curl http://localhost:8000/api/v1/metrics/prometheus
    - **Template**: Base environment (OS, Python, uv) - rarely changes
    - **Code deployment**: Git pull + uv sync - changes frequently
    - **No template rebuilds needed for code updates!**
+
    ```
 
 2. Create `.github/workflows/deploy-workers.yml` (example):
+
    ```yaml
    name: Deploy to Workers
 
@@ -2762,6 +2900,7 @@ curl http://localhost:8000/api/v1/metrics/prometheus
    ```
 
 **Quality Gate**:
+
 ```bash
 make quality  # Docs linting
 ```
@@ -2781,7 +2920,7 @@ make quality  # Docs linting
 ✅ **TESTABLE**: Deploy code update to all workers with one command
 ✅ **CI/CD Ready**: No template rebuilds for code changes
 
-**Total Phase 5 Time**: ~10 hours
+**Total Phase 6 Time**: ~10 hours
 
 ---
 
@@ -2803,6 +2942,7 @@ make quality  # Docs linting
 ### Implementation Strategy
 
 **MVP First (Phases 1-3, ~26 hours)**:
+
 - Complete distributed system working in Docker Compose
 - Supports both local and remote execution (hybrid)
 - Fully functional for development and testing
@@ -2811,12 +2951,14 @@ make quality  # Docs linting
 - **You can use it!**
 
 **Clean Architecture (Phase 4, ~8.5 hours)**:
+
 - Remove local execution mode entirely
 - Backend orchestrates only, never executes
 - Simplified codebase with single execution path
 - **You can trust it!**
 
 **Production Ready (Phase 5, ~10 hours)**:
+
 - Proxmox LXC deployment automation
 - Continuous delivery pipeline (no template rebuilds!)
 - Monitoring and observability
@@ -2825,11 +2967,13 @@ make quality  # Docs linting
 ### Key Improvements Over Previous Plan
 
 **Vertical Slices**:
+
 - ✅ Phase 1 ends with working distributed backtesting (testable!)
 - ✅ Phase 2 ends with scaled, reliable system (testable!)
 - ✅ Phase 3 ends with training support (testable!)
 
 **Not Horizontal Layers**:
+
 - ❌ No "build all models first" phase
 - ❌ No "build all services first" phase
 - ✅ Each phase delivers complete functionality
@@ -2837,6 +2981,7 @@ make quality  # Docs linting
 ### Quality Standards
 
 Every task must pass:
+
 ```bash
 make test-unit      # All unit tests (existing + new)
 make quality        # Lint + format + typecheck
@@ -2857,9 +3002,3 @@ make quality        # Lint + format + typecheck
 2. ✅ Review and approve ARCHITECTURE.md
 3. ✅ Review and approve IMPLEMENTATION_PLAN.md (this document - v2.0)
 4. 🚀 Begin Phase 1, Task 1.1
-
----
-
-**Ready to implement with vertical slices!** 🎯
-
-Each phase delivers working, testable functionality from day one.
