@@ -119,89 +119,136 @@ docker-compose -f docker/docker-compose.dev.yml up -d backend
 
 ### Task 5.2: Remove Local Training Execution
 
-**Objective**: TrainingService requires workers or host service, removes local execution
+**Objective**: TrainingService requires WorkerRegistry, implements GPU-first CPU-fallback selection, removes local execution
 
 **TDD Approach**:
 
-1. Update tests for distributed-only mode
-2. Verify graceful degradation when no workers available
+1. Update tests for distributed-only mode with GPU-first CPU-fallback logic
+2. Verify worker selection priority: GPU → CPU → Error
+3. Remove tests for local execution mode
 
 **Implementation**:
 
-1. Modify `ktrdr/training/training_manager.py`:
+1. Modify `ktrdr/api/services/training_service.py`:
 
    ```python
-   def __init__(self):
+   def __init__(self, worker_registry: WorkerRegistry):  # Required, not Optional!
        """Initialize training service (distributed-only mode)."""
        super().__init__()
+       self.worker_registry = worker_registry  # Required
+       self._operation_workers: dict[str, str] = {}
 
-       # Check if GPU host service is configured
-       self.use_gpu_host = os.getenv("USE_TRAINING_HOST_SERVICE", "false").lower() in ("true", "1", "yes")
+       logger.info("Training service initialized (distributed mode: GPU-first, CPU-fallback)")
 
-       if self.use_gpu_host:
-           # GPU host service mode
-           self.adapter = TrainingHostAdapter(...)
-       else:
-           # CPU worker mode - require WorkerRegistry
-           worker_registry = get_worker_registry()
-           if not worker_registry:
-               raise RuntimeError(
-                   "Training requires either GPU host service or CPU workers. "
-                   "Neither configured. Set USE_TRAINING_HOST_SERVICE=true or start training workers."
-               )
-           self.worker_registry = worker_registry
+   def _select_training_worker(self, context: dict) -> Optional[WorkerEndpoint]:
+       """
+       Select training worker with GPU-first, CPU-fallback strategy.
 
-       logger.info(f"Training service initialized ({'GPU host' if self.use_gpu_host else 'CPU workers'} mode)")
+       Priority:
+       1. Try GPU workers first (10x-100x faster)
+       2. Fallback to CPU workers if no GPU available
+       3. Raise error if no workers available
+       """
+       # Try GPU workers first
+       gpu_workers = self.worker_registry.get_available_workers(
+           worker_type=WorkerType.TRAINING,
+           capabilities={"gpu": True}
+       )
 
-   # Remove local training execution code
-   # All training now goes through GPU host service OR CPU workers
+       if gpu_workers:
+           logger.info("Selected GPU worker for training (10x-100x faster)")
+           return gpu_workers[0]
+
+       # Fallback to CPU workers
+       cpu_workers = self.worker_registry.get_available_workers(
+           worker_type=WorkerType.TRAINING,
+           capabilities={"gpu": False}
+       )
+
+       if cpu_workers:
+           logger.info("Selected CPU worker for training (GPU unavailable)")
+           return cpu_workers[0]
+
+       # No workers available
+       raise RuntimeError(
+           "No training workers available. Start GPU or CPU training workers."
+       )
+
+   # Remove _initialize_adapter() - no adapter pattern anymore
+   # Remove local execution code
+   # Remove USE_TRAINING_HOST_SERVICE environment variable handling
+   # Always use WorkerRegistry with GPU-first, CPU-fallback selection
    ```
 
-2. Remove local execution fallback
+2. Update `ktrdr/api/endpoints/training.py`:
+
+   ```python
+   async def get_training_service() -> TrainingService:
+       global _training_service
+       if _training_service is None:
+           worker_registry = get_worker_registry()  # Always required
+           _training_service = TrainingService(worker_registry=worker_registry)
+       return _training_service
+   ```
+
+3. Remove environment variable handling:
+   - Delete `USE_TRAINING_HOST_SERVICE` checks
+   - Delete `TRAINING_HOST_SERVICE_URL` usage
+   - Workers register themselves with capabilities (gpu: true/false)
 
 **Quality Gate**:
 
 ```bash
 make test-unit
 make quality
+
+# Manual test - should fail gracefully with no workers
+docker-compose -f docker/docker-compose.dev.yml up -d backend
+# (no workers started)
+# Try to start training -> Should get clear error: "No training workers available"
 ```
 
-**Commit**: `refactor(training): remove local execution mode, require workers or GPU host service`
+**Commit**: `refactor(training): remove local execution, implement GPU-first CPU-fallback worker selection`
 
-**Estimated Time**: 2 hours
+**Estimated Time**: 3 hours
 
 ---
 
 ### Task 5.3: Clean Up Environment Variables
 
-**Objective**: Remove unused environment variables, document required ones
+**Objective**: Remove all local/remote toggle environment variables (pure distributed architecture)
 
 **Implementation**:
 
-1. Delete from `docker-compose.yml`:
-   - `USE_REMOTE_BACKTEST_SERVICE` (always remote now)
+1. Delete from `docker-compose.yml` and codebase:
+   - `USE_REMOTE_BACKTEST_SERVICE` (always use WorkerRegistry now)
    - `REMOTE_BACKTEST_SERVICE_URL` (use WorkerRegistry)
+   - `USE_TRAINING_HOST_SERVICE` (always use WorkerRegistry with GPU-first logic)
+   - `TRAINING_HOST_SERVICE_URL` (workers register themselves)
 
-2. Keep:
-   - `USE_TRAINING_HOST_SERVICE` (toggle between GPU host vs CPU workers)
-   - `TRAINING_HOST_SERVICE_URL` (for GPU host service)
-   - `USE_IB_HOST_SERVICE` (IB Gateway access)
+2. Keep only IB-specific variables (IB Gateway requires host service):
+   - `USE_IB_HOST_SERVICE` (IB Gateway access requires host service)
    - `IB_HOST_SERVICE_URL`
 
 3. Update `.env.example` with new structure:
 
    ```bash
-   # Backend always uses WorkerRegistry for backtesting (no local execution)
-   # Training can use GPU host service OR CPU workers
+   # Pure Distributed Architecture
+   # Backend always uses WorkerRegistry for backtesting and training (no local execution)
+   # Workers register themselves on startup (push-based registration)
 
-   # GPU Training (requires training-host-service)
-   USE_TRAINING_HOST_SERVICE=true
-   TRAINING_HOST_SERVICE_URL=http://host.docker.internal:5002
-
-   # IB Data Access (requires ib-host-service)
+   # IB Data Access (requires ib-host-service for IB Gateway TCP connection)
    USE_IB_HOST_SERVICE=true
    IB_HOST_SERVICE_URL=http://host.docker.internal:5001
+
+   # Worker Configuration (workers register themselves)
+   # No backend environment variables needed - workers discover backend via service discovery
    ```
+
+4. Update documentation:
+   - Remove references to USE_TRAINING_HOST_SERVICE
+   - Document worker registration pattern
+   - Explain GPU-first CPU-fallback automatic selection
 
 **Quality Gate**:
 
@@ -210,6 +257,11 @@ make quality
 docker-compose up -d
 docker-compose logs | grep -i "error\|warning"
 # Should be no errors about missing env vars
+
+# Verify workers can register
+curl -X POST http://localhost:8000/api/v1/workers/register \
+  -H "Content-Type: application/json" \
+  -d '{"worker_id":"test","worker_type":"TRAINING","capabilities":{"gpu":true}}'
 ```
 
 **Commit**: `refactor(config): clean up environment variables for distributed-only mode`
