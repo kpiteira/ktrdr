@@ -30,7 +30,7 @@ class TestWorkerRegistration:
 
     def test_init_uses_defaults(self):
         """Test initialization with default values."""
-        with patch.dict(os.environ, {}, clear=True):
+        with patch.dict(os.environ, {"KTRDR_API_URL": "http://backend:8000"}, clear=True):
             with patch("socket.gethostname", return_value="container-abc123"):
                 registration = WorkerRegistration()
 
@@ -41,7 +41,7 @@ class TestWorkerRegistration:
 
     def test_get_endpoint_url_with_hostname(self):
         """Test endpoint URL construction using hostname."""
-        with patch.dict(os.environ, {"WORKER_ID": "backtest-1"}):
+        with patch.dict(os.environ, {"WORKER_ID": "backtest-1", "KTRDR_API_URL": "http://backend:8000"}):
             with patch("socket.gethostname", return_value="worker-host"):
                 registration = WorkerRegistration()
                 endpoint_url = registration.get_endpoint_url()
@@ -50,19 +50,20 @@ class TestWorkerRegistration:
 
     def test_get_capabilities_default(self):
         """Test getting default capabilities."""
-        registration = WorkerRegistration()
-        capabilities = registration.get_capabilities()
+        with patch.dict(os.environ, {"KTRDR_API_URL": "http://backend:8000"}):
+            registration = WorkerRegistration()
+            capabilities = registration.get_capabilities()
 
-        # Should have basic capabilities
-        assert "cores" in capabilities
-        assert "memory_gb" in capabilities
-        assert isinstance(capabilities["cores"], int)
-        assert isinstance(capabilities["memory_gb"], (int, float))
+            # Should have basic capabilities
+            assert "cores" in capabilities
+            assert "memory_gb" in capabilities
+            assert isinstance(capabilities["cores"], int)
+            assert isinstance(capabilities["memory_gb"], (int, float))
 
     @pytest.mark.asyncio
     async def test_register_success(self):
         """Test successful worker registration."""
-        with patch.dict(os.environ, {"WORKER_ID": "backtest-1"}):
+        with patch.dict(os.environ, {"WORKER_ID": "backtest-1", "KTRDR_API_URL": "http://backend:8000"}):
             registration = WorkerRegistration()
 
             # Mock the HTTP client
@@ -82,7 +83,7 @@ class TestWorkerRegistration:
     @pytest.mark.asyncio
     async def test_register_handles_connection_error(self):
         """Test registration handles connection errors gracefully."""
-        with patch.dict(os.environ, {"WORKER_ID": "backtest-1"}):
+        with patch.dict(os.environ, {"WORKER_ID": "backtest-1", "KTRDR_API_URL": "http://backend:8000"}):
             registration = WorkerRegistration()
 
             # Mock connection error
@@ -96,7 +97,7 @@ class TestWorkerRegistration:
     @pytest.mark.asyncio
     async def test_register_retries_on_failure(self):
         """Test registration retries on failure."""
-        with patch.dict(os.environ, {"WORKER_ID": "backtest-1"}):
+        with patch.dict(os.environ, {"WORKER_ID": "backtest-1", "KTRDR_API_URL": "http://backend:8000"}):
             registration = WorkerRegistration(max_retries=3, retry_delay=0.1)
 
             call_count = 0
@@ -121,7 +122,7 @@ class TestWorkerRegistration:
     @pytest.mark.asyncio
     async def test_register_gives_up_after_max_retries(self):
         """Test registration gives up after max retries."""
-        with patch.dict(os.environ, {"WORKER_ID": "backtest-1"}):
+        with patch.dict(os.environ, {"WORKER_ID": "backtest-1", "KTRDR_API_URL": "http://backend:8000"}):
             registration = WorkerRegistration(max_retries=2, retry_delay=0.1)
 
             # Always fail
