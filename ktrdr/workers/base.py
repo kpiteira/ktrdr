@@ -13,7 +13,7 @@ Source: training-host-service/
 
 import os
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import FastAPI, HTTPException, Path, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -392,13 +392,55 @@ class WorkerAPIBase:
 
     async def self_register(self) -> None:
         """
-        Register this worker with backend.
+        Register this worker with backend's WorkerRegistry.
 
-        Pattern from training-host-service worker registration.
+        Sends worker metadata to backend's POST /workers/register endpoint.
         """
-        # For now, this is a placeholder - worker registration will be implemented
-        # in the actual worker classes that inherit from this base
-        logger.info(
-            f"Worker self-registration placeholder (worker_id: {self.worker_id})"
-        )
-        # TODO: Implement actual registration in Phase 1, Task 1.5
+        import httpx
+
+        registration_url = f"{self.backend_url}/api/v1/workers/register"
+
+        # Determine worker capabilities (GPU detection for training workers)
+        capabilities: dict[str, Any] = {}
+        if self.worker_type.value == "training":
+            # Detect GPU for training workers
+            try:
+                import torch
+
+                capabilities["gpu"] = (
+                    torch.cuda.is_available() or torch.backends.mps.is_available()
+                )
+                if capabilities["gpu"]:
+                    if torch.cuda.is_available():
+                        capabilities["gpu_type"] = "CUDA"
+                        capabilities["gpu_count"] = torch.cuda.device_count()
+                    elif torch.backends.mps.is_available():
+                        capabilities["gpu_type"] = "MPS"
+                        capabilities["gpu_count"] = 1
+            except ImportError:
+                logger.debug("PyTorch not available - no GPU detection")
+
+        # Detect actual resolvable hostname (Docker container name)
+        import socket
+
+        hostname = socket.gethostname()
+
+        payload = {
+            "worker_id": self.worker_id,
+            "worker_type": self.worker_type.value,
+            "endpoint_url": f"http://{hostname}:{self.worker_port}",
+            "capabilities": capabilities,
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(registration_url, json=payload)
+                response.raise_for_status()
+                logger.info(
+                    f"✅ Worker registered successfully: {self.worker_id} "
+                    f"(type: {self.worker_type.value}, capabilities: {capabilities})"
+                )
+        except Exception as e:
+            logger.warning(
+                f"⚠️  Worker self-registration failed (will retry via health checks): {e}"
+            )

@@ -97,11 +97,9 @@ async def startup_event():
         f"✅ OperationsService initialized (cache_ttl={_operations_service._cache_ttl}s)"
     )
 
-    # Initialize BacktestingService (will run in local mode)
-    backtest_service = get_backtest_service()
-    logger.info(
-        f"✅ BacktestingService initialized (mode: {'remote' if backtest_service._use_remote else 'local'})"
-    )
+    # Initialize BacktestingService (distributed-only mode)
+    get_backtest_service()
+    logger.info("✅ BacktestingService initialized (mode: distributed, workers-only)")
 
     # Register with backend (self-registration)
     logger.info("")

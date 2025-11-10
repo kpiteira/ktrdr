@@ -323,6 +323,7 @@ class BacktestingService(ServiceOrchestrator[None]):
         strategy_name = os.path.splitext(os.path.basename(strategy_config_path))[0]
 
         request_payload = {
+            "task_id": operation_id,  # ← CRITICAL: Synchronize operation IDs (training-host pattern)
             "strategy_name": strategy_name,  # Remote API expects strategy_name, not path
             "symbol": symbol,
             "timeframe": timeframe,

@@ -5,6 +5,7 @@ This worker implements the same pattern as training-host-service but uses
 WorkerAPIBase for common infrastructure.
 """
 
+import asyncio
 import os
 import uuid
 from typing import Any, Optional
@@ -18,7 +19,6 @@ from ktrdr.api.models.workers import WorkerType
 # Note: TrainingProgressBridge requires TrainingOperationContext which is complex
 # For now, we'll use direct progress callbacks instead
 from ktrdr.logging import get_logger
-from ktrdr.training.training_manager import TrainingManager
 from ktrdr.workers.base import WorkerAPIBase
 
 logger = get_logger(__name__)
@@ -66,9 +66,6 @@ class TrainingWorker(WorkerAPIBase):
             backend_url=backend_url,
         )
 
-        # Force local mode (this service should never use remote mode)
-        os.environ["USE_TRAINING_HOST_SERVICE"] = "false"
-
         # Register domain-specific endpoint
         @self.app.post("/training/start")
         async def start_training(request: TrainingStartRequest):
@@ -78,18 +75,18 @@ class TrainingWorker(WorkerAPIBase):
             Follows training-host-service pattern:
             - Accepts task_id from backend for ID synchronization
             - Returns operation_id back to backend
+            - Starts work in background, returns immediately
             """
             # Use backend's task_id if provided, generate if not
             operation_id = request.task_id or f"worker_training_{uuid.uuid4().hex[:12]}"
 
-            # Execute work following training-host pattern
-            result = await self._execute_training_work(operation_id, request)
+            # Start work in background (non-blocking!) - training-host pattern
+            asyncio.create_task(self._execute_training_work(operation_id, request))
 
             return {
                 "success": True,
-                "operation_id": operation_id,  # ← Return same ID to backend!
+                "operation_id": operation_id,  # Standard field (WorkerAPIBase pattern)
                 "status": "started",
-                **result,
             }
 
     async def _execute_training_work(
@@ -142,34 +139,95 @@ class TrainingWorker(WorkerAPIBase):
             ),
         )
 
-        # 2. Progress tracking (simplified - no bridge needed for now)
-        # TrainingManager handles its own progress tracking
-        logger.info(f"Starting training for operation {operation_id}")
+        # 2. Mark operation as RUNNING (CRITICAL for progress reporting!)
+        # Create a dummy task - actual work happens below
+        dummy_task = asyncio.create_task(asyncio.sleep(0))
+        await self._operations_service.start_operation(operation_id, dummy_task)
+        logger.info(f"Marked operation {operation_id} as RUNNING")
 
-        # 3. Execute actual work (TrainingManager)
+        # 3. Execute actual work (LocalTrainingOrchestrator - direct execution)
         try:
-            # Create training manager
-            manager = TrainingManager()
+            # Use LocalTrainingOrchestrator directly - worker IS the execution environment
+            import tempfile
+            from pathlib import Path
+
+            from ktrdr.api.services.training.context import build_training_context
+            from ktrdr.api.services.training.local_orchestrator import (
+                LocalTrainingOrchestrator,
+            )
+            from ktrdr.api.services.training.progress_bridge import (
+                TrainingProgressBridge,
+            )
+            from ktrdr.training.model_storage import ModelStorage
 
             # Get cancellation token
             cancellation_token = self._operations_service.get_cancellation_token(
                 operation_id
             )
 
-            # Run training (async)
-            # TODO: Need to create temporary YAML file from strategy_yaml string
-            # For now, use a placeholder path
-            result = await manager.train_multi_symbol_strategy(
-                strategy_config_path="temp_strategy.yaml",  # TODO: Create from request.strategy_yaml
-                symbols=request.symbols or ["AAPL"],
-                timeframes=request.timeframes or ["1d"],
-                start_date=request.start_date or "2020-01-01",
-                end_date=request.end_date or "2024-12-31",
-                validation_split=0.2,
-                data_mode="local",
-                progress_callback=None,  # TrainingManager handles progress internally
-                cancellation_token=cancellation_token,
-            )
+            # Extract strategy name from YAML content FIRST
+            strategy_name = "neuro_mean_reversion"  # Default
+            for line in request.strategy_yaml.split("\n"):
+                if line.strip().startswith("name:"):
+                    strategy_name = line.split(":", 1)[1].strip().strip('"').strip("'")
+                    break
+
+            # Create temp directory and file with CORRECT strategy name
+            # This is critical: build_training_context() looks for {strategy_name}.yaml
+            temp_dir = tempfile.mkdtemp()
+            temp_yaml_path = Path(temp_dir) / f"{strategy_name}.yaml"
+
+            try:
+                # Write YAML to temp file with correct name
+                with open(temp_yaml_path, "w") as f:
+                    f.write(request.strategy_yaml)
+
+                # Build training context (will find the file now!)
+                context = build_training_context(
+                    operation_id=operation_id,
+                    strategy_name=strategy_name,
+                    symbols=request.symbols or ["AAPL"],
+                    timeframes=request.timeframes or ["1d"],
+                    start_date=request.start_date,
+                    end_date=request.end_date,
+                    detailed_analytics=False,
+                    use_host_service=False,  # Local execution on worker
+                    strategy_search_paths=[Path(temp_dir)],
+                )
+
+                # Create progress bridge and register it (CRITICAL for progress reporting!)
+                # TrainingProgressBridge requires either progress_manager or update_progress_callback
+                # We use pull-based progress via OperationsService, so provide a no-op callback
+                def noop_callback(**kwargs):
+                    pass
+
+                bridge = TrainingProgressBridge(
+                    context=context,
+                    update_progress_callback=noop_callback,
+                    cancellation_token=cancellation_token,
+                )
+                self._operations_service.register_local_bridge(operation_id, bridge)
+                logger.info(f"Registered training bridge for operation {operation_id}")
+
+                # Create model storage
+                model_storage = ModelStorage()
+
+                # Create orchestrator
+                orchestrator = LocalTrainingOrchestrator(
+                    context=context,
+                    progress_bridge=bridge,
+                    cancellation_token=cancellation_token,
+                    model_storage=model_storage,
+                )
+
+                # Run training (async)
+                result = await orchestrator.run()
+            finally:
+                # Clean up temp directory
+                import shutil
+
+                if os.path.exists(temp_dir):
+                    shutil.rmtree(temp_dir)
 
             # 4. Complete operation
             await self._operations_service.complete_operation(

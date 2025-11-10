@@ -69,18 +69,18 @@ class BacktestWorker(WorkerAPIBase):
             Follows training-host-service pattern:
             - Accepts task_id from backend for ID synchronization
             - Returns operation_id back to backend
+            - Starts work in background, returns immediately
             """
             # Use backend's task_id if provided, generate if not
             operation_id = request.task_id or f"worker_backtest_{uuid.uuid4().hex[:12]}"
 
-            # Execute work following training-host pattern
-            result = await self._execute_backtest_work(operation_id, request)
+            # Start work in background (non-blocking!) - training-host pattern
+            asyncio.create_task(self._execute_backtest_work(operation_id, request))
 
             return {
                 "success": True,
                 "operation_id": operation_id,  # ← Return same ID to backend!
                 "status": "started",
-                **result,
             }
 
     async def _execute_backtest_work(
@@ -139,6 +139,12 @@ class BacktestWorker(WorkerAPIBase):
 
         self._operations_service.register_local_bridge(operation_id, bridge)
         logger.info(f"Registered backtest bridge for operation {operation_id}")
+
+        # 2.5. Mark operation as RUNNING (CRITICAL for progress reporting!)
+        # Create a dummy task - actual work happens in asyncio.to_thread below
+        dummy_task = asyncio.create_task(asyncio.sleep(0))
+        await self._operations_service.start_operation(operation_id, dummy_task)
+        logger.info(f"Marked operation {operation_id} as RUNNING")
 
         # 3. Execute actual work (Engine, not Service!)
         try:

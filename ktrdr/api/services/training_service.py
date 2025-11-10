@@ -14,10 +14,8 @@ from ktrdr.api.models.workers import WorkerType
 from ktrdr.api.services.operations_service import get_operations_service
 from ktrdr.api.services.training import (
     TrainingOperationContext,
-    TrainingProgressBridge,
     build_training_context,
 )
-from ktrdr.api.services.training.local_orchestrator import LocalTrainingOrchestrator
 from ktrdr.api.services.training.training_progress_renderer import (
     TrainingProgressRenderer,
 )
@@ -25,9 +23,9 @@ from ktrdr.async_infrastructure.service_orchestrator import ServiceOrchestrator
 from ktrdr.backtesting.model_loader import ModelLoader
 from ktrdr.errors import ValidationError
 from ktrdr.training.model_storage import ModelStorage
-from ktrdr.training.training_adapter import TrainingAdapter
 
 if TYPE_CHECKING:
+    from ktrdr.api.models.workers import WorkerEndpoint
     from ktrdr.api.services.worker_registry import WorkerRegistry
 
 logger = get_logger(__name__)
@@ -36,19 +34,20 @@ logger = get_logger(__name__)
 _loaded_models: dict[str, Any] = {}
 
 
-class TrainingService(ServiceOrchestrator[TrainingAdapter | None]):
-    """Service for neural network training operations.
+class TrainingService(ServiceOrchestrator[None]):
+    """Service for neural network training operations (distributed-only mode).
 
-    Adapter is None for local training mode (uses LocalTrainingOrchestrator directly).
-    Adapter is TrainingAdapter for host service mode.
+    TrainingService requires WorkerRegistry and always uses distributed workers.
+    GPU workers are preferred for performance, with automatic fallback to CPU workers.
     """
 
-    def __init__(self, worker_registry: Optional["WorkerRegistry"] = None) -> None:
-        """Initialize training service.
+    def __init__(self, worker_registry: "WorkerRegistry") -> None:
+        """Initialize training service (distributed mode).
 
         Args:
-            worker_registry: Optional WorkerRegistry for distributed worker selection.
-                           Required when using distributed training workers.
+            worker_registry: WorkerRegistry for distributed worker selection (REQUIRED).
+                           GPU workers are selected first (10x-100x faster),
+                           with automatic fallback to CPU workers.
         """
         super().__init__()
         # Override progress renderer with training-specific renderer
@@ -63,50 +62,75 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter | None]):
         self._operation_workers: dict[str, str] = {}
 
         logger.info(
-            f"Training service initialized with TrainingProgressRenderer "
-            f"(worker_registry: {'enabled' if worker_registry else 'disabled'})"
+            "Training service initialized (distributed mode: GPU-first, CPU-fallback)"
         )
 
-    def _initialize_adapter(self) -> TrainingAdapter | None:
-        """Initialize training adapter only for host service mode.
-
-        For local training, returns None since LocalTrainingOrchestrator is used directly.
+    def _select_training_worker(self, context: dict) -> Optional["WorkerEndpoint"]:
         """
-        import os
+        Select training worker with GPU-first, CPU-fallback strategy.
 
-        # Check if host service is enabled
-        env_enabled = os.getenv("USE_TRAINING_HOST_SERVICE", "").lower()
-        use_host_service = env_enabled in ("true", "1", "yes")
+        Priority:
+        1. Try GPU workers first (10x-100x faster)
+        2. Fallback to CPU workers if no GPU available
+        3. Raise error if no workers available
 
-        if not use_host_service:
-            # Local training mode - no adapter needed (uses LocalTrainingOrchestrator directly)
-            logger.info("=" * 80)
-            logger.info("💻 TRAINING MODE: LOCAL (Docker Container)")
-            logger.info("   Uses: LocalTrainingOrchestrator directly")
-            logger.info("   GPU Training: Not available in Docker")
-            logger.info("   CPU Training: Available")
-            logger.info("=" * 80)
-            return None
+        Args:
+            context: Training operation context (currently unused, for future filtering)
 
-        # Host service mode - create adapter
-        host_service_url = os.getenv(
-            "TRAINING_HOST_SERVICE_URL", "http://localhost:5002"
+        Returns:
+            Selected WorkerEndpoint with optimal capabilities
+
+        Raises:
+            RuntimeError: If no training workers are available
+        """
+        from ktrdr.api.models.workers import WorkerStatus
+
+        # Get all training workers
+        all_workers = self.worker_registry.list_workers(
+            worker_type=WorkerType.TRAINING, status=WorkerStatus.AVAILABLE
         )
-        logger.info("=" * 80)
-        logger.info("🚀 TRAINING MODE: HOST SERVICE")
-        logger.info(f"   URL: {host_service_url}")
-        logger.info("   GPU Training: Available (if host service has GPU)")
-        logger.info("=" * 80)
 
-        return TrainingAdapter(use_host_service=True, host_service_url=host_service_url)
+        if not all_workers:
+            raise RuntimeError(
+                "No training workers available. Start GPU or CPU training workers."
+            )
+
+        # Try GPU workers first (10x-100x faster)
+        gpu_workers = [w for w in all_workers if w.capabilities.get("gpu") is True]
+
+        if gpu_workers:
+            logger.info("Selected GPU worker for training (10x-100x faster)")
+            return gpu_workers[0]
+
+        # Fallback to CPU workers (always available via containers)
+        cpu_workers = [
+            w
+            for w in all_workers
+            if w.capabilities.get("gpu") is False or "gpu" not in w.capabilities
+        ]
+
+        if cpu_workers:
+            logger.info("Selected CPU worker for training (GPU unavailable)")
+            return cpu_workers[0]
+
+        # No workers available (all might be busy)
+        raise RuntimeError(
+            "No training workers available. Start GPU or CPU training workers."
+        )
 
     def _get_service_name(self) -> str:
         return "TrainingService"
 
+    def _initialize_adapter(self) -> None:
+        """No adapter needed for distributed-only mode."""
+        return None
+
     def _get_default_host_url(self) -> str:
-        return "http://localhost:5002"
+        """Not used in distributed-only mode."""
+        return ""
 
     def _get_env_var_prefix(self) -> str:
+        """Not used in distributed-only mode."""
         return "TRAINING"
 
     async def health_check(self) -> dict[str, Any]:
@@ -146,7 +170,7 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter | None]):
             start_date=start_date,
             end_date=end_date,
             detailed_analytics=detailed_analytics,
-            use_host_service=self.is_using_host_service(),
+            use_host_service=False,  # Distributed-only mode (no local/remote toggle)
         )
 
         operation_result = await self.start_managed_operation(
@@ -179,7 +203,6 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter | None]):
             "timeframes": context.timeframes,
             "strategy_name": strategy_name,
             "estimated_duration_minutes": estimated_duration,
-            "use_host_service": context.use_host_service,
         }
 
     async def _legacy_operation_entrypoint(
@@ -188,73 +211,28 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter | None]):
         operation_id: str,
         context: TrainingOperationContext,
     ) -> Optional[dict[str, Any]]:
-        """Temporary adapter that reuses legacy training manager wiring."""
+        """Execute training on distributed workers (distributed-only mode)."""
         context.operation_id = operation_id
 
         # Log training mode clearly before execution
-        if context.use_host_service:
-            logger.info("=" * 80)
-            logger.info("🚀 EXECUTING TRAINING: HOST SERVICE MODE")
-            logger.info(f"   Operation ID: {operation_id}")
-            logger.info(f"   Symbols: {', '.join(context.symbols)}")
-            logger.info(f"   Strategy: {context.strategy_name}")
-            logger.info("   GPU Training: Available (if host service has GPU)")
-            logger.info("=" * 80)
-            return await self._run_host_training(context=context)
-        else:
-            logger.info("=" * 80)
-            logger.info("💻 EXECUTING TRAINING: LOCAL MODE (Docker Container)")
-            logger.info(f"   Operation ID: {operation_id}")
-            logger.info(f"   Symbols: {', '.join(context.symbols)}")
-            logger.info(f"   Strategy: {context.strategy_name}")
-            logger.info("   GPU Training: Not available")
-            logger.info("   CPU Training: Active")
-            logger.info("=" * 80)
-            return await self._run_local_training(context=context)
+        logger.info("=" * 80)
+        logger.info("🚀 EXECUTING TRAINING: DISTRIBUTED WORKERS MODE")
+        logger.info(f"   Operation ID: {operation_id}")
+        logger.info(f"   Symbols: {', '.join(context.symbols)}")
+        logger.info(f"   Strategy: {context.strategy_name}")
+        logger.info("   Worker Selection: GPU-first, CPU-fallback")
+        logger.info("=" * 80)
 
-    async def _run_local_training(
-        self, *, context: TrainingOperationContext
-    ) -> dict[str, Any]:
-        """Run local training via the orchestrator-native components."""
-        progress_manager = self._current_operation_progress
-        if progress_manager is None:
-            raise RuntimeError("Progress manager not available for training operation")
+        return await self._run_distributed_worker_training_wrapper(context=context)
 
-        # TASK 1.2: Pull-based metrics - OperationsService will pull via bridge.get_metrics()
-        # Metrics callback removed - replaced with pull-based architecture
-        bridge = TrainingProgressBridge(
-            context=context,
-            progress_manager=progress_manager,
-            cancellation_token=self._current_cancellation_token,
-        )
-
-        # TASK 1.3: Register bridge with OperationsService for pull-based refresh
-        if context.operation_id:
-            self.operations_service.register_local_bridge(context.operation_id, bridge)
-            logger.info(
-                f"Registered local training bridge for operation {context.operation_id}"
-            )
-
-        orchestrator = LocalTrainingOrchestrator(
-            context=context,
-            progress_bridge=bridge,
-            cancellation_token=self._current_cancellation_token,
-            model_storage=self.model_storage,
-        )
-
-        return await orchestrator.run()
-
-    async def _run_host_training(
+    async def _run_distributed_worker_training_wrapper(
         self, *, context: TrainingOperationContext
     ) -> dict[str, Any]:
         """
-        Run training on distributed workers or host service using proxy pattern.
-
-        If WorkerRegistry is available, selects a worker and communicates directly.
-        Otherwise, falls back to TrainingAdapter for host service mode (backward compatibility).
+        Run training on distributed workers using proxy pattern (distributed-only mode).
 
         Backend acts as pure proxy:
-        1. Starts training on remote worker/service
+        1. Starts training on remote worker
         2. Registers OperationServiceProxy for client queries
         3. Returns immediately (no waiting, no polling)
 
@@ -262,102 +240,24 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter | None]):
         - Client queries backend (GET /api/v1/operations/{backend_op_id})
         - Backend pulls from worker via proxy (cached with TTL)
         - Completion discovered when client queries, not through background polling
-
-        Architecture:
-        - NO bridge creation (bridge lives on worker service)
-        - NO backend polling (client-driven pull architecture)
-        - Backend operation ID != Worker operation ID (mapped via proxy)
         """
         # Get backend operation ID
         backend_operation_id = context.operation_id
         if not backend_operation_id:
-            raise RuntimeError("Operation ID required for remote training")
+            raise RuntimeError("Operation ID required for distributed training")
 
         from datetime import UTC
 
         start_date = context.start_date or "2020-01-01"
         end_date = context.end_date or datetime.now(UTC).strftime("%Y-%m-%d")
 
-        # DISTRIBUTED WORKERS MODE: Use WorkerRegistry for worker selection
-        if self.worker_registry is not None:
-            return await self._run_distributed_worker_training(
-                context=context,
-                backend_operation_id=backend_operation_id,
-                start_date=start_date,
-                end_date=end_date,
-            )
-
-        # LEGACY MODE: Use TrainingAdapter for single host service
-        # Type assertion: adapter is guaranteed to be TrainingAdapter in host service mode
-        assert (
-            self.adapter is not None
-        ), "Adapter should not be None in host service mode"
-
-        logger.info(
-            "Starting host training for strategy=%s symbols=%s timeframes=%s",
-            context.strategy_name,
-            context.symbols,
-            context.timeframes,
-        )
-
-        response = await self.adapter.train_multi_symbol_strategy(
-            strategy_config_path=str(context.strategy_path),
-            symbols=context.symbols,
-            timeframes=context.timeframes,
+        # Use WorkerRegistry for worker selection (distributed-only mode)
+        return await self._run_distributed_worker_training(
+            context=context,
+            backend_operation_id=backend_operation_id,
             start_date=start_date,
             end_date=end_date,
-            validation_split=context.training_config.get("validation_split", 0.2),
-            data_mode=context.training_config.get("data_mode", "local"),
-            cancellation_token=self._current_cancellation_token,
-            training_config=context.training_config,
         )
-
-        # (2) Get host operation ID from session_id
-        # Host service returns session_id, but operation ID is host_training_{session_id}
-        session_id = response.get("session_id") if isinstance(response, dict) else None
-        if not session_id:
-            raise RuntimeError("Host service did not return a session_id")
-
-        # TASK 3.1: Construct full operation ID matching host service convention
-        host_operation_id = f"host_training_{session_id}"
-
-        logger.info(
-            f"Host training started: backend_op={backend_operation_id}, "
-            f"host_op={host_operation_id}, session_id={session_id}"
-        )
-
-        # (3) Create OperationServiceProxy for this host service
-        import os
-
-        from ktrdr.api.services.adapters.operation_service_proxy import (
-            OperationServiceProxy,
-        )
-
-        host_service_url = os.getenv(
-            "TRAINING_HOST_SERVICE_URL", "http://localhost:5002"
-        )
-        proxy = OperationServiceProxy(base_url=host_service_url)
-
-        # (4) Register proxy with OperationsService
-        self.operations_service.register_remote_proxy(
-            backend_operation_id=backend_operation_id,
-            proxy=proxy,
-            host_operation_id=host_operation_id,
-        )
-
-        logger.info(
-            f"Registered remote proxy: {backend_operation_id} → {host_operation_id}"
-        )
-
-        # (5) Return immediately (no waiting, no polling)
-        # Backend doesn't know completion status - client discovers it via queries
-        return {
-            "session_id": session_id,  # Raw session ID for backward compatibility
-            "host_operation_id": host_operation_id,  # Full operation ID
-            "backend_operation_id": backend_operation_id,
-            "status": "started",
-            "message": f"Training started on host service (session: {session_id})",
-        }
 
     async def _run_distributed_worker_training(
         self,
@@ -433,21 +333,17 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter | None]):
             )
 
         # (2) Dispatch to worker with retry on 503
-        # Extract strategy_name from strategy_path
-        import os
-
-        strategy_name = os.path.splitext(os.path.basename(str(context.strategy_path)))[
-            0
-        ]
+        # Read strategy YAML file to send to worker
+        with open(context.strategy_path) as f:
+            strategy_yaml = f.read()
 
         request_payload = {
+            "task_id": backend_operation_id,  # ← Operation ID sync (training-host pattern)
+            "strategy_yaml": strategy_yaml,  # ← Send YAML content (required)
             "symbols": context.symbols,
             "timeframes": context.timeframes,
-            "strategy_name": strategy_name,
             "start_date": start_date,
             "end_date": end_date,
-            "task_id": backend_operation_id,
-            "detailed_analytics": context.analytics_enabled,
         }
 
         remote_response = None
@@ -473,9 +369,9 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter | None]):
                     remote_response = response.json()
 
                 # Success! Break retry loop
-                remote_operation_id = remote_response.get("task_id")
+                remote_operation_id = remote_response.get("operation_id")
                 if not remote_operation_id:
-                    raise RuntimeError("Remote worker did not return task_id")
+                    raise RuntimeError("Remote worker did not return operation_id")
 
                 logger.info(
                     f"✅ Training accepted by worker {worker_id}: remote_op={remote_operation_id}"
@@ -735,15 +631,5 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter | None]):
         return {"success": True, "models": model_summaries}
 
 
-# Global training service instance
-
-# Global training service instance
-_training_service: TrainingService | None = None
-
-
-def get_training_service() -> TrainingService:
-    """Get the global training service instance."""
-    global _training_service
-    if _training_service is None:
-        _training_service = TrainingService()
-    return _training_service
+# Note: get_training_service() dependency function is defined in endpoints/training.py
+# It properly injects WorkerRegistry which is required for distributed-only mode
