@@ -45,34 +45,54 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Dependencies flow in one direction: UI → API → Core → Data
 - No circular dependencies or tight coupling
 
-### 2. Host Service Architecture
+### 2. Distributed Workers Architecture
 
-KTRDR uses **Host Services** to bypass Docker limitations for components requiring direct system access:
+KTRDR uses a **distributed workers architecture** where the backend orchestrates operations across a cluster of worker nodes:
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ Docker Container (Port 8000)                                │
-│  ├─ API Layer (FastAPI)                                     │
-│  ├─ Service Orchestrators (DataAcquisitionService,          │
-│  │                          TrainingManager)                │
-│  └─ Business Logic                                          │
-└─────────────────────────────────────────────────────────────┘
-         │                                    │
-         │ HTTP                               │ HTTP
-         ▼                                    ▼
-┌──────────────────────┐           ┌──────────────────────┐
-│ IB Host Service      │           │ Training Host Service│
-│ (Port 5001)          │           │ (Port 5002)          │
-│ - Direct IB Gateway  │           │ - GPU Access (CUDA)  │
-│ - No Docker network  │           │ - Native Performance │
-└──────────────────────┘           └──────────────────────┘
-         │                                    │
-         ▼                                    ▼
-   IB Gateway                          PyTorch + GPU
-   (Port 4002)
+┌─────────────────────────────────────────────────────────────────┐
+│ Backend (Docker Container, Port 8000)                          │
+│  ├─ API Layer (FastAPI)                                        │
+│  ├─ Service Orchestrators (NEVER execute operations)           │
+│  ├─ WorkerRegistry (tracks all workers)                        │
+│  └─ OperationsService (tracks all operations)                  │
+└─────────────────────────────────────────────────────────────────┘
+         │
+         ├─ HTTP (Worker Registration & Operation Dispatch)
+         │
+    ┌────┴────┬──────────┬──────────┬─────────────┐
+    │         │          │          │             │
+    ▼         ▼          ▼          ▼             ▼
+┌───────┐ ┌───────┐ ┌───────┐ ┌───────┐   ┌──────────────┐
+│Backtest││Backtest││Training││Training│   │IB Host Service│
+│Worker 1││Worker 2││Worker 1││Worker 2│   │(Port 5001)   │
+│:5003   ││:5003   ││:5004   ││:5004   │   │Direct IB TCP │
+└────────┘└────────┘└────────┘└────────┘   └──────────────┘
+CPU-only  CPU-only  CPU-only  CPU-only    Direct IB Gateway
+
+         ┌─────────────────────┐
+         │Training Host Service│
+         │(Port 5002)          │
+         │GPU Access (CUDA/MPS)│
+         └─────────────────────┘
+         10x-100x faster training
 ```
 
-**Key Pattern**: Service Orchestrators use adapters to route operations either locally (in-process) or to host services (HTTP), controlled by environment variables.
+**Key Architectural Changes**:
+
+1. **Backend as Orchestrator Only**: Backend NEVER executes operations locally—it only selects workers and dispatches operations
+2. **Distributed-Only Execution**: All backtesting and training operations execute on workers (no local fallback)
+3. **Self-Registering Workers**: Workers push-register with backend on startup (infrastructure-agnostic)
+4. **GPU-First Routing**: Training operations prefer GPU workers (10x-100x faster) with CPU worker fallback
+5. **Horizontal Scalability**: Add more workers = more concurrent operations (`docker-compose up --scale backtest-worker=10`)
+
+**Worker Types**:
+- **Backtest Workers** (containerized, CPU-only): Execute backtesting operations, horizontally scalable
+- **Training Workers** (containerized, CPU-only): Execute training operations (fallback), horizontally scalable
+- **Training Host Service** (native, GPU): Execute GPU training (priority), limited by hardware
+- **IB Host Service** (native): Direct IB Gateway access (Docker networking limitation)
+
+**For More Details**: See [Distributed Workers Architecture Overview](docs/architecture-overviews/distributed-workers.md)
 
 ### 3. Service Orchestrator Pattern
 
@@ -252,19 +272,43 @@ class DataAcquisitionService(ServiceOrchestrator):
         return await self._execute_with_progress(...)
 ```
 
-### Host Service Integration
+### Host Service Integration & Worker Deployment
 
-**When to use host services**:
-
-- IB Gateway: Direct TCP connection (Docker networking issues)
-- Training: GPU access (CUDA/MPS not available in container)
-
-**Environment Variables**:
-
+**IB Host Service** (still uses environment variables):
 - `USE_IB_HOST_SERVICE=true` → Route data operations to [ib-host-service](ib-host-service/)
-- `USE_TRAINING_HOST_SERVICE=true` → Route training to [training-host-service](training-host-service/)
 - `IB_HOST_SERVICE_URL=http://localhost:5001` (default)
-- `TRAINING_HOST_SERVICE_URL=http://localhost:5002` (default)
+- **Why**: IB Gateway requires direct TCP connection (Docker networking limitation)
+
+**Training & Backtesting** (now uses WorkerRegistry, NO environment flags):
+- ❌ **REMOVED**: `USE_TRAINING_HOST_SERVICE`, `REMOTE_BACKTEST_SERVICE_URL` (Phase 5.3)
+- ✅ **NOW**: Workers self-register with backend on startup (push-based registration)
+- Backend uses WorkerRegistry to select available workers automatically
+- GPU training workers register with `gpu: true` capability (prioritized automatically)
+- CPU workers register as fallback (always available)
+
+**Starting Workers**:
+
+```bash
+# Docker Compose (development)
+docker-compose up -d --scale backtest-worker=5 --scale training-worker=3
+
+# Training Host Service (GPU, runs natively)
+cd training-host-service && ./start.sh
+
+# Workers self-register at:
+# - Backtest: http://localhost:5003
+# - Training (CPU): http://localhost:5004
+# - Training (GPU): http://localhost:5002
+```
+
+**Verification**:
+
+```bash
+# Check registered workers
+curl http://localhost:8000/api/v1/workers | jq
+
+# Expected: All workers show as AVAILABLE with proper capabilities
+```
 
 ### WorkerAPIBase Pattern
 
@@ -282,12 +326,13 @@ All workers inherit from WorkerAPIBase and get these features for free:
    - `DELETE /api/v1/operations/{id}/cancel` - Cancel operation
 3. **Health endpoint** - Reports busy/idle status (`GET /health`)
 4. **FastAPI app with CORS** - Ready for Docker communication
-5. **Self-registration** - Worker registration with backend (placeholder)
+5. **Self-registration** - Worker registration with backend on startup (automatic)
 
 **Key Pattern Elements**:
 - **Operation ID Synchronization**: Accepts optional `task_id` from backend, returns same `operation_id`
 - **Progress Tracking**: Workers register progress bridges in their OperationsService
 - **Remote Queryability**: Backend can query worker's operations endpoints directly (1s cache TTL)
+- **Push-Based Registration**: Workers call `POST /workers/register` on startup (infrastructure-agnostic)
 
 **Worker Implementations**:
 
@@ -302,6 +347,11 @@ All workers inherit from WorkerAPIBase and get these features for free:
   - Simplified progress tracking
 
 **Code Reuse**: ~570 lines eliminated per worker by using WorkerAPIBase!
+
+**Developer Resources**:
+- **Architecture**: [Distributed Workers Architecture Overview](docs/architecture-overviews/distributed-workers.md)
+- **Development**: [Distributed Workers Developer Guide](docs/developer/distributed-workers-guide.md) - Creating new worker types
+- **Deployment**: [Docker Compose Deployment Guide](docs/user-guides/deployment.md) - Starting and scaling workers
 
 **Example Pattern**:
 
@@ -355,11 +405,16 @@ All long-running operations support cancellation:
 Before working on specific modules:
 
 - **ServiceOrchestrator Pattern**: [ktrdr/async_infrastructure/service_orchestrator.py](ktrdr/async_infrastructure/service_orchestrator.py)
+- **Distributed Workers Architecture** (IMPORTANT):
+  - [docs/architecture-overviews/distributed-workers.md](docs/architecture-overviews/distributed-workers.md) - High-level architecture overview
+  - [docs/developer/distributed-workers-guide.md](docs/developer/distributed-workers-guide.md) - Developer guide for creating/debugging workers
+  - [docs/user-guides/deployment.md](docs/user-guides/deployment.md) - Deployment and operations guide
 - **Data Module**:
   - [ktrdr/data/repository/data_repository.py](ktrdr/data/repository/data_repository.py) - Cached data access
   - [ktrdr/data/acquisition/acquisition_service.py](ktrdr/data/acquisition/acquisition_service.py) - Data downloads with ServiceOrchestrator
   - [ktrdr/data/CLAUDE.md](ktrdr/data/CLAUDE.md) - Data module patterns
-- **Training Module**: [ktrdr/training/training_manager.py](ktrdr/training/training_manager.py) - Host service routing pattern
+- **Training Module**: [ktrdr/training/training_manager.py](ktrdr/training/training_manager.py) - Now uses WorkerRegistry (distributed-only)
+- **Backtesting Module**: [ktrdr/backtesting/backtesting_service.py](ktrdr/backtesting/backtesting_service.py) - Now uses WorkerRegistry (distributed-only)
 - **API Module**: Review FastAPI patterns in [ktrdr/api/](ktrdr/api/)
 - **CLI Async Pattern**: [ktrdr/cli/helpers/async_cli_client.py](ktrdr/cli/helpers/async_cli_client.py)
 - **Host Services**:
