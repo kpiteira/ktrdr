@@ -1,14 +1,18 @@
-# KTRDR LXC Template Creation
+# KTRDR LXC Templates and Worker Provisioning
 
-This directory contains scripts for creating and managing Proxmox LXC templates for KTRDR workers.
+This directory contains scripts for creating Proxmox LXC templates and provisioning workers from those templates.
 
 ## Overview
 
 The LXC template system enables **continuous deployment** by separating:
-- **Template** (base environment) - Changes rarely
-- **Code** (KTRDR application) - Deployed separately, changes frequently
+- **Template** (base environment) - Changes rarely (Task 6.1)
+- **Worker Provisioning** (create workers from template) - Fast, automated (Task 6.3)
+- **Code** (KTRDR application) - Deployed separately, changes frequently (Task 6.2)
 
-This separation allows deploying code updates to all workers without rebuilding templates.
+This separation allows:
+1. **One-time template creation** - Build base environment once
+2. **Fast worker provisioning** - Clone workers in seconds
+3. **Rapid code deployment** - Update all workers in minutes
 
 ## Template Contents
 
@@ -100,20 +104,33 @@ ls -lh /var/lib/vz/template/cache/ktrdr-worker-base-v1.tar.zst
 
 ## Using the Template
 
-### Creating a Worker from Template
+### Creating a Worker from Template (Manual Method)
+
+**Note:** Use `provision-worker.sh` (Task 6.3) for automated provisioning instead!
 
 ```bash
-# Create worker LXC container from template
-pct create 201 local:vztmpl/ktrdr-worker-base-v1.tar.zst \
-  --hostname ktrdr-backtest-worker-1 \
-  --memory 4096 \
-  --cores 4 \
-  --rootfs local-lvm:16 \
-  --net0 name=eth0,bridge=vmbr0,ip=192.168.1.201/24,gw=192.168.1.1
-
-# Start the worker
+# Manual method (if you need fine-grained control)
+pct clone 999 201 --hostname ktrdr-backtest-worker-1
+pct set 201 --net0 name=eth0,bridge=vmbr0,ip=192.168.1.201/24,gw=192.168.1.1
 pct start 201
 ```
+
+### Creating a Worker from Template (Automated Method - Recommended)
+
+**Use the automated provisioning script:**
+
+```bash
+# Provision backtesting worker
+./provision-worker.sh 201 192.168.1.201 backtesting
+
+# Provision training worker
+./provision-worker.sh 202 192.168.1.202 training
+
+# Default is backtesting if type not specified
+./provision-worker.sh 203 192.168.1.203
+```
+
+See **Worker Provisioning** section below for details.
 
 ### Verifying Base Environment
 
@@ -290,12 +307,146 @@ scp /var/lib/vz/template/cache/ktrdr-worker-base-v1.tar.zst \
     root@proxmox-host2:/var/lib/vz/template/cache/
 ```
 
+## Worker Provisioning (Task 6.3)
+
+After creating the base template, use `provision-worker.sh` to quickly create new workers.
+
+### Quick Start
+
+```bash
+# Provision a backtesting worker
+./provision-worker.sh 201 192.168.1.201 backtesting
+
+# Provision a training worker
+./provision-worker.sh 202 192.168.1.202 training
+```
+
+### What the Provisioning Script Does
+
+1. **Clones worker from template** (ID 999)
+2. **Configures network** settings (IP, gateway)
+3. **Starts the container**
+4. **Creates .env file** with worker configuration:
+   - `KTRDR_API_URL` - Backend API endpoint
+   - `WORKER_ENDPOINT_URL` - Worker's own URL
+   - `WORKER_TYPE` - backtesting or training
+   - `WORKER_ID` - Unique identifier
+
+### Usage
+
+```bash
+./provision-worker.sh WORKER_ID WORKER_IP [WORKER_TYPE]
+```
+
+**Parameters:**
+- `WORKER_ID` (required) - Unique LXC container ID (e.g., 201, 202, 203)
+- `WORKER_IP` (required) - IP address for the worker (e.g., 192.168.1.201)
+- `WORKER_TYPE` (optional) - "backtesting" or "training" (default: "backtesting")
+
+### Examples
+
+```bash
+# Backtesting workers
+./provision-worker.sh 201 192.168.1.201 backtesting
+./provision-worker.sh 202 192.168.1.202 backtesting
+./provision-worker.sh 203 192.168.1.203  # Defaults to backtesting
+
+# Training workers
+./provision-worker.sh 204 192.168.1.204 training
+./provision-worker.sh 205 192.168.1.205 training
+```
+
+### Provisioning Multiple Workers
+
+```bash
+# Provision 5 backtesting workers
+for i in {201..205}; do
+    ./provision-worker.sh $i 192.168.1.$i backtesting
+done
+
+# Provision 3 training workers
+for i in {211..213}; do
+    ./provision-worker.sh $i 192.168.1.$i training
+done
+```
+
+### After Provisioning
+
+Once a worker is provisioned, you need to:
+
+1. **Deploy code** (see Task 6.2):
+   ```bash
+   ./scripts/deploy/deploy-code.sh "201" main
+   ```
+
+2. **Install systemd service**:
+   ```bash
+   pct enter 201
+   cp /opt/ktrdr/scripts/deploy/systemd/ktrdr-backtest-worker.service \
+      /etc/systemd/system/ktrdr-worker.service
+   systemctl daemon-reload
+   systemctl enable ktrdr-worker
+   systemctl start ktrdr-worker
+   ```
+
+3. **Verify worker is healthy**:
+   ```bash
+   curl http://192.168.1.201:5003/health
+   ```
+
+### Environment Variables
+
+The provisioning script supports customization via environment variables:
+
+- `KTRDR_BACKEND_API` - Backend API URL (default: http://192.168.1.100:8000)
+- `KTRDR_GATEWAY` - Network gateway (default: 192.168.1.1)
+- `KTRDR_NETMASK` - Network mask (default: 24)
+
+Example:
+```bash
+export KTRDR_BACKEND_API="http://10.0.0.100:8000"
+export KTRDR_GATEWAY="10.0.0.1"
+./provision-worker.sh 201 10.0.0.201 backtesting
+```
+
+### Troubleshooting Provisioning
+
+#### Issue: "Template 999 does not exist"
+
+**Solution:** Create the base template first:
+```bash
+./create-template.sh
+```
+
+#### Issue: "Worker ID already exists"
+
+**Solution:** Choose a different ID or destroy existing worker:
+```bash
+pct stop 201
+pct destroy 201
+```
+
+#### Issue: "Worker failed to become ready"
+
+**Cause:** Network configuration issue
+
+**Solution:**
+```bash
+# Check if worker started
+pct status 201
+
+# Check network inside container
+pct enter 201
+ping 192.168.1.1  # Test gateway
+ping 8.8.8.8      # Test internet
+```
+
 ## Related Documentation
 
-- **Code Deployment**: `scripts/deploy/README.md` (Task 6.2)
-- **Worker Provisioning**: `scripts/lxc/provision-worker.sh` (Task 6.3)
+- **Code Deployment**: [scripts/deploy/README.md](../deploy/README.md) (Task 6.2)
+- **Worker Provisioning**: `scripts/lxc/provision-worker.sh` (Task 6.3 - this file)
 - **Proxmox Deployment Guide**: `docs/user-guides/deployment-proxmox.md` (Task 6.6)
-- **Distributed Architecture**: `docs/architecture/distributed/ARCHITECTURE.md`
+- **Distributed Architecture**: [docs/architecture/distributed/ARCHITECTURE.md](../../docs/architecture/distributed/ARCHITECTURE.md)
 
 ## References
 
