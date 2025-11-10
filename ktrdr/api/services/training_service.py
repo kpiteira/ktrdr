@@ -298,7 +298,8 @@ class TrainingService(ServiceOrchestrator[None]):
 
         if self.worker_registry is not None:
             for attempt in range(max_retries):
-                worker = self.worker_registry.select_worker(WorkerType.TRAINING)
+                # Use GPU-first worker selection (10x-100x faster)
+                worker = self._select_training_worker(context={})
                 if not worker:
                     if attempt == 0:
                         raise RuntimeError(
@@ -389,9 +390,8 @@ class TrainingService(ServiceOrchestrator[None]):
                     if retry_attempt < max_retries - 1:
                         # Select a different worker for next attempt
                         if self.worker_registry is not None:
-                            worker = self.worker_registry.select_worker(
-                                WorkerType.TRAINING
-                            )
+                            # Use GPU-first selection for retry
+                            worker = self._select_training_worker(context={})
                             if worker and worker.worker_id not in attempted_workers:
                                 worker_id = worker.worker_id
                                 remote_url = worker.endpoint_url

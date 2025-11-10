@@ -19,18 +19,15 @@ from ktrdr.api.models.workers import WorkerType
 from ktrdr.backtesting.engine import BacktestConfig, BacktestingEngine
 from ktrdr.backtesting.progress_bridge import BacktestProgressBridge
 from ktrdr.logging import get_logger
-from ktrdr.workers.base import WorkerAPIBase
+from ktrdr.workers.base import WorkerAPIBase, WorkerOperationMixin
 
 logger = get_logger(__name__)
 
 
-class BacktestStartRequest(BaseModel):
+class BacktestStartRequest(WorkerOperationMixin):
     """Request to start a backtest (following training-host pattern)."""
 
-    task_id: Optional[str] = Field(
-        default=None,
-        description="Optional task ID from backend (for operation ID synchronization)",
-    )
+    # task_id inherited from WorkerOperationMixin
     symbol: str
     timeframe: str
     strategy_name: str

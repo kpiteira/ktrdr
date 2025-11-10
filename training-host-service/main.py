@@ -125,14 +125,15 @@ class TrainingHostWorker(WorkerAPIBase):
 
         Overrides WorkerAPIBase.self_register to include GPU capabilities.
         """
-        import socket
+        import os
 
         import httpx
 
         registration_url = f"{self.backend_url}/api/v1/workers/register"
 
-        # Detect actual resolvable hostname (Docker container name or actual hostname)
-        hostname = socket.gethostname()
+        # For host services (running outside Docker), use host.docker.internal
+        # so backend can reach us from inside Docker
+        hostname = os.getenv("WORKER_HOSTNAME", "host.docker.internal")
 
         payload = {
             "worker_id": self.worker_id,

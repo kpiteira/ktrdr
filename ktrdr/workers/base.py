@@ -17,6 +17,7 @@ from typing import Any, Optional
 
 from fastapi import FastAPI, HTTPException, Path, Query
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
 from ktrdr.api.models.operations import (
     OperationListResponse,
@@ -27,7 +28,47 @@ from ktrdr.api.models.operations import (
     OperationType,
 )
 from ktrdr.api.models.workers import WorkerType
-from ktrdr.api.services.operations_service import OperationsService
+from ktrdr.api.services.operations_service import (
+    OperationsService,
+    get_operations_service,
+)
+
+
+# ==============================================================================
+# Worker Request Models - Operation ID Synchronization Pattern
+# ==============================================================================
+
+
+class WorkerOperationMixin(BaseModel):
+    """
+    Mixin for worker operation requests to handle backend operation ID synchronization.
+
+    All worker start requests should inherit from this to support the operation ID
+    synchronization pattern where backend passes its operation_id as task_id.
+
+    Pattern:
+        Backend sends: {"task_id": "op_xyz_123", ...}
+        Worker uses:   operation_id = request.task_id or generate_new_id()
+        Worker returns: {"operation_id": "op_xyz_123", ...}
+
+    This ensures backend and worker track the same operation with the same ID.
+
+    Example:
+        class BacktestStartRequest(WorkerOperationMixin):
+            symbol: str
+            timeframe: str
+            # Automatically gets task_id field from mixin
+
+        # In endpoint:
+        operation_id = request.task_id or f"worker_backtest_{uuid.uuid4().hex[:12]}"
+    """
+
+    task_id: Optional[str] = Field(
+        default=None,
+        description="Backend's operation ID for synchronization (backend → worker)",
+    )
+
+
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
@@ -73,10 +114,11 @@ class WorkerAPIBase:
             "WORKER_ID", f"{worker_type.value}-worker-{os.urandom(4).hex()}"
         )
 
-        # Initialize OperationsService singleton (CRITICAL!)
-        # Each worker MUST have its own instance for remote queryability
-        self._operations_service = OperationsService()
-        logger.info(f"Operations service initialized in {worker_type.value} worker")
+        # Get OperationsService singleton (CRITICAL!)
+        # All code in this worker (including domain services) shares the same instance
+        # This ensures operations registered by domain services are visible to worker endpoints
+        self._operations_service = get_operations_service()
+        logger.info(f"Using shared OperationsService in {worker_type.value} worker")
 
         # Create FastAPI app
         self.app = FastAPI(

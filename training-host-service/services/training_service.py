@@ -488,8 +488,9 @@ class TrainingService:
             # Get operations service singleton
             ops_service = get_operations_service()
 
-            # Generate operation ID with consistent naming: host_training_{session_id}
-            operation_id = f"host_training_{session.session_id}"
+            # Use session_id directly as operation_id (backend's operation_id passed via task_id)
+            # This ensures backend and worker track the same operation with the same ID
+            operation_id = session.session_id
             session.operation_id = operation_id
 
             # Create operation in OperationsService

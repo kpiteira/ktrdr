@@ -19,18 +19,15 @@ from ktrdr.api.models.workers import WorkerType
 # Note: TrainingProgressBridge requires TrainingOperationContext which is complex
 # For now, we'll use direct progress callbacks instead
 from ktrdr.logging import get_logger
-from ktrdr.workers.base import WorkerAPIBase
+from ktrdr.workers.base import WorkerAPIBase, WorkerOperationMixin
 
 logger = get_logger(__name__)
 
 
-class TrainingStartRequest(BaseModel):
+class TrainingStartRequest(WorkerOperationMixin):
     """Request to start training (following training-host pattern)."""
 
-    task_id: Optional[str] = Field(
-        default=None,
-        description="Optional task ID from backend (for operation ID synchronization)",
-    )
+    # task_id inherited from WorkerOperationMixin
     strategy_yaml: str = Field(description="Strategy configuration as YAML string")
     # Runtime overrides (optional)
     symbols: Optional[list[str]] = Field(
