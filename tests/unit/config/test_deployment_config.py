@@ -9,7 +9,6 @@ from pathlib import Path
 
 import yaml
 
-
 # Configuration file paths
 WORKERS_DEV_CONFIG = Path("config/workers.dev.yaml")
 WORKERS_PROD_CONFIG = Path("config/workers.prod.yaml")
@@ -36,9 +35,7 @@ class TestConfigurationFilesExist:
 
     def test_prod_env_template_exists(self):
         """Production .env template should exist."""
-        assert (
-            PROD_ENV_TEMPLATE.exists()
-        ), f"Template not found at {PROD_ENV_TEMPLATE}"
+        assert PROD_ENV_TEMPLATE.exists(), f"Template not found at {PROD_ENV_TEMPLATE}"
 
 
 class TestWorkersDevConfig:
@@ -139,9 +136,7 @@ class TestDevEnvTemplate:
         """Template should have KTRDR_BACKEND_API variable."""
         with open(DEV_ENV_TEMPLATE) as f:
             content = f.read()
-        assert (
-            "KTRDR_BACKEND_API" in content
-        ), "Template must define KTRDR_BACKEND_API"
+        assert "KTRDR_BACKEND_API" in content, "Template must define KTRDR_BACKEND_API"
 
     def test_has_gateway(self):
         """Template should have KTRDR_GATEWAY variable."""
@@ -169,9 +164,7 @@ class TestProdEnvTemplate:
         """Template should have KTRDR_BACKEND_API variable."""
         with open(PROD_ENV_TEMPLATE) as f:
             content = f.read()
-        assert (
-            "KTRDR_BACKEND_API" in content
-        ), "Template must define KTRDR_BACKEND_API"
+        assert "KTRDR_BACKEND_API" in content, "Template must define KTRDR_BACKEND_API"
 
     def test_has_gateway(self):
         """Template should have KTRDR_GATEWAY variable."""
@@ -205,6 +198,4 @@ class TestConfigurationConsistency:
         # Both should have same top-level keys
         dev_keys = set(dev_data.keys())
         prod_keys = set(prod_data.keys())
-        assert (
-            dev_keys == prod_keys
-        ), "Dev and prod configs should have same structure"
+        assert dev_keys == prod_keys, "Dev and prod configs should have same structure"
