@@ -347,23 +347,169 @@ make quality
 
 ---
 
+### Task 5.6: Migrate training-host-service to WorkerAPIBase
+
+**Objective**: Convert training-host-service from standalone FastAPI to WorkerAPIBase pattern for self-registration
+
+**Why Needed**:
+- **Current**: training-host-service runs as standalone service, no worker registration
+- **Problem**: GPU host service invisible to WorkerRegistry (doesn't show in `/api/v1/workers`)
+- **Solution**: Migrate to WorkerAPIBase → automatic registration with `gpu: true` capability
+
+**Critical for**:
+- GPU-first worker selection (TrainingService can't find GPU workers)
+- Unified worker management (all workers visible via WorkerRegistry)
+- Consistent worker pattern (BacktestWorker and TrainingWorker already use WorkerAPIBase)
+
+**TDD Approach**:
+
+1. Create `tests/unit/training_host/test_gpu_worker_registration.py`
+2. Test scenarios:
+   - Worker registers with `gpu: true` capability
+   - Worker reports GPU type (CUDA vs MPS)
+   - Worker health check includes GPU availability
+   - OperationsService endpoints work via WorkerAPIBase
+
+**Implementation**:
+
+**Step 1: Convert training-host-service/main.py** (~2 hours)
+
+```python
+# training-host-service/main.py
+import sys
+from pathlib import Path
+import torch
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from ktrdr.workers.base import WorkerAPIBase
+from ktrdr.api.models.workers import WorkerType
+from ktrdr.api.models.operations import OperationType
+
+class TrainingHostWorker(WorkerAPIBase):
+    """Training host service using WorkerAPIBase pattern."""
+
+    def __init__(
+        self,
+        worker_port: int = 5002,
+        backend_url: str = "http://localhost:8000",
+    ):
+        # Detect GPU capabilities
+        capabilities = self._detect_gpu_capabilities()
+
+        super().__init__(
+            worker_type=WorkerType.TRAINING,
+            operation_type=OperationType.TRAINING,
+            worker_port=worker_port,
+            backend_url=backend_url,
+            capabilities=capabilities,
+        )
+
+        # Import and register domain-specific endpoints
+        from endpoints.training import router as training_router
+        self.app.include_router(training_router)
+
+    def _detect_gpu_capabilities(self) -> dict:
+        """Detect GPU type and availability."""
+        cuda_available = torch.cuda.is_available()
+        mps_available = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+
+        if cuda_available:
+            return {
+                "gpu": True,
+                "gpu_type": "CUDA",
+                "gpu_count": torch.cuda.device_count(),
+            }
+        elif mps_available:
+            return {
+                "gpu": True,
+                "gpu_type": "MPS",
+                "gpu_count": 1,
+            }
+        else:
+            return {"gpu": False}
+
+# Create worker instance
+worker = TrainingHostWorker()
+app = worker.app
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=5002,
+        reload=True,
+    )
+```
+
+**Step 2: Remove duplicate OperationsService setup** (~30 min)
+
+- Remove manual OperationsService initialization from `startup_event`
+- WorkerAPIBase already provides this
+- Remove duplicate operations router inclusion
+
+**Step 3: Test GPU worker shows in registry** (~30 min)
+
+```bash
+# Start training-host-service
+cd training-host-service && ./start.sh
+
+# Verify registration
+curl http://localhost:8000/api/v1/workers | jq '.[] | select(.worker_type=="TRAINING")'
+# Should show worker with gpu:true, gpu_type:"CUDA" or "MPS"
+```
+
+**Acceptance Criteria**:
+
+1. ✅ training-host-service shows in `/api/v1/workers` with `gpu: true`
+2. ✅ GPU type correctly reported (CUDA or MPS)
+3. ✅ TrainingService._select_training_worker() finds GPU worker
+4. ✅ Training requests route to GPU worker first
+5. ✅ All existing training endpoints still work
+6. ✅ OperationsService endpoints work (`/api/v1/operations`)
+
+**Quality Gate**:
+
+```bash
+# Start training-host-service
+cd training-host-service && ./start.sh
+
+# Verify worker registration
+curl http://localhost:8000/api/v1/workers | grep -q "gpu.*true" || echo "FAIL: GPU worker not registered"
+
+# Verify training works
+ktrdr models train --strategy neuro_mean_reversion --symbol EURUSD --timeframe 1d
+
+# Verify tests pass
+make test-unit
+make quality
+```
+
+**Commit**: `feat(training-host): migrate to WorkerAPIBase for GPU worker registration`
+
+**Estimated Time**: 3 hours
+
+---
+
 **Phase 5 (Docker-Only) Checkpoint**:
 ✅ No local execution mode in BacktestingService
 ✅ No local execution mode in TrainingService
 ✅ Backend is orchestrator-only (never executes operations)
+✅ GPU training-host-service registers as worker with gpu:true
 ✅ Simplified codebase with single execution path
 ✅ Clear error messages when workers unavailable
 ✅ **TESTABLE**: All operations require workers/host services
 
-**Total Phase 5 (Tasks 5.1-5.5) Time**: ~8.5 hours
+**Total Phase 5 (Tasks 5.1-5.6) Time**: ~11.5 hours
 
-**Architectural Achievement**: Clean separation - Backend orchestrates, Workers execute
+**Architectural Achievement**: Clean separation - Backend orchestrates, Workers execute. All workers self-register!
 
-**Next Step**: Deploy to Docker Compose and test! (Or continue to Task 5.6 for multi-host support)
+**Next Step**: Deploy to Docker Compose and test! (Or continue to Task 5.7 for multi-host support)
 
 ---
 
-### Task 5.6: Multi-Host Network Configuration (OPTIONAL)
+### Task 5.7: Multi-Host Network Configuration (OPTIONAL)
 
 ⚠️ **Only complete this task if deploying to Proxmox LXC, Kubernetes, or cloud!**
 
