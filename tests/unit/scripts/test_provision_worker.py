@@ -8,7 +8,6 @@ import os
 import subprocess
 from pathlib import Path
 
-
 SCRIPT_PATH = Path("scripts/lxc/provision-worker.sh")
 
 
@@ -100,7 +99,9 @@ class TestProvisionScriptContent:
         """Script should configure network settings."""
         with open(SCRIPT_PATH) as f:
             content = f.read()
-        assert "pct set" in content or "net0" in content, "Script must configure network"
+        assert (
+            "pct set" in content or "net0" in content
+        ), "Script must configure network"
 
     def test_starts_worker_container(self):
         """Script should start the worker container."""
@@ -124,9 +125,7 @@ class TestProvisionScriptContent:
         """Script should configure WORKER_ENDPOINT_URL."""
         with open(SCRIPT_PATH) as f:
             content = f.read()
-        assert (
-            "WORKER_ENDPOINT_URL" in content
-        ), "Script must set WORKER_ENDPOINT_URL"
+        assert "WORKER_ENDPOINT_URL" in content, "Script must set WORKER_ENDPOINT_URL"
 
     def test_configures_worker_type_in_env(self):
         """Script should set WORKER_TYPE in environment."""
