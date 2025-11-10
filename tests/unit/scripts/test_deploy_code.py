@@ -9,7 +9,6 @@ import os
 import subprocess
 from pathlib import Path
 
-
 SCRIPT_PATH = Path("scripts/deploy/deploy-code.sh")
 SYSTEMD_BACKTEST_PATH = Path("scripts/deploy/systemd/ktrdr-backtest-worker.service")
 SYSTEMD_TRAINING_PATH = Path("scripts/deploy/systemd/ktrdr-training-worker.service")
@@ -76,7 +75,9 @@ class TestDeployScriptContent:
         """Script should clone git repo or update existing."""
         with open(SCRIPT_PATH) as f:
             content = f.read()
-        assert "git clone" in content or "git fetch" in content, "Script must clone/update git repo"
+        assert (
+            "git clone" in content or "git fetch" in content
+        ), "Script must clone/update git repo"
         assert "git checkout" in content, "Script must checkout specified ref"
 
     def test_installs_dependencies_with_uv(self):
@@ -214,5 +215,5 @@ class TestDeployScriptDocumentation:
         with open(SCRIPT_PATH) as f:
             content = f.read()
         # Should explain worker IDs and git ref
-        mentions_params = ("worker" in content.lower() and "git" in content.lower())
+        mentions_params = "worker" in content.lower() and "git" in content.lower()
         assert mentions_params, "Script should document parameters"
