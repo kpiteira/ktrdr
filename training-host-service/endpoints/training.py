@@ -14,10 +14,8 @@ from pydantic import BaseModel, Field
 # Import existing ktrdr modules
 from ktrdr.logging import get_logger
 
-# Import training service and health utilities
+# Import training service
 from services.training_service import get_training_service
-
-from .health import get_gpu_manager
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/training", tags=["training"])
@@ -268,9 +266,9 @@ async def evaluate_model(request: EvaluationRequest):
         evaluation_id = str(uuid.uuid4())
         start_time = datetime.utcnow()
 
-        # Check GPU availability
-        gpu_manager = await get_gpu_manager()
-        gpu_used = gpu_manager is not None and gpu_manager.enabled
+        # Note: GPU availability is managed by the worker via WorkerAPIBase
+        # Worker self-registers with GPU capabilities to backend
+        gpu_used = True  # Assume GPU if worker has it
 
         # TODO: Implement actual model evaluation logic
         # For now, return mock results

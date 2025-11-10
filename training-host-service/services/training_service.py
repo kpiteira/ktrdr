@@ -16,6 +16,7 @@ from ktrdr.api.models.operations import (
     OperationStatus,
     OperationType,
 )
+from ktrdr.api.services.operations_service import get_operations_service
 from ktrdr.api.services.training.context import TrainingOperationContext
 from ktrdr.api.services.training.progress_bridge import TrainingProgressBridge
 from ktrdr.async_infrastructure.progress_bridge import ProgressBridge
@@ -27,7 +28,6 @@ from ktrdr.training.device_manager import DeviceManager
 from ktrdr.training.gpu_memory_manager import GPUMemoryConfig, GPUMemoryManager
 from ktrdr.training.memory_manager import MemoryBudget, MemoryManager
 from ktrdr.training.performance_optimizer import PerformanceConfig, PerformanceOptimizer
-from services.operations import get_operations_service
 
 logger = get_logger(__name__)
 

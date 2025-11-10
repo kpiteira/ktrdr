@@ -50,9 +50,7 @@ class TestTrainingHostServiceRemoved:
     def test_training_host_service_settings_does_not_exist(self):
         """TrainingHostServiceSettings class should not exist."""
         with pytest.raises(ImportError):
-            from ktrdr.config.host_services import (
-                TrainingHostServiceSettings,
-            )  # noqa: F401, I001
+            pass  # noqa: F401, I001
 
     def test_get_training_host_service_settings_does_not_exist(self):
         """get_training_host_service_settings function should not exist."""
