@@ -1,22 +1,20 @@
 """
 Remote Backtesting API - FastAPI Application for Remote Container.
 
-This module provides a FastAPI application that runs BacktestingService in LOCAL mode
-within a remote container. The backend treats this as "remote", but this service
-itself runs locally (from its own perspective).
+DEPRECATED: This file is being replaced by BacktestWorker (using WorkerAPIBase pattern).
+See ktrdr/backtesting/backtest_worker.py for the new implementation.
 
-Key Design:
-- Runs BacktestingService in LOCAL mode (not remote mode!)
-- Exposes same OperationsService endpoints as backend
+This module provides a FastAPI application that runs BacktestingService within
+a remote container using the legacy pattern.
+
+Legacy Design:
+- Exposes OperationsService endpoints
 - Backend proxies to this service via OperationServiceProxy
-- Two-level caching: backend cache + this service's cache
+- Being replaced by WorkerAPIBase pattern
 
-Usage:
-    # Run directly for development
-    uvicorn ktrdr.backtesting.remote_api:app --host 0.0.0.0 --port 5003
-
-    # Or via Docker
-    docker run -p 5003:5003 ktrdr-backend uvicorn ktrdr.backtesting.remote_api:app ...
+Usage (DEPRECATED):
+    # Use backtest_worker.py instead
+    # Legacy: uvicorn ktrdr.backtesting.remote_api:app --host 0.0.0.0 --port 5003
 """
 
 import logging
@@ -30,6 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from ktrdr.api.models.backtesting import BacktestStartRequest, BacktestStartResponse
 from ktrdr.api.models.operations import OperationType
 from ktrdr.api.services.operations_service import get_operations_service
+from ktrdr.api.services.worker_registry import WorkerRegistry
 from ktrdr.backtesting.backtesting_service import BacktestingService
 from ktrdr.backtesting.worker_registration import WorkerRegistration
 
@@ -65,10 +64,18 @@ _backtesting_service: Optional[BacktestingService] = None
 
 
 def get_backtest_service() -> BacktestingService:
-    """Get backtesting service singleton."""
+    """
+    Get backtesting service singleton.
+
+    Note: This creates an empty WorkerRegistry as this legacy API
+    is being replaced by BacktestWorker.
+    """
     global _backtesting_service
     if _backtesting_service is None:
-        _backtesting_service = BacktestingService()
+        # Create minimal registry for backward compatibility
+        # (This file is deprecated - use backtest_worker.py instead)
+        worker_registry = WorkerRegistry()
+        _backtesting_service = BacktestingService(worker_registry=worker_registry)
     return _backtesting_service
 
 

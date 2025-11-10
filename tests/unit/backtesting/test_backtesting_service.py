@@ -13,7 +13,6 @@ import pytest
 from ktrdr.api.models.workers import WorkerStatus, WorkerType
 from ktrdr.api.services.worker_registry import WorkerRegistry
 from ktrdr.backtesting.backtesting_service import BacktestingService
-from ktrdr.backtesting.progress_bridge import BacktestProgressBridge
 
 
 @pytest.fixture
@@ -64,7 +63,10 @@ class TestBacktestingServiceInitialization:
             # Should log distributed mode message
             mock_logger.info.assert_called()
             logged_message = mock_logger.info.call_args[0][0]
-            assert "distributed" in logged_message.lower() or "Backtesting service initialized" in logged_message
+            assert (
+                "distributed" in logged_message.lower()
+                or "Backtesting service initialized" in logged_message
+            )
 
 
 class TestBacktestingServiceDistributedMode:
@@ -103,7 +105,9 @@ class TestBacktestingServiceWorkerDispatch:
     """Test backtest dispatch to workers."""
 
     @pytest.mark.asyncio
-    async def test_run_backtest_on_worker_registers_proxy(self, backtest_service, worker_registry):
+    async def test_run_backtest_on_worker_registers_proxy(
+        self, backtest_service, worker_registry
+    ):
         """Test run_backtest_on_worker registers OperationServiceProxy."""
         operation_id = "op_test_123"
         remote_operation_id = "remote_op_456"
@@ -158,7 +162,6 @@ class TestBacktestingServiceErrorHandling:
             await backtest_service.run_backtest(symbol="AAPL")
 
 
-
 class TestBacktestingServiceWorkerRegistry:
     """Test WorkerRegistry integration for distributed backtesting."""
 
@@ -169,7 +172,6 @@ class TestBacktestingServiceWorkerRegistry:
 
         assert service.worker_registry is registry
         assert isinstance(service._operation_workers, dict)
-
 
     @pytest.mark.asyncio
     async def test_worker_dispatch_selects_worker_from_registry(self):
@@ -346,4 +348,3 @@ class TestBacktestingServiceWorkerRegistry:
 
         # Should not raise error for nonexistent operation
         service.cleanup_worker("nonexistent_op")
-

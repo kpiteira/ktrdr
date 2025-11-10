@@ -5,7 +5,6 @@ Follows the ServiceOrchestrator pattern for async operations support,
 matching the architecture of TrainingService.
 """
 
-import asyncio
 import logging
 import os
 from datetime import datetime
@@ -18,8 +17,6 @@ from ktrdr.api.models.workers import WorkerType
 from ktrdr.api.services.adapters.operation_service_proxy import OperationServiceProxy
 from ktrdr.api.services.operations_service import get_operations_service
 from ktrdr.async_infrastructure import ServiceOrchestrator
-from ktrdr.backtesting.engine import BacktestConfig, BacktestingEngine
-from ktrdr.backtesting.progress_bridge import BacktestProgressBridge
 
 if TYPE_CHECKING:
     from ktrdr.api.services.worker_registry import WorkerRegistry
@@ -323,8 +320,6 @@ class BacktestingService(ServiceOrchestrator[None]):
 
         # (2) Dispatch to worker with retry on 503
         # Extract strategy_name from strategy_config_path (e.g., "strategies/test.yaml" -> "test")
-        import os
-
         strategy_name = os.path.splitext(os.path.basename(strategy_config_path))[0]
 
         request_payload = {
