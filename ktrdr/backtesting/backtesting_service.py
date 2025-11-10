@@ -41,33 +41,21 @@ class BacktestingService(ServiceOrchestrator[None]):
     (no GPU requirements), so the generic type is None.
     """
 
-    def __init__(self, worker_registry: Optional["WorkerRegistry"] = None) -> None:
-        """Initialize backtesting service.
+    def __init__(self, worker_registry: "WorkerRegistry") -> None:
+        """Initialize backtesting service (distributed-only mode).
 
         Args:
-            worker_registry: Optional WorkerRegistry for distributed worker selection.
-                           Required when USE_REMOTE_BACKTEST_SERVICE=true.
+            worker_registry: WorkerRegistry for distributed worker selection (required).
         """
         super().__init__()
         self.operations_service = get_operations_service()
-        self._use_remote = self._should_use_remote_service()
-        self.worker_registry = worker_registry
+        self.worker_registry = worker_registry  # Required, not optional
 
         # Track which worker is handling which operation for cleanup
         # operation_id → worker_id mapping
         self._operation_workers: dict[str, str] = {}
 
-        # Validate that worker_registry is provided if using remote mode
-        if self._use_remote and worker_registry is None:
-            logger.warning(
-                "Remote backtest mode enabled but no WorkerRegistry provided. "
-                "Will fall back to hardcoded URL (not recommended for production)."
-            )
-
-        logger.info(
-            f"Backtesting service initialized (mode: {'remote' if self._use_remote else 'local'}, "
-            f"worker_registry: {'enabled' if worker_registry else 'disabled'})"
-        )
+        logger.info("Backtesting service initialized (distributed mode)")
 
     def _initialize_adapter(self) -> None:
         """
@@ -83,21 +71,12 @@ class BacktestingService(ServiceOrchestrator[None]):
         return "Backtesting"
 
     def _get_default_host_url(self) -> str:
-        """Get default remote service URL."""
-        return "http://localhost:5003"
+        """Get default host URL (not used in distributed-only mode)."""
+        return ""
 
     def _get_env_var_prefix(self) -> str:
-        """Get environment variable prefix."""
-        return "BACKTEST"
-
-    def _should_use_remote_service(self) -> bool:
-        """Check if should use remote backtest service."""
-        env_value = os.getenv("USE_REMOTE_BACKTEST_SERVICE", "false").lower()
-        return env_value in ("true", "1", "yes")
-
-    def _get_remote_service_url(self) -> str:
-        """Get remote backtest service URL."""
-        return os.getenv("REMOTE_BACKTEST_SERVICE_URL", "http://localhost:5003")
+        """Get environment variable prefix (not used in distributed-only mode)."""
+        return ""
 
     async def health_check(self) -> dict[str, Any]:
         """
@@ -113,7 +92,7 @@ class BacktestingService(ServiceOrchestrator[None]):
             "service": "BacktestingService",
             "status": "ok",
             "active_backtests": len(active_operations),
-            "mode": "remote" if self._use_remote else "local",
+            "mode": "distributed",
         }
 
     def cleanup_worker(self, operation_id: str) -> None:
@@ -133,12 +112,11 @@ class BacktestingService(ServiceOrchestrator[None]):
 
         worker_id = self._operation_workers[operation_id]
 
-        if self.worker_registry is not None:
-            self.worker_registry.mark_available(worker_id)
-            logger.info(
-                f"Manually marked worker {worker_id} as AVAILABLE "
-                f"after operation {operation_id} completed"
-            )
+        self.worker_registry.mark_available(worker_id)
+        logger.info(
+            f"Manually marked worker {worker_id} as AVAILABLE "
+            f"after operation {operation_id} completed"
+        )
 
         # Remove from tracking
         del self._operation_workers[operation_id]
@@ -186,14 +164,13 @@ class BacktestingService(ServiceOrchestrator[None]):
             "initial_capital": initial_capital,
             "commission": commission,
             "slippage": slippage,
-            "use_remote": self._use_remote,
         }
 
         # Create operation metadata
         metadata = OperationMetadata(
             symbol=symbol,
             timeframe=timeframe,
-            mode="remote" if self._use_remote else "local",
+            mode="distributed",
             start_date=start_date,
             end_date=end_date,
             parameters={
@@ -224,7 +201,7 @@ class BacktestingService(ServiceOrchestrator[None]):
             "message": f"Backtest started for {symbol} {timeframe}",
             "symbol": symbol,
             "timeframe": timeframe,
-            "mode": "remote" if self._use_remote else "local",
+            "mode": "distributed",
         }
 
     async def _operation_entrypoint(
@@ -236,6 +213,8 @@ class BacktestingService(ServiceOrchestrator[None]):
         """
         Entry point for backtest operations (called by ServiceOrchestrator).
 
+        Always dispatches to worker (distributed-only mode).
+
         Args:
             operation_id: Operation identifier
             context: Operation context with parameters
@@ -243,137 +222,26 @@ class BacktestingService(ServiceOrchestrator[None]):
         Returns:
             Results dictionary or None for async operations
         """
-        if context.get("use_remote"):
-            logger.info("=" * 80)
-            logger.info("🚀 EXECUTING BACKTEST: REMOTE MODE")
-            logger.info(f"   Operation ID: {operation_id}")
-            logger.info(f"   Symbol: {context['symbol']}")
-            logger.info(f"   Timeframe: {context['timeframe']}")
-            logger.info("=" * 80)
-            return await self._run_remote_backtest(
-                operation_id=operation_id,
-                symbol=context["symbol"],
-                timeframe=context["timeframe"],
-                strategy_config_path=context["strategy_config_path"],
-                model_path=context["model_path"],
-                start_date=datetime.fromisoformat(context["start_date"]),
-                end_date=datetime.fromisoformat(context["end_date"]),
-                initial_capital=context["initial_capital"],
-                commission=context.get("commission", 0.001),
-                slippage=context.get("slippage", 0.001),
-            )
-        else:
-            logger.info("=" * 80)
-            logger.info("💻 EXECUTING BACKTEST: LOCAL MODE")
-            logger.info(f"   Operation ID: {operation_id}")
-            logger.info(f"   Symbol: {context['symbol']}")
-            logger.info(f"   Timeframe: {context['timeframe']}")
-            logger.info("=" * 80)
-            return await self._run_local_backtest(
-                operation_id=operation_id,
-                symbol=context["symbol"],
-                timeframe=context["timeframe"],
-                strategy_config_path=context["strategy_config_path"],
-                model_path=context["model_path"],
-                start_date=datetime.fromisoformat(context["start_date"]),
-                end_date=datetime.fromisoformat(context["end_date"]),
-                initial_capital=context["initial_capital"],
-                commission=context.get("commission", 0.001),
-                slippage=context.get("slippage", 0.001),
-            )
-
-    async def _run_local_backtest(
-        self,
-        operation_id: str,
-        symbol: str,
-        timeframe: str,
-        strategy_config_path: str,
-        model_path: str,
-        start_date: datetime,
-        end_date: datetime,
-        initial_capital: float,
-        commission: float = 0.001,
-        slippage: float = 0.001,
-    ) -> dict[str, Any]:
-        """
-        Run backtest locally via thread pool.
-
-        Follows training's pattern:
-        1. Create BacktestProgressBridge
-        2. Register bridge with OperationsService
-        3. Run engine in thread (blocking operation)
-        4. Return results
-
-        Args:
-            operation_id: Operation identifier
-            symbol: Trading symbol
-            timeframe: Timeframe
-            strategy_config_path: Strategy configuration path
-            model_path: Model file path
-            start_date: Start date
-            end_date: End date
-            initial_capital: Initial capital
-            commission: Commission rate
-            slippage: Slippage rate
-
-        Returns:
-            Backtest results dictionary
-        """
-        # Create progress bridge for this operation
-        # Estimate total bars (rough approximation)
-        days = (end_date - start_date).days
-        bars_per_day = {"1h": 24, "4h": 6, "1d": 1, "1w": 0.2}
-        total_bars = int(days * bars_per_day.get(timeframe, 1))
-
-        bridge = BacktestProgressBridge(
+        logger.info("=" * 80)
+        logger.info("🚀 EXECUTING BACKTEST: DISTRIBUTED MODE")
+        logger.info(f"   Operation ID: {operation_id}")
+        logger.info(f"   Symbol: {context['symbol']}")
+        logger.info(f"   Timeframe: {context['timeframe']}")
+        logger.info("=" * 80)
+        return await self.run_backtest_on_worker(
             operation_id=operation_id,
-            symbol=symbol,
-            timeframe=timeframe,
-            total_bars=max(total_bars, 100),  # Minimum 100 bars estimate
+            symbol=context["symbol"],
+            timeframe=context["timeframe"],
+            strategy_config_path=context["strategy_config_path"],
+            model_path=context["model_path"],
+            start_date=datetime.fromisoformat(context["start_date"]),
+            end_date=datetime.fromisoformat(context["end_date"]),
+            initial_capital=context["initial_capital"],
+            commission=context.get("commission", 0.001),
+            slippage=context.get("slippage", 0.001),
         )
 
-        # Register bridge with OperationsService for pull-based progress
-        self.operations_service.register_local_bridge(operation_id, bridge)
-        logger.info(f"Registered local backtest bridge for operation {operation_id}")
-
-        # Build engine configuration
-        engine_config = BacktestConfig(
-            symbol=symbol,
-            timeframe=timeframe,
-            strategy_config_path=strategy_config_path,
-            model_path=model_path,
-            start_date=start_date.isoformat(),
-            end_date=end_date.isoformat(),
-            initial_capital=initial_capital,
-            commission=commission,
-            slippage=slippage,
-        )
-
-        # Create engine
-        engine = BacktestingEngine(config=engine_config)
-
-        # Get cancellation token from operations service
-        cancellation_token = self.operations_service.get_cancellation_token(
-            operation_id
-        )
-
-        # Run engine in thread pool (blocking operation)
-        logger.info(f"Starting backtest engine in thread pool for {symbol} {timeframe}")
-        results = await asyncio.to_thread(
-            engine.run,
-            bridge=bridge,
-            cancellation_token=cancellation_token,
-        )
-
-        # Convert results to dictionary
-        results_dict = results.to_dict()
-        logger.info(
-            f"Backtest completed for {symbol} {timeframe}: {results_dict.get('total_return', 0):.2%} return"
-        )
-
-        return results_dict
-
-    async def _run_remote_backtest(
+    async def run_backtest_on_worker(
         self,
         operation_id: str,
         symbol: str,
@@ -387,11 +255,13 @@ class BacktestingService(ServiceOrchestrator[None]):
         slippage: float = 0.001,
     ) -> dict[str, Any]:
         """
-        Run backtest on remote service using proxy pattern.
+        Run backtest on worker using distributed execution pattern.
 
-        Follows training's remote pattern:
+        Distributed-only mode: always dispatches to worker via WorkerRegistry.
+
+        Workflow:
         1. Select available worker from WorkerRegistry
-        2. Start backtest on remote service (HTTP POST)
+        2. Start backtest on worker (HTTP POST)
         3. Get remote operation ID
         4. Create OperationServiceProxy
         5. Register proxy with OperationsService
@@ -410,7 +280,7 @@ class BacktestingService(ServiceOrchestrator[None]):
             slippage: Slippage rate
 
         Returns:
-            Dictionary with status="started" (remote operation continues independently)
+            Dictionary with status="started" (worker operation continues independently)
 
         Raises:
             RuntimeError: If no workers are available
@@ -421,42 +291,34 @@ class BacktestingService(ServiceOrchestrator[None]):
         max_retries = 3
         attempted_workers: list[str] = []
 
-        if self.worker_registry is not None:
-            for attempt in range(max_retries):
-                worker = self.worker_registry.select_worker(WorkerType.BACKTESTING)
-                if not worker:
-                    if attempt == 0:
-                        raise RuntimeError(
-                            "No available backtest workers. All workers are busy or unavailable."
-                        )
-                    # All workers have been tried, none available
+        for attempt in range(max_retries):
+            worker = self.worker_registry.select_worker(WorkerType.BACKTESTING)
+            if not worker:
+                if attempt == 0:
                     raise RuntimeError(
-                        f"All backtest workers are busy. Tried {len(attempted_workers)} workers: {attempted_workers}"
+                        "No available backtest workers. All workers are busy or unavailable."
                     )
-
-                # Skip workers we've already tried
-                if worker.worker_id in attempted_workers:
-                    continue
-
-                worker_id = worker.worker_id
-                remote_url = worker.endpoint_url
-                attempted_workers.append(worker_id)
-
-                logger.info(
-                    f"Selected worker {worker_id} for operation {operation_id} "
-                    f"(symbol={symbol}, timeframe={timeframe}, attempt={attempt + 1}/{max_retries})"
-                )
-                break  # Worker selected, exit retry loop to try dispatching
-            else:
+                # All workers have been tried, none available
                 raise RuntimeError(
-                    f"Could not select unique worker after {max_retries} attempts"
+                    f"All backtest workers are busy. Tried {len(attempted_workers)} workers: {attempted_workers}"
                 )
+
+            # Skip workers we've already tried
+            if worker.worker_id in attempted_workers:
+                continue
+
+            worker_id = worker.worker_id
+            remote_url = worker.endpoint_url
+            attempted_workers.append(worker_id)
+
+            logger.info(
+                f"Selected worker {worker_id} for operation {operation_id} "
+                f"(symbol={symbol}, timeframe={timeframe}, attempt={attempt + 1}/{max_retries})"
+            )
+            break  # Worker selected, exit retry loop to try dispatching
         else:
-            # Fallback to hardcoded URL if no registry (backward compatibility)
-            remote_url = self._get_remote_service_url()
-            logger.warning(
-                f"No WorkerRegistry available, using hardcoded URL: {remote_url} "
-                f"for operation {operation_id}"
+            raise RuntimeError(
+                f"Could not select unique worker after {max_retries} attempts"
             )
 
         # (2) Dispatch to worker with retry on 503
@@ -516,22 +378,21 @@ class BacktestingService(ServiceOrchestrator[None]):
 
                     if retry_attempt < max_retries - 1:
                         # Select a different worker for next attempt
-                        if self.worker_registry is not None:
-                            worker = self.worker_registry.select_worker(
-                                WorkerType.BACKTESTING
-                            )
-                            if worker and worker.worker_id not in attempted_workers:
-                                worker_id = worker.worker_id
-                                remote_url = worker.endpoint_url
-                                attempted_workers.append(worker_id)
-                                logger.info(f"Retrying with worker {worker_id}")
-                                continue  # Retry with new worker
-                            else:
-                                # No more unique workers available
-                                raise RuntimeError(
-                                    f"All workers busy or unavailable after {retry_attempt + 1} attempts. "
-                                    f"Tried workers: {attempted_workers}"
-                                ) from e
+                        worker = self.worker_registry.select_worker(
+                            WorkerType.BACKTESTING
+                        )
+                        if worker and worker.worker_id not in attempted_workers:
+                            worker_id = worker.worker_id
+                            remote_url = worker.endpoint_url
+                            attempted_workers.append(worker_id)
+                            logger.info(f"Retrying with worker {worker_id}")
+                            continue  # Retry with new worker
+                        else:
+                            # No more unique workers available
+                            raise RuntimeError(
+                                f"All workers busy or unavailable after {retry_attempt + 1} attempts. "
+                                f"Tried workers: {attempted_workers}"
+                            ) from e
                     else:
                         # Last retry failed
                         raise RuntimeError(
@@ -550,8 +411,8 @@ class BacktestingService(ServiceOrchestrator[None]):
             f"remote_op={remote_operation_id}"
         )
 
-        # (3) Mark worker as busy (if using registry)
-        if self.worker_registry is not None and worker_id is not None:
+        # (3) Mark worker as busy
+        if worker_id is not None:
             self.worker_registry.mark_busy(worker_id, operation_id)
             self._operation_workers[operation_id] = worker_id
             logger.info(

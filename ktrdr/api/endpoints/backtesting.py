@@ -33,10 +33,10 @@ _backtesting_service: Optional[BacktestingService] = None
 
 # Dependency for backtesting service
 async def get_backtesting_service() -> BacktestingService:
-    """Get backtesting service instance (singleton)."""
+    """Get backtesting service instance (singleton - distributed-only mode)."""
     global _backtesting_service
     if _backtesting_service is None:
-        # Inject WorkerRegistry for distributed worker selection
+        # WorkerRegistry is required for distributed-only mode
         worker_registry = get_worker_registry()
         _backtesting_service = BacktestingService(worker_registry=worker_registry)
     return _backtesting_service
