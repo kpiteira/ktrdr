@@ -36,15 +36,8 @@ class ServiceErrorFormatter:
             "enable_env": "USE_IB_HOST_SERVICE",
             "default_url": "http://localhost:5001",
         },
-        "training-host": {
-            "name": "Training Host Service",
-            "default_port": "8002",
-            "start_script": "./training-host-service/start.sh",
-            "log_path": "training-host-service/logs/training-host-service.log",
-            "url_env": "TRAINING_HOST_SERVICE_URL",
-            "enable_env": "USE_TRAINING_HOST_SERVICE",
-            "default_url": "http://localhost:8002",
-        },
+        # Note: Training and backtesting now use distributed workers (WorkerRegistry)
+        # No host service configuration needed - workers register themselves
     }
 
     @classmethod
@@ -242,7 +235,7 @@ class ServiceErrorFormatter:
         message_parts = []
 
         # Handle specific configuration keys
-        if config_key in ["USE_IB_HOST_SERVICE", "USE_TRAINING_HOST_SERVICE"]:
+        if config_key in ["USE_IB_HOST_SERVICE"]:
             # Boolean configuration error
             if operation_context:
                 message_parts.append(f"{operation_context}: Invalid configuration.")
@@ -255,7 +248,7 @@ class ServiceErrorFormatter:
             message_parts.append(f"  export {config_key}=true   # Enable service")
             message_parts.append(f"  export {config_key}=false  # Disable service")
 
-        elif config_key in ["IB_HOST_SERVICE_URL", "TRAINING_HOST_SERVICE_URL"]:
+        elif config_key in ["IB_HOST_SERVICE_URL"]:
             # URL configuration error
             if service_config:
                 default_url = service_config["default_url"]
@@ -339,22 +332,7 @@ class ServiceErrorFormatter:
                     "Example: export IB_HOST_SERVICE_URL=http://localhost:5001"
                 )
 
-        # Check Training Host Service configuration
-        training_enabled = os.getenv("USE_TRAINING_HOST_SERVICE")
-        if training_enabled is not None and training_enabled.lower() not in [
-            "true",
-            "false",
-        ]:
-            errors.append(
-                f"Invalid configuration: USE_TRAINING_HOST_SERVICE must be 'true' or 'false', got '{training_enabled}'"
-            )
-
-        if training_enabled and training_enabled.lower() == "true":
-            training_url = os.getenv("TRAINING_HOST_SERVICE_URL")
-            if not training_url:
-                errors.append(
-                    "TRAINING_HOST_SERVICE_URL is required when USE_TRAINING_HOST_SERVICE=true\n"
-                    "Example: export TRAINING_HOST_SERVICE_URL=http://localhost:8002"
-                )
+        # Note: Training and backtesting now use distributed workers (WorkerRegistry)
+        # No validation needed - workers register themselves on startup
 
         return errors

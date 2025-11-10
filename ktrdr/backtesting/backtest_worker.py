@@ -57,9 +57,6 @@ class BacktestWorker(WorkerAPIBase):
             backend_url=backend_url,
         )
 
-        # Force local mode (this service should never use remote mode)
-        os.environ["USE_REMOTE_BACKTEST_SERVICE"] = "false"
-
         # Register domain-specific endpoint
         @self.app.post("/backtests/start")
         async def start_backtest(request: BacktestStartRequest):

@@ -50,18 +50,12 @@ services:
       - IB_HOST=172.17.0.1
       - IB_PORT=4002
       - IB_CLIENT_ID=1
-      # IB Host Service configuration (Phase 0)
-      # Set to true to enable host service mode, false for direct connection
+      # IB Host Service configuration
+      # IB Gateway requires host service for direct TCP connection (Docker networking limitation)
       - USE_IB_HOST_SERVICE=${USE_IB_HOST_SERVICE:-true}
       - IB_HOST_SERVICE_URL=http://host.docker.internal:5001
-      # Training Host Service configuration (GPU Acceleration)
-      # Set to true to enable GPU training host service, false for Docker-only training
-      - USE_TRAINING_HOST_SERVICE=${USE_TRAINING_HOST_SERVICE:-true}
-      - TRAINING_HOST_SERVICE_URL=http://host.docker.internal:5002
-      # Backtesting Remote Service configuration (Phase 3)
-      # Set to true to enable remote backtesting (via backtest-worker), false for local backtesting
-      - USE_REMOTE_BACKTEST_SERVICE=${USE_REMOTE_BACKTEST_SERVICE:-false}
-      - REMOTE_BACKTEST_SERVICE_URL=http://backtest-worker:5003
+      # Note: Training and backtesting now use WorkerRegistry (distributed-only mode)
+      # Workers register themselves on startup - no environment variables needed here
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
@@ -100,11 +94,10 @@ services:
       - ENVIRONMENT=development
       - LOG_LEVEL=INFO
       - PYTHONPATH=/app
-      # Force LOCAL mode (this service should never use remote mode)
-      - USE_REMOTE_BACKTEST_SERVICE=false
       # IB configuration (for data access if needed)
       - USE_IB_HOST_SERVICE=${USE_IB_HOST_SERVICE:-true}
       - IB_HOST_SERVICE_URL=http://host.docker.internal:5001
+      # Worker registers with backend on startup (distributed-only mode)
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:

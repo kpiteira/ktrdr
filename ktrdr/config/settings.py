@@ -13,9 +13,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from .. import metadata
 from .host_services import (
     ApiServiceSettings,
-    TrainingHostServiceSettings,
     get_api_service_settings,
-    get_training_host_service_settings,
 )
 from .ib_config import IbConfig, get_ib_config
 
@@ -63,13 +61,7 @@ def get_logging_settings() -> LoggingSettings:
 
 
 # Compatibility aliases for existing code
-TrainingHostSettings = TrainingHostServiceSettings
 CLISettings = ApiServiceSettings  # CLI uses API service settings for client connections
-
-
-def get_training_host_settings() -> TrainingHostServiceSettings:
-    """Get training host service settings with caching (compatibility alias)."""
-    return get_training_host_service_settings()
 
 
 def get_cli_settings() -> ApiServiceSettings:
@@ -82,7 +74,6 @@ def clear_settings_cache() -> None:
     """Clear settings cache."""
     get_api_settings.cache_clear()
     get_logging_settings.cache_clear()
-    get_training_host_service_settings.cache_clear()
     get_api_service_settings.cache_clear()
 
 
@@ -90,17 +81,13 @@ def clear_settings_cache() -> None:
 __all__ = [
     "APISettings",
     "LoggingSettings",
-    "TrainingHostServiceSettings",
     "ApiServiceSettings",
     "get_api_settings",
     "get_logging_settings",
-    "get_training_host_service_settings",
     "get_api_service_settings",
     "clear_settings_cache",
     # Compatibility aliases
-    "TrainingHostSettings",
     "CLISettings",
-    "get_training_host_settings",
     "get_cli_settings",
     "IbConfig",
     "get_ib_config",

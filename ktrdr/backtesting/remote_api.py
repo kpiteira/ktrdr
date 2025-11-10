@@ -88,9 +88,6 @@ async def startup_event():
     logger.info("🚀 Starting Backtesting Remote Service")
     logger.info("=" * 80)
 
-    # Force local mode (this service should never use remote mode)
-    os.environ["USE_REMOTE_BACKTEST_SERVICE"] = "false"
-
     # Initialize OperationsService
     _operations_service = get_operations_service()
     logger.info(
