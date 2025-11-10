@@ -1,0 +1,38 @@
+# Development Workers Configuration
+# This file defines worker containers for the development environment
+
+# Backend API URL
+backend_api_url: "http://192.168.1.100:8000"
+
+# Network settings
+network:
+  gateway: "192.168.1.1"
+  netmask: "24"
+
+# Git repository
+git_repo: "https://github.com/your-org/ktrdr.git"
+
+# Workers list
+workers:
+  # Backtesting workers (dev)
+  - id: 211
+    ip: "192.168.1.211"
+    type: "backtesting"
+    hostname: "ktrdr-dev-backtest-1"
+    cores: 2
+    memory: 2048  # MB
+
+  - id: 212
+    ip: "192.168.1.212"
+    type: "backtesting"
+    hostname: "ktrdr-dev-backtest-2"
+    cores: 2
+    memory: 2048
+
+  # Training worker (dev)
+  - id: 213
+    ip: "192.168.1.213"
+    type: "training"
+    hostname: "ktrdr-dev-training-1"
+    cores: 4
+    memory: 4096
