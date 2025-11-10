@@ -11,7 +11,7 @@ import uuid
 from typing import Any, Optional
 
 from fastapi import FastAPI
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from ktrdr.api.models.operations import OperationMetadata, OperationType
 from ktrdr.api.models.workers import WorkerType

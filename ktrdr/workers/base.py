@@ -32,7 +32,9 @@ from ktrdr.api.services.operations_service import (
     OperationsService,
     get_operations_service,
 )
+from ktrdr.logging import get_logger
 
+logger = get_logger(__name__)
 
 # ==============================================================================
 # Worker Request Models - Operation ID Synchronization Pattern
@@ -67,11 +69,6 @@ class WorkerOperationMixin(BaseModel):
         default=None,
         description="Backend's operation ID for synchronization (backend → worker)",
     )
-
-
-from ktrdr.logging import get_logger
-
-logger = get_logger(__name__)
 
 
 class WorkerAPIBase:

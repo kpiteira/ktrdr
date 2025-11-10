@@ -9,10 +9,9 @@ import asyncio
 import os
 import uuid
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import FastAPI
-from pydantic import BaseModel, Field
 
 from ktrdr.api.models.operations import OperationMetadata, OperationType
 from ktrdr.api.models.workers import WorkerType

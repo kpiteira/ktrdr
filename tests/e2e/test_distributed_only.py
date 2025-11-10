@@ -310,7 +310,7 @@ async def test_backtest_fails_without_workers(backend_only):
             # Debug: Show full operation response if no error found
             if not error_msg:
                 print(
-                    f"\n⚠ WARNING: No error message found in backtest operation response!"
+                    "\n⚠ WARNING: No error message found in backtest operation response!"
                 )
                 print(f"Full operation response: {final_op}")
                 # Don't fail test - this might be expected in current implementation
@@ -501,7 +501,7 @@ async def test_training_fails_without_workers(backend_only):
             # Debug: Show full operation response if no error found
             if not error_msg:
                 print(
-                    f"\n⚠ WARNING: No error message found in training operation response!"
+                    "\n⚠ WARNING: No error message found in training operation response!"
                 )
                 print(f"Full operation response: {final_op}")
                 # Don't fail test - this might be expected in current implementation
