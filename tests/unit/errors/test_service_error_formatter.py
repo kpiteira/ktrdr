@@ -50,7 +50,10 @@ class TestServiceErrorFormatter:
         formatted = ServiceErrorFormatter.format_service_error(error)
 
         # Generic service error formatting (no special Training Host Service)
-        assert "Service training-host is unavailable" in formatted or "unavailable" in formatted
+        assert (
+            "Service training-host is unavailable" in formatted
+            or "unavailable" in formatted
+        )
         assert "service status" in formatted.lower() or "check" in formatted.lower()
 
     def test_format_configuration_error_invalid_value(self):
@@ -89,7 +92,9 @@ class TestServiceErrorFormatter:
         formatted = ServiceErrorFormatter.format_service_error(error)
 
         # Generic configuration error (no special Training Host Service handling)
-        assert "Invalid configuration" in formatted or "configuration" in formatted.lower()
+        assert (
+            "Invalid configuration" in formatted or "configuration" in formatted.lower()
+        )
         assert "TRAINING_HOST_SERVICE_URL" in formatted
 
     def test_format_network_timeout_error(self):
