@@ -18,9 +18,21 @@ from ktrdr.api.models.workers import WorkerType
 from ktrdr.backtesting.engine import BacktestConfig, BacktestingEngine
 from ktrdr.backtesting.progress_bridge import BacktestProgressBridge
 from ktrdr.logging import get_logger
+from ktrdr.monitoring.setup import instrument_app, setup_monitoring
 from ktrdr.workers.base import WorkerAPIBase, WorkerOperationMixin
 
 logger = get_logger(__name__)
+
+# Get worker ID for unique service identification
+worker_id = os.getenv("WORKER_ID", uuid.uuid4().hex[:8])
+
+# Setup monitoring BEFORE creating worker
+otlp_endpoint = os.getenv("OTLP_ENDPOINT", "http://jaeger:4317")
+setup_monitoring(
+    service_name=f"ktrdr-backtest-worker-{worker_id}",
+    otlp_endpoint=otlp_endpoint,
+    console_output=os.getenv("ENVIRONMENT") == "development",
+)
 
 
 class BacktestStartRequest(WorkerOperationMixin):
@@ -196,6 +208,16 @@ worker = BacktestWorker(
     worker_port=int(os.getenv("WORKER_PORT", "5003")),
     backend_url=os.getenv("KTRDR_API_URL", "http://backend:8000"),
 )
+
+# Auto-instrument with OpenTelemetry
+instrument_app(worker.app)
+
+# Add worker-specific span attributes (for tracing)
+from opentelemetry import trace
+
+tracer = trace.get_tracer(__name__)
+# Note: Worker attributes will be added during actual request handling
+# The worker_id, worker_type, and capabilities are already tracked in WorkerAPIBase
 
 # Export FastAPI app for uvicorn
 app: FastAPI = worker.app
