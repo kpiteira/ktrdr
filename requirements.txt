@@ -180,6 +180,7 @@ opentelemetry-api==1.38.0
     #   ktrdr (pyproject.toml)
     #   opentelemetry-exporter-otlp-proto-grpc
     #   opentelemetry-exporter-otlp-proto-http
+    #   opentelemetry-exporter-prometheus
     #   opentelemetry-instrumentation
     #   opentelemetry-instrumentation-asgi
     #   opentelemetry-instrumentation-fastapi
@@ -197,6 +198,8 @@ opentelemetry-exporter-otlp-proto-grpc==1.38.0
     # via opentelemetry-exporter-otlp
 opentelemetry-exporter-otlp-proto-http==1.38.0
     # via opentelemetry-exporter-otlp
+opentelemetry-exporter-prometheus==0.59b0
+    # via ktrdr (pyproject.toml)
 opentelemetry-instrumentation==0.59b0
     # via
     #   opentelemetry-instrumentation-asgi
@@ -221,6 +224,7 @@ opentelemetry-sdk==1.38.0
     #   ktrdr (pyproject.toml)
     #   opentelemetry-exporter-otlp-proto-grpc
     #   opentelemetry-exporter-otlp-proto-http
+    #   opentelemetry-exporter-prometheus
 opentelemetry-semantic-conventions==0.59b0
     # via
     #   opentelemetry-instrumentation
@@ -260,6 +264,10 @@ pillow==12.0.0
     #   streamlit
 plotly==6.4.0
     # via ktrdr (pyproject.toml)
+prometheus-client==0.23.1
+    # via
+    #   ktrdr (pyproject.toml)
+    #   opentelemetry-exporter-prometheus
 propcache==0.4.1
     # via
     #   aiohttp
