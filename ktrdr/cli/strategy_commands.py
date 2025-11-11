@@ -25,6 +25,7 @@ from rich.progress import (
 from rich.table import Table
 
 from ktrdr.cli.api_client import check_api_connection, get_api_client
+from ktrdr.cli.telemetry import trace_cli_command
 from ktrdr.config.strategy_loader import strategy_loader
 from ktrdr.config.strategy_validator import StrategyValidator
 from ktrdr.config.validation import InputValidator
@@ -43,6 +44,7 @@ strategies_app = typer.Typer(
 )
 
 
+@trace_cli_command("strategies_validate")
 @strategies_app.command("validate")
 def validate_strategy(
     strategy: str = typer.Argument(..., help="Path to strategy YAML file"),
@@ -110,6 +112,7 @@ def validate_strategy(
         raise typer.Exit(1)
 
 
+@trace_cli_command("strategies_list")
 @strategies_app.command("list")
 def list_strategies(
     directory: str = typer.Argument(
@@ -239,6 +242,7 @@ def list_strategies(
             console.print(f"   • {strategy}")
 
 
+@trace_cli_command("strategies_backtest")
 @strategies_app.command("backtest")
 def backtest_strategy(
     strategy_file: str = typer.Argument(
@@ -456,6 +460,7 @@ async def run_backtest_async(
         sys.exit(1)
 
 
+@trace_cli_command("strategies_validate-all")
 @strategies_app.command("validate-all")
 def validate_all_cmd(
     directory: str = typer.Argument(..., help="Directory containing strategy files"),

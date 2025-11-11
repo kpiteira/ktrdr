@@ -267,6 +267,7 @@ async def _show_data_async(
         ) from e
 
 
+@trace_cli_command("data_load")
 @data_app.command("load")
 def load_data(
     symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),
@@ -831,6 +832,7 @@ async def _process_data_load_response(
         sys.exit(1)
 
 
+@trace_cli_command("data_range")
 @data_app.command("range")
 def get_data_range(
     symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),

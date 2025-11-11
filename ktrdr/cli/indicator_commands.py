@@ -17,6 +17,7 @@ from rich.console import Console
 from rich.table import Table
 
 from ktrdr.cli.api_client import check_api_connection, get_api_client
+from ktrdr.cli.telemetry import trace_cli_command
 from ktrdr.config.host_services import get_api_base_url
 from ktrdr.config.validation import InputValidator
 from ktrdr.errors import DataError, ValidationError
@@ -35,6 +36,7 @@ indicators_app = typer.Typer(
 )
 
 
+@trace_cli_command("indicators_compute")
 @indicators_app.command("compute")
 def compute_indicator(
     symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),
@@ -254,6 +256,7 @@ async def _compute_indicator_async(
         ) from e
 
 
+@trace_cli_command("indicators_plot")
 @indicators_app.command("plot")
 def plot_chart(
     symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),
@@ -365,6 +368,7 @@ async def _plot_chart_async(
         ) from e
 
 
+@trace_cli_command("indicators_list")
 @indicators_app.command("list")
 def list_indicators(
     category: Optional[str] = typer.Option(

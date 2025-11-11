@@ -7,6 +7,7 @@ import structlog
 from mcp.server.fastmcp import FastMCP
 
 from .api_client import get_api_client
+from .telemetry import trace_mcp_tool
 
 logger = structlog.get_logger()
 
@@ -15,6 +16,7 @@ mcp = FastMCP("KTRDR-Trading-Research")
 
 
 # Phase 0: Hello World Tool
+@trace_mcp_tool("hello_ktrdr")
 @mcp.tool()
 def hello_ktrdr(name: str = "World") -> str:
     """Test tool to verify MCP server is working"""
@@ -25,6 +27,7 @@ def hello_ktrdr(name: str = "World") -> str:
 # Phase 1: Core Research Tools
 
 
+@trace_mcp_tool("check_backend_health")
 @mcp.tool()
 async def check_backend_health() -> dict[str, Any]:
     """
@@ -76,6 +79,7 @@ async def check_backend_health() -> dict[str, Any]:
         }
 
 
+@trace_mcp_tool("get_available_symbols")
 @mcp.tool()
 async def get_available_symbols() -> list[dict[str, Any]]:
     """
@@ -121,6 +125,7 @@ async def get_available_symbols() -> list[dict[str, Any]]:
         raise
 
 
+@trace_mcp_tool("get_market_data")
 @mcp.tool()
 async def get_market_data(
     symbol: str,
@@ -176,6 +181,7 @@ async def get_market_data(
         raise
 
 
+@trace_mcp_tool("get_data_summary")
 @mcp.tool()
 async def get_data_summary(symbol: str, timeframe: str = "1h") -> dict[str, Any]:
     """
@@ -246,6 +252,7 @@ async def get_data_summary(symbol: str, timeframe: str = "1h") -> dict[str, Any]
         raise
 
 
+@trace_mcp_tool("get_available_indicators")
 @mcp.tool()
 async def get_available_indicators() -> list[dict[str, Any]]:
     """
@@ -298,6 +305,7 @@ async def get_available_indicators() -> list[dict[str, Any]]:
         raise
 
 
+@trace_mcp_tool("get_available_strategies")
 @mcp.tool()
 async def get_available_strategies() -> list[dict[str, Any]]:
     """
@@ -353,6 +361,7 @@ async def get_available_strategies() -> list[dict[str, Any]]:
 # Neural Network Training Tools
 
 
+@trace_mcp_tool("get_training_status")
 @mcp.tool()
 async def get_training_status(task_id: str) -> dict[str, Any]:
     """
@@ -391,6 +400,7 @@ async def get_training_status(task_id: str) -> dict[str, Any]:
         raise
 
 
+@trace_mcp_tool("get_model_performance")
 @mcp.tool()
 async def get_model_performance(task_id: str) -> dict[str, Any]:
     """
@@ -454,6 +464,7 @@ async def get_model_performance(task_id: str) -> dict[str, Any]:
         raise
 
 
+@trace_mcp_tool("test_model_prediction")
 @mcp.tool()
 async def test_model_prediction(
     model_name: str, symbol: str, timeframe: str = "1h", test_date: Optional[str] = None
@@ -546,6 +557,7 @@ async def test_model_prediction(
 # Backtesting Tools
 
 
+@trace_mcp_tool("list_operations")
 @mcp.tool()
 async def list_operations(
     operation_type: Optional[str] = None,
@@ -634,6 +646,7 @@ async def list_operations(
         raise
 
 
+@trace_mcp_tool("get_operation_status")
 @mcp.tool()
 async def get_operation_status(operation_id: str) -> dict[str, Any]:
     """
@@ -695,6 +708,7 @@ async def get_operation_status(operation_id: str) -> dict[str, Any]:
         raise
 
 
+@trace_mcp_tool("cancel_operation")
 @mcp.tool()
 async def cancel_operation(
     operation_id: str, reason: Optional[str] = None
@@ -751,6 +765,7 @@ async def cancel_operation(
         raise
 
 
+@trace_mcp_tool("get_operation_results")
 @mcp.tool()
 async def get_operation_results(operation_id: str) -> dict[str, Any]:
     """
@@ -812,6 +827,7 @@ async def get_operation_results(operation_id: str) -> dict[str, Any]:
         raise
 
 
+@trace_mcp_tool("get_operation_metrics")
 @mcp.tool()
 async def get_operation_metrics(operation_id: str) -> dict[str, Any]:
     """
@@ -897,6 +913,7 @@ async def get_operation_metrics(operation_id: str) -> dict[str, Any]:
         raise
 
 
+@trace_mcp_tool("trigger_data_loading")
 @mcp.tool()
 async def trigger_data_loading(
     symbol: str,
@@ -997,6 +1014,7 @@ async def trigger_data_loading(
         raise
 
 
+@trace_mcp_tool("start_training")
 @mcp.tool()
 async def start_training(
     symbols: list[str],
@@ -1102,6 +1120,7 @@ async def start_training(
         raise
 
 
+@trace_mcp_tool("start_backtest")
 @mcp.tool()
 async def start_backtest(
     strategy_name: str,

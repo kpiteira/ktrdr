@@ -14,6 +14,7 @@ from rich.console import Console
 
 from ktrdr.cli.operation_adapters import TrainingOperationAdapter
 from ktrdr.cli.operation_executor import AsyncOperationExecutor
+from ktrdr.cli.telemetry import trace_cli_command
 from ktrdr.config.strategy_loader import strategy_loader
 from ktrdr.config.validation import InputValidator
 from ktrdr.errors import ValidationError
@@ -32,6 +33,7 @@ async_models_app = typer.Typer(
 )
 
 
+@trace_cli_command("models_train")
 @async_models_app.command("train")
 def train_model_async(
     strategy_file: str = typer.Argument(..., help="Path to strategy YAML file"),
