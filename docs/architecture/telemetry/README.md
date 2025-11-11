@@ -9,7 +9,7 @@
 
 This directory contains the design and architecture for KTRDR's observability stack based on **OpenTelemetry (OTEL)**.
 
-The primary goal is to provide **distributed tracing** and **structured logging** across KTRDR's multi-service architecture (API container, IB host service, training host service) to enable rapid debugging of service communication failures and runtime issues.
+The primary goal is to provide **distributed tracing** and **structured logging** across KTRDR's distributed architecture (API backend, IB host service, training workers, backtesting workers) to enable rapid debugging of service communication failures, worker operations, and runtime issues.
 
 ---
 
@@ -35,11 +35,24 @@ The primary goal is to provide **distributed tracing** and **structured logging*
 - Core components (OTEL SDK, auto-instrumentation libraries, span processors)
 - Instrumentation patterns (auto-instrumentation, custom spans, structured logging)
 - Data flow (trace creation, log correlation)
-- Service integration (API, IB host, training host)
+- Service integration (API, IB host, training host, workers, CLI, MCP)
 - Storage backends (Jaeger, Prometheus, Loki, Grafana)
 - Performance and security considerations
 
 **Key Takeaway**: Detailed technical specifications for implementing the observability stack.
+
+---
+
+### [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) - Step-by-Step Implementation
+
+**Read This Third** before implementing:
+- Detailed task-by-task implementation guide
+- TDD approach with quality gates
+- Specific code examples for each phase
+- Validation and testing procedures
+- Commit-by-commit breakdown
+
+**Key Takeaway**: Follow this plan to implement observability incrementally with zero disruption to existing functionality.
 
 ---
 
@@ -100,9 +113,10 @@ The primary goal is to provide **distributed tracing** and **structured logging*
    ```
 
 **Expected Output**: JSON traces printed to stdout showing:
-- API request (POST /api/v1/data/load)
-- HTTP call to IB host service (if configured)
-- Logs with trace IDs
+- API request (POST /api/v1/data/load or /api/v1/training/start)
+- HTTP call to IB host service or worker selection
+- Worker operation execution
+- Logs with trace IDs across backend and workers
 
 ---
 
@@ -266,26 +280,90 @@ logger.info("Training started", extra={"symbol": symbol})
 
 ---
 
-### 2. Debug Distributed Operations
+### 2. Debug Worker Selection and Dispatch
+
+**Scenario**: "Training operation not starting"
+
+**Old Way**:
+- Check worker registry manually
+- Check worker health endpoints
+- Guess if backend selected a worker
+- Check worker logs individually
+
+**With OTEL** (1 query):
+```json
+{
+  "trace_id": "def-456",
+  "name": "POST /api/v1/training/start",
+  "status": "ERROR",
+  "spans": [
+    {
+      "name": "worker_registry.select_worker",
+      "attributes": {
+        "worker_type": "training",
+        "available_workers": 0,
+        "required_capabilities": ["gpu"]
+      },
+      "status": "ERROR",
+      "error.type": "NoAvailableWorkersError"
+    }
+  ]
+}
+```
+
+**Diagnosis**: "No GPU training workers available. Need to start training workers with GPU capability."
+
+---
+
+### 3. Debug Distributed Worker Operations
 
 **Scenario**: "Training is slow"
 
 **With OTEL**:
 ```
 Trace: train_model (25min)
-├─ API: POST /train (50ms)
-├─ Training Host: /train (24.9min)
+├─ Backend: POST /api/v1/training/start (50ms)
+│  └─ WorkerRegistry: select_worker (5ms)
+├─ Training Worker: /api/v1/training/train (24.9min)
 │  ├─ Data loading (45s)
 │  ├─ Model init (5s)
 │  └─ Training loop (24min) ← SLOW!
-└─ Save results (10s)
+└─ Backend: Save results (10s)
 ```
 
-**Diagnosis**: "Training loop is 2.4x slower than baseline. Check GPU utilization."
+**Diagnosis**: "Training loop is 2.4x slower than baseline. Check GPU utilization on worker node."
 
 ---
 
-### 3. Track Exceptions with Context
+### 4. Debug Worker Health and Load Balancing
+
+**Scenario**: "Operations queuing up despite multiple workers"
+
+**With OTEL**:
+```json
+{
+  "trace_id": "ghi-789",
+  "name": "POST /api/v1/training/start",
+  "spans": [
+    {
+      "name": "worker_registry.select_worker",
+      "attributes": {
+        "total_workers": 3,
+        "available_workers": 0,
+        "busy_workers": ["worker-1", "worker-2", "worker-3"],
+        "selection_strategy": "least_busy"
+      },
+      "status": "QUEUED"
+    }
+  ]
+}
+```
+
+**Diagnosis**: "All 3 workers busy. Consider adding more workers or optimizing operation duration."
+
+---
+
+### 5. Track Exceptions with Context
 
 **Scenario**: Training fails with CUDA OOM
 
@@ -308,12 +386,79 @@ Trace: train_model (25min)
 
 ---
 
+### 6. Debug End-to-End CLI Operations
+
+**Scenario**: "CLI training command not working"
+
+**Old Way**:
+- Check if API is running
+- Try command with verbose flag
+- Check logs manually
+- Guess where it failed
+
+**With OTEL** (1 trace showing full flow):
+```
+Trace: ktrdr train AAPL momentum (25min 350ms)
+├─ CLI: cli.train (25min 350ms)
+│  ├─ Attributes: cli.command="train", cli.symbol="AAPL", cli.strategy="momentum"
+│  └─ POST http://localhost:8000/api/v1/training/start (25min 300ms)
+│     ├─ Backend: POST /api/v1/training/start (25min 300ms)
+│     │  └─ WorkerRegistry: select_worker (5ms)
+│     │     └─ Selected: training-worker-gpu-01
+│     └─ Training Worker: /api/v1/training/train (25min 250ms)
+│        ├─ Data loading (45s)
+│        ├─ Model init (5s)
+│        └─ Training loop (24min 200s)
+└─ CLI: Display results (50ms)
+```
+
+**Diagnosis**: "Complete end-to-end trace from user command to worker execution. Training completed successfully. Total time includes network latency and CLI overhead."
+
+---
+
+### 7. Debug MCP/LLM Agent Requests
+
+**Scenario**: "LLM agent's training request failing"
+
+**With OTEL**:
+```json
+{
+  "trace_id": "mcp-789",
+  "name": "mcp.tool.execute",
+  "status": "ERROR",
+  "spans": [
+    {
+      "name": "mcp.tool.execute",
+      "attributes": {
+        "mcp.tool": "start_training",
+        "mcp.params": "{\"symbol\":\"AAPL\",\"strategy\":\"invalid_strategy\"}",
+        "llm.agent": "claude-sonnet"
+      },
+      "children": [
+        {
+          "name": "POST /api/v1/training/start",
+          "status": "ERROR",
+          "error.type": "ValidationError",
+          "error.message": "Unknown strategy: invalid_strategy"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Diagnosis**: "LLM agent passed invalid strategy name 'invalid_strategy'. Backend validation caught the error. Need to update MCP tool schema or LLM prompt."
+
+---
+
 ## Technology Stack Summary
 
 | Component | Purpose | Required? |
 |-----------|---------|-----------|
 | **OTEL SDK** (Python) | Core instrumentation library | ✅ Always |
 | **Auto-instrumentation** | FastAPI, httpx, logging | ✅ Always |
+| **CLI Instrumentation** | Track user commands end-to-end | ✅ Recommended |
+| **MCP Server Instrumentation** | Track LLM agent requests | ✅ Recommended |
 | **Console Exporter** | Print traces to stdout | Dev only |
 | **OTLP Exporter** | Send traces to backend | Production |
 | **Jaeger** | Trace storage + UI | Recommended |
@@ -329,12 +474,13 @@ Trace: train_model (25min)
 |-------|------|--------|-------|
 | **1** | Console traces | 2 hours | Validate setup |
 | **2** | Jaeger UI | 1 hour | Visual debugging |
-| **3** | Host services | 2 hours | End-to-end tracing |
+| **3** | Workers + host services | 3 hours | End-to-end tracing across all workers |
+| **3.5** | CLI + MCP server | 2 hours | Complete user-to-worker visibility |
 | **4** | Structured logs | 4 hours | Searchable logs |
 | **5** | Metrics + dashboards | 6 hours | Performance monitoring |
 | **6** | Centralized aggregation | 8 hours | Production-ready |
 
-**Total**: ~23 hours spread over 3 months
+**Total**: ~26 hours spread over 3 months
 
 **ROI**: 3-5x reduction in debugging time for distributed issues
 
@@ -410,9 +556,10 @@ Prometheus alone:
 
 1. **Read DESIGN.md** for high-level design and rationale
 2. **Read ARCHITECTURE.md** for technical implementation details
-3. **Start Phase 1** (console traces) to validate setup
-4. **Add Jaeger** (Phase 2) for visual debugging
-5. **Instrument host services** (Phase 3) for end-to-end tracing
+3. **Read IMPLEMENTATION_PLAN.md** for step-by-step instructions
+4. **Start Phase 1** (console traces) to validate setup
+5. **Add Jaeger** (Phase 2) for visual debugging
+6. **Instrument workers and host services** (Phase 3) for end-to-end tracing across distributed operations
 
 ---
 

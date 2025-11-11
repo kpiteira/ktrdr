@@ -22,7 +22,7 @@
 
 ## Executive Summary
 
-This design introduces **OpenTelemetry (OTEL)-based observability** to KTRDR, enabling comprehensive visibility into distributed operations across the API container, IB host service, and training host service. The primary goal is to provide **structured telemetry data** that enables rapid debugging of service communication failures, distributed operation issues, and runtime exceptions.
+This design introduces **OpenTelemetry (OTEL)-based observability** to KTRDR, enabling comprehensive visibility into distributed operations across the API backend, IB host service, training workers, and backtesting workers. The primary goal is to provide **structured telemetry data** that enables rapid debugging of service communication failures, worker operations, distributed operation issues, and runtime exceptions.
 
 ### Key Design Principles
 
@@ -65,11 +65,11 @@ KTRDR's distributed architecture creates debugging challenges:
 ```
 CLI Command
   ↓
-API Container (Docker)
+API Backend (Docker)
   ↓
-IB Host Service (port 5001) → IB Gateway (port 4002)
-  OR
-Training Host Service (port 5002) → GPU/PyTorch
+  ├─ IB Host Service (port 5001) → IB Gateway (port 4002)
+  ├─ Training Workers (multiple nodes) → GPU/PyTorch
+  └─ Backtesting Workers (multiple nodes) → CPU computation
 ```
 
 **Debugging Scenario**: "Data download failed"
@@ -84,10 +84,12 @@ Training Host Service (port 5002) → GPU/PyTorch
 
 **Problems**:
 - ❌ No visibility into whether HTTP calls succeeded
-- ❌ Logs scattered across 3 services
+- ❌ Logs scattered across multiple services and workers
 - ❌ No correlation between operation IDs and service calls
 - ❌ String parsing required to extract context
 - ❌ Manual detective work to reconstruct flow
+- ❌ No visibility into worker selection and load balancing decisions
+- ❌ Cannot trace operations across backend → worker boundary
 
 ### Desired State: X-Ray Vision
 
@@ -284,8 +286,13 @@ operation = await operations_service.create_operation(
 
 **KTRDR Use Cases**:
 - "Did API call IB host service?"
-- "Where did training fail?" (API, host service, GPU, IB Gateway)
+- "Which worker did the backend select?"
+- "Where did training fail?" (Backend, worker, GPU, network)
 - "Why did data download time out?" (network, IB Gateway, data volume)
+- "Are workers receiving operations from the backend?"
+- "Why is load balancing not distributing evenly?"
+- "Did the CLI command reach the backend?" (CLI → Backend connectivity)
+- "Why did the LLM agent's request fail?" (MCP server → Backend validation)
 
 **Auto-Captured Data**:
 ```json
@@ -428,21 +435,48 @@ logger.info(
 
 ---
 
-### Phase 3: Host Service Instrumentation (Week 3)
+### Phase 3: Worker and Host Service Instrumentation (Week 3)
 
-**Goal**: End-to-end tracing across all services
+**Goal**: End-to-end tracing across backend, workers, and host services
 
 **Tasks**:
 1. Add auto-instrumentation to IB host service
-2. Add auto-instrumentation to training host service
-3. Configure trace context propagation (HTTP headers)
-4. Test cross-service traces
+2. Add auto-instrumentation to training workers
+3. Add auto-instrumentation to backtesting workers
+4. Configure trace context propagation (HTTP headers)
+5. Test cross-service traces including worker dispatch
 
 **Deliverables**:
-- Single trace spanning API → host service → IB Gateway
-- See exact latency breakdown by service
+- Single trace spanning Backend → Worker → Host Service
+- See exact latency breakdown by component
+- Worker selection visible in traces
 
-**Validation**: Data download shows: API (50ms) → IB Host (20ms) → IB Gateway (15s) → Parse (50ms)
+**Validation**:
+- Data download shows: Backend (50ms) → IB Host (20ms) → IB Gateway (15s) → Parse (50ms)
+- Training shows: Backend (50ms) → Worker Selection (5ms) → Worker (24.9min) → Result (10s)
+
+**Effort**: ~3 hours
+
+---
+
+### Phase 3.5: CLI and MCP Server Instrumentation (Week 4)
+
+**Goal**: End-to-end tracing from user entry points (CLI, LLM agents)
+
+**Tasks**:
+1. Add OTEL instrumentation to CLI commands
+2. Add custom spans for CLI operations
+3. Instrument MCP server (if applicable)
+4. Test full trace: CLI → Backend → Worker or MCP → Backend → Worker
+
+**Deliverables**:
+- CLI commands create root spans
+- Complete trace from `ktrdr train` command to worker completion
+- MCP tool calls tracked with attributes
+
+**Validation**:
+- CLI trace shows: `ktrdr train AAPL momentum` → Backend API → Worker Selection → Worker Execution → CLI Result Display
+- MCP trace shows: LLM Request → MCP Tool → Backend API → Worker
 
 **Effort**: ~2 hours
 
@@ -629,11 +663,19 @@ logger.info(
 ✅ **Service dependency graph** shows API → host services
 ✅ **Click trace → see all spans** with timing breakdown
 
-### Phase 3: Host Service Instrumentation
+### Phase 3: Worker and Host Service Instrumentation
 
-✅ **Single trace spans API + host service**
-✅ **Cross-service trace context propagation** works
-✅ **See exact latency breakdown**: API (50ms) → Host (20ms) → Gateway (15s)
+✅ **Single trace spans Backend + Worker + Host Service**
+✅ **Cross-service trace context propagation** works (including workers)
+✅ **Worker selection visible** in traces with attributes
+✅ **See exact latency breakdown**: Backend (50ms) → Worker Selection (5ms) → Worker (24.9min) → Host (20ms)
+
+### Phase 3.5: CLI and MCP Server Instrumentation
+
+✅ **CLI commands create root spans** with command attributes
+✅ **Complete end-to-end trace**: CLI → Backend → Worker → CLI Result
+✅ **MCP tool calls tracked** with tool name and parameters
+✅ **LLM agent requests visible** in traces with error details
 
 ### Phase 4: Structured Logging
 
@@ -653,6 +695,8 @@ logger.info(
 ✅ **LLM agents diagnose issues in first response** (no iteration)
 ✅ **Service communication failures identified in <1 minute**
 ✅ **Exception context captured automatically** (no manual log parsing)
+✅ **End-to-end visibility** from CLI command or LLM request to worker completion
+✅ **MCP/LLM integration issues** debuggable from traces (parameter validation, routing)
 
 ---
 

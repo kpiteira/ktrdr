@@ -26,24 +26,26 @@
 
 ### Purpose
 
-The telemetry architecture provides **comprehensive observability** for KTRDR's distributed system, capturing traces, logs, and metrics across the API container, IB host service, and training host service.
+The telemetry architecture provides **comprehensive observability** for KTRDR's distributed system, capturing traces, logs, and metrics across the API backend, IB host service, training workers, and backtesting workers.
 
 ### Key Requirements
 
-- **Distributed Tracing**: Track requests across service boundaries (API → host services → IB Gateway/GPU)
+- **Distributed Tracing**: Track requests across service boundaries (Backend → Workers → Host Services → IB Gateway/GPU)
 - **Auto-Instrumentation**: Capture telemetry with minimal code changes
-- **Trace-Log Correlation**: Automatically link logs to traces via trace IDs
+- **Trace-Log Correlation**: Automatically link logs to traces via trace IDs across all workers
 - **Structured Data**: Machine-readable telemetry for programmatic analysis
+- **Worker Visibility**: Track worker selection, dispatch, and execution
 - **Low Overhead**: <5% performance impact on operations
 - **Developer Experience**: Easy local development with console/UI tools
 
 ### Architecture Drivers
 
-1. **Distributed Architecture**: KTRDR spans 3+ services (API, IB host, training host)
-2. **Service Communication Failures**: Primary debugging challenge is "did the call happen?"
-3. **Exception Context**: Need full context (trace, span, attributes) for errors
-4. **LLM-Friendly**: Structured data enables AI assistants to diagnose issues directly
-5. **Incremental Adoption**: Must work without disrupting existing code
+1. **Distributed Architecture**: KTRDR spans multiple services and workers (Backend, IB host, training workers, backtesting workers)
+2. **Service Communication Failures**: Primary debugging challenge is "did the call happen?" and "which worker was selected?"
+3. **Worker Load Balancing**: Need visibility into worker selection and distribution
+4. **Exception Context**: Need full context (trace, span, attributes) for errors across workers
+5. **LLM-Friendly**: Structured data enables AI assistants to diagnose issues directly
+6. **Incremental Adoption**: Must work without disrupting existing code
 
 ---
 
@@ -52,50 +54,77 @@ The telemetry architecture provides **comprehensive observability** for KTRDR's 
 ### Telemetry Stack
 
 ```
-┌────────────────────────────────────────────────────────────────┐
-│                     KTRDR Services                              │
-│                                                                 │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐         │
-│  │  API         │  │ IB Host      │  │ Training     │         │
-│  │  Container   │  │ Service      │  │ Host Service │         │
-│  │              │  │              │  │              │         │
-│  │ OTEL SDK     │  │ OTEL SDK     │  │ OTEL SDK     │         │
-│  │ - FastAPI    │  │ - FastAPI    │  │ - FastAPI    │         │
-│  │ - httpx      │  │ - httpx      │  │ - PyTorch    │         │
-│  │ - logging    │  │ - logging    │  │ - logging    │         │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘         │
-│         │                 │                 │                 │
-│         └─────────────────┼─────────────────┘                 │
-│                           │                                   │
-└───────────────────────────┼───────────────────────────────────┘
-                            │ OTLP (gRPC/HTTP)
-                            ▼
-                   ┌─────────────────┐
-                   │ OTEL Collector  │
-                   │  (Optional)     │
-                   └────────┬────────┘
-                            │
-          ┌─────────────────┼─────────────────┐
-          │                 │                 │
-          ▼                 ▼                 ▼
-   ┌───────────┐     ┌───────────┐    ┌───────────┐
-   │  Jaeger   │     │Prometheus │    │   Loki    │
-   │  (Traces) │     │ (Metrics) │    │  (Logs)   │
-   └─────┬─────┘     └─────┬─────┘    └─────┬─────┘
-         │                 │                 │
-         └─────────────────┼─────────────────┘
-                           ▼
-                    ┌────────────┐
-                    │  Grafana   │
-                    │ (Unified)  │
-                    └────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          Client Layer (Entry Points)                     │
+│                                                                          │
+│  ┌──────────────┐                              ┌──────────────┐         │
+│  │     CLI      │                              │ MCP Server   │         │
+│  │  (Commands)  │                              │ (LLM Agent)  │         │
+│  │              │                              │              │         │
+│  │ OTEL SDK     │                              │ OTEL SDK     │         │
+│  │ - httpx      │                              │ - FastAPI    │         │
+│  │ - logging    │                              │ - httpx      │         │
+│  └──────┬───────┘                              └──────┬───────┘         │
+│         │                                             │                 │
+│         └─────────────────────┬─────────────────────┘                   │
+└───────────────────────────────┼──────────────────────────────────────────┘
+                                │ HTTP(S)
+                                ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     KTRDR Backend & Workers                              │
+│                                                                          │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                  │
+│  │  Backend     │  │ IB Host      │  │ Training     │                  │
+│  │  (API)       │  │ Service      │  │ Workers      │                  │
+│  │              │  │              │  │ (Multiple)   │                  │
+│  │ OTEL SDK     │  │ OTEL SDK     │  │ OTEL SDK     │                  │
+│  │ - FastAPI    │  │ - FastAPI    │  │ - FastAPI    │                  │
+│  │ - httpx      │  │ - httpx      │  │ - PyTorch    │                  │
+│  │ - logging    │  │ - logging    │  │ - logging    │                  │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘                  │
+│         │                 │                 │                          │
+│         │                 │  ┌──────────────┐                          │
+│         │                 │  │ Backtesting  │                          │
+│         │                 │  │ Workers      │                          │
+│         │                 │  │ (Multiple)   │                          │
+│         │                 │  │ OTEL SDK     │                          │
+│         │                 │  │ - FastAPI    │                          │
+│         │                 │  │ - httpx      │                          │
+│         │                 │  │ - logging    │                          │
+│         │                 │  └──────┬───────┘                          │
+│         │                 │         │                                  │
+│         └─────────────────┼─────────┼────────────────                  │
+│                           │         │                                  │
+└───────────────────────────┼─────────┼──────────────────────────────────┘
+                            │         │ OTLP (gRPC/HTTP)
+                            └─────────┘
+                                  ▼
+                         ┌─────────────────┐
+                         │ OTEL Collector  │
+                         │  (Optional)     │
+                         └────────┬────────┘
+                                  │
+                ┌─────────────────┼─────────────────┐
+                │                 │                 │
+                ▼                 ▼                 ▼
+         ┌───────────┐     ┌───────────┐    ┌───────────┐
+         │  Jaeger   │     │Prometheus │    │   Loki    │
+         │  (Traces) │     │ (Metrics) │    │  (Logs)   │
+         └─────┬─────┘     └─────┬─────┘    └─────┬─────┘
+               │                 │                 │
+               └─────────────────┼─────────────────┘
+                                 ▼
+                          ┌────────────┐
+                          │  Grafana   │
+                          │ (Unified)  │
+                          └────────────┘
 ```
 
 ### Architectural Layers
 
 #### 1. Instrumentation Layer (In-Process)
 
-**Location**: Within each KTRDR service (API, host services)
+**Location**: Within each KTRDR service (Backend, workers, host services)
 
 **Components**:
 - OTEL SDK (Python)
@@ -696,7 +725,7 @@ Grafana
 
 ## Service Integration
 
-### API Container
+### Backend (API)
 
 **Configuration** (ktrdr/api/main.py):
 
@@ -753,17 +782,143 @@ instrument_app(app)
 
 ---
 
-### Training Host Service
+### Training Workers
 
-**Configuration** (training-host-service/main.py):
+**Configuration** (ktrdr/training/training_worker.py):
 
 ```python
 from ktrdr.monitoring.setup import setup_monitoring, instrument_app
 
 # Setup OTEL
 setup_monitoring(
-    service_name="ktrdr-training-host-service",
+    service_name=f"ktrdr-training-worker-{worker_id}",
     otlp_endpoint=os.getenv("OTLP_ENDPOINT", "http://jaeger:4317")
+)
+
+# Create FastAPI app using WorkerAPIBase
+app = FastAPI(...)
+
+# Auto-instrument
+instrument_app(app)
+
+# Add worker-specific attributes
+tracer = trace.get_tracer(__name__)
+span = trace.get_current_span()
+span.set_attribute("worker.id", worker_id)
+span.set_attribute("worker.type", "training")
+span.set_attribute("worker.capabilities", ["gpu", "cpu"])
+
+# Future: PyTorch instrumentation
+# from opentelemetry.instrumentation.pytorch import PyTorchInstrumentor
+# PyTorchInstrumentor().instrument()
+```
+
+**Key Points**:
+- Each worker has unique service name (`worker-{id}`) for identification
+- Worker attributes captured in spans (worker_id, type, capabilities)
+- Same auto-instrumentation pattern as backend
+- Trace context propagated from backend via HTTP headers
+
+---
+
+### Backtesting Workers
+
+**Configuration** (ktrdr/backtesting/backtest_worker.py):
+
+```python
+from ktrdr.monitoring.setup import setup_monitoring, instrument_app
+
+# Setup OTEL
+setup_monitoring(
+    service_name=f"ktrdr-backtest-worker-{worker_id}",
+    otlp_endpoint=os.getenv("OTLP_ENDPOINT", "http://jaeger:4317")
+)
+
+# Create FastAPI app using WorkerAPIBase
+app = FastAPI(...)
+
+# Auto-instrument
+instrument_app(app)
+
+# Add worker-specific attributes
+span = trace.get_current_span()
+span.set_attribute("worker.id", worker_id)
+span.set_attribute("worker.type", "backtesting")
+span.set_attribute("worker.capabilities", ["cpu"])
+```
+
+**Key Points**:
+- Similar pattern to training workers
+- CPU-only capabilities
+- Unique service name per worker for Jaeger filtering
+
+---
+
+### CLI (Command Line Interface)
+
+**Configuration** (ktrdr/cli/main.py):
+
+```python
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+
+def setup_cli_tracing():
+    """Setup OTEL for CLI commands."""
+    # Setup tracer provider
+    provider = TracerProvider()
+    exporter = OTLPSpanExporter(
+        endpoint=os.getenv("OTLP_ENDPOINT", "http://localhost:4317"),
+        insecure=True
+    )
+    provider.add_span_processor(BatchSpanProcessor(exporter))
+    trace.set_tracer_provider(provider)
+
+    # Instrument httpx (CLI uses AsyncCLIClient with httpx)
+    HTTPXClientInstrumentor().instrument()
+
+# In CLI command handlers
+tracer = trace.get_tracer(__name__)
+
+@app.command()
+def train(symbol: str, strategy: str):
+    """Start training operation."""
+    with tracer.start_as_current_span("cli.train") as span:
+        span.set_attribute("cli.command", "train")
+        span.set_attribute("cli.symbol", symbol)
+        span.set_attribute("cli.strategy", strategy)
+
+        # Call API (httpx auto-instrumented)
+        async with AsyncCLIClient() as client:
+            response = await client.post("/api/v1/training/start", json={...})
+```
+
+**Key Points**:
+- CLI commands create root spans (e.g., `cli.train`, `cli.data_load`)
+- httpx auto-instrumentation captures API calls
+- Complete trace: CLI command → API request → Worker selection → Worker execution
+- User can see full operation flow from command to result
+
+**Benefits**:
+- Debug CLI-specific issues (connection failures, auth problems)
+- See exact latency: user command → API → worker → completion
+- Track CLI usage patterns and command frequency
+
+---
+
+### MCP Server (Model Context Protocol)
+
+**Configuration** (mcp server implementation):
+
+```python
+from ktrdr.monitoring.setup import setup_monitoring, instrument_app
+
+# Setup OTEL
+setup_monitoring(
+    service_name="ktrdr-mcp-server",
+    otlp_endpoint=os.getenv("OTLP_ENDPOINT", "http://localhost:4317")
 )
 
 # Create FastAPI app
@@ -772,10 +927,33 @@ app = FastAPI(...)
 # Auto-instrument
 instrument_app(app)
 
-# Future: PyTorch instrumentation
-# from opentelemetry.instrumentation.pytorch import PyTorchInstrumentor
-# PyTorchInstrumentor().instrument()
+# Add MCP-specific tracing
+tracer = trace.get_tracer(__name__)
+
+@app.post("/mcp/tools/{tool_name}")
+async def execute_tool(tool_name: str, params: dict):
+    """Execute MCP tool with tracing."""
+    with tracer.start_as_current_span("mcp.tool.execute") as span:
+        span.set_attribute("mcp.tool", tool_name)
+        span.set_attribute("mcp.params", json.dumps(params))
+
+        # Execute tool (may call backend API)
+        result = await tool_executor.execute(tool_name, params)
+
+        span.set_attribute("mcp.result.status", "success")
+        return result
 ```
+
+**Key Points**:
+- MCP server acts as a bridge between LLM agents and KTRDR backend
+- Each MCP tool call creates a span
+- Traces show: LLM request → MCP tool → Backend API → Worker
+- Helps debug LLM integration issues
+
+**Use Cases**:
+- "Which MCP tools are LLM agents using most?"
+- "Why did LLM agent's training request fail?"
+- "How long do MCP tool calls take?"
 
 ---
 
