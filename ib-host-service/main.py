@@ -10,6 +10,7 @@ endpoints that the containerized backend can call.
 """
 
 import logging
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -33,6 +34,7 @@ try:
 
     # Import existing ktrdr modules
     from ktrdr.logging import get_logger
+    from ktrdr.monitoring.setup import instrument_app, setup_monitoring
 except ImportError as e:
     print(f"Error importing modules: {e}")
     print("Make sure the parent directory contains ktrdr modules")
@@ -45,12 +47,23 @@ service_config = get_host_service_config()
 logging.basicConfig(level=getattr(logging, service_config.host_service.log_level))
 logger = get_logger(__name__)
 
+# Setup monitoring BEFORE creating app
+otlp_endpoint = os.getenv("OTLP_ENDPOINT", "http://localhost:4317")
+setup_monitoring(
+    service_name="ktrdr-ib-host-service",
+    otlp_endpoint=otlp_endpoint,
+    console_output=os.getenv("ENVIRONMENT") == "development",
+)
+
 # Create FastAPI app
 app = FastAPI(
     title="IB Connector Host Service",
     description="Direct IB Gateway connectivity service for KTRDR",
     version="1.0.0",
 )
+
+# Auto-instrument with OpenTelemetry
+instrument_app(app)
 
 # Add CORS middleware for Docker container communication
 app.add_middleware(
