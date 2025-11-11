@@ -235,6 +235,35 @@ services:
       retries: 3
       start_period: 10s
 
+  # Grafana - Unified observability UI (Phase 5: Metrics and Dashboards)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ktrdr-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      - GF_INSTALL_PLUGINS=
+    volumes:
+      - ../monitoring/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ../monitoring/grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ../monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - jaeger
+    networks:
+      - ktrdr-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
 networks:
   ktrdr-network:
     driver: bridge
@@ -244,3 +273,4 @@ volumes:
   uv-cache:
   npm-cache:
   prometheus_data:
+  grafana_data:
