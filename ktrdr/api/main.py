@@ -6,6 +6,7 @@ for the KTRDR API backend.
 """
 
 import logging
+import os
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -25,9 +26,17 @@ from ktrdr.errors import (
     DataNotFoundError,
     ProcessingError,
 )
+from ktrdr.monitoring.setup import instrument_app, setup_monitoring
 
 # Setup module-level logger
 logger = logging.getLogger(__name__)
+
+# Setup monitoring BEFORE creating app
+setup_monitoring(
+    service_name="ktrdr-api",
+    otlp_endpoint=os.getenv("OTLP_ENDPOINT"),  # None for Phase 1
+    console_output=True,  # Enable console traces for Phase 1
+)
 
 # Set up templates directory
 templates_dir = Path(__file__).parent / "templates"
@@ -56,6 +65,9 @@ def create_application() -> FastAPI:
         openapi_url=f"{config.api_prefix}/openapi.json",
         lifespan=lifespan,
     )
+
+    # Auto-instrument the app with OpenTelemetry
+    instrument_app(app)
 
     # Add CORS middleware
     app.add_middleware(
