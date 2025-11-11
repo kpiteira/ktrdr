@@ -115,11 +115,16 @@ cd training-host-service && ./start.sh
 
 #### For Production Deployments
 
-See **[Comprehensive Deployment Guide](docs/user-guides/deployment.md)** for:
-- Docker Compose deployment (single host)
-- Proxmox LXC deployment (multi-host production)
-- Worker configuration and scaling strategies
-- Monitoring and troubleshooting
+**Deployment Options**:
+- **Development**: [Docker Compose Guide](docs/user-guides/deployment.md) - Single-host, quick setup
+- **Production**: [Proxmox LXC Guide](docs/user-guides/deployment-proxmox.md) - Multi-host, 5-15% better performance
+- **Operations**: [CI/CD Runbook](docs/developer/cicd-operations-runbook.md) - Deployment automation, incident response
+
+**Key Benefits of Proxmox (Production)**:
+- Lower overhead (~5-15% performance improvement vs Docker)
+- Template-based rapid worker cloning
+- Full OS environment with systemd
+- Proxmox management tools (backups, snapshots, monitoring)
 
 ### Launching KTRDR
 

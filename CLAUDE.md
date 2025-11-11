@@ -408,7 +408,9 @@ Before working on specific modules:
 - **Distributed Workers Architecture** (IMPORTANT):
   - [docs/architecture-overviews/distributed-workers.md](docs/architecture-overviews/distributed-workers.md) - High-level architecture overview
   - [docs/developer/distributed-workers-guide.md](docs/developer/distributed-workers-guide.md) - Developer guide for creating/debugging workers
-  - [docs/user-guides/deployment.md](docs/user-guides/deployment.md) - Deployment and operations guide
+  - [docs/user-guides/deployment.md](docs/user-guides/deployment.md) - Docker Compose deployment (development)
+  - [docs/user-guides/deployment-proxmox.md](docs/user-guides/deployment-proxmox.md) - Proxmox LXC deployment (production)
+  - [docs/developer/cicd-operations-runbook.md](docs/developer/cicd-operations-runbook.md) - CI/CD and operations procedures
 - **Data Module**:
   - [ktrdr/data/repository/data_repository.py](ktrdr/data/repository/data_repository.py) - Cached data access
   - [ktrdr/data/acquisition/acquisition_service.py](ktrdr/data/acquisition/acquisition_service.py) - Data downloads with ServiceOrchestrator
@@ -495,6 +497,90 @@ ktrdr operations cancel <operation-id>
 ktrdr ib test-connection
 ktrdr ib check-status
 ```
+
+## 🏭 PROXMOX PRODUCTION DEPLOYMENT
+
+**For production deployments**, KTRDR uses Proxmox LXC containers for better performance and lower overhead than Docker.
+
+### Why Proxmox LXC?
+
+- **5-15% better performance** vs Docker (lower container overhead)
+- **Lower memory footprint** per worker
+- **Template-based cloning** for rapid worker scaling
+- **Full OS environment** with systemd and native tooling
+- **Proxmox management tools** (backups, snapshots, monitoring)
+- **Multi-host clustering** for high availability
+
+### Quick Start (Production)
+
+```bash
+# 1. Create LXC template (one-time setup)
+# See: docs/user-guides/deployment-proxmox.md
+
+# 2. Clone and deploy backend LXC
+ssh root@proxmox "pct clone 900 100 --hostname ktrdr-backend"
+ssh root@proxmox "pct set 100 --cores 4 --memory 8192 --net0 ip=192.168.1.100/24"
+ssh root@proxmox "pct start 100"
+
+# 3. Deploy code to backend
+./scripts/deploy/deploy-code.sh --target 192.168.1.100
+
+# 4. Clone and deploy worker LXCs (5 workers example)
+for i in {1..5}; do
+  CTID=$((200 + i))
+  IP=$((200 + i))
+  ssh root@proxmox "pct clone 900 $CTID --hostname ktrdr-worker-$i"
+  ssh root@proxmox "pct set $CTID --cores 4 --memory 8192 --net0 ip=192.168.1.$IP/24"
+  ssh root@proxmox "pct start $CTID"
+  ./scripts/deploy/deploy-code.sh --target 192.168.1.$IP
+done
+
+# 5. Verify deployment
+curl http://192.168.1.100:8000/api/v1/workers | jq
+# Should show 5 registered workers
+```
+
+### Operations & Maintenance
+
+**Automated Deployment**:
+```bash
+# Deploy new version (rolling update, zero downtime)
+./scripts/deploy/deploy-to-proxmox.sh --env production --version v1.5.2
+```
+
+**Add Workers During High Load**:
+```bash
+# Clone from template, deploy code, workers auto-register
+./scripts/lxc/provision-worker.sh --count 10 --start-id 211
+```
+
+**View System Status**:
+```bash
+# Health check all workers
+./scripts/ops/system-status.sh
+
+# View logs across all LXCs
+./scripts/ops/view-logs.sh all "1 hour ago"
+
+# Check resource usage
+./scripts/ops/check-resources.sh
+```
+
+### Documentation
+
+- **Deployment**: [docs/user-guides/deployment-proxmox.md](docs/user-guides/deployment-proxmox.md) - Complete Proxmox deployment guide
+- **CI/CD**: [docs/developer/cicd-operations-runbook.md](docs/developer/cicd-operations-runbook.md) - Operations and incident response
+- **Development**: [docs/user-guides/deployment.md](docs/user-guides/deployment.md) - Docker Compose for local development
+
+### When to Use Proxmox vs Docker
+
+| Use Case | Recommended | Why |
+|----------|-------------|-----|
+| Local development | Docker Compose | Quick setup, easy iteration |
+| Testing/staging | Docker Compose | Matches dev environment |
+| Production | **Proxmox LXC** | Better performance, management tools |
+| > 20 workers | **Proxmox LXC** | Lower overhead scales better |
+| High-performance | **Proxmox LXC** | 5-15% performance gain matters |
 
 ## 🔥 DEVELOPMENT BEST PRACTICES
 

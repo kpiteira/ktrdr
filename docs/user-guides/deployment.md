@@ -59,14 +59,21 @@ KTRDR supports two primary deployment models:
 - Lower overhead for CPU-intensive workloads
 
 **Characteristics**:
-- Lower overhead than Docker (LXC containers)
+- Lower overhead than Docker (LXC containers ~5-15% performance gain)
 - Multi-host distribution across Proxmox cluster
-- Proxmox management tools (backups, snapshots)
-- Full OS environment in each container
+- Proxmox management tools (backups, snapshots, monitoring)
+- Full OS environment in each container (easier debugging)
+- Template-based rapid worker cloning
 
-**Documentation**: See [Proxmox Deployment Guide](deployment-proxmox.md) (Phase 6, coming soon)
+**Documentation**: See [Proxmox Deployment Guide](deployment-proxmox.md)
 
-**When to Use**: Production environments, high-performance requirements
+**When to Use**: Production environments, high-performance requirements, > 20 workers
+
+**Key Differences from Docker**:
+- Better performance for CPU-intensive workloads
+- Lower memory footprint per worker
+- Full systemd and native OS tooling
+- Requires Proxmox infrastructure (not portable to other clouds)
 
 ---
 
@@ -1406,7 +1413,8 @@ This deployment guide covered:
 **Next Steps**:
 - **For Architecture**: See [Architecture Overview](../architecture-overviews/distributed-workers.md)
 - **For Development**: See [Developer Guide](../developer/distributed-workers-guide.md)
-- **For Production**: Proxmox LXC deployment guide (Phase 6, coming soon)
+- **For Production**: See [Proxmox Deployment Guide](deployment-proxmox.md)
+- **For Operations**: See [CI/CD Operations Runbook](../developer/cicd-operations-runbook.md)
 
 ---
 
