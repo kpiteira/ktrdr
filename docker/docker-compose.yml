@@ -211,6 +211,30 @@ services:
       retries: 3
       start_period: 10s
 
+  # Prometheus - Metrics collection (Phase 5: Metrics and Dashboards)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ktrdr-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    networks:
+      - ktrdr-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
 networks:
   ktrdr-network:
     driver: bridge
@@ -219,3 +243,4 @@ volumes:
   pip-cache:
   uv-cache:
   npm-cache:
+  prometheus_data:

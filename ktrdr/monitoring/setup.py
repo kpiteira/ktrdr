@@ -3,10 +3,12 @@
 import logging
 import os
 
-from opentelemetry import trace
+from opentelemetry import metrics, trace
+from opentelemetry.exporter.prometheus import PrometheusMetricReader
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.logging import LoggingInstrumentor
+from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import (
@@ -14,6 +16,7 @@ from opentelemetry.sdk.trace.export import (
     ConsoleSpanExporter,
     SimpleSpanProcessor,
 )
+from prometheus_client import make_asgi_app
 
 logger = logging.getLogger(__name__)
 
@@ -90,3 +93,46 @@ def instrument_app(app):
     # Instrument logging
     LoggingInstrumentor().instrument(set_logging_format=True)
     logger.info("✅ Logging auto-instrumentation enabled")
+
+
+def setup_metrics(service_name: str) -> MeterProvider:
+    """
+    Setup OpenTelemetry metrics for a service with Prometheus export.
+
+    Args:
+        service_name: Name of the service (e.g., "ktrdr-api")
+
+    Returns:
+        MeterProvider instance
+    """
+    # Create resource with service identification
+    resource = Resource.create(
+        {
+            "service.name": service_name,
+            "service.version": os.getenv("APP_VERSION", "dev"),
+            "deployment.environment": os.getenv("ENVIRONMENT", "development"),
+        }
+    )
+
+    # Create Prometheus metric reader
+    reader = PrometheusMetricReader()
+
+    # Create meter provider
+    provider = MeterProvider(resource=resource, metric_readers=[reader])
+
+    # Set as global meter provider
+    metrics.set_meter_provider(provider)
+
+    logger.info(f"✅ Prometheus metrics export enabled for {service_name}")
+
+    return provider
+
+
+def get_metrics_app():
+    """
+    Get Prometheus metrics ASGI app for mounting at /metrics endpoint.
+
+    Returns:
+        ASGI application that serves Prometheus metrics
+    """
+    return make_asgi_app()
