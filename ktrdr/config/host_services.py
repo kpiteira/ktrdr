@@ -5,10 +5,11 @@ This module provides a base class and specific implementations for managing
 host service configurations (URLs, timeouts, etc.) across all KTRDR services.
 
 Services supported:
-- IB Host Service (port 5001)
-- Training Host Service (port 5002)
+- IB Host Service (port 5001) - Required for IB Gateway TCP connection
 - API Server (port 8000)
-- Any future host services
+
+Note: Training and backtesting now use distributed workers (WorkerRegistry).
+Workers register themselves on startup - no host service configuration needed.
 
 Design principles:
 - Single source of truth per service
@@ -90,44 +91,6 @@ class IbHostServiceSettings(HostServiceSettings):
     model_config = SettingsConfigDict(env_prefix="IB_HOST_SERVICE_", extra="forbid")
 
 
-class TrainingHostServiceSettings(HostServiceSettings):
-    """Training Host Service configuration."""
-
-    enabled: bool = Field(
-        default=metadata.get("training_host.enabled", False),
-        alias="USE_TRAINING_HOST_SERVICE",
-    )
-
-    base_url: str = Field(
-        default=metadata.get("training_host.base_url", "http://localhost:5002"),
-        alias="TRAINING_HOST_SERVICE_URL",
-    )
-
-    timeout: float = Field(default=metadata.get("training_host.timeout", 30.0))
-
-    health_check_interval: float = Field(
-        default=metadata.get("training_host.health_check_interval", 10.0)
-    )
-
-    max_retries: int = Field(default=metadata.get("training_host.max_retries", 3))
-
-    retry_delay: float = Field(default=metadata.get("training_host.retry_delay", 1.0))
-
-    progress_poll_interval: float = Field(
-        default=metadata.get("training_host.progress_poll_interval", 2.0),
-        description="Seconds between progress polls for training operations",
-    )
-
-    session_timeout: float = Field(
-        default=metadata.get("training_host.session_timeout", 3600.0),
-        description="Maximum session duration in seconds",
-    )
-
-    model_config = SettingsConfigDict(
-        env_prefix="TRAINING_HOST_SERVICE_", extra="forbid"
-    )
-
-
 class ApiServiceSettings(HostServiceSettings):
     """API Server configuration for client connections."""
 
@@ -162,12 +125,6 @@ def get_ib_host_service_settings() -> IbHostServiceSettings:
 
 
 @lru_cache
-def get_training_host_service_settings() -> TrainingHostServiceSettings:
-    """Get Training Host Service settings with caching."""
-    return TrainingHostServiceSettings()
-
-
-@lru_cache
 def get_api_service_settings() -> ApiServiceSettings:
     """Get API service settings for client connections with caching."""
     return ApiServiceSettings()
@@ -177,11 +134,6 @@ def get_api_service_settings() -> ApiServiceSettings:
 def get_ib_host_url() -> str:
     """Get IB Host Service URL."""
     return get_ib_host_service_settings().base_url
-
-
-def get_training_host_url() -> str:
-    """Get Training Host Service URL."""
-    return get_training_host_service_settings().base_url
 
 
 def get_api_base_url() -> str:
@@ -222,6 +174,5 @@ def get_all_service_settings() -> dict[str, HostServiceSettings]:
     """
     return {
         "ib_host_service": get_ib_host_service_settings(),
-        "training_host_service": get_training_host_service_settings(),
         "api_service": get_api_service_settings(),
     }

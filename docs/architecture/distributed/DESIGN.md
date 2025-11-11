@@ -184,6 +184,232 @@ Training Request
 
 ---
 
+### Decision 6: Worker API Framework (Base Class)
+
+**Choice**: Extract proven working code from training-host-service into reusable `WorkerAPIBase` class
+
+**Background - We Already Solved This!**:
+
+The training-host-service (port 5002) already implements the complete worker pattern with:
+- OperationsService singleton for remote queries
+- Operations proxy endpoints (`/api/v1/operations/*`) - **374 lines!**
+- Progress bridge registration for pull-based updates
+- Operation ID synchronization (accepts `session_id` parameter)
+- Health endpoint reporting busy/idle status
+- Self-registration with backend
+
+**This pattern works perfectly** - we just need to extract it into a reusable base class.
+
+**Problem**:
+- training-host-service has ~670 lines of worker infrastructure code
+- Backtesting workers need identical infrastructure
+- Without extraction: ~670 lines duplicated per worker
+- With extraction: ~670 lines once + ~50-100 lines per worker
+
+**Solution**: Extract Working Pattern from Training Host Service
+
+```python
+class WorkerAPIBase:
+    """
+    Base class extracted from training-host-service.
+
+    Provides (identical to training-host-service):
+    - OperationsService singleton (services/operations.py - 41 lines)
+    - Operations proxy endpoints (endpoints/operations.py - 374 lines!)
+    - Health endpoint (endpoints/health.py)
+    - FastAPI app setup with CORS (main.py)
+    - Self-registration on startup
+    - Operation lifecycle management
+    """
+```
+
+**What's Extracted from Training Host Service**:
+
+1. ✅ **OperationsService Singleton** (`services/operations.py` - 41 lines)
+   ```python
+   _operations_service: Optional[OperationsService] = None
+
+   def get_operations_service() -> OperationsService:
+       global _operations_service
+       if _operations_service is None:
+           _operations_service = OperationsService()
+       return _operations_service
+   ```
+
+2. ✅ **Operations Proxy Endpoints** (`endpoints/operations.py` - 374 lines!)
+   - `GET /api/v1/operations/{operation_id}` - Get operation status
+   - `GET /api/v1/operations/{operation_id}/metrics` - Get metrics with cursor
+   - `GET /api/v1/operations` - List operations with filtering
+   - `DELETE /api/v1/operations/{operation_id}/cancel` - Cancel operation
+   - **Copy verbatim** - this code already works!
+
+3. ✅ **Health Endpoint** (`endpoints/health.py`)
+   ```python
+   @app.get("/health")
+   async def health_check():
+       return {
+           "healthy": True,
+           "service": f"{worker_type}-worker",
+           "timestamp": datetime.utcnow().isoformat(),
+           "status": "operational"
+       }
+   ```
+
+4. ✅ **FastAPI Setup** (`main.py`)
+   - App creation with CORS middleware
+   - Router registration
+   - Startup/shutdown events
+   - OperationsService initialization
+
+5. ✅ **Self-Registration** (worker registration pattern)
+   - Calls `POST /workers/register` on startup
+   - Idempotent re-registration
+   - Worker ID from environment or hostname
+
+**What's Worker-Specific** (stays in subclass):
+
+Based on training-host-service pattern:
+
+1. ❌ **Domain Endpoint** (`endpoints/training.py` vs `endpoints/backtesting.py`)
+   - `POST /training/start` vs `POST /backtests/start`
+   - Accepts optional `session_id`/`task_id` parameter for ID synchronization
+   - Returns `{operation_id: ...}` back to backend
+
+2. ❌ **Work Execution** (following training host pattern):
+   ```python
+   async def _execute_work(self, operation_id: str, request: Request):
+       # 1. Create operation in worker's OperationsService
+       await self._operations_service.create_operation(operation_id, ...)
+
+       # 2. Create and register progress bridge
+       bridge = BacktestProgressBridge(operation_id, ...)
+       self._operations_service.register_local_bridge(operation_id, bridge)
+
+       # 3. Execute actual work (Engine, not Service!)
+       engine = BacktestingEngine(...)
+       result = await asyncio.to_thread(engine.run, bridge=bridge)
+
+       # 4. Complete operation
+       await self._operations_service.complete_operation(operation_id, result)
+   ```
+
+3. ❌ **Operation Metadata** (worker-specific parameters)
+
+**Critical Pattern from Training Host Service**:
+
+**Operation ID Synchronization**:
+```python
+# Backend passes its operation_id as session_id/task_id
+class TrainingStartRequest(BaseModel):
+    session_id: Optional[str] = Field(default=None)  # ← Backend's operation_id!
+    strategy_yaml: str
+    ...
+
+@router.post("/training/start")
+async def start_training(request: TrainingStartRequest):
+    # Use backend's ID if provided, generate if not
+    session_id = await service.create_session(
+        config,
+        request.session_id  # ← Backend and worker use SAME ID!
+    )
+
+    return TrainingStartResponse(
+        session_id=session_id,  # ← Return same ID to backend
+        ...
+    )
+```
+
+**Progress Bridge Registration**:
+```python
+# training-host-service/services/training_service.py:_create_operation_and_bridge
+async def _create_operation_and_bridge(self, session: TrainingSession):
+    # Get worker's OperationsService
+    ops_service = get_operations_service()
+
+    # Create operation in worker's OperationsService
+    await ops_service.create_operation(operation_id, ...)
+
+    # Create and register bridge
+    bridge = TrainingProgressBridge(...)
+    ops_service.register_local_bridge(operation_id, bridge)
+
+    # Now backend can query via /api/v1/operations/{operation_id}
+```
+
+**Code Reduction**:
+
+| Component | Before (Duplication) | After (Extraction) |
+|-----------|---------------------|-------------------|
+| Operations endpoints | 374 lines × N workers | 374 lines (once in base) |
+| OperationsService | 41 lines × N workers | 41 lines (once in base) |
+| Health endpoint | ~50 lines × N workers | ~50 lines (once in base) |
+| FastAPI setup | ~200 lines × N workers | ~200 lines (once in base) |
+| **Total common** | **~670 lines × N workers** | **~670 lines (once)** |
+| **Per worker** | ~670 lines | ~50-100 lines |
+| **2 workers** | ~1340 lines | ~770 lines total |
+
+**Savings**: **~570 lines** for 2 workers, more for each additional worker!
+
+**Example Worker (After Extraction)**:
+
+```python
+class BacktestWorker(WorkerAPIBase):
+    def __init__(self):
+        super().__init__(
+            worker_type=WorkerType.BACKTESTING,
+            operation_type=OperationType.BACKTESTING,
+            worker_port=5003,
+            backend_url=os.getenv("KTRDR_API_URL", "http://backend:8000")
+        )
+
+        # Register domain-specific endpoint
+        @self.app.post("/backtests/start")
+        async def start_backtest(request: BacktestStartRequest):
+            # Use backend's task_id if provided
+            operation_id = request.task_id or f"worker_bt_{uuid.uuid4().hex[:12]}"
+
+            # Execute work (following training host pattern)
+            result = await self._execute_backtest_work(operation_id, request)
+
+            return {
+                "success": True,
+                "operation_id": operation_id,  # ← Return same ID!
+                "status": "started",
+                **result
+            }
+
+    async def _execute_backtest_work(self, operation_id: str, request):
+        # 1. Create operation
+        await self._operations_service.create_operation(operation_id, ...)
+
+        # 2. Create and register bridge
+        bridge = BacktestProgressBridge(operation_id, ...)
+        self._operations_service.register_local_bridge(operation_id, bridge)
+
+        # 3. Execute (Engine, not Service!)
+        engine = BacktestingEngine(...)
+        result = await asyncio.to_thread(engine.run, bridge=bridge)
+
+        # 4. Complete
+        await self._operations_service.complete_operation(operation_id, result)
+
+        return result.to_dict()
+
+# ~100 lines instead of ~670 lines!
+```
+
+**Rationale**:
+- **Copy What Works**: Training host service pattern already proven in production
+- **DRY Principle**: Extract 374 lines of operations endpoints (identical across workers)
+- **Consistency**: All workers use same infrastructure from training-host-service
+- **Bug Prevention**: Fixes applied once benefit all workers
+- **Maintainability**: Single source of truth for worker infrastructure
+- **Testability**: Test base class once, test worker-specific logic separately
+
+**Next Step**: See IMPLEMENTATION_PLAN.md Phase 4 for extraction steps
+
+---
+
 ## System Flows
 
 ### Worker Startup & Registration

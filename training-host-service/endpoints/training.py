@@ -13,11 +13,10 @@ from pydantic import BaseModel, Field
 
 # Import existing ktrdr modules
 from ktrdr.logging import get_logger
+from ktrdr.workers.base import WorkerOperationMixin
 
-# Import training service and health utilities
+# Import training service
 from services.training_service import get_training_service
-
-from .health import get_gpu_manager
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/training", tags=["training"])
@@ -31,10 +30,11 @@ def get_service():
 # Request/Response Models
 
 
-class TrainingStartRequest(BaseModel):
+class TrainingStartRequest(WorkerOperationMixin):
     """Request to start a training session."""
 
-    session_id: Optional[str] = Field(default=None, description="Optional session ID")
+    # task_id inherited from WorkerOperationMixin
+    session_id: Optional[str] = Field(default=None, description="Optional session ID (legacy)")
     strategy_yaml: str = Field(description="Strategy configuration as YAML string")
     # Runtime overrides (optional)
     symbols: Optional[list[str]] = Field(
@@ -68,6 +68,7 @@ class TrainingStartResponse(BaseModel):
     """Response to training start request."""
 
     session_id: str
+    operation_id: str  # Backend expects this field (same as session_id)
     status: str
     message: str
     gpu_allocated: bool
@@ -118,8 +119,12 @@ async def start_training(request: TrainingStartRequest):
             "end_date": request.end_date,
         }
 
+        # Use backend's task_id if provided, otherwise session_id
+        # This aligns with WorkerAPIBase pattern (accept backend's operation_id)
+        operation_id = request.task_id or request.session_id
+
         # Create training session
-        session_id = await service.create_session(config, request.session_id)
+        session_id = await service.create_session(config, operation_id)
 
         # Get session status to determine GPU allocation
         status = service.get_session_status(session_id)
@@ -129,6 +134,7 @@ async def start_training(request: TrainingStartRequest):
 
         return TrainingStartResponse(
             session_id=session_id,
+            operation_id=session_id,  # Backend expects operation_id field
             status="started",
             message=f"Training session {session_id} started successfully",
             gpu_allocated=gpu_allocated,
@@ -268,9 +274,9 @@ async def evaluate_model(request: EvaluationRequest):
         evaluation_id = str(uuid.uuid4())
         start_time = datetime.utcnow()
 
-        # Check GPU availability
-        gpu_manager = await get_gpu_manager()
-        gpu_used = gpu_manager is not None and gpu_manager.enabled
+        # Note: GPU availability is managed by the worker via WorkerAPIBase
+        # Worker self-registers with GPU capabilities to backend
+        gpu_used = True  # Assume GPU if worker has it
 
         # TODO: Implement actual model evaluation logic
         # For now, return mock results

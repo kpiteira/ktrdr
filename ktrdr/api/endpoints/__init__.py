@@ -19,6 +19,7 @@ from ktrdr.api.endpoints.models import router as models_router
 from ktrdr.api.endpoints.operations import router as operations_router
 from ktrdr.api.endpoints.strategies import router as strategies_router
 from ktrdr.api.endpoints.training import router as training_router
+from ktrdr.api.endpoints.workers import router as workers_router
 
 # Create main API router
 api_router = APIRouter()
@@ -61,6 +62,7 @@ api_router.include_router(gap_analysis_router, tags=["Gap Analysis"])
 api_router.include_router(training_router, tags=["Training"])
 api_router.include_router(models_router, tags=["Models"])
 api_router.include_router(operations_router, tags=["Operations"])
+api_router.include_router(workers_router, tags=["Workers"])
 # Temporarily disabled while updating multi-timeframe for pure fuzzy
 # api_router.include_router(
 #     multi_timeframe_decisions_router, tags=["Multi-Timeframe Decisions"]

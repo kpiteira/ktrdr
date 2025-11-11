@@ -39,6 +39,14 @@ KTRDR is an advanced automated trading system built around a neuro-fuzzy decisio
 - **Performance metrics and analytics**
 - **Strategy comparison tools**
 
+### ⚡ Distributed Execution
+
+- **Horizontal scaling** with distributed workers
+- **Concurrent operations** across worker cluster
+- **GPU-first training** with CPU fallback
+- **Dynamic worker scaling** (`docker-compose up --scale`)
+- **Self-registering workers** (infrastructure-agnostic)
+
 ### 🌐 API & Web Interface
 
 - **RESTful API** with FastAPI
@@ -73,6 +81,51 @@ chmod +x setup_dev.sh
 ./setup_dev.sh
 ```
 
+### Starting Workers
+
+**IMPORTANT**: KTRDR uses a distributed architecture where operations execute on workers. You must start workers alongside the backend.
+
+#### Quick Start: Docker Compose with Workers
+
+```bash
+# Start backend + workers (recommended for development)
+docker-compose -f docker/docker-compose.yml up -d \
+  --scale backtest-worker=3 \
+  --scale training-worker=2
+
+# Verify workers registered
+curl http://localhost:8000/api/v1/workers | jq
+
+# Expected: 3 backtest workers + 2 training workers showing as AVAILABLE
+```
+
+**Worker Scaling**: Add more workers for more concurrent operations:
+- `--scale backtest-worker=10` → 10 concurrent backtests
+- `--scale training-worker=5` → 5 concurrent training operations (CPU)
+
+#### Optional: GPU Training (10x-100x Faster)
+
+```bash
+# Start GPU training host service (outside Docker, for GPU access)
+cd training-host-service && ./start.sh
+
+# GPU worker automatically registers with backend
+# Training operations will prefer GPU (if available) before CPU fallback
+```
+
+#### For Production Deployments
+
+**Deployment Options**:
+- **Development**: [Docker Compose Guide](docs/user-guides/deployment.md) - Single-host, quick setup
+- **Production**: [Proxmox LXC Guide](docs/user-guides/deployment-proxmox.md) - Multi-host, 5-15% better performance
+- **Operations**: [CI/CD Runbook](docs/developer/cicd-operations-runbook.md) - Deployment automation, incident response
+
+**Key Benefits of Proxmox (Production)**:
+- Lower overhead (~5-15% performance improvement vs Docker)
+- Template-based rapid worker cloning
+- Full OS environment with systemd
+- Proxmox management tools (backups, snapshots, monitoring)
+
 ### Launching KTRDR
 
 #### Option 1: Complete System (Recommended)
@@ -87,6 +140,7 @@ This will start:
 - IB Host Service on port 5001
 - API server on <http://localhost:8000>
 - Frontend on <http://localhost:3000>
+- **Note**: You still need to start workers separately (see above)
 
 #### Option 2: Docker Development Environment
 
@@ -99,6 +153,8 @@ This will start:
 
 # Stop containers
 ./docker_dev.sh stop
+
+# Note: Start workers separately for backtesting/training operations
 ```
 
 #### Option 3: API Server Only
@@ -109,6 +165,8 @@ uv run python scripts/run_api_server.py
 
 # Or using Python directly
 python scripts/run_api_server.py --host 0.0.0.0 --port 8000
+
+# Note: Backend alone won't execute operations - requires workers
 ```
 
 ## 📚 API Documentation

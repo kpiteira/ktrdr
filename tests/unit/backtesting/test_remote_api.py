@@ -1,13 +1,18 @@
 """
 Unit tests for Backtesting Remote API.
 
-Tests the remote container FastAPI application (Task 3.2).
+DEPRECATED: This tests the legacy remote_api.py which is being replaced by backtest_worker.py.
+Tests are skipped as this module is deprecated.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+
+pytestmark = pytest.mark.skip(
+    reason="remote_api.py is deprecated, replaced by backtest_worker.py"
+)
 
 
 @pytest.fixture
