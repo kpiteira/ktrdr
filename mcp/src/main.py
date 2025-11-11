@@ -6,8 +6,9 @@ import sys
 
 # Setup OpenTelemetry tracing for MCP server (optional - graceful if Jaeger unavailable)
 try:
-    from ktrdr.monitoring.setup import setup_monitoring
     from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+
+    from ktrdr.monitoring.setup import setup_monitoring
 
     # Setup monitoring for MCP server
     # Uses OTLP_ENDPOINT env var if set, otherwise defaults to localhost
