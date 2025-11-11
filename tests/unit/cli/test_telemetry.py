@@ -1,7 +1,6 @@
 """Tests for CLI OpenTelemetry instrumentation."""
 
 import json
-from unittest.mock import MagicMock, patch
 
 import pytest
 from opentelemetry import trace
@@ -155,6 +154,7 @@ def test_cli_command_decorator_without_otel(tracer_setup):
 def test_cli_command_with_async_function(tracer_setup):
     """Test that decorator works with async functions."""
     import asyncio
+
     from ktrdr.cli.telemetry import trace_cli_command
 
     exporter = tracer_setup

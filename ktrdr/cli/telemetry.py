@@ -12,9 +12,6 @@ from ktrdr import get_logger
 
 logger = get_logger(__name__)
 
-# Get tracer for CLI instrumentation
-tracer = trace.get_tracer(__name__)
-
 # Type variable for generic decorator
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -45,6 +42,8 @@ def trace_cli_command(command_name: str) -> Callable[[F], F]:
         @functools.wraps(func)
         def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
             """Wrapper for synchronous functions."""
+            # Get tracer dynamically to support test fixtures
+            tracer = trace.get_tracer(__name__)
             span_name = f"cli.{command_name}"
 
             with tracer.start_as_current_span(span_name) as span:
@@ -81,6 +80,8 @@ def trace_cli_command(command_name: str) -> Callable[[F], F]:
         @functools.wraps(func)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
             """Wrapper for asynchronous functions."""
+            # Get tracer dynamically to support test fixtures
+            tracer = trace.get_tracer(__name__)
             span_name = f"cli.{command_name}"
 
             with tracer.start_as_current_span(span_name) as span:

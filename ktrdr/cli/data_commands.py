@@ -26,6 +26,7 @@ from ktrdr.cli.error_handler import (
     handle_cli_error,
 )
 from ktrdr.cli.progress_display_enhanced import create_enhanced_progress_callback
+from ktrdr.cli.telemetry import trace_cli_command
 from ktrdr.config.validation import InputValidator
 from ktrdr.errors import DataError, ValidationError
 from ktrdr.logging import get_logger
@@ -43,6 +44,7 @@ data_app = typer.Typer(
 )
 
 
+@trace_cli_command("data_show")
 @data_app.command("show")
 def show_data(
     symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),

@@ -1,7 +1,6 @@
 """Tests for MCP OpenTelemetry instrumentation."""
 
 import json
-from unittest.mock import MagicMock
 
 import pytest
 from opentelemetry import trace
@@ -145,6 +144,7 @@ def test_mcp_tool_decorator_preserves_metadata(tracer_setup):
 def test_mcp_tool_with_async_function(tracer_setup):
     """Test that decorator works with async functions."""
     import asyncio
+
     from mcp.src.telemetry import trace_mcp_tool
 
     exporter = tracer_setup

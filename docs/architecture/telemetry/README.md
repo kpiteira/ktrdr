@@ -15,9 +15,39 @@ The primary goal is to provide **distributed tracing** and **structured logging*
 
 ## Documents
 
-### [DESIGN.md](DESIGN.md) - High-Level Design
+### 🎯 START HERE
 
-**Read This First** for:
+#### [How to Use Observability](../../debugging/how-to-use-observability.md) - **Practical Guide**
+
+**Comprehensive guide to using KTRDR's observability stack**:
+- ✅ What you have (Phases 1-5: auto-instrumentation, Jaeger, Prometheus, Grafana)
+- ❌ What's missing (Phase 6: business logic instrumentation)
+- 💡 How to make it actionable
+- 🎯 Concrete examples: Before vs. After Phase 6
+- 🤖 How Claude Code uses observability for debugging
+
+**Key Takeaway**: Infrastructure ready, Phase 6 adds business logic visibility.
+
+---
+
+#### [Using Observability Tools TODAY](../../debugging/using-observability-tools-today.md) - **Quick Reference**
+
+**Practical debugging with current auto-instrumentation**:
+- 🔧 Quick access to Jaeger/Prometheus/Grafana
+- ✅ What you CAN debug (HTTP flow, connection errors, request duration)
+- ❌ What you CANNOT debug (worker selection, execution phases)
+- 🔍 Step-by-step workflows
+- 💡 Pro tips
+
+**Key Takeaway**: Use HTTP-level tracing effectively while Phase 6 is being implemented.
+
+---
+
+### 📋 Design & Architecture
+
+#### [DESIGN.md](DESIGN.md) - High-Level Design
+
+**Background and rationale**:
 - Design goals and motivation
 - Problem statement (why we need this)
 - Core design decisions (OTEL vs Prometheus alone, auto-instrumentation strategy)
@@ -28,9 +58,9 @@ The primary goal is to provide **distributed tracing** and **structured logging*
 
 ---
 
-### [ARCHITECTURE.md](ARCHITECTURE.md) - Technical Architecture
+#### [ARCHITECTURE.md](ARCHITECTURE.md) - Technical Architecture
 
-**Read This Second** for:
+**Technical specifications**:
 - System topology (services, collectors, backends)
 - Core components (OTEL SDK, auto-instrumentation libraries, span processors)
 - Instrumentation patterns (auto-instrumentation, custom spans, structured logging)
@@ -43,16 +73,29 @@ The primary goal is to provide **distributed tracing** and **structured logging*
 
 ---
 
-### [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) - Step-by-Step Implementation
+### 🚀 Implementation
 
-**Read This Third** before implementing:
-- Detailed task-by-task implementation guide
-- TDD approach with quality gates
-- Specific code examples for each phase
-- Validation and testing procedures
-- Commit-by-commit breakdown
+#### [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) - Complete Implementation Plan
 
-**Key Takeaway**: Follow this plan to implement observability incrementally with zero disruption to existing functionality.
+**All 6 phases** from setup to production:
+- **Phase 1**: Console traces (Foundation) ✅
+- **Phase 2**: Jaeger UI (Visual debugging) ✅
+- **Phase 3**: Workers and host services (Distributed tracing) ✅
+- **Phase 3.5**: CLI and MCP (Complete user flow) ✅
+- **Phase 4**: Structured logging (Searchable logs) ✅
+- **Phase 5**: Metrics and dashboards (Performance monitoring) ✅
+- **Phase 6**: Business Logic Instrumentation (Actionable observability) 🎯
+
+**Phase 6** - The missing piece (62 hours across 7 tasks):
+1. Entry points (CLI + MCP) - 10h
+2. API business logic (all 60+ endpoints) - 14h
+3. Operation orchestration & worker dispatch - 8h
+4. Worker execution phases - 12h
+5. Host services - 6h
+6. Progress integration - 6h
+7. Documentation & agent integration - 6h
+
+**Key Takeaway**: Phases 1-5 provide HTTP-level visibility. Phase 6 adds business logic visibility to answer "which worker?", "which phase stuck?", "why no progress?"
 
 ---
 

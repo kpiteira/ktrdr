@@ -1381,32 +1381,321 @@ datasources:
 
 ---
 
-## Phase 6: Centralized Aggregation (Production)
+## Phase 6: Business Logic Instrumentation (Actionable Observability)
 
-**Goal**: Production-ready observability with Loki
+**Goal**: Comprehensive visibility into business logic - all entry points, services, workers, and host services
+
+**Why This Phase**: Phases 1-5 gave us HTTP-level tracing. Phase 6 instruments **business logic** to answer questions like "which worker was selected?", "which phase is stuck?", "why no progress updates?"
 
 **End State**:
-- Loki for log aggregation
-- Unified Grafana for logs + traces + metrics
-- **TESTABLE**: See all telemetry in one place
+- All CLI commands instrumented
+- All MCP tools instrumented
+- All API business logic instrumented
+- Complete worker execution phase visibility
+- Host service operations visible
+- Real-time progress updates in spans
+- Debugging documentation for developers and Claude Code
+
+**Discovery Complete**: 60+ endpoints, 25+ CLI commands, 18+ MCP tools mapped
+**Reference**: See Serena memories for complete system map
+
+**Total Effort**: ~62 hours across 7 tasks
+
+---
+
+### Task 6.1: Entry Point Instrumentation (CLI + MCP)
+
+**Goal**: Complete visibility from user entry points to API
+
+**Scope**:
+- **25+ CLI commands** (data, backtest, models, operations, indicators, ib, fuzzy, strategies)
+- **18+ MCP tools** (Claude Desktop integration)
+- **Trace propagation**: User → CLI/MCP → API → Services
+
+**Files**:
+- `ktrdr/cli/__init__.py` - CLI OpenTelemetry setup
+- `ktrdr/cli/commands.py` - Main CLI app
+- `ktrdr/cli/commands/` - All command modules (8 files)
+- `mcp/src/main.py` - MCP OpenTelemetry setup
+- `mcp/src/server.py` - MCP tools
+
+**Instrumentation Pattern**:
+
+```python
+# CLI commands
+with tracer.start_as_current_span(f"cli.{command_name}") as span:
+    span.set_attribute("cli.command", command_name)
+    span.set_attribute("cli.args", json.dumps(args))
+    if operation_id:
+        span.set_attribute("operation.id", operation_id)
+
+# MCP tools
+with tracer.start_as_current_span(f"mcp.tool.{tool_name}") as span:
+    span.set_attribute("mcp.tool", tool_name)
+    span.set_attribute("mcp.params", json.dumps(params))
+    if operation_id:
+        span.set_attribute("operation.id", operation_id)
+```
+
+**What This Enables**:
+- See which CLI command or MCP tool triggered operation
+- Trace complete flow: User → Entry Point → API → Worker
+- Debug entry point-specific issues
+
+**Effort**: ~10 hours
+
+**Commit**: `feat(telemetry): instrument CLI commands and MCP tools`
+
+---
+
+### Task 6.2: API Business Logic Instrumentation
+
+**Goal**: Instrument business logic DOWNSTREAM of all API endpoints
+
+**Scope**: **All 13 endpoint categories** (60+ endpoints):
+- Data (6 endpoints)
+- Training (2)
+- Backtesting (1)
+- Models (4)
+- Operations (7)
+- Workers (2)
+- IB (8)
+- Indicators (5)
+- Fuzzy (5)
+- Strategies, Gap Analysis, Health, etc.
+
+**Files**:
+- `ktrdr/api/endpoints/` - All 13 endpoint modules
+- `ktrdr/api/services/` - All service implementations
+
+**Pattern**: Instrument SERVICE logic, not just HTTP layer
+
+**Example** (Data Service):
+```python
+async def download_data(self, symbol, timeframe, ...):
+    with tracer.start_as_current_span("data.download") as span:
+        span.set_attribute("operation.id", operation_id)
+        span.set_attribute("data.symbol", symbol)
+
+        # Phase spans
+        with tracer.start_as_current_span("data.fetch"): ...
+        with tracer.start_as_current_span("data.parse"): ...
+        with tracer.start_as_current_span("data.validate"): ...
+        with tracer.start_as_current_span("data.cache"): ...
+```
+
+**Apply to**: IndicatorService, FuzzyService, StrategyService, ModelService, IBService
+
+**What This Enables**:
+- See which service phase is executing/stuck
+- See business parameters for every operation
+- Identify service-specific bottlenecks
+
+**Effort**: ~14 hours
+
+**Commit**: `feat(telemetry): instrument API business logic and services`
+
+---
+
+### Task 6.3: Operation Orchestration & Worker Dispatch
+
+**Goal**: Complete visibility into operation lifecycle and worker selection
+
+**Files**:
+- `ktrdr/api/services/operations_service.py`
+- `ktrdr/api/services/worker_registry.py`
+- `ktrdr/async_infrastructure/service_orchestrator.py`
+
+**Spans to Add**:
+
+1. **`operation.register`** - Operation creation
+2. **`worker_registry.select_worker`** - Worker selection with attributes:
+   - total_workers, available_workers, capable_workers
+   - selected_worker_id, selection_status
+3. **`operation.dispatch`** - Worker dispatch with success/failure
+4. **`operation.state_transition`** - Status updates with progress
+
+**What This Enables**:
+- See complete operation lifecycle
+- See which worker was selected and why
+- Identify worker selection failures
+- Debug mismatched operation IDs (singleton issues)
 
 **Effort**: ~8 hours
 
----
-
-### Task 6.1: Add Loki
-
-**Implementation**: Add Loki to docker-compose for log aggregation
-
-**Commit**: `feat(telemetry): add Loki for log aggregation`
+**Commit**: `feat(telemetry): instrument operation orchestration and worker dispatch`
 
 ---
 
-### Task 6.2: Configure Production
+### Task 6.4: Worker Execution Phase Instrumentation
 
-**Implementation**: TLS, authentication, retention policies
+**Goal**: See what workers are doing - all phases, all operation types
 
-**Commit**: `feat(telemetry): configure production observability`
+**Files**:
+- `ktrdr/training/training_worker.py` + training logic
+- `ktrdr/backtesting/backtest_worker.py` + backtesting logic
+- `ktrdr/data/acquisition/acquisition_service.py`
+
+**Phases to Instrument**:
+
+**Training**:
+- `training.data_loading` → data.rows, data.columns
+- `training.indicators` → indicators.count
+- `training.fuzzy_computation` → fuzzy_sets.count
+- `training.model_init` → model.parameters, model.device
+- `training.training_loop` → epochs.total, epochs.completed, current_loss
+- `training.save_model` → model.path, model.size_mb
+
+**Backtest**:
+- `backtest.data_loading`, `backtest.strategy_init`, `backtest.simulation`, `backtest.results_calculation`
+
+**Data Loading**:
+- `data.fetch_from_source`, `data.parse`, `data.validate`, `data.cache`
+
+**All spans include**: `operation.id`, `progress.phase`, `progress.percentage`, `operations_service.instance_id`
+
+**What This Enables**:
+- See which execution phase is running/stuck
+- Identify performance bottlenecks by phase
+- Catch singleton issues
+
+**Effort**: ~12 hours
+
+**Commit**: `feat(telemetry): instrument worker execution phases`
+
+---
+
+### Task 6.5: Host Services Instrumentation
+
+**Goal**: Visibility into IB Host Service and Training Host Service
+
+**Files**:
+- `ib-host-service/main.py` and IB service implementation
+- `training-host-service/main.py` and GPU training implementation
+
+**IB Host Service Spans**:
+- `ib.connect` → host, port, connection.status
+- `ib.fetch_historical` → symbol, timeframe, bars.requested, bars.received, ib.latency_ms
+
+**Training Host Service Spans**:
+- `training_host.gpu_training` → gpu.device, gpu.memory_allocated_mb, gpu.utilization_percent
+- Plus same training phases as worker (with GPU metrics)
+
+**What This Enables**:
+- See IB Gateway connectivity issues and latency
+- Monitor GPU utilization during training
+- Debug host service-specific issues
+
+**Effort**: ~6 hours
+
+**Commit**: `feat(telemetry): instrument host services (IB and Training)`
+
+---
+
+### Task 6.6: Progress System Integration
+
+**Goal**: Real-time span attribute updates as operations progress
+
+**Pattern**:
+```python
+def update_progress(self, operation_id, percentage, phase):
+    await self.operations_service.update_progress(operation_id, percentage)
+
+    span = trace.get_current_span()
+    if span.is_recording():
+        span.set_attribute("progress.percentage", percentage)
+        span.set_attribute("progress.phase", phase)
+        span.set_attribute("progress.updated_at", time.time())
+```
+
+**Files to Update**:
+- All progress callbacks in training, backtesting, data loading
+
+**What This Enables**:
+- See current progress in Jaeger without API query
+- Identify if progress is updating or stuck
+
+**Effort**: ~6 hours
+
+**Commit**: `feat(telemetry): integrate progress updates with tracing spans`
+
+---
+
+### Task 6.7: Observability Documentation & Agent Integration
+
+**Goal**: Document how to use observability + enable Claude Code debugging
+
+**Files**:
+- `docs/debugging/observability-debugging-workflows.md` (new)
+- `CLAUDE.md` (update - add observability section)
+
+**Documentation Contents**:
+
+1. **Query Patterns** - How to search Jaeger by operation ID, error, phase, etc.
+2. **Debugging Scenarios** - Step-by-step for common issues (stuck, slow, error, no workers)
+3. **Span Attribute Reference** - Complete list with expected values
+4. **CLAUDE.md Integration** - When/how I (Claude Code) should use observability
+
+**CLAUDE.md Addition**:
+```markdown
+## 🔍 Debugging with Observability
+
+When user reports issue:
+1. Query Jaeger: curl "http://localhost:16686/api/traces?tag=operation.id:op_xyz_123"
+2. Analyze trace structure (which spans exist/missing, errors, durations)
+3. Diagnose in first response
+
+Common patterns:
+- "Operation stuck" → Check span durations
+- "No progress" → Check operation IDs match
+- "Worker not selected" → Check worker_registry span attributes
+```
+
+**What This Enables**:
+- Developers know how to use Jaeger for debugging
+- Claude Code knows when/how to query traces
+- Standardized debugging workflow
+- Faster issue resolution
+
+**Effort**: ~6 hours
+
+**Commit**: `docs(telemetry): add observability debugging workflows and CLAUDE.md integration`
+
+---
+
+## Phase 6 Implementation Order
+
+**Recommended Sequence**:
+
+1. **Task 6.3** (8h) - Operation orchestration - Foundation for operation.id everywhere
+2. **Task 6.1** (10h) - Entry points (CLI/MCP) - Complete trace from user
+3. **Task 6.2** (14h) - API business logic - Comprehensive service visibility
+4. **Task 6.4** (12h) - Worker execution - See what workers are doing
+5. **Task 6.5** (6h) - Host services - IB and GPU visibility
+6. **Task 6.6** (6h) - Progress integration - Real-time updates
+7. **Task 6.7** (6h) - Documentation - Enable everyone
+
+**Checkpoints**:
+- After Task 6.3: Can we debug "which worker?" and "why no worker?"
+- After Task 6.4: Can we see which phase is stuck?
+- After Task 6.7: Can Claude Code debug in first response?
+
+---
+
+## Phase 6 Success Criteria
+
+After Phase 6, I (Claude Code) can:
+
+1. ✅ Trace complete flow: CLI/MCP → API → Service → Worker → Host
+2. ✅ See which worker was selected and why
+3. ✅ See which execution phase is running/stuck
+4. ✅ See progress percentage in real-time
+5. ✅ See business parameters for every operation
+6. ✅ Identify bottlenecks in any phase
+7. ✅ Debug issues in FIRST response (not 10 messages later)
+8. ✅ See IB connectivity and latency issues
+9. ✅ See GPU utilization during training
+10. ✅ Catch singleton/configuration issues
 
 ---
 
