@@ -18,10 +18,12 @@ try:
     # Setup monitoring for CLI
     # Uses OTLP_ENDPOINT env var if set, otherwise defaults to localhost
     # CLI doesn't spam console output
+    # Use SimpleSpanProcessor for immediate export (CLI is short-lived)
     setup_monitoring(
         service_name="ktrdr-cli",
         otlp_endpoint=os.getenv("OTLP_ENDPOINT", "http://localhost:4317"),
         console_output=False,  # CLI shouldn't spam traces to console
+        use_simple_processor=True,  # Immediate export for short-lived CLI process
     )
 
     # Instrument httpx for automatic trace propagation

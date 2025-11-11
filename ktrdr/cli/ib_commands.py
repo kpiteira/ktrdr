@@ -76,8 +76,8 @@ def handle_ib_error(e: Exception, verbose: bool = False):
         logger.error(f"IB command error: {str(e)}", exc_info=True)
 
 
-@trace_cli_command("ib_test")
 @ib_app.command("test")
+@trace_cli_command("ib_test")
 def test_connection(
     symbol: Optional[str] = typer.Option("AAPL", "--symbol", "-s", help="Test symbol"),
     verbose: bool = typer.Option(
@@ -159,8 +159,8 @@ async def _test_connection_async(
         ) from e
 
 
-@trace_cli_command("ib_cleanup")
 @ib_app.command("cleanup")
+@trace_cli_command("ib_cleanup")
 def cleanup_connections(
     force: bool = typer.Option(
         False, "--force", "-f", help="Force cleanup even if connections are active"
@@ -240,8 +240,8 @@ async def _cleanup_connections_async(
         ) from e
 
 
-@trace_cli_command("ib_status")
 @ib_app.command("status")
+@trace_cli_command("ib_status")
 def check_status(
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Enable verbose output"

@@ -35,8 +35,8 @@ operations_app = typer.Typer(
 )
 
 
-@trace_cli_command("operations_list")
 @operations_app.command("list")
+@trace_cli_command("operations_list")
 def list_operations(
     status: Optional[str] = typer.Option(
         None,
@@ -207,8 +207,8 @@ async def _list_operations_async(
         ) from e
 
 
-@trace_cli_command("operations_status")
 @operations_app.command("status")
+@trace_cli_command("operations_status")
 def get_operation_status(
     operation_id: str = typer.Argument(..., help="Operation ID to check"),
     verbose: bool = typer.Option(
@@ -363,8 +363,8 @@ async def _get_operation_status_async(operation_id: str, verbose: bool):
         ) from e
 
 
-@trace_cli_command("operations_cancel")
 @operations_app.command("cancel")
+@trace_cli_command("operations_cancel")
 def cancel_operation(
     operation_id: str = typer.Argument(..., help="Operation ID to cancel"),
     reason: Optional[str] = typer.Option(
@@ -494,8 +494,8 @@ async def _cancel_operation_async(
         ) from e
 
 
-@trace_cli_command("operations_retry")
 @operations_app.command("retry")
+@trace_cli_command("operations_retry")
 def retry_operation(
     operation_id: str = typer.Argument(..., help="Failed operation ID to retry"),
     verbose: bool = typer.Option(

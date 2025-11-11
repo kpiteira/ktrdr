@@ -31,8 +31,8 @@ backtest_app = typer.Typer(
 )
 
 
-@trace_cli_command("backtest_run")
 @backtest_app.command("run")
+@trace_cli_command("backtest_run")
 def run_backtest(
     strategy: str = typer.Argument(..., help="Strategy name (without .yaml extension)"),
     symbol: str = typer.Argument(

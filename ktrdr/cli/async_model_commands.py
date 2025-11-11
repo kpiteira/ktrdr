@@ -33,8 +33,8 @@ async_models_app = typer.Typer(
 )
 
 
-@trace_cli_command("models_train")
 @async_models_app.command("train")
+@trace_cli_command("models_train")
 def train_model_async(
     strategy_file: str = typer.Argument(..., help="Path to strategy YAML file"),
     symbol: Optional[str] = typer.Argument(

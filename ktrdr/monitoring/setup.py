@@ -25,6 +25,7 @@ def setup_monitoring(
     service_name: str,
     otlp_endpoint: str | None = None,
     console_output: bool = False,
+    use_simple_processor: bool = False,
 ) -> TracerProvider:
     """
     Setup OpenTelemetry tracing for a service.
@@ -33,6 +34,7 @@ def setup_monitoring(
         service_name: Name of the service (e.g., "ktrdr-api", "ktrdr-training-worker")
         otlp_endpoint: OTLP gRPC endpoint (e.g., "http://jaeger:4317"). If None, console only.
         console_output: If True, also print traces to console (for debugging)
+        use_simple_processor: If True, use SimpleSpanProcessor for immediate export (for CLI/short-lived processes)
 
     Returns:
         TracerProvider instance
@@ -64,10 +66,19 @@ def setup_monitoring(
         otlp_exporter = OTLPSpanExporter(
             endpoint=otlp_endpoint, insecure=True  # Use TLS in production
         )
-        provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
-        logger.info(
-            f"✅ OTLP trace export enabled for {service_name} → {otlp_endpoint}"
-        )
+
+        # Use SimpleSpanProcessor for CLI/short-lived processes (immediate export)
+        # Use BatchSpanProcessor for services (efficient batching)
+        if use_simple_processor:
+            provider.add_span_processor(SimpleSpanProcessor(otlp_exporter))
+            logger.info(
+                f"✅ OTLP trace export enabled for {service_name} → {otlp_endpoint} (immediate)"
+            )
+        else:
+            provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
+            logger.info(
+                f"✅ OTLP trace export enabled for {service_name} → {otlp_endpoint}"
+            )
 
     # Set as global tracer provider
     trace.set_tracer_provider(provider)

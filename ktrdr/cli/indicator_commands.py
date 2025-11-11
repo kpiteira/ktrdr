@@ -36,8 +36,8 @@ indicators_app = typer.Typer(
 )
 
 
-@trace_cli_command("indicators_compute")
 @indicators_app.command("compute")
+@trace_cli_command("indicators_compute")
 def compute_indicator(
     symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),
     indicator_type: str = typer.Option(
@@ -256,8 +256,8 @@ async def _compute_indicator_async(
         ) from e
 
 
-@trace_cli_command("indicators_plot")
 @indicators_app.command("plot")
+@trace_cli_command("indicators_plot")
 def plot_chart(
     symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),
     timeframe: str = typer.Option(
@@ -368,8 +368,8 @@ async def _plot_chart_async(
         ) from e
 
 
-@trace_cli_command("indicators_list")
 @indicators_app.command("list")
+@trace_cli_command("indicators_list")
 def list_indicators(
     category: Optional[str] = typer.Option(
         None, "--category", "-c", help="Filter by category"

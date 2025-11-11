@@ -35,8 +35,8 @@ fuzzy_app = typer.Typer(
 )
 
 
-@trace_cli_command("fuzzy_compute")
 @fuzzy_app.command("compute")
+@trace_cli_command("fuzzy_compute")
 def compute_fuzzy(
     symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),
     indicator: str = typer.Option(
@@ -255,8 +255,8 @@ async def _compute_fuzzy_async(
         ) from e
 
 
-@trace_cli_command("fuzzy_visualize")
 @fuzzy_app.command("visualize")
+@trace_cli_command("fuzzy_visualize")
 def visualize_fuzzy(
     symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),
     indicator: str = typer.Option(
@@ -396,8 +396,8 @@ async def _visualize_fuzzy_async(
         ) from e
 
 
-@trace_cli_command("fuzzy_config")
 @fuzzy_app.command("config")
+@trace_cli_command("fuzzy_config")
 def manage_config(
     action: str = typer.Argument(
         ..., help="Action to perform (validate, generate, upgrade)"

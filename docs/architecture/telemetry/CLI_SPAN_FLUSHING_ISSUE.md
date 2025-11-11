@@ -1,17 +1,56 @@
-# CLI Span Flushing Issue & Solution
+# CLI Span Visibility Issue & Solution
 
 **Issue Discovered**: 2025-11-11
-**Status**: 🐛 Known Issue with Solution
-**Priority**: Medium (affects trace visibility, not functionality)
+**Status**: ✅ **RESOLVED**
+**Priority**: High (blocked trace visibility)
 
 ## Problem
 
-CLI command decorator spans (e.g., `cli.data_range`) are **not appearing in Jaeger** even though:
+CLI command decorator spans (e.g., `cli.data_range`) were **not appearing in Jaeger** even though:
 - ✅ Decorator code is correct
 - ✅ `ktrdr-cli` service is registered in Jaeger
 - ✅ httpx auto-instrumentation spans ARE appearing
 
-**Root Cause**: `BatchSpanProcessor` buffers spans for efficiency (flushes every 5s or 512 spans). CLI commands exit before spans are flushed.
+**Root Causes (TWO issues identified)**:
+1. **Decorator Order** (Primary): Typer's `@app.command()` decorator was bypassing our `@trace_cli_command()` decorator
+2. **Span Flushing** (Secondary): `BatchSpanProcessor` buffers spans, CLI exits before flush
+
+## Solution (IMPLEMENTED ✅)
+
+Both issues have been resolved:
+
+### 1. Decorator Order Fix (Primary)
+**Problem**: When decorators were applied as:
+```python
+@trace_cli_command("data_range")  # Outer
+@data_app.command("range")        # Inner
+def get_data_range(...):
+```
+Typer's `@command()` decorator created a new wrapper that bypassed the trace decorator.
+
+**Solution**: Swap decorator order to put `@trace_cli_command()` INSIDE (closer to function):
+```python
+@data_app.command("range")        # Outer
+@trace_cli_command("data_range")  # Inner (called by Typer's wrapper)
+def get_data_range(...):
+```
+
+✅ **Applied to all 25+ CLI commands** across 8 modules
+
+### 2. Span Flushing Fix (Secondary)
+**Solution**: Use `SimpleSpanProcessor` + `atexit` flush handler in [ktrdr/cli/__init__.py](ktrdr/cli/__init__.py):
+```python
+setup_monitoring(
+    service_name="ktrdr-cli",
+    otlp_endpoint=os.getenv("OTLP_ENDPOINT", "http://localhost:4317"),
+    use_simple_processor=True,  # Immediate export
+)
+
+def flush_spans():
+    trace.get_tracer_provider().force_flush(timeout_millis=1000)
+
+atexit.register(flush_spans)
+```
 
 ## Evidence
 
