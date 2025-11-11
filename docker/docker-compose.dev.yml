@@ -30,6 +30,8 @@ services:
       - PYTHONPATH=/app
       - LOG_LEVEL=INFO
       - ENVIRONMENT=development
+      # OpenTelemetry / Jaeger configuration (Phase 2: Jaeger UI)
+      - OTLP_ENDPOINT=http://jaeger:4317
       # Enable distributed workers architecture
       - USE_IB_HOST_SERVICE=false
       - USE_TRAINING_HOST_SERVICE=false
@@ -42,6 +44,9 @@ services:
       start_period: 30s
     networks:
       - ktrdr-network
+    depends_on:
+      jaeger:
+        condition: service_healthy
     command: ["uvicorn", "ktrdr.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
   # Backtest worker - Executes backtesting operations
@@ -121,6 +126,32 @@ services:
         condition: service_healthy
     # Run the training worker API (using WorkerAPIBase pattern)
     command: ["uvicorn", "ktrdr.training.training_worker:app", "--host", "0.0.0.0", "--port", "5004", "--reload"]
+
+  # Jaeger - Distributed tracing UI and collector (Phase 2: Jaeger UI)
+  jaeger:
+    image: jaegertracing/all-in-one:1.53
+    container_name: ktrdr-jaeger
+    restart: unless-stopped
+    ports:
+      # Jaeger UI
+      - "16686:16686"
+      # OTLP gRPC receiver (for OpenTelemetry traces)
+      - "4317:4317"
+      # OTLP HTTP receiver (alternative)
+      - "4318:4318"
+      # Jaeger agent (legacy, for completeness)
+      - "6831:6831/udp"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - LOG_LEVEL=info
+    networks:
+      - ktrdr-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:16686"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
 networks:
   ktrdr-network:

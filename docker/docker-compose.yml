@@ -48,6 +48,8 @@ services:
       - PYTHONPATH=/app
       # Backend API URL (explicit - no default in code)
       - KTRDR_API_URL=http://backend:8000
+      # OpenTelemetry / Jaeger configuration (Phase 2: Jaeger UI)
+      - OTLP_ENDPOINT=http://jaeger:4317
       # IB Gateway configuration - testing bridge gateway IP
       - IB_HOST=172.17.0.1
       - IB_PORT=4002
@@ -60,6 +62,9 @@ services:
       # Workers register themselves on startup - no environment variables needed here
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    depends_on:
+      jaeger:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
       interval: 30s
@@ -179,6 +184,32 @@ services:
     network_mode: host  # Use host network to access localhost directly
     # Keep container alive for Claude to connect via: docker exec -i ktrdr-mcp python -m src.main
     command: tail -f /dev/null
+
+  # Jaeger - Distributed tracing UI and collector (Phase 2: Jaeger UI)
+  jaeger:
+    image: jaegertracing/all-in-one:1.53
+    container_name: ktrdr-jaeger
+    restart: unless-stopped
+    ports:
+      # Jaeger UI
+      - "16686:16686"
+      # OTLP gRPC receiver (for OpenTelemetry traces)
+      - "4317:4317"
+      # OTLP HTTP receiver (alternative)
+      - "4318:4318"
+      # Jaeger agent (legacy, for completeness)
+      - "6831:6831/udp"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - LOG_LEVEL=info
+    networks:
+      - ktrdr-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:16686"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
 networks:
   ktrdr-network:

@@ -32,10 +32,12 @@ from ktrdr.monitoring.setup import instrument_app, setup_monitoring
 logger = logging.getLogger(__name__)
 
 # Setup monitoring BEFORE creating app
+otlp_endpoint = os.getenv("OTLP_ENDPOINT")
 setup_monitoring(
     service_name="ktrdr-api",
-    otlp_endpoint=os.getenv("OTLP_ENDPOINT"),  # None for Phase 1
-    console_output=True,  # Enable console traces for Phase 1
+    otlp_endpoint=otlp_endpoint,
+    # Disable console output when OTLP is configured (reduce noise)
+    console_output=otlp_endpoint is None,
 )
 
 # Set up templates directory
