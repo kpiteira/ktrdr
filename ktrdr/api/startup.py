@@ -40,12 +40,23 @@ async def lifespan(app: FastAPI):
     _ = await get_training_service()  # Initialize service (logs training mode)
     logger.info("✅ TrainingService initialized")
 
+    # Start worker registry background health checks
+    from ktrdr.api.endpoints.workers import get_worker_registry
+
+    registry = get_worker_registry()
+    await registry.start()
+    logger.info("✅ Worker registry started with background health checks")
+
     logger.info("🎉 API startup completed")
 
     yield
 
     # Shutdown
     logger.info("🛑 Shutting down KTRDR API...")
+
+    # Stop worker registry background health checks
+    await registry.stop()
+    logger.info("✅ Worker registry stopped")
 
     # New architecture: connections are cleaned up automatically
     # via context managers and dedicated threads

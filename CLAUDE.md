@@ -45,34 +45,54 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Dependencies flow in one direction: UI → API → Core → Data
 - No circular dependencies or tight coupling
 
-### 2. Host Service Architecture
+### 2. Distributed Workers Architecture
 
-KTRDR uses **Host Services** to bypass Docker limitations for components requiring direct system access:
+KTRDR uses a **distributed workers architecture** where the backend orchestrates operations across a cluster of worker nodes:
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ Docker Container (Port 8000)                                │
-│  ├─ API Layer (FastAPI)                                     │
-│  ├─ Service Orchestrators (DataAcquisitionService,          │
-│  │                          TrainingManager)                │
-│  └─ Business Logic                                          │
-└─────────────────────────────────────────────────────────────┘
-         │                                    │
-         │ HTTP                               │ HTTP
-         ▼                                    ▼
-┌──────────────────────┐           ┌──────────────────────┐
-│ IB Host Service      │           │ Training Host Service│
-│ (Port 5001)          │           │ (Port 5002)          │
-│ - Direct IB Gateway  │           │ - GPU Access (CUDA)  │
-│ - No Docker network  │           │ - Native Performance │
-└──────────────────────┘           └──────────────────────┘
-         │                                    │
-         ▼                                    ▼
-   IB Gateway                          PyTorch + GPU
-   (Port 4002)
+┌─────────────────────────────────────────────────────────────────┐
+│ Backend (Docker Container, Port 8000)                          │
+│  ├─ API Layer (FastAPI)                                        │
+│  ├─ Service Orchestrators (NEVER execute operations)           │
+│  ├─ WorkerRegistry (tracks all workers)                        │
+│  └─ OperationsService (tracks all operations)                  │
+└─────────────────────────────────────────────────────────────────┘
+         │
+         ├─ HTTP (Worker Registration & Operation Dispatch)
+         │
+    ┌────┴────┬──────────┬──────────┬─────────────┐
+    │         │          │          │             │
+    ▼         ▼          ▼          ▼             ▼
+┌───────┐ ┌───────┐ ┌───────┐ ┌───────┐   ┌──────────────┐
+│Backtest││Backtest││Training││Training│   │IB Host Service│
+│Worker 1││Worker 2││Worker 1││Worker 2│   │(Port 5001)   │
+│:5003   ││:5003   ││:5004   ││:5004   │   │Direct IB TCP │
+└────────┘└────────┘└────────┘└────────┘   └──────────────┘
+CPU-only  CPU-only  CPU-only  CPU-only    Direct IB Gateway
+
+         ┌─────────────────────┐
+         │Training Host Service│
+         │(Port 5002)          │
+         │GPU Access (CUDA/MPS)│
+         └─────────────────────┘
+         10x-100x faster training
 ```
 
-**Key Pattern**: Service Orchestrators use adapters to route operations either locally (in-process) or to host services (HTTP), controlled by environment variables.
+**Key Architectural Changes**:
+
+1. **Backend as Orchestrator Only**: Backend NEVER executes operations locally—it only selects workers and dispatches operations
+2. **Distributed-Only Execution**: All backtesting and training operations execute on workers (no local fallback)
+3. **Self-Registering Workers**: Workers push-register with backend on startup (infrastructure-agnostic)
+4. **GPU-First Routing**: Training operations prefer GPU workers (10x-100x faster) with CPU worker fallback
+5. **Horizontal Scalability**: Add more workers = more concurrent operations (`docker-compose up --scale backtest-worker=10`)
+
+**Worker Types**:
+- **Backtest Workers** (containerized, CPU-only): Execute backtesting operations, horizontally scalable
+- **Training Workers** (containerized, CPU-only): Execute training operations (fallback), horizontally scalable
+- **Training Host Service** (native, GPU): Execute GPU training (priority), limited by hardware
+- **IB Host Service** (native): Direct IB Gateway access (Docker networking limitation)
+
+**For More Details**: See [Distributed Workers Architecture Overview](docs/architecture-overviews/distributed-workers.md)
 
 ### 3. Service Orchestrator Pattern
 
@@ -252,19 +272,106 @@ class DataAcquisitionService(ServiceOrchestrator):
         return await self._execute_with_progress(...)
 ```
 
-### Host Service Integration
+### Host Service Integration & Worker Deployment
 
-**When to use host services**:
-
-- IB Gateway: Direct TCP connection (Docker networking issues)
-- Training: GPU access (CUDA/MPS not available in container)
-
-**Environment Variables**:
-
+**IB Host Service** (still uses environment variables):
 - `USE_IB_HOST_SERVICE=true` → Route data operations to [ib-host-service](ib-host-service/)
-- `USE_TRAINING_HOST_SERVICE=true` → Route training to [training-host-service](training-host-service/)
 - `IB_HOST_SERVICE_URL=http://localhost:5001` (default)
-- `TRAINING_HOST_SERVICE_URL=http://localhost:5002` (default)
+- **Why**: IB Gateway requires direct TCP connection (Docker networking limitation)
+
+**Training & Backtesting** (now uses WorkerRegistry, NO environment flags):
+- ❌ **REMOVED**: `USE_TRAINING_HOST_SERVICE`, `REMOTE_BACKTEST_SERVICE_URL` (Phase 5.3)
+- ✅ **NOW**: Workers self-register with backend on startup (push-based registration)
+- Backend uses WorkerRegistry to select available workers automatically
+- GPU training workers register with `gpu: true` capability (prioritized automatically)
+- CPU workers register as fallback (always available)
+
+**Starting Workers**:
+
+```bash
+# Docker Compose (development)
+docker-compose up -d --scale backtest-worker=5 --scale training-worker=3
+
+# Training Host Service (GPU, runs natively)
+cd training-host-service && ./start.sh
+
+# Workers self-register at:
+# - Backtest: http://localhost:5003
+# - Training (CPU): http://localhost:5004
+# - Training (GPU): http://localhost:5002
+```
+
+**Verification**:
+
+```bash
+# Check registered workers
+curl http://localhost:8000/api/v1/workers | jq
+
+# Expected: All workers show as AVAILABLE with proper capabilities
+```
+
+### WorkerAPIBase Pattern
+
+**Location**: [ktrdr/workers/base.py](ktrdr/workers/base.py)
+
+**Source**: Extracted from training-host-service (~670 lines) to provide proven working infrastructure for all worker types.
+
+All workers inherit from WorkerAPIBase and get these features for free:
+
+1. **OperationsService singleton** - Worker-local operation tracking
+2. **Operations proxy endpoints** (374 lines):
+   - `GET /api/v1/operations/{id}` - Get operation status
+   - `GET /api/v1/operations/{id}/metrics` - Get operation metrics
+   - `GET /api/v1/operations` - List operations
+   - `DELETE /api/v1/operations/{id}/cancel` - Cancel operation
+3. **Health endpoint** - Reports busy/idle status (`GET /health`)
+4. **FastAPI app with CORS** - Ready for Docker communication
+5. **Self-registration** - Worker registration with backend on startup (automatic)
+
+**Key Pattern Elements**:
+- **Operation ID Synchronization**: Accepts optional `task_id` from backend, returns same `operation_id`
+- **Progress Tracking**: Workers register progress bridges in their OperationsService
+- **Remote Queryability**: Backend can query worker's operations endpoints directly (1s cache TTL)
+- **Push-Based Registration**: Workers call `POST /workers/register` on startup (infrastructure-agnostic)
+
+**Worker Implementations**:
+
+- **BacktestWorker** ([ktrdr/backtesting/backtest_worker.py](ktrdr/backtesting/backtest_worker.py)):
+  - Adds `/backtests/start` endpoint
+  - Calls BacktestingEngine directly via `asyncio.to_thread`
+  - Registers BacktestProgressBridge
+
+- **TrainingWorker** ([ktrdr/training/training_worker.py](ktrdr/training/training_worker.py)):
+  - Adds `/training/start` endpoint
+  - Calls TrainingManager directly (async)
+  - Simplified progress tracking
+
+**Code Reuse**: ~570 lines eliminated per worker by using WorkerAPIBase!
+
+**Developer Resources**:
+- **Architecture**: [Distributed Workers Architecture Overview](docs/architecture-overviews/distributed-workers.md)
+- **Development**: [Distributed Workers Developer Guide](docs/developer/distributed-workers-guide.md) - Creating new worker types
+- **Deployment**: [Docker Compose Deployment Guide](docs/user-guides/deployment.md) - Starting and scaling workers
+
+**Example Pattern**:
+
+```python
+class BacktestWorker(WorkerAPIBase):
+    def __init__(self, worker_port=5003, backend_url="http://backend:8000"):
+        super().__init__(
+            worker_type=WorkerType.BACKTESTING,
+            operation_type=OperationType.BACKTESTING,
+            worker_port=worker_port,
+            backend_url=backend_url,
+        )
+
+        # Register domain-specific endpoint
+        @self.app.post("/backtests/start")
+        async def start_backtest(request: BacktestStartRequest):
+            operation_id = request.task_id or f"worker_backtest_{uuid.uuid4().hex[:12]}"
+            result = await self._execute_backtest_work(operation_id, request)
+            return {"success": True, "operation_id": operation_id, **result}
+```
 
 ### Async Operations Pattern (CLI Commands)
 
@@ -298,11 +405,18 @@ All long-running operations support cancellation:
 Before working on specific modules:
 
 - **ServiceOrchestrator Pattern**: [ktrdr/async_infrastructure/service_orchestrator.py](ktrdr/async_infrastructure/service_orchestrator.py)
+- **Distributed Workers Architecture** (IMPORTANT):
+  - [docs/architecture-overviews/distributed-workers.md](docs/architecture-overviews/distributed-workers.md) - High-level architecture overview
+  - [docs/developer/distributed-workers-guide.md](docs/developer/distributed-workers-guide.md) - Developer guide for creating/debugging workers
+  - [docs/user-guides/deployment.md](docs/user-guides/deployment.md) - Docker Compose deployment (development)
+  - [docs/user-guides/deployment-proxmox.md](docs/user-guides/deployment-proxmox.md) - Proxmox LXC deployment (production)
+  - [docs/developer/cicd-operations-runbook.md](docs/developer/cicd-operations-runbook.md) - CI/CD and operations procedures
 - **Data Module**:
   - [ktrdr/data/repository/data_repository.py](ktrdr/data/repository/data_repository.py) - Cached data access
   - [ktrdr/data/acquisition/acquisition_service.py](ktrdr/data/acquisition/acquisition_service.py) - Data downloads with ServiceOrchestrator
   - [ktrdr/data/CLAUDE.md](ktrdr/data/CLAUDE.md) - Data module patterns
-- **Training Module**: [ktrdr/training/training_manager.py](ktrdr/training/training_manager.py) - Host service routing pattern
+- **Training Module**: [ktrdr/training/training_manager.py](ktrdr/training/training_manager.py) - Now uses WorkerRegistry (distributed-only)
+- **Backtesting Module**: [ktrdr/backtesting/backtesting_service.py](ktrdr/backtesting/backtesting_service.py) - Now uses WorkerRegistry (distributed-only)
 - **API Module**: Review FastAPI patterns in [ktrdr/api/](ktrdr/api/)
 - **CLI Async Pattern**: [ktrdr/cli/helpers/async_cli_client.py](ktrdr/cli/helpers/async_cli_client.py)
 - **Host Services**:
@@ -383,6 +497,90 @@ ktrdr operations cancel <operation-id>
 ktrdr ib test-connection
 ktrdr ib check-status
 ```
+
+## 🏭 PROXMOX PRODUCTION DEPLOYMENT
+
+**For production deployments**, KTRDR uses Proxmox LXC containers for better performance and lower overhead than Docker.
+
+### Why Proxmox LXC?
+
+- **5-15% better performance** vs Docker (lower container overhead)
+- **Lower memory footprint** per worker
+- **Template-based cloning** for rapid worker scaling
+- **Full OS environment** with systemd and native tooling
+- **Proxmox management tools** (backups, snapshots, monitoring)
+- **Multi-host clustering** for high availability
+
+### Quick Start (Production)
+
+```bash
+# 1. Create LXC template (one-time setup)
+# See: docs/user-guides/deployment-proxmox.md
+
+# 2. Clone and deploy backend LXC
+ssh root@proxmox "pct clone 900 100 --hostname ktrdr-backend"
+ssh root@proxmox "pct set 100 --cores 4 --memory 8192 --net0 ip=192.168.1.100/24"
+ssh root@proxmox "pct start 100"
+
+# 3. Deploy code to backend
+./scripts/deploy/deploy-code.sh --target 192.168.1.100
+
+# 4. Clone and deploy worker LXCs (5 workers example)
+for i in {1..5}; do
+  CTID=$((200 + i))
+  IP=$((200 + i))
+  ssh root@proxmox "pct clone 900 $CTID --hostname ktrdr-worker-$i"
+  ssh root@proxmox "pct set $CTID --cores 4 --memory 8192 --net0 ip=192.168.1.$IP/24"
+  ssh root@proxmox "pct start $CTID"
+  ./scripts/deploy/deploy-code.sh --target 192.168.1.$IP
+done
+
+# 5. Verify deployment
+curl http://192.168.1.100:8000/api/v1/workers | jq
+# Should show 5 registered workers
+```
+
+### Operations & Maintenance
+
+**Automated Deployment**:
+```bash
+# Deploy new version (rolling update, zero downtime)
+./scripts/deploy/deploy-to-proxmox.sh --env production --version v1.5.2
+```
+
+**Add Workers During High Load**:
+```bash
+# Clone from template, deploy code, workers auto-register
+./scripts/lxc/provision-worker.sh --count 10 --start-id 211
+```
+
+**View System Status**:
+```bash
+# Health check all workers
+./scripts/ops/system-status.sh
+
+# View logs across all LXCs
+./scripts/ops/view-logs.sh all "1 hour ago"
+
+# Check resource usage
+./scripts/ops/check-resources.sh
+```
+
+### Documentation
+
+- **Deployment**: [docs/user-guides/deployment-proxmox.md](docs/user-guides/deployment-proxmox.md) - Complete Proxmox deployment guide
+- **CI/CD**: [docs/developer/cicd-operations-runbook.md](docs/developer/cicd-operations-runbook.md) - Operations and incident response
+- **Development**: [docs/user-guides/deployment.md](docs/user-guides/deployment.md) - Docker Compose for local development
+
+### When to Use Proxmox vs Docker
+
+| Use Case | Recommended | Why |
+|----------|-------------|-----|
+| Local development | Docker Compose | Quick setup, easy iteration |
+| Testing/staging | Docker Compose | Matches dev environment |
+| Production | **Proxmox LXC** | Better performance, management tools |
+| > 20 workers | **Proxmox LXC** | Lower overhead scales better |
+| High-performance | **Proxmox LXC** | 5-15% performance gain matters |
 
 ## 🔥 DEVELOPMENT BEST PRACTICES
 

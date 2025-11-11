@@ -67,6 +67,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 
 from ktrdr import get_logger
+from ktrdr.api.endpoints.workers import get_worker_registry
 from ktrdr.api.services.training_service import TrainingService
 from ktrdr.errors import ConfigurationError, DataError, ValidationError
 
@@ -222,7 +223,9 @@ async def get_training_service() -> TrainingService:
     """Get training service instance (singleton)."""
     global _training_service
     if _training_service is None:
-        _training_service = TrainingService()
+        # Inject WorkerRegistry for distributed worker selection
+        worker_registry = get_worker_registry()
+        _training_service = TrainingService(worker_registry=worker_registry)
     return _training_service
 
 

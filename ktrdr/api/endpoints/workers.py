@@ -1,0 +1,159 @@
+"""
+Workers API endpoints.
+
+This module implements the API endpoints for worker registration and discovery
+in the distributed training and backtesting architecture.
+"""
+
+from typing import Optional
+
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel, Field
+
+from ktrdr import get_logger
+from ktrdr.api.models.workers import WorkerType
+from ktrdr.api.services.worker_registry import WorkerRegistry
+
+# Setup module-level logger
+logger = get_logger(__name__)
+
+# Create router for worker endpoints
+router = APIRouter()
+
+# Global worker registry instance (singleton)
+_worker_registry: Optional[WorkerRegistry] = None
+
+
+def get_worker_registry() -> WorkerRegistry:
+    """
+    Get or create the global WorkerRegistry instance.
+
+    Returns:
+        WorkerRegistry: The global worker registry singleton
+    """
+    global _worker_registry
+    if _worker_registry is None:
+        _worker_registry = WorkerRegistry()
+        logger.info("Worker registry initialized")
+    return _worker_registry
+
+
+class WorkerRegistrationRequest(BaseModel):
+    """Request model for worker registration."""
+
+    worker_id: str = Field(..., description="Unique identifier for the worker")
+    worker_type: WorkerType = Field(..., description="Type of worker")
+    endpoint_url: str = Field(..., description="HTTP URL where worker can be reached")
+    capabilities: Optional[dict] = Field(
+        default=None, description="Worker capabilities (cores, memory, etc.)"
+    )
+
+    class Config:
+        """Pydantic model configuration."""
+
+        json_schema_extra = {
+            "example": {
+                "worker_id": "backtest-worker-1",
+                "worker_type": "backtesting",
+                "endpoint_url": "http://192.168.1.201:5003",
+                "capabilities": {"cores": 4, "memory_gb": 8},
+            }
+        }
+
+
+@router.post(
+    "/workers/register",
+    tags=["Workers"],
+    summary="Register a worker",
+    description="Register or update a worker node in the distributed system",
+)
+async def register_worker(
+    request: WorkerRegistrationRequest,
+    registry: WorkerRegistry = Depends(get_worker_registry),
+) -> dict:
+    """
+    Register or update a worker node.
+
+    Workers self-register on startup by calling this endpoint with their
+    ID, type, URL, and capabilities. Re-registering an existing worker
+    updates its information (idempotent operation).
+
+    Args:
+        request: Worker registration information
+        registry: The worker registry (injected dependency)
+
+    Returns:
+        dict: The registered worker information
+
+    Example:
+        ```json
+        {
+            "worker_id": "backtest-worker-1",
+            "worker_type": "backtesting",
+            "endpoint_url": "http://192.168.1.201:5003",
+            "capabilities": {"cores": 4, "memory_gb": 8}
+        }
+        ```
+    """
+    logger.info(
+        f"Worker registration request: {request.worker_id} ({request.worker_type})"
+    )
+
+    worker = registry.register_worker(
+        worker_id=request.worker_id,
+        worker_type=request.worker_type,
+        endpoint_url=request.endpoint_url,
+        capabilities=request.capabilities,
+    )
+
+    logger.info(f"Worker registered successfully: {request.worker_id}")
+
+    return worker.to_dict()
+
+
+@router.get(
+    "/workers",
+    tags=["Workers"],
+    summary="List workers",
+    description="List all registered workers with optional filtering",
+)
+async def list_workers(
+    worker_type: Optional[WorkerType] = None,
+    status: Optional[str] = None,
+    registry: WorkerRegistry = Depends(get_worker_registry),
+) -> list[dict]:
+    """
+    List registered workers with optional filtering.
+
+    Args:
+        worker_type: Optional filter by worker type
+        status: Optional filter by worker status
+        registry: The worker registry (injected dependency)
+
+    Returns:
+        list[dict]: List of workers matching the filters
+
+    Example:
+        ```
+        GET /api/v1/workers
+        GET /api/v1/workers?worker_type=backtesting
+        GET /api/v1/workers?status=available
+        GET /api/v1/workers?worker_type=backtesting&status=available
+        ```
+    """
+    # Import WorkerStatus here to avoid circular dependency
+    from ktrdr.api.models.workers import WorkerStatus
+
+    # Convert status string to enum if provided
+    status_enum = None
+    if status:
+        try:
+            status_enum = WorkerStatus(status)
+        except ValueError:
+            logger.warning(f"Invalid status filter: {status}")
+            # Return empty list for invalid status
+            return []
+
+    workers = registry.list_workers(worker_type=worker_type, status=status_enum)
+
+    return [worker.to_dict() for worker in workers]

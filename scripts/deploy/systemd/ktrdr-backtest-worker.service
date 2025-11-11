@@ -1,0 +1,42 @@
+[Unit]
+Description=KTRDR Backtest Worker
+Documentation=https://github.com/your-org/ktrdr
+After=network.target
+
+[Service]
+Type=simple
+User=ktrdr
+Group=ktrdr
+WorkingDirectory=/opt/ktrdr
+
+# Environment
+Environment="PATH=/opt/ktrdr/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=-/opt/ktrdr/.env
+
+# Start worker
+ExecStart=/opt/ktrdr/.venv/bin/uvicorn ktrdr.backtesting.backtest_worker:app --host 0.0.0.0 --port 5003
+
+# Restart policy
+Restart=always
+RestartSec=5
+StartLimitInterval=300
+StartLimitBurst=5
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ktrdr-backtest-worker
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/ktrdr/logs /opt/ktrdr/data
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictNamespaces=true
+
+[Install]
+WantedBy=multi-user.target

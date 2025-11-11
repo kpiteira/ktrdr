@@ -16,6 +16,7 @@ from ktrdr.api.models.operations import (
     OperationStatus,
     OperationType,
 )
+from ktrdr.api.services.operations_service import get_operations_service
 from ktrdr.api.services.training.context import TrainingOperationContext
 from ktrdr.api.services.training.progress_bridge import TrainingProgressBridge
 from ktrdr.async_infrastructure.progress_bridge import ProgressBridge
@@ -27,7 +28,6 @@ from ktrdr.training.device_manager import DeviceManager
 from ktrdr.training.gpu_memory_manager import GPUMemoryConfig, GPUMemoryManager
 from ktrdr.training.memory_manager import MemoryBudget, MemoryManager
 from ktrdr.training.performance_optimizer import PerformanceConfig, PerformanceOptimizer
-from services.operations import get_operations_service
 
 logger = get_logger(__name__)
 
@@ -488,8 +488,9 @@ class TrainingService:
             # Get operations service singleton
             ops_service = get_operations_service()
 
-            # Generate operation ID with consistent naming: host_training_{session_id}
-            operation_id = f"host_training_{session.session_id}"
+            # Use session_id directly as operation_id (backend's operation_id passed via task_id)
+            # This ensures backend and worker track the same operation with the same ID
+            operation_id = session.session_id
             session.operation_id = operation_id
 
             # Create operation in OperationsService

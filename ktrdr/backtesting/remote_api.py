@@ -1,22 +1,20 @@
 """
 Remote Backtesting API - FastAPI Application for Remote Container.
 
-This module provides a FastAPI application that runs BacktestingService in LOCAL mode
-within a remote container. The backend treats this as "remote", but this service
-itself runs locally (from its own perspective).
+DEPRECATED: This file is being replaced by BacktestWorker (using WorkerAPIBase pattern).
+See ktrdr/backtesting/backtest_worker.py for the new implementation.
 
-Key Design:
-- Runs BacktestingService in LOCAL mode (not remote mode!)
-- Exposes same OperationsService endpoints as backend
+This module provides a FastAPI application that runs BacktestingService within
+a remote container using the legacy pattern.
+
+Legacy Design:
+- Exposes OperationsService endpoints
 - Backend proxies to this service via OperationServiceProxy
-- Two-level caching: backend cache + this service's cache
+- Being replaced by WorkerAPIBase pattern
 
-Usage:
-    # Run directly for development
-    uvicorn ktrdr.backtesting.remote_api:app --host 0.0.0.0 --port 5003
-
-    # Or via Docker
-    docker run -p 5003:5003 ktrdr-backend uvicorn ktrdr.backtesting.remote_api:app ...
+Usage (DEPRECATED):
+    # Use backtest_worker.py instead
+    # Legacy: uvicorn ktrdr.backtesting.remote_api:app --host 0.0.0.0 --port 5003
 """
 
 import logging
@@ -30,7 +28,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from ktrdr.api.models.backtesting import BacktestStartRequest, BacktestStartResponse
 from ktrdr.api.models.operations import OperationType
 from ktrdr.api.services.operations_service import get_operations_service
+from ktrdr.api.services.worker_registry import WorkerRegistry
 from ktrdr.backtesting.backtesting_service import BacktestingService
+from ktrdr.backtesting.worker_registration import WorkerRegistration
 
 if TYPE_CHECKING:
     from ktrdr.api.services.operations_service import OperationsService
@@ -64,10 +64,18 @@ _backtesting_service: Optional[BacktestingService] = None
 
 
 def get_backtest_service() -> BacktestingService:
-    """Get backtesting service singleton."""
+    """
+    Get backtesting service singleton.
+
+    Note: This creates an empty WorkerRegistry as this legacy API
+    is being replaced by BacktestWorker.
+    """
     global _backtesting_service
     if _backtesting_service is None:
-        _backtesting_service = BacktestingService()
+        # Create minimal registry for backward compatibility
+        # (This file is deprecated - use backtest_worker.py instead)
+        worker_registry = WorkerRegistry()
+        _backtesting_service = BacktestingService(worker_registry=worker_registry)
     return _backtesting_service
 
 
@@ -80,20 +88,33 @@ async def startup_event():
     logger.info("🚀 Starting Backtesting Remote Service")
     logger.info("=" * 80)
 
-    # Force local mode (this service should never use remote mode)
-    os.environ["USE_REMOTE_BACKTEST_SERVICE"] = "false"
-
     # Initialize OperationsService
     _operations_service = get_operations_service()
     logger.info(
         f"✅ OperationsService initialized (cache_ttl={_operations_service._cache_ttl}s)"
     )
 
-    # Initialize BacktestingService (will run in local mode)
-    backtest_service = get_backtest_service()
-    logger.info(
-        f"✅ BacktestingService initialized (mode: {'remote' if backtest_service._use_remote else 'local'})"
-    )
+    # Initialize BacktestingService (distributed-only mode)
+    get_backtest_service()
+    logger.info("✅ BacktestingService initialized (mode: distributed, workers-only)")
+
+    # Register with backend (self-registration)
+    logger.info("")
+    logger.info("📝 Registering worker with backend...")
+    worker_registration = WorkerRegistration()
+    registration_success = await worker_registration.register()
+
+    if registration_success:
+        logger.info(
+            f"✅ Worker registered successfully: {worker_registration.worker_id}"
+        )
+    else:
+        logger.warning(
+            f"⚠️  Worker registration failed: {worker_registration.worker_id}"
+        )
+        logger.warning(
+            "   Worker will continue running but may not receive tasks from backend"
+        )
 
     logger.info("")
     logger.info("📡 Available Endpoints:")
@@ -136,12 +157,30 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """Basic health check endpoint."""
+    """
+    Health check endpoint that reports worker status.
+
+    Returns worker_status as 'busy' if there are active operations,
+    'idle' otherwise. This is used by the backend's health check system
+    to determine worker availability.
+    """
+    # Check if there are active backtest operations
+    ops_service = get_operations_service()
+    active_ops, _, _ = await ops_service.list_operations(
+        operation_type=OperationType.BACKTESTING, active_only=True
+    )
+
+    worker_status = "busy" if active_ops else "idle"
+    current_operation = active_ops[0].operation_id if active_ops else None
+
     return {
         "healthy": True,
         "service": "backtest-remote",
         "timestamp": datetime.utcnow().isoformat(),
         "status": "operational",
+        "worker_status": worker_status,  # 'busy' or 'idle' - used by backend health checks
+        "current_operation": current_operation,
+        "active_operations_count": len(active_ops),
     }
 
 
@@ -166,8 +205,29 @@ async def start_backtest(request: BacktestStartRequest) -> BacktestStartResponse
         BacktestStartResponse with operation_id for tracking
 
     Raises:
-        HTTPException: 400 for validation errors, 500 for internal errors
+        HTTPException: 400 for validation errors, 500 for internal errors, 503 if worker busy
     """
+    # EXCLUSIVITY CHECK: Reject if worker is already busy
+    ops_service = get_operations_service()
+    active_ops, _, _ = await ops_service.list_operations(
+        operation_type=OperationType.BACKTESTING, active_only=True
+    )
+
+    if active_ops:
+        current_operation = active_ops[0].operation_id
+        logger.warning(
+            f"⛔ Worker BUSY - Rejecting new backtest request (current operation: {current_operation})"
+        )
+        raise HTTPException(
+            status_code=503,  # Service Unavailable
+            detail={
+                "error": "Worker busy",
+                "message": f"Worker is currently executing operation {current_operation}",
+                "current_operation": current_operation,
+                "active_operations_count": len(active_ops),
+            },
+        )
+
     try:
         service = get_backtest_service()
 
@@ -178,9 +238,14 @@ async def start_backtest(request: BacktestStartRequest) -> BacktestStartResponse
         # Build strategy config path
         strategy_config_path = f"strategies/{request.strategy_name}.yaml"
 
+        # Get worker ID for logging
+        import socket
+
+        worker_id = os.getenv("WORKER_ID") or f"backtest-{socket.gethostname()}"
+
         # Call BacktestingService (will run in LOCAL mode)
         logger.info(
-            f"Starting backtest: {request.symbol} {request.timeframe} ({request.start_date} to {request.end_date})"
+            f"🔵 WORKER {worker_id}: Starting backtest {request.symbol} {request.timeframe} ({request.start_date} to {request.end_date})"
         )
 
         result = await service.run_backtest(
@@ -195,7 +260,9 @@ async def start_backtest(request: BacktestStartRequest) -> BacktestStartResponse
             slippage=request.slippage,
         )
 
-        logger.info(f"Backtest started: operation_id={result['operation_id']}")
+        logger.info(
+            f"🔵 WORKER {worker_id}: Operation started - operation_id={result['operation_id']}"
+        )
 
         return BacktestStartResponse(
             success=result["success"],

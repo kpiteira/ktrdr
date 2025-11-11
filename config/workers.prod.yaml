@@ -1,0 +1,66 @@
+# Production Workers Configuration
+# This file defines worker containers for the production environment
+
+# Backend API URL
+backend_api_url: "http://192.168.1.100:8000"
+
+# Network settings
+network:
+  gateway: "192.168.1.1"
+  netmask: "24"
+
+# Git repository
+git_repo: "https://github.com/your-org/ktrdr.git"
+
+# Workers list
+workers:
+  # Backtesting workers (production)
+  - id: 201
+    ip: "192.168.1.201"
+    type: "backtesting"
+    hostname: "ktrdr-backtest-1"
+    cores: 4
+    memory: 4096  # MB
+
+  - id: 202
+    ip: "192.168.1.202"
+    type: "backtesting"
+    hostname: "ktrdr-backtest-2"
+    cores: 4
+    memory: 4096
+
+  - id: 203
+    ip: "192.168.1.203"
+    type: "backtesting"
+    hostname: "ktrdr-backtest-3"
+    cores: 4
+    memory: 4096
+
+  - id: 204
+    ip: "192.168.1.204"
+    type: "backtesting"
+    hostname: "ktrdr-backtest-4"
+    cores: 4
+    memory: 4096
+
+  - id: 205
+    ip: "192.168.1.205"
+    type: "backtesting"
+    hostname: "ktrdr-backtest-5"
+    cores: 4
+    memory: 4096
+
+  # Training workers (production)
+  - id: 206
+    ip: "192.168.1.206"
+    type: "training"
+    hostname: "ktrdr-training-1"
+    cores: 8
+    memory: 8192
+
+  - id: 207
+    ip: "192.168.1.207"
+    type: "training"
+    hostname: "ktrdr-training-2"
+    cores: 8
+    memory: 8192
