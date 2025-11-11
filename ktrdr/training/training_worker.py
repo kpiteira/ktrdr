@@ -11,6 +11,7 @@ import uuid
 from typing import Any, Optional
 
 from fastapi import FastAPI
+from opentelemetry import trace
 from pydantic import Field
 
 from ktrdr.api.models.operations import OperationMetadata, OperationType
@@ -271,8 +272,6 @@ worker = TrainingWorker(
 instrument_app(worker.app)
 
 # Add worker-specific span attributes (for tracing)
-from opentelemetry import trace
-
 tracer = trace.get_tracer(__name__)
 # Note: Worker attributes will be added during actual request handling
 # The worker_id, worker_type, and capabilities are already tracked in WorkerAPIBase

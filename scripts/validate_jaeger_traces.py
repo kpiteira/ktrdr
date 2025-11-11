@@ -88,7 +88,7 @@ def main():
         return 1
 
     # Step 4: Query traces
-    print(f"\n4. Fetching recent traces for ktrdr-api...")
+    print("\n4. Fetching recent traces for ktrdr-api...")
     try:
         traces_response = httpx.get(
             f"{args.jaeger_url}/api/traces",
@@ -106,7 +106,7 @@ def main():
 
         # Display first trace details
         first_trace = traces_data["data"][0]
-        print(f"\n   First trace details:")
+        print("\n   First trace details:")
         print(f"      Trace ID: {first_trace['traceID']}")
         print(f"      Spans: {len(first_trace['spans'])}")
 

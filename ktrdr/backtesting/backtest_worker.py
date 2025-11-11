@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import FastAPI
+from opentelemetry import trace
 
 from ktrdr.api.models.operations import OperationMetadata, OperationType
 from ktrdr.api.models.workers import WorkerType
@@ -213,8 +214,6 @@ worker = BacktestWorker(
 instrument_app(worker.app)
 
 # Add worker-specific span attributes (for tracing)
-from opentelemetry import trace
-
 tracer = trace.get_tracer(__name__)
 # Note: Worker attributes will be added during actual request handling
 # The worker_id, worker_type, and capabilities are already tracked in WorkerAPIBase

@@ -2,7 +2,6 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 
@@ -36,9 +35,11 @@ def test_instrument_app():
     """Test FastAPI app instrumentation."""
     mock_app = MagicMock()
 
-    with patch("ktrdr.monitoring.setup.FastAPIInstrumentor"), patch(
-        "ktrdr.monitoring.setup.HTTPXClientInstrumentor"
-    ), patch("ktrdr.monitoring.setup.LoggingInstrumentor"):
+    with (
+        patch("ktrdr.monitoring.setup.FastAPIInstrumentor"),
+        patch("ktrdr.monitoring.setup.HTTPXClientInstrumentor"),
+        patch("ktrdr.monitoring.setup.LoggingInstrumentor"),
+    ):
         instrument_app(mock_app)
         # Should not raise
 
