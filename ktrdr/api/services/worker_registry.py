@@ -12,6 +12,7 @@ from typing import Optional
 import httpx
 
 from ktrdr.api.models.workers import WorkerEndpoint, WorkerStatus, WorkerType
+from ktrdr.monitoring.service_telemetry import trace_service_method
 
 logger = logging.getLogger(__name__)
 
