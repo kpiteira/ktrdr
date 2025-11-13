@@ -107,6 +107,7 @@ class WorkerRegistry:
         """
         return self._workers.get(worker_id)
 
+    @trace_service_method("workers.list")
     def list_workers(
         self,
         worker_type: Optional[WorkerType] = None,
@@ -177,6 +178,7 @@ class WorkerRegistry:
 
         return workers
 
+    @trace_service_method("workers.select")
     def select_worker(self, worker_type: WorkerType) -> Optional[WorkerEndpoint]:
         """
         Select an available worker using round-robin (least recently used).
