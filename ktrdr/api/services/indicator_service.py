@@ -24,6 +24,7 @@ from ktrdr.errors import ConfigurationError, DataError, ProcessingError
 from ktrdr.indicators.categories import get_indicator_category
 from ktrdr.indicators.indicator_engine import IndicatorEngine
 from ktrdr.indicators.indicator_factory import BUILT_IN_INDICATORS
+from ktrdr.monitoring.service_telemetry import trace_service_method, create_service_span
 
 # Create module-level logger
 logger = get_logger(__name__)
@@ -43,6 +44,7 @@ class IndicatorService(BaseService):
         self.repository = DataRepository()
         self.logger.info("Initialized IndicatorService")
 
+    @trace_service_method("indicator.list")
     async def get_available_indicators(self) -> list[IndicatorMetadata]:
         """
         Get a list of all available indicators with their metadata.
@@ -181,6 +183,7 @@ class IndicatorService(BaseService):
                 details={"error": str(e)},
             ) from e
 
+    @trace_service_method("indicator.calculate")
     async def calculate_indicators(
         self, request: IndicatorCalculateRequest
     ) -> tuple[list[str], dict[str, list[float]], dict[str, Any]]:
