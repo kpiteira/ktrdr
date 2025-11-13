@@ -22,6 +22,7 @@ from ktrdr.api.services.training.training_progress_renderer import (
 from ktrdr.async_infrastructure.service_orchestrator import ServiceOrchestrator
 from ktrdr.backtesting.model_loader import ModelLoader
 from ktrdr.errors import ValidationError
+from ktrdr.monitoring.service_telemetry import trace_service_method
 from ktrdr.training.model_storage import ModelStorage
 
 if TYPE_CHECKING:
@@ -133,6 +134,7 @@ class TrainingService(ServiceOrchestrator[None]):
         """Not used in distributed-only mode."""
         return "TRAINING"
 
+    @trace_service_method("training.health_check")
     async def health_check(self) -> dict[str, Any]:
         """
         Perform a health check on the training service.
@@ -151,6 +153,7 @@ class TrainingService(ServiceOrchestrator[None]):
             "model_loader_ready": self.model_loader is not None,
         }
 
+    @trace_service_method("training.start")
     async def start_training(
         self,
         symbols: list[str],
@@ -462,6 +465,7 @@ class TrainingService(ServiceOrchestrator[None]):
             "worker_id": worker_id,  # Include worker_id in response for visibility
         }
 
+    @trace_service_method("training.get_performance")
     async def get_model_performance(self, task_id: str) -> dict[str, Any]:
         """Get detailed performance metrics for completed training."""
         # Get operation info from operations service
@@ -491,6 +495,7 @@ class TrainingService(ServiceOrchestrator[None]):
             "model_info": model_info,
         }
 
+    @trace_service_method("training.save_model")
     async def save_trained_model(
         self, task_id: str, model_name: str, description: str = ""
     ) -> dict[str, Any]:
@@ -530,6 +535,7 @@ class TrainingService(ServiceOrchestrator[None]):
             "model_size_mb": model_size_mb,
         }
 
+    @trace_service_method("training.load_model")
     async def load_trained_model(self, model_name: str) -> dict[str, Any]:
         """Load a previously saved neural network model."""
         # Check if model exists in storage
@@ -574,6 +580,7 @@ class TrainingService(ServiceOrchestrator[None]):
             },
         }
 
+    @trace_service_method("training.test_prediction")
     async def test_model_prediction(
         self,
         model_name: str,
@@ -606,6 +613,7 @@ class TrainingService(ServiceOrchestrator[None]):
             "input_features": {},  # Would be populated by real model prediction
         }
 
+    @trace_service_method("training.list_models")
     async def list_trained_models(self) -> dict[str, Any]:
         """List all available trained neural network models."""
         # Get all models from storage

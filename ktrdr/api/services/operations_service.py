@@ -25,6 +25,7 @@ from ktrdr.async_infrastructure.cancellation import (
 )
 from ktrdr.errors import DataError
 from ktrdr.logging import get_logger
+from ktrdr.monitoring.service_telemetry import trace_service_method
 
 logger = get_logger(__name__)
 
@@ -89,6 +90,7 @@ class OperationsService:
         else:
             return f"op_{operation_type.value}_{timestamp}_{unique_id}"
 
+    @trace_service_method("operations.create")
     async def create_operation(
         self,
         operation_type: OperationType,
@@ -416,6 +418,7 @@ class OperationsService:
 
             return operation
 
+    @trace_service_method("operations.list")
     async def list_operations(
         self,
         status: Optional[OperationStatus] = None,
