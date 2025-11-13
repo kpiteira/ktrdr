@@ -1,6 +1,7 @@
 """Simplified tests for OpenTelemetry instrumentation of API services."""
 
 import asyncio
+
 import pytest
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
@@ -148,7 +149,9 @@ def test_nested_spans(tracer_setup):
     assert len(spans) == 3
 
     parent_span = [s for s in spans if s.name == "data.download"][0]
-    child_spans = [s for s in spans if s.parent and s.parent.span_id == parent_span.context.span_id]
+    child_spans = [
+        s for s in spans if s.parent and s.parent.span_id == parent_span.context.span_id
+    ]
 
     assert len(child_spans) == 2
     child_names = {s.name for s in child_spans}

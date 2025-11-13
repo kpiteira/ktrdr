@@ -24,7 +24,7 @@ from ktrdr.errors import ConfigurationError, DataError, ProcessingError
 from ktrdr.indicators.categories import get_indicator_category
 from ktrdr.indicators.indicator_engine import IndicatorEngine
 from ktrdr.indicators.indicator_factory import BUILT_IN_INDICATORS
-from ktrdr.monitoring.service_telemetry import trace_service_method, create_service_span
+from ktrdr.monitoring.service_telemetry import trace_service_method
 
 # Create module-level logger
 logger = get_logger(__name__)

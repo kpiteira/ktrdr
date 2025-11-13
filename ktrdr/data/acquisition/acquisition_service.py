@@ -23,7 +23,7 @@ from ktrdr.data.async_infrastructure.data_progress_renderer import DataProgressR
 from ktrdr.data.components.symbol_cache import SymbolCache
 from ktrdr.data.repository import DataRepository
 from ktrdr.errors.exceptions import DataNotFoundError
-from ktrdr.monitoring.service_telemetry import trace_service_method, create_service_span
+from ktrdr.monitoring.service_telemetry import trace_service_method
 
 logger = logging.getLogger(__name__)
 

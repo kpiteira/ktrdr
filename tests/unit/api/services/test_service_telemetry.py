@@ -1,12 +1,11 @@
 """Tests for OpenTelemetry instrumentation of API services."""
 
 import pytest
-from unittest.mock import MagicMock, patch
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-from opentelemetry.trace import Status, StatusCode
+from opentelemetry.trace import StatusCode
 
 
 @pytest.fixture(autouse=True)
@@ -94,6 +93,7 @@ class TestTraceServiceMethod:
     def test_service_method_async_support(self, tracer_provider):
         """Test that async service methods are supported."""
         import asyncio
+
         from ktrdr.monitoring.service_telemetry import trace_service_method
 
         provider, exporter = tracer_provider
@@ -173,10 +173,7 @@ class TestCreateServiceSpan:
         provider, exporter = tracer_provider
 
         with create_service_span(
-            "data.fetch",
-            symbol="AAPL",
-            timeframe="1d",
-            operation_id="op_123"
+            "data.fetch", symbol="AAPL", timeframe="1d", operation_id="op_123"
         ):
             pass  # Simulate work
 
@@ -208,7 +205,11 @@ class TestCreateServiceSpan:
 
         # Verify parent-child relationships
         parent_span = [s for s in spans if s.name == "data.download"][0]
-        child_spans = [s for s in spans if s.parent and s.parent.span_id == parent_span.context.span_id]
+        child_spans = [
+            s
+            for s in spans
+            if s.parent and s.parent.span_id == parent_span.context.span_id
+        ]
 
         assert len(child_spans) == 3
         child_names = {s.name for s in child_spans}
@@ -251,7 +252,7 @@ class TestAttributeMapping:
             timeframe="1d",
             strategy="momentum",
             model_id="model_v1",
-            operation_id="op_123"
+            operation_id="op_123",
         ):
             pass
 
