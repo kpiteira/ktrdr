@@ -11,12 +11,16 @@ Key components:
 - GenericProgressManager: Thread-safe progress manager with TimeEstimationEngine integration
 """
 
+import json
 import logging
 import threading
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Callable, Optional
+
+from opentelemetry import trace
 
 logger = logging.getLogger(__name__)
 
@@ -368,13 +372,74 @@ class GenericProgressManager:
             )
             self._trigger_callback()
 
+    def _update_span_attributes(self) -> None:
+        """
+        Update OpenTelemetry span attributes with current progress.
+
+        This method integrates progress updates with distributed tracing by updating
+        the current span's attributes whenever progress changes. This enables real-time
+        visibility into operation progress directly from Jaeger traces.
+        """
+        if self._state is None:
+            return
+
+        try:
+            # Get current span
+            span = trace.get_current_span()
+
+            # Only update if span is recording
+            if not span.is_recording():
+                return
+
+            # Update span attributes with progress information
+            span.set_attribute("progress.percentage", self._state.percentage)
+            span.set_attribute("progress.current_step", self._state.current_step)
+            span.set_attribute("progress.total_steps", self._state.total_steps)
+            span.set_attribute("progress.items_processed", self._state.items_processed)
+
+            # Add phase information from context
+            phase = self._state.context.get("phase") or self._state.message
+            if phase:
+                span.set_attribute("progress.phase", str(phase))
+
+            # Add timestamp for real-time tracking
+            span.set_attribute("progress.updated_at", time.time())
+
+            # Add optional context (serialize large objects)
+            if self._state.context:
+                # Serialize context to string (limit size to avoid span bloat)
+                try:
+                    context_str = json.dumps(self._state.context)
+                    # Limit context size to 1000 characters
+                    if len(context_str) > 1000:
+                        context_str = context_str[:997] + "..."
+                    span.set_attribute("progress.context", context_str)
+                except (TypeError, ValueError) as e:
+                    # If context can't be serialized, just log it
+                    logger.debug(f"Could not serialize progress context: {e}")
+
+            logger.debug(
+                f"Updated span attributes: {self._state.percentage:.1f}% - {phase}"
+            )
+
+        except Exception as e:
+            # Don't fail progress updates if telemetry fails
+            logger.debug(f"Could not update span attributes: {e}")
+
     def _trigger_callback(self) -> None:
         """
         Trigger progress callback - preserve existing pattern.
 
         Handles callback failures gracefully with logging, same as existing ProgressManager.
         """
-        if self.callback is None or self._state is None:
+        if self._state is None:
+            return
+
+        # Always update OTEL span attributes, even if there's no callback
+        self._update_span_attributes()
+
+        # If no callback, we're done
+        if self.callback is None:
             return
 
         try:

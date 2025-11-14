@@ -6,6 +6,7 @@ for the KTRDR API backend.
 """
 
 import logging
+import os
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -25,9 +26,27 @@ from ktrdr.errors import (
     DataNotFoundError,
     ProcessingError,
 )
+from ktrdr.monitoring.setup import (
+    get_metrics_app,
+    instrument_app,
+    setup_metrics,
+    setup_monitoring,
+)
 
 # Setup module-level logger
 logger = logging.getLogger(__name__)
+
+# Setup monitoring BEFORE creating app
+otlp_endpoint = os.getenv("OTLP_ENDPOINT")
+setup_monitoring(
+    service_name="ktrdr-api",
+    otlp_endpoint=otlp_endpoint,
+    # Disable console output when OTLP is configured (reduce noise)
+    console_output=otlp_endpoint is None,
+)
+
+# Setup metrics (Phase 5: Prometheus metrics)
+setup_metrics(service_name="ktrdr-api")
 
 # Set up templates directory
 templates_dir = Path(__file__).parent / "templates"
@@ -56,6 +75,9 @@ def create_application() -> FastAPI:
         openapi_url=f"{config.api_prefix}/openapi.json",
         lifespan=lifespan,
     )
+
+    # Auto-instrument the app with OpenTelemetry
+    instrument_app(app)
 
     # Add CORS middleware
     app.add_middleware(
@@ -217,6 +239,11 @@ def create_application() -> FastAPI:
     from ktrdr.api.endpoints import api_router
 
     app.include_router(api_router, prefix=config.api_prefix)
+
+    # Mount Prometheus metrics endpoint (Phase 5: Metrics and Dashboards)
+    metrics_app = get_metrics_app()
+    app.mount("/metrics", metrics_app)
+    logger.info("✅ Prometheus metrics endpoint mounted at /metrics")
 
     # Custom Redoc route
     @app.get(f"{config.api_prefix}/redoc", include_in_schema=False)

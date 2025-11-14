@@ -26,6 +26,7 @@ from ktrdr.cli.error_handler import (
     handle_cli_error,
 )
 from ktrdr.cli.progress_display_enhanced import create_enhanced_progress_callback
+from ktrdr.cli.telemetry import trace_cli_command
 from ktrdr.config.validation import InputValidator
 from ktrdr.errors import DataError, ValidationError
 from ktrdr.logging import get_logger
@@ -44,6 +45,7 @@ data_app = typer.Typer(
 
 
 @data_app.command("show")
+@trace_cli_command("data_show")
 def show_data(
     symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),
     timeframe: str = typer.Option(
@@ -266,6 +268,7 @@ async def _show_data_async(
 
 
 @data_app.command("load")
+@trace_cli_command("data_load")
 def load_data(
     symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),
     timeframe: str = typer.Option(
@@ -830,6 +833,7 @@ async def _process_data_load_response(
 
 
 @data_app.command("range")
+@trace_cli_command("data_range")
 def get_data_range(
     symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),
     timeframe: str = typer.Option(

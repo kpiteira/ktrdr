@@ -17,6 +17,7 @@ from rich.console import Console
 from rich.table import Table
 
 from ktrdr.cli.api_client import check_api_connection, get_api_client
+from ktrdr.cli.telemetry import trace_cli_command
 from ktrdr.config.validation import InputValidator
 from ktrdr.errors import DataError, ValidationError
 from ktrdr.logging import get_logger
@@ -35,6 +36,7 @@ fuzzy_app = typer.Typer(
 
 
 @fuzzy_app.command("compute")
+@trace_cli_command("fuzzy_compute")
 def compute_fuzzy(
     symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),
     indicator: str = typer.Option(
@@ -254,6 +256,7 @@ async def _compute_fuzzy_async(
 
 
 @fuzzy_app.command("visualize")
+@trace_cli_command("fuzzy_visualize")
 def visualize_fuzzy(
     symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),
     indicator: str = typer.Option(
@@ -394,6 +397,7 @@ async def _visualize_fuzzy_async(
 
 
 @fuzzy_app.command("config")
+@trace_cli_command("fuzzy_config")
 def manage_config(
     action: str = typer.Argument(
         ..., help="Action to perform (validate, generate, upgrade)"

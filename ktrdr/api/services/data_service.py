@@ -15,6 +15,7 @@ from ktrdr import get_logger, log_entry_exit, log_performance
 from ktrdr.api.services.base import BaseService
 from ktrdr.data.repository import DataRepository
 from ktrdr.errors import DataError, DataNotFoundError
+from ktrdr.monitoring.service_telemetry import trace_service_method
 
 # Setup module-level logger
 logger = get_logger(__name__)
@@ -40,6 +41,7 @@ class DataService(BaseService):
         self.repository = DataRepository(data_dir=data_dir)
         self.logger.info("DataService initialized with DataRepository")
 
+    @trace_service_method("data.load_cache")
     @log_entry_exit(logger=logger, log_args=True)
     @log_performance(threshold_ms=200, logger=logger)
     def load_cached_data(
@@ -117,6 +119,7 @@ class DataService(BaseService):
 
         return result
 
+    @trace_service_method("data.list_symbols")
     @log_entry_exit(logger=logger)
     @log_performance(threshold_ms=100, logger=logger)
     async def get_available_symbols(self) -> list[dict[str, Any]]:
@@ -301,6 +304,7 @@ class DataService(BaseService):
             logger.error(f"Error filtering trading hours for {symbol}: {e}")
             return df  # Return original data if filtering fails
 
+    @trace_service_method("data.list_timeframes_for_symbol")
     @log_entry_exit(logger=logger)
     async def get_available_timeframes_for_symbol(self, symbol: str) -> list[str]:
         """
@@ -325,6 +329,7 @@ class DataService(BaseService):
         logger.debug(f"Found {len(timeframes)} available timeframes for {symbol}")
         return timeframes
 
+    @trace_service_method("data.list_timeframes")
     @log_entry_exit(logger=logger)
     async def get_available_timeframes(self) -> list[dict[str, str]]:
         """
@@ -362,6 +367,7 @@ class DataService(BaseService):
         logger.info(f"Retrieved {len(timeframes)} available timeframes")
         return timeframes
 
+    @trace_service_method("data.get_range")
     @log_entry_exit(logger=logger, log_args=True)
     @log_performance(threshold_ms=500, logger=logger)
     async def get_data_range(self, symbol: str, timeframe: str) -> dict[str, Any]:
@@ -426,6 +432,7 @@ class DataService(BaseService):
                 details={"symbol": symbol, "timeframe": timeframe},
             ) from e
 
+    @trace_service_method("data.health_check")
     async def health_check(self) -> dict[str, Any]:
         """
         Perform a health check on the data service.

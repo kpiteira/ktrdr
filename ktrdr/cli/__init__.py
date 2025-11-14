@@ -5,6 +5,49 @@ This module provides a CLI for interacting with the KTRDR application,
 including commands for data inspection, indicator calculation, and visualization.
 """
 
+import atexit
+import os
+
+# Setup OpenTelemetry tracing for CLI (optional - graceful if Jaeger unavailable)
+try:
+    from opentelemetry import trace
+    from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+
+    from ktrdr.monitoring.setup import setup_monitoring
+
+    # Setup monitoring for CLI
+    # Uses OTLP_ENDPOINT env var if set, otherwise defaults to localhost
+    # CLI doesn't spam console output
+    # Use SimpleSpanProcessor for immediate export (CLI is short-lived)
+    setup_monitoring(
+        service_name="ktrdr-cli",
+        otlp_endpoint=os.getenv("OTLP_ENDPOINT", "http://localhost:4317"),
+        console_output=False,  # CLI shouldn't spam traces to console
+        use_simple_processor=True,  # Immediate export for short-lived CLI process
+    )
+
+    # Instrument httpx for automatic trace propagation
+    # This ensures CLI -> API calls include trace context in HTTP headers
+    HTTPXClientInstrumentor().instrument()
+
+    # Force flush spans before CLI exit (fixes short-lived process issue)
+    # BatchSpanProcessor buffers spans (5s/512 spans) - CLI exits before flush
+    def flush_spans():
+        """Force flush all pending spans before CLI exit."""
+        try:
+            trace_provider = trace.get_tracer_provider()
+            if hasattr(trace_provider, "force_flush"):
+                trace_provider.force_flush(timeout_millis=1000)
+        except Exception:
+            pass  # Ignore errors during shutdown
+
+    atexit.register(flush_spans)
+
+except Exception:
+    # Gracefully handle case where OTEL packages aren't available
+    # or Jaeger isn't running - CLI should still work
+    pass
+
 from ktrdr.cli.async_model_commands import async_models_app as models_app
 from ktrdr.cli.backtest_commands import backtest_app
 from ktrdr.cli.commands import cli_app

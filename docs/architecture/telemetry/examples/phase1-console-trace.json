@@ -1,0 +1,42 @@
+{
+  "name": "GET /api/v1/data/{symbol}/{timeframe}",
+  "context": {
+    "trace_id": "0x7a2c617e07d34d8c76e89c24d9878fa1",
+    "span_id": "0x56fb11a6d6017475",
+    "trace_state": "[]"
+  },
+  "kind": "SpanKind.SERVER",
+  "parent_id": null,
+  "start_time": "2025-11-11T04:56:23.722114Z",
+  "end_time": "2025-11-11T04:56:23.723550Z",
+  "status": {
+    "status_code": "UNSET"
+  },
+  "attributes": {
+    "http.scheme": "http",
+    "http.host": "localhost",
+    "net.host.port": 8000,
+    "http.flavor": "1.1",
+    "http.target": "/api/v1/data/AAPL/1d",
+    "http.url": "http://localhost:8000/api/v1/data/AAPL/1d",
+    "http.method": "GET",
+    "http.server_name": "localhost",
+    "http.user_agent": "python-httpx/0.28.1",
+    "net.peer.ip": "127.0.0.1",
+    "net.peer.port": 50000,
+    "http.status_code": 200
+  },
+  "events": [],
+  "links": [],
+  "resource": {
+    "attributes": {
+      "telemetry.sdk.language": "python",
+      "telemetry.sdk.name": "opentelemetry",
+      "telemetry.sdk.version": "1.38.0",
+      "service.name": "ktrdr-api",
+      "service.version": "dev",
+      "deployment.environment": "development"
+    },
+    "schema_url": ""
+  }
+}

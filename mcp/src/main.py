@@ -1,7 +1,32 @@
 """Entry point for MCP server"""
 
 import logging
+import os
 import sys
+
+# Setup OpenTelemetry tracing for MCP server (optional - graceful if Jaeger unavailable)
+try:
+    from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+
+    from ktrdr.monitoring.setup import setup_monitoring
+
+    # Setup monitoring for MCP server
+    # Uses OTLP_ENDPOINT env var if set, otherwise defaults to localhost
+    setup_monitoring(
+        service_name="ktrdr-mcp-server",
+        otlp_endpoint=os.getenv("OTLP_ENDPOINT", "http://localhost:4317"),
+        console_output=False,  # MCP server shouldn't spam traces to console
+    )
+
+    # Instrument httpx for automatic trace propagation
+    # This ensures MCP tool calls -> API calls include trace context
+    HTTPXClientInstrumentor().instrument()
+
+    logging.info("✅ OpenTelemetry instrumentation enabled for MCP server")
+except Exception as e:
+    # Gracefully handle case where OTEL packages aren't available
+    # or Jaeger isn't running - MCP server should still work
+    logging.debug(f"OTEL instrumentation not available: {e}")
 
 from .config import setup_logging
 from .server import KTRDRMCPServer

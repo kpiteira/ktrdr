@@ -43,6 +43,11 @@ from ktrdr.async_infrastructure.progress import (
 )
 from ktrdr.errors import DataError
 from ktrdr.logging import get_logger
+from ktrdr.monitoring.logging_helpers import (
+    log_operation_complete,
+    log_operation_error,
+    log_operation_start,
+)
 
 logger = get_logger(__name__)
 
@@ -998,7 +1003,14 @@ class ServiceOrchestrator(ABC, Generic[T]):
         )
 
         operation_id = operation_info.operation_id
-        logger.info(f"Created managed operation: {operation_id} ({operation_name})")
+        log_operation_start(
+            logger,
+            operation_id=operation_id,
+            operation_type=operation_type,
+            symbol=metadata.symbol if metadata.symbol != "N/A" else None,
+            timeframe=metadata.timeframe if metadata.timeframe != "N/A" else None,
+            mode=metadata.mode if metadata.mode != "N/A" else None,
+        )
 
         # Start the background operation in a separate thread to prevent blocking FastAPI
         # This ensures HTTP responses return immediately with operation_id while
@@ -1020,6 +1032,7 @@ class ServiceOrchestrator(ABC, Generic[T]):
         # Modify the progress callback to communicate back to main loop
         async def _managed_operation_wrapper():
             """Wrapper that handles progress, cancellation, and completion."""
+            start_time = time.time()
             try:
                 # Get cancellation token from operations service
                 cancellation_token = operations_service.get_cancellation_token(
@@ -1105,10 +1118,13 @@ class ServiceOrchestrator(ABC, Generic[T]):
 
                 main_loop.call_soon_threadsafe(complete_in_main_loop)
 
-                logger.info(f"Completed managed operation: {operation_id}")
+                duration_ms = (time.time() - start_time) * 1000
+                log_operation_complete(
+                    logger, operation_id=operation_id, duration_ms=duration_ms
+                )
 
             except Exception as exc:
-                logger.error(f"Managed operation {operation_id} failed: {exc}")
+                log_operation_error(logger, operation_id=operation_id, error=exc)
                 error_msg = str(exc)
 
                 def fail_in_main_loop():

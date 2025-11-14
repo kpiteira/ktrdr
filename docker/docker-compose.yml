@@ -48,6 +48,8 @@ services:
       - PYTHONPATH=/app
       # Backend API URL (explicit - no default in code)
       - KTRDR_API_URL=http://backend:8000
+      # OpenTelemetry / Jaeger configuration (Phase 2: Jaeger UI)
+      - OTLP_ENDPOINT=http://jaeger:4317
       # IB Gateway configuration - testing bridge gateway IP
       - IB_HOST=172.17.0.1
       - IB_PORT=4002
@@ -60,6 +62,9 @@ services:
       # Workers register themselves on startup - no environment variables needed here
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    depends_on:
+      jaeger:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
       interval: 30s
@@ -180,6 +185,85 @@ services:
     # Keep container alive for Claude to connect via: docker exec -i ktrdr-mcp python -m src.main
     command: tail -f /dev/null
 
+  # Jaeger - Distributed tracing UI and collector (Phase 2: Jaeger UI)
+  jaeger:
+    image: jaegertracing/all-in-one:1.53
+    container_name: ktrdr-jaeger
+    restart: unless-stopped
+    ports:
+      # Jaeger UI
+      - "16686:16686"
+      # OTLP gRPC receiver (for OpenTelemetry traces)
+      - "4317:4317"
+      # OTLP HTTP receiver (alternative)
+      - "4318:4318"
+      # Jaeger agent (legacy, for completeness)
+      - "6831:6831/udp"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - LOG_LEVEL=info
+    networks:
+      - ktrdr-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:16686"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Prometheus - Metrics collection (Phase 5: Metrics and Dashboards)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ktrdr-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    networks:
+      - ktrdr-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Grafana - Unified observability UI (Phase 5: Metrics and Dashboards)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ktrdr-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      - GF_INSTALL_PLUGINS=
+    volumes:
+      - ../monitoring/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ../monitoring/grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ../monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - jaeger
+    networks:
+      - ktrdr-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
 networks:
   ktrdr-network:
     driver: bridge
@@ -188,3 +272,5 @@ volumes:
   pip-cache:
   uv-cache:
   npm-cache:
+  prometheus_data:
+  grafana_data:

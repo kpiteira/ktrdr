@@ -13,6 +13,7 @@ from rich.console import Console
 
 from ktrdr.cli.operation_adapters import BacktestingOperationAdapter
 from ktrdr.cli.operation_executor import AsyncOperationExecutor
+from ktrdr.cli.telemetry import trace_cli_command
 from ktrdr.config.validation import InputValidator
 from ktrdr.errors import ValidationError
 from ktrdr.logging import get_logger
@@ -31,6 +32,7 @@ backtest_app = typer.Typer(
 
 
 @backtest_app.command("run")
+@trace_cli_command("backtest_run")
 def run_backtest(
     strategy: str = typer.Argument(..., help="Strategy name (without .yaml extension)"),
     symbol: str = typer.Argument(

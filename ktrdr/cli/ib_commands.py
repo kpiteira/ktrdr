@@ -23,6 +23,7 @@ from ktrdr.cli.ib_diagnosis import (
     detect_ib_issue_from_api_response,
     get_ib_recovery_suggestions,
 )
+from ktrdr.cli.telemetry import trace_cli_command
 from ktrdr.config.validation import InputValidator
 from ktrdr.errors import DataError, ValidationError
 from ktrdr.logging import get_logger
@@ -76,6 +77,7 @@ def handle_ib_error(e: Exception, verbose: bool = False):
 
 
 @ib_app.command("test")
+@trace_cli_command("ib_test")
 def test_connection(
     symbol: Optional[str] = typer.Option("AAPL", "--symbol", "-s", help="Test symbol"),
     verbose: bool = typer.Option(
@@ -158,6 +160,7 @@ async def _test_connection_async(
 
 
 @ib_app.command("cleanup")
+@trace_cli_command("ib_cleanup")
 def cleanup_connections(
     force: bool = typer.Option(
         False, "--force", "-f", help="Force cleanup even if connections are active"
@@ -238,6 +241,7 @@ async def _cleanup_connections_async(
 
 
 @ib_app.command("status")
+@trace_cli_command("ib_status")
 def check_status(
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Enable verbose output"

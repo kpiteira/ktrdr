@@ -12,6 +12,7 @@ from typing import Optional
 import httpx
 
 from ktrdr.api.models.workers import WorkerEndpoint, WorkerStatus, WorkerType
+from ktrdr.monitoring.service_telemetry import trace_service_method
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +108,7 @@ class WorkerRegistry:
         """
         return self._workers.get(worker_id)
 
+    @trace_service_method("workers.list")
     def list_workers(
         self,
         worker_type: Optional[WorkerType] = None,
@@ -177,6 +179,7 @@ class WorkerRegistry:
 
         return workers
 
+    @trace_service_method("workers.select")
     def select_worker(self, worker_type: WorkerType) -> Optional[WorkerEndpoint]:
         """
         Select an available worker using round-robin (least recently used).
@@ -197,15 +200,45 @@ class WorkerRegistry:
             ...     # Dispatch operation to this worker
             ...     registry.mark_busy(worker.worker_id, "op-123")
         """
-        workers = self.get_available_workers(worker_type)
-        if not workers:
+        from opentelemetry import trace
+
+        # Get tracer for adding attributes to the current span
+        try:
+            span = trace.get_current_span()
+        except Exception:
+            span = None
+
+        # Gather worker selection metrics
+        total_workers = len(self._workers)
+        capable_workers = [
+            w for w in self._workers.values() if w.worker_type == worker_type
+        ]
+        available_workers = [
+            w for w in capable_workers if w.status == WorkerStatus.AVAILABLE
+        ]
+
+        # Add telemetry attributes to current span
+        if span and span.is_recording():
+            span.set_attribute("worker.type", worker_type.value)
+            span.set_attribute("worker.total_workers", str(total_workers))
+            span.set_attribute("worker.capable_workers", str(len(capable_workers)))
+            span.set_attribute("worker.available_workers", str(len(available_workers)))
+
+        if not available_workers:
+            if span and span.is_recording():
+                span.set_attribute("worker.selection_status", "no_workers_available")
             return None
 
         # Select first worker (least recently used)
-        worker = workers[0]
+        worker = available_workers[0]
 
         # Update selection timestamp
         worker.metadata["last_selected"] = datetime.utcnow().timestamp()
+
+        # Add selection result to telemetry
+        if span and span.is_recording():
+            span.set_attribute("worker.selected_id", worker.worker_id)
+            span.set_attribute("worker.selection_status", "success")
 
         logger.debug(f"Selected worker {worker.worker_id} for {worker_type}")
         return worker

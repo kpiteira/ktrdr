@@ -26,6 +26,7 @@ from ktrdr.data.acquisition.gap_classifier import (
 from ktrdr.data.local_data_loader import LocalDataLoader
 from ktrdr.data.timeframe_constants import TimeframeConstants
 from ktrdr.logging import get_logger
+from ktrdr.monitoring.service_telemetry import trace_service_method
 
 logger = get_logger(__name__)
 
@@ -49,6 +50,7 @@ class GapAnalysisService:
 
         logger.info(f"Initialized GapAnalysisService with data_dir: {self.data_dir}")
 
+    @trace_service_method("gap_analysis.analyze")
     async def analyze_gaps(self, request: GapAnalysisRequest) -> GapAnalysisResponse:
         """
         Perform comprehensive gap analysis for a symbol/timeframe.
@@ -123,6 +125,7 @@ class GapAnalysisService:
             )
             raise
 
+    @trace_service_method("gap_analysis.analyze_batch")
     async def analyze_gaps_batch(
         self, request: BatchGapAnalysisRequest
     ) -> BatchGapAnalysisResponse:

@@ -10,6 +10,8 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
+from opentelemetry import trace
+
 # Task 2.3: Import operations service and progress bridge for pull-based operations
 from ktrdr.api.models.operations import (
     OperationMetadata,
@@ -30,6 +32,7 @@ from ktrdr.training.memory_manager import MemoryBudget, MemoryManager
 from ktrdr.training.performance_optimizer import PerformanceConfig, PerformanceOptimizer
 
 logger = get_logger(__name__)
+tracer = trace.get_tracer(__name__)
 
 
 class TrainingSession:
@@ -699,47 +702,96 @@ class TrainingService:
         PERFORMANCE FIX: The old implementation had 14 minutes of sleep overhead per
         100 epochs. The orchestrator uses intelligent throttling instead (8ms overhead).
         """
-        try:
-            # Import orchestrator
-            import sys
-            from pathlib import Path
+        # Create span for GPU training with detailed attributes
+        with tracer.start_as_current_span("training_host.gpu_training") as span:
+            # Add GPU device information if available
+            if self.global_gpu_manager and self.global_gpu_manager.enabled:
+                try:
+                    import torch
 
-            orchestrator_path = Path(__file__).parent.parent
-            if str(orchestrator_path) not in sys.path:
-                sys.path.insert(0, str(orchestrator_path))
+                    if torch.cuda.is_available():
+                        device = torch.cuda.current_device()
+                        span.set_attribute("gpu.device", torch.cuda.get_device_name(device))
+                        span.set_attribute(
+                            "gpu.memory_allocated_mb",
+                            round(torch.cuda.memory_allocated(device) / 1024 / 1024, 2),
+                        )
+                        span.set_attribute(
+                            "gpu.memory_reserved_mb",
+                            round(torch.cuda.memory_reserved(device) / 1024 / 1024, 2),
+                        )
+                        # GPU utilization would require nvidia-smi or similar
+                        # For now, we track memory which is the key metric
+                except Exception as e:
+                    logger.debug(f"Could not capture GPU metrics: {e}")
 
-            from orchestrator import HostTrainingOrchestrator
-
-            # Host service has its own ModelStorage instance configured at service level
-            # This provides situational awareness - the service knows where models should be saved
-            # The orchestrator receives this and passes it through to TrainingPipeline
-            orchestrator = HostTrainingOrchestrator(
-                session=session,
-                model_storage=self.model_storage,  # Use service-level ModelStorage
+            # Add training configuration to span
+            span.set_attribute(
+                "training.epochs", session.config.get("training_config", {}).get("epochs", 0)
             )
+            span.set_attribute("training.session_id", session.session_id)
 
-            # Run training via orchestrator (direct async - no thread wrapper)
-            result = await orchestrator.run()
+            try:
+                # Import orchestrator
+                import sys
+                from pathlib import Path
 
-            # Result already includes:
-            # - model_path (saved via ModelStorage)
-            # - training_metrics
-            # - test_metrics
-            # - resource_usage (GPU info)
-            # - session_id
+                orchestrator_path = Path(__file__).parent.parent
+                if str(orchestrator_path) not in sys.path:
+                    sys.path.insert(0, str(orchestrator_path))
 
-            # Session status already updated by orchestrator
-            logger.info(
-                f"Training orchestration completed for session {session.session_id}"
-            )
+                from orchestrator import HostTrainingOrchestrator
 
-            return result
+                # Host service has its own ModelStorage instance configured at service level
+                # This provides situational awareness - the service knows where models should be saved
+                # The orchestrator receives this and passes it through to TrainingPipeline
+                orchestrator = HostTrainingOrchestrator(
+                    session=session,
+                    model_storage=self.model_storage,  # Use service-level ModelStorage
+                )
 
-        except Exception as e:
-            session.status = "failed"
-            session.message = f"Training failed: {str(e)}"
-            logger.error(f"Training failed for session {session.session_id}: {str(e)}")
-            raise
+                # Run training via orchestrator (direct async - no thread wrapper)
+                result = await orchestrator.run()
+
+                # Add final GPU metrics to span after training
+                if self.global_gpu_manager and self.global_gpu_manager.enabled:
+                    try:
+                        import torch
+
+                        if torch.cuda.is_available():
+                            device = torch.cuda.current_device()
+                            span.set_attribute(
+                                "gpu.memory_allocated_final_mb",
+                                round(torch.cuda.memory_allocated(device) / 1024 / 1024, 2),
+                            )
+                            span.set_attribute(
+                                "gpu.memory_peak_mb",
+                                round(torch.cuda.max_memory_allocated(device) / 1024 / 1024, 2),
+                            )
+                    except Exception as e:
+                        logger.debug(f"Could not capture final GPU metrics: {e}")
+
+                # Result already includes:
+                # - model_path (saved via ModelStorage)
+                # - training_metrics
+                # - test_metrics
+                # - resource_usage (GPU info)
+                # - session_id
+
+                # Session status already updated by orchestrator
+                logger.info(
+                    f"Training orchestration completed for session {session.session_id}"
+                )
+
+                return result
+
+            except Exception as e:
+                session.status = "failed"
+                session.message = f"Training failed: {str(e)}"
+                span.record_exception(e)
+                span.set_attribute("error", True)
+                logger.error(f"Training failed for session {session.session_id}: {str(e)}")
+                raise
 
     # Old simplified feature engineering methods removed - now using TrainingPipeline
 

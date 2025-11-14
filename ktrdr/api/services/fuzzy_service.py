@@ -28,6 +28,7 @@ from ktrdr.fuzzy.config import (
 )
 from ktrdr.fuzzy.engine import FuzzyEngine
 from ktrdr.indicators import IndicatorEngine
+from ktrdr.monitoring.service_telemetry import trace_service_method
 
 # Create module-level logger
 logger = get_logger(__name__)
@@ -138,6 +139,7 @@ class FuzzyService(BaseService):
             self.fuzzy_engine = None
             self.batch_calculator = None
 
+    @trace_service_method("fuzzy.list_indicators")
     async def get_available_indicators(self) -> list[dict[str, Any]]:
         """
         Get a list of indicators available for fuzzy operations.
@@ -191,6 +193,7 @@ class FuzzyService(BaseService):
                 details={"error": str(e)},
             ) from e
 
+    @trace_service_method("fuzzy.get_sets")
     async def get_fuzzy_sets(self, indicator: str) -> dict[str, dict[str, Any]]:
         """
         Get detailed information about fuzzy sets for an indicator.
@@ -256,6 +259,7 @@ class FuzzyService(BaseService):
                 details={"indicator": indicator, "error": str(e)},
             ) from e
 
+    @trace_service_method("fuzzy.fuzzify_indicator")
     async def fuzzify_indicator(
         self, indicator: str, values: list[float], dates: Optional[list[str]] = None
     ) -> dict[str, Any]:
@@ -352,6 +356,7 @@ class FuzzyService(BaseService):
                 details={"indicator": indicator, "error": str(e)},
             ) from e
 
+    @trace_service_method("fuzzy.fuzzify_data")
     async def fuzzify_data(
         self,
         symbol: str,
@@ -507,6 +512,7 @@ class FuzzyService(BaseService):
                 details={"error": str(e)},
             ) from e
 
+    @trace_service_method("fuzzy.get_overlays")
     async def get_fuzzy_overlays(
         self,
         symbol: str,
@@ -834,6 +840,7 @@ class FuzzyService(BaseService):
             )
             return None
 
+    @trace_service_method("fuzzy.health_check")
     async def health_check(self) -> dict[str, Any]:
         """
         Perform a health check on the fuzzy service.

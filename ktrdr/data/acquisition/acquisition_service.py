@@ -23,6 +23,7 @@ from ktrdr.data.async_infrastructure.data_progress_renderer import DataProgressR
 from ktrdr.data.components.symbol_cache import SymbolCache
 from ktrdr.data.repository import DataRepository
 from ktrdr.errors.exceptions import DataNotFoundError
+from ktrdr.monitoring.service_telemetry import trace_service_method
 
 logger = logging.getLogger(__name__)
 
@@ -428,6 +429,7 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
 
         return periodic_save_callback
 
+    @trace_service_method("data.download")
     async def download_data(
         self,
         symbol: str,
