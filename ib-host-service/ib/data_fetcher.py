@@ -18,11 +18,13 @@ from datetime import datetime
 
 import pandas as pd
 from ib_insync import Contract, Forex, Stock
+from opentelemetry import trace
 
 from ib.pool_manager import get_shared_ib_pool
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
+tracer = trace.get_tracer(__name__)
 
 
 class IbDataFetcher:
@@ -71,29 +73,48 @@ class IbDataFetcher:
         """
         self.requests_made += 1
 
-        try:
-            # Use connection pool with synchronous execution to avoid async issues
-            result = await self.connection_pool.execute_with_connection_sync(
-                self._fetch_historical_data_impl,
-                symbol,
-                timeframe,
-                start,
-                end,
-                instrument_type,
-            )
+        # Create span for IB historical data fetch with detailed attributes
+        with tracer.start_as_current_span("ib.fetch_historical") as span:
+            span.set_attribute("data.symbol", symbol)
+            span.set_attribute("data.timeframe", timeframe)
+            span.set_attribute("data.start_date", start.isoformat())
+            span.set_attribute("data.end_date", end.isoformat())
+            span.set_attribute("data.instrument_type", instrument_type)
 
-            self.successful_requests += 1
-            logger.debug(
-                f"Successfully fetched {len(result)} bars for {symbol} {timeframe}"
-            )
-            return result
+            fetch_start_time = time.time()
 
-        except Exception as e:
-            self.failed_requests += 1
-            logger.error(
-                f"Failed to fetch historical data for {symbol} {timeframe}: {e}"
-            )
-            raise
+            try:
+                # Use connection pool with synchronous execution to avoid async issues
+                result = await self.connection_pool.execute_with_connection_sync(
+                    self._fetch_historical_data_impl,
+                    symbol,
+                    timeframe,
+                    start,
+                    end,
+                    instrument_type,
+                )
+
+                # Calculate latency
+                latency_ms = (time.time() - fetch_start_time) * 1000
+
+                # Add result metrics to span
+                span.set_attribute("bars.received", len(result))
+                span.set_attribute("ib.latency_ms", round(latency_ms, 2))
+
+                self.successful_requests += 1
+                logger.debug(
+                    f"Successfully fetched {len(result)} bars for {symbol} {timeframe} in {latency_ms:.2f}ms"
+                )
+                return result
+
+            except Exception as e:
+                self.failed_requests += 1
+                span.record_exception(e)
+                span.set_attribute("error", True)
+                logger.error(
+                    f"Failed to fetch historical data for {symbol} {timeframe}: {e}"
+                )
+                raise
 
     def _fetch_historical_data_impl(
         self,

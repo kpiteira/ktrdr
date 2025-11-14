@@ -7,6 +7,9 @@ from typing import Any, Optional, cast
 
 import pandas as pd
 
+# OpenTelemetry imports for instrumentation
+from opentelemetry import trace
+
 from .. import get_logger
 from ..async_infrastructure.cancellation import CancellationToken
 from ..async_infrastructure.progress_bridge import ProgressBridge
@@ -16,6 +19,7 @@ from .performance import PerformanceMetrics, PerformanceTracker
 from .position_manager import PositionManager, Trade
 
 logger = get_logger(__name__)
+tracer = trace.get_tracer(__name__)
 
 
 @dataclass
@@ -161,9 +165,14 @@ class BacktestingEngine:
             print("🚀 Pre-computing features for backtesting performance...")
 
         # PERFORMANCE OPTIMIZATION: Pre-compute all features for fast backtesting
-        logger.info("🚀 Pre-computing indicators and fuzzy memberships...")
-        self.orchestrator.prepare_feature_cache(data)
-        logger.info("✅ Feature cache ready - backtesting should be much faster!")
+        # Create telemetry span for strategy initialization phase
+        with tracer.start_as_current_span("backtest.strategy_init") as span:
+            span.set_attribute("progress.phase", "strategy_init")
+            span.set_attribute("data.rows", len(data))
+
+            logger.info("🚀 Pre-computing indicators and fuzzy memberships...")
+            self.orchestrator.prepare_feature_cache(data)
+            logger.info("✅ Feature cache ready - backtesting should be much faster!")
 
         if self.config.verbose:
             print("✅ Feature cache prepared - backtesting optimized!")
@@ -214,6 +223,12 @@ class BacktestingEngine:
         # PERFORMANCE OPTIMIZATION: Start from bar 50 to align with FeatureCache
         # The first 50 bars are skipped because indicators need sufficient lookback data
         start_idx = 50
+
+        # Create telemetry span for simulation phase
+        sim_span = tracer.start_span("backtest.simulation")
+        sim_span.set_attribute("progress.phase", "simulation")
+        sim_span.set_attribute("simulation.total_bars", len(data))
+        sim_span.set_attribute("simulation.processable_bars", processable_bars)
 
         for idx in range(start_idx, len(data)):
             current_bar = data.iloc[idx]
@@ -724,6 +739,9 @@ class BacktestingEngine:
                             f"Confidence: {attempt['confidence']:.4f} | Price: ${attempt['price']:.2f}"
                         )
 
+        # End simulation span
+        sim_span.end()
+
         results = self._generate_results(start_time, end_time, execution_time)
 
         if self.config.verbose:
@@ -737,36 +755,46 @@ class BacktestingEngine:
         Returns:
             DataFrame with OHLCV data
         """
-        # Load data from cache (backtesting always uses cached data)
-        data = self.repository.load_from_cache(
-            symbol=self.config.symbol,
-            timeframe=self.config.timeframe,
-        )
+        # Create telemetry span for data loading phase
+        with tracer.start_as_current_span("backtest.data_loading") as span:
+            # Set span attributes
+            span.set_attribute("data.symbol", self.config.symbol)
+            span.set_attribute("data.timeframe", self.config.timeframe)
+            span.set_attribute("progress.phase", "data_loading")
 
-        # Filter by date range if specified
-        if self.config.start_date:
-            start_date = pd.to_datetime(self.config.start_date)
-            # Make timezone-aware if needed to match data index
-            if (
-                hasattr(data.index, "tz")
-                and data.index.tz is not None
-                and start_date.tz is None
-            ):
-                start_date = start_date.tz_localize("UTC")
-            data = data[data.index >= start_date]
+            # Load data from cache (backtesting always uses cached data)
+            data = self.repository.load_from_cache(
+                symbol=self.config.symbol,
+                timeframe=self.config.timeframe,
+            )
 
-        if self.config.end_date:
-            end_date = pd.to_datetime(self.config.end_date)
-            # Make timezone-aware if needed to match data index
-            if (
-                hasattr(data.index, "tz")
-                and data.index.tz is not None
-                and end_date.tz is None
-            ):
-                end_date = end_date.tz_localize("UTC")
-            data = data[data.index <= end_date]
+            # Filter by date range if specified
+            if self.config.start_date:
+                start_date = pd.to_datetime(self.config.start_date)
+                # Make timezone-aware if needed to match data index
+                if (
+                    hasattr(data.index, "tz")
+                    and data.index.tz is not None
+                    and start_date.tz is None
+                ):
+                    start_date = start_date.tz_localize("UTC")
+                data = data[data.index >= start_date]
 
-        return data
+            if self.config.end_date:
+                end_date = pd.to_datetime(self.config.end_date)
+                # Make timezone-aware if needed to match data index
+                if (
+                    hasattr(data.index, "tz")
+                    and data.index.tz is not None
+                    and end_date.tz is None
+                ):
+                    end_date = end_date.tz_localize("UTC")
+                data = data[data.index <= end_date]
+
+            # Add data metrics to span
+            span.set_attribute("data.rows", len(data))
+
+            return data
 
     def _generate_results(
         self, start_time: pd.Timestamp, end_time: pd.Timestamp, execution_time: float

@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 from ib_insync import IB
+from opentelemetry import trace
 
 from ktrdr.logging import get_logger
 from ktrdr.logging.config import should_sample_log
@@ -32,6 +33,7 @@ from ktrdr.logging.config import should_sample_log
 from .error_classifier import IbErrorClassifier
 
 logger = get_logger(__name__)
+tracer = trace.get_tracer(__name__)
 
 
 @dataclass
@@ -200,52 +202,62 @@ class IbConnection:
         """Connect to IB Gateway/TWS synchronously with dedicated event loop"""
         logger.debug(f" Connecting to IB (client_id={self.client_id})")
 
-        try:
-            # Create fresh event loop for this thread - ib_insync needs one
-            import asyncio
+        # Create span for IB connection with detailed attributes
+        with tracer.start_as_current_span("ib.connect") as span:
+            span.set_attribute("ib.host", self.host)
+            span.set_attribute("ib.port", self.port)
+            span.set_attribute("connection.client_id", self.client_id)
 
             try:
-                # Try to get existing loop (should be None in sync thread)
-                loop = asyncio.get_event_loop()
-                logger.debug(f" {loop}")
-            except RuntimeError:
-                # No event loop in this thread - create one
-                logger.debug(" No event loop found, creating new one")
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+                # Create fresh event loop for this thread - ib_insync needs one
+                import asyncio
 
-            # Use synchronous connect - ib_insync will use the event loop we just created
-            self.ib.connect(
-                host=self.host,
-                port=self.port,
-                clientId=self.client_id,
-                timeout=10.0,
-                readonly=False,
-            )
+                try:
+                    # Try to get existing loop (should be None in sync thread)
+                    loop = asyncio.get_event_loop()
+                    logger.debug(f" {loop}")
+                except RuntimeError:
+                    # No event loop in this thread - create one
+                    logger.debug(" No event loop found, creating new one")
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
 
-            # Wait for connection to stabilize
-            time.sleep(2.0)
+                # Use synchronous connect - ib_insync will use the event loop we just created
+                self.ib.connect(
+                    host=self.host,
+                    port=self.port,
+                    clientId=self.client_id,
+                    timeout=10.0,
+                    readonly=False,
+                )
 
-            if self.ib.isConnected():
-                self.connected = True
-                self.last_activity = time.time()
+                # Wait for connection to stabilize
+                time.sleep(2.0)
+
+                if self.ib.isConnected():
+                    self.connected = True
+                    self.last_activity = time.time()
+                    span.set_attribute("connection.status", "connected")
+                    logger.debug(
+                        f" IB connection {self.client_id} established successfully"
+                    )
+                else:
+                    span.set_attribute("connection.status", "failed")
+                    raise ConnectionError(
+                        f"Failed to establish IB connection {self.client_id}"
+                    )
+
+            except Exception as e:
+                span.set_attribute("connection.status", "error")
+                span.record_exception(e)
+                logger.error(f"Failed to connect to IB (client_id={self.client_id}): {e}")
                 logger.debug(
-                    f" IB connection {self.client_id} established successfully"
+                    f"DEBUG: Connection attempt failed - host={self.host}, port={self.port}, client_id={self.client_id}"
                 )
-            else:
-                raise ConnectionError(
-                    f"Failed to establish IB connection {self.client_id}"
+                logger.debug(
+                    f"DEBUG: IB instance state - connected={self.ib.isConnected() if self.ib else 'No IB instance'}"
                 )
-
-        except Exception as e:
-            logger.error(f"Failed to connect to IB (client_id={self.client_id}): {e}")
-            logger.debug(
-                f"DEBUG: Connection attempt failed - host={self.host}, port={self.port}, client_id={self.client_id}"
-            )
-            logger.debug(
-                f"DEBUG: IB instance state - connected={self.ib.isConnected() if self.ib else 'No IB instance'}"
-            )
-            raise
+                raise
 
     def _disconnect_from_ib_sync(self):
         """Disconnect from IB Gateway/TWS synchronously"""
