@@ -12,6 +12,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from opentelemetry import trace
+
 from ktrdr.api.models.operations import (
     OperationInfo,
     OperationMetadata,
@@ -195,6 +197,9 @@ class OperationsService:
         """
         Update operation progress (lock-free for performance).
 
+        This method updates the progress state and also integrates with OpenTelemetry
+        by updating span attributes for real-time visibility in distributed traces.
+
         Args:
             operation_id: Operation identifier
             progress: Updated progress information
@@ -217,6 +222,41 @@ class OperationsService:
             operation.warnings = operation.warnings + warnings
         if errors:
             operation.errors = operation.errors + errors
+
+        # Update OpenTelemetry span attributes with progress
+        try:
+            span = trace.get_current_span()
+            if span.is_recording():
+                # Update span attributes
+                span.set_attribute("progress.percentage", progress.percentage)
+                span.set_attribute("operation.id", operation_id)
+
+                # Add phase/step information
+                if progress.current_step:
+                    span.set_attribute("progress.phase", progress.current_step)
+
+                # Add timestamp for real-time tracking
+                span.set_attribute("progress.updated_at", time.time())
+
+                # Add items processed if available
+                if progress.items_processed > 0:
+                    span.set_attribute(
+                        "progress.items_processed", progress.items_processed
+                    )
+
+                # Add steps completed if available
+                if progress.steps_completed > 0:
+                    span.set_attribute(
+                        "progress.steps_completed", progress.steps_completed
+                    )
+
+                logger.debug(
+                    f"Updated span attributes for operation {operation_id}: "
+                    f"{progress.percentage:.1f}% - {progress.current_step or 'N/A'}"
+                )
+        except Exception as e:
+            # Don't fail progress updates if telemetry fails
+            logger.debug(f"Could not update span attributes: {e}")
 
         # 🔧 TEMP DEBUG: Log ALL progress updates at INFO level
         logger.info(
