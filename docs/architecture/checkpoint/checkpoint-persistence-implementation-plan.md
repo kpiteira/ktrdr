@@ -32,7 +32,7 @@ This implementation plan breaks down the checkpoint persistence system into **5 
 
 **Estimated Time:** 4 hours
 
-### Task: Add PostgreSQL + TimescaleDB Infrastructure
+### Task 0.1: Add PostgreSQL + TimescaleDB Infrastructure
 
 **Checklist:**
 
@@ -191,7 +191,7 @@ $ docker exec ktrdr-postgres psql -U ktrdr_admin -d ktrdr -c "SELECT * FROM sche
 
 **Estimated Time:** 2 days
 
-### Task 1: Database Schema & Configuration (3 hours)
+### Task 1.1: Database Schema & Configuration (3 hours)
 
 **Checklist:**
 - [ ] Create `migrations/001_add_checkpoint_tables.sql`
@@ -216,7 +216,7 @@ $ docker exec ktrdr-postgres psql -U ktrdr_admin -d ktrdr -c "SELECT * FROM sche
 
 ---
 
-### Task 2: CheckpointService Implementation (6 hours)
+### Task 1.2: CheckpointService Implementation (6 hours)
 
 **Checklist:**
 - [ ] Create `ktrdr/checkpoint/policy.py`
@@ -250,7 +250,7 @@ $ docker exec ktrdr-postgres psql -U ktrdr_admin -d ktrdr -c "SELECT * FROM sche
 
 ---
 
-### Task 3: Integration Testing (2 hours)
+### Task 1.3: Integration Testing (2 hours)
 
 **Checklist:**
 - [ ] Create `tests/integration/checkpoint/test_basic_flow.py`
@@ -323,7 +323,7 @@ def test_phase1_checkpoint_crud():
 
 **Estimated Time:** 2 days
 
-### Task 1: Training State Capture & Checkpoint Integration (8 hours)
+### Task 2.1: Training State Capture & Checkpoint Integration (8 hours)
 
 **Checklist:**
 - [ ] Add state management to `ModelTrainer`
@@ -359,7 +359,7 @@ def test_phase1_checkpoint_crud():
 
 ---
 
-### Task 2: Integration Testing (3 hours)
+### Task 2.2: Integration Testing (3 hours)
 
 **Checklist:**
 - [ ] Create `tests/integration/training/test_training_checkpoint_resume.py`
@@ -432,7 +432,7 @@ def test_phase2_training_checkpoint_resume():
 
 **Estimated Time:** 2.5 days
 
-### Task 1: Operations Persistence & Startup Recovery (5 hours)
+### Task 3.1: Operations Persistence & Startup Recovery (5 hours)
 
 **Checklist:**
 - [ ] Add operations persistence to `OperationsService`
@@ -462,7 +462,7 @@ def test_phase2_training_checkpoint_resume():
 
 ---
 
-### Task 2: Resume Operation Implementation (5 hours)
+### Task 3.2: Resume Operation Implementation (5 hours)
 
 **Checklist:**
 - [ ] Add `resume_operation()` to `OperationsService`
@@ -496,7 +496,7 @@ def test_phase2_training_checkpoint_resume():
 
 ---
 
-### Task 3: CLI Commands & Checkpoint Management (5 hours)
+### Task 3.3: CLI Commands & Checkpoint Management (5 hours)
 
 **Checklist:**
 - [ ] Add CLI resume command
@@ -530,7 +530,7 @@ def test_phase2_training_checkpoint_resume():
 
 ---
 
-### Task 4: Integration Testing (2 hours)
+### Task 3.4: Integration Testing (2 hours)
 
 **Checklist:**
 - [ ] Create `tests/integration/api/test_full_resume_flow.py`
@@ -631,7 +631,7 @@ op_training_20250117_150000 | CANCELLED | Epoch 10/100 | None
 
 **Estimated Time:** 1.5 days
 
-### Task 1: Backtesting State Capture & Checkpoint Integration (6 hours)
+### Task 4.1: Backtesting State Capture & Checkpoint Integration (6 hours)
 
 **Checklist:**
 - [ ] Add state management to backtesting components
@@ -669,7 +669,7 @@ op_training_20250117_150000 | CANCELLED | Epoch 10/100 | None
 
 ---
 
-### Task 2: Integration Testing (2 hours)
+### Task 4.2: Integration Testing (2 hours)
 
 **Checklist:**
 - [ ] Create `tests/integration/backtesting/test_backtest_checkpoint_resume.py`
@@ -744,7 +744,7 @@ def test_phase4_backtest_checkpoint_resume():
 
 **Estimated Time:** 2.5 days
 
-### Task 1: Cleanup, Validation & Monitoring (7 hours)
+### Task 5.1: Cleanup, Validation & Monitoring (7 hours)
 
 **Checklist:**
 - [ ] Implement cleanup system
@@ -784,7 +784,7 @@ def test_phase4_backtest_checkpoint_resume():
 
 ---
 
-### Task 2: Error Handling & Performance Testing (5 hours)
+### Task 5.2: Error Handling & Performance Testing (5 hours)
 
 **Checklist:**
 - [ ] Test and handle error scenarios
@@ -815,7 +815,7 @@ def test_phase4_backtest_checkpoint_resume():
 
 ---
 
-### Task 3: Documentation (3 hours)
+### Task 5.3: Documentation (3 hours)
 
 **Checklist:**
 - [ ] Add docstrings to all public APIs
