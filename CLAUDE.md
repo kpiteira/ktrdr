@@ -498,6 +498,44 @@ ktrdr ib test-connection
 ktrdr ib check-status
 ```
 
+### Database Operations
+
+```bash
+# Start PostgreSQL (included automatically with docker-compose)
+cd docker && docker-compose up -d postgres
+
+# Check PostgreSQL status
+docker ps | grep postgres
+docker logs ktrdr-postgres
+
+# Access PostgreSQL shell
+docker exec -it ktrdr-postgres psql -U ktrdr_admin -d ktrdr
+
+# Verify TimescaleDB extension
+docker exec -it ktrdr-postgres psql -U ktrdr_admin -d ktrdr -c "SELECT extname, extversion FROM pg_extension WHERE extname = 'timescaledb';"
+
+# Check migrations
+docker exec -it ktrdr-postgres psql -U ktrdr_admin -d ktrdr -c "SELECT * FROM schema_version ORDER BY version;"
+
+# Run integration tests
+uv run pytest tests/integration/database/ -v
+
+# Database connection details (from .env.example)
+# - Host: localhost (from host machine)
+# - Port: 5432
+# - Database: ktrdr
+# - User: ktrdr_admin
+# - Password: ktrdr_dev_password (change in production!)
+# - Connection String: postgresql://ktrdr_admin:ktrdr_dev_password@localhost:5432/ktrdr
+```
+
+**Important Notes**:
+- PostgreSQL data persists in Docker volume `postgres-data`
+- Migrations run automatically on first startup (via `/docker-entrypoint-initdb.d`)
+- TimescaleDB extension enabled for future time-series features
+- Connection pooling configured in [config/database.yaml](config/database.yaml)
+- For production, use strong passwords and enable SSL (see docker-compose.prod.yml)
+
 ## 🏭 PROXMOX PRODUCTION DEPLOYMENT
 
 **For production deployments**, KTRDR uses Proxmox LXC containers for better performance and lower overhead than Docker.
