@@ -18,6 +18,9 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
+
+# OpenTelemetry imports for instrumentation
+from opentelemetry import trace
 from sklearn.metrics import (
     f1_score,
     precision_score,
@@ -39,6 +42,7 @@ from ktrdr.training.model_trainer import ModelTrainer
 from ktrdr.training.zigzag_labeler import ZigZagLabeler
 
 logger = get_logger(__name__)
+tracer = trace.get_tracer(__name__)
 
 
 class TrainingPipeline:
@@ -92,56 +96,73 @@ class TrainingPipeline:
             ValueError: If no timeframes successfully loaded
             DataNotFoundError: If data not cached (must run `ktrdr data load` first)
         """
-        # Initialize components if not provided
-        if repository is None:
-            repository = DataRepository()
+        # Create telemetry span for data loading phase
+        with tracer.start_as_current_span("training.data_loading") as span:
+            # Set span attributes
+            span.set_attribute("data.symbol", symbol)
+            span.set_attribute("data.timeframes", ",".join(timeframes))
+            span.set_attribute("progress.phase", "data_loading")
 
-        if multi_timeframe_coordinator is None:
-            multi_timeframe_coordinator = MultiTimeframeCoordinator(repository)
+            # Initialize components if not provided
+            if repository is None:
+                repository = DataRepository()
 
-        # Handle single timeframe case (backward compatibility)
-        # EXTRACTED FROM: train_strategy.py:584-592
-        if len(timeframes) == 1:
-            timeframe = timeframes[0]
-            # Load from cache only - training uses pre-downloaded data
-            data = repository.load_from_cache(
+            if multi_timeframe_coordinator is None:
+                multi_timeframe_coordinator = MultiTimeframeCoordinator(repository)
+
+            # Handle single timeframe case (backward compatibility)
+            # EXTRACTED FROM: train_strategy.py:584-592
+            if len(timeframes) == 1:
+                timeframe = timeframes[0]
+                # Load from cache only - training uses pre-downloaded data
+                data = repository.load_from_cache(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    start_date=start_date,
+                    end_date=end_date,
+                )
+
+                # Add data metrics to span
+                span.set_attribute("data.rows", len(data))
+                span.set_attribute("data.columns", len(data.columns))
+
+                return {timeframe: data}
+
+            # Multi-timeframe case - use first timeframe (highest frequency) as base
+            # EXTRACTED FROM: train_strategy.py:594-622
+            base_timeframe = timeframes[0]  # Always use first timeframe as base
+            multi_data = multi_timeframe_coordinator.load_multi_timeframe_data(
                 symbol=symbol,
-                timeframe=timeframe,
+                timeframes=timeframes,
                 start_date=start_date,
                 end_date=end_date,
+                base_timeframe=base_timeframe,
             )
 
-            return {timeframe: data}
+            # Validate multi-timeframe loading success
+            if len(multi_data) != len(timeframes):
+                available_tfs = list(multi_data.keys())
+                missing_tfs = set(timeframes) - set(available_tfs)
+                logger.warning(
+                    f"⚠️ Multi-timeframe loading partial success: {len(multi_data)}/{len(timeframes)} timeframes loaded. "
+                    f"Missing: {missing_tfs}, Available: {available_tfs}"
+                )
 
-        # Multi-timeframe case - use first timeframe (highest frequency) as base
-        # EXTRACTED FROM: train_strategy.py:594-622
-        base_timeframe = timeframes[0]  # Always use first timeframe as base
-        multi_data = multi_timeframe_coordinator.load_multi_timeframe_data(
-            symbol=symbol,
-            timeframes=timeframes,
-            start_date=start_date,
-            end_date=end_date,
-            base_timeframe=base_timeframe,
-        )
+                # Continue with available timeframes but warn user
+                if len(multi_data) == 0:
+                    raise ValueError(f"No timeframes successfully loaded for {symbol}")
+            else:
+                logger.info(
+                    f"✅ Multi-timeframe data loaded successfully: {', '.join(multi_data.keys())}"
+                )
 
-        # Validate multi-timeframe loading success
-        if len(multi_data) != len(timeframes):
-            available_tfs = list(multi_data.keys())
-            missing_tfs = set(timeframes) - set(available_tfs)
-            logger.warning(
-                f"⚠️ Multi-timeframe loading partial success: {len(multi_data)}/{len(timeframes)} timeframes loaded. "
-                f"Missing: {missing_tfs}, Available: {available_tfs}"
-            )
+            # Add data metrics to span (total rows across all timeframes)
+            total_rows = sum(len(df) for df in multi_data.values())
+            total_cols = sum(len(df.columns) for df in multi_data.values())
+            span.set_attribute("data.rows", total_rows)
+            span.set_attribute("data.columns", total_cols)
 
-            # Continue with available timeframes but warn user
-            if len(multi_data) == 0:
-                raise ValueError(f"No timeframes successfully loaded for {symbol}")
-        else:
-            logger.info(
-                f"✅ Multi-timeframe data loaded successfully: {', '.join(multi_data.keys())}"
-            )
-
-        return multi_data
+            return multi_data
 
     # _filter_data_by_date_range() method removed
     # Date filtering now handled by DataRepository.load_from_cache() which is more efficient
@@ -243,40 +264,49 @@ class TrainingPipeline:
         Returns:
             Dictionary mapping timeframes to DataFrames with indicators
         """
-        logger.info(
-            f"🔧 TrainingPipeline.calculate_indicators() - Processing {len(price_data)} timeframe(s) "
-            f"with {len(indicator_configs)} indicator(s)"
-        )
+        # Create telemetry span for indicators phase
+        with tracer.start_as_current_span("training.indicators") as span:
+            # Set span attributes
+            span.set_attribute("indicators.count", len(indicator_configs))
+            span.set_attribute("indicators.timeframes", ",".join(price_data.keys()))
+            span.set_attribute("progress.phase", "indicators")
 
-        # Create indicator engine ONCE - No computation on sample data (Phase 7)!
-        indicator_engine = IndicatorEngine(indicators=indicator_configs)
+            logger.info(
+                f"🔧 TrainingPipeline.calculate_indicators() - Processing {len(price_data)} timeframe(s) "
+                f"with {len(indicator_configs)} indicator(s)"
+            )
 
-        # Apply to all timeframes (single-timeframe is just a 1-item dict)
-        # CRITICAL: Don't pass indicator_configs to prevent duplicate engine creation!
-        indicator_results = indicator_engine.apply_multi_timeframe(price_data)
+            # Create indicator engine ONCE - No computation on sample data (Phase 7)!
+            indicator_engine = IndicatorEngine(indicators=indicator_configs)
 
-        # Combine price data with indicator results per timeframe
-        combined_results = {}
+            # Apply to all timeframes (single-timeframe is just a 1-item dict)
+            # CRITICAL: Don't pass indicator_configs to prevent duplicate engine creation!
+            indicator_results = indicator_engine.apply_multi_timeframe(price_data)
 
-        for timeframe, tf_indicators in indicator_results.items():
-            tf_price_data = price_data[timeframe]
+            # Combine price data with indicator results per timeframe
+            combined_results = {}
 
-            # Phase 3 simplified: Just combine - feature_id aliases already exist!
-            # Use pd.concat to avoid DataFrame fragmentation (more efficient than iterative assignment)
-            new_cols = [
-                col for col in tf_indicators.columns if col not in tf_price_data.columns
-            ]
-            if new_cols:
-                result = pd.concat([tf_price_data, tf_indicators[new_cols]], axis=1)
-            else:
-                result = tf_price_data.copy()
+            for timeframe, tf_indicators in indicator_results.items():
+                tf_price_data = price_data[timeframe]
 
-            # Safety check: replace any inf values with NaN, then fill NaN with 0
-            result = result.replace([np.inf, -np.inf], np.nan).fillna(0.0)
+                # Phase 3 simplified: Just combine - feature_id aliases already exist!
+                # Use pd.concat to avoid DataFrame fragmentation (more efficient than iterative assignment)
+                new_cols = [
+                    col
+                    for col in tf_indicators.columns
+                    if col not in tf_price_data.columns
+                ]
+                if new_cols:
+                    result = pd.concat([tf_price_data, tf_indicators[new_cols]], axis=1)
+                else:
+                    result = tf_price_data.copy()
 
-            combined_results[timeframe] = result
+                # Safety check: replace any inf values with NaN, then fill NaN with 0
+                result = result.replace([np.inf, -np.inf], np.nan).fillna(0.0)
 
-        return combined_results
+                combined_results[timeframe] = result
+
+            return combined_results
 
     @staticmethod
     def generate_fuzzy_memberships(
@@ -298,20 +328,27 @@ class TrainingPipeline:
         Returns:
             Dictionary mapping timeframes to DataFrames with fuzzy membership values
         """
-        logger.info(
-            f"🔧 TrainingPipeline.generate_fuzzy_memberships() - Processing {len(indicators)} timeframe(s) "
-            f"with {len(fuzzy_configs)} fuzzy indicator(s)"
-        )
+        # Create telemetry span for fuzzy computation phase
+        with tracer.start_as_current_span("training.fuzzy_computation") as span:
+            # Set span attributes
+            span.set_attribute("fuzzy_sets.count", len(fuzzy_configs))
+            span.set_attribute("fuzzy_sets.timeframes", ",".join(indicators.keys()))
+            span.set_attribute("progress.phase", "fuzzy_computation")
 
-        # Initialize fuzzy engine
-        fuzzy_config = FuzzyConfigLoader.load_from_dict(fuzzy_configs)
-        fuzzy_engine = FuzzyEngine(fuzzy_config)
+            logger.info(
+                f"🔧 TrainingPipeline.generate_fuzzy_memberships() - Processing {len(indicators)} timeframe(s) "
+                f"with {len(fuzzy_configs)} fuzzy indicator(s)"
+            )
 
-        # Always use multi-timeframe method (single-timeframe is just a 1-item dict)
-        # The fuzzy engine now passes context_data in multi-timeframe path!
-        return fuzzy_engine.generate_multi_timeframe_memberships(
-            indicators, fuzzy_configs
-        )
+            # Initialize fuzzy engine
+            fuzzy_config = FuzzyConfigLoader.load_from_dict(fuzzy_configs)
+            fuzzy_engine = FuzzyEngine(fuzzy_config)
+
+            # Always use multi-timeframe method (single-timeframe is just a 1-item dict)
+            # The fuzzy engine now passes context_data in multi-timeframe path!
+            return fuzzy_engine.generate_multi_timeframe_memberships(
+                indicators, fuzzy_configs
+            )
 
     @staticmethod
     def create_features(
