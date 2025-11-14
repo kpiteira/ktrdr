@@ -35,7 +35,7 @@ class TestIBConnectionTelemetry:
         _, exporter = tracer_provider
 
         # Create connection with instrumentation
-        conn = IbConnection(client_id=1, host="localhost", port=4002)
+        _ = IbConnection(client_id=1, host="localhost", port=4002)
 
         # Simulate connection attempt (mock the actual IB connection)
         with tracer.start_as_current_span("test.connection"):
@@ -88,8 +88,9 @@ class TestIBDataFetchingTelemetry:
     @pytest.mark.asyncio
     async def test_fetch_historical_creates_span(self, tracer, tracer_provider):
         """Test that fetch_historical_data creates instrumented span."""
-        from ib.data_fetcher import IbDataFetcher
         from datetime import datetime, timezone
+
+        from ib.data_fetcher import IbDataFetcher
 
         _, exporter = tracer_provider
 

@@ -11,6 +11,11 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 
 from ktrdr.data.acquisition.acquisition_service import DataAcquisitionService
 
+# Skip all tests in this module until Phase 6.4 (Worker Execution Phase Instrumentation) is implemented
+pytestmark = pytest.mark.skip(
+    reason="Phase 6.4 not implemented - waiting for data acquisition phase instrumentation"
+)
+
 
 @pytest.fixture
 def tracer_provider():

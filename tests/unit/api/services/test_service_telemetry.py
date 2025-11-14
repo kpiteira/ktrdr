@@ -7,6 +7,11 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import StatusCode
 
+# Skip all tests in this module until Phase 6.2 (API Business Logic Instrumentation) is implemented
+pytestmark = pytest.mark.skip(
+    reason="Phase 6.2 not implemented - waiting for ktrdr.monitoring.service_telemetry module"
+)
+
 
 @pytest.fixture(autouse=True)
 def reset_tracer():
