@@ -25,7 +25,7 @@ from ktrdr.async_infrastructure.cancellation import (
 )
 from ktrdr.errors import DataError
 from ktrdr.logging import get_logger
-from ktrdr.monitoring.service_telemetry import trace_service_method
+from ktrdr.monitoring.service_telemetry import create_service_span, trace_service_method
 
 logger = get_logger(__name__)
 
@@ -120,25 +120,38 @@ class OperationsService:
                     details={"operation_id": operation_id},
                 )
 
-            # Create operation
-            operation = OperationInfo(
+            # Create operation with telemetry
+            with create_service_span(
+                "operation.register",
                 operation_id=operation_id,
-                operation_type=operation_type,
-                status=OperationStatus.PENDING,
-                created_at=datetime.now(timezone.utc),
-                metadata=metadata,
-                started_at=None,
-                completed_at=None,
-                error_message=None,
-                result_summary=None,
-                metrics=None,  # NEW: M1 - initialize as None
-            )
+                symbol=metadata.symbol,
+                timeframe=metadata.timeframe,
+            ) as span:
+                # Add operation-specific attributes
+                span.set_attribute("operation.type", operation_type.value)
+                span.set_attribute("operation.status", OperationStatus.PENDING.value)
 
-            # Add to registry
-            self._operations[operation_id] = operation
+                # Create operation
+                operation = OperationInfo(
+                    operation_id=operation_id,
+                    operation_type=operation_type,
+                    status=OperationStatus.PENDING,
+                    created_at=datetime.now(timezone.utc),
+                    metadata=metadata,
+                    started_at=None,
+                    completed_at=None,
+                    error_message=None,
+                    result_summary=None,
+                    metrics=None,  # NEW: M1 - initialize as None
+                )
 
-            logger.info(f"Created operation: {operation_id} (type: {operation_type})")
-            return operation
+                # Add to registry
+                self._operations[operation_id] = operation
+
+                logger.info(
+                    f"Created operation: {operation_id} (type: {operation_type})"
+                )
+                return operation
 
     async def start_operation(self, operation_id: str, task: asyncio.Task) -> None:
         """
@@ -156,10 +169,16 @@ class OperationsService:
                     details={"operation_id": operation_id},
                 )
 
-            # Update operation status
+            # Update operation status with telemetry
             operation = self._operations[operation_id]
-            operation.status = OperationStatus.RUNNING
-            operation.started_at = datetime.now(timezone.utc)
+            with create_service_span(
+                "operation.state_transition", operation_id=operation_id
+            ) as span:
+                span.set_attribute("operation.from_status", operation.status.value)
+                span.set_attribute("operation.to_status", OperationStatus.RUNNING.value)
+
+                operation.status = OperationStatus.RUNNING
+                operation.started_at = datetime.now(timezone.utc)
 
             # Register task for cancellation
             self._operation_tasks[operation_id] = task
@@ -231,10 +250,19 @@ class OperationsService:
                 self._last_refresh[operation_id] = 0
                 self._refresh_from_bridge(operation_id)
 
-            operation.status = OperationStatus.COMPLETED
-            operation.completed_at = datetime.now(timezone.utc)
-            operation.result_summary = result_summary
-            operation.progress.percentage = 100.0
+            # Update status with telemetry
+            with create_service_span(
+                "operation.state_transition", operation_id=operation_id
+            ) as span:
+                span.set_attribute("operation.from_status", operation.status.value)
+                span.set_attribute(
+                    "operation.to_status", OperationStatus.COMPLETED.value
+                )
+
+                operation.status = OperationStatus.COMPLETED
+                operation.completed_at = datetime.now(timezone.utc)
+                operation.result_summary = result_summary
+                operation.progress.percentage = 100.0
 
             # Clean up task reference
             if operation_id in self._operation_tasks:
@@ -260,9 +288,18 @@ class OperationsService:
                 return
 
             operation = self._operations[operation_id]
-            operation.status = OperationStatus.FAILED
-            operation.completed_at = datetime.now(timezone.utc)
-            operation.error_message = error_message
+
+            # Update status with telemetry
+            with create_service_span(
+                "operation.state_transition", operation_id=operation_id
+            ) as span:
+                span.set_attribute("operation.from_status", operation.status.value)
+                span.set_attribute("operation.to_status", OperationStatus.FAILED.value)
+                span.set_attribute("operation.error", error_message)
+
+                operation.status = OperationStatus.FAILED
+                operation.completed_at = datetime.now(timezone.utc)
+                operation.error_message = error_message
 
             # Clean up task reference
             if operation_id in self._operation_tasks:
@@ -345,10 +382,20 @@ class OperationsService:
                         f"Failed to cancel remote operation {host_operation_id}: {e}"
                     )
 
-            # Update operation status
-            operation.status = OperationStatus.CANCELLED
-            operation.completed_at = datetime.now(timezone.utc)
-            operation.error_message = reason or "Operation cancelled by user"
+            # Update operation status with telemetry
+            with create_service_span(
+                "operation.state_transition", operation_id=operation_id
+            ) as span:
+                span.set_attribute("operation.from_status", operation.status.value)
+                span.set_attribute(
+                    "operation.to_status", OperationStatus.CANCELLED.value
+                )
+                if reason:
+                    span.set_attribute("operation.cancellation_reason", reason)
+
+                operation.status = OperationStatus.CANCELLED
+                operation.completed_at = datetime.now(timezone.utc)
+                operation.error_message = reason or "Operation cancelled by user"
 
             logger.info(
                 f"Cancelled operation: {operation_id} (task_cancelled: {cancelled_task}, remote_cancelled: {remote_cancelled})"
