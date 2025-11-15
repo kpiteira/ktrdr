@@ -180,6 +180,7 @@ class ModelTrainer:
         y_train: torch.Tensor,
         X_val: Optional[torch.Tensor] = None,
         y_val: Optional[torch.Tensor] = None,
+        start_epoch: int = 0,
     ) -> dict[str, Any]:
         """Train the neural network model.
 
@@ -189,6 +190,7 @@ class ModelTrainer:
             y_train: Training labels
             X_val: Optional validation features
             y_val: Optional validation labels
+            start_epoch: Starting epoch for training (default: 0, for resuming: checkpoint_epoch + 1)
 
         Returns:
             Training history and metrics
@@ -269,8 +271,8 @@ class ModelTrainer:
         total_bars = len(X_train)  # Total number of market data bars
         total_bars_all_epochs = total_bars * epochs  # Total bars across all epochs
 
-        # Training loop
-        for epoch in range(epochs):
+        # Training loop (support resuming from start_epoch)
+        for epoch in range(start_epoch, epochs):
             self._check_cancelled()
             start_time = time.time()
 
@@ -610,23 +612,10 @@ class ModelTrainer:
                         )
 
                         # Prepare checkpoint data for CheckpointService
+                        # Extract binary artifacts
                         artifacts: dict[str, bytes] = {
                             "model.pt": checkpoint_state["model_state_dict"],
                             "optimizer.pt": checkpoint_state["optimizer_state_dict"],
-                        }
-
-                        checkpoint_data: dict[str, Any] = {
-                            "checkpoint_id": f"{self.operation_id}_epoch_{epoch}",
-                            "checkpoint_type": "epoch_snapshot",
-                            "metadata": {
-                                "epoch": epoch,
-                                "train_loss": avg_train_loss,
-                                "train_accuracy": train_accuracy,
-                                "val_loss": val_loss,
-                                "val_accuracy": val_accuracy,
-                            },
-                            "state": checkpoint_state,
-                            "artifacts": artifacts,
                         }
 
                         # Add scheduler artifact if exists
@@ -640,6 +629,33 @@ class ModelTrainer:
                             artifacts["best_model.pt"] = checkpoint_state[
                                 "best_model_state"
                             ]
+
+                        # Create JSON-serializable state (without binary artifacts)
+                        json_state = {
+                            k: v
+                            for k, v in checkpoint_state.items()
+                            if k
+                            not in [
+                                "model_state_dict",
+                                "optimizer_state_dict",
+                                "scheduler_state_dict",
+                                "best_model_state",
+                            ]
+                        }
+
+                        checkpoint_data: dict[str, Any] = {
+                            "checkpoint_id": f"{self.operation_id}_epoch_{epoch}",
+                            "checkpoint_type": "epoch_snapshot",
+                            "metadata": {
+                                "epoch": epoch,
+                                "train_loss": avg_train_loss,
+                                "train_accuracy": train_accuracy,
+                                "val_loss": val_loss,
+                                "val_accuracy": val_accuracy,
+                            },
+                            "state": json_state,
+                            "artifacts": artifacts,
+                        }
 
                         # Save checkpoint via CheckpointService
                         self.checkpoint_service.save_checkpoint(
@@ -1294,9 +1310,10 @@ class ModelTrainer:
 
     def restore_checkpoint_state(
         self,
-        checkpoint_state: dict[str, Any],
         model: nn.Module,
-        optimizer: optim.Optimizer,
+        checkpoint_state: dict[str, Any],
+        artifacts: dict[str, bytes],
+        optimizer: optim.Optimizer | None = None,
         scheduler: Any = None,
         early_stopping: EarlyStopping | None = None,
     ) -> int:
@@ -1304,9 +1321,10 @@ class ModelTrainer:
         Restore training state from checkpoint.
 
         Args:
-            checkpoint_state: Checkpoint state dictionary
             model: PyTorch model to restore state into
-            optimizer: PyTorch optimizer to restore state into
+            checkpoint_state: Checkpoint state dictionary (JSON-serializable part)
+            artifacts: Dictionary of binary artifacts (model, optimizer, etc.)
+            optimizer: PyTorch optimizer to restore state into (optional, for flexibility)
             scheduler: Optional learning rate scheduler to restore state into
             early_stopping: Optional early stopping callback to restore state into
 
@@ -1315,19 +1333,21 @@ class ModelTrainer:
         """
         import io
 
-        # Restore model state
-        model_bytes = checkpoint_state["model_state_dict"]
-        model_state_dict = torch.load(io.BytesIO(model_bytes))
-        model.load_state_dict(model_state_dict)
+        # Restore model state from artifacts
+        if "model.pt" in artifacts:
+            model_bytes = artifacts["model.pt"]
+            model_state_dict = torch.load(io.BytesIO(model_bytes))
+            model.load_state_dict(model_state_dict)
 
-        # Restore optimizer state
-        optimizer_bytes = checkpoint_state["optimizer_state_dict"]
-        optimizer_state_dict = torch.load(io.BytesIO(optimizer_bytes))
-        optimizer.load_state_dict(optimizer_state_dict)
+        # Restore optimizer state from artifacts (if provided)
+        if optimizer is not None and "optimizer.pt" in artifacts:
+            optimizer_bytes = artifacts["optimizer.pt"]
+            optimizer_state_dict = torch.load(io.BytesIO(optimizer_bytes))
+            optimizer.load_state_dict(optimizer_state_dict)
 
         # Restore scheduler state (if exists)
-        if scheduler is not None and checkpoint_state.get("scheduler_state_dict"):
-            scheduler_bytes = checkpoint_state["scheduler_state_dict"]
+        if scheduler is not None and "scheduler.pt" in artifacts:
+            scheduler_bytes = artifacts["scheduler.pt"]
             scheduler_state_dict = torch.load(io.BytesIO(scheduler_bytes))
             scheduler.load_state_dict(scheduler_state_dict)
 
@@ -1346,9 +1366,9 @@ class ModelTrainer:
             for h in history_dicts
         ]
 
-        # Restore best model state (if exists)
-        if checkpoint_state.get("best_model_state"):
-            best_model_bytes = checkpoint_state["best_model_state"]
+        # Restore best model state (if exists in artifacts)
+        if "best_model.pt" in artifacts:
+            best_model_bytes = artifacts["best_model.pt"]
             self.best_model_state = torch.load(io.BytesIO(best_model_bytes))
         else:
             self.best_model_state = None
