@@ -1,0 +1,104 @@
+# Checkpoint Persistence System Configuration
+# ============================================================================
+# Configuration for checkpoint-based operation resume functionality
+# See: docs/architecture/checkpoint/checkpoint-persistence-architecture.md
+# ============================================================================
+
+# Database configuration
+# Connection settings (can be overridden by DATABASE_URL environment variable)
+database:
+  host: ${POSTGRES_HOST:-localhost}
+  port: ${POSTGRES_PORT:-5432}
+  database: ${POSTGRES_DB:-ktrdr}
+  user: ${POSTGRES_USER:-ktrdr_admin}
+  password: ${POSTGRES_PASSWORD:-ktrdr_dev_password}
+
+  # Connection pooling settings
+  pool_size: 10
+  pool_timeout: 30
+
+# Checkpointing configuration
+checkpointing:
+  # Global enable/disable flag
+  enabled: true
+
+  # Artifacts storage directory (relative to project root)
+  artifacts_dir: data/checkpoints/artifacts
+
+  # Training checkpoint policy
+  # Time-based checkpointing adapts to operation speed automatically
+  training:
+    # Target time between checkpoints (seconds)
+    # Default: 300 seconds (5 minutes)
+    # Fast epochs (10s): checkpoint every ~30 epochs
+    # Slow epochs (30m): checkpoint every epoch
+    checkpoint_interval_seconds: 300
+
+    # Force checkpoint every N epochs (safety net)
+    # Ensures checkpoint even if time threshold not reached
+    force_checkpoint_every_n: 50
+
+    # Delete checkpoint when operation completes successfully
+    # Checkpoints are ephemeral - only needed for resume
+    delete_on_completion: true
+
+    # Save checkpoint when operation fails
+    # Allows resume from failure point
+    checkpoint_on_failure: true
+
+  # Backtesting checkpoint policy
+  # Same time-based approach as training
+  backtesting:
+    # Target time between checkpoints (seconds)
+    # Default: 300 seconds (5 minutes)
+    checkpoint_interval_seconds: 300
+
+    # Force checkpoint every N bars (safety net)
+    # Ensures checkpoint even if time threshold not reached
+    force_checkpoint_every_n: 5000
+
+    # Delete checkpoint when operation completes successfully
+    delete_on_completion: true
+
+    # Save checkpoint when operation fails
+    checkpoint_on_failure: true
+
+  # Cleanup policies
+  cleanup:
+    # How often to run cleanup job (hours)
+    # Default: 24 hours (daily)
+    run_interval_hours: 24
+
+    # Delete checkpoints older than N days (age-based retention)
+    # Default: 30 days
+    # This prevents abandoned operations from consuming disk forever
+    delete_old_checkpoints_days: 30
+
+    # Disk usage warning threshold (percentage)
+    # Default: 80%
+    # Alert when checkpoint storage exceeds this percentage
+    warn_disk_usage_percent: 80
+
+# Design Notes:
+# ==============================================================================
+# 1. ONE Checkpoint Per Operation
+#    - operation_checkpoints table uses operation_id as PRIMARY KEY
+#    - When new checkpoint saved, old one is replaced (UPSERT)
+#    - Simplifies retention logic and reduces disk usage by 10x
+#
+# 2. Time-Based Checkpointing
+#    - checkpoint_interval_seconds adapts to operation speed
+#    - Fast operations (10s/epoch): checkpoint every ~30 epochs
+#    - Slow operations (30m/epoch): checkpoint every epoch
+#    - No manual tuning required
+#
+# 3. Ephemeral Checkpoints
+#    - Checkpoints deleted when operation completes (delete_on_completion: true)
+#    - FAILED/CANCELLED operations keep checkpoint for resume
+#    - 30-day age limit prevents forever accumulation
+#
+# 4. Startup Recovery
+#    - On API startup, all RUNNING operations → FAILED
+#    - Makes crashed operations immediately resumable
+#    - See: docs/architecture/checkpoint/checkpoint-persistence-design.md
+# ==============================================================================
