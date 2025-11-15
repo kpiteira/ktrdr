@@ -1086,3 +1086,191 @@ class ModelTrainer:
 
         with open(path, "w") as f:
             json.dump(history_data, f, indent=2)
+
+    def get_checkpoint_state(
+        self,
+        current_epoch: int,
+        model: nn.Module,
+        optimizer: optim.Optimizer,
+        scheduler: optim.lr_scheduler._LRScheduler | None = None,
+        early_stopping: EarlyStopping | None = None,
+    ) -> dict[str, Any]:
+        """
+        Capture complete training state for checkpointing.
+
+        Args:
+            current_epoch: Current epoch number
+            model: PyTorch model being trained
+            optimizer: PyTorch optimizer
+            scheduler: Optional learning rate scheduler
+            early_stopping: Optional early stopping callback
+
+        Returns:
+            Dictionary containing all training state:
+                - epoch: Current epoch number
+                - model_state_dict: Model state as bytes
+                - optimizer_state_dict: Optimizer state as bytes
+                - scheduler_state_dict: Scheduler state as bytes (or None)
+                - history: Training history (list of TrainingMetrics)
+                - best_model_state: Best model state as bytes (or None)
+                - best_val_accuracy: Best validation accuracy
+                - early_stopping_state: Early stopping state (or None)
+                - config: Training configuration
+                - operation_id: Operation ID (if set)
+                - checkpoint_type: Type of checkpoint ('epoch_snapshot')
+                - created_at: ISO timestamp
+                - pytorch_version: PyTorch version
+                - checkpoint_version: Checkpoint format version
+        """
+        import io
+        from datetime import datetime
+
+        # Serialize model state_dict to bytes
+        model_buffer = io.BytesIO()
+        torch.save(model.state_dict(), model_buffer)
+        model_state_bytes = model_buffer.getvalue()
+
+        # Serialize optimizer state_dict to bytes
+        optimizer_buffer = io.BytesIO()
+        torch.save(optimizer.state_dict(), optimizer_buffer)
+        optimizer_state_bytes = optimizer_buffer.getvalue()
+
+        # Serialize scheduler state_dict to bytes (if exists)
+        scheduler_state_bytes = None
+        if scheduler is not None:
+            scheduler_buffer = io.BytesIO()
+            torch.save(scheduler.state_dict(), scheduler_buffer)
+            scheduler_state_bytes = scheduler_buffer.getvalue()
+
+        # Serialize best model state to bytes (if exists)
+        best_model_state_bytes = None
+        if self.best_model_state is not None:
+            best_model_buffer = io.BytesIO()
+            torch.save(self.best_model_state, best_model_buffer)
+            best_model_state_bytes = best_model_buffer.getvalue()
+
+        # Serialize training history (convert TrainingMetrics to dict)
+        history_dicts = [
+            {
+                "epoch": m.epoch,
+                "train_loss": m.train_loss,
+                "train_accuracy": m.train_accuracy,
+                "val_loss": m.val_loss,
+                "val_accuracy": m.val_accuracy,
+                "learning_rate": m.learning_rate,
+                "duration": m.duration,
+            }
+            for m in self.history
+        ]
+
+        # Serialize early stopping state (if exists)
+        early_stopping_state = None
+        if early_stopping is not None:
+            early_stopping_state = {
+                "counter": early_stopping.counter,
+                "best_score": early_stopping.best_score,
+                "early_stop": early_stopping.early_stop,
+                "patience": early_stopping.patience,
+                "min_delta": early_stopping.min_delta,
+                "monitor": early_stopping.monitor,
+                "mode": early_stopping.mode,
+            }
+
+        # Build checkpoint state
+        checkpoint_state = {
+            "epoch": current_epoch,
+            "model_state_dict": model_state_bytes,
+            "optimizer_state_dict": optimizer_state_bytes,
+            "scheduler_state_dict": scheduler_state_bytes,
+            "history": history_dicts,
+            "best_model_state": best_model_state_bytes,
+            "best_val_accuracy": self.best_val_accuracy,
+            "early_stopping_state": early_stopping_state,
+            "config": self.config.copy(),
+            "operation_id": getattr(self, "operation_id", None),
+            "checkpoint_type": "epoch_snapshot",
+            "created_at": datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z"),
+            "pytorch_version": torch.__version__,
+            "checkpoint_version": "1.0",
+        }
+
+        return checkpoint_state
+
+    def restore_checkpoint_state(
+        self,
+        checkpoint_state: dict[str, Any],
+        model: nn.Module,
+        optimizer: optim.Optimizer,
+        scheduler: optim.lr_scheduler._LRScheduler | None = None,
+        early_stopping: EarlyStopping | None = None,
+    ) -> int:
+        """
+        Restore training state from checkpoint.
+
+        Args:
+            checkpoint_state: Checkpoint state dictionary
+            model: PyTorch model to restore state into
+            optimizer: PyTorch optimizer to restore state into
+            scheduler: Optional learning rate scheduler to restore state into
+            early_stopping: Optional early stopping callback to restore state into
+
+        Returns:
+            Starting epoch for resumed training (checkpoint epoch + 1)
+        """
+        import io
+
+        # Restore model state
+        model_bytes = checkpoint_state["model_state_dict"]
+        model_state_dict = torch.load(io.BytesIO(model_bytes))
+        model.load_state_dict(model_state_dict)
+
+        # Restore optimizer state
+        optimizer_bytes = checkpoint_state["optimizer_state_dict"]
+        optimizer_state_dict = torch.load(io.BytesIO(optimizer_bytes))
+        optimizer.load_state_dict(optimizer_state_dict)
+
+        # Restore scheduler state (if exists)
+        if scheduler is not None and checkpoint_state.get("scheduler_state_dict"):
+            scheduler_bytes = checkpoint_state["scheduler_state_dict"]
+            scheduler_state_dict = torch.load(io.BytesIO(scheduler_bytes))
+            scheduler.load_state_dict(scheduler_state_dict)
+
+        # Restore training history
+        history_dicts = checkpoint_state["history"]
+        self.history = [
+            TrainingMetrics(
+                epoch=h["epoch"],
+                train_loss=h["train_loss"],
+                train_accuracy=h["train_accuracy"],
+                val_loss=h.get("val_loss"),
+                val_accuracy=h.get("val_accuracy"),
+                learning_rate=h.get("learning_rate", 0.001),
+                duration=h.get("duration", 0.0),
+            )
+            for h in history_dicts
+        ]
+
+        # Restore best model state (if exists)
+        if checkpoint_state.get("best_model_state"):
+            best_model_bytes = checkpoint_state["best_model_state"]
+            self.best_model_state = torch.load(io.BytesIO(best_model_bytes))
+        else:
+            self.best_model_state = None
+
+        # Restore best validation accuracy
+        self.best_val_accuracy = checkpoint_state.get("best_val_accuracy", 0.0)
+
+        # Restore early stopping state (if exists)
+        if early_stopping is not None and checkpoint_state.get("early_stopping_state"):
+            es_state = checkpoint_state["early_stopping_state"]
+            early_stopping.counter = es_state["counter"]
+            early_stopping.best_score = es_state["best_score"]
+            early_stopping.early_stop = es_state["early_stop"]
+            # Restore config (already set in __init__, but verify compatibility)
+            # Note: patience, min_delta, monitor, mode are set in __init__
+
+        # Return starting epoch (checkpoint epoch + 1)
+        checkpoint_epoch = checkpoint_state["epoch"]
+        starting_epoch = checkpoint_epoch + 1
+
+        return starting_epoch
