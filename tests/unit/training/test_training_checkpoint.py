@@ -8,7 +8,7 @@ Tests the integration of CheckpointService into ModelTrainer:
 """
 
 import time
-from unittest.mock import MagicMock, Mock, call, patch
+from unittest.mock import Mock, patch
 
 import pytest
 import torch
@@ -204,7 +204,7 @@ def test_training_loop_creates_checkpoints_at_correct_intervals(
     model_trainer_with_checkpoint.operation_id = "test_op_001"
 
     # Run training (20 epochs)
-    result = model_trainer_with_checkpoint.train(
+    model_trainer_with_checkpoint.train(
         model=model,
         X_train=X_train,
         y_train=y_train,
@@ -301,7 +301,7 @@ def test_checkpoint_logs_events(mock_service_class, model_trainer_with_checkpoin
 
     # Run training with logging capture
     with patch("ktrdr.training.model_trainer.logger") as mock_logger:
-        result = model_trainer_with_checkpoint.train(
+        model_trainer_with_checkpoint.train(
             model=model,
             X_train=X_train,
             y_train=y_train,

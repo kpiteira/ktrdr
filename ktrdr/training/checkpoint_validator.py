@@ -8,7 +8,9 @@ checkpoints can be safely restored.
 from typing import Any
 
 
-def validate_checkpoint_state(checkpoint_state: dict[str, Any]) -> tuple[bool, list[str]]:
+def validate_checkpoint_state(
+    checkpoint_state: dict[str, Any],
+) -> tuple[bool, list[str]]:
     """
     Validate checkpoint state structure and types.
 

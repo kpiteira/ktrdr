@@ -8,7 +8,6 @@ Tests the ability of ModelTrainer to:
 """
 
 import io
-from unittest.mock import MagicMock, Mock
 
 import pytest
 import torch
@@ -62,13 +61,25 @@ def trained_model_trainer(simple_model):
     # Simulate some training progress
     trainer.history = [
         TrainingMetrics(
-            epoch=0, train_loss=0.5, train_accuracy=0.6, val_loss=0.45, val_accuracy=0.65
+            epoch=0,
+            train_loss=0.5,
+            train_accuracy=0.6,
+            val_loss=0.45,
+            val_accuracy=0.65,
         ),
         TrainingMetrics(
-            epoch=1, train_loss=0.4, train_accuracy=0.7, val_loss=0.38, val_accuracy=0.72
+            epoch=1,
+            train_loss=0.4,
+            train_accuracy=0.7,
+            val_loss=0.38,
+            val_accuracy=0.72,
         ),
         TrainingMetrics(
-            epoch=2, train_loss=0.3, train_accuracy=0.8, val_loss=0.32, val_accuracy=0.78
+            epoch=2,
+            train_loss=0.3,
+            train_accuracy=0.8,
+            val_loss=0.32,
+            val_accuracy=0.78,
         ),
     ]
     trainer.best_val_accuracy = 0.78

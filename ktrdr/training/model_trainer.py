@@ -101,12 +101,19 @@ class ModelTrainer:
         config: dict[str, Any],
         progress_callback=None,
         cancellation_token: CancellationToken | None = None,
+        checkpoint_service=None,
+        checkpoint_policy=None,
+        operation_id: Optional[str] = None,
     ):
         """Initialize trainer.
 
         Args:
             config: Training configuration
             progress_callback: Optional callback for progress updates
+            cancellation_token: Optional cancellation token for training interruption
+            checkpoint_service: Optional CheckpointService for checkpointing
+            checkpoint_policy: Optional CheckpointPolicy for checkpoint decisions
+            operation_id: Optional operation ID for checkpoint tracking
         """
         self.config = config
         self.cancellation_token = cancellation_token
@@ -122,6 +129,12 @@ class ModelTrainer:
         # Progress update frequency: update every N batches
         # Default to 1 (every batch) for responsive UI, can be increased for performance
         self.progress_update_frequency = config.get("progress_update_frequency", 1)
+
+        # Checkpoint support (optional)
+        self.checkpoint_service = checkpoint_service
+        self.checkpoint_policy = checkpoint_policy
+        self.operation_id = operation_id
+        self.last_checkpoint_time: Optional[float] = None
 
         # Analytics setup - check both direct config and full_config
         full_config = config.get("full_config", config)
@@ -562,6 +575,91 @@ class ModelTrainer:
                     self.progress_callback(epoch, epochs, epoch_metrics)
                 except Exception as e:
                     print(f"Warning: Progress callback failed: {e}")
+
+            # Checkpoint logic (if checkpointing enabled)
+            if (
+                self.checkpoint_service is not None
+                and self.checkpoint_policy is not None
+                and self.operation_id is not None
+            ):
+                try:
+                    from ktrdr.checkpoint.policy import CheckpointDecisionEngine
+
+                    # Initialize checkpoint time if first checkpoint check
+                    if self.last_checkpoint_time is None:
+                        self.last_checkpoint_time = time.time()
+
+                    # Check if we should checkpoint
+                    engine = CheckpointDecisionEngine()
+                    should_checkpoint, reason = engine.should_checkpoint(
+                        policy=self.checkpoint_policy,
+                        last_checkpoint_time=self.last_checkpoint_time,
+                        current_time=time.time(),
+                        natural_boundary=epoch + 1,  # Epoch numbers are 0-indexed
+                        total_boundaries=epoch + 1,
+                    )
+
+                    if should_checkpoint:
+                        # Capture checkpoint state
+                        checkpoint_state = self.get_checkpoint_state(
+                            current_epoch=epoch,
+                            model=model,
+                            optimizer=optimizer,
+                            scheduler=scheduler,
+                            early_stopping=early_stopping,
+                        )
+
+                        # Prepare checkpoint data for CheckpointService
+                        checkpoint_data = {
+                            "checkpoint_id": f"{self.operation_id}_epoch_{epoch}",
+                            "checkpoint_type": "epoch_snapshot",
+                            "metadata": {
+                                "epoch": epoch,
+                                "train_loss": avg_train_loss,
+                                "train_accuracy": train_accuracy,
+                                "val_loss": val_loss,
+                                "val_accuracy": val_accuracy,
+                            },
+                            "state": checkpoint_state,
+                            "artifacts": {
+                                "model.pt": checkpoint_state["model_state_dict"],
+                                "optimizer.pt": checkpoint_state[
+                                    "optimizer_state_dict"
+                                ],
+                            },
+                        }
+
+                        # Add scheduler artifact if exists
+                        if checkpoint_state.get("scheduler_state_dict"):
+                            checkpoint_data["artifacts"]["scheduler.pt"] = (
+                                checkpoint_state["scheduler_state_dict"]
+                            )
+
+                        # Add best model artifact if exists
+                        if checkpoint_state.get("best_model_state"):
+                            artifacts_dict = checkpoint_data["artifacts"]
+                            if isinstance(artifacts_dict, dict):
+                                artifacts_dict["best_model.pt"] = checkpoint_state[
+                                    "best_model_state"
+                                ]
+
+                        # Save checkpoint via CheckpointService
+                        self.checkpoint_service.save_checkpoint(
+                            operation_id=self.operation_id,
+                            checkpoint_data=checkpoint_data,
+                        )
+
+                        # Update last checkpoint time
+                        self.last_checkpoint_time = time.time()
+
+                        # Log checkpoint event
+                        print(
+                            f"💾 Checkpoint saved at epoch {epoch} (reason: {reason})"
+                        )
+
+                except Exception as e:
+                    # Checkpoint failure should not stop training
+                    print(f"⚠️ Checkpoint save failed (training continues): {e}")
 
         # Restore best model if available
         if self.best_model_state is not None:
@@ -1123,7 +1221,7 @@ class ModelTrainer:
                 - checkpoint_version: Checkpoint format version
         """
         import io
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         # Serialize model state_dict to bytes
         model_buffer = io.BytesIO()
@@ -1189,7 +1287,7 @@ class ModelTrainer:
             "config": self.config.copy(),
             "operation_id": getattr(self, "operation_id", None),
             "checkpoint_type": "epoch_snapshot",
-            "created_at": datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z"),
+            "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "pytorch_version": torch.__version__,
             "checkpoint_version": "1.0",
         }

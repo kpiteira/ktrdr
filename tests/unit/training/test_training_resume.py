@@ -7,7 +7,7 @@ Tests TrainingService's ability to:
 - Continue training from correct epoch
 """
 
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -85,7 +85,9 @@ async def test_resume_training_loads_checkpoint_and_continues(
     training_service.checkpoint_service = mock_checkpoint_service
 
     # Mock the actual training dispatch to worker
-    with patch.object(training_service, "_dispatch_training_to_worker") as mock_dispatch:
+    with patch.object(
+        training_service, "_dispatch_training_to_worker"
+    ) as mock_dispatch:
         mock_dispatch.return_value = {
             "operation_id": "op_training_resumed_001",
             "status": "RUNNING",
@@ -176,7 +178,9 @@ async def test_resume_training_deletes_original_checkpoint_after_start(
     mock_checkpoint_service.load_checkpoint.return_value = sample_checkpoint_state
     training_service.checkpoint_service = mock_checkpoint_service
 
-    with patch.object(training_service, "_dispatch_training_to_worker") as mock_dispatch:
+    with patch.object(
+        training_service, "_dispatch_training_to_worker"
+    ) as mock_dispatch:
         mock_dispatch.return_value = {
             "operation_id": "op_training_resumed_004",
             "status": "RUNNING",
@@ -207,7 +211,9 @@ async def test_resume_training_continues_from_correct_epoch(
     mock_checkpoint_service.load_checkpoint.return_value = sample_checkpoint_state
     training_service.checkpoint_service = mock_checkpoint_service
 
-    with patch.object(training_service, "_dispatch_training_to_worker") as mock_dispatch:
+    with patch.object(
+        training_service, "_dispatch_training_to_worker"
+    ) as mock_dispatch:
         mock_dispatch.return_value = {
             "operation_id": "op_training_resumed_005",
             "status": "RUNNING",
@@ -246,7 +252,9 @@ async def test_resume_training_preserves_training_history(
     mock_checkpoint_service.load_checkpoint.return_value = sample_checkpoint_state
     training_service.checkpoint_service = mock_checkpoint_service
 
-    with patch.object(training_service, "_dispatch_training_to_worker") as mock_dispatch:
+    with patch.object(
+        training_service, "_dispatch_training_to_worker"
+    ) as mock_dispatch:
         mock_dispatch.return_value = {
             "operation_id": "op_training_resumed_006",
             "status": "RUNNING",
@@ -279,7 +287,9 @@ async def test_resume_training_links_new_operation_to_original(
     mock_checkpoint_service.load_checkpoint.return_value = sample_checkpoint_state
     training_service.checkpoint_service = mock_checkpoint_service
 
-    with patch.object(training_service, "_dispatch_training_to_worker") as mock_dispatch:
+    with patch.object(
+        training_service, "_dispatch_training_to_worker"
+    ) as mock_dispatch:
         mock_dispatch.return_value = {
             "operation_id": "op_training_resumed_007",
             "status": "RUNNING",
