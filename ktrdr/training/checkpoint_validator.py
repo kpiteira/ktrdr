@@ -5,7 +5,7 @@ Validates checkpoint state structure and data types to ensure
 checkpoints can be safely restored.
 """
 
-from typing import Any
+from typing import Any, cast
 
 
 def validate_checkpoint_state(
@@ -66,12 +66,17 @@ def validate_checkpoint_state(
     # Check optional fields (if present)
     for field, expected_types in optional_fields.items():
         if field in checkpoint_state:
-            if not isinstance(checkpoint_state[field], expected_types):
+            # Cast expected_types to proper type for isinstance check
+            types_tuple: tuple[type, ...] | type = cast(
+                tuple[type, ...] | type, expected_types
+            )
+
+            if not isinstance(checkpoint_state[field], types_tuple):
                 actual_type = type(checkpoint_state[field]).__name__
                 if isinstance(expected_types, tuple):
-                    expected_names = " or ".join(t.__name__ for t in expected_types)
+                    expected_names = " or ".join(t.__name__ for t in expected_types)  # type: ignore
                 else:
-                    expected_names = expected_types.__name__
+                    expected_names = expected_types.__name__  # type: ignore
                 errors.append(
                     f"Invalid type for field '{field}': "
                     f"expected {expected_names}, got {actual_type}"

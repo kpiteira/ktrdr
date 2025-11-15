@@ -662,8 +662,10 @@ class TrainingService(ServiceOrchestrator[None]):
         from ktrdr.checkpoint.service import CheckpointService
         from ktrdr.training.checkpoint_validator import validate_checkpoint_state
 
-        # Load checkpoint
-        checkpoint_service = CheckpointService()
+        # Load checkpoint (use injected service if available, otherwise create new)
+        checkpoint_service = (
+            getattr(self, "checkpoint_service", None) or CheckpointService()
+        )
         checkpoint_state = checkpoint_service.load_checkpoint(original_operation_id)
 
         if checkpoint_state is None:

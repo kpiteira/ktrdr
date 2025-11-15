@@ -610,7 +610,12 @@ class ModelTrainer:
                         )
 
                         # Prepare checkpoint data for CheckpointService
-                        checkpoint_data = {
+                        artifacts: dict[str, bytes] = {
+                            "model.pt": checkpoint_state["model_state_dict"],
+                            "optimizer.pt": checkpoint_state["optimizer_state_dict"],
+                        }
+
+                        checkpoint_data: dict[str, Any] = {
                             "checkpoint_id": f"{self.operation_id}_epoch_{epoch}",
                             "checkpoint_type": "epoch_snapshot",
                             "metadata": {
@@ -621,27 +626,20 @@ class ModelTrainer:
                                 "val_accuracy": val_accuracy,
                             },
                             "state": checkpoint_state,
-                            "artifacts": {
-                                "model.pt": checkpoint_state["model_state_dict"],
-                                "optimizer.pt": checkpoint_state[
-                                    "optimizer_state_dict"
-                                ],
-                            },
+                            "artifacts": artifacts,
                         }
 
                         # Add scheduler artifact if exists
                         if checkpoint_state.get("scheduler_state_dict"):
-                            checkpoint_data["artifacts"]["scheduler.pt"] = (
-                                checkpoint_state["scheduler_state_dict"]
-                            )
+                            artifacts["scheduler.pt"] = checkpoint_state[
+                                "scheduler_state_dict"
+                            ]
 
                         # Add best model artifact if exists
                         if checkpoint_state.get("best_model_state"):
-                            artifacts_dict = checkpoint_data["artifacts"]
-                            if isinstance(artifacts_dict, dict):
-                                artifacts_dict["best_model.pt"] = checkpoint_state[
-                                    "best_model_state"
-                                ]
+                            artifacts["best_model.pt"] = checkpoint_state[
+                                "best_model_state"
+                            ]
 
                         # Save checkpoint via CheckpointService
                         self.checkpoint_service.save_checkpoint(
@@ -1067,14 +1065,14 @@ class ModelTrainer:
         else:
             return optim.Adam(model.parameters(), lr=learning_rate)
 
-    def _create_scheduler(self, optimizer: optim.Optimizer) -> Optional[object]:
+    def _create_scheduler(self, optimizer: optim.Optimizer) -> Any:
         """Create learning rate scheduler.
 
         Args:
             optimizer: PyTorch optimizer
 
         Returns:
-            Scheduler instance or None
+            Scheduler instance or None (Any type due to incomplete PyTorch type stubs)
         """
         scheduler_config = self.config.get("lr_scheduler", None)
         if not scheduler_config:
@@ -1190,7 +1188,7 @@ class ModelTrainer:
         current_epoch: int,
         model: nn.Module,
         optimizer: optim.Optimizer,
-        scheduler: optim.lr_scheduler._LRScheduler | None = None,
+        scheduler: Any = None,
         early_stopping: EarlyStopping | None = None,
     ) -> dict[str, Any]:
         """
@@ -1299,7 +1297,7 @@ class ModelTrainer:
         checkpoint_state: dict[str, Any],
         model: nn.Module,
         optimizer: optim.Optimizer,
-        scheduler: optim.lr_scheduler._LRScheduler | None = None,
+        scheduler: Any = None,
         early_stopping: EarlyStopping | None = None,
     ) -> int:
         """

@@ -154,11 +154,7 @@ def test_should_not_checkpoint_when_time_insufficient(checkpoint_policy):
     assert "not enough time" in reason.lower() or "elapsed" in reason.lower()
 
 
-@patch("ktrdr.training.model_trainer.CheckpointService")
-@patch("ktrdr.training.model_trainer.CheckpointDecisionEngine")
 def test_training_loop_creates_checkpoints_at_correct_intervals(
-    mock_decision_engine_class,
-    mock_service_class,
     model_trainer_with_checkpoint,
     checkpoint_policy,
 ):
@@ -172,10 +168,9 @@ def test_training_loop_creates_checkpoints_at_correct_intervals(
     """
     # Setup mocks
     mock_service = Mock(spec=CheckpointService)
-    mock_service_class.return_value = mock_service
 
+    # Mock CheckpointDecisionEngine imported inside the training loop
     mock_engine = Mock(spec=CheckpointDecisionEngine)
-    mock_decision_engine_class.return_value = mock_engine
 
     # should_checkpoint returns True at epochs 5, 10, 15, 20 (forced boundaries)
     def should_checkpoint_side_effect(
@@ -216,15 +211,12 @@ def test_training_loop_creates_checkpoints_at_correct_intervals(
     # Note: Implementation should call save_checkpoint 4 times
     assert mock_service.save_checkpoint.call_count == 4
 
-    # Verify operation_id passed to checkpoint service
+    # Verify operation_id passed to checkpoint service (as keyword arg)
     for call in mock_service.save_checkpoint.call_args_list:
-        assert call[0][0] == "test_op_001"  # operation_id
+        assert call.kwargs["operation_id"] == "test_op_001"
 
 
-@patch("ktrdr.training.model_trainer.CheckpointService")
-def test_training_continues_when_checkpoint_fails(
-    mock_service_class, model_trainer_with_checkpoint
-):
+def test_training_continues_when_checkpoint_fails(model_trainer_with_checkpoint):
     """
     Test that training continues even if checkpoint fails.
 
@@ -236,7 +228,6 @@ def test_training_continues_when_checkpoint_fails(
     # Setup mock to raise exception
     mock_service = Mock(spec=CheckpointService)
     mock_service.save_checkpoint.side_effect = Exception("Disk full")
-    mock_service_class.return_value = mock_service
 
     # Create simple training data
     X_train = torch.randn(100, 10)
@@ -269,8 +260,7 @@ def test_training_continues_when_checkpoint_fails(
     assert len(result["history"]) > 0
 
 
-@patch("ktrdr.training.model_trainer.CheckpointService")
-def test_checkpoint_logs_events(mock_service_class, model_trainer_with_checkpoint):
+def test_checkpoint_logs_events(model_trainer_with_checkpoint):
     """
     Test that checkpoint events are logged.
 
@@ -281,7 +271,6 @@ def test_checkpoint_logs_events(mock_service_class, model_trainer_with_checkpoin
     """
     mock_service = Mock(spec=CheckpointService)
     mock_service.save_checkpoint.return_value = "checkpoint_001"
-    mock_service_class.return_value = mock_service
 
     X_train = torch.randn(100, 10)
     y_train = torch.randint(0, 3, (100,))
@@ -299,21 +288,21 @@ def test_checkpoint_logs_events(mock_service_class, model_trainer_with_checkpoin
     )
     model_trainer_with_checkpoint.operation_id = "test_op_003"
 
-    # Run training with logging capture
-    with patch("ktrdr.training.model_trainer.logger") as mock_logger:
+    # Run training with print capture
+    with patch("builtins.print") as mock_print:
         model_trainer_with_checkpoint.train(
             model=model,
             X_train=X_train,
             y_train=y_train,
         )
 
-        # Verify checkpoint events were logged
-        # Implementation should log checkpoint saves
-        log_calls = [str(call) for call in mock_logger.info.call_args_list]
-        checkpoint_logs = [c for c in log_calls if "checkpoint" in c.lower()]
+        # Verify checkpoint events were printed
+        # Implementation should print checkpoint saves
+        print_calls = [str(call) for call in mock_print.call_args_list]
+        checkpoint_prints = [c for c in print_calls if "checkpoint" in c.lower()]
 
-        # Should have at least one checkpoint log
-        assert len(checkpoint_logs) > 0
+        # Should have at least one checkpoint print
+        assert len(checkpoint_prints) > 0
 
 
 def test_checkpoint_state_includes_operation_context():
