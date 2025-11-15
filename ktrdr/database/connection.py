@@ -8,10 +8,9 @@ for database operations.
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
-import yaml
+from typing import Optional
 
-import psycopg2
+import yaml
 from psycopg2.pool import SimpleConnectionPool
 
 from ktrdr.logging import get_logger
@@ -74,7 +73,7 @@ class DatabaseConfig:
         if not yaml_file.exists():
             raise FileNotFoundError(f"Config file not found: {yaml_path}")
 
-        with open(yaml_file, "r") as f:
+        with open(yaml_file) as f:
             config_data = yaml.safe_load(f)
 
         db_config = config_data.get("database", {})

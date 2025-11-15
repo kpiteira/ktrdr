@@ -4,10 +4,10 @@ Unit tests for database connection utilities.
 Tests database connection management, connection pooling, and error handling.
 """
 
-import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import MagicMock, patch
+
 import psycopg2
-from psycopg2.pool import SimpleConnectionPool
+import pytest
 
 from ktrdr.database.connection import (
     DatabaseConfig,
@@ -220,6 +220,7 @@ class TestDatabaseHelpers:
         """Test get_database_config returns singleton instance."""
         # Reset singleton to force fresh load
         import ktrdr.database.connection as db_module
+
         db_module._database_config = None
 
         config1 = get_database_config()

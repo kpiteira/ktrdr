@@ -4,16 +4,12 @@ Unit tests for startup recovery logic.
 Tests automatic recovery of interrupted operations on API restart.
 """
 
-import pytest
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from ktrdr.api.services.operations_service import OperationsService
-from ktrdr.api.models.operations import (
-    OperationInfo,
-    OperationStatus,
-    OperationType,
-)
 
 
 class TestStartupRecovery:
@@ -98,7 +94,9 @@ class TestStartupRecovery:
 
         # Verify UPDATE query to mark as FAILED
         update_calls = [
-            call for call in mock_cursor.execute.call_args_list if "UPDATE" in call[0][0]
+            call
+            for call in mock_cursor.execute.call_args_list
+            if "UPDATE" in call[0][0]
         ]
         assert len(update_calls) == 3  # One UPDATE per operation
 
@@ -152,7 +150,7 @@ class TestStartupRecovery:
                 datetime(2025, 1, 17, 10, 1, 0, tzinfo=timezone.utc),
                 None,
                 datetime(2025, 1, 17, 10, 5, 0, tzinfo=timezone.utc),
-                '{}',
+                "{}",
                 None,
                 None,
             ),
@@ -162,7 +160,9 @@ class TestStartupRecovery:
 
         # Verify UPDATE includes completed_at timestamp
         update_call = next(
-            call for call in mock_cursor.execute.call_args_list if "UPDATE" in call[0][0]
+            call
+            for call in mock_cursor.execute.call_args_list
+            if "UPDATE" in call[0][0]
         )
         sql = update_call[0][0]
         assert "completed_at = %s" in sql or "completed_at = NOW()" in sql
@@ -184,7 +184,7 @@ class TestStartupRecovery:
                 datetime(2025, 1, 17, 10, 1, 0, tzinfo=timezone.utc),
                 None,
                 datetime(2025, 1, 17, 10, 5, 0, tzinfo=timezone.utc),
-                '{}',
+                "{}",
                 None,
                 None,
             ),
@@ -235,7 +235,7 @@ class TestStartupRecovery:
                 datetime(2025, 1, 17, 10, 1, 0, tzinfo=timezone.utc),
                 None,
                 datetime(2025, 1, 17, 10, 5, 0, tzinfo=timezone.utc),
-                '{}',
+                "{}",
                 None,
                 None,
             ),
@@ -247,7 +247,7 @@ class TestStartupRecovery:
                 datetime(2025, 1, 17, 11, 1, 0, tzinfo=timezone.utc),
                 None,
                 datetime(2025, 1, 17, 11, 5, 0, tzinfo=timezone.utc),
-                '{}',
+                "{}",
                 None,
                 None,
             ),
@@ -281,10 +281,10 @@ class TestStartupEventIntegration:
             mock_get_operations_service.return_value = mock_operations_service
 
             # Import here to avoid early initialization
-            from ktrdr.api.startup import lifespan
-
             # Create a mock FastAPI app
             from fastapi import FastAPI
+
+            from ktrdr.api.startup import lifespan
 
             app = FastAPI()
 
@@ -308,8 +308,9 @@ class TestStartupEventIntegration:
             mock_get_operations_service.return_value = mock_operations_service
 
             with patch("ktrdr.api.startup.logger") as mock_logger:
-                from ktrdr.api.startup import lifespan
                 from fastapi import FastAPI
+
+                from ktrdr.api.startup import lifespan
 
                 app = FastAPI()
 

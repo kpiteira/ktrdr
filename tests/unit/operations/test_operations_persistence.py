@@ -4,19 +4,20 @@ Unit tests for OperationsService persistence methods.
 Tests saving and loading operations from PostgreSQL database.
 """
 
-import pytest
-from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch, call
 import json
+from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
 
-from ktrdr.api.services.operations_service import OperationsService
+import pytest
+
 from ktrdr.api.models.operations import (
     OperationInfo,
+    OperationMetadata,
+    OperationProgress,
     OperationStatus,
     OperationType,
-    OperationProgress,
-    OperationMetadata,
 )
+from ktrdr.api.services.operations_service import OperationsService
 
 
 class TestOperationsServicePersistence:
@@ -190,7 +191,9 @@ class TestOperationsServicePersistence:
                 "Out of memory",
                 "checkpoint_001",  # checkpoint_id
                 52000000,  # checkpoint size
-                datetime(2025, 1, 17, 10, 9, 0, tzinfo=timezone.utc),  # checkpoint created
+                datetime(
+                    2025, 1, 17, 10, 9, 0, tzinfo=timezone.utc
+                ),  # checkpoint created
             ),
         ]
 

@@ -1182,8 +1182,9 @@ class OperationsService:
         Args:
             operation: Operation to persist
         """
-        from ktrdr.database.connection import get_database_connection
         import json
+
+        from ktrdr.database.connection import get_database_connection
 
         try:
             db = get_database_connection()
@@ -1228,7 +1229,9 @@ class OperationsService:
                         ),
                     )
                     conn.commit()
-                    logger.debug(f"Persisted operation to database: {operation.operation_id}")
+                    logger.debug(
+                        f"Persisted operation to database: {operation.operation_id}"
+                    )
         except Exception as e:
             logger.error(f"Failed to persist operation {operation.operation_id}: {e}")
             # Don't raise - graceful degradation
@@ -1245,8 +1248,9 @@ class OperationsService:
         Returns:
             List of OperationInfo objects
         """
-        from ktrdr.database.connection import get_database_connection
         import json
+
+        from ktrdr.database.connection import get_database_connection
 
         try:
             db = get_database_connection()
@@ -1279,9 +1283,7 @@ class OperationsService:
 
                     operations = []
                     for row in rows:
-                        metadata = (
-                            json.loads(row[7]) if row[7] else {}
-                        )  # metadata_json
+                        metadata = json.loads(row[7]) if row[7] else {}  # metadata_json
                         result_summary = (
                             json.loads(row[8]) if row[8] else None
                         )  # result_summary_json
@@ -1315,8 +1317,9 @@ class OperationsService:
         Returns:
             List of OperationInfo objects with checkpoint attributes added
         """
-        from ktrdr.database.connection import get_database_connection
         import json
+
+        from ktrdr.database.connection import get_database_connection
 
         try:
             db = get_database_connection()
@@ -1425,9 +1428,7 @@ class OperationsService:
                                 operation_id,
                             ),
                         )
-                        logger.debug(
-                            f"Marked operation as FAILED: {operation_id}"
-                        )
+                        logger.debug(f"Marked operation as FAILED: {operation_id}")
 
                     conn.commit()
 
