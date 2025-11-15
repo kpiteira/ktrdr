@@ -150,6 +150,9 @@ class OperationsService:
                 # Add to registry
                 self._operations[operation_id] = operation
 
+                # TASK 3.1: Persist to database
+                await self.persist_operation(operation)
+
                 logger.info(
                     f"Created operation: {operation_id} (type: {operation_type})"
                 )
@@ -304,6 +307,9 @@ class OperationsService:
                 operation.result_summary = result_summary
                 operation.progress.percentage = 100.0
 
+            # TASK 3.1: Persist to database
+            await self.persist_operation(operation)
+
             # Clean up task reference
             if operation_id in self._operation_tasks:
                 del self._operation_tasks[operation_id]
@@ -340,6 +346,9 @@ class OperationsService:
                 operation.status = OperationStatus.FAILED
                 operation.completed_at = datetime.now(timezone.utc)
                 operation.error_message = error_message
+
+            # TASK 3.1: Persist to database
+            await self.persist_operation(operation)
 
             # Clean up task reference
             if operation_id in self._operation_tasks:
@@ -1158,6 +1167,282 @@ class OperationsService:
             ValueError: If metrics_data is invalid
         """
         await self.add_operation_metrics(operation_id, metrics_data)
+
+    # ========================================================================
+    # DATABASE PERSISTENCE (TASK 3.1)
+    # ========================================================================
+
+    async def persist_operation(self, operation: OperationInfo) -> None:
+        """
+        Persist operation to PostgreSQL database.
+
+        Uses UPSERT to insert new operations or update existing ones.
+        Handles errors gracefully (logs and continues).
+
+        Args:
+            operation: Operation to persist
+        """
+        from ktrdr.database.connection import get_database_connection
+        import json
+
+        try:
+            db = get_database_connection()
+            with db as conn:
+                with conn.cursor() as cursor:
+                    # Serialize metadata and result_summary to JSON
+                    metadata_json = json.dumps(operation.metadata.model_dump())
+                    result_summary_json = (
+                        json.dumps(operation.result_summary)
+                        if operation.result_summary
+                        else None
+                    )
+
+                    # UPSERT operation
+                    cursor.execute(
+                        """
+                        INSERT INTO operations (
+                            operation_id, operation_type, status,
+                            created_at, started_at, completed_at, last_updated,
+                            metadata_json, result_summary_json, error_message
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (operation_id) DO UPDATE
+                        SET status = EXCLUDED.status,
+                            started_at = EXCLUDED.started_at,
+                            completed_at = EXCLUDED.completed_at,
+                            last_updated = EXCLUDED.last_updated,
+                            metadata_json = EXCLUDED.metadata_json,
+                            result_summary_json = EXCLUDED.result_summary_json,
+                            error_message = EXCLUDED.error_message
+                        """,
+                        (
+                            operation.operation_id,
+                            operation.operation_type.value,
+                            operation.status.value,
+                            operation.created_at,
+                            operation.started_at,
+                            operation.completed_at,
+                            datetime.now(timezone.utc),  # last_updated
+                            metadata_json,
+                            result_summary_json,
+                            operation.error_message,
+                        ),
+                    )
+                    conn.commit()
+                    logger.debug(f"Persisted operation to database: {operation.operation_id}")
+        except Exception as e:
+            logger.error(f"Failed to persist operation {operation.operation_id}: {e}")
+            # Don't raise - graceful degradation
+
+    async def load_operations(
+        self, status: Optional[OperationStatus] = None
+    ) -> list[OperationInfo]:
+        """
+        Load operations from PostgreSQL database.
+
+        Args:
+            status: Optional status filter
+
+        Returns:
+            List of OperationInfo objects
+        """
+        from ktrdr.database.connection import get_database_connection
+        import json
+
+        try:
+            db = get_database_connection()
+            with db as conn:
+                with conn.cursor() as cursor:
+                    if status:
+                        cursor.execute(
+                            """
+                            SELECT operation_id, operation_type, status,
+                                   created_at, started_at, completed_at, last_updated,
+                                   metadata_json, result_summary_json, error_message
+                            FROM operations
+                            WHERE status = %s
+                            ORDER BY created_at DESC
+                            """,
+                            (status.value,),
+                        )
+                    else:
+                        cursor.execute(
+                            """
+                            SELECT operation_id, operation_type, status,
+                                   created_at, started_at, completed_at, last_updated,
+                                   metadata_json, result_summary_json, error_message
+                            FROM operations
+                            ORDER BY created_at DESC
+                            """
+                        )
+
+                    rows = cursor.fetchall()
+
+                    operations = []
+                    for row in rows:
+                        metadata = (
+                            json.loads(row[7]) if row[7] else {}
+                        )  # metadata_json
+                        result_summary = (
+                            json.loads(row[8]) if row[8] else None
+                        )  # result_summary_json
+
+                        operation = OperationInfo(
+                            operation_id=row[0],
+                            operation_type=OperationType(row[1]),
+                            status=OperationStatus(row[2]),
+                            created_at=row[3],
+                            started_at=row[4],
+                            completed_at=row[5],
+                            metadata=OperationMetadata(**metadata),
+                            result_summary=result_summary,
+                            error_message=row[9],
+                        )
+                        operations.append(operation)
+
+                    logger.debug(f"Loaded {len(operations)} operations from database")
+                    return operations
+
+        except Exception as e:
+            logger.error(f"Failed to load operations from database: {e}")
+            return []
+
+    async def load_operations_with_checkpoints(self) -> list[OperationInfo]:
+        """
+        Load operations with checkpoint metadata from database.
+
+        Performs LEFT JOIN with operation_checkpoints to include checkpoint info.
+
+        Returns:
+            List of OperationInfo objects with checkpoint attributes added
+        """
+        from ktrdr.database.connection import get_database_connection
+        import json
+
+        try:
+            db = get_database_connection()
+            with db as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        SELECT
+                            o.operation_id, o.operation_type, o.status,
+                            o.created_at, o.started_at, o.completed_at, o.last_updated,
+                            o.metadata_json, o.result_summary_json, o.error_message,
+                            c.checkpoint_id, c.artifacts_size_bytes, c.created_at
+                        FROM operations o
+                        LEFT JOIN operation_checkpoints c ON o.operation_id = c.operation_id
+                        ORDER BY o.created_at DESC
+                        """
+                    )
+
+                    rows = cursor.fetchall()
+
+                    operations = []
+                    for row in rows:
+                        metadata = json.loads(row[7]) if row[7] else {}
+                        result_summary = json.loads(row[8]) if row[8] else None
+
+                        operation = OperationInfo(
+                            operation_id=row[0],
+                            operation_type=OperationType(row[1]),
+                            status=OperationStatus(row[2]),
+                            created_at=row[3],
+                            started_at=row[4],
+                            completed_at=row[5],
+                            metadata=OperationMetadata(**metadata),
+                            result_summary=result_summary,
+                            error_message=row[9],
+                        )
+
+                        # Add checkpoint attributes dynamically
+                        operation.checkpoint_id = row[10]  # type: ignore
+                        operation.checkpoint_size_bytes = row[11]  # type: ignore
+                        operation.checkpoint_created_at = row[12]  # type: ignore
+
+                        operations.append(operation)
+
+                    logger.debug(
+                        f"Loaded {len(operations)} operations with checkpoint metadata"
+                    )
+                    return operations
+
+        except Exception as e:
+            logger.error(
+                f"Failed to load operations with checkpoints from database: {e}"
+            )
+            return []
+
+    async def recover_interrupted_operations(self) -> int:
+        """
+        Mark all RUNNING operations as FAILED on API startup.
+
+        This handles the primary use case: API crashes/restarts.
+        RUNNING operations are orphaned and cannot be resumed until marked FAILED.
+
+        Returns:
+            Number of operations recovered
+        """
+        from ktrdr.database.connection import get_database_connection
+
+        try:
+            db = get_database_connection()
+            with db as conn:
+                with conn.cursor() as cursor:
+                    # Find all RUNNING operations
+                    cursor.execute(
+                        """
+                        SELECT operation_id, operation_type, status,
+                               created_at, started_at, completed_at, last_updated,
+                               metadata_json, result_summary_json, error_message
+                        FROM operations
+                        WHERE status = %s
+                        """,
+                        ("RUNNING",),
+                    )
+
+                    rows = cursor.fetchall()
+                    recovered_count = len(rows)
+
+                    if recovered_count == 0:
+                        logger.info("Startup recovery: No interrupted operations found")
+                        return 0
+
+                    # Mark each as FAILED
+                    for row in rows:
+                        operation_id = row[0]
+                        cursor.execute(
+                            """
+                            UPDATE operations
+                            SET status = %s,
+                                error_message = %s,
+                                completed_at = NOW(),
+                                last_updated = NOW()
+                            WHERE operation_id = %s
+                            """,
+                            (
+                                "FAILED",
+                                "Operation interrupted by API restart",
+                                operation_id,
+                            ),
+                        )
+                        logger.debug(
+                            f"Marked operation as FAILED: {operation_id}"
+                        )
+
+                    conn.commit()
+
+                    logger.info(
+                        f"Startup recovery: {recovered_count} operations marked as FAILED"
+                    )
+                    return recovered_count
+
+        except Exception as e:
+            logger.error(f"Failed to recover interrupted operations: {e}")
+            try:
+                conn.rollback()
+            except:
+                pass
+            return 0
 
 
 # Global operations service instance
