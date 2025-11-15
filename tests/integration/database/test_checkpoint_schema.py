@@ -76,11 +76,13 @@ def test_checkpoint_migration_recorded(db_connection):
     """
     cursor = db_connection.cursor()
 
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT version, description, applied_at, applied_by
         FROM schema_version
         WHERE version = 1;
-    """)
+    """
+    )
     result = cursor.fetchone()
 
     assert result is not None, (
@@ -91,9 +93,9 @@ def test_checkpoint_migration_recorded(db_connection):
     version, description, applied_at, applied_by = result
 
     assert version == 1
-    assert "checkpoint" in description.lower(), (
-        f"Migration description should mention 'checkpoint', got: {description}"
-    )
+    assert (
+        "checkpoint" in description.lower()
+    ), f"Migration description should mention 'checkpoint', got: {description}"
     assert applied_at is not None
     assert applied_by is not None
 
@@ -113,12 +115,14 @@ def test_operations_table_exists(db_connection):
     cursor = db_connection.cursor()
 
     # Check if operations table exists
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT EXISTS (
             SELECT FROM information_schema.tables
             WHERE table_name = 'operations'
         );
-    """)
+    """
+    )
     table_exists = cursor.fetchone()[0]
 
     assert table_exists, (
@@ -127,12 +131,14 @@ def test_operations_table_exists(db_connection):
     )
 
     # Verify table structure
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT column_name, data_type, is_nullable
         FROM information_schema.columns
         WHERE table_name = 'operations'
         ORDER BY ordinal_position;
-    """)
+    """
+    )
     columns = cursor.fetchall()
 
     # Expected columns (from architecture document)
@@ -152,36 +158,40 @@ def test_operations_table_exists(db_connection):
     actual_columns = {col[0]: (col[1], col[2]) for col in columns}
 
     for col_name, (col_type, nullable) in expected_columns.items():
-        assert col_name in actual_columns, (
-            f"Column '{col_name}' missing from operations table"
-        )
+        assert (
+            col_name in actual_columns
+        ), f"Column '{col_name}' missing from operations table"
         actual_type, actual_nullable = actual_columns[col_name]
-        assert actual_type.startswith(col_type), (
-            f"Column '{col_name}' has type '{actual_type}', expected '{col_type}'"
-        )
-        assert actual_nullable == nullable, (
-            f"Column '{col_name}' nullable={actual_nullable}, expected {nullable}"
-        )
+        assert actual_type.startswith(
+            col_type
+        ), f"Column '{col_name}' has type '{actual_type}', expected '{col_type}'"
+        assert (
+            actual_nullable == nullable
+        ), f"Column '{col_name}' nullable={actual_nullable}, expected {nullable}"
 
     # Verify primary key
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT a.attname
         FROM pg_index i
         JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
         WHERE i.indrelid = 'operations'::regclass AND i.indisprimary;
-    """)
+    """
+    )
     pk_columns = [row[0] for row in cursor.fetchall()]
 
-    assert pk_columns == ["operation_id"], (
-        f"Primary key should be operation_id, got: {pk_columns}"
-    )
+    assert pk_columns == [
+        "operation_id"
+    ], f"Primary key should be operation_id, got: {pk_columns}"
 
     # Verify indexes exist (idx_operations_status, idx_operations_type, etc.)
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT indexname
         FROM pg_indexes
         WHERE tablename = 'operations';
-    """)
+    """
+    )
     indexes = [row[0] for row in cursor.fetchall()]
 
     required_indexes = [
@@ -192,9 +202,7 @@ def test_operations_table_exists(db_connection):
     ]
 
     for idx_name in required_indexes:
-        assert idx_name in indexes, (
-            f"Index '{idx_name}' missing from operations table"
-        )
+        assert idx_name in indexes, f"Index '{idx_name}' missing from operations table"
 
     cursor.close()
 
@@ -212,12 +220,14 @@ def test_operation_checkpoints_table_exists(db_connection):
     cursor = db_connection.cursor()
 
     # Check if operation_checkpoints table exists
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT EXISTS (
             SELECT FROM information_schema.tables
             WHERE table_name = 'operation_checkpoints'
         );
-    """)
+    """
+    )
     table_exists = cursor.fetchone()[0]
 
     assert table_exists, (
@@ -226,12 +236,14 @@ def test_operation_checkpoints_table_exists(db_connection):
     )
 
     # Verify table structure
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT column_name, data_type, is_nullable
         FROM information_schema.columns
         WHERE table_name = 'operation_checkpoints'
         ORDER BY ordinal_position;
-    """)
+    """
+    )
     columns = cursor.fetchall()
 
     # Expected columns (from architecture document)
@@ -250,32 +262,35 @@ def test_operation_checkpoints_table_exists(db_connection):
     actual_columns = {col[0]: (col[1], col[2]) for col in columns}
 
     for col_name, (col_type, nullable) in expected_columns.items():
-        assert col_name in actual_columns, (
-            f"Column '{col_name}' missing from operation_checkpoints table"
-        )
+        assert (
+            col_name in actual_columns
+        ), f"Column '{col_name}' missing from operation_checkpoints table"
         actual_type, actual_nullable = actual_columns[col_name]
-        assert actual_type.startswith(col_type), (
-            f"Column '{col_name}' has type '{actual_type}', expected '{col_type}'"
-        )
-        assert actual_nullable == nullable, (
-            f"Column '{col_name}' nullable={actual_nullable}, expected {nullable}"
-        )
+        assert actual_type.startswith(
+            col_type
+        ), f"Column '{col_name}' has type '{actual_type}', expected '{col_type}'"
+        assert (
+            actual_nullable == nullable
+        ), f"Column '{col_name}' nullable={actual_nullable}, expected {nullable}"
 
     # Verify primary key is operation_id (ONE checkpoint per operation)
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT a.attname
         FROM pg_index i
         JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
         WHERE i.indrelid = 'operation_checkpoints'::regclass AND i.indisprimary;
-    """)
+    """
+    )
     pk_columns = [row[0] for row in cursor.fetchall()]
 
-    assert pk_columns == ["operation_id"], (
-        f"Primary key should be operation_id (ONE checkpoint per operation), got: {pk_columns}"
-    )
+    assert pk_columns == [
+        "operation_id"
+    ], f"Primary key should be operation_id (ONE checkpoint per operation), got: {pk_columns}"
 
     # Verify foreign key constraint to operations table
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT
             tc.constraint_name,
             tc.table_name,
@@ -294,34 +309,41 @@ def test_operation_checkpoints_table_exists(db_connection):
             ON tc.constraint_name = rc.constraint_name
         WHERE tc.constraint_type = 'FOREIGN KEY'
             AND tc.table_name = 'operation_checkpoints';
-    """)
+    """
+    )
     fk_constraints = cursor.fetchall()
 
-    assert len(fk_constraints) > 0, (
-        "No foreign key constraints found on operation_checkpoints table"
-    )
+    assert (
+        len(fk_constraints) > 0
+    ), "No foreign key constraints found on operation_checkpoints table"
 
     # Verify FK references operations table with CASCADE delete
     fk_to_operations = [
-        fk for fk in fk_constraints
-        if fk[3] == "operations"  # foreign_table_name
+        fk for fk in fk_constraints if fk[3] == "operations"  # foreign_table_name
     ]
 
-    assert len(fk_to_operations) == 1, (
-        f"Expected 1 foreign key to operations table, found {len(fk_to_operations)}"
-    )
+    assert (
+        len(fk_to_operations) == 1
+    ), f"Expected 1 foreign key to operations table, found {len(fk_to_operations)}"
 
-    constraint_name, table_name, column_name, foreign_table, foreign_column, delete_rule = fk_to_operations[0]
+    (
+        constraint_name,
+        table_name,
+        column_name,
+        foreign_table,
+        foreign_column,
+        delete_rule,
+    ) = fk_to_operations[0]
 
-    assert column_name == "operation_id", (
-        f"FK column should be operation_id, got: {column_name}"
-    )
-    assert foreign_column == "operation_id", (
-        f"FK should reference operations.operation_id, got: {foreign_table}.{foreign_column}"
-    )
-    assert delete_rule == "CASCADE", (
-        f"FK delete rule should be CASCADE, got: {delete_rule}"
-    )
+    assert (
+        column_name == "operation_id"
+    ), f"FK column should be operation_id, got: {column_name}"
+    assert (
+        foreign_column == "operation_id"
+    ), f"FK should reference operations.operation_id, got: {foreign_table}.{foreign_column}"
+    assert (
+        delete_rule == "CASCADE"
+    ), f"FK delete rule should be CASCADE, got: {delete_rule}"
 
     cursor.close()
 
@@ -337,12 +359,14 @@ def test_cleanup_checkpoint_trigger_function_exists(db_connection):
     cursor = db_connection.cursor()
 
     # Check if trigger function exists
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT EXISTS (
             SELECT FROM pg_proc
             WHERE proname = 'cleanup_checkpoint_on_completion'
         );
-    """)
+    """
+    )
     function_exists = cursor.fetchone()[0]
 
     assert function_exists, (
@@ -351,19 +375,21 @@ def test_cleanup_checkpoint_trigger_function_exists(db_connection):
     )
 
     # Verify it's a trigger function (returns TRIGGER type)
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT p.proname, t.typname as return_type
         FROM pg_proc p
         JOIN pg_type t ON p.prorettype = t.oid
         WHERE p.proname = 'cleanup_checkpoint_on_completion';
-    """)
+    """
+    )
     result = cursor.fetchone()
 
     assert result is not None
     function_name, return_type = result
-    assert return_type == "trigger", (
-        f"cleanup_checkpoint_on_completion should return TRIGGER, got: {return_type}"
-    )
+    assert (
+        return_type == "trigger"
+    ), f"cleanup_checkpoint_on_completion should return TRIGGER, got: {return_type}"
 
     cursor.close()
 
@@ -380,7 +406,8 @@ def test_cleanup_checkpoint_trigger_exists(db_connection):
     cursor = db_connection.cursor()
 
     # Check if trigger exists
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT
             tgname,
             tgtype,
@@ -389,7 +416,8 @@ def test_cleanup_checkpoint_trigger_exists(db_connection):
         JOIN pg_proc ON pg_trigger.tgfoid = pg_proc.oid
         WHERE tgname = 'trigger_cleanup_checkpoint'
             AND tgrelid = 'operations'::regclass;
-    """)
+    """
+    )
     result = cursor.fetchone()
 
     assert result is not None, (
@@ -400,9 +428,9 @@ def test_cleanup_checkpoint_trigger_exists(db_connection):
     trigger_name, trigger_type, trigger_function = result
 
     assert trigger_name == "trigger_cleanup_checkpoint"
-    assert trigger_function == "cleanup_checkpoint_on_completion", (
-        f"Trigger should call cleanup_checkpoint_on_completion, got: {trigger_function}"
-    )
+    assert (
+        trigger_function == "cleanup_checkpoint_on_completion"
+    ), f"Trigger should call cleanup_checkpoint_on_completion, got: {trigger_function}"
 
     # Verify trigger type (AFTER UPDATE, FOR EACH ROW)
     # pg_trigger.tgtype is a bitmap:
@@ -444,18 +472,22 @@ def test_trigger_deletes_checkpoint_on_completion(db_connection):
     test_operation_id = "test_op_trigger_001"
 
     # Insert test operation (RUNNING status)
-    cursor.execute("""
+    cursor.execute(
+        """
         INSERT INTO operations (
             operation_id,
             operation_type,
             status,
             created_at
         ) VALUES (%s, 'training', 'RUNNING', CURRENT_TIMESTAMP);
-    """, (test_operation_id,))
+    """,
+        (test_operation_id,),
+    )
     db_connection.commit()
 
     # Insert checkpoint for this operation
-    cursor.execute("""
+    cursor.execute(
+        """
         INSERT INTO operation_checkpoints (
             operation_id,
             checkpoint_id,
@@ -463,53 +495,68 @@ def test_trigger_deletes_checkpoint_on_completion(db_connection):
             created_at,
             state_json
         ) VALUES (%s, %s, 'epoch_snapshot', CURRENT_TIMESTAMP, '{}');
-    """, (test_operation_id, f"{test_operation_id}_checkpoint"))
+    """,
+        (test_operation_id, f"{test_operation_id}_checkpoint"),
+    )
     db_connection.commit()
 
     # Verify checkpoint exists
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT EXISTS (
             SELECT 1 FROM operation_checkpoints
             WHERE operation_id = %s
         );
-    """, (test_operation_id,))
+    """,
+        (test_operation_id,),
+    )
     checkpoint_exists_before = cursor.fetchone()[0]
     assert checkpoint_exists_before, "Checkpoint should exist before trigger fires"
 
     # Trigger the cleanup: Update operation status to COMPLETED
-    cursor.execute("""
+    cursor.execute(
+        """
         UPDATE operations
         SET status = 'COMPLETED', completed_at = CURRENT_TIMESTAMP
         WHERE operation_id = %s;
-    """, (test_operation_id,))
+    """,
+        (test_operation_id,),
+    )
     db_connection.commit()
 
     # Verify checkpoint was deleted by trigger
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT EXISTS (
             SELECT 1 FROM operation_checkpoints
             WHERE operation_id = %s
         );
-    """, (test_operation_id,))
+    """,
+        (test_operation_id,),
+    )
     checkpoint_exists_after = cursor.fetchone()[0]
 
-    assert not checkpoint_exists_after, (
-        "Checkpoint should be deleted by trigger when operation completes"
-    )
+    assert (
+        not checkpoint_exists_after
+    ), "Checkpoint should be deleted by trigger when operation completes"
 
     # Test that FAILED operations keep checkpoint
     test_operation_id_2 = "test_op_trigger_002"
 
-    cursor.execute("""
+    cursor.execute(
+        """
         INSERT INTO operations (
             operation_id,
             operation_type,
             status,
             created_at
         ) VALUES (%s, 'training', 'RUNNING', CURRENT_TIMESTAMP);
-    """, (test_operation_id_2,))
+    """,
+        (test_operation_id_2,),
+    )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         INSERT INTO operation_checkpoints (
             operation_id,
             checkpoint_id,
@@ -517,33 +564,43 @@ def test_trigger_deletes_checkpoint_on_completion(db_connection):
             created_at,
             state_json
         ) VALUES (%s, %s, 'epoch_snapshot', CURRENT_TIMESTAMP, '{}');
-    """, (test_operation_id_2, f"{test_operation_id_2}_checkpoint"))
+    """,
+        (test_operation_id_2, f"{test_operation_id_2}_checkpoint"),
+    )
     db_connection.commit()
 
     # Update to FAILED (should NOT delete checkpoint)
-    cursor.execute("""
+    cursor.execute(
+        """
         UPDATE operations
         SET status = 'FAILED', completed_at = CURRENT_TIMESTAMP, error_message = 'Test failure'
         WHERE operation_id = %s;
-    """, (test_operation_id_2,))
+    """,
+        (test_operation_id_2,),
+    )
     db_connection.commit()
 
     # Verify checkpoint still exists
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT EXISTS (
             SELECT 1 FROM operation_checkpoints
             WHERE operation_id = %s
         );
-    """, (test_operation_id_2,))
+    """,
+        (test_operation_id_2,),
+    )
     checkpoint_exists_failed = cursor.fetchone()[0]
 
-    assert checkpoint_exists_failed, (
-        "Checkpoint should be preserved for FAILED operations"
-    )
+    assert (
+        checkpoint_exists_failed
+    ), "Checkpoint should be preserved for FAILED operations"
 
     # Cleanup test data
-    cursor.execute("DELETE FROM operations WHERE operation_id IN (%s, %s);",
-                  (test_operation_id, test_operation_id_2))
+    cursor.execute(
+        "DELETE FROM operations WHERE operation_id IN (%s, %s);",
+        (test_operation_id, test_operation_id_2),
+    )
     db_connection.commit()
 
     cursor.close()

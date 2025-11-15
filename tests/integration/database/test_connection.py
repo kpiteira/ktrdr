@@ -11,11 +11,10 @@ Tests:
 
 import os
 import time
-from typing import Generator
+from collections.abc import Generator
 
 import psycopg2
 import pytest
-from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 
 @pytest.fixture
@@ -101,11 +100,13 @@ def test_timescaledb_extension_enabled(db_connection):
     cursor = db_connection.cursor()
 
     # Query for TimescaleDB extension
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT extname, extversion
         FROM pg_extension
         WHERE extname = 'timescaledb';
-    """)
+    """
+    )
     result = cursor.fetchone()
 
     assert result is not None, (
@@ -132,12 +133,14 @@ def test_migrations_schema_version_table_exists(db_connection):
     cursor = db_connection.cursor()
 
     # Check if schema_version table exists
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT EXISTS (
             SELECT FROM information_schema.tables
             WHERE table_name = 'schema_version'
         );
-    """)
+    """
+    )
     table_exists = cursor.fetchone()[0]
 
     assert table_exists, (
@@ -146,12 +149,14 @@ def test_migrations_schema_version_table_exists(db_connection):
     )
 
     # Verify table structure
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT column_name, data_type
         FROM information_schema.columns
         WHERE table_name = 'schema_version'
         ORDER BY ordinal_position;
-    """)
+    """
+    )
     columns = cursor.fetchall()
 
     expected_columns = {
@@ -164,7 +169,9 @@ def test_migrations_schema_version_table_exists(db_connection):
     actual_columns = {col[0]: col[1] for col in columns}
 
     for col_name, col_type in expected_columns.items():
-        assert col_name in actual_columns, f"Column '{col_name}' missing from schema_version table"
+        assert (
+            col_name in actual_columns
+        ), f"Column '{col_name}' missing from schema_version table"
         assert actual_columns[col_name].startswith(col_type.split()[0]), (
             f"Column '{col_name}' has type '{actual_columns[col_name]}', "
             f"expected '{col_type}'"
@@ -183,11 +190,13 @@ def test_initial_migration_recorded(db_connection):
     """
     cursor = db_connection.cursor()
 
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT version, description, applied_at, applied_by
         FROM schema_version
         WHERE version = 0;
-    """)
+    """
+    )
     result = cursor.fetchone()
 
     assert result is not None, (
@@ -221,31 +230,39 @@ def test_database_persistence(db_connection):
     cursor = db_connection.cursor()
 
     # Create test table
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS test_persistence (
             id SERIAL PRIMARY KEY,
             test_data TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
-    """)
+    """
+    )
     db_connection.commit()
 
     # Insert test data
     test_value = "test_checkpoint_persistence"
-    cursor.execute("""
+    cursor.execute(
+        """
         INSERT INTO test_persistence (test_data)
         VALUES (%s)
         RETURNING id;
-    """, (test_value,))
+    """,
+        (test_value,),
+    )
     inserted_id = cursor.fetchone()[0]
     db_connection.commit()
 
     # Query data back
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT id, test_data
         FROM test_persistence
         WHERE id = %s;
-    """, (inserted_id,))
+    """,
+        (inserted_id,),
+    )
     result = cursor.fetchone()
 
     assert result is not None
@@ -283,7 +300,9 @@ def test_backend_connection_string_format():
     assert "ktrdr" in database_url
 
     # For backend (inside Docker), the format should be:
-    expected_backend_url_pattern = "postgresql://ktrdr_admin:ktrdr_dev_password@postgres:5432/ktrdr"
+    expected_backend_url_pattern = (
+        "postgresql://ktrdr_admin:ktrdr_dev_password@postgres:5432/ktrdr"
+    )
 
     # Validate pattern structure (not exact match, as password may differ)
     assert "postgresql://" in expected_backend_url_pattern
@@ -303,9 +322,9 @@ def test_connection_pooling_support(db_connection):
     cursor.execute("SHOW max_connections;")
     max_connections = int(cursor.fetchone()[0])
 
-    assert max_connections >= 100, (
-        f"max_connections is {max_connections}, expected >= 100 for production use"
-    )
+    assert (
+        max_connections >= 100
+    ), f"max_connections is {max_connections}, expected >= 100 for production use"
 
     cursor.close()
 

@@ -114,7 +114,10 @@ class TestSaveCheckpoint:
             "checkpoint_id": "ckpt_001",
             "checkpoint_type": "epoch_snapshot",
             "metadata": {"epoch": 10, "loss": 0.5},
-            "state": {"model_state": "tensor_data", "optimizer_state": "optimizer_data"},
+            "state": {
+                "model_state": "tensor_data",
+                "optimizer_state": "optimizer_data",
+            },
             "artifacts_path": None,
         }
 
@@ -183,7 +186,10 @@ class TestSaveCheckpoint:
         - ✅ No partial writes on failure
         """
         operation_id = "op_training_003"
-        artifacts_data = {"model.pt": b"binary_tensor_data", "config.json": b'{"param": 1}'}
+        artifacts_data = {
+            "model.pt": b"binary_tensor_data",
+            "config.json": b'{"param": 1}',
+        }
 
         checkpoint_data = {
             "checkpoint_id": "ckpt_003",
@@ -608,4 +614,6 @@ class TestCheckpointServiceEdgeCases:
                 # Verify parameterized query used (safe)
                 call_args = mock_cursor.execute.call_args
                 assert len(call_args[0]) == 2  # SQL + params
-                assert operation_id in call_args[0][1]  # Passed as parameter, not in SQL string
+                assert (
+                    operation_id in call_args[0][1]
+                )  # Passed as parameter, not in SQL string

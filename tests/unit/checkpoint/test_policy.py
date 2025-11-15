@@ -53,7 +53,9 @@ class TestCheckpointPolicy:
         Acceptance Criteria:
         - ✅ ValueError raised for negative checkpoint_interval_seconds
         """
-        with pytest.raises(ValueError, match="checkpoint_interval_seconds must be positive"):
+        with pytest.raises(
+            ValueError, match="checkpoint_interval_seconds must be positive"
+        ):
             CheckpointPolicy(
                 checkpoint_interval_seconds=-1.0,
                 force_checkpoint_every_n=50,
@@ -68,7 +70,9 @@ class TestCheckpointPolicy:
         Acceptance Criteria:
         - ✅ ValueError raised for zero checkpoint_interval_seconds
         """
-        with pytest.raises(ValueError, match="checkpoint_interval_seconds must be positive"):
+        with pytest.raises(
+            ValueError, match="checkpoint_interval_seconds must be positive"
+        ):
             CheckpointPolicy(
                 checkpoint_interval_seconds=0.0,
                 force_checkpoint_every_n=50,
@@ -83,7 +87,9 @@ class TestCheckpointPolicy:
         Acceptance Criteria:
         - ✅ ValueError raised for negative force_checkpoint_every_n
         """
-        with pytest.raises(ValueError, match="force_checkpoint_every_n must be positive"):
+        with pytest.raises(
+            ValueError, match="force_checkpoint_every_n must be positive"
+        ):
             CheckpointPolicy(
                 checkpoint_interval_seconds=300.0,
                 force_checkpoint_every_n=-1,
@@ -98,7 +104,9 @@ class TestCheckpointPolicy:
         Acceptance Criteria:
         - ✅ ValueError raised for zero force_checkpoint_every_n
         """
-        with pytest.raises(ValueError, match="force_checkpoint_every_n must be positive"):
+        with pytest.raises(
+            ValueError, match="force_checkpoint_every_n must be positive"
+        ):
             CheckpointPolicy(
                 checkpoint_interval_seconds=300.0,
                 force_checkpoint_every_n=0,
@@ -189,7 +197,9 @@ class TestCheckpointDecisionEngine:
                 total_boundaries=boundary,
             )
 
-            assert should_checkpoint is True, f"Should checkpoint at boundary {boundary}"
+            assert (
+                should_checkpoint is True
+            ), f"Should checkpoint at boundary {boundary}"
             assert "force" in reason.lower() or "boundary" in reason.lower()
 
     def test_time_based_checkpoint_triggers(self, engine, policy):
@@ -224,7 +234,9 @@ class TestCheckpointDecisionEngine:
         - ✅ Reason indicates "not enough time"
         """
         current_time = time.time()
-        last_checkpoint_time = current_time - 100.0  # Only 100 seconds ago (< 300s interval)
+        last_checkpoint_time = (
+            current_time - 100.0
+        )  # Only 100 seconds ago (< 300s interval)
 
         # Epoch 10 (not a force boundary, not enough time)
         should_checkpoint, reason = engine.should_checkpoint(

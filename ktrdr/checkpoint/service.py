@@ -70,10 +70,18 @@ class CheckpointService:
 
         # Configure database connection
         db_config = config.get("database", {})
-        self.db_host = db_host or os.getenv("POSTGRES_HOST", db_config.get("host", "localhost"))
-        self.db_port = db_port or int(os.getenv("POSTGRES_PORT", db_config.get("port", 5432)))
-        self.db_name = db_name or os.getenv("POSTGRES_DB", db_config.get("database", "ktrdr"))
-        self.db_user = db_user or os.getenv("POSTGRES_USER", db_config.get("user", "ktrdr_admin"))
+        self.db_host = db_host or os.getenv(
+            "POSTGRES_HOST", db_config.get("host", "localhost")
+        )
+        self.db_port = db_port or int(
+            os.getenv("POSTGRES_PORT", db_config.get("port", 5432))
+        )
+        self.db_name = db_name or os.getenv(
+            "POSTGRES_DB", db_config.get("database", "ktrdr")
+        )
+        self.db_user = db_user or os.getenv(
+            "POSTGRES_USER", db_config.get("user", "ktrdr_admin")
+        )
         self.db_password = db_password or os.getenv(
             "POSTGRES_PASSWORD", db_config.get("password", "ktrdr_dev_password")
         )
@@ -125,7 +133,9 @@ class CheckpointService:
 
         return self._conn, self._cursor
 
-    def save_checkpoint(self, operation_id: str, checkpoint_data: dict[str, Any]) -> None:
+    def save_checkpoint(
+        self, operation_id: str, checkpoint_data: dict[str, Any]
+    ) -> None:
         """
         Save checkpoint (UPSERT - replaces old checkpoint for operation).
 
@@ -285,7 +295,9 @@ class CheckpointService:
             metadata = json.loads(metadata_json) if metadata_json else {}
             state = json.loads(state_json)
         except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON in checkpoint for {operation_id}: {e}") from e
+            raise ValueError(
+                f"Invalid JSON in checkpoint for {operation_id}: {e}"
+            ) from e
 
         # Load artifacts from filesystem (if present)
         artifacts = {}
@@ -296,7 +308,11 @@ class CheckpointService:
             "operation_id": operation_id,
             "checkpoint_id": checkpoint_id,
             "checkpoint_type": checkpoint_type,
-            "created_at": created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at),
+            "created_at": (
+                created_at.isoformat()
+                if hasattr(created_at, "isoformat")
+                else str(created_at)
+            ),
             "metadata": metadata,
             "state": state,
             "artifacts_path": artifacts_path,
@@ -337,7 +353,9 @@ class CheckpointService:
         cursor.execute(sql, (operation_id,))
         conn.commit()
 
-    def _write_artifacts_atomic(self, operation_id: str, artifacts: dict[str, bytes]) -> str:
+    def _write_artifacts_atomic(
+        self, operation_id: str, artifacts: dict[str, bytes]
+    ) -> str:
         """
         Write artifacts to filesystem using atomic temp → rename pattern.
 
@@ -352,7 +370,9 @@ class CheckpointService:
         artifacts_dir = self.artifacts_dir / f"artifacts_{operation_id}"
 
         # Write to temp directory first (atomic)
-        temp_dir = Path(tempfile.mkdtemp(prefix="checkpoint_temp_", dir=self.artifacts_dir))
+        temp_dir = Path(
+            tempfile.mkdtemp(prefix="checkpoint_temp_", dir=self.artifacts_dir)
+        )
 
         try:
             # Write all artifact files to temp directory
@@ -384,7 +404,7 @@ class CheckpointService:
         Returns:
             Dictionary mapping filename to binary data
         """
-        artifacts = {}
+        artifacts: dict[str, bytes] = {}
 
         if not artifacts_path.exists() or not artifacts_path.is_dir():
             return artifacts

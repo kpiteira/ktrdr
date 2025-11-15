@@ -31,13 +31,10 @@ def test_persistence_config_file_exists(config_path):
     - ✅ persistence.yaml file exists in config directory
     """
     assert config_path.exists(), (
-        f"persistence.yaml not found at {config_path}. "
-        "Ensure file has been created."
+        f"persistence.yaml not found at {config_path}. " "Ensure file has been created."
     )
 
-    assert config_path.is_file(), (
-        f"{config_path} is not a file"
-    )
+    assert config_path.is_file(), f"{config_path} is not a file"
 
 
 def test_persistence_config_valid_yaml(config_path):
@@ -72,9 +69,7 @@ def test_persistence_config_has_database_section(config_path):
     with open(config_path) as f:
         config = yaml.safe_load(f)
 
-    assert "database" in config, (
-        "persistence.yaml should have 'database' section"
-    )
+    assert "database" in config, "persistence.yaml should have 'database' section"
 
     database = config["database"]
     assert isinstance(database, dict), "'database' section should be a dictionary"
@@ -82,19 +77,19 @@ def test_persistence_config_has_database_section(config_path):
     # Required connection fields (from architecture document)
     required_fields = ["host", "port", "database", "user", "password"]
     for field in required_fields:
-        assert field in database, (
-            f"'database' section missing required field: '{field}'"
-        )
+        assert (
+            field in database
+        ), f"'database' section missing required field: '{field}'"
 
     # Connection pool configuration
-    assert "pool_size" in database or "pool" in database, (
-        "'database' section should have connection pool configuration"
-    )
+    assert (
+        "pool_size" in database or "pool" in database
+    ), "'database' section should have connection pool configuration"
 
     # Timeout configuration
-    assert "pool_timeout" in database or "timeout" in database or "pool" in database, (
-        "'database' section should have timeout configuration"
-    )
+    assert (
+        "pool_timeout" in database or "timeout" in database or "pool" in database
+    ), "'database' section should have timeout configuration"
 
 
 def test_persistence_config_has_checkpointing_section(config_path):
@@ -110,36 +105,34 @@ def test_persistence_config_has_checkpointing_section(config_path):
     with open(config_path) as f:
         config = yaml.safe_load(f)
 
-    assert "checkpointing" in config, (
-        "persistence.yaml should have 'checkpointing' section"
-    )
+    assert (
+        "checkpointing" in config
+    ), "persistence.yaml should have 'checkpointing' section"
 
     checkpointing = config["checkpointing"]
-    assert isinstance(checkpointing, dict), (
-        "'checkpointing' section should be a dictionary"
-    )
+    assert isinstance(
+        checkpointing, dict
+    ), "'checkpointing' section should be a dictionary"
 
     # Global checkpointing settings
-    assert "enabled" in checkpointing, (
-        "'checkpointing' section should have 'enabled' flag"
-    )
-    assert isinstance(checkpointing["enabled"], bool), (
-        "'enabled' should be a boolean"
-    )
+    assert (
+        "enabled" in checkpointing
+    ), "'checkpointing' section should have 'enabled' flag"
+    assert isinstance(checkpointing["enabled"], bool), "'enabled' should be a boolean"
 
-    assert "artifacts_dir" in checkpointing, (
-        "'checkpointing' section should have 'artifacts_dir' path"
-    )
+    assert (
+        "artifacts_dir" in checkpointing
+    ), "'checkpointing' section should have 'artifacts_dir' path"
 
     # Training policy
-    assert "training" in checkpointing, (
-        "'checkpointing' section should have 'training' policy"
-    )
+    assert (
+        "training" in checkpointing
+    ), "'checkpointing' section should have 'training' policy"
 
     # Backtesting policy
-    assert "backtesting" in checkpointing, (
-        "'checkpointing' section should have 'backtesting' policy"
-    )
+    assert (
+        "backtesting" in checkpointing
+    ), "'checkpointing' section should have 'backtesting' policy"
 
 
 def test_training_checkpoint_policy_structure(config_path):
@@ -162,42 +155,40 @@ def test_training_checkpoint_policy_structure(config_path):
     # Required fields (from architecture document - CheckpointPolicy dataclass)
     required_fields = [
         "checkpoint_interval_seconds",  # Time-based checkpointing
-        "force_checkpoint_every_n",      # Safety net
-        "delete_on_completion",          # Cleanup policy
-        "checkpoint_on_failure",         # Failure handling
+        "force_checkpoint_every_n",  # Safety net
+        "delete_on_completion",  # Cleanup policy
+        "checkpoint_on_failure",  # Failure handling
     ]
 
     for field in required_fields:
-        assert field in training, (
-            f"'training' policy missing required field: '{field}'"
-        )
+        assert field in training, f"'training' policy missing required field: '{field}'"
 
     # Validate types and reasonable defaults
-    assert isinstance(training["checkpoint_interval_seconds"], (int, float)), (
-        "'checkpoint_interval_seconds' should be numeric"
-    )
-    assert training["checkpoint_interval_seconds"] > 0, (
-        "'checkpoint_interval_seconds' should be positive"
-    )
+    assert isinstance(
+        training["checkpoint_interval_seconds"], (int, float)
+    ), "'checkpoint_interval_seconds' should be numeric"
+    assert (
+        training["checkpoint_interval_seconds"] > 0
+    ), "'checkpoint_interval_seconds' should be positive"
     # Architecture doc specifies 300 seconds (5 minutes) as default
-    assert training["checkpoint_interval_seconds"] >= 60, (
-        "'checkpoint_interval_seconds' should be at least 60 seconds (1 minute)"
-    )
+    assert (
+        training["checkpoint_interval_seconds"] >= 60
+    ), "'checkpoint_interval_seconds' should be at least 60 seconds (1 minute)"
 
-    assert isinstance(training["force_checkpoint_every_n"], int), (
-        "'force_checkpoint_every_n' should be an integer"
-    )
-    assert training["force_checkpoint_every_n"] > 0, (
-        "'force_checkpoint_every_n' should be positive"
-    )
+    assert isinstance(
+        training["force_checkpoint_every_n"], int
+    ), "'force_checkpoint_every_n' should be an integer"
+    assert (
+        training["force_checkpoint_every_n"] > 0
+    ), "'force_checkpoint_every_n' should be positive"
 
-    assert isinstance(training["delete_on_completion"], bool), (
-        "'delete_on_completion' should be a boolean"
-    )
+    assert isinstance(
+        training["delete_on_completion"], bool
+    ), "'delete_on_completion' should be a boolean"
 
-    assert isinstance(training["checkpoint_on_failure"], bool), (
-        "'checkpoint_on_failure' should be a boolean"
-    )
+    assert isinstance(
+        training["checkpoint_on_failure"], bool
+    ), "'checkpoint_on_failure' should be a boolean"
 
 
 def test_backtesting_checkpoint_policy_structure(config_path):
@@ -226,32 +217,32 @@ def test_backtesting_checkpoint_policy_structure(config_path):
     ]
 
     for field in required_fields:
-        assert field in backtesting, (
-            f"'backtesting' policy missing required field: '{field}'"
-        )
+        assert (
+            field in backtesting
+        ), f"'backtesting' policy missing required field: '{field}'"
 
     # Validate types and reasonable defaults
-    assert isinstance(backtesting["checkpoint_interval_seconds"], (int, float)), (
-        "'checkpoint_interval_seconds' should be numeric"
-    )
-    assert backtesting["checkpoint_interval_seconds"] > 0, (
-        "'checkpoint_interval_seconds' should be positive"
-    )
+    assert isinstance(
+        backtesting["checkpoint_interval_seconds"], (int, float)
+    ), "'checkpoint_interval_seconds' should be numeric"
+    assert (
+        backtesting["checkpoint_interval_seconds"] > 0
+    ), "'checkpoint_interval_seconds' should be positive"
 
-    assert isinstance(backtesting["force_checkpoint_every_n"], int), (
-        "'force_checkpoint_every_n' should be an integer"
-    )
-    assert backtesting["force_checkpoint_every_n"] > 0, (
-        "'force_checkpoint_every_n' should be positive"
-    )
+    assert isinstance(
+        backtesting["force_checkpoint_every_n"], int
+    ), "'force_checkpoint_every_n' should be an integer"
+    assert (
+        backtesting["force_checkpoint_every_n"] > 0
+    ), "'force_checkpoint_every_n' should be positive"
 
-    assert isinstance(backtesting["delete_on_completion"], bool), (
-        "'delete_on_completion' should be a boolean"
-    )
+    assert isinstance(
+        backtesting["delete_on_completion"], bool
+    ), "'delete_on_completion' should be a boolean"
 
-    assert isinstance(backtesting["checkpoint_on_failure"], bool), (
-        "'checkpoint_on_failure' should be a boolean"
-    )
+    assert isinstance(
+        backtesting["checkpoint_on_failure"], bool
+    ), "'checkpoint_on_failure' should be a boolean"
 
 
 def test_cleanup_policy_structure(config_path):
@@ -269,50 +260,46 @@ def test_cleanup_policy_structure(config_path):
 
     checkpointing = config["checkpointing"]
 
-    assert "cleanup" in checkpointing, (
-        "'checkpointing' section should have 'cleanup' policy"
-    )
+    assert (
+        "cleanup" in checkpointing
+    ), "'checkpointing' section should have 'cleanup' policy"
 
     cleanup = checkpointing["cleanup"]
     assert isinstance(cleanup, dict), "'cleanup' policy should be a dictionary"
 
     # Required fields (from architecture appendix)
     required_fields = [
-        "run_interval_hours",           # How often to run cleanup job
+        "run_interval_hours",  # How often to run cleanup job
         "delete_old_checkpoints_days",  # Age-based retention (30 days)
-        "warn_disk_usage_percent",      # Disk usage warning threshold
+        "warn_disk_usage_percent",  # Disk usage warning threshold
     ]
 
     for field in required_fields:
-        assert field in cleanup, (
-            f"'cleanup' policy missing required field: '{field}'"
-        )
+        assert field in cleanup, f"'cleanup' policy missing required field: '{field}'"
 
     # Validate types and reasonable defaults
-    assert isinstance(cleanup["run_interval_hours"], (int, float)), (
-        "'run_interval_hours' should be numeric"
-    )
-    assert cleanup["run_interval_hours"] > 0, (
-        "'run_interval_hours' should be positive"
-    )
+    assert isinstance(
+        cleanup["run_interval_hours"], (int, float)
+    ), "'run_interval_hours' should be numeric"
+    assert cleanup["run_interval_hours"] > 0, "'run_interval_hours' should be positive"
 
-    assert isinstance(cleanup["delete_old_checkpoints_days"], int), (
-        "'delete_old_checkpoints_days' should be an integer"
-    )
-    assert cleanup["delete_old_checkpoints_days"] > 0, (
-        "'delete_old_checkpoints_days' should be positive"
-    )
+    assert isinstance(
+        cleanup["delete_old_checkpoints_days"], int
+    ), "'delete_old_checkpoints_days' should be an integer"
+    assert (
+        cleanup["delete_old_checkpoints_days"] > 0
+    ), "'delete_old_checkpoints_days' should be positive"
     # Architecture doc specifies 30 days
-    assert cleanup["delete_old_checkpoints_days"] >= 7, (
-        "'delete_old_checkpoints_days' should be at least 7 days"
-    )
+    assert (
+        cleanup["delete_old_checkpoints_days"] >= 7
+    ), "'delete_old_checkpoints_days' should be at least 7 days"
 
-    assert isinstance(cleanup["warn_disk_usage_percent"], (int, float)), (
-        "'warn_disk_usage_percent' should be numeric"
-    )
-    assert 0 < cleanup["warn_disk_usage_percent"] <= 100, (
-        "'warn_disk_usage_percent' should be between 0 and 100"
-    )
+    assert isinstance(
+        cleanup["warn_disk_usage_percent"], (int, float)
+    ), "'warn_disk_usage_percent' should be numeric"
+    assert (
+        0 < cleanup["warn_disk_usage_percent"] <= 100
+    ), "'warn_disk_usage_percent' should be between 0 and 100"
 
 
 def test_config_default_values_match_architecture(config_path):
@@ -337,44 +324,44 @@ def test_config_default_values_match_architecture(config_path):
     cleanup = config["checkpointing"]["cleanup"]
 
     # Checkpoint intervals (5 minutes for both)
-    assert training["checkpoint_interval_seconds"] == 300, (
-        "Training checkpoint interval should be 300 seconds (5 minutes) per architecture doc"
-    )
-    assert backtesting["checkpoint_interval_seconds"] == 300, (
-        "Backtesting checkpoint interval should be 300 seconds (5 minutes) per architecture doc"
-    )
+    assert (
+        training["checkpoint_interval_seconds"] == 300
+    ), "Training checkpoint interval should be 300 seconds (5 minutes) per architecture doc"
+    assert (
+        backtesting["checkpoint_interval_seconds"] == 300
+    ), "Backtesting checkpoint interval should be 300 seconds (5 minutes) per architecture doc"
 
     # Force checkpoint boundaries
-    assert training["force_checkpoint_every_n"] == 50, (
-        "Training force checkpoint should be every 50 epochs per architecture doc"
-    )
-    assert backtesting["force_checkpoint_every_n"] == 5000, (
-        "Backtesting force checkpoint should be every 5000 bars per architecture doc"
-    )
+    assert (
+        training["force_checkpoint_every_n"] == 50
+    ), "Training force checkpoint should be every 50 epochs per architecture doc"
+    assert (
+        backtesting["force_checkpoint_every_n"] == 5000
+    ), "Backtesting force checkpoint should be every 5000 bars per architecture doc"
 
     # Delete on completion (both should be true)
-    assert training["delete_on_completion"] is True, (
-        "Training should delete checkpoints on completion"
-    )
-    assert backtesting["delete_on_completion"] is True, (
-        "Backtesting should delete checkpoints on completion"
-    )
+    assert (
+        training["delete_on_completion"] is True
+    ), "Training should delete checkpoints on completion"
+    assert (
+        backtesting["delete_on_completion"] is True
+    ), "Backtesting should delete checkpoints on completion"
 
     # Checkpoint on failure (both should be true)
-    assert training["checkpoint_on_failure"] is True, (
-        "Training should checkpoint on failure"
-    )
-    assert backtesting["checkpoint_on_failure"] is True, (
-        "Backtesting should checkpoint on failure"
-    )
+    assert (
+        training["checkpoint_on_failure"] is True
+    ), "Training should checkpoint on failure"
+    assert (
+        backtesting["checkpoint_on_failure"] is True
+    ), "Backtesting should checkpoint on failure"
 
     # Cleanup policy
-    assert cleanup["run_interval_hours"] == 24, (
-        "Cleanup should run every 24 hours (daily) per architecture doc"
-    )
-    assert cleanup["delete_old_checkpoints_days"] == 30, (
-        "Should delete checkpoints older than 30 days per architecture doc"
-    )
-    assert cleanup["warn_disk_usage_percent"] == 80, (
-        "Should warn at 80% disk usage per architecture doc"
-    )
+    assert (
+        cleanup["run_interval_hours"] == 24
+    ), "Cleanup should run every 24 hours (daily) per architecture doc"
+    assert (
+        cleanup["delete_old_checkpoints_days"] == 30
+    ), "Should delete checkpoints older than 30 days per architecture doc"
+    assert (
+        cleanup["warn_disk_usage_percent"] == 80
+    ), "Should warn at 80% disk usage per architecture doc"

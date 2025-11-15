@@ -89,18 +89,29 @@ class CheckpointDecisionEngine:
 
         # 2. At forced boundary? → YES
         if natural_boundary % policy.force_checkpoint_every_n == 0:
-            return True, f"Force checkpoint at boundary {natural_boundary} (every {policy.force_checkpoint_every_n})"
+            return (
+                True,
+                f"Force checkpoint at boundary {natural_boundary} (every {policy.force_checkpoint_every_n})",
+            )
 
         # 3. Enough time elapsed? → YES
         time_since_last = current_time - last_checkpoint_time
         if time_since_last >= policy.checkpoint_interval_seconds:
-            return True, f"Time threshold met ({time_since_last:.1f}s >= {policy.checkpoint_interval_seconds}s)"
+            return (
+                True,
+                f"Time threshold met ({time_since_last:.1f}s >= {policy.checkpoint_interval_seconds}s)",
+            )
 
         # 4. Default → NO
-        return False, f"Not enough time elapsed ({time_since_last:.1f}s < {policy.checkpoint_interval_seconds}s)"
+        return (
+            False,
+            f"Not enough time elapsed ({time_since_last:.1f}s < {policy.checkpoint_interval_seconds}s)",
+        )
 
 
-def load_checkpoint_policies(config_path: Path | None = None) -> dict[str, CheckpointPolicy]:
+def load_checkpoint_policies(
+    config_path: Path | None = None,
+) -> dict[str, CheckpointPolicy]:
     """
     Load checkpoint policies from config/persistence.yaml.
 
@@ -153,7 +164,9 @@ def load_checkpoint_policies(config_path: Path | None = None) -> dict[str, Check
     # Load training policy
     training_config = checkpointing["training"]
     training_policy = CheckpointPolicy(
-        checkpoint_interval_seconds=float(training_config["checkpoint_interval_seconds"]),
+        checkpoint_interval_seconds=float(
+            training_config["checkpoint_interval_seconds"]
+        ),
         force_checkpoint_every_n=int(training_config["force_checkpoint_every_n"]),
         delete_on_completion=bool(training_config["delete_on_completion"]),
         checkpoint_on_failure=bool(training_config["checkpoint_on_failure"]),
@@ -162,7 +175,9 @@ def load_checkpoint_policies(config_path: Path | None = None) -> dict[str, Check
     # Load backtesting policy
     backtesting_config = checkpointing["backtesting"]
     backtesting_policy = CheckpointPolicy(
-        checkpoint_interval_seconds=float(backtesting_config["checkpoint_interval_seconds"]),
+        checkpoint_interval_seconds=float(
+            backtesting_config["checkpoint_interval_seconds"]
+        ),
         force_checkpoint_every_n=int(backtesting_config["force_checkpoint_every_n"]),
         delete_on_completion=bool(backtesting_config["delete_on_completion"]),
         checkpoint_on_failure=bool(backtesting_config["checkpoint_on_failure"]),

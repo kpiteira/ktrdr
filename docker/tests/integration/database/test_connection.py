@@ -11,11 +11,10 @@ Tests:
 
 import os
 import time
-from typing import Generator
+from collections.abc import Generator
 
 import psycopg2
 import pytest
-from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 
 @pytest.fixture
