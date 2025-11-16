@@ -761,3 +761,286 @@ async def resume_operation(
             error_code="OPERATIONS-ResumeError",
             details={"operation_id": operation_id, "error": str(e)},
         ) from e
+
+
+@router.delete(
+    "/operations/{operation_id}/checkpoint",
+    tags=["Operations"],
+    summary="Delete checkpoint for operation",
+    description="""
+    Delete the checkpoint for a specific operation.
+
+    **Use Cases:**
+    - Free up disk space by deleting unused checkpoints
+    - Clean up after successful operation completion
+    - Remove checkpoints for operations that won't be resumed
+
+    **Perfect for:** Disk space management, cleanup scripts
+    """,
+)
+async def delete_checkpoint(
+    operation_id: str = Path(
+        ..., description="ID of operation whose checkpoint to delete"
+    ),
+    operations_service: OperationsService = Depends(get_operations_service),
+) -> OperationStatusResponse:
+    """
+    Delete checkpoint for a specific operation.
+
+    Args:
+        operation_id: ID of the operation
+        operations_service: Operations service dependency
+        checkpoint_service: Checkpoint service dependency
+
+    Returns:
+        OperationStatusResponse: Confirmation of deletion
+
+    Raises:
+        HTTPException:
+            404: Operation not found
+            500: Deletion failed
+
+    Example:
+        DELETE /api/v1/operations/op_training_001/checkpoint
+
+        Response:
+        {
+            "success": true,
+            "data": {
+                "operation_id": "op_training_001",
+                "message": "Checkpoint deleted successfully"
+            }
+        }
+    """
+    try:
+        # Import here to avoid circular imports
+        from ktrdr.api.dependencies import get_checkpoint_service
+
+        checkpoint_service = get_checkpoint_service()
+
+        logger.info(f"Deleting checkpoint for operation: {operation_id}")
+
+        # Verify operation exists
+        operation = await operations_service.get_operation(operation_id)
+        if not operation:
+            raise HTTPException(
+                status_code=404, detail=f"Operation not found: {operation_id}"
+            )
+
+        # Delete checkpoint
+        checkpoint_service.delete_checkpoint(operation_id)
+
+        logger.info(f"Successfully deleted checkpoint for operation {operation_id}")
+
+        return OperationStatusResponse(
+            success=True,
+            data={  # type: ignore[arg-type]
+                "operation_id": operation_id,
+                "message": "Checkpoint deleted successfully",
+            },
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting checkpoint for {operation_id}: {str(e)}")
+        raise DataError(
+            message=f"Failed to delete checkpoint for operation {operation_id}",
+            error_code="OPERATIONS-DeleteCheckpointError",
+            details={"operation_id": operation_id, "error": str(e)},
+        ) from e
+
+
+@router.post(
+    "/operations/checkpoints/cleanup-cancelled",
+    response_model=OperationStatusResponse,
+    tags=["Operations"],
+    summary="Cleanup cancelled operation checkpoints",
+    description="""
+    Delete checkpoints for all cancelled operations.
+
+    **Use Cases:**
+    - Automated cleanup of cancelled operations
+    - Free disk space from abandoned operations
+    - Scheduled maintenance
+
+    **Perfect for:** Cleanup scripts, scheduled jobs
+    """,
+)
+async def cleanup_cancelled_checkpoints(
+    operations_service: OperationsService = Depends(get_operations_service),
+) -> OperationStatusResponse:
+    """
+    Clean up checkpoints for all cancelled operations.
+
+    Args:
+        operations_service: Operations service dependency
+
+    Returns:
+        OperationStatusResponse: Cleanup statistics
+
+    Example:
+        POST /api/v1/operations/checkpoints/cleanup-cancelled
+
+        Response:
+        {
+            "success": true,
+            "data": {
+                "deleted_count": 3,
+                "operation_ids": ["op_001", "op_002", "op_003"],
+                "total_freed_bytes": 156000000
+            }
+        }
+    """
+    try:
+        from ktrdr.api.dependencies import get_checkpoint_service
+
+        checkpoint_service = get_checkpoint_service()
+
+        logger.info("Cleaning up cancelled operation checkpoints")
+
+        # Load operations with checkpoints (only cancelled)
+        ops_with_checkpoints = (
+            await operations_service.load_operations_with_checkpoints()
+        )
+
+        # Filter for cancelled operations
+        cancelled_ops = [op for op in ops_with_checkpoints if op.status == "CANCELLED"]
+
+        deleted_ids = []
+        total_freed_bytes = 0
+
+        # Delete each checkpoint
+        for operation in cancelled_ops:
+            try:
+                checkpoint_service.delete_checkpoint(operation.operation_id)
+                deleted_ids.append(operation.operation_id)
+                # Note: We don't track freed bytes in current implementation
+            except Exception as e:
+                logger.warning(
+                    f"Failed to delete checkpoint for {operation.operation_id}: {str(e)}"
+                )
+
+        logger.info(f"Cleaned up {len(deleted_ids)} cancelled operation checkpoints")
+
+        return OperationStatusResponse(
+            success=True,
+            data={  # type: ignore[arg-type]
+                "deleted_count": len(deleted_ids),
+                "operation_ids": deleted_ids,
+                "total_freed_bytes": total_freed_bytes,
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Error cleaning up cancelled checkpoints: {str(e)}")
+        raise DataError(
+            message="Failed to cleanup cancelled operation checkpoints",
+            error_code="OPERATIONS-CleanupCancelledError",
+            details={"error": str(e)},
+        ) from e
+
+
+@router.post(
+    "/operations/checkpoints/cleanup-old",
+    response_model=OperationStatusResponse,
+    tags=["Operations"],
+    summary="Cleanup old operation checkpoints",
+    description="""
+    Delete checkpoints older than specified days.
+
+    **Use Cases:**
+    - Scheduled cleanup of old checkpoints
+    - Disk space management
+    - Retention policy enforcement
+
+    **Perfect for:** Cron jobs, maintenance scripts
+    """,
+)
+async def cleanup_old_checkpoints(
+    days: int = Query(
+        30, ge=1, description="Delete checkpoints older than this many days"
+    ),
+    operations_service: OperationsService = Depends(get_operations_service),
+) -> OperationStatusResponse:
+    """
+    Clean up checkpoints older than specified days.
+
+    Args:
+        days: Delete checkpoints older than this many days
+        operations_service: Operations service dependency
+
+    Returns:
+        OperationStatusResponse: Cleanup statistics
+
+    Example:
+        POST /api/v1/operations/checkpoints/cleanup-old?days=7
+
+        Response:
+        {
+            "success": true,
+            "data": {
+                "deleted_count": 5,
+                "operation_ids": ["op_001", "op_002", "op_003", "op_004", "op_005"],
+                "total_freed_bytes": 260000000
+            }
+        }
+    """
+    try:
+        from datetime import datetime, timedelta
+
+        from ktrdr.api.dependencies import get_checkpoint_service
+
+        checkpoint_service = get_checkpoint_service()
+
+        logger.info(f"Cleaning up checkpoints older than {days} days")
+
+        # Calculate cutoff date
+        cutoff_date = datetime.now() - timedelta(days=days)
+
+        # Load operations with checkpoints
+        ops_with_checkpoints = (
+            await operations_service.load_operations_with_checkpoints()
+        )
+
+        # Filter for old operations (FAILED or CANCELLED only for safety)
+        cutoff_str = cutoff_date.isoformat()
+        old_ops = [
+            op
+            for op in ops_with_checkpoints
+            if op.status in ["FAILED", "CANCELLED"] and op.created_at < cutoff_str  # type: ignore[operator]
+        ]
+
+        deleted_ids = []
+        total_freed_bytes = 0
+
+        # Delete each checkpoint
+        for operation in old_ops:
+            try:
+                checkpoint_service.delete_checkpoint(operation.operation_id)
+                deleted_ids.append(operation.operation_id)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to delete checkpoint for {operation.operation_id}: {str(e)}"
+                )
+
+        logger.info(
+            f"Cleaned up {len(deleted_ids)} old operation checkpoints (>{days} days)"
+        )
+
+        return OperationStatusResponse(
+            success=True,
+            data={  # type: ignore[arg-type]
+                "deleted_count": len(deleted_ids),
+                "operation_ids": deleted_ids,
+                "total_freed_bytes": total_freed_bytes,
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Error cleaning up old checkpoints: {str(e)}")
+        raise DataError(
+            message=f"Failed to cleanup old operation checkpoints (>{days} days)",
+            error_code="OPERATIONS-CleanupOldError",
+            details={"days": days, "error": str(e)},
+        ) from e

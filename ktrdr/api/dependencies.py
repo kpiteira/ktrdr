@@ -17,6 +17,7 @@ from ktrdr.api.services.operations_service import (
     OperationsService,
     get_operations_service,
 )
+from ktrdr.checkpoint.service import CheckpointService
 from ktrdr.data.acquisition.acquisition_service import DataAcquisitionService
 
 
@@ -97,6 +98,25 @@ def get_operations_service_dep() -> OperationsService:
     return get_operations_service()
 
 
+# Checkpoint service dependency (singleton)
+_checkpoint_service: Optional[CheckpointService] = None
+
+
+def get_checkpoint_service() -> CheckpointService:
+    """
+    Dependency for providing the checkpoint service (singleton).
+
+    Returns same instance across requests to maintain database connection pool.
+
+    Returns:
+        CheckpointService: Singleton checkpoint service instance
+    """
+    global _checkpoint_service
+    if _checkpoint_service is None:
+        _checkpoint_service = CheckpointService()
+    return _checkpoint_service
+
+
 # Define common dependencies with annotations for usage in route functions
 ConfigDep = Annotated[APIConfig, Depends(get_api_config)]
 DataServiceDep = Annotated[DataService, Depends(get_data_service)]
@@ -106,3 +126,4 @@ AcquisitionServiceDep = Annotated[
     DataAcquisitionService, Depends(get_acquisition_service)
 ]
 OperationsServiceDep = Annotated[OperationsService, Depends(get_operations_service_dep)]
+CheckpointServiceDep = Annotated[CheckpointService, Depends(get_checkpoint_service)]

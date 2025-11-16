@@ -586,3 +586,384 @@ async def _retry_operation_async(operation_id: str, verbose: bool):
             error_code="CLI-RetryOperationError",
             details={"operation_id": operation_id, "error": str(e)},
         ) from e
+
+
+@operations_app.command("resume")
+@trace_cli_command("operations_resume")
+def resume_operation(
+    operation_id: str = typer.Argument(
+        ..., help="Failed/cancelled operation ID to resume"
+    ),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show detailed information"
+    ),
+):
+    """
+    Resume a failed or cancelled operation from its checkpoint.
+
+    Creates a new operation that continues from where the original operation stopped.
+    The original operation must have a checkpoint saved.
+
+    Examples:
+        ktrdr operations resume op_training_20250101_123456
+        ktrdr operations resume op_backtest_20250101_789012 --verbose
+    """
+    try:
+        # Input validation
+        operation_id = InputValidator.validate_string(
+            operation_id, min_length=1, max_length=100
+        )
+
+        # Run async operation
+        asyncio.run(_resume_operation_async(operation_id, verbose))
+
+    except ValidationError as e:
+        error_console.print(f"[bold red]Validation error:[/bold red] {str(e)}")
+        if verbose:
+            logger.error(f"Validation error: {str(e)}")
+        sys.exit(1)
+    except Exception as e:
+        error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        if verbose:
+            logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+        sys.exit(1)
+
+
+async def _resume_operation_async(operation_id: str, verbose: bool):
+    """Async implementation of resume operation command."""
+    try:
+        # Check API connection
+        if not await check_api_connection():
+            error_console.print(
+                "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
+            )
+            error_console.print(
+                "Make sure the API server is running at http://localhost:8000"
+            )
+            sys.exit(1)
+
+        api_client = get_api_client()
+
+        if verbose:
+            console.print(f"🔄 Resuming operation from checkpoint: {operation_id}")
+
+        # Resume operation via API
+        try:
+            response = await api_client.resume_operation(operation_id)
+            result = response
+        except DataError as e:
+            if "404" in str(e) or "not found" in str(e).lower():
+                error_console.print(f"❌ Operation not found: {operation_id}")
+                sys.exit(1)
+            elif "400" in str(e) or "cannot resume" in str(e).lower():
+                error_console.print(f"❌ Operation cannot be resumed: {operation_id}")
+                error_console.print(
+                    "Only FAILED or CANCELLED operations with checkpoints can be resumed."
+                )
+                sys.exit(1)
+            elif "checkpoint" in str(e).lower():
+                error_console.print(
+                    f"❌ No checkpoint found for operation: {operation_id}"
+                )
+                error_console.print(
+                    "The operation may not have created a checkpoint before failing."
+                )
+                sys.exit(1)
+            else:
+                raise
+
+        # Display results
+        new_operation_id = result.get("new_operation_id")
+        resumed_from = result.get("resumed_from_checkpoint", "checkpoint")
+        message = result.get("message", "")
+
+        console.print(
+            "✅ [green]Successfully resumed operation from checkpoint[/green]"
+        )
+        console.print(f"Original: {operation_id}")
+        console.print(f"New:      {new_operation_id}")
+        console.print(f"Resumed from: {resumed_from}")
+
+        if message:
+            console.print(f"📝 {message}")
+
+        console.print(
+            f"\n💡 Use 'ktrdr operations status {new_operation_id}' to monitor progress"
+        )
+
+        if verbose:
+            console.print("\n✅ Operation resume completed")
+
+    except Exception as e:
+        raise DataError(
+            message=f"Failed to resume operation {operation_id}",
+            error_code="CLI-ResumeOperationError",
+            details={"operation_id": operation_id, "error": str(e)},
+        ) from e
+
+
+@operations_app.command("delete-checkpoint")
+@trace_cli_command("operations_delete_checkpoint")
+def delete_checkpoint(
+    operation_id: str = typer.Argument(
+        ..., help="Operation ID whose checkpoint to delete"
+    ),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show detailed information"
+    ),
+):
+    """
+    Delete the checkpoint for a specific operation.
+
+    Frees up disk space by removing the checkpoint. The operation cannot be
+    resumed after its checkpoint is deleted.
+
+    Examples:
+        ktrdr operations delete-checkpoint op_training_20250101_123456
+        ktrdr operations delete-checkpoint op_backtest_20250101_789012 --verbose
+    """
+    try:
+        # Input validation
+        operation_id = InputValidator.validate_string(
+            operation_id, min_length=1, max_length=100
+        )
+
+        # Run async operation
+        asyncio.run(_delete_checkpoint_async(operation_id, verbose))
+
+    except ValidationError as e:
+        error_console.print(f"[bold red]Validation error:[/bold red] {str(e)}")
+        if verbose:
+            logger.error(f"Validation error: {str(e)}")
+        sys.exit(1)
+    except Exception as e:
+        error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        if verbose:
+            logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+        sys.exit(1)
+
+
+async def _delete_checkpoint_async(operation_id: str, verbose: bool):
+    """Async implementation of delete checkpoint command."""
+    try:
+        # Check API connection
+        if not await check_api_connection():
+            error_console.print(
+                "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
+            )
+            error_console.print(
+                "Make sure the API server is running at http://localhost:8000"
+            )
+            sys.exit(1)
+
+        api_client = get_api_client()
+
+        if verbose:
+            console.print(f"🗑️  Deleting checkpoint for operation: {operation_id}")
+
+        # Delete checkpoint via API
+        try:
+            response = await api_client.delete_checkpoint(operation_id)
+            result = response
+        except DataError as e:
+            if "404" in str(e) or "not found" in str(e).lower():
+                error_console.print(
+                    f"❌ Operation or checkpoint not found: {operation_id}"
+                )
+                sys.exit(1)
+            else:
+                raise
+
+        # Display results
+        console.print(
+            f"✅ [green]Checkpoint deleted for operation: {operation_id}[/green]"
+        )
+
+        # Show freed space if available
+        freed_bytes = result.get("freed_bytes", 0)
+        if freed_bytes > 0:
+            freed_mb = freed_bytes / (1024 * 1024)
+            console.print(f"💾 Freed {freed_mb:.1f} MB of disk space")
+
+        if verbose:
+            console.print("\n✅ Checkpoint deletion completed")
+
+    except Exception as e:
+        raise DataError(
+            message=f"Failed to delete checkpoint for operation {operation_id}",
+            error_code="CLI-DeleteCheckpointError",
+            details={"operation_id": operation_id, "error": str(e)},
+        ) from e
+
+
+@operations_app.command("cleanup-cancelled")
+@trace_cli_command("operations_cleanup_cancelled")
+def cleanup_cancelled_checkpoints(
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show detailed information"
+    ),
+):
+    """
+    Delete checkpoints for all cancelled operations.
+
+    Frees up disk space by removing checkpoints from operations that were
+    cancelled and won't be resumed.
+
+    Examples:
+        ktrdr operations cleanup-cancelled
+        ktrdr operations cleanup-cancelled --verbose
+    """
+    try:
+        # Run async operation
+        asyncio.run(_cleanup_cancelled_async(verbose))
+
+    except Exception as e:
+        error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        if verbose:
+            logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+        sys.exit(1)
+
+
+async def _cleanup_cancelled_async(verbose: bool):
+    """Async implementation of cleanup cancelled checkpoints command."""
+    try:
+        # Check API connection
+        if not await check_api_connection():
+            error_console.print(
+                "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
+            )
+            error_console.print(
+                "Make sure the API server is running at http://localhost:8000"
+            )
+            sys.exit(1)
+
+        api_client = get_api_client()
+
+        if verbose:
+            console.print("🧹 Cleaning up cancelled operation checkpoints...")
+
+        # Cleanup via API
+        response = await api_client.cleanup_cancelled_checkpoints()
+        result = response
+
+        # Display results
+        deleted_count = result.get("deleted_count", 0)
+        operation_ids = result.get("operation_ids", [])
+        freed_bytes = result.get("total_freed_bytes", 0)
+
+        if deleted_count == 0:
+            console.print("ℹ️  No cancelled operation checkpoints found to clean up")
+        else:
+            console.print(
+                f"✅ [green]Cleaned up {deleted_count} cancelled operation checkpoint(s)[/green]"
+            )
+
+            # Show freed space
+            if freed_bytes > 0:
+                freed_mb = freed_bytes / (1024 * 1024)
+                console.print(f"💾 Freed {freed_mb:.1f} MB of disk space")
+
+            # Show operation IDs in verbose mode
+            if verbose and operation_ids:
+                console.print("\n📋 Deleted checkpoints for:")
+                for op_id in operation_ids:
+                    console.print(f"  • {op_id}")
+
+        if verbose:
+            console.print("\n✅ Cleanup completed")
+
+    except Exception as e:
+        raise DataError(
+            message="Failed to cleanup cancelled checkpoints",
+            error_code="CLI-CleanupCancelledError",
+            details={"error": str(e)},
+        ) from e
+
+
+@operations_app.command("cleanup-old")
+@trace_cli_command("operations_cleanup_old")
+def cleanup_old_checkpoints(
+    days: int = typer.Option(
+        30, "--days", "-d", min=1, help="Delete checkpoints older than this many days"
+    ),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show detailed information"
+    ),
+):
+    """
+    Delete checkpoints older than specified number of days.
+
+    Removes checkpoints from failed/cancelled operations that are older than
+    the specified threshold. Useful for automated cleanup and disk space management.
+
+    Examples:
+        ktrdr operations cleanup-old --days 7
+        ktrdr operations cleanup-old --days 30 --verbose
+        ktrdr operations cleanup-old  # Defaults to 30 days
+    """
+    try:
+        # Run async operation
+        asyncio.run(_cleanup_old_async(days, verbose))
+
+    except Exception as e:
+        error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        if verbose:
+            logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+        sys.exit(1)
+
+
+async def _cleanup_old_async(days: int, verbose: bool):
+    """Async implementation of cleanup old checkpoints command."""
+    try:
+        # Check API connection
+        if not await check_api_connection():
+            error_console.print(
+                "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
+            )
+            error_console.print(
+                "Make sure the API server is running at http://localhost:8000"
+            )
+            sys.exit(1)
+
+        api_client = get_api_client()
+
+        if verbose:
+            console.print(f"🧹 Cleaning up checkpoints older than {days} days...")
+
+        # Cleanup via API
+        response = await api_client.cleanup_old_checkpoints(days)
+        result = response
+
+        # Display results
+        deleted_count = result.get("deleted_count", 0)
+        operation_ids = result.get("operation_ids", [])
+        freed_bytes = result.get("total_freed_bytes", 0)
+
+        if deleted_count == 0:
+            console.print(f"ℹ️  No checkpoints older than {days} days found to clean up")
+        else:
+            console.print(
+                f"✅ [green]Cleaned up {deleted_count} old checkpoint(s)[/green]"
+            )
+            console.print(f"📅 Removed checkpoints older than {days} days")
+
+            # Show freed space
+            if freed_bytes > 0:
+                freed_mb = freed_bytes / (1024 * 1024)
+                console.print(f"💾 Freed {freed_mb:.1f} MB of disk space")
+
+            # Show operation IDs in verbose mode
+            if verbose and operation_ids:
+                console.print("\n📋 Deleted checkpoints for:")
+                for op_id in operation_ids:
+                    console.print(f"  • {op_id}")
+
+        if verbose:
+            console.print("\n✅ Cleanup completed")
+
+    except Exception as e:
+        raise DataError(
+            message=f"Failed to cleanup old checkpoints (>{days} days)",
+            error_code="CLI-CleanupOldError",
+            details={"days": days, "error": str(e)},
+        ) from e

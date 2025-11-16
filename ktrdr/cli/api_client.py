@@ -757,6 +757,99 @@ class KtrdrApiClient:
             )
         return response
 
+    async def resume_operation(self, operation_id: str) -> dict[str, Any]:
+        """
+        Resume a failed or cancelled operation from its checkpoint.
+
+        Args:
+            operation_id: ID of the operation to resume
+
+        Returns:
+            Response containing new operation_id and resume details
+
+        Raises:
+            DataError: If resume fails
+        """
+        response = await self._make_request(
+            "POST", f"/operations/{operation_id}/resume"
+        )
+        if not response.get("success"):
+            raise DataError(
+                message=f"Failed to resume operation {operation_id}",
+                error_code="API-ResumeOperationError",
+                details={"response": response, "operation_id": operation_id},
+            )
+        return response
+
+    async def delete_checkpoint(self, operation_id: str) -> dict[str, Any]:
+        """
+        Delete checkpoint for a specific operation.
+
+        Args:
+            operation_id: ID of the operation whose checkpoint to delete
+
+        Returns:
+            Response containing deletion details
+
+        Raises:
+            DataError: If deletion fails
+        """
+        response = await self._make_request(
+            "DELETE", f"/operations/{operation_id}/checkpoint"
+        )
+        if not response.get("success"):
+            raise DataError(
+                message=f"Failed to delete checkpoint for operation {operation_id}",
+                error_code="API-DeleteCheckpointError",
+                details={"response": response, "operation_id": operation_id},
+            )
+        return response
+
+    async def cleanup_cancelled_checkpoints(self) -> dict[str, Any]:
+        """
+        Clean up checkpoints for all cancelled operations.
+
+        Returns:
+            Response containing cleanup statistics
+
+        Raises:
+            DataError: If cleanup fails
+        """
+        response = await self._make_request(
+            "POST", "/operations/checkpoints/cleanup-cancelled"
+        )
+        if not response.get("success"):
+            raise DataError(
+                message="Failed to cleanup cancelled checkpoints",
+                error_code="API-CleanupCancelledError",
+                details={"response": response},
+            )
+        return response
+
+    async def cleanup_old_checkpoints(self, days: int = 30) -> dict[str, Any]:
+        """
+        Clean up checkpoints older than specified days.
+
+        Args:
+            days: Delete checkpoints older than this many days (default: 30)
+
+        Returns:
+            Response containing cleanup statistics
+
+        Raises:
+            DataError: If cleanup fails
+        """
+        response = await self._make_request(
+            "POST", f"/operations/checkpoints/cleanup-old?days={days}"
+        )
+        if not response.get("success"):
+            raise DataError(
+                message=f"Failed to cleanup old checkpoints (>{days} days)",
+                error_code="API-CleanupOldError",
+                details={"response": response, "days": days},
+            )
+        return response
+
     # =============================================================================
     # Dummy Service Endpoints
     # =============================================================================
