@@ -17,7 +17,6 @@ from ktrdr.api.services.operations_service import (
     OperationsService,
     get_operations_service,
 )
-from ktrdr.checkpoint.service import CheckpointService
 from ktrdr.data.acquisition.acquisition_service import DataAcquisitionService
 
 
@@ -99,10 +98,10 @@ def get_operations_service_dep() -> OperationsService:
 
 
 # Checkpoint service dependency (singleton)
-_checkpoint_service: Optional[CheckpointService] = None
+_checkpoint_service: Optional[object] = None
 
 
-def get_checkpoint_service() -> CheckpointService:
+def get_checkpoint_service():
     """
     Dependency for providing the checkpoint service (singleton).
 
@@ -111,6 +110,9 @@ def get_checkpoint_service() -> CheckpointService:
     Returns:
         CheckpointService: Singleton checkpoint service instance
     """
+    # Lazy import to avoid loading psycopg2 when not needed
+    from ktrdr.checkpoint.service import CheckpointService
+
     global _checkpoint_service
     if _checkpoint_service is None:
         _checkpoint_service = CheckpointService()
@@ -126,4 +128,5 @@ AcquisitionServiceDep = Annotated[
     DataAcquisitionService, Depends(get_acquisition_service)
 ]
 OperationsServiceDep = Annotated[OperationsService, Depends(get_operations_service_dep)]
-CheckpointServiceDep = Annotated[CheckpointService, Depends(get_checkpoint_service)]
+# CheckpointServiceDep uses object type to avoid import issues - actual type is CheckpointService
+CheckpointServiceDep = Annotated[object, Depends(get_checkpoint_service)]
