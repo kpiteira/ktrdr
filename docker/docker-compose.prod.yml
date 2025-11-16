@@ -1,4 +1,59 @@
 services:
+  # PostgreSQL + TimescaleDB - Database for checkpoint persistence (Production)
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    container_name: ktrdr-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    volumes:
+      # Persistent data storage
+      - postgres-data:/var/lib/postgresql/data
+      # Backups directory
+      - postgres-backups:/var/lib/postgresql/backups
+      # Auto-run migrations on first startup (read-only)
+      - ../migrations:/docker-entrypoint-initdb.d:ro
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-ktrdr}
+      - POSTGRES_USER=${POSTGRES_USER:-ktrdr_admin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}  # Must be set in production .env
+      # Production PostgreSQL settings
+      - POSTGRES_MAX_CONNECTIONS=200
+      - POSTGRES_SHARED_BUFFERS=256MB
+      - POSTGRES_EFFECTIVE_CACHE_SIZE=1GB
+      - POSTGRES_MAINTENANCE_WORK_MEM=64MB
+      - POSTGRES_CHECKPOINT_COMPLETION_TARGET=0.9
+      - POSTGRES_WAL_BUFFERS=16MB
+      - POSTGRES_DEFAULT_STATISTICS_TARGET=100
+      - POSTGRES_RANDOM_PAGE_COST=1.1
+      - POSTGRES_WORK_MEM=4MB
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ktrdr_admin} -d ${POSTGRES_DB:-ktrdr}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - ktrdr-network
+    # Security settings
+    security_opt:
+      - no-new-privileges:true
+    # Resource limits (database gets more resources)
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   # FastAPI backend service - Production configuration
   backend:
     build:
@@ -20,6 +75,8 @@ services:
     environment:
       - ENVIRONMENT=production
       - LOG_LEVEL=WARNING
+      # PostgreSQL / TimescaleDB configuration (checkpoint persistence)
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-ktrdr_admin}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ktrdr}?sslmode=prefer
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
       interval: 30s
@@ -28,6 +85,9 @@ services:
       start_period: 30s
     networks:
       - ktrdr-network
+    depends_on:
+      postgres:
+        condition: service_healthy
     # Security settings
     security_opt:
       - no-new-privileges:true
@@ -108,5 +168,9 @@ networks:
     driver: bridge
 
 volumes:
+  postgres-data:
+    driver: local
+  postgres-backups:
+    driver: local
   redis-data:
     driver: local

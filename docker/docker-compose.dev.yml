@@ -5,6 +5,31 @@ version: "3.8"
 # For production, workers will run in Proxmox LXC containers
 
 services:
+  # PostgreSQL + TimescaleDB - Database for checkpoint persistence
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    container_name: ktrdr-postgres-distributed
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    volumes:
+      # Persistent data storage
+      - postgres-data:/var/lib/postgresql/data
+      # Auto-run migrations on first startup (read-only)
+      - ../migrations:/docker-entrypoint-initdb.d:ro
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-ktrdr}
+      - POSTGRES_USER=${POSTGRES_USER:-ktrdr_admin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-ktrdr_dev_password}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ktrdr_admin} -d ${POSTGRES_DB:-ktrdr}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - ktrdr-network
+
   # Backend service - Central orchestrator
   backend:
     build:
@@ -30,6 +55,8 @@ services:
       - PYTHONPATH=/app
       - LOG_LEVEL=INFO
       - ENVIRONMENT=development
+      # PostgreSQL / TimescaleDB configuration (checkpoint persistence)
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-ktrdr_admin}:${POSTGRES_PASSWORD:-ktrdr_dev_password}@postgres:5432/${POSTGRES_DB:-ktrdr}
       # OpenTelemetry / Jaeger configuration (Phase 2: Jaeger UI)
       - OTLP_ENDPOINT=http://jaeger:4317
       # Enable distributed workers architecture
@@ -45,6 +72,8 @@ services:
     networks:
       - ktrdr-network
     depends_on:
+      postgres:
+        condition: service_healthy
       jaeger:
         condition: service_healthy
     command: ["uvicorn", "ktrdr.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
@@ -70,6 +99,8 @@ services:
     environment:
       - PYTHONPATH=/app
       - LOG_LEVEL=INFO
+      # PostgreSQL / TimescaleDB configuration (checkpoint persistence)
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-ktrdr_admin}:${POSTGRES_PASSWORD:-ktrdr_dev_password}@postgres:5432/${POSTGRES_DB:-ktrdr}
       - KTRDR_API_URL=http://backend:8000
       - WORKER_TYPE=backtesting
       - WORKER_PORT=5003
@@ -109,6 +140,8 @@ services:
     environment:
       - PYTHONPATH=/app
       - LOG_LEVEL=INFO
+      # PostgreSQL / TimescaleDB configuration (checkpoint persistence)
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-ktrdr_admin}:${POSTGRES_PASSWORD:-ktrdr_dev_password}@postgres:5432/${POSTGRES_DB:-ktrdr}
       - KTRDR_API_URL=http://backend:8000
       - WORKER_TYPE=training
       - WORKER_PORT=5004
@@ -211,6 +244,7 @@ networks:
     driver: bridge
 
 volumes:
+  postgres-data:
   pip-cache:
   uv-cache:
   prometheus_data:

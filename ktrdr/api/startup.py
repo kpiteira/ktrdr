@@ -47,6 +47,18 @@ async def lifespan(app: FastAPI):
     await registry.start()
     logger.info("✅ Worker registry started with background health checks")
 
+    # TASK 3.1: Startup recovery for interrupted operations
+    from ktrdr.api.services.operations_service import get_operations_service
+
+    operations_service = get_operations_service()
+    recovered_count = await operations_service.recover_interrupted_operations()
+    if recovered_count > 0:
+        logger.info(
+            f"✅ Startup recovery: {recovered_count} interrupted operations marked as FAILED"
+        )
+    else:
+        logger.info("✅ Startup recovery: No interrupted operations found")
+
     logger.info("🎉 API startup completed")
 
     yield

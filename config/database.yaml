@@ -1,0 +1,61 @@
+# PostgreSQL + TimescaleDB Configuration
+# ============================================================================
+# Database connection settings and connection pooling configuration
+# ============================================================================
+
+database:
+  # Connection settings (overridden by DATABASE_URL environment variable if present)
+  host: ${POSTGRES_HOST:-localhost}
+  port: ${POSTGRES_PORT:-5432}
+  database: ${POSTGRES_DB:-ktrdr}
+  user: ${POSTGRES_USER:-ktrdr_admin}
+  password: ${POSTGRES_PASSWORD:-ktrdr_dev_password}
+
+  # Connection pooling settings
+  # These settings optimize database connection management for production use
+  pool:
+    # Minimum number of connections to maintain in the pool
+    min_size: 2
+    # Maximum number of connections allowed in the pool
+    # Note: PostgreSQL max_connections defaults to 100-200
+    # With 10 max pool size, we can support ~10 concurrent backend instances
+    max_size: 10
+    # Maximum time (seconds) to wait for a connection from the pool
+    timeout: 30
+    # Maximum lifetime (seconds) of a connection before recycling
+    # Prevents stale connections and helps with connection cleanup
+    max_lifetime: 3600  # 1 hour
+    # Maximum idle time (seconds) before closing an idle connection
+    max_idle_time: 600  # 10 minutes
+
+  # TimescaleDB specific settings
+  timescaledb:
+    # Enable TimescaleDB features (extension must be installed)
+    enabled: true
+    # Future: Time-series specific settings can be added here
+    # - Chunk interval for hypertables
+    # - Compression policies
+    # - Retention policies
+
+  # Query timeouts
+  timeouts:
+    # Default statement timeout (milliseconds)
+    # Prevents runaway queries from blocking the database
+    statement_timeout: 30000  # 30 seconds
+    # Connection timeout (seconds)
+    connect_timeout: 10
+
+# Development settings
+development:
+  # Log all SQL queries in development mode
+  log_queries: false
+  # Echo SQL to console (useful for debugging)
+  echo_sql: false
+
+# Production settings
+production:
+  # Disable query logging in production (performance)
+  log_queries: false
+  echo_sql: false
+  # Enable SSL/TLS for production connections
+  ssl_mode: require
