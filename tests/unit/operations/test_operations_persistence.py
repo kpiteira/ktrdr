@@ -127,7 +127,7 @@ class TestOperationsServicePersistence:
             (
                 "op_test_001",
                 "training",
-                "COMPLETED",
+                "completed",
                 datetime(2025, 1, 17, 10, 0, 0, tzinfo=timezone.utc),
                 datetime(2025, 1, 17, 10, 1, 0, tzinfo=timezone.utc),
                 datetime(2025, 1, 17, 10, 10, 0, tzinfo=timezone.utc),
@@ -167,7 +167,7 @@ class TestOperationsServicePersistence:
         assert "WHERE status = %s" in sql
 
         params = mock_cursor.execute.call_args[0][1]
-        assert "RUNNING" in params
+        assert "running" in params
 
     @pytest.mark.asyncio
     async def test_load_operations_with_checkpoints(
@@ -181,7 +181,7 @@ class TestOperationsServicePersistence:
             (
                 "op_test_001",
                 "training",
-                "FAILED",
+                "failed",
                 datetime(2025, 1, 17, 10, 0, 0, tzinfo=timezone.utc),
                 datetime(2025, 1, 17, 10, 1, 0, tzinfo=timezone.utc),
                 None,
@@ -259,9 +259,8 @@ class TestOperationsServicePersistenceIntegration:
         mock_db, mock_conn, mock_cursor = mock_db_connection
         operations_service = OperationsService()
 
-        operation_info = await operations_service.create_operation(
+        await operations_service.create_operation(
             operation_type=OperationType.TRAINING,
-            description="Test training",
             metadata=OperationMetadata(symbol="AAPL", timeframe="1d"),
         )
 
@@ -279,7 +278,7 @@ class TestOperationsServicePersistenceIntegration:
         # Create operation first
         operation_info = await operations_service.create_operation(
             operation_type=OperationType.TRAINING,
-            description="Test training",
+            metadata=OperationMetadata(),
         )
 
         # Reset mock to check complete_operation calls
@@ -306,7 +305,7 @@ class TestOperationsServicePersistenceIntegration:
         # Create operation first
         operation_info = await operations_service.create_operation(
             operation_type=OperationType.TRAINING,
-            description="Test training",
+            metadata=OperationMetadata(),
         )
 
         # Reset mock

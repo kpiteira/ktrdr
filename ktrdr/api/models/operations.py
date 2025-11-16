@@ -144,6 +144,15 @@ class OperationInfo(BaseModel):
         "For backtesting: trade stats, performance metrics.",
     )
 
+    # Checkpoint metadata (Task 3.1: populated by load_operations_with_checkpoints)
+    checkpoint_id: Optional[str] = Field(None, description="Associated checkpoint ID")
+    checkpoint_size_bytes: Optional[int] = Field(
+        None, description="Checkpoint size in bytes"
+    )
+    checkpoint_created_at: Optional[datetime] = Field(
+        None, description="When checkpoint was created"
+    )
+
     @property
     def duration_seconds(self) -> Optional[float]:
         """Calculate operation duration in seconds."""
@@ -366,6 +375,30 @@ class OperationMetricsResponse(BaseModel):
                         "total_epochs_completed": 1,
                     },
                 },
+            }
+        }
+    )
+
+
+class OperationResumeResponse(BaseModel):
+    """Response for operation resume (Task 3.2)."""
+
+    success: bool = Field(True, description="Whether the resume was successful")
+    original_operation_id: str = Field(..., description="ID of original operation")
+    new_operation_id: str = Field(..., description="ID of new resumed operation")
+    resumed_from_checkpoint: str = Field(
+        ..., description="Type of checkpoint resumed from"
+    )
+    message: str = Field(..., description="Human-readable message about resume point")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "success": True,
+                "original_operation_id": "op_training_20250117_100000",
+                "new_operation_id": "op_training_20250117_140000",
+                "resumed_from_checkpoint": "epoch_snapshot",
+                "message": "Operation resumed from epoch 45",
             }
         }
     )

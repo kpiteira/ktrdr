@@ -19,6 +19,7 @@ from ktrdr.api.models.operations import (
     OperationCancelResponse,
     OperationListResponse,
     OperationMetricsResponse,
+    OperationResumeResponse,
     OperationStatus,
     OperationStatusResponse,
     OperationSummary,
@@ -672,5 +673,91 @@ async def add_operation_metrics(
         raise DataError(
             message=f"Failed to add metrics for operation {operation_id}",
             error_code="OPERATIONS-AddMetricsError",
+            details={"operation_id": operation_id, "error": str(e)},
+        ) from e
+
+
+@router.post(
+    "/operations/{operation_id}/resume",
+    response_model=OperationResumeResponse,
+    tags=["Operations"],
+    summary="Resume operation from checkpoint",
+    description="""
+    Resume a FAILED or CANCELLED operation from its last checkpoint.
+
+    **Features:**
+    - Validates operation is resumable (FAILED/CANCELLED only)
+    - Loads latest checkpoint from database
+    - Creates new operation linked to original
+    - Dispatches to appropriate service (Training/Backtesting)
+    - Deletes original checkpoint after resume starts
+
+    **Perfect for:** Recovery from failures, continuing cancelled work
+    """,
+)
+async def resume_operation(
+    operation_id: str = Path(..., description="ID of operation to resume"),
+    operations_service: OperationsService = Depends(get_operations_service),
+) -> OperationResumeResponse:
+    """
+    Resume operation from checkpoint (Task 3.2).
+
+    Algorithm:
+    1. Validate operation exists and is resumable (FAILED/CANCELLED)
+    2. Load checkpoint from CheckpointService
+    3. Create new operation with resumed_from link
+    4. Dispatch to TrainingService or BacktestingService
+    5. Delete original checkpoint
+    6. Return new operation info
+
+    Args:
+        operation_id: ID of the original (failed/cancelled) operation
+
+    Returns:
+        OperationResumeResponse: Information about resumed operation
+
+    Raises:
+        404: Operation not found
+        400: Operation not resumable or no checkpoint found
+        500: Resume failed
+
+    Example:
+        POST /api/v1/operations/op_training_20250117_100000/resume
+        Response:
+        {
+            "success": true,
+            "original_operation_id": "op_training_20250117_100000",
+            "new_operation_id": "op_training_20250117_140000",
+            "resumed_from_checkpoint": "epoch_snapshot",
+            "message": "Operation resumed from epoch 45"
+        }
+    """
+    try:
+        logger.info(f"Resuming operation from checkpoint: {operation_id}")
+
+        # Resume operation via service
+        result = await operations_service.resume_operation(operation_id)
+
+        logger.info(
+            f"Successfully resumed operation {operation_id} as {result['new_operation_id']}"
+        )
+
+        return OperationResumeResponse(**result)
+
+    except ValueError as e:
+        # ValueError raised for validation errors (not found, wrong status, no checkpoint)
+        error_msg = str(e)
+        logger.warning(f"Cannot resume operation {operation_id}: {error_msg}")
+
+        if "not found" in error_msg.lower():
+            raise HTTPException(status_code=404, detail=error_msg) from e
+        else:
+            raise HTTPException(status_code=400, detail=error_msg) from e
+
+    except Exception as e:
+        logger.error(f"Error resuming operation {operation_id}: {str(e)}")
+        raise DataError(
+            message=f"Failed to resume operation {operation_id}",
+            error_code="OPERATIONS-ResumeError",
             details={"operation_id": operation_id, "error": str(e)},
         ) from e

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
-from psycopg2.pool import SimpleConnectionPool
+from psycopg2.pool import SimpleConnectionPool  # type: ignore[import-untyped]
 
 from ktrdr.logging import get_logger
 
@@ -116,7 +116,7 @@ class DatabaseConnection:
             config: Database configuration
         """
         self.config = config
-        self._pool: SimpleConnectionPool = None
+        self._pool: Optional[SimpleConnectionPool] = None
         self._init_pool()
 
     def _init_pool(self) -> None:
@@ -149,6 +149,8 @@ class DatabaseConnection:
         Raises:
             psycopg2.OperationalError: If connection cannot be obtained
         """
+        if self._pool is None:
+            raise RuntimeError("Connection pool not initialized")
         try:
             conn = self._pool.getconn()
             return conn
@@ -163,6 +165,8 @@ class DatabaseConnection:
         Args:
             conn: Connection to release
         """
+        if self._pool is None:
+            raise RuntimeError("Connection pool not initialized")
         try:
             self._pool.putconn(conn)
         except Exception as e:

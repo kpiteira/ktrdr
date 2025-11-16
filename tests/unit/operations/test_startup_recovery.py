@@ -44,7 +44,7 @@ class TestStartupRecovery:
             (
                 "op_test_001",
                 "training",
-                "RUNNING",
+                "running",
                 datetime(2025, 1, 17, 10, 0, 0, tzinfo=timezone.utc),
                 datetime(2025, 1, 17, 10, 1, 0, tzinfo=timezone.utc),
                 None,
@@ -56,7 +56,7 @@ class TestStartupRecovery:
             (
                 "op_test_002",
                 "backtesting",
-                "RUNNING",
+                "running",
                 datetime(2025, 1, 17, 11, 0, 0, tzinfo=timezone.utc),
                 datetime(2025, 1, 17, 11, 1, 0, tzinfo=timezone.utc),
                 None,
@@ -68,7 +68,7 @@ class TestStartupRecovery:
             (
                 "op_test_003",
                 "data_load",
-                "RUNNING",
+                "running",
                 datetime(2025, 1, 17, 12, 0, 0, tzinfo=timezone.utc),
                 datetime(2025, 1, 17, 12, 1, 0, tzinfo=timezone.utc),
                 None,
@@ -90,7 +90,7 @@ class TestStartupRecovery:
         select_call = mock_cursor.execute.call_args_list[0][0]
         assert "SELECT" in select_call[0]
         assert "WHERE status = %s" in select_call[0]
-        assert "RUNNING" in select_call[1]
+        assert "running" in select_call[1]
 
         # Verify UPDATE query to mark as FAILED
         update_calls = [
@@ -106,7 +106,7 @@ class TestStartupRecovery:
             params = call[0][1]
             assert "UPDATE operations" in sql
             assert "SET status = %s" in sql
-            assert "FAILED" in params
+            assert "failed" in params
             assert "Operation interrupted by API restart" in params
 
         # Verify commit called
@@ -260,7 +260,7 @@ class TestStartupRecovery:
 
             # Verify logging
             # Should log info about recovery
-            info_calls = [call for call in mock_logger.info.call_args_list]
+            info_calls = list(mock_logger.info.call_args_list)
             assert any("Startup recovery" in str(call) for call in info_calls)
             assert any("2" in str(call) for call in info_calls)
 
@@ -272,7 +272,7 @@ class TestStartupEventIntegration:
     async def test_lifespan_calls_recover_interrupted_operations(self):
         """Test lifespan event calls recover_interrupted_operations on startup."""
         with patch(
-            "ktrdr.api.startup.get_operations_service"
+            "ktrdr.api.services.operations_service.get_operations_service"
         ) as mock_get_operations_service:
             mock_operations_service = MagicMock()
             mock_operations_service.recover_interrupted_operations = AsyncMock(
@@ -299,7 +299,7 @@ class TestStartupEventIntegration:
     async def test_lifespan_logs_recovery_count(self):
         """Test lifespan logs the number of recovered operations."""
         with patch(
-            "ktrdr.api.startup.get_operations_service"
+            "ktrdr.api.services.operations_service.get_operations_service"
         ) as mock_get_operations_service:
             mock_operations_service = MagicMock()
             mock_operations_service.recover_interrupted_operations = AsyncMock(
@@ -318,5 +318,7 @@ class TestStartupEventIntegration:
                     pass
 
                 # Verify logging
-                info_calls = [call for call in mock_logger.info.call_args_list]
-                assert any("5 operations" in str(call) for call in info_calls)
+                info_calls = list(mock_logger.info.call_args_list)
+                assert any(
+                    "5 interrupted operations" in str(call) for call in info_calls
+                )

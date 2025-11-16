@@ -17,7 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
-import psycopg2
+import psycopg2  # type: ignore[import-untyped]
 import yaml
 
 

@@ -180,7 +180,7 @@ class TestDatabaseConnection:
         db = DatabaseConnection(config)
 
         with pytest.raises(ValueError):
-            with db as conn:
+            with db as _:
                 raise ValueError("Test error")
 
         # Verify connection still released

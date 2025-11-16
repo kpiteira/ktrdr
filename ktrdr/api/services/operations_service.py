@@ -145,6 +145,9 @@ class OperationsService:
                     error_message=None,
                     result_summary=None,
                     metrics=None,  # NEW: M1 - initialize as None
+                    checkpoint_id=None,
+                    checkpoint_size_bytes=None,
+                    checkpoint_created_at=None,
                 )
 
                 # Add to registry
@@ -629,6 +632,9 @@ class OperationsService:
                 error_message=None,
                 result_summary=None,
                 metrics=None,  # NEW: M1 - initialize as None
+                checkpoint_id=None,
+                checkpoint_size_bytes=None,
+                checkpoint_created_at=None,
             )
 
             # Add to registry
@@ -1234,6 +1240,12 @@ class OperationsService:
                     )
         except Exception as e:
             logger.error(f"Failed to persist operation {operation.operation_id}: {e}")
+            # Rollback on error
+            try:
+                if "conn" in locals():
+                    conn.rollback()
+            except Exception:
+                pass
             # Don't raise - graceful degradation
 
     async def load_operations(
@@ -1298,6 +1310,10 @@ class OperationsService:
                             metadata=OperationMetadata(**metadata),
                             result_summary=result_summary,
                             error_message=row[9],
+                            metrics=None,
+                            checkpoint_id=None,
+                            checkpoint_size_bytes=None,
+                            checkpoint_created_at=None,
                         )
                         operations.append(operation)
 
@@ -1355,12 +1371,11 @@ class OperationsService:
                             metadata=OperationMetadata(**metadata),
                             result_summary=result_summary,
                             error_message=row[9],
+                            metrics=None,
+                            checkpoint_id=row[10],
+                            checkpoint_size_bytes=row[11],
+                            checkpoint_created_at=row[12],
                         )
-
-                        # Add checkpoint attributes dynamically
-                        operation.checkpoint_id = row[10]  # type: ignore
-                        operation.checkpoint_size_bytes = row[11]  # type: ignore
-                        operation.checkpoint_created_at = row[12]  # type: ignore
 
                         operations.append(operation)
 
@@ -1400,7 +1415,7 @@ class OperationsService:
                         FROM operations
                         WHERE status = %s
                         """,
-                        ("RUNNING",),
+                        ("running",),
                     )
 
                     rows = cursor.fetchall()
@@ -1423,7 +1438,7 @@ class OperationsService:
                             WHERE operation_id = %s
                             """,
                             (
-                                "FAILED",
+                                "failed",
                                 "Operation interrupted by API restart",
                                 operation_id,
                             ),
@@ -1441,9 +1456,138 @@ class OperationsService:
             logger.error(f"Failed to recover interrupted operations: {e}")
             try:
                 conn.rollback()
-            except:
+            except Exception:
                 pass
             return 0
+
+    async def resume_operation(self, original_operation_id: str) -> dict[str, Any]:
+        """
+        Resume operation from checkpoint.
+
+        Algorithm:
+        1. Validate original operation is resumable (FAILED/CANCELLED)
+        2. Load latest checkpoint via CheckpointService
+        3. Create NEW operation with new operation_id
+        4. Dispatch to appropriate service (TrainingService/BacktestingService)
+        5. Delete original checkpoint after resume starts
+        6. Return new operation info
+
+        Args:
+            original_operation_id: ID of the original (failed/cancelled) operation
+
+        Returns:
+            dict with:
+                - success: bool
+                - original_operation_id: str
+                - new_operation_id: str
+                - resumed_from_checkpoint: str
+                - message: str
+
+        Raises:
+            ValueError: If operation not found, not resumable, or no checkpoint exists
+        """
+        # Step 1: Validate operation exists and is resumable
+        original_operation = await self.get_operation(original_operation_id)
+        if original_operation is None:
+            raise ValueError(f"Operation not found: {original_operation_id}")
+
+        # Check status is FAILED or CANCELLED
+        if original_operation.status not in [
+            OperationStatus.FAILED,
+            OperationStatus.CANCELLED,
+        ]:
+            raise ValueError(
+                f"Cannot resume {original_operation.status.value} operation. "
+                "Only FAILED or CANCELLED operations can be resumed."
+            )
+
+        # Step 2: Load checkpoint
+        checkpoint_service = get_checkpoint_service()
+        checkpoint_state = checkpoint_service.load_checkpoint(original_operation_id)
+
+        if checkpoint_state is None:
+            raise ValueError(
+                f"No checkpoint found for {original_operation_id}. Cannot resume."
+            )
+
+        # Extract checkpoint metadata
+        checkpoint_type = checkpoint_state.get("checkpoint_type", "unknown")
+        checkpoint_info = {
+            "epoch": checkpoint_state.get("epoch"),
+            "bar_index": checkpoint_state.get("current_bar_index"),
+        }
+
+        # Step 3: Create new operation with resumed_from link
+        new_metadata = OperationMetadata(
+            symbol=original_operation.metadata.symbol,
+            timeframe=original_operation.metadata.timeframe,
+            mode=original_operation.metadata.mode,
+            start_date=original_operation.metadata.start_date,
+            end_date=original_operation.metadata.end_date,
+            parameters={
+                **original_operation.metadata.parameters,
+                "resumed_from": original_operation_id,
+            },
+        )
+
+        new_operation = await self.create_operation(
+            operation_type=original_operation.operation_type,
+            metadata=new_metadata,
+        )
+
+        new_operation_id = new_operation.operation_id
+
+        # Step 4: Dispatch to appropriate service based on operation type
+        try:
+            if original_operation.operation_type == OperationType.TRAINING:
+                # Dispatch to TrainingService
+                training_service = get_training_service()
+                await training_service.resume_training(
+                    new_operation_id=new_operation_id,
+                    checkpoint_state=checkpoint_state,
+                )
+
+            elif original_operation.operation_type == OperationType.BACKTESTING:
+                # Dispatch to BacktestingService
+                backtesting_service = get_backtesting_service()
+                await backtesting_service.resume_backtest(
+                    new_operation_id=new_operation_id,
+                    checkpoint_state=checkpoint_state,
+                )
+
+            else:
+                raise ValueError(
+                    f"Resume not supported for operation type: {original_operation.operation_type.value}"
+                )
+
+        except Exception as e:
+            # If resume fails, mark new operation as failed
+            await self.fail_operation(
+                new_operation_id, error_message=f"Resume failed: {str(e)}"
+            )
+            raise
+
+        # Step 5: Delete original checkpoint (resume has started successfully)
+        checkpoint_service.delete_checkpoint(original_operation_id)
+
+        # Step 6: Return response
+        resume_point = (
+            f"epoch {checkpoint_info['epoch']}"
+            if checkpoint_info.get("epoch") is not None
+            else (
+                f"bar {checkpoint_info['bar_index']}"
+                if checkpoint_info.get("bar_index") is not None
+                else "last checkpoint"
+            )
+        )
+
+        return {
+            "success": True,
+            "original_operation_id": original_operation_id,
+            "new_operation_id": new_operation_id,
+            "resumed_from_checkpoint": checkpoint_type,
+            "message": f"Operation resumed from {resume_point}",
+        }
 
 
 # Global operations service instance
@@ -1461,3 +1605,41 @@ def get_operations_service() -> OperationsService:
     if _operations_service is None:
         _operations_service = OperationsService()
     return _operations_service
+
+
+def get_checkpoint_service():
+    """
+    Get the CheckpointService instance.
+
+    Returns:
+        CheckpointService instance
+    """
+    from ktrdr.checkpoint import CheckpointService
+
+    return CheckpointService()
+
+
+def get_training_service():
+    """
+    Get the TrainingService instance.
+
+    Returns:
+        TrainingService instance
+    """
+    from ktrdr.api.services.training.training_service import (  # type: ignore[import-untyped]
+        TrainingService,
+    )
+
+    return TrainingService()
+
+
+def get_backtesting_service():
+    """
+    Get the BacktestingService instance.
+
+    Returns:
+        BacktestingService instance
+    """
+    from ktrdr.backtesting.backtesting_service import BacktestingService
+
+    return BacktestingService()

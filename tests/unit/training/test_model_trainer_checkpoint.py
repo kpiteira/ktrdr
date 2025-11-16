@@ -239,10 +239,21 @@ def test_restore_checkpoint_state_restores_all_state(trained_model_trainer):
     new_early_stopping = EarlyStopping(patience=10, monitor="val_loss")
     new_trainer = ModelTrainer(config=trainer.config)
 
+    # Extract artifacts from checkpoint_state (temporary fix for Task 2.1 signature change)
+    artifacts = {
+        "model.pt": checkpoint_state.pop("model_state_dict"),
+        "optimizer.pt": checkpoint_state.pop("optimizer_state_dict"),
+    }
+    if checkpoint_state.get("scheduler_state_dict"):
+        artifacts["scheduler.pt"] = checkpoint_state.pop("scheduler_state_dict")
+    if checkpoint_state.get("best_model_state"):
+        artifacts["best_model.pt"] = checkpoint_state.pop("best_model_state")
+
     # Restore checkpoint
     starting_epoch = new_trainer.restore_checkpoint_state(
-        checkpoint_state=checkpoint_state,
         model=new_model,
+        checkpoint_state=checkpoint_state,
+        artifacts=artifacts,
         optimizer=new_optimizer,
         scheduler=new_scheduler,
         early_stopping=new_early_stopping,
@@ -294,9 +305,16 @@ def test_restore_checkpoint_state_handles_missing_optional_components(model_trai
     new_model = SimpleModel()
     new_optimizer = optim.Adam(new_model.parameters(), lr=0.001)
 
+    # Extract artifacts from checkpoint_state
+    artifacts = {
+        "model.pt": checkpoint_state.pop("model_state_dict"),
+        "optimizer.pt": checkpoint_state.pop("optimizer_state_dict"),
+    }
+
     starting_epoch = model_trainer.restore_checkpoint_state(
-        checkpoint_state=checkpoint_state,
         model=new_model,
+        checkpoint_state=checkpoint_state,
+        artifacts=artifacts,
         optimizer=new_optimizer,
         scheduler=None,
         early_stopping=None,
@@ -390,11 +408,18 @@ def test_restore_checkpoint_state_validates_config_compatibility(model_trainer):
     new_model = SimpleModel()
     new_optimizer = optim.Adam(new_model.parameters(), lr=0.01)
 
+    # Extract artifacts from checkpoint_state
+    artifacts = {
+        "model.pt": checkpoint_state.pop("model_state_dict"),
+        "optimizer.pt": checkpoint_state.pop("optimizer_state_dict"),
+    }
+
     # Should raise error or log warning
     # For now, we'll just restore (implementation can add validation later)
     starting_epoch = new_trainer.restore_checkpoint_state(
-        checkpoint_state=checkpoint_state,
         model=new_model,
+        checkpoint_state=checkpoint_state,
+        artifacts=artifacts,
         optimizer=new_optimizer,
         scheduler=None,
         early_stopping=None,
