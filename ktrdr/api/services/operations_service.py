@@ -438,6 +438,40 @@ class OperationsService:
                         f"Failed to cancel remote operation {host_operation_id}: {e}"
                     )
 
+            # Task 3.5: Create checkpoint before cancelling (if policy enables it)
+            checkpoint_created = False
+            try:
+                from ktrdr.checkpoint.policy import load_checkpoint_policies
+
+                # Load checkpoint policy for this operation type
+                policies = load_checkpoint_policies()
+                operation_type_key = operation.operation_type.value.lower()
+                policy = policies.get(operation_type_key)
+
+                if policy and policy.checkpoint_on_cancellation:
+                    # Create cancellation checkpoint with metadata
+                    checkpoint_created = await self.create_checkpoint(
+                        operation_id=operation_id,
+                        checkpoint_type=CheckpointType.CANCELLATION,
+                        metadata={
+                            "cancellation_reason": cancellation_reason,
+                            "checkpoint_at_cancellation": True,
+                        },
+                    )
+                    if checkpoint_created:
+                        logger.info(
+                            f"Created cancellation checkpoint for operation {operation_id}"
+                        )
+                    else:
+                        logger.warning(
+                            f"Failed to create cancellation checkpoint for {operation_id}, continuing with cancellation"
+                        )
+            except Exception as e:
+                # Don't let checkpoint failure block cancellation
+                logger.warning(
+                    f"Checkpoint creation failed for {operation_id}: {e}, continuing with cancellation"
+                )
+
             # Update operation status with telemetry
             with create_service_span(
                 "operation.state_transition", operation_id=operation_id
