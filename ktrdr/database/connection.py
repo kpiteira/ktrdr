@@ -6,9 +6,10 @@ for database operations.
 """
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import yaml
 from psycopg2.pool import SimpleConnectionPool  # type: ignore[import-untyped]
@@ -16,6 +17,38 @@ from psycopg2.pool import SimpleConnectionPool  # type: ignore[import-untyped]
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def resolve_env_variable(value: Any) -> Any:
+    """
+    Resolve environment variable references in a value.
+
+    Supports ${VAR:-default} and ${VAR} syntax.
+
+    Args:
+        value: Value to resolve (can be str, int, dict, list, etc.)
+
+    Returns:
+        Resolved value with environment variables substituted
+    """
+    if not isinstance(value, str):
+        return value
+
+    # Match ${VAR:-default} or ${VAR}
+    pattern = r"\$\{([^}:]+)(?::-([^}]*))?\}"
+
+    def replace_env(match: re.Match) -> str:
+        var_name = match.group(1)
+        default_value = match.group(2) if match.group(2) is not None else ""
+        return os.getenv(var_name, default_value)
+
+    resolved = re.sub(pattern, replace_env, value)
+
+    # Try to convert to int if it looks like a number
+    if resolved.isdigit():
+        return int(resolved)
+
+    return resolved
 
 
 @dataclass
@@ -59,6 +92,8 @@ class DatabaseConfig:
         """
         Create database config from YAML file.
 
+        Environment variables in the YAML file (${VAR:-default}) will be resolved.
+
         Args:
             yaml_path: Path to YAML configuration file
 
@@ -78,12 +113,23 @@ class DatabaseConfig:
 
         db_config = config_data.get("database", {})
 
+        # Resolve environment variables in all config values
+        host = resolve_env_variable(db_config.get("host", "localhost"))
+        port = resolve_env_variable(db_config.get("port", 5432))
+        database = resolve_env_variable(db_config.get("database", "ktrdr"))
+        user = resolve_env_variable(db_config.get("user", "ktrdr_admin"))
+        password = resolve_env_variable(db_config.get("password", "ktrdr_dev_password"))
+
+        # Ensure port is an integer
+        if isinstance(port, str):
+            port = int(port)
+
         return cls(
-            host=db_config.get("host", "localhost"),
-            port=db_config.get("port", 5432),
-            database=db_config.get("database", "ktrdr"),
-            user=db_config.get("user", "ktrdr_admin"),
-            password=db_config.get("password", "ktrdr_dev_password"),
+            host=host,
+            port=port,
+            database=database,
+            user=user,
+            password=password,
             pool_min_size=db_config.get("pool", {}).get("min_size", 2),
             pool_max_size=db_config.get("pool", {}).get("max_size", 10),
             pool_timeout=db_config.get("pool", {}).get("timeout", 30),

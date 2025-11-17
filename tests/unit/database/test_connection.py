@@ -232,6 +232,12 @@ class TestDatabaseHelpers:
     @patch("ktrdr.database.connection.DatabaseConnection")
     def test_get_database_connection(self, mock_db_class):
         """Test get_database_connection returns singleton instance."""
+        # Reset singletons to force fresh creation
+        import ktrdr.database.connection as db_module
+
+        db_module._database_connection = None
+        db_module._database_config = None
+
         mock_db = MagicMock()
         mock_db_class.return_value = mock_db
 

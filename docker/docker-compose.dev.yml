@@ -56,6 +56,11 @@ services:
       - LOG_LEVEL=INFO
       - ENVIRONMENT=development
       # PostgreSQL / TimescaleDB configuration (checkpoint persistence)
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-ktrdr}
+      - POSTGRES_USER=${POSTGRES_USER:-ktrdr_admin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-ktrdr_dev_password}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-ktrdr_admin}:${POSTGRES_PASSWORD:-ktrdr_dev_password}@postgres:5432/${POSTGRES_DB:-ktrdr}
       # OpenTelemetry / Jaeger configuration (Phase 2: Jaeger UI)
       - OTLP_ENDPOINT=http://jaeger:4317
@@ -100,6 +105,11 @@ services:
       - PYTHONPATH=/app
       - LOG_LEVEL=INFO
       # PostgreSQL / TimescaleDB configuration (checkpoint persistence)
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-ktrdr}
+      - POSTGRES_USER=${POSTGRES_USER:-ktrdr_admin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-ktrdr_dev_password}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-ktrdr_admin}:${POSTGRES_PASSWORD:-ktrdr_dev_password}@postgres:5432/${POSTGRES_DB:-ktrdr}
       - KTRDR_API_URL=http://backend:8000
       - WORKER_TYPE=backtesting
@@ -141,6 +151,11 @@ services:
       - PYTHONPATH=/app
       - LOG_LEVEL=INFO
       # PostgreSQL / TimescaleDB configuration (checkpoint persistence)
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-ktrdr}
+      - POSTGRES_USER=${POSTGRES_USER:-ktrdr_admin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-ktrdr_dev_password}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-ktrdr_admin}:${POSTGRES_PASSWORD:-ktrdr_dev_password}@postgres:5432/${POSTGRES_DB:-ktrdr}
       - KTRDR_API_URL=http://backend:8000
       - WORKER_TYPE=training
