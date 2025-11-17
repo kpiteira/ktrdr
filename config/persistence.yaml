@@ -46,6 +46,10 @@ checkpointing:
     # Allows resume from failure point
     checkpoint_on_failure: true
 
+    # Save checkpoint when user cancels operation
+    # Preserves work when operation is manually cancelled (Task 3.5)
+    checkpoint_on_cancellation: true
+
   # Backtesting checkpoint policy
   # Same time-based approach as training
   backtesting:
@@ -62,6 +66,10 @@ checkpointing:
 
     # Save checkpoint when operation fails
     checkpoint_on_failure: true
+
+    # Save checkpoint when user cancels operation
+    # Preserves work when operation is manually cancelled (Task 3.5)
+    checkpoint_on_cancellation: true
 
   # Cleanup policies
   cleanup:

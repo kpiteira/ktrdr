@@ -28,12 +28,15 @@ class CheckpointPolicy:
             Checkpoints are ephemeral - only needed for resume
         checkpoint_on_failure: Save checkpoint when operation fails
             Allows resume from failure point
+        checkpoint_on_cancellation: Save checkpoint when user cancels operation
+            Preserves work when operation is manually cancelled (Task 3.5)
     """
 
     checkpoint_interval_seconds: float
     force_checkpoint_every_n: int
     delete_on_completion: bool
     checkpoint_on_failure: bool
+    checkpoint_on_cancellation: bool
 
     def __post_init__(self):
         """Validate policy parameters."""
@@ -170,6 +173,9 @@ def load_checkpoint_policies(
         force_checkpoint_every_n=int(training_config["force_checkpoint_every_n"]),
         delete_on_completion=bool(training_config["delete_on_completion"]),
         checkpoint_on_failure=bool(training_config["checkpoint_on_failure"]),
+        checkpoint_on_cancellation=bool(
+            training_config.get("checkpoint_on_cancellation", False)
+        ),
     )
 
     # Load backtesting policy
@@ -181,6 +187,9 @@ def load_checkpoint_policies(
         force_checkpoint_every_n=int(backtesting_config["force_checkpoint_every_n"]),
         delete_on_completion=bool(backtesting_config["delete_on_completion"]),
         checkpoint_on_failure=bool(backtesting_config["checkpoint_on_failure"]),
+        checkpoint_on_cancellation=bool(
+            backtesting_config.get("checkpoint_on_cancellation", False)
+        ),
     )
 
     return {
