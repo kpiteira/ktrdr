@@ -60,10 +60,12 @@ class TestCreateCheckpoint:
         assert result is True
         mock_checkpoint_service.save_checkpoint.assert_called_once()
         call_args = mock_checkpoint_service.save_checkpoint.call_args
-        assert call_args[1]["operation_id"] == operation_id
-        assert call_args[1]["checkpoint_type"] == "TIMER"
-        assert call_args[1]["state"] == current_state
-        assert call_args[1]["metadata"]["interval"] == 300
+        # Check positional arguments: save_checkpoint(operation_id, checkpoint_data)
+        assert call_args[0][0] == operation_id  # First positional arg
+        checkpoint_data = call_args[0][1]  # Second positional arg (checkpoint_data dict)
+        assert checkpoint_data["checkpoint_type"] == "TIMER"
+        assert checkpoint_data["state"] == current_state
+        assert checkpoint_data["metadata"]["interval"] == 300
 
     @pytest.mark.asyncio
     async def test_create_checkpoint_cancellation_type(
@@ -92,8 +94,9 @@ class TestCreateCheckpoint:
 
         assert result is True
         call_args = mock_checkpoint_service.save_checkpoint.call_args
-        assert call_args[1]["checkpoint_type"] == "CANCELLATION"
-        assert call_args[1]["metadata"]["cancellation_reason"] == "user_cancelled"
+        checkpoint_data = call_args[0][1]
+        assert checkpoint_data["checkpoint_type"] == "CANCELLATION"
+        assert checkpoint_data["metadata"]["cancellation_reason"] == "user_cancelled"
 
     @pytest.mark.asyncio
     async def test_create_checkpoint_shutdown_type(
@@ -122,8 +125,9 @@ class TestCreateCheckpoint:
 
         assert result is True
         call_args = mock_checkpoint_service.save_checkpoint.call_args
-        assert call_args[1]["checkpoint_type"] == "SHUTDOWN"
-        assert call_args[1]["metadata"]["shutdown_signal"] == 15
+        checkpoint_data = call_args[0][1]
+        assert checkpoint_data["checkpoint_type"] == "SHUTDOWN"
+        assert checkpoint_data["metadata"]["shutdown_signal"] == 15
 
     @pytest.mark.asyncio
     async def test_create_checkpoint_no_state_available(
@@ -160,8 +164,12 @@ class TestCreateCheckpoint:
         operation_id = "op_test_005"
         current_state = {"epoch": 15}
 
-        # Make save_checkpoint raise exception
-        mock_checkpoint_service.save_checkpoint.side_effect = Exception("Disk full")
+        # Make save_checkpoint raise exception (wrapped in asyncio.to_thread)
+        # The mock needs to work with asyncio.to_thread, so we patch it differently
+        def raise_exception(*args, **kwargs):
+            raise Exception("Disk full")
+
+        mock_checkpoint_service.save_checkpoint = raise_exception
 
         with patch.object(
             operations_service,
@@ -211,9 +219,10 @@ class TestCreateCheckpoint:
         assert result is True
         call_args = mock_checkpoint_service.save_checkpoint.call_args
         # Should have default fields even when None metadata provided
-        assert "checkpoint_type" in call_args[1]["metadata"]
-        assert "created_at" in call_args[1]["metadata"]
-        assert call_args[1]["metadata"]["checkpoint_type"] == "FORCE"
+        checkpoint_data = call_args[0][1]
+        assert "checkpoint_type" in checkpoint_data["metadata"]
+        assert "created_at" in checkpoint_data["metadata"]
+        assert checkpoint_data["metadata"]["checkpoint_type"] == "FORCE"
 
     @pytest.mark.asyncio
     async def test_create_checkpoint_logs_success(
