@@ -62,7 +62,9 @@ class TestCreateCheckpoint:
         call_args = mock_checkpoint_service.save_checkpoint.call_args
         # Check positional arguments: save_checkpoint(operation_id, checkpoint_data)
         assert call_args[0][0] == operation_id  # First positional arg
-        checkpoint_data = call_args[0][1]  # Second positional arg (checkpoint_data dict)
+        checkpoint_data = call_args[0][
+            1
+        ]  # Second positional arg (checkpoint_data dict)
         assert checkpoint_data["checkpoint_type"] == "TIMER"
         assert checkpoint_data["state"] == current_state
         assert checkpoint_data["metadata"]["interval"] == 300
