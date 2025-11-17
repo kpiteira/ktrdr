@@ -7,8 +7,6 @@ Tests verify:
 - Can be used in comparisons
 """
 
-import pytest
-
 from ktrdr.checkpoint.types import CheckpointType
 
 

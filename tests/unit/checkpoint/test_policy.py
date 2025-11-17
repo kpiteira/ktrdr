@@ -39,6 +39,7 @@ class TestCheckpointPolicy:
             force_checkpoint_every_n=50,
             delete_on_completion=True,
             checkpoint_on_failure=True,
+            checkpoint_on_cancellation=True,
         )
 
         assert policy.checkpoint_interval_seconds == 300.0
@@ -61,6 +62,7 @@ class TestCheckpointPolicy:
                 force_checkpoint_every_n=50,
                 delete_on_completion=True,
                 checkpoint_on_failure=True,
+                checkpoint_on_cancellation=True,
             )
 
     def test_policy_validation_zero_interval(self):
@@ -78,6 +80,7 @@ class TestCheckpointPolicy:
                 force_checkpoint_every_n=50,
                 delete_on_completion=True,
                 checkpoint_on_failure=True,
+                checkpoint_on_cancellation=True,
             )
 
     def test_policy_validation_negative_force_boundary(self):
@@ -95,6 +98,7 @@ class TestCheckpointPolicy:
                 force_checkpoint_every_n=-1,
                 delete_on_completion=True,
                 checkpoint_on_failure=True,
+                checkpoint_on_cancellation=True,
             )
 
     def test_policy_validation_zero_force_boundary(self):
@@ -112,6 +116,7 @@ class TestCheckpointPolicy:
                 force_checkpoint_every_n=0,
                 delete_on_completion=True,
                 checkpoint_on_failure=True,
+                checkpoint_on_cancellation=True,
             )
 
 
@@ -126,6 +131,7 @@ class TestCheckpointDecisionEngine:
             force_checkpoint_every_n=50,
             delete_on_completion=True,
             checkpoint_on_failure=True,
+            checkpoint_on_cancellation=True,
         )
 
     @pytest.fixture
@@ -306,6 +312,7 @@ class TestCheckpointDecisionEngine:
             force_checkpoint_every_n=10,
             delete_on_completion=True,
             checkpoint_on_failure=True,
+            checkpoint_on_cancellation=True,
         )
 
         current_time = time.time()

@@ -125,18 +125,19 @@ class TestCheckpointPolicyWithCancellation:
 
     def test_policy_validation_unchanged(self):
         """Test that existing validation still works with new field."""
-        # Valid policy should pass
-        policy = CheckpointPolicy(
+        # Valid policy should pass (should not raise)
+        CheckpointPolicy(
             checkpoint_interval_seconds=300,
             force_checkpoint_every_n=50,
             delete_on_completion=True,
             checkpoint_on_failure=True,
             checkpoint_on_cancellation=True,
         )
-        # Should not raise
 
         # Invalid checkpoint_interval_seconds should fail
-        with pytest.raises(ValueError, match="checkpoint_interval_seconds must be positive"):
+        with pytest.raises(
+            ValueError, match="checkpoint_interval_seconds must be positive"
+        ):
             CheckpointPolicy(
                 checkpoint_interval_seconds=-10,
                 force_checkpoint_every_n=50,
@@ -146,7 +147,9 @@ class TestCheckpointPolicyWithCancellation:
             )
 
         # Invalid force_checkpoint_every_n should fail
-        with pytest.raises(ValueError, match="force_checkpoint_every_n must be positive"):
+        with pytest.raises(
+            ValueError, match="force_checkpoint_every_n must be positive"
+        ):
             CheckpointPolicy(
                 checkpoint_interval_seconds=300,
                 force_checkpoint_every_n=0,

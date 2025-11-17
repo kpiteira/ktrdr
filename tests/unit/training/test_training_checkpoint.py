@@ -40,6 +40,7 @@ def checkpoint_policy():
         force_checkpoint_every_n=5,  # Force every 5 epochs
         delete_on_completion=True,
         checkpoint_on_failure=True,
+        checkpoint_on_cancellation=True,
     )
 
 
@@ -242,6 +243,7 @@ def test_training_continues_when_checkpoint_fails(model_trainer_with_checkpoint)
         force_checkpoint_every_n=1,  # Every epoch
         delete_on_completion=True,
         checkpoint_on_failure=True,
+        checkpoint_on_cancellation=True,
     )
     model_trainer_with_checkpoint.checkpoint_decision_engine = (
         CheckpointDecisionEngine()
@@ -282,6 +284,7 @@ def test_checkpoint_logs_events(model_trainer_with_checkpoint):
         force_checkpoint_every_n=1,
         delete_on_completion=True,
         checkpoint_on_failure=True,
+        checkpoint_on_cancellation=True,
     )
     model_trainer_with_checkpoint.checkpoint_decision_engine = (
         CheckpointDecisionEngine()

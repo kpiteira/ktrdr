@@ -1673,12 +1673,17 @@ class OperationsService:
             checkpoint_metadata["checkpoint_type"] = checkpoint_type.value
             checkpoint_metadata["created_at"] = datetime.now(timezone.utc).isoformat()
 
-            # Save checkpoint
-            await checkpoint_service.save_checkpoint(
-                operation_id=operation_id,
-                checkpoint_type=checkpoint_type.value,
-                state=current_state,
-                metadata=checkpoint_metadata,
+            # Save checkpoint (prepare data dict for CheckpointService)
+            checkpoint_data = {
+                "checkpoint_id": f"{operation_id}_{checkpoint_type.value}_{int(time.time())}",
+                "checkpoint_type": checkpoint_type.value,
+                "metadata": checkpoint_metadata,
+                "state": current_state,
+            }
+            await asyncio.to_thread(
+                checkpoint_service.save_checkpoint,
+                operation_id,
+                checkpoint_data,
             )
 
             logger.info(
@@ -1761,9 +1766,12 @@ class OperationsService:
                 "progress": {
                     "percentage": operation.progress.percentage,
                     "current_step": operation.progress.current_step,
-                    "total_steps": operation.progress.total_steps,
+                    "steps_completed": operation.progress.steps_completed,
+                    "steps_total": operation.progress.steps_total,
                 },
-                "started_at": operation.started_at.isoformat() if operation.started_at else None,
+                "started_at": (
+                    operation.started_at.isoformat() if operation.started_at else None
+                ),
             }
 
         return None

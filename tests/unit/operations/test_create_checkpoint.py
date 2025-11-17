@@ -9,8 +9,9 @@ Tests verify:
 - Logging of checkpoint events
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from ktrdr.api.services.operations_service import OperationsService
 from ktrdr.checkpoint.types import CheckpointType
@@ -32,17 +33,28 @@ class TestCreateCheckpoint:
         return mock_service
 
     @pytest.mark.asyncio
-    async def test_create_checkpoint_timer_type(self, operations_service, mock_checkpoint_service):
+    async def test_create_checkpoint_timer_type(
+        self, operations_service, mock_checkpoint_service
+    ):
         """Test creating TIMER checkpoint."""
         operation_id = "op_test_001"
         current_state = {"epoch": 10, "loss": 0.5}
 
-        with patch.object(operations_service, '_get_checkpoint_service', return_value=mock_checkpoint_service):
-            with patch.object(operations_service, '_get_operation_state', new_callable=AsyncMock, return_value=current_state):
+        with patch.object(
+            operations_service,
+            "_get_checkpoint_service",
+            return_value=mock_checkpoint_service,
+        ):
+            with patch.object(
+                operations_service,
+                "_get_operation_state",
+                new_callable=AsyncMock,
+                return_value=current_state,
+            ):
                 result = await operations_service.create_checkpoint(
                     operation_id=operation_id,
                     checkpoint_type=CheckpointType.TIMER,
-                    metadata={"interval": 300}
+                    metadata={"interval": 300},
                 )
 
         assert result is True
@@ -54,17 +66,28 @@ class TestCreateCheckpoint:
         assert call_args[1]["metadata"]["interval"] == 300
 
     @pytest.mark.asyncio
-    async def test_create_checkpoint_cancellation_type(self, operations_service, mock_checkpoint_service):
+    async def test_create_checkpoint_cancellation_type(
+        self, operations_service, mock_checkpoint_service
+    ):
         """Test creating CANCELLATION checkpoint."""
         operation_id = "op_test_002"
         current_state = {"epoch": 25, "loss": 0.3}
 
-        with patch.object(operations_service, '_get_checkpoint_service', return_value=mock_checkpoint_service):
-            with patch.object(operations_service, '_get_operation_state', new_callable=AsyncMock, return_value=current_state):
+        with patch.object(
+            operations_service,
+            "_get_checkpoint_service",
+            return_value=mock_checkpoint_service,
+        ):
+            with patch.object(
+                operations_service,
+                "_get_operation_state",
+                new_callable=AsyncMock,
+                return_value=current_state,
+            ):
                 result = await operations_service.create_checkpoint(
                     operation_id=operation_id,
                     checkpoint_type=CheckpointType.CANCELLATION,
-                    metadata={"cancellation_reason": "user_cancelled"}
+                    metadata={"cancellation_reason": "user_cancelled"},
                 )
 
         assert result is True
@@ -73,17 +96,28 @@ class TestCreateCheckpoint:
         assert call_args[1]["metadata"]["cancellation_reason"] == "user_cancelled"
 
     @pytest.mark.asyncio
-    async def test_create_checkpoint_shutdown_type(self, operations_service, mock_checkpoint_service):
+    async def test_create_checkpoint_shutdown_type(
+        self, operations_service, mock_checkpoint_service
+    ):
         """Test creating SHUTDOWN checkpoint."""
         operation_id = "op_test_003"
         current_state = {"bar_index": 5000, "position": "LONG"}
 
-        with patch.object(operations_service, '_get_checkpoint_service', return_value=mock_checkpoint_service):
-            with patch.object(operations_service, '_get_operation_state', new_callable=AsyncMock, return_value=current_state):
+        with patch.object(
+            operations_service,
+            "_get_checkpoint_service",
+            return_value=mock_checkpoint_service,
+        ):
+            with patch.object(
+                operations_service,
+                "_get_operation_state",
+                new_callable=AsyncMock,
+                return_value=current_state,
+            ):
                 result = await operations_service.create_checkpoint(
                     operation_id=operation_id,
                     checkpoint_type=CheckpointType.SHUTDOWN,
-                    metadata={"shutdown_signal": 15}  # SIGTERM
+                    metadata={"shutdown_signal": 15},  # SIGTERM
                 )
 
         assert result is True
@@ -92,23 +126,36 @@ class TestCreateCheckpoint:
         assert call_args[1]["metadata"]["shutdown_signal"] == 15
 
     @pytest.mark.asyncio
-    async def test_create_checkpoint_no_state_available(self, operations_service, mock_checkpoint_service):
+    async def test_create_checkpoint_no_state_available(
+        self, operations_service, mock_checkpoint_service
+    ):
         """Test checkpoint creation fails gracefully when no state available."""
         operation_id = "op_test_004"
 
-        with patch.object(operations_service, '_get_checkpoint_service', return_value=mock_checkpoint_service):
-            with patch.object(operations_service, '_get_operation_state', new_callable=AsyncMock, return_value=None):
+        with patch.object(
+            operations_service,
+            "_get_checkpoint_service",
+            return_value=mock_checkpoint_service,
+        ):
+            with patch.object(
+                operations_service,
+                "_get_operation_state",
+                new_callable=AsyncMock,
+                return_value=None,
+            ):
                 result = await operations_service.create_checkpoint(
                     operation_id=operation_id,
                     checkpoint_type=CheckpointType.CANCELLATION,
-                    metadata={}
+                    metadata={},
                 )
 
         assert result is False
         mock_checkpoint_service.save_checkpoint.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_create_checkpoint_service_error(self, operations_service, mock_checkpoint_service):
+    async def test_create_checkpoint_service_error(
+        self, operations_service, mock_checkpoint_service
+    ):
         """Test checkpoint creation handles CheckpointService errors gracefully."""
         operation_id = "op_test_005"
         current_state = {"epoch": 15}
@@ -116,29 +163,49 @@ class TestCreateCheckpoint:
         # Make save_checkpoint raise exception
         mock_checkpoint_service.save_checkpoint.side_effect = Exception("Disk full")
 
-        with patch.object(operations_service, '_get_checkpoint_service', return_value=mock_checkpoint_service):
-            with patch.object(operations_service, '_get_operation_state', new_callable=AsyncMock, return_value=current_state):
+        with patch.object(
+            operations_service,
+            "_get_checkpoint_service",
+            return_value=mock_checkpoint_service,
+        ):
+            with patch.object(
+                operations_service,
+                "_get_operation_state",
+                new_callable=AsyncMock,
+                return_value=current_state,
+            ):
                 result = await operations_service.create_checkpoint(
                     operation_id=operation_id,
                     checkpoint_type=CheckpointType.TIMER,
-                    metadata={}
+                    metadata={},
                 )
 
         # Should return False but not crash
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_create_checkpoint_with_empty_metadata(self, operations_service, mock_checkpoint_service):
+    async def test_create_checkpoint_with_empty_metadata(
+        self, operations_service, mock_checkpoint_service
+    ):
         """Test checkpoint creation with None metadata adds default fields."""
         operation_id = "op_test_006"
         current_state = {"epoch": 5}
 
-        with patch.object(operations_service, '_get_checkpoint_service', return_value=mock_checkpoint_service):
-            with patch.object(operations_service, '_get_operation_state', new_callable=AsyncMock, return_value=current_state):
+        with patch.object(
+            operations_service,
+            "_get_checkpoint_service",
+            return_value=mock_checkpoint_service,
+        ):
+            with patch.object(
+                operations_service,
+                "_get_operation_state",
+                new_callable=AsyncMock,
+                return_value=current_state,
+            ):
                 result = await operations_service.create_checkpoint(
                     operation_id=operation_id,
                     checkpoint_type=CheckpointType.FORCE,
-                    metadata=None  # None should be handled
+                    metadata=None,  # None should be handled
                 )
 
         assert result is True
@@ -149,18 +216,31 @@ class TestCreateCheckpoint:
         assert call_args[1]["metadata"]["checkpoint_type"] == "FORCE"
 
     @pytest.mark.asyncio
-    async def test_create_checkpoint_logs_success(self, operations_service, mock_checkpoint_service):
+    async def test_create_checkpoint_logs_success(
+        self, operations_service, mock_checkpoint_service
+    ):
         """Test checkpoint creation logs success message."""
         operation_id = "op_test_007"
         current_state = {"epoch": 20}
 
-        with patch.object(operations_service, '_get_checkpoint_service', return_value=mock_checkpoint_service):
-            with patch.object(operations_service, '_get_operation_state', new_callable=AsyncMock, return_value=current_state):
-                with patch('ktrdr.api.services.operations_service.logger') as mock_logger:
+        with patch.object(
+            operations_service,
+            "_get_checkpoint_service",
+            return_value=mock_checkpoint_service,
+        ):
+            with patch.object(
+                operations_service,
+                "_get_operation_state",
+                new_callable=AsyncMock,
+                return_value=current_state,
+            ):
+                with patch(
+                    "ktrdr.api.services.operations_service.logger"
+                ) as mock_logger:
                     result = await operations_service.create_checkpoint(
                         operation_id=operation_id,
                         checkpoint_type=CheckpointType.CANCELLATION,
-                        metadata={}
+                        metadata={},
                     )
 
         assert result is True
@@ -171,17 +251,30 @@ class TestCreateCheckpoint:
         assert operation_id in log_call
 
     @pytest.mark.asyncio
-    async def test_create_checkpoint_logs_failure(self, operations_service, mock_checkpoint_service):
+    async def test_create_checkpoint_logs_failure(
+        self, operations_service, mock_checkpoint_service
+    ):
         """Test checkpoint creation logs failure when state unavailable."""
         operation_id = "op_test_008"
 
-        with patch.object(operations_service, '_get_checkpoint_service', return_value=mock_checkpoint_service):
-            with patch.object(operations_service, '_get_operation_state', new_callable=AsyncMock, return_value=None):
-                with patch('ktrdr.api.services.operations_service.logger') as mock_logger:
+        with patch.object(
+            operations_service,
+            "_get_checkpoint_service",
+            return_value=mock_checkpoint_service,
+        ):
+            with patch.object(
+                operations_service,
+                "_get_operation_state",
+                new_callable=AsyncMock,
+                return_value=None,
+            ):
+                with patch(
+                    "ktrdr.api.services.operations_service.logger"
+                ) as mock_logger:
                     result = await operations_service.create_checkpoint(
                         operation_id=operation_id,
                         checkpoint_type=CheckpointType.TIMER,
-                        metadata={}
+                        metadata={},
                     )
 
         assert result is False
