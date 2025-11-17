@@ -10,7 +10,10 @@ import os
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
+
+if TYPE_CHECKING:
+    from ktrdr.checkpoint.service import CheckpointService
 
 from opentelemetry import trace
 
@@ -25,6 +28,7 @@ from ktrdr.async_infrastructure.cancellation import (
     AsyncCancellationToken,
     get_global_coordinator,
 )
+from ktrdr.checkpoint.types import CheckpointType
 from ktrdr.errors import DataError
 from ktrdr.logging import get_logger
 from ktrdr.monitoring.service_telemetry import create_service_span, trace_service_method
@@ -1588,6 +1592,147 @@ class OperationsService:
             "resumed_from_checkpoint": checkpoint_type,
             "message": f"Operation resumed from {resume_point}",
         }
+
+    async def create_checkpoint(
+        self,
+        operation_id: str,
+        checkpoint_type: "CheckpointType",
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> bool:
+        """
+        Create a checkpoint for an operation.
+
+        Centralized method for checkpoint creation, called from:
+        - Progress tracking (TIMER checkpoints)
+        - Forced checkpoints (FORCE checkpoints)
+        - Operation cancellation (CANCELLATION checkpoints)
+        - Worker shutdown (SHUTDOWN checkpoints)
+        - Operation failure (FAILURE checkpoints)
+
+        Args:
+            operation_id: Operation identifier
+            checkpoint_type: Type of checkpoint (from CheckpointType enum)
+            metadata: Optional metadata to include in checkpoint
+
+        Returns:
+            True if checkpoint was created successfully, False otherwise
+
+        Implementation note:
+            This method coordinates with CheckpointService to persist checkpoints
+            and retrieves current operation state from workers/progress bridges.
+        """
+        try:
+            # Get current operation state
+            current_state = await self._get_operation_state(operation_id)
+
+            if current_state is None:
+                logger.warning(
+                    f"Cannot create checkpoint for {operation_id}: no state available"
+                )
+                return False
+
+            # Get checkpoint service
+            checkpoint_service = self._get_checkpoint_service()
+
+            # Prepare metadata
+            checkpoint_metadata = metadata or {}
+            checkpoint_metadata["checkpoint_type"] = checkpoint_type.value
+            checkpoint_metadata["created_at"] = datetime.now(timezone.utc).isoformat()
+
+            # Save checkpoint
+            await checkpoint_service.save_checkpoint(
+                operation_id=operation_id,
+                checkpoint_type=checkpoint_type.value,
+                state=current_state,
+                metadata=checkpoint_metadata,
+            )
+
+            logger.info(
+                f"Created {checkpoint_type.value} checkpoint for operation {operation_id}"
+            )
+            return True
+
+        except Exception as e:
+            logger.error(
+                f"Failed to create checkpoint for {operation_id}: {e}",
+                exc_info=True,
+            )
+            return False
+
+    def _get_checkpoint_service(self) -> "CheckpointService":
+        """
+        Get or create CheckpointService instance.
+
+        Returns:
+            CheckpointService singleton instance for this OperationsService
+
+        Implementation note:
+            Lazily initializes CheckpointService on first use.
+            Uses lazy import to avoid circular dependencies.
+        """
+        if not hasattr(self, "_checkpoint_service"):
+            from ktrdr.checkpoint.service import CheckpointService
+
+            self._checkpoint_service = CheckpointService()
+
+        return self._checkpoint_service
+
+    async def _get_operation_state(self, operation_id: str) -> Optional[dict[str, Any]]:
+        """
+        Retrieve current state for an operation.
+
+        Queries progress bridges and remote proxies to get the most recent
+        operation state suitable for checkpoint creation.
+
+        Args:
+            operation_id: Operation identifier
+
+        Returns:
+            Dictionary containing operation state, or None if unavailable
+
+        Implementation note:
+            - For local operations: queries progress bridge
+            - For remote operations: queries remote proxy
+            - Returns state dict with epoch/bar_index, loss, model state, etc.
+        """
+        # Try to get state from local bridge first
+        if operation_id in self._local_bridges:
+            bridge = self._local_bridges[operation_id]
+            if hasattr(bridge, "get_state"):
+                state = await bridge.get_state()
+                if state:
+                    return state
+
+        # Try to get state from remote proxy
+        remote_proxy_info = self._get_remote_proxy(operation_id)
+        if remote_proxy_info:
+            proxy, remote_operation_id = remote_proxy_info
+            try:
+                if hasattr(proxy, "get_operation_state"):
+                    state = await proxy.get_operation_state(remote_operation_id)
+                    if state:
+                        return state
+            except Exception as e:
+                logger.debug(
+                    f"Could not get state from remote proxy for {operation_id}: {e}"
+                )
+
+        # Fallback: construct state from operation info
+        if operation_id in self._operations:
+            operation = self._operations[operation_id]
+            return {
+                "operation_id": operation_id,
+                "operation_type": operation.operation_type.value,
+                "status": operation.status.value,
+                "progress": {
+                    "percentage": operation.progress.percentage,
+                    "current_step": operation.progress.current_step,
+                    "total_steps": operation.progress.total_steps,
+                },
+                "started_at": operation.started_at.isoformat() if operation.started_at else None,
+            }
+
+        return None
 
 
 # Global operations service instance
