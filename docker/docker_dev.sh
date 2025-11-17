@@ -69,6 +69,10 @@ function print_help() {
 
 function start_dev() {
     echo -e "${BLUE}Starting KTRDR development environment...${NC}"
+
+    # Sync .env file to docker/.env
+    ../scripts/sync-env.sh sync
+
     docker-compose up -d
     echo -e "${GREEN}Development environment started!${NC}"
     echo -e "API available at: ${YELLOW}http://localhost:8000${NC}"
@@ -139,6 +143,10 @@ function open_frontend_shell() {
 function rebuild_containers() {
     echo -e "${BLUE}Rebuilding KTRDR containers with optimized caching...${NC}"
     docker-compose down
+
+    # Sync .env file to docker/.env
+    ../scripts/sync-env.sh sync
+
     # Use our optimized build script
     ./build_docker_dev.sh
     docker-compose up -d
@@ -148,6 +156,10 @@ function rebuild_containers() {
 function rebuild_nocache() {
     echo -e "${BLUE}Rebuilding KTRDR containers without cache (clean build)...${NC}"
     docker-compose down
+
+    # Sync .env file to docker/.env
+    ../scripts/sync-env.sh sync
+
     docker-compose build --no-cache
     docker-compose up -d
     echo -e "${GREEN}Containers rebuilt from scratch and started!${NC}"
@@ -267,6 +279,10 @@ function run_ci_checks() {
 
 function start_prod() {
     echo -e "${BLUE}Starting KTRDR production environment...${NC}"
+
+    # Sync .env file to docker/.env
+    ../scripts/sync-env.sh sync
+
     docker-compose -f docker-compose.prod.yml up -d
     echo -e "${GREEN}Production environment started!${NC}"
 }
@@ -282,12 +298,15 @@ function check_health() {
 
 function start_research() {
     echo -e "${BLUE}Starting KTRDR Research Agents...${NC}"
-    
+
+    # Sync .env file to docker/.env
+    ../scripts/sync-env.sh sync
+
     # Environment check
     if [ -z "$OPENAI_API_KEY" ]; then
         echo -e "${YELLOW}⚠️  Notice: OPENAI_API_KEY not set - AI features will be limited${NC}"
     fi
-    
+
     docker-compose -f "$SCRIPT_DIR/docker-compose.research.yml" up -d
     echo -e "${GREEN}Research agents started!${NC}"
     echo -e "Research API available at: ${YELLOW}http://localhost:8101${NC}"
@@ -345,6 +364,10 @@ function open_postgres_research_shell() {
 function rebuild_research() {
     echo -e "${BLUE}Rebuilding research containers with optimized caching...${NC}"
     docker-compose -f "$SCRIPT_DIR/docker-compose.research.yml" down
+
+    # Sync .env file to docker/.env
+    ../scripts/sync-env.sh sync
+
     # Use optimized build with BuildKit
     export DOCKER_BUILDKIT=1
     docker-compose -f "$SCRIPT_DIR/docker-compose.research.yml" build --parallel

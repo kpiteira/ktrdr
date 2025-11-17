@@ -98,6 +98,7 @@ training-host-service/models
 *.cert
 .secrets/
 .env
+docker/.env
 credentials.json
 auth_tokens.json
 config/*_secure.yaml

@@ -664,6 +664,70 @@ make typecheck         # MyPy type checking only
 make ci                # Run unit tests + quality checks
 ```
 
+### .env File Management
+
+**CRITICAL**: All secrets and environment-specific configuration must be in `.env` files. Docker Compose requires `.env` to be copied to `docker/.env` for proper initialization.
+
+**The Process**:
+
+1. **Root .env**: Contains all secrets and configuration
+   - Location: `/path/to/ktrdr2/.env`
+   - Gitignored (never committed)
+   - Created from `.env.example`
+
+2. **Docker .env**: Synced copy for Docker Compose
+   - Location: `/path/to/ktrdr2/docker/.env`
+   - Automatically synced by startup scripts
+   - Gitignored (never committed)
+
+**Automatic Sync**:
+
+All startup scripts automatically sync `.env` to `docker/.env`:
+- `./docker_dev.sh start` - Auto-syncs before starting
+- `./start_ktrdr.sh` - Auto-syncs before starting
+- `./docker_dev.sh rebuild` - Auto-syncs before rebuilding
+
+**Manual Sync**:
+
+```bash
+# Sync .env to docker/.env
+./scripts/sync-env.sh sync
+
+# Check sync status
+./scripts/sync-env.sh status
+
+# Clean up docker/.env
+./scripts/sync-env.sh clean
+```
+
+**Why This Matters**:
+
+PostgreSQL (and other services) initialize **only once** when the Docker volume is created. If the password changes in `.env` but the database was already initialized with the old password, you'll get authentication errors.
+
+**Common Issues**:
+
+```bash
+# ❌ ERROR: Password authentication failed for user "ktrdr_admin"
+# CAUSE: Database initialized with old password, new password in .env
+
+# FIX Option 1: Recreate database with correct password
+docker-compose -f docker/docker-compose.dev.yml down -v  # Delete volumes
+./scripts/sync-env.sh sync  # Sync current .env
+docker-compose -f docker/docker-compose.dev.yml up -d   # Recreate with new password
+
+# FIX Option 2: Update password in existing database
+docker exec -it ktrdr-postgres-distributed psql -U ktrdr_admin -d ktrdr
+# Then run: ALTER USER ktrdr_admin WITH PASSWORD 'new_password';
+```
+
+**Security Best Practices**:
+
+1. ✅ **DO**: Keep strong, unique passwords in `.env`
+2. ✅ **DO**: Never commit `.env` files (already gitignored)
+3. ✅ **DO**: Use `.env.example` as template with placeholder values
+4. ❌ **DON'T**: Share `.env` files via Slack/email
+5. ❌ **DON'T**: Use production passwords in development `.env`
+
 ### Pre-Commit Checklist
 
 1. `make test-unit` - All unit tests pass (<2s)

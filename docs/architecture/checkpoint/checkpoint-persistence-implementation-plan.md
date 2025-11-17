@@ -14,12 +14,14 @@ This implementation plan breaks down the checkpoint persistence system into **5 
 - ✅ Builds on previous phases
 - ✅ Can be deployed independently
 
-**Estimated Timeline:** 11 development days
+**Estimated Timeline:** 11.5 development days
 
 **Key Features:**
 - ✅ **Startup Recovery:** Automatically recover interrupted operations on API restart
+- ✅ **Checkpoint on Cancellation:** Save checkpoint when user cancels operation (Task 3.5)
+- ✅ **Checkpoint on Graceful Shutdown:** Save checkpoint when worker receives SIGTERM (Task 3.5)
 - ✅ **Manual Checkpoint Management:** Delete individual checkpoints or bulk cleanup
-- ✅ **Enhanced Operations List:** Show checkpoint info (size, age, status)
+- ✅ **Enhanced Operations List:** Show checkpoint info (size, age, status, type)
 - ✅ **One Checkpoint Per Operation:** Simple, efficient UPSERT model
 
 ---
@@ -424,13 +426,13 @@ def test_phase2_training_checkpoint_resume():
 
 ---
 
-## Phase 3: Operations Service Integration (2.5 days)
+## Phase 3: Operations Service Integration (3 days)
 
-**Goal:** Operations API supports checkpoint & resume.
+**Goal:** Operations API supports checkpoint & resume with cancellation and shutdown handling.
 
-**Value Delivered:** Users can resume operations via CLI/API.
+**Value Delivered:** Users can resume operations via CLI/API. Checkpoints created on cancellation and graceful shutdown.
 
-**Estimated Time:** 2.5 days
+**Estimated Time:** 3 days
 
 ### Task 3.1: Operations Persistence & Startup Recovery (5 hours)
 
@@ -548,6 +550,243 @@ def test_phase2_training_checkpoint_resume():
 
 ---
 
+### Task 3.5: Checkpoint on Cancellation & Graceful Shutdown (4 hours)
+
+**Checklist:**
+- [ ] Update checkpoint policy for cancellation events
+  - Add `checkpoint_on_cancellation: bool` to `CheckpointPolicy`
+  - Add to training/backtesting configs in `config/persistence.yaml`
+- [ ] Implement checkpoint-on-cancellation in `OperationsService`
+  - Modify `cancel_operation()` to create checkpoint before status change
+  - Get current operation state from worker/service
+  - Save checkpoint with type "CANCELLATION"
+  - Handle cases where state cannot be retrieved (operation not running)
+- [ ] Implement graceful shutdown checkpoint for workers
+  - Add signal handlers (SIGTERM, SIGINT) to `WorkerAPIBase`
+  - On shutdown signal, trigger checkpoint save for any running operation
+  - Save checkpoint with type "SHUTDOWN"
+  - Wait for checkpoint completion before worker exits
+- [ ] Update distributed workers architecture
+  - Add shutdown checkpoint logic to `BacktestWorker`
+  - Add shutdown checkpoint logic to `TrainingWorker`
+  - Coordinate with backend to get operation state
+- [ ] Write comprehensive tests
+  - Unit test: checkpoint-on-cancellation logic
+  - Unit test: graceful shutdown handler
+  - Integration test: cancel operation → checkpoint created
+  - Integration test: worker SIGTERM → checkpoint created
+  - Integration test: resume from cancellation checkpoint
+  - Integration test: resume from shutdown checkpoint
+
+**Acceptance Criteria:**
+- ✅ Cancelling operation creates checkpoint (if policy enabled)
+- ✅ Checkpoint contains current execution state (epoch/bar, progress)
+- ✅ Worker graceful shutdown (SIGTERM) creates checkpoint
+- ✅ Operations can resume from cancellation checkpoint
+- ✅ Operations can resume from shutdown checkpoint
+- ✅ No checkpoint created if operation hasn't started yet
+- ✅ No checkpoint created if operation already has checkpoint (avoid duplicate)
+- ✅ Checkpoint-on-cancellation respects policy flag
+- ✅ Shutdown timeout: max 10 seconds to complete checkpoint
+- ✅ Logs checkpoint events with clear reason ("user_cancellation", "graceful_shutdown")
+
+**Implementation Details:**
+
+**Policy Update (`ktrdr/checkpoint/policy.py`):**
+```python
+@dataclass
+class CheckpointPolicy:
+    checkpoint_interval_seconds: float
+    force_checkpoint_every_n: int
+    delete_on_completion: bool
+    checkpoint_on_failure: bool
+    checkpoint_on_cancellation: bool  # NEW
+```
+
+**Checkpoint Type Enum (`ktrdr/checkpoint/types.py`):**
+```python
+from enum import Enum
+
+class CheckpointType(str, Enum):
+    """Types of checkpoints that can be created."""
+    TIMER = "TIMER"              # Time-based checkpoint (every N seconds)
+    FORCE = "FORCE"              # Force checkpoint (every N epochs/bars)
+    CANCELLATION = "CANCELLATION"  # User cancelled operation
+    SHUTDOWN = "SHUTDOWN"        # Worker graceful shutdown
+    FAILURE = "FAILURE"          # Operation failed
+```
+
+**Centralized Checkpoint Method (`ktrdr/api/services/operations_service.py`):**
+```python
+async def create_checkpoint(
+    self,
+    operation_id: str,
+    checkpoint_type: CheckpointType,
+    metadata: Optional[dict] = None
+) -> bool:
+    """
+    Create checkpoint for operation (centralized method used by all checkpoint triggers).
+
+    Args:
+        operation_id: Operation to checkpoint
+        checkpoint_type: Type of checkpoint (TIMER, FORCE, CANCELLATION, SHUTDOWN, FAILURE)
+        metadata: Optional metadata (reason, signal, etc.)
+
+    Returns:
+        True if checkpoint created successfully, False otherwise
+    """
+    try:
+        # Get current state from worker/service
+        current_state = await self._get_operation_state(operation_id)
+
+        if not current_state:
+            logger.warning(f"Cannot create checkpoint for {operation_id}: no state available")
+            return False
+
+        # Save checkpoint
+        checkpoint_service = get_checkpoint_service()
+        await checkpoint_service.save_checkpoint(
+            operation_id=operation_id,
+            checkpoint_state=current_state,
+            checkpoint_type=checkpoint_type.value,
+            metadata=metadata or {}
+        )
+
+        logger.info(
+            f"Created {checkpoint_type.value} checkpoint for {operation_id}",
+            extra={"operation_id": operation_id, "checkpoint_type": checkpoint_type.value}
+        )
+        return True
+
+    except Exception as e:
+        logger.error(
+            f"Failed to create {checkpoint_type.value} checkpoint for {operation_id}: {e}",
+            exc_info=True,
+            extra={"operation_id": operation_id, "checkpoint_type": checkpoint_type.value}
+        )
+        return False
+```
+
+**Cancel Operation Logic (Refactored):**
+```python
+async def cancel_operation(self, operation_id: str, reason: Optional[str] = None):
+    # ... existing cancellation logic ...
+
+    # Create checkpoint before marking as CANCELLED (if policy enabled)
+    if policy.checkpoint_on_cancellation:
+        await self.create_checkpoint(
+            operation_id=operation_id,
+            checkpoint_type=CheckpointType.CANCELLATION,
+            metadata={"cancellation_reason": reason}
+        )
+        # Note: Continue with cancellation even if checkpoint fails
+
+    operation.status = OperationStatus.CANCELLED
+    # ... rest of cancellation logic ...
+```
+
+**Graceful Shutdown Handler (Refactored):**
+```python
+class WorkerAPIBase:
+    def __init__(self, ...):
+        # ... existing init ...
+
+        # Register signal handlers for graceful shutdown
+        signal.signal(signal.SIGTERM, self._handle_shutdown_signal)
+        signal.signal(signal.SIGINT, self._handle_shutdown_signal)
+
+    async def _handle_shutdown_signal(self, signum, frame):
+        """Handle shutdown signal by creating checkpoint."""
+        logger.info(f"Received shutdown signal {signum}, creating checkpoints...")
+
+        # Get current running operations
+        running_ops = [
+            op for op in self.operations_service.get_all_operations()
+            if op.status == OperationStatus.RUNNING
+        ]
+
+        # Create checkpoints for all running operations
+        for operation in running_ops:
+            await self.operations_service.create_checkpoint(
+                operation_id=operation.operation_id,
+                checkpoint_type=CheckpointType.SHUTDOWN,
+                metadata={"shutdown_signal": signum}
+            )
+
+        # Exit gracefully
+        sys.exit(0)
+```
+
+**Training Loop (Example of using centralized method):**
+```python
+# In ModelTrainer.train() loop
+for epoch in range(start_epoch, total_epochs):
+    # ... training logic ...
+
+    # Check if should checkpoint
+    should_checkpoint, reason = checkpoint_decision_engine.should_checkpoint(
+        policy=policy,
+        last_checkpoint_time=last_checkpoint_time,
+        current_time=time.time(),
+        natural_boundary=epoch,
+        total_boundaries=epoch
+    )
+
+    if should_checkpoint:
+        # Determine checkpoint type
+        checkpoint_type = (
+            CheckpointType.FORCE if "Force checkpoint" in reason
+            else CheckpointType.TIMER
+        )
+
+        # Create checkpoint using centralized method
+        success = await operations_service.create_checkpoint(
+            operation_id=operation_id,
+            checkpoint_type=checkpoint_type,
+            metadata={"epoch": epoch, "reason": reason}
+        )
+
+        if success:
+            last_checkpoint_time = time.time()
+```
+
+**Config Update (`config/persistence.yaml`):**
+```yaml
+checkpointing:
+  training:
+    checkpoint_interval_seconds: 300
+    force_checkpoint_every_n: 50
+    delete_on_completion: true
+    checkpoint_on_failure: true
+    checkpoint_on_cancellation: true  # NEW
+
+  backtesting:
+    checkpoint_interval_seconds: 300
+    force_checkpoint_every_n: 5000
+    delete_on_completion: true
+    checkpoint_on_failure: true
+    checkpoint_on_cancellation: true  # NEW
+```
+
+**Files:**
+
+- `ktrdr/checkpoint/types.py` (new - CheckpointType enum)
+- `ktrdr/checkpoint/policy.py` (modified - add checkpoint_on_cancellation)
+- `ktrdr/api/services/operations_service.py` (modified - add create_checkpoint() method)
+- `ktrdr/workers/base.py` (modified - add signal handlers)
+- `ktrdr/backtesting/backtest_worker.py` (modified - use centralized create_checkpoint)
+- `ktrdr/training/training_worker.py` (modified - use centralized create_checkpoint)
+- `ktrdr/training/model_trainer.py` (modified - use centralized create_checkpoint)
+- `ktrdr/backtesting/backtesting_engine.py` (modified - use centralized create_checkpoint)
+- `config/persistence.yaml` (modified - add checkpoint_on_cancellation)
+- `tests/unit/operations/test_cancel_with_checkpoint.py` (new)
+- `tests/unit/operations/test_centralized_checkpoint.py` (new)
+- `tests/unit/workers/test_graceful_shutdown.py` (new)
+- `tests/integration/checkpoint/test_cancellation_checkpoint.py` (new)
+- `tests/integration/checkpoint/test_shutdown_checkpoint.py` (new)
+
+---
+
 ### Phase 3 End-to-End Test
 
 **Test Scenario 1: API Crash Recovery (Primary Use Case)**
@@ -588,28 +827,76 @@ op_training_20250117_100000 | FAILED    | Epoch 45/100 | None (deleted)
 op_training_20250117_140000 | COMPLETED | Epoch 100/100| None
 ```
 
-**Test Scenario 2: User Cancellation & Cleanup**
+**Test Scenario 2: User Cancellation with Checkpoint (Task 3.5)**
 ```bash
 # Start training
 $ ktrdr models train --strategy config/test.yaml --epochs 100
 Operation started: op_training_20250117_150000
+✓ Epoch 1/100 complete
+✓ Epoch 5/100 complete
+✓ Epoch 10/100 complete
 
-# Cancel manually
+# Cancel manually (before any time-based checkpoint)
 ^C
+Cancelling operation...
+Saving cancellation checkpoint at epoch 10/100...
 Operation cancelled at epoch 10/100
 
-# List operations
+# List operations (checkpoint created on cancellation)
 $ ktrdr operations list
-op_training_20250117_150000 | CANCELLED | Epoch 10/100 | 52.3 MB (now)
+op_training_20250117_150000 | CANCELLED | Epoch 10/100 | 52.3 MB (now, type: CANCELLATION)
 
-# Cleanup cancelled checkpoints
+# Resume from cancellation checkpoint
+$ ktrdr operations resume op_training_20250117_150000
+Resuming from epoch 10/100...
+Created new operation: op_training_20250117_150100
+✓ Epoch 11/100 complete
+...
+✓ Training complete!
+
+# Cleanup cancelled checkpoints (for operations not resumed)
 $ ktrdr operations cleanup-cancelled
-Found 1 cancelled operations with checkpoints
-✓ Deleted checkpoints for 1 operations (freed 52.3 MB)
+Found 0 cancelled operations with checkpoints (1 was resumed)
 
-# Verify deleted
+# Verify original checkpoint deleted after resume
 $ ktrdr operations list
-op_training_20250117_150000 | CANCELLED | Epoch 10/100 | None
+op_training_20250117_150000 | CANCELLED  | Epoch 10/100  | None (deleted after resume)
+op_training_20250117_150100 | COMPLETED  | Epoch 100/100 | None
+```
+
+**Test Scenario 3: Worker Graceful Shutdown (Task 3.5)**
+```bash
+# Start backtest on worker
+$ ktrdr backtests run --symbol AAPL --timeframe 1h --start 2024-01-01 --end 2024-12-31
+Operation started: op_backtest_20250117_160000
+Running on worker: backtest-worker-1
+✓ Bar 100/10000 complete
+✓ Bar 500/10000 complete
+
+# Gracefully shutdown worker (Docker restart)
+$ docker restart ktrdr-backtest-worker-1
+Worker received SIGTERM...
+Saving shutdown checkpoint at bar 500/10000...
+Checkpoint saved successfully
+Worker stopped gracefully
+
+# Worker restarts, list operations
+$ ktrdr operations list
+op_backtest_20250117_160000 | FAILED | Bar 500/10000 | 4.8 MB (now, type: SHUTDOWN)
+
+# Resume from shutdown checkpoint
+$ ktrdr operations resume op_backtest_20250117_160000
+Resuming from bar 500/10000...
+Created new operation: op_backtest_20250117_160100
+Running on worker: backtest-worker-2
+✓ Bar 501/10000 complete
+...
+✓ Backtest complete!
+
+# Verify checkpoint deleted
+$ ktrdr operations list
+op_backtest_20250117_160000 | FAILED    | Bar 500/10000  | None (deleted after resume)
+op_backtest_20250117_160100 | COMPLETED | Bar 10000/10000| None
 ```
 
 **Success Criteria:**
@@ -620,6 +907,11 @@ op_training_20250117_150000 | CANCELLED | Epoch 10/100 | None
 - ✅ Can manually cleanup checkpoints
 - ✅ Checkpoints auto-deleted on successful completion
 - ✅ Original operation's checkpoint deleted after resume starts
+- ✅ **[Task 3.5]** User cancellation creates checkpoint with current state
+- ✅ **[Task 3.5]** Can resume from cancellation checkpoint
+- ✅ **[Task 3.5]** Worker graceful shutdown creates checkpoint
+- ✅ **[Task 3.5]** Can resume from shutdown checkpoint
+- ✅ **[Task 3.5]** Checkpoint type metadata correctly set (CANCELLATION, SHUTDOWN)
 
 ---
 
@@ -1047,11 +1339,11 @@ If issues discovered after deployment:
 | Phase 0: PostgreSQL + TimescaleDB Setup | 0.5 days | Day 0.5 | Database infrastructure ready |
 | Phase 1: Core Infrastructure | 2 days | Day 2.5 | Basic checkpoint CRUD |
 | Phase 2: Training Checkpoints | 2 days | Day 4.5 | Training resume works |
-| Phase 3: Operations API + Recovery | 2.5 days | Day 7 | CLI resume + startup recovery + cleanup |
-| Phase 4: Backtesting | 1.5 days | Day 8.5 | Backtest resume works |
-| Phase 5: Production | 2.5 days | Day 11 | Production ready |
+| Phase 3: Operations API + Recovery + Cancellation/Shutdown | 3 days | Day 7.5 | CLI resume + startup recovery + cleanup + checkpoint on cancel/shutdown |
+| Phase 4: Backtesting | 1.5 days | Day 9 | Backtest resume works |
+| Phase 5: Production | 2.5 days | Day 11.5 | Production ready |
 
-**Total: 11 development days (~2.2 work weeks)**
+**Total: 11.5 development days (~2.3 work weeks)**
 
 ---
 

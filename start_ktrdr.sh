@@ -11,6 +11,11 @@ cd "$SCRIPT_DIR"
 echo "🚀 Starting KTRDR Complete System..."
 echo "=================================="
 
+# Step 0: Sync environment configuration
+echo ""
+echo "🔧 Step 0: Syncing environment configuration..."
+./scripts/sync-env.sh sync
+
 # Step 1: Start IB Host Service
 echo ""
 echo "📡 Step 1: Starting IB Host Service..."
