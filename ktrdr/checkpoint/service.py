@@ -19,6 +19,13 @@ from typing import Any, Optional
 
 import psycopg2  # type: ignore[import-untyped]
 import yaml
+from opentelemetry import trace
+
+from ktrdr.logging import get_logger
+
+# Get tracer for checkpoint service
+tracer = trace.get_tracer(__name__)
+logger = get_logger(__name__)
 
 
 class CheckpointService:
@@ -157,81 +164,108 @@ class CheckpointService:
             5. Commit transaction
             6. On error: rollback + cleanup artifacts
         """
-        conn, cursor = self._get_connection()
-
-        # Extract checkpoint data
-        checkpoint_id = checkpoint_data["checkpoint_id"]
-        checkpoint_type = checkpoint_data["checkpoint_type"]
-        metadata = checkpoint_data.get("metadata", {})
-        state = checkpoint_data["state"]
-        artifacts = checkpoint_data.get("artifacts", {})
-        artifacts_path = checkpoint_data.get("artifacts_path")
-
-        # Serialize to JSON
-        metadata_json = json.dumps(metadata)
-        state_json = json.dumps(state)
-
-        # Calculate sizes
-        state_size_bytes = len(state_json.encode("utf-8"))
-        artifacts_size_bytes = 0
-
-        # Write artifacts to filesystem (atomic temp → rename)
-        if artifacts and not artifacts_path:
-            artifacts_path = self._write_artifacts_atomic(operation_id, artifacts)
-            artifacts_size_bytes = self._calculate_artifacts_size(Path(artifacts_path))
-        elif artifacts_path:
-            artifacts_size_bytes = self._calculate_artifacts_size(Path(artifacts_path))
-
-        try:
-            # UPSERT into operation_checkpoints table
-            # Uses INSERT ... ON CONFLICT DO UPDATE for atomicity
-            sql = """
-                INSERT INTO operation_checkpoints (
-                    operation_id,
-                    checkpoint_id,
-                    checkpoint_type,
-                    created_at,
-                    checkpoint_metadata_json,
-                    state_json,
-                    artifacts_path,
-                    state_size_bytes,
-                    artifacts_size_bytes
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (operation_id) DO UPDATE SET
-                    checkpoint_id = EXCLUDED.checkpoint_id,
-                    checkpoint_type = EXCLUDED.checkpoint_type,
-                    created_at = EXCLUDED.created_at,
-                    checkpoint_metadata_json = EXCLUDED.checkpoint_metadata_json,
-                    state_json = EXCLUDED.state_json,
-                    artifacts_path = EXCLUDED.artifacts_path,
-                    state_size_bytes = EXCLUDED.state_size_bytes,
-                    artifacts_size_bytes = EXCLUDED.artifacts_size_bytes;
-            """
-
-            params = (
-                operation_id,
-                checkpoint_id,
-                checkpoint_type,
-                datetime.utcnow(),
-                metadata_json,
-                state_json,
-                str(artifacts_path) if artifacts_path else None,
-                state_size_bytes,
-                artifacts_size_bytes,
+        with tracer.start_as_current_span("checkpoint.save") as span:
+            span.set_attribute("operation.id", operation_id)
+            span.set_attribute(
+                "checkpoint.type", checkpoint_data.get("checkpoint_type", "unknown")
             )
 
-            cursor.execute(sql, params)
-            conn.commit()
+            conn, cursor = self._get_connection()
 
-        except Exception:
-            # Rollback transaction
-            conn.rollback()
+            # Extract checkpoint data
+            checkpoint_id = checkpoint_data["checkpoint_id"]
+            checkpoint_type = checkpoint_data["checkpoint_type"]
+            metadata = checkpoint_data.get("metadata", {})
+            state = checkpoint_data["state"]
+            artifacts = checkpoint_data.get("artifacts", {})
+            artifacts_path = checkpoint_data.get("artifacts_path")
 
-            # Cleanup artifacts if they were created
-            if artifacts and artifacts_path and Path(artifacts_path).exists():
-                shutil.rmtree(artifacts_path, ignore_errors=True)
+            # Serialize to JSON
+            metadata_json = json.dumps(metadata)
+            state_json = json.dumps(state)
 
-            raise
+            # Calculate sizes
+            state_size_bytes = len(state_json.encode("utf-8"))
+            artifacts_size_bytes = 0
+
+            span.set_attribute("checkpoint.state_size_bytes", state_size_bytes)
+            span.set_attribute("checkpoint.has_artifacts", bool(artifacts))
+
+            # Write artifacts to filesystem (atomic temp → rename)
+            if artifacts and not artifacts_path:
+                with tracer.start_as_current_span("checkpoint.write_artifacts") as artifact_span:
+                    artifacts_path = self._write_artifacts_atomic(operation_id, artifacts)
+                    artifacts_size_bytes = self._calculate_artifacts_size(Path(artifacts_path))
+                    artifact_span.set_attribute("checkpoint.artifacts_size_bytes", artifacts_size_bytes)
+            elif artifacts_path:
+                artifacts_size_bytes = self._calculate_artifacts_size(Path(artifacts_path))
+
+            span.set_attribute("checkpoint.artifacts_size_bytes", artifacts_size_bytes)
+            span.set_attribute("checkpoint.total_size_bytes", state_size_bytes + artifacts_size_bytes)
+
+            try:
+                # UPSERT into operation_checkpoints table
+                # Uses INSERT ... ON CONFLICT DO UPDATE for atomicity
+                with tracer.start_as_current_span("checkpoint.db_upsert") as db_span:
+                    sql = """
+                        INSERT INTO operation_checkpoints (
+                            operation_id,
+                            checkpoint_id,
+                            checkpoint_type,
+                            created_at,
+                            checkpoint_metadata_json,
+                            state_json,
+                            artifacts_path,
+                            state_size_bytes,
+                            artifacts_size_bytes
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (operation_id) DO UPDATE SET
+                            checkpoint_id = EXCLUDED.checkpoint_id,
+                            checkpoint_type = EXCLUDED.checkpoint_type,
+                            created_at = EXCLUDED.created_at,
+                            checkpoint_metadata_json = EXCLUDED.checkpoint_metadata_json,
+                            state_json = EXCLUDED.state_json,
+                            artifacts_path = EXCLUDED.artifacts_path,
+                            state_size_bytes = EXCLUDED.state_size_bytes,
+                            artifacts_size_bytes = EXCLUDED.artifacts_size_bytes;
+                    """
+
+                    params = (
+                        operation_id,
+                        checkpoint_id,
+                        checkpoint_type,
+                        datetime.utcnow(),
+                        metadata_json,
+                        state_json,
+                        str(artifacts_path) if artifacts_path else None,
+                        state_size_bytes,
+                        artifacts_size_bytes,
+                    )
+
+                    cursor.execute(sql, params)
+                    conn.commit()
+                    db_span.set_attribute("checkpoint.db_committed", True)
+
+                span.set_attribute("checkpoint.success", True)
+                logger.debug(
+                    f"Saved checkpoint for {operation_id}: {checkpoint_type} ({state_size_bytes + artifacts_size_bytes} bytes)"
+                )
+
+            except Exception as e:
+                # Rollback transaction
+                conn.rollback()
+
+                # Cleanup artifacts if they were created
+                if artifacts and artifacts_path and Path(artifacts_path).exists():
+                    shutil.rmtree(artifacts_path, ignore_errors=True)
+
+                span.set_attribute("error", True)
+                span.set_attribute("error.type", type(e).__name__)
+                span.set_attribute("error.message", str(e))
+                span.set_attribute("checkpoint.success", False)
+
+                logger.error(f"Failed to save checkpoint for {operation_id}: {e}")
+                raise
 
     def load_checkpoint(self, operation_id: str) -> Optional[dict[str, Any]]:
         """

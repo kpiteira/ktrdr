@@ -440,37 +440,52 @@ class OperationsService:
 
             # Task 3.5: Create checkpoint before cancelling (if policy enables it)
             checkpoint_created = False
-            try:
-                from ktrdr.checkpoint.policy import load_checkpoint_policies
+            with create_service_span(
+                "checkpoint.create_on_cancellation", operation_id=operation_id
+            ) as span:
+                try:
+                    from ktrdr.checkpoint.policy import load_checkpoint_policies
 
-                # Load checkpoint policy for this operation type
-                policies = load_checkpoint_policies()
-                operation_type_key = operation.operation_type.value.lower()
-                policy = policies.get(operation_type_key)
+                    # Load checkpoint policy for this operation type
+                    policies = load_checkpoint_policies()
+                    operation_type_key = operation.operation_type.value.lower()
+                    policy = policies.get(operation_type_key)
 
-                if policy and policy.checkpoint_on_cancellation:
-                    # Create cancellation checkpoint with metadata
-                    checkpoint_created = await self.create_checkpoint(
-                        operation_id=operation_id,
-                        checkpoint_type=CheckpointType.CANCELLATION,
-                        metadata={
-                            "cancellation_reason": cancellation_reason,
-                            "checkpoint_at_cancellation": True,
-                        },
+                    span.set_attribute("operation.type", operation_type_key)
+                    span.set_attribute(
+                        "checkpoint.policy.enabled",
+                        policy.checkpoint_on_cancellation if policy else False,
                     )
-                    if checkpoint_created:
-                        logger.info(
-                            f"Created cancellation checkpoint for operation {operation_id}"
+
+                    if policy and policy.checkpoint_on_cancellation:
+                        # Create cancellation checkpoint with metadata
+                        checkpoint_created = await self.create_checkpoint(
+                            operation_id=operation_id,
+                            checkpoint_type=CheckpointType.CANCELLATION,
+                            metadata={
+                                "cancellation_reason": cancellation_reason,
+                                "checkpoint_at_cancellation": True,
+                            },
                         )
-                    else:
-                        logger.warning(
-                            f"Failed to create cancellation checkpoint for {operation_id}, continuing with cancellation"
-                        )
-            except Exception as e:
-                # Don't let checkpoint failure block cancellation
-                logger.warning(
-                    f"Checkpoint creation failed for {operation_id}: {e}, continuing with cancellation"
-                )
+                        span.set_attribute("checkpoint.created", checkpoint_created)
+
+                        if checkpoint_created:
+                            logger.info(
+                                f"Created cancellation checkpoint for operation {operation_id}"
+                            )
+                        else:
+                            logger.warning(
+                                f"Failed to create cancellation checkpoint for {operation_id}, continuing with cancellation"
+                            )
+                            span.set_attribute("checkpoint.creation_failed", True)
+                except Exception as e:
+                    # Don't let checkpoint failure block cancellation
+                    logger.warning(
+                        f"Checkpoint creation failed for {operation_id}: {e}, continuing with cancellation"
+                    )
+                    span.set_attribute("error", True)
+                    span.set_attribute("error.type", type(e).__name__)
+                    span.set_attribute("error.message", str(e))
 
             # Update operation status with telemetry
             with create_service_span(
@@ -487,8 +502,12 @@ class OperationsService:
                 operation.completed_at = datetime.now(timezone.utc)
                 operation.error_message = reason or "Operation cancelled by user"
 
+                # Persist the CANCELLED status to database
+                await self.persist_operation(operation)
+                span.set_attribute("operation.persisted", True)
+
             logger.info(
-                f"Cancelled operation: {operation_id} (task_cancelled: {cancelled_task}, remote_cancelled: {remote_cancelled})"
+                f"Cancelled operation: {operation_id} (task_cancelled: {cancelled_task}, remote_cancelled: {remote_cancelled}, checkpoint_created: {checkpoint_created})"
             )
 
             return {
@@ -1648,62 +1667,81 @@ class OperationsService:
             This method coordinates with CheckpointService to persist checkpoints
             and retrieves current operation state from workers/progress bridges.
         """
-        try:
-            # Get current operation state
-            current_state = await self._get_operation_state(operation_id)
+        with create_service_span(
+            "checkpoint.create", operation_id=operation_id
+        ) as span:
+            span.set_attribute("checkpoint.type", checkpoint_type.value)
+            if metadata:
+                span.set_attribute("checkpoint.has_metadata", True)
 
-            if current_state is None:
-                logger.warning(
-                    f"Cannot create checkpoint for {operation_id}: no state available"
+            try:
+                # Get current operation state
+                current_state = await self._get_operation_state(operation_id)
+
+                if current_state is None:
+                    logger.warning(
+                        f"Cannot create checkpoint for {operation_id}: no state available"
+                    )
+                    span.set_attribute("checkpoint.no_state", True)
+                    return False
+
+                # Ensure operation is persisted to database before creating checkpoint
+                # This handles the case where persist_operation failed silently during
+                # operation creation (graceful degradation) but we need database persistence
+                # for checkpoint foreign key constraint
+                # NOTE: We DON'T acquire the lock here because create_checkpoint may be called
+                # from cancel_operation which already holds the lock. Accessing _operations
+                # dict without lock is safe for reading if we just need to check existence.
+                if operation_id in self._operations:
+                    operation = self._operations[operation_id]
+                    await self.persist_operation(operation)
+                    logger.debug(
+                        f"Ensured operation {operation_id} is persisted to database before checkpoint"
+                    )
+
+                # Get checkpoint service
+                checkpoint_service = self._get_checkpoint_service()
+
+                # Prepare metadata
+                checkpoint_metadata = metadata or {}
+                checkpoint_metadata["checkpoint_type"] = checkpoint_type.value
+                checkpoint_metadata["created_at"] = datetime.now(timezone.utc).isoformat()
+
+                # Save checkpoint (prepare data dict for CheckpointService)
+                checkpoint_data = {
+                    "checkpoint_id": f"{operation_id}_{checkpoint_type.value}_{int(time.time())}",
+                    "checkpoint_type": checkpoint_type.value,
+                    "metadata": checkpoint_metadata,
+                    "state": current_state,
+                }
+
+                # Save checkpoint with timing instrumentation
+                start_time = time.time()
+                await asyncio.to_thread(
+                    checkpoint_service.save_checkpoint,
+                    operation_id,
+                    checkpoint_data,
                 )
+                save_duration_ms = (time.time() - start_time) * 1000
+
+                span.set_attribute("checkpoint.save_duration_ms", save_duration_ms)
+                span.set_attribute("checkpoint.success", True)
+
+                logger.info(
+                    f"Created {checkpoint_type.value} checkpoint for operation {operation_id}"
+                )
+                return True
+
+            except Exception as e:
+                logger.error(
+                    f"Failed to create checkpoint for {operation_id}: {e}",
+                    exc_info=True,
+                )
+                span.set_attribute("error", True)
+                span.set_attribute("error.type", type(e).__name__)
+                span.set_attribute("error.message", str(e))
+                span.set_attribute("checkpoint.success", False)
                 return False
-
-            # Ensure operation is persisted to database before creating checkpoint
-            # This handles the case where persist_operation failed silently during
-            # operation creation (graceful degradation) but we need database persistence
-            # for checkpoint foreign key constraint
-            # NOTE: We DON'T acquire the lock here because create_checkpoint may be called
-            # from cancel_operation which already holds the lock. Accessing _operations
-            # dict without lock is safe for reading if we just need to check existence.
-            if operation_id in self._operations:
-                operation = self._operations[operation_id]
-                await self.persist_operation(operation)
-                logger.debug(
-                    f"Ensured operation {operation_id} is persisted to database before checkpoint"
-                )
-
-            # Get checkpoint service
-            checkpoint_service = self._get_checkpoint_service()
-
-            # Prepare metadata
-            checkpoint_metadata = metadata or {}
-            checkpoint_metadata["checkpoint_type"] = checkpoint_type.value
-            checkpoint_metadata["created_at"] = datetime.now(timezone.utc).isoformat()
-
-            # Save checkpoint (prepare data dict for CheckpointService)
-            checkpoint_data = {
-                "checkpoint_id": f"{operation_id}_{checkpoint_type.value}_{int(time.time())}",
-                "checkpoint_type": checkpoint_type.value,
-                "metadata": checkpoint_metadata,
-                "state": current_state,
-            }
-            await asyncio.to_thread(
-                checkpoint_service.save_checkpoint,
-                operation_id,
-                checkpoint_data,
-            )
-
-            logger.info(
-                f"Created {checkpoint_type.value} checkpoint for operation {operation_id}"
-            )
-            return True
-
-        except Exception as e:
-            logger.error(
-                f"Failed to create checkpoint for {operation_id}: {e}",
-                exc_info=True,
-            )
-            return False
 
     def _get_checkpoint_service(self) -> "CheckpointService":
         """
