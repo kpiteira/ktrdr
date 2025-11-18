@@ -75,3 +75,31 @@ class BacktestStartResponse(BaseModel):
     symbol: str
     timeframe: str
     mode: Optional[str] = None  # "local" or "remote"
+
+
+class ResumeRequest(BaseModel):
+    """
+    Request model for resuming an operation from checkpoint.
+
+    This model is used by workers to receive resume requests from the backend.
+    Following the distributed architecture pattern, it contains only operation IDs
+    - NO checkpoint data is sent over the network.
+
+    The worker loads the checkpoint autonomously from the database using the
+    original_operation_id.
+
+    Fields:
+        task_id: New operation ID assigned by backend
+        original_operation_id: ID of the original (failed/cancelled) operation to resume from
+    """
+
+    task_id: str
+    original_operation_id: str
+
+    @field_validator("task_id", "original_operation_id")
+    @classmethod
+    def validate_non_empty_strings(cls, v: str) -> str:
+        """Validate that operation IDs are not empty."""
+        if not v or not v.strip():
+            raise ValueError("Operation ID cannot be empty")
+        return v.strip()
