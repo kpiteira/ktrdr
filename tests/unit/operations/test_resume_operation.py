@@ -128,15 +128,17 @@ class TestResumeOperationHappyPath:
                 )
                 mock_get_checkpoint.return_value = mock_checkpoint_service
 
-                # Mock TrainingService.resume_training
+                # Mock TrainingService.resume_training_on_worker
                 with patch(
                     "ktrdr.api.services.operations_service.get_training_service"
                 ) as mock_get_training:
                     mock_training_service = AsyncMock()
-                    mock_training_service.resume_training.return_value = {
-                        "success": True,
-                        "result": "training_resumed",
-                    }
+                    mock_training_service.resume_training_on_worker = AsyncMock(
+                        return_value={
+                            "success": True,
+                            "result": "training_resumed",
+                        }
+                    )
                     mock_get_training.return_value = mock_training_service
 
                     # Mock create_operation
@@ -158,24 +160,25 @@ class TestResumeOperationHappyPath:
                             "op_training_001"
                         )
 
-                        # Assert: Check result structure
+                        # Assert: Check result structure (refactored - no domain-specific checkpoint info)
                         assert result["success"] is True
                         assert result["original_operation_id"] == "op_training_001"
                         assert result["new_operation_id"] == "op_training_new_001"
-                        assert "resumed_from_checkpoint" in result
+                        assert result["message"] == "Operation resumed"
 
-                        # Assert: CheckpointService.load_checkpoint was called
-                        mock_checkpoint_service.load_checkpoint.assert_called_once_with(
-                            "op_training_001"
+                        # Assert: CheckpointService.load_checkpoint was NOT called (worker autonomy)
+                        # Backend no longer loads checkpoints - workers do it autonomously
+                        mock_checkpoint_service.load_checkpoint.assert_not_called()
+
+                        # Assert: CheckpointService.delete_checkpoint was NOT called yet
+                        # Checkpoint deletion happens later in the flow (not in resume_operation)
+                        mock_checkpoint_service.delete_checkpoint.assert_not_called()
+
+                        # Assert: TrainingService.resume_training_on_worker was called with operation IDs only
+                        mock_training_service.resume_training_on_worker.assert_called_once_with(
+                            operation_id="op_training_new_001",
+                            original_operation_id="op_training_001",
                         )
-
-                        # Assert: CheckpointService.delete_checkpoint was called
-                        mock_checkpoint_service.delete_checkpoint.assert_called_once_with(
-                            "op_training_001"
-                        )
-
-                        # Assert: TrainingService.resume_training was called
-                        mock_training_service.resume_training.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_resume_cancelled_operation_success(
@@ -284,22 +287,54 @@ class TestResumeOperationValidation:
     async def test_resume_no_checkpoint_found(
         self, operations_service, failed_operation
     ):
-        """Test resume fails when no checkpoint exists."""
+        """
+        Test resume dispatch succeeds even when no checkpoint exists (worker autonomy).
+
+        REFACTORED: In the new worker autonomy pattern, backend no longer validates checkpoint
+        existence. The worker loads checkpoints autonomously and will fail gracefully if checkpoint
+        is missing. This test now verifies that backend successfully dispatches to the worker.
+        """
         # Setup: Mock get_operation to return failed operation
         with patch.object(
             operations_service, "get_operation", return_value=failed_operation
         ):
-            # Mock CheckpointService.load_checkpoint to return None
+            # Mock CheckpointService (backend doesn't call it anymore)
             with patch(
                 "ktrdr.api.services.operations_service.get_checkpoint_service"
             ) as mock_get_checkpoint:
                 mock_checkpoint_service = MagicMock()
-                mock_checkpoint_service.load_checkpoint.return_value = None
                 mock_get_checkpoint.return_value = mock_checkpoint_service
 
-                # Execute & Assert: Should raise ValueError
-                with pytest.raises(ValueError, match="No checkpoint found"):
-                    await operations_service.resume_operation("op_training_001")
+                # Mock TrainingService.resume_training_on_worker
+                with patch(
+                    "ktrdr.api.services.operations_service.get_training_service"
+                ) as mock_get_training:
+                    mock_training_service = AsyncMock()
+                    mock_training_service.resume_training_on_worker = AsyncMock(
+                        return_value={"success": True}
+                    )
+                    mock_get_training.return_value = mock_training_service
+
+                    # Mock create_operation
+                    with patch.object(
+                        operations_service, "create_operation"
+                    ) as mock_create:
+                        new_operation = OperationInfo(
+                            operation_id="op_training_new_001",
+                            operation_type=OperationType.TRAINING,
+                            status=OperationStatus.PENDING,
+                            created_at=datetime.now(timezone.utc),
+                            progress=OperationProgress(),
+                            metadata=failed_operation.metadata,
+                        )
+                        mock_create.return_value = new_operation
+
+                        # Execute: Resume operation succeeds (worker validates checkpoint)
+                        result = await operations_service.resume_operation("op_training_001")
+
+                        # Assert: Backend dispatched successfully
+                        assert result["success"] is True
+                        # Worker will fail later if checkpoint doesn't exist
 
 
 class TestResumeOperationDispatch:
@@ -334,14 +369,16 @@ class TestResumeOperationDispatch:
                 )
                 mock_get_checkpoint.return_value = mock_checkpoint_service
 
-                # Mock BacktestingService.resume_backtest
+                # Mock BacktestingService.resume_backtest_on_worker (refactored method name)
                 with patch(
                     "ktrdr.api.services.operations_service.get_backtesting_service"
                 ) as mock_get_backtest:
                     mock_backtest_service = AsyncMock()
-                    mock_backtest_service.resume_backtest.return_value = {
-                        "success": True
-                    }
+                    mock_backtest_service.resume_backtest_on_worker = AsyncMock(
+                        return_value={
+                            "success": True
+                        }
+                    )
                     mock_get_backtest.return_value = mock_backtest_service
 
                     with patch.object(
@@ -362,8 +399,11 @@ class TestResumeOperationDispatch:
                             "op_backtest_001"
                         )
 
-                        # Assert: BacktestingService.resume_backtest was called
-                        mock_backtest_service.resume_backtest.assert_called_once()
+                        # Assert: BacktestingService.resume_backtest_on_worker was called with operation IDs only
+                        mock_backtest_service.resume_backtest_on_worker.assert_called_once_with(
+                            operation_id="op_backtest_new_001",
+                            original_operation_id="op_backtest_001",
+                        )
                         assert result["success"] is True
 
     @pytest.mark.asyncio

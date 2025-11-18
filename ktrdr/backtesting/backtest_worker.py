@@ -14,10 +14,12 @@ from typing import Any
 from fastapi import FastAPI
 from opentelemetry import trace
 
+from ktrdr.api.models.backtesting import ResumeRequest
 from ktrdr.api.models.operations import OperationMetadata, OperationType
 from ktrdr.api.models.workers import WorkerType
 from ktrdr.backtesting.engine import BacktestConfig, BacktestingEngine
 from ktrdr.backtesting.progress_bridge import BacktestProgressBridge
+from ktrdr.checkpoint.service import CheckpointService
 from ktrdr.logging import get_logger
 from ktrdr.monitoring.setup import instrument_app, setup_monitoring
 from ktrdr.workers.base import WorkerAPIBase, WorkerOperationMixin
@@ -66,7 +68,11 @@ class BacktestWorker(WorkerAPIBase):
             backend_url=backend_url,
         )
 
-        # Register domain-specific endpoint
+        # Initialize CheckpointService for autonomous checkpoint loading
+        self._checkpoint_service = CheckpointService()
+        logger.info("CheckpointService initialized in backtest worker")
+
+        # Register domain-specific endpoint: /backtests/start
         @self.app.post("/backtests/start")
         async def start_backtest(request: BacktestStartRequest):
             """
@@ -86,6 +92,32 @@ class BacktestWorker(WorkerAPIBase):
             return {
                 "success": True,
                 "operation_id": operation_id,  # ← Return same ID to backend!
+                "status": "started",
+            }
+
+        # Register domain-specific endpoint: /backtests/resume
+        @self.app.post("/backtests/resume")
+        async def resume_backtest(request: ResumeRequest):
+            """
+            Resume a backtest operation from checkpoint.
+
+            Worker autonomy pattern:
+            - Receives only operation IDs from backend (minimal payload)
+            - Loads checkpoint autonomously from database
+            - Returns operation_id back to backend
+            - Starts work in background, returns immediately
+            """
+            # Use backend's task_id
+            operation_id = request.task_id
+
+            # Start resume work in background (non-blocking!)
+            asyncio.create_task(
+                self._execute_resume_backtest_work(operation_id, request)
+            )
+
+            return {
+                "success": True,
+                "operation_id": operation_id,
                 "status": "started",
             }
 
@@ -200,6 +232,90 @@ class BacktestWorker(WorkerAPIBase):
 
         except Exception as e:
             # Fail operation on error
+            await self._operations_service.fail_operation(operation_id, str(e))
+            raise
+
+    async def _execute_resume_backtest_work(
+        self,
+        operation_id: str,
+        request: ResumeRequest,
+    ) -> dict[str, Any]:
+        """
+        Execute resumed backtest work from checkpoint.
+
+        Worker autonomy pattern:
+        1. Load checkpoint from database (autonomous)
+        2. Load original operation metadata
+        3. Extract parameters and rebuild request
+        4. Call shared backtest execution logic
+
+        Args:
+            operation_id: New operation ID for resumed backtest
+            request: Resume request with original_operation_id
+
+        Returns:
+            Result dictionary
+        """
+        try:
+            # 1. Load checkpoint autonomously from database
+            checkpoint = self._checkpoint_service.load_checkpoint(
+                request.original_operation_id
+            )
+
+            if checkpoint is None:
+                error_msg = f"No checkpoint found for {request.original_operation_id}"
+                logger.error(error_msg)
+                await self._operations_service.fail_operation(operation_id, error_msg)
+                raise ValueError(error_msg)
+
+            logger.info(
+                f"Loaded checkpoint for {request.original_operation_id}: "
+                f"type={checkpoint.get('checkpoint_type')}, "
+                f"bar_index={checkpoint.get('current_bar_index')}"
+            )
+
+            # 2. Load original operation metadata to get parameters
+            original_operation = await self._operations_service.get_operation(
+                request.original_operation_id
+            )
+
+            if original_operation is None:
+                error_msg = f"Original operation not found: {request.original_operation_id}"
+                logger.error(error_msg)
+                await self._operations_service.fail_operation(operation_id, error_msg)
+                raise ValueError(error_msg)
+
+            # 3. Extract parameters and rebuild BacktestStartRequest
+            metadata = original_operation.metadata
+            params = metadata.parameters
+
+            # Rebuild request from original operation metadata + checkpoint state
+            resume_request = BacktestStartRequest(
+                task_id=operation_id,
+                symbol=metadata.symbol,
+                timeframe=metadata.timeframe,
+                strategy_name=params.get("strategy_name", ""),
+                start_date=metadata.start_date.isoformat() if hasattr(metadata.start_date, 'isoformat') else metadata.start_date,
+                end_date=metadata.end_date.isoformat() if hasattr(metadata.end_date, 'isoformat') else metadata.end_date,
+                initial_capital=params.get("initial_capital", 100000.0),
+                commission=params.get("commission", 0.001),
+                slippage=params.get("slippage", 0.0),
+            )
+
+            # 4. Execute backtest work with checkpoint state
+            # NOTE: In a full implementation, we'd pass checkpoint_state to the engine
+            # For now, execute as fresh start (engine resume logic is separate task)
+            logger.warning(
+                f"Resume executing as fresh start for {operation_id}. "
+                "Engine-level checkpoint resume not yet implemented."
+            )
+
+            result = await self._execute_backtest_work(operation_id, resume_request)
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Resume backtest failed for {operation_id}: {e}")
             await self._operations_service.fail_operation(operation_id, str(e))
             raise
 

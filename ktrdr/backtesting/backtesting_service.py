@@ -238,49 +238,38 @@ class BacktestingService(ServiceOrchestrator[None]):
             slippage=context.get("slippage", 0.001),
         )
 
-    async def run_backtest_on_worker(
+    async def _dispatch_to_worker(
         self,
         operation_id: str,
-        symbol: str,
-        timeframe: str,
-        strategy_config_path: str,
-        model_path: str,
-        start_date: datetime,
-        end_date: datetime,
-        initial_capital: float,
-        commission: float = 0.001,
-        slippage: float = 0.001,
+        endpoint: str,
+        payload: dict[str, Any],
     ) -> dict[str, Any]:
         """
-        Run backtest on worker using distributed execution pattern.
+        Common worker dispatch logic (DRY pattern).
 
-        Distributed-only mode: always dispatches to worker via WorkerRegistry.
+        Extracted from run_backtest_on_worker() to enable reuse by both start and resume operations.
 
         Workflow:
         1. Select available worker from WorkerRegistry
-        2. Start backtest on worker (HTTP POST)
-        3. Get remote operation ID
-        4. Create OperationServiceProxy
-        5. Register proxy with OperationsService
-        6. Return immediately (no waiting)
+        2. HTTP POST to worker endpoint with 503 retry
+        3. Mark worker as busy
+        4. Register OperationServiceProxy
+        5. Return remote response
 
         Args:
             operation_id: Backend operation identifier
-            symbol: Trading symbol
-            timeframe: Timeframe
-            strategy_config_path: Strategy configuration path
-            model_path: Model file path
-            start_date: Start date
-            end_date: End date
-            initial_capital: Initial capital
-            commission: Commission rate
-            slippage: Slippage rate
+            endpoint: Worker endpoint (e.g., "backtests/start", "backtests/resume")
+            payload: Request payload (already built by caller)
 
         Returns:
-            Dictionary with status="started" (worker operation continues independently)
+            Dictionary with:
+                - remote_operation_id: str
+                - backend_operation_id: str
+                - status: str
+                - worker_id: str
 
         Raises:
-            RuntimeError: If no workers are available
+            RuntimeError: If no workers available or all workers busy
         """
         # (1) Select worker from registry with retry on 503 (worker busy)
         worker_id: Optional[str] = None
@@ -310,7 +299,7 @@ class BacktestingService(ServiceOrchestrator[None]):
 
             logger.info(
                 f"Selected worker {worker_id} for operation {operation_id} "
-                f"(symbol={symbol}, timeframe={timeframe}, attempt={attempt + 1}/{max_retries})"
+                f"(endpoint={endpoint}, attempt={attempt + 1}/{max_retries})"
             )
             break  # Worker selected, exit retry loop to try dispatching
         else:
@@ -319,21 +308,6 @@ class BacktestingService(ServiceOrchestrator[None]):
             )
 
         # (2) Dispatch to worker with retry on 503
-        # Extract strategy_name from strategy_config_path (e.g., "strategies/test.yaml" -> "test")
-        strategy_name = os.path.splitext(os.path.basename(strategy_config_path))[0]
-
-        request_payload = {
-            "task_id": operation_id,  # ← CRITICAL: Synchronize operation IDs (training-host pattern)
-            "strategy_name": strategy_name,  # Remote API expects strategy_name, not path
-            "symbol": symbol,
-            "timeframe": timeframe,
-            "start_date": start_date.isoformat(),
-            "end_date": end_date.isoformat(),
-            "initial_capital": initial_capital,
-            "commission": commission,
-            "slippage": slippage,
-        }
-
         remote_response = None
         remote_operation_id = None
 
@@ -341,14 +315,14 @@ class BacktestingService(ServiceOrchestrator[None]):
         for retry_attempt in range(max_retries):
             try:
                 logger.info(
-                    f"Dispatching backtest to worker {worker_id} at {remote_url}/backtests/start "
+                    f"Dispatching to worker {worker_id} at {remote_url}/{endpoint} "
                     f"(attempt {retry_attempt + 1}/{max_retries})"
                 )
 
                 async with httpx.AsyncClient() as client:
                     response = await client.post(
-                        f"{remote_url}/backtests/start",
-                        json=request_payload,
+                        f"{remote_url}/{endpoint}",
+                        json=payload,
                         timeout=30.0,
                     )
                     response.raise_for_status()
@@ -360,7 +334,7 @@ class BacktestingService(ServiceOrchestrator[None]):
                     raise RuntimeError("Remote service did not return operation_id")
 
                 logger.info(
-                    f"✅ Backtest accepted by worker {worker_id}: remote_op={remote_operation_id}"
+                    f"✅ Operation accepted by worker {worker_id}: remote_op={remote_operation_id}"
                 )
                 break
 
@@ -400,10 +374,10 @@ class BacktestingService(ServiceOrchestrator[None]):
                     raise
 
         if not remote_operation_id:
-            raise RuntimeError("Failed to start backtest on any worker")
+            raise RuntimeError("Failed to dispatch operation to any worker")
 
         logger.info(
-            f"Remote backtest started: backend_op={operation_id}, "
+            f"Remote operation started: backend_op={operation_id}, "
             f"remote_op={remote_operation_id}"
         )
 
@@ -416,7 +390,7 @@ class BacktestingService(ServiceOrchestrator[None]):
             )
             logger.info(
                 "Worker cleanup will be handled by health check system "
-                "(worker reports idle when backtest completes)"
+                "(worker reports idle when operation completes)"
             )
 
         # (4) Create OperationServiceProxy for remote service
@@ -431,13 +405,123 @@ class BacktestingService(ServiceOrchestrator[None]):
 
         logger.info(f"Registered remote proxy: {operation_id} → {remote_operation_id}")
 
-        # (6) Return immediately with status="started"
-        # Backend doesn't know completion status - client discovers via queries
-        # TODO: Add callback to mark worker as available when operation completes
+        # (6) Return remote response with worker_id
         return {
             "remote_operation_id": remote_operation_id,
             "backend_operation_id": operation_id,
             "status": "started",
-            "message": f"Backtest started on remote service: {symbol} {timeframe}",
-            "worker_id": worker_id,  # Include worker_id in response for visibility
+            "worker_id": worker_id,
         }
+
+    async def run_backtest_on_worker(
+        self,
+        operation_id: str,
+        symbol: str,
+        timeframe: str,
+        strategy_config_path: str,
+        model_path: str,
+        start_date: datetime,
+        end_date: datetime,
+        initial_capital: float,
+        commission: float = 0.001,
+        slippage: float = 0.001,
+    ) -> dict[str, Any]:
+        """
+        Run backtest on worker using distributed execution pattern.
+
+        Distributed-only mode: always dispatches to worker via WorkerRegistry.
+
+        Workflow:
+        1. Build request payload
+        2. Dispatch to worker via _dispatch_to_worker() (common logic)
+        3. Return response with domain-specific message
+
+        Args:
+            operation_id: Backend operation identifier
+            symbol: Trading symbol
+            timeframe: Timeframe
+            strategy_config_path: Strategy configuration path
+            model_path: Model file path
+            start_date: Start date
+            end_date: End date
+            initial_capital: Initial capital
+            commission: Commission rate
+            slippage: Slippage rate
+
+        Returns:
+            Dictionary with status="started" (worker operation continues independently)
+
+        Raises:
+            RuntimeError: If no workers are available
+        """
+        # (1) Build request payload (domain-specific)
+        # Extract strategy_name from strategy_config_path (e.g., "strategies/test.yaml" -> "test")
+        strategy_name = os.path.splitext(os.path.basename(strategy_config_path))[0]
+
+        request_payload = {
+            "task_id": operation_id,  # ← CRITICAL: Synchronize operation IDs (training-host pattern)
+            "strategy_name": strategy_name,  # Remote API expects strategy_name, not path
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+            "initial_capital": initial_capital,
+            "commission": commission,
+            "slippage": slippage,
+        }
+
+        # (2) Dispatch to worker using common dispatch logic
+        result = await self._dispatch_to_worker(
+            operation_id=operation_id,
+            endpoint="backtests/start",
+            payload=request_payload,
+        )
+
+        # (3) Add domain-specific message and return
+        result["message"] = f"Backtest started on remote service: {symbol} {timeframe}"
+        return result
+
+    async def resume_backtest_on_worker(
+        self,
+        operation_id: str,
+        original_operation_id: str,
+    ) -> dict[str, Any]:
+        """
+        Resume backtest on worker from checkpoint.
+
+        Following worker autonomy pattern:
+        - Backend sends only operation IDs (minimal payload)
+        - Worker loads checkpoint autonomously from database
+        - Uses common _dispatch_to_worker() logic (DRY)
+
+        Args:
+            operation_id: New operation ID for resumed backtest
+            original_operation_id: Original operation ID to resume from
+
+        Returns:
+            Dictionary with:
+                - remote_operation_id: str
+                - backend_operation_id: str
+                - status: str
+                - worker_id: str
+                - message: str
+
+        Raises:
+            RuntimeError: If no workers are available
+        """
+        # (1) Build minimal resume payload (NO checkpoint data)
+        request_payload = {
+            "task_id": operation_id,
+            "original_operation_id": original_operation_id,
+        }
+
+        # (2) Dispatch to worker using common dispatch logic
+        result = await self._dispatch_to_worker(
+            operation_id=operation_id,
+            endpoint="backtests/resume",
+            payload=request_payload,
+        )
+
+        # (3) Add domain-specific message and return
+        result["message"] = f"Backtest resumed from checkpoint: {original_operation_id}"
+        return result

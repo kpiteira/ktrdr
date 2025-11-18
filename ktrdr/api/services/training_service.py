@@ -638,86 +638,116 @@ class TrainingService(ServiceOrchestrator[None]):
 
         return {"success": True, "models": model_summaries}
 
-    async def resume_training(
+    async def resume_training_on_worker(
         self,
+        operation_id: str,
         original_operation_id: str,
-        new_operation_id: str,
     ) -> dict[str, Any]:
         """
-        Resume training from a checkpoint.
+        Resume training on worker from checkpoint.
 
-        Loads the checkpoint for the original operation, creates a new operation,
-        and continues training from the checkpoint state.
+        REFACTORED for worker autonomy pattern:
+        - Backend sends only operation IDs (minimal payload)
+        - Worker loads checkpoint autonomously from database
+        - Uses worker dispatch pattern (DRY)
 
         Args:
-            original_operation_id: Operation ID of the failed/cancelled training
-            new_operation_id: New operation ID for the resumed training
+            operation_id: New operation ID for resumed training
+            original_operation_id: Original operation ID to resume from
 
         Returns:
-            Dict with new operation details
+            Dictionary with:
+                - remote_operation_id: str
+                - backend_operation_id: str
+                - status: str
+                - worker_id: str
+                - message: str
 
         Raises:
-            ValueError: If checkpoint not found or corrupted
+            RuntimeError: If no workers are available
         """
-        from ktrdr.checkpoint.service import CheckpointService
-        from ktrdr.training.checkpoint_validator import validate_checkpoint_state
+        # (1) Build minimal resume payload (NO checkpoint data)
+        request_payload = {
+            "task_id": operation_id,
+            "original_operation_id": original_operation_id,
+        }
 
-        # Load checkpoint (use injected service if available, otherwise create new)
-        checkpoint_service = (
-            getattr(self, "checkpoint_service", None) or CheckpointService()
+        # (2) Select worker from registry
+        if self.worker_registry is None:
+            raise RuntimeError(
+                "WorkerRegistry is required for distributed worker training"
+            )
+
+        worker = self._select_training_worker(context={})
+        if not worker:
+            raise RuntimeError(
+                "No available training workers. All workers are busy or unavailable."
+            )
+
+        worker_id = worker.worker_id
+        remote_url = worker.endpoint_url
+
+        logger.info(
+            f"Selected worker {worker_id} for resume operation {operation_id} "
+            f"(original={original_operation_id})"
         )
-        checkpoint_state = checkpoint_service.load_checkpoint(original_operation_id)
 
-        if checkpoint_state is None:
-            raise ValueError(
-                f"No checkpoint found for operation {original_operation_id}. "
-                f"Cannot resume training."
-            )
-
-        # Validate checkpoint structure
-        is_valid, errors = validate_checkpoint_state(checkpoint_state)
-        if not is_valid:
-            error_msg = "; ".join(errors)
-            raise ValueError(
-                f"Checkpoint for {original_operation_id} is corrupted or invalid: {error_msg}"
-            )
-
-        # Log resume operation
-        logger.info(f"Resuming training from operation {original_operation_id}")
-        logger.info(f"Checkpoint epoch: {checkpoint_state.get('epoch')}")
-        logger.info(f"New operation ID: {new_operation_id}")
-
-        # Create training context with checkpoint state
-        # Note: This is a simplified implementation
-        # Full implementation would reconstruct TrainingOperationContext from checkpoint
-        {
-            "operation_id": new_operation_id,
-            "resumed_from": original_operation_id,
-            "checkpoint_state": checkpoint_state,
-            "starting_epoch": checkpoint_state["epoch"] + 1,
-            "config": checkpoint_state.get("config", {}),
-        }
-
-        # Dispatch to worker (simplified - full implementation would use _run_distributed_worker_training)
-        # For now, return success with metadata
-        result = {
-            "operation_id": new_operation_id,
-            "status": "RUNNING",
-            "resumed_from": original_operation_id,
-            "starting_epoch": checkpoint_state["epoch"] + 1,
-            "message": f"Resumed training from epoch {checkpoint_state['epoch']}",
-        }
-
-        # Delete original checkpoint (resume started, no longer needed)
+        # (3) Dispatch to worker
         try:
-            checkpoint_service.delete_checkpoint(original_operation_id)
-            logger.info(f"Deleted checkpoint for {original_operation_id}")
-        except Exception as e:
-            logger.warning(
-                f"Failed to delete checkpoint for {original_operation_id}: {e}"
+            import httpx
+
+            logger.info(
+                f"Dispatching training resume to worker {worker_id} at {remote_url}/training/resume"
             )
 
-        return result
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{remote_url}/training/resume",
+                    json=request_payload,
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+                remote_response = response.json()
+
+            remote_operation_id = remote_response.get("operation_id")
+            if not remote_operation_id:
+                raise RuntimeError("Remote worker did not return operation_id")
+
+            logger.info(
+                f"✅ Training resume accepted by worker {worker_id}: remote_op={remote_operation_id}"
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to dispatch resume to worker: {e}")
+            raise
+
+        # (4) Mark worker as busy
+        self.worker_registry.mark_busy(worker_id, operation_id)
+        self._operation_workers[operation_id] = worker_id
+        logger.info(f"Marked worker {worker_id} as BUSY for operation {operation_id}")
+
+        # (5) Create and register OperationServiceProxy
+        from ktrdr.api.services.adapters.operation_service_proxy import (
+            OperationServiceProxy,
+        )
+
+        proxy = OperationServiceProxy(base_url=remote_url)
+        self.operations_service.register_remote_proxy(
+            backend_operation_id=operation_id,
+            proxy=proxy,
+            host_operation_id=remote_operation_id,
+        )
+
+        logger.info(f"Registered remote proxy: {operation_id} → {remote_operation_id}")
+
+        # (6) Return with domain-specific message
+        return {
+            "remote_operation_id": remote_operation_id,
+            "backend_operation_id": operation_id,
+            "status": "started",
+            "worker_id": worker_id,
+            "message": f"Training resumed from checkpoint: {original_operation_id}",
+        }
 
 
 # Note: get_training_service() dependency function is defined in endpoints/training.py

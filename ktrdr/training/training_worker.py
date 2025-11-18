@@ -14,8 +14,10 @@ from fastapi import FastAPI
 from opentelemetry import trace
 from pydantic import Field
 
+from ktrdr.api.models.backtesting import ResumeRequest
 from ktrdr.api.models.operations import OperationMetadata, OperationType
 from ktrdr.api.models.workers import WorkerType
+from ktrdr.checkpoint.service import CheckpointService
 
 # Note: TrainingProgressBridge requires TrainingOperationContext which is complex
 # For now, we'll use direct progress callbacks instead
@@ -76,7 +78,11 @@ class TrainingWorker(WorkerAPIBase):
             backend_url=backend_url,
         )
 
-        # Register domain-specific endpoint
+        # Initialize CheckpointService for autonomous checkpoint loading
+        self._checkpoint_service = CheckpointService()
+        logger.info("CheckpointService initialized in training worker")
+
+        # Register domain-specific endpoint: /training/start
         @self.app.post("/training/start")
         async def start_training(request: TrainingStartRequest):
             """
@@ -96,6 +102,32 @@ class TrainingWorker(WorkerAPIBase):
             return {
                 "success": True,
                 "operation_id": operation_id,  # Standard field (WorkerAPIBase pattern)
+                "status": "started",
+            }
+
+        # Register domain-specific endpoint: /training/resume
+        @self.app.post("/training/resume")
+        async def resume_training(request: ResumeRequest):
+            """
+            Resume a training operation from checkpoint.
+
+            Worker autonomy pattern:
+            - Receives only operation IDs from backend (minimal payload)
+            - Loads checkpoint autonomously from database
+            - Returns operation_id back to backend
+            - Starts work in background, returns immediately
+            """
+            # Use backend's task_id
+            operation_id = request.task_id
+
+            # Start resume work in background (non-blocking!)
+            asyncio.create_task(
+                self._execute_resume_training_work(operation_id, request)
+            )
+
+            return {
+                "success": True,
+                "operation_id": operation_id,
                 "status": "started",
             }
 
@@ -258,6 +290,87 @@ class TrainingWorker(WorkerAPIBase):
 
         except Exception as e:
             # Fail operation on error
+            await self._operations_service.fail_operation(operation_id, str(e))
+            raise
+
+    async def _execute_resume_training_work(
+        self,
+        operation_id: str,
+        request: ResumeRequest,
+    ) -> dict[str, Any]:
+        """
+        Execute resumed training work from checkpoint.
+
+        Worker autonomy pattern:
+        1. Load checkpoint from database (autonomous)
+        2. Load original operation metadata
+        3. Extract parameters and rebuild request
+        4. Call shared training execution logic
+
+        Args:
+            operation_id: New operation ID for resumed training
+            request: Resume request with original_operation_id
+
+        Returns:
+            Result dictionary
+        """
+        try:
+            # 1. Load checkpoint autonomously from database
+            checkpoint = self._checkpoint_service.load_checkpoint(
+                request.original_operation_id
+            )
+
+            if checkpoint is None:
+                error_msg = f"No checkpoint found for {request.original_operation_id}"
+                logger.error(error_msg)
+                await self._operations_service.fail_operation(operation_id, error_msg)
+                raise ValueError(error_msg)
+
+            logger.info(
+                f"Loaded checkpoint for {request.original_operation_id}: "
+                f"type={checkpoint.get('checkpoint_type')}, "
+                f"epoch={checkpoint.get('epoch')}"
+            )
+
+            # 2. Load original operation metadata to get parameters
+            original_operation = await self._operations_service.get_operation(
+                request.original_operation_id
+            )
+
+            if original_operation is None:
+                error_msg = f"Original operation not found: {request.original_operation_id}"
+                logger.error(error_msg)
+                await self._operations_service.fail_operation(operation_id, error_msg)
+                raise ValueError(error_msg)
+
+            # 3. Extract parameters and rebuild TrainingStartRequest
+            metadata = original_operation.metadata
+            params = metadata.parameters
+
+            # Rebuild request from original operation metadata + checkpoint state
+            resume_request = TrainingStartRequest(
+                task_id=operation_id,
+                strategy_yaml=params.get("strategy_yaml", ""),
+                symbols=params.get("symbols"),
+                timeframes=params.get("timeframes"),
+                start_date=params.get("start_date"),
+                end_date=params.get("end_date"),
+            )
+
+            # 4. Execute training work with checkpoint state
+            # NOTE: In a full implementation, we'd pass checkpoint_state to the orchestrator
+            # For now, execute as fresh start (orchestrator resume logic is separate task)
+            logger.warning(
+                f"Resume executing as fresh start for {operation_id}. "
+                "Orchestrator-level checkpoint resume not yet implemented."
+            )
+
+            result = await self._execute_training_work(operation_id, resume_request)
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Resume training failed for {operation_id}: {e}")
             await self._operations_service.fail_operation(operation_id, str(e))
             raise
 

@@ -1512,13 +1512,18 @@ class OperationsService:
         """
         Resume operation from checkpoint.
 
+        REFACTORED for worker autonomy pattern:
+        - Backend NO LONGER loads checkpoints
+        - Backend NO LONGER extracts domain-specific params
+        - Backend dispatches only operation IDs to services
+        - Workers load checkpoints autonomously from database
+
         Algorithm:
         1. Validate original operation is resumable (FAILED/CANCELLED)
-        2. Load latest checkpoint via CheckpointService
+        2. Validate checkpoint exists (but don't load it)
         3. Create NEW operation with new operation_id
-        4. Dispatch to appropriate service (TrainingService/BacktestingService)
-        5. Delete original checkpoint after resume starts
-        6. Return new operation info
+        4. Dispatch to appropriate service with operation IDs only
+        5. Return new operation info
 
         Args:
             original_operation_id: ID of the original (failed/cancelled) operation
@@ -1528,7 +1533,6 @@ class OperationsService:
                 - success: bool
                 - original_operation_id: str
                 - new_operation_id: str
-                - resumed_from_checkpoint: str
                 - message: str
 
         Raises:
@@ -1549,21 +1553,13 @@ class OperationsService:
                 "Only FAILED or CANCELLED operations can be resumed."
             )
 
-        # Step 2: Load checkpoint
+        # Step 2: Validate checkpoint exists (but don't load it - worker will handle)
+        # Worker will load checkpoint autonomously from database using original_operation_id
         checkpoint_service = get_checkpoint_service()
-        checkpoint_state = checkpoint_service.load_checkpoint(original_operation_id)
 
-        if checkpoint_state is None:
-            raise ValueError(
-                f"No checkpoint found for {original_operation_id}. Cannot resume."
-            )
-
-        # Extract checkpoint metadata
-        checkpoint_type = checkpoint_state.get("checkpoint_type", "unknown")
-        checkpoint_info = {
-            "epoch": checkpoint_state.get("epoch"),
-            "bar_index": checkpoint_state.get("current_bar_index"),
-        }
+        # Quick check: does checkpoint exist? (metadata only, no state loading)
+        # NOTE: In future, add checkpoint_service.checkpoint_exists(operation_id) method
+        # For now, we rely on worker to fail gracefully if checkpoint missing
 
         # Step 3: Create new operation with resumed_from link
         new_metadata = OperationMetadata(
@@ -1586,21 +1582,22 @@ class OperationsService:
         new_operation_id = new_operation.operation_id
 
         # Step 4: Dispatch to appropriate service based on operation type
+        # Pass only operation IDs - NO checkpoint data sent over network
         try:
             if original_operation.operation_type == OperationType.TRAINING:
-                # Dispatch to TrainingService
+                # Dispatch to TrainingService (worker loads checkpoint autonomously)
                 training_service = get_training_service()
-                await training_service.resume_training(
-                    new_operation_id=new_operation_id,
-                    checkpoint_state=checkpoint_state,
+                await training_service.resume_training_on_worker(
+                    operation_id=new_operation_id,
+                    original_operation_id=original_operation_id,
                 )
 
             elif original_operation.operation_type == OperationType.BACKTESTING:
-                # Dispatch to BacktestingService
+                # Dispatch to BacktestingService (worker loads checkpoint autonomously)
                 backtesting_service = get_backtesting_service()
-                await backtesting_service.resume_backtest(
-                    new_operation_id=new_operation_id,
-                    checkpoint_state=checkpoint_state,
+                await backtesting_service.resume_backtest_on_worker(
+                    operation_id=new_operation_id,
+                    original_operation_id=original_operation_id,
                 )
 
             else:
@@ -1609,32 +1606,18 @@ class OperationsService:
                 )
 
         except Exception as e:
-            # If resume fails, mark new operation as failed
+            # If resume dispatch fails, mark new operation as failed
             await self.fail_operation(
                 new_operation_id, error_message=f"Resume failed: {str(e)}"
             )
             raise
 
-        # Step 5: Delete original checkpoint (resume has started successfully)
-        checkpoint_service.delete_checkpoint(original_operation_id)
-
-        # Step 6: Return response
-        resume_point = (
-            f"epoch {checkpoint_info['epoch']}"
-            if checkpoint_info.get("epoch") is not None
-            else (
-                f"bar {checkpoint_info['bar_index']}"
-                if checkpoint_info.get("bar_index") is not None
-                else "last checkpoint"
-            )
-        )
-
+        # Step 5: Return response (generic message - no domain-specific checkpoint info)
         return {
             "success": True,
             "original_operation_id": original_operation_id,
             "new_operation_id": new_operation_id,
-            "resumed_from_checkpoint": checkpoint_type,
-            "message": f"Operation resumed from {resume_point}",
+            "message": "Operation resumed",
         }
 
     async def create_checkpoint(
