@@ -294,3 +294,82 @@ class TestCreateCheckpoint:
         log_call = mock_logger.warning.call_args[0][0]
         assert operation_id in log_call
         assert "no state available" in log_call.lower()
+
+    @pytest.mark.asyncio
+    async def test_create_checkpoint_persists_operation_first(
+        self, operations_service, mock_checkpoint_service
+    ):
+        """Test checkpoint creation persists operation to database before creating checkpoint.
+
+        This test verifies the fix for the foreign key constraint violation issue where
+        operations might exist in-memory but not in the database due to graceful degradation
+        in persist_operation. The checkpoint creation now ensures the operation is persisted
+        before creating the checkpoint.
+        """
+        from datetime import datetime, timezone
+
+        from ktrdr.api.models.operations import (
+            OperationInfo,
+            OperationMetadata,
+            OperationStatus,
+            OperationType,
+        )
+
+        operation_id = "op_test_009"
+        current_state = {"epoch": 10}
+
+        # Create operation in-memory (simulating the case where database persistence
+        # failed during operation creation)
+        operation = OperationInfo(
+            operation_id=operation_id,
+            operation_type=OperationType.TRAINING,
+            status=OperationStatus.RUNNING,
+            created_at=datetime.now(timezone.utc),
+            metadata=OperationMetadata(
+                symbol="TEST",
+                timeframe="1d",
+                mode="test",
+            ),
+            started_at=datetime.now(timezone.utc),
+            completed_at=None,
+            error_message=None,
+            result_summary=None,
+            metrics=None,
+            checkpoint_id=None,
+            checkpoint_size_bytes=None,
+            checkpoint_created_at=None,
+        )
+        operations_service._operations[operation_id] = operation
+
+        # Mock persist_operation to verify it's called
+        # NOTE: We wrap asyncio.to_thread since persist_operation now uses it
+        async def mock_persist_async(op):
+            return None
+
+        with patch.object(
+            operations_service,
+            "persist_operation",
+            side_effect=mock_persist_async,
+        ) as mock_persist:
+            with patch.object(
+                operations_service,
+                "_get_checkpoint_service",
+                return_value=mock_checkpoint_service,
+            ):
+                with patch.object(
+                    operations_service,
+                    "_get_operation_state",
+                    new_callable=AsyncMock,
+                    return_value=current_state,
+                ):
+                    result = await operations_service.create_checkpoint(
+                        operation_id=operation_id,
+                        checkpoint_type=CheckpointType.CANCELLATION,
+                        metadata={},
+                    )
+
+        assert result is True
+        # Verify persist_operation was called before checkpoint creation
+        mock_persist.assert_called_once_with(operation)
+        # Verify checkpoint was created
+        mock_checkpoint_service.save_checkpoint.assert_called_once()

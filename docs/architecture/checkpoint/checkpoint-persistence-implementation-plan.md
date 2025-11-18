@@ -787,6 +787,342 @@ checkpointing:
 
 ---
 
+### Task 3.6: Refactor Resume Architecture for Worker Autonomy (6 hours)
+
+**Problem Identified:**
+
+The resume implementation from Phase 2 and Task 3.2 violates distributed architecture principles:
+
+- **As implemented**: `OperationsService.resume_operation()` (line 1549) loads checkpoint from DB in backend
+- **As implemented**: Backend extracts domain-specific params (epoch, bar_index) from checkpoint (lines 1560-1563)
+- **As implemented**: Backend passes `checkpoint_state` to `TrainingService.resume_training()` (line 1599)
+- **As implemented**: `TrainingService.resume_training()` (line 669) loads checkpoint in backend instead of worker
+- **Result**: 200 MB checkpoint sent over network to worker (inefficient)
+- **Result**: Separate `resume_backtest()` and `resume_training()` methods duplicate dispatch logic
+
+**Architectural Insight:**
+
+Workers should load checkpoints autonomously. Resume is just "start work, but with checkpoint_state" - not a fundamentally different operation.
+
+**Checklist:**
+
+**Backend Refactoring (BacktestingService):**
+
+- [ ] Extract `_dispatch_to_worker()` method from `run_backtest_on_worker()`
+  - Worker selection with retries
+  - 503 failover logic
+  - Mark worker busy
+  - Register OperationServiceProxy
+  - ~200 lines of common logic
+- [ ] Refactor `run_backtest_on_worker()` to use `_dispatch_to_worker()`
+  - Build payload with all start parameters
+  - Call `_dispatch_to_worker(operation_id, "backtests/start", payload)`
+- [ ] Add `resume_backtest_on_worker()` method
+  - Minimal payload: just `task_id` and `original_operation_id`
+  - Call `_dispatch_to_worker(operation_id, "backtests/resume", payload)`
+- [ ] Refactor `resume_operation()` in OperationsService (EXISTING CODE)
+  - Remove checkpoint loading logic at line 1549 (worker handles this now)
+  - Remove param extraction from checkpoint at lines 1560-1563 (domain logic, not orchestrator concern)
+  - Update service calls to pass only `original_operation_id` instead of `checkpoint_state`
+  - Keep `get_backtesting_service()` and `get_training_service()` helpers (needed for dispatch)
+
+**Backend Refactoring (TrainingService):**
+
+- [ ] Refactor existing `resume_training()` method (EXISTING CODE at line 641)
+  - Remove checkpoint loading at line 669 (worker handles this now)
+  - Remove checkpoint validation logic (lines 678-683, worker handles this)
+  - Remove checkpoint deletion logic (lines 712-718, moved to OperationsService)
+  - Convert to worker dispatch pattern like BacktestingService
+- [ ] Apply same pattern to TrainingService worker dispatch
+  - Extract `_dispatch_to_worker()` from existing training dispatch logic
+  - Add `resume_training_on_worker()` method
+  - Refactor to use common dispatch
+
+**Worker Database Infrastructure Setup:**
+
+- [ ] Initialize CheckpointService in BacktestWorker
+  - Add `from ktrdr.checkpoint.service import CheckpointService`
+  - Create singleton instance in `__init__`: `self._checkpoint_service = CheckpointService()`
+  - Make available to resume endpoint
+  - Verify DATABASE_URL environment variable is accessible
+- [ ] Initialize CheckpointService in TrainingWorker
+  - Same pattern as BacktestWorker
+  - Ensure both containerized and native workers can access
+- [ ] Verify OperationsService database persistence in workers
+  - Test `operations_service.get_operation()` loads from PostgreSQL
+  - Test `operations_service.persist_operation()` writes to PostgreSQL
+  - Ensure graceful degradation doesn't break resume functionality
+- [ ] Update native host service startup scripts (NON-Docker workers)
+  - Modify `training-host-service/start.sh` to source parent `.env` file
+  - Modify `ib-host-service/start.sh` to source parent `.env` file (for future checkpoint support)
+  - Ensure DATABASE_URL is available to native Python processes
+  - Document environment requirements in host service READMEs
+
+**Worker Refactoring (BacktestWorker):**
+
+- [ ] Add `/backtests/resume` endpoint
+  - Accept `ResumeRequest(task_id, original_operation_id)`
+  - Load checkpoint from DB: `checkpoint_service.load_checkpoint(original_operation_id)`
+  - Load operation metadata from DB: `operations_service.get_operation(original_operation_id)`
+  - Extract params from operation.metadata
+  - Call existing start logic with `checkpoint_state` parameter
+- [ ] Update `/backtests/start` endpoint signature (if needed)
+  - Ensure `checkpoint_state` is optional parameter
+- [ ] Add shared `_run_backtest()` helper
+  - Accepts all params + optional `checkpoint_state`
+  - Both `/start` and `/resume` endpoints call this
+  - If `checkpoint_state`: resume from checkpoint
+  - Else: fresh start
+
+**Worker Refactoring (TrainingWorker):**
+
+- [ ] Apply same pattern to TrainingWorker
+  - Add `/training/resume` endpoint
+  - Worker loads checkpoint autonomously
+  - Shared `_run_training()` logic
+
+**Pydantic Models:**
+
+- [ ] Create `ResumeRequest` model
+  - `task_id: str` - New operation ID from backend
+  - `original_operation_id: str` - Operation to resume from
+- [ ] Ensure `StartRequest` models have all required params
+
+**Testing:**
+
+- [ ] Unit test: `BacktestingService._dispatch_to_worker()`
+- [ ] Unit test: `BacktestingService.resume_backtest_on_worker()`
+- [ ] Unit test: Worker `/backtests/resume` endpoint
+- [ ] Unit test: CheckpointService initialization in workers
+  - Verify singleton pattern
+  - Verify DATABASE_URL is read correctly
+  - Test graceful handling of missing DATABASE_URL
+- [ ] Integration test: Worker database connectivity
+  - Verify containerized workers can connect to PostgreSQL
+  - Verify native host services can connect to PostgreSQL
+  - Test both checkpoint and operations table access
+- [ ] Integration test: End-to-end resume flow (backend → worker → checkpoint load)
+- [ ] Integration test: Worker autonomous checkpoint loading
+  - Create checkpoint in backend
+  - Verify worker can load it from database (not receive it over HTTP)
+  - Measure network traffic (should be <1 KB for operation ID only)
+  - Verify checkpoint data (200 MB) NOT sent over network
+- [ ] Verify worker loads checkpoint from DB (not backend)
+- [ ] Verify only operation_id sent over network (not 200MB checkpoint)
+
+**Acceptance Criteria:**
+
+- ✅ DRY: Common `_dispatch_to_worker()` used by both start and resume
+- ✅ Worker autonomy: Worker loads checkpoint from DB
+- ✅ Minimal network traffic: Only operation IDs sent over HTTP
+- ✅ Backend stays generic: No domain-specific checkpoint knowledge
+- ✅ Clear intent: Separate `/start` and `/resume` endpoints
+- ✅ Code reuse: Shared `_run_backtest()` / `_run_training()` logic
+- ✅ Pattern applies to both training and backtesting
+- ✅ Workers have CheckpointService initialized and can access PostgreSQL
+- ✅ Containerized workers connect to database via DATABASE_URL
+- ✅ Native host services source .env file and connect to database
+- ✅ All tests pass
+- ✅ Resume flow works end-to-end
+
+**Implementation Pattern (Backend):**
+```python
+# BacktestingService (ktrdr/backtesting/backtesting_service.py)
+
+async def run_backtest_on_worker(self, operation_id, symbol, timeframe, ...) -> dict:
+    """Start fresh backtest on worker."""
+    payload = {
+        "task_id": operation_id,
+        "symbol": symbol,
+        "timeframe": timeframe,
+        # ... all start params ...
+    }
+    return await self._dispatch_to_worker(
+        operation_id=operation_id,
+        endpoint="backtests/start",
+        payload=payload
+    )
+
+async def resume_backtest_on_worker(self, operation_id, original_operation_id) -> dict:
+    """Resume backtest from checkpoint on worker."""
+    payload = {
+        "task_id": operation_id,
+        "original_operation_id": original_operation_id
+    }
+    return await self._dispatch_to_worker(
+        operation_id=operation_id,
+        endpoint="backtests/resume",
+        payload=payload
+    )
+
+async def _dispatch_to_worker(self, operation_id, endpoint, payload) -> dict:
+    """
+    Common worker dispatch logic (DRY).
+
+    - Select worker from WorkerRegistry
+    - HTTP POST with retry on 503
+    - Mark worker as busy
+    - Register OperationServiceProxy
+    - Return remote operation response
+    """
+    # ... extract 200 lines from run_backtest_on_worker ...
+```
+
+**Implementation Pattern (Worker):**
+```python
+# BacktestWorker (ktrdr/backtesting/backtest_worker.py)
+
+@app.post("/backtests/start")
+async def start_backtest(request: StartRequest):
+    """Start fresh backtest."""
+    return await _run_backtest(
+        task_id=request.task_id,
+        symbol=request.symbol,
+        timeframe=request.timeframe,
+        # ... all params ...
+        checkpoint_state=None  # Fresh!
+    )
+
+@app.post("/backtests/resume")
+async def resume_backtest(request: ResumeRequest):
+    """Resume backtest from checkpoint."""
+    # Worker loads checkpoint autonomously
+    checkpoint = checkpoint_service.load_checkpoint(request.original_operation_id)
+    operation = operations_service.get_operation(request.original_operation_id)
+
+    # Call shared logic
+    return await _run_backtest(
+        task_id=request.task_id,
+        symbol=operation.metadata.symbol,
+        timeframe=operation.metadata.timeframe,
+        # ... extract params from operation.metadata ...
+        checkpoint_state=checkpoint["state"]  # Resume!
+    )
+
+async def _run_backtest(..., checkpoint_state: Optional[dict] = None):
+    """Shared execution logic for both start and resume."""
+    if checkpoint_state:
+        start_bar = checkpoint_state["current_bar_index"] + 1
+    else:
+        start_bar = 0
+
+    # Run backtest...
+```
+
+**Implementation Pattern (Worker Database Setup):**
+```python
+# BacktestWorker (ktrdr/backtesting/backtest_worker.py)
+
+from ktrdr.checkpoint.service import CheckpointService
+
+class BacktestWorker(WorkerAPIBase):
+    def __init__(self, worker_port=5003, backend_url="http://backend:8000"):
+        super().__init__(
+            worker_type=WorkerType.BACKTESTING,
+            operation_type=OperationType.BACKTESTING,
+            worker_port=worker_port,
+            backend_url=backend_url,
+        )
+
+        # Initialize CheckpointService (uses DATABASE_URL from env)
+        self._checkpoint_service = CheckpointService()
+        logger.info("CheckpointService initialized in backtest worker")
+
+        # Register domain-specific endpoint
+        @self.app.post("/backtests/start")
+        async def start_backtest(request: BacktestStartRequest):
+            # ... existing logic ...
+
+        @self.app.post("/backtests/resume")
+        async def resume_backtest(request: ResumeRequest):
+            # Worker loads checkpoint autonomously (synchronous I/O in thread)
+            checkpoint = await asyncio.to_thread(
+                self._checkpoint_service.load_checkpoint,
+                request.original_operation_id
+            )
+
+            # Worker loads operation metadata (may be async or sync depending on implementation)
+            operation = await self._operations_service.get_operation(
+                request.original_operation_id
+            )
+
+            # Call shared logic
+            return await self._execute_backtest_work(
+                operation_id=request.task_id,
+                request=BacktestStartRequest(
+                    task_id=request.task_id,
+                    symbol=operation.metadata.symbol,
+                    timeframe=operation.metadata.timeframe,
+                    # ... extract other params from operation.metadata ...
+                ),
+                checkpoint_state=checkpoint["state"]
+            )
+```
+
+**Implementation Pattern (Native Host Service .env):**
+```bash
+# training-host-service/start.sh
+
+#!/bin/bash
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Source parent .env file for database credentials
+if [ -f "$DIR/../.env" ]; then
+    set -a  # Export all variables
+    source "$DIR/../.env"
+    set +a
+    echo "Loaded database credentials from .env"
+else
+    echo "WARNING: No .env file found at $DIR/../.env"
+    echo "Database operations may fail without DATABASE_URL"
+fi
+
+# Activate virtual environment if it exists
+if [ -d "$DIR/venv" ]; then
+    source "$DIR/venv/bin/activate"
+    echo "Activated virtual environment: $DIR/venv"
+fi
+
+# ... rest of startup script ...
+```
+
+**Files:**
+
+- `ktrdr/backtesting/backtesting_service.py` (modified - extract _dispatch_to_worker, add resume method)
+- `ktrdr/api/services/training/training_service.py` (modified - same pattern)
+- `ktrdr/api/services/operations_service.py` (modified - simplify resume_operation)
+- `ktrdr/backtesting/backtest_worker.py` (modified - add CheckpointService, /resume endpoint, shared logic)
+- `ktrdr/training/training_worker.py` (modified - add CheckpointService, same pattern)
+- `ktrdr/api/models/backtesting.py` (modified - add ResumeRequest)
+- `ktrdr/api/models/training.py` (modified - add ResumeRequest)
+- `training-host-service/start.sh` (modified - source .env for DATABASE_URL)
+- `ib-host-service/start.sh` (modified - source .env for DATABASE_URL)
+- `training-host-service/README.md` (modified - document DATABASE_URL requirement)
+- `ib-host-service/README.md` (modified - document DATABASE_URL requirement)
+- `tests/unit/backtesting/test_dispatch_to_worker.py` (new)
+- `tests/unit/backtesting/test_resume_on_worker.py` (new)
+- `tests/unit/workers/test_checkpoint_service_init.py` (new)
+- `tests/integration/workers/test_database_connectivity.py` (new)
+- `tests/integration/checkpoint/test_worker_autonomous_resume.py` (new)
+
+**Dependencies:**
+
+- Requires Phase 0 completed (PostgreSQL + DATABASE_URL configuration)
+- Requires Task 3.5 completed (checkpoint creation infrastructure)
+- Requires workers have DATABASE_URL environment variable configured
+- Requires workers have CheckpointService initialized (new prerequisite)
+- Blocks Phase 4 (backtesting resume implementation depends on this pattern)
+
+**Rationale:**
+This refactoring aligns resume with the existing distributed architecture:
+- Workers are autonomous (self-register, own OperationsService, DB access)
+- Backend is orchestrator only (selects worker, dispatches task)
+- Domain logic stays in workers (training/backtesting execution)
+
+Resume should follow the same pattern - backend dispatches, worker handles domain logic.
+
+---
+
 ### Phase 3 End-to-End Test
 
 **Test Scenario 1: API Crash Recovery (Primary Use Case)**
@@ -923,38 +1259,48 @@ op_backtest_20250117_160100 | COMPLETED | Bar 10000/10000| None
 
 **Estimated Time:** 1.5 days
 
-### Task 4.1: Backtesting State Capture & Checkpoint Integration (6 hours)
+### Task 4.1: Backtesting State Capture & Resume Integration (6 hours)
+
+**Note:** Resume architecture already implemented in Task 3.6. This task focuses on domain-specific state capture/restore.
 
 **Checklist:**
+
 - [ ] Add state management to backtesting components
   - `PositionManager`: `get_state()`, `restore_state()`
   - `PerformanceTracker`: `get_state()`, `restore_state()`
   - `BacktestingEngine`: `get_checkpoint_state()`
+  - Include: bar_index, position, performance, config, trade history, equity curve
 - [ ] Integrate `CheckpointService` into backtest loop
   - Inject service into `BacktestingEngine`
   - Add checkpoint decision logic (check policy each bar)
   - Call `save_checkpoint()` when `should_checkpoint()` returns True
-  - Handle checkpoint failures gracefully
-- [ ] Add `resume_backtest()` to `BacktestingService`
-  - Load checkpoint → restore state → continue backtest
+  - Handle checkpoint failures gracefully (backtest continues)
+- [ ] Implement checkpoint resume in `_run_backtest()` worker method
+  - Accept optional `checkpoint_state` parameter (Task 3.6 pattern)
+  - If checkpoint_state: restore PositionManager, PerformanceTracker, start from checkpoint bar
+  - If no checkpoint_state: fresh start
   - Rebuild feature cache from resume point
 - [ ] Write comprehensive unit tests
   - State capture/restore (position, performance, trade history)
   - Checkpoint integration
-  - Resume logic
+  - Resume logic with checkpoint_state parameter
 
 **Acceptance Criteria:**
-- ✅ State includes: bar_index, position, performance, config, trade history
-- ✅ Checkpoints saved at correct intervals
+
+- ✅ State includes: bar_index, position, performance, config, trade history, equity curve
+- ✅ Checkpoints saved at correct intervals (time-based + force)
 - ✅ Can resume from bar N, start at N+1
 - ✅ Position state, performance tracking, equity curve preserved
 - ✅ Feature cache rebuilt correctly on resume
+- ✅ `/backtests/resume` endpoint works (Task 3.6 architecture)
+- ✅ Worker loads checkpoint autonomously (no 200MB over network)
 
 **Files:**
+
 - `ktrdr/backtesting/position_manager.py` (modified)
 - `ktrdr/backtesting/performance_tracker.py` (modified)
 - `ktrdr/backtesting/backtesting_engine.py` (modified)
-- `ktrdr/backtesting/backtesting_service.py` (modified)
+- `ktrdr/backtesting/backtest_worker.py` (modified - _run_backtest handles checkpoint_state)
 - `tests/unit/backtesting/test_state_capture.py` (new)
 - `tests/unit/backtesting/test_backtest_checkpoint.py` (new)
 - `tests/unit/backtesting/test_backtest_resume.py` (new)
@@ -1339,11 +1685,20 @@ If issues discovered after deployment:
 | Phase 0: PostgreSQL + TimescaleDB Setup | 0.5 days | Day 0.5 | Database infrastructure ready |
 | Phase 1: Core Infrastructure | 2 days | Day 2.5 | Basic checkpoint CRUD |
 | Phase 2: Training Checkpoints | 2 days | Day 4.5 | Training resume works |
-| Phase 3: Operations API + Recovery + Cancellation/Shutdown | 3 days | Day 7.5 | CLI resume + startup recovery + cleanup + checkpoint on cancel/shutdown |
-| Phase 4: Backtesting | 1.5 days | Day 9 | Backtest resume works |
-| Phase 5: Production | 2.5 days | Day 11.5 | Production ready |
+| Phase 3: Operations API + Recovery + Cancellation/Shutdown + Resume Architecture | 3.75 days | Day 8.25 | CLI resume + startup recovery + cleanup + checkpoint on cancel/shutdown + worker autonomous resume |
+| Phase 4: Backtesting | 1.5 days | Day 9.75 | Backtest resume works |
+| Phase 5: Production | 2.5 days | Day 12.25 | Production ready |
 
-**Total: 11.5 development days (~2.3 work weeks)**
+**Total:** 12.25 development days (~2.5 work weeks)
+
+**Phase 3 Breakdown:**
+
+- Task 3.1: Operations Persistence & Startup Recovery (5 hours)
+- Task 3.2: Resume Operation Implementation (5 hours)
+- Task 3.3: CLI Commands & Checkpoint Management (5 hours)
+- Task 3.4: Integration Testing (2 hours)
+- Task 3.5: Checkpoint on Cancellation & Graceful Shutdown (4 hours)
+- **Task 3.6: Refactor Resume Architecture for Worker Autonomy (6 hours)** - NEW (includes worker database setup)
 
 ---
 

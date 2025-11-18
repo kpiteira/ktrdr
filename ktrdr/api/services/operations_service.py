@@ -1230,61 +1230,71 @@ class OperationsService:
 
         from ktrdr.database.connection import get_database_connection
 
-        try:
-            db = get_database_connection()
-            with db as conn:
-                with conn.cursor() as cursor:
-                    # Serialize metadata and result_summary to JSON
-                    metadata_json = json.dumps(operation.metadata.model_dump())
-                    result_summary_json = (
-                        json.dumps(operation.result_summary)
-                        if operation.result_summary
-                        else None
-                    )
-
-                    # UPSERT operation
-                    cursor.execute(
-                        """
-                        INSERT INTO operations (
-                            operation_id, operation_type, status,
-                            created_at, started_at, completed_at, last_updated,
-                            metadata_json, result_summary_json, error_message
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (operation_id) DO UPDATE
-                        SET status = EXCLUDED.status,
-                            started_at = EXCLUDED.started_at,
-                            completed_at = EXCLUDED.completed_at,
-                            last_updated = EXCLUDED.last_updated,
-                            metadata_json = EXCLUDED.metadata_json,
-                            result_summary_json = EXCLUDED.result_summary_json,
-                            error_message = EXCLUDED.error_message
-                        """,
-                        (
-                            operation.operation_id,
-                            operation.operation_type.value,
-                            operation.status.value,
-                            operation.created_at,
-                            operation.started_at,
-                            operation.completed_at,
-                            datetime.now(timezone.utc),  # last_updated
-                            metadata_json,
-                            result_summary_json,
-                            operation.error_message,
-                        ),
-                    )
-                    conn.commit()
-                    logger.debug(
-                        f"Persisted operation to database: {operation.operation_id}"
-                    )
-        except Exception as e:
-            logger.error(f"Failed to persist operation {operation.operation_id}: {e}")
-            # Rollback on error
+        def _persist_sync():
+            """Synchronous database operation (run in thread pool)."""
             try:
-                if "conn" in locals():
-                    conn.rollback()
-            except Exception:
-                pass
-            # Don't raise - graceful degradation
+                db = get_database_connection()
+                with db as conn:
+                    with conn.cursor() as cursor:
+                        # Serialize metadata and result_summary to JSON
+                        # Use mode='json' to ensure datetime objects are serialized properly
+                        metadata_json = json.dumps(
+                            operation.metadata.model_dump(mode="json")
+                        )
+                        result_summary_json = (
+                            json.dumps(operation.result_summary)
+                            if operation.result_summary
+                            else None
+                        )
+
+                        # UPSERT operation
+                        cursor.execute(
+                            """
+                            INSERT INTO operations (
+                                operation_id, operation_type, status,
+                                created_at, started_at, completed_at, last_updated,
+                                metadata_json, result_summary_json, error_message
+                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            ON CONFLICT (operation_id) DO UPDATE
+                            SET status = EXCLUDED.status,
+                                started_at = EXCLUDED.started_at,
+                                completed_at = EXCLUDED.completed_at,
+                                last_updated = EXCLUDED.last_updated,
+                                metadata_json = EXCLUDED.metadata_json,
+                                result_summary_json = EXCLUDED.result_summary_json,
+                                error_message = EXCLUDED.error_message
+                            """,
+                            (
+                                operation.operation_id,
+                                operation.operation_type.value,
+                                operation.status.value,
+                                operation.created_at,
+                                operation.started_at,
+                                operation.completed_at,
+                                datetime.now(timezone.utc),  # last_updated
+                                metadata_json,
+                                result_summary_json,
+                                operation.error_message,
+                            ),
+                        )
+                        conn.commit()
+                        logger.debug(
+                            f"Persisted operation to database: {operation.operation_id}"
+                        )
+            except Exception as e:
+                logger.error(
+                    f"Failed to persist operation {operation.operation_id}: {e}"
+                )
+                # Rollback on error
+                try:
+                    if "conn" in locals():
+                        conn.rollback()
+                except Exception:
+                    pass
+                # Don't raise - graceful degradation
+
+        # Run blocking database I/O in thread pool to avoid blocking event loop
+        await asyncio.to_thread(_persist_sync)
 
     async def load_operations(
         self, status: Optional[OperationStatus] = None
@@ -1665,6 +1675,20 @@ class OperationsService:
                 )
                 return False
 
+            # Ensure operation is persisted to database before creating checkpoint
+            # This handles the case where persist_operation failed silently during
+            # operation creation (graceful degradation) but we need database persistence
+            # for checkpoint foreign key constraint
+            # NOTE: We DON'T acquire the lock here because create_checkpoint may be called
+            # from cancel_operation which already holds the lock. Accessing _operations
+            # dict without lock is safe for reading if we just need to check existence.
+            if operation_id in self._operations:
+                operation = self._operations[operation_id]
+                await self.persist_operation(operation)
+                logger.debug(
+                    f"Ensured operation {operation_id} is persisted to database before checkpoint"
+                )
+
             # Get checkpoint service
             checkpoint_service = self._get_checkpoint_service()
 
@@ -1827,6 +1851,8 @@ def get_backtesting_service():
     Returns:
         BacktestingService instance
     """
+    from ktrdr.api.endpoints.workers import get_worker_registry
     from ktrdr.backtesting.backtesting_service import BacktestingService
 
-    return BacktestingService()
+    worker_registry = get_worker_registry()
+    return BacktestingService(worker_registry=worker_registry)
