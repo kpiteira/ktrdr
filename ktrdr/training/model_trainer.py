@@ -578,6 +578,36 @@ class ModelTrainer:
                 except Exception as e:
                     print(f"Warning: Progress callback failed: {e}")
 
+            # Task 3.7/3.8 FIX: Cache state after EVERY epoch for cancellation checkpoints
+            # This ensures cancellation checkpoints have state even if no periodic checkpoint saved yet
+            if hasattr(self.progress_callback, "set_latest_checkpoint_state"):
+                try:
+                    # Get current training state (lightweight metadata only)
+                    lightweight_state = {
+                        "epoch": epoch,
+                        "train_loss": avg_train_loss,
+                        "train_accuracy": train_accuracy,
+                        "val_loss": val_loss,
+                        "val_accuracy": val_accuracy,
+                        "learning_rate": optimizer.param_groups[0]["lr"],
+                        "best_val_accuracy": self.best_val_accuracy,
+                        "training_history": [
+                            {
+                                "epoch": m.epoch,
+                                "train_loss": m.train_loss,
+                                "val_accuracy": m.val_accuracy,
+                            }
+                            for m in self.history[-10:]  # Last 10 epochs only
+                        ],
+                    }
+                    # Cache state WITHOUT artifacts (artifacts only saved during periodic checkpoints)
+                    self.progress_callback.set_latest_checkpoint_state(
+                        checkpoint_data=lightweight_state,
+                        artifacts={},  # No artifacts yet, will be updated at checkpoint time
+                    )
+                except Exception as e:
+                    print(f"Warning: State caching failed: {e}")
+
             # Checkpoint logic (if checkpointing enabled)
             if (
                 self.checkpoint_service is not None
