@@ -13,6 +13,7 @@ def test_resume_request_import():
     """Test that ResumeRequest model can be imported."""
     try:
         from ktrdr.api.models.backtesting import ResumeRequest
+
         assert ResumeRequest is not None
     except ImportError:
         pytest.fail("ResumeRequest model not found in ktrdr.api.models.backtesting")
@@ -30,8 +31,7 @@ def test_resume_request_has_required_fields():
 
     # Valid request
     request = ResumeRequest(
-        task_id="new-op-123",
-        original_operation_id="original-op-456"
+        task_id="new-op-123", original_operation_id="original-op-456"
     )
 
     assert request.task_id == "new-op-123"
@@ -88,10 +88,7 @@ def test_resume_request_no_checkpoint_data():
     """
     from ktrdr.api.models.backtesting import ResumeRequest
 
-    request = ResumeRequest(
-        task_id="new-op",
-        original_operation_id="original-op"
-    )
+    request = ResumeRequest(task_id="new-op", original_operation_id="original-op")
 
     # Should NOT have checkpoint-related fields
     assert not hasattr(request, "checkpoint_state")

@@ -264,6 +264,95 @@ class WorkerAPIBase:
                 ) from e
 
         @self.app.get(
+            "/api/v1/operations/{operation_id}/state",
+            summary="Get operation state (Task 3.8)",
+        )
+        async def get_operation_state(
+            operation_id: str = Path(..., description="Unique operation identifier"),
+        ):
+            """
+            Get complete operation state including checkpoint data and artifact paths.
+
+            Task 3.8: Enables backend to retrieve cached checkpoint state from workers
+            during cancellation. Returns ~1KB JSON metadata with artifact PATHS (not bytes),
+            leveraging shared filesystem (Docker volume or NFS) for artifact access.
+
+            Returns:
+                dict: {
+                    "success": bool,
+                    "state": {
+                        "operation_id": str,
+                        "operation_type": str,
+                        "status": str,
+                        "progress": {...},
+                        "checkpoint_data": {...},  # Domain-specific state
+                        "artifacts": {"model.pt": "path/to/model.pt", ...}  # Paths!
+                    }
+                }
+            """
+            try:
+                logger.debug(f"Getting state for operation: {operation_id}")
+
+                # Verify operation exists
+                operation = await self._operations_service.get_operation(operation_id)
+
+                if not operation:
+                    logger.warning(f"Operation not found: {operation_id}")
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"Operation not found: {operation_id}",
+                    )
+
+                # Try to get state from progress bridge if available
+                state = None
+                if (
+                    hasattr(operation, "_progress_bridge")
+                    and operation._progress_bridge
+                ):
+                    bridge = operation._progress_bridge
+                    if hasattr(bridge, "get_state"):
+                        try:
+                            state = await bridge.get_state()
+                        except Exception as e:
+                            logger.error(
+                                f"Error getting state from bridge for {operation_id}: {e}"
+                            )
+                            raise HTTPException(
+                                status_code=500,
+                                detail=f"Error retrieving operation state: {str(e)}",
+                            ) from e
+
+                # Fallback: construct basic state from operation info
+                if not state:
+                    state = {
+                        "operation_id": operation_id,
+                        "operation_type": operation.operation_type.value,
+                        "status": operation.status.value,
+                        "progress": {
+                            "percentage": operation.progress.percentage,
+                            "current_step": operation.progress.current_step,
+                            "steps_completed": operation.progress.steps_completed,
+                            "steps_total": operation.progress.steps_total,
+                        },
+                        "started_at": (
+                            operation.started_at.isoformat()
+                            if operation.started_at
+                            else None
+                        ),
+                    }
+
+                return {"success": True, "state": state}
+
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"Error getting operation state: {str(e)}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to get operation state: {str(e)}",
+                ) from e
+
+        @self.app.get(
             "/api/v1/operations",
             response_model=OperationListResponse,
             summary="List operations",

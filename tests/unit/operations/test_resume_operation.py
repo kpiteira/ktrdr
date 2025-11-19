@@ -330,7 +330,9 @@ class TestResumeOperationValidation:
                         mock_create.return_value = new_operation
 
                         # Execute: Resume operation succeeds (worker validates checkpoint)
-                        result = await operations_service.resume_operation("op_training_001")
+                        result = await operations_service.resume_operation(
+                            "op_training_001"
+                        )
 
                         # Assert: Backend dispatched successfully
                         assert result["success"] is True
@@ -375,9 +377,7 @@ class TestResumeOperationDispatch:
                 ) as mock_get_backtest:
                     mock_backtest_service = AsyncMock()
                     mock_backtest_service.resume_backtest_on_worker = AsyncMock(
-                        return_value={
-                            "success": True
-                        }
+                        return_value={"success": True}
                     )
                     mock_get_backtest.return_value = mock_backtest_service
 

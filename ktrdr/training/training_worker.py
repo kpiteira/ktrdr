@@ -338,7 +338,9 @@ class TrainingWorker(WorkerAPIBase):
             )
 
             if original_operation is None:
-                error_msg = f"Original operation not found: {request.original_operation_id}"
+                error_msg = (
+                    f"Original operation not found: {request.original_operation_id}"
+                )
                 logger.error(error_msg)
                 await self._operations_service.fail_operation(operation_id, error_msg)
                 raise ValueError(error_msg)

@@ -634,11 +634,19 @@ class BacktestingEngine:
 
             # Task 3.7: Cache checkpoint state in bridge (every 100 bars)
             # This enables cancellation checkpoints to include portfolio state
-            if bridge and (idx - start_idx) % 100 == 0 and hasattr(bridge, "set_latest_checkpoint_state"):
+            if (
+                bridge
+                and (idx - start_idx) % 100 == 0
+                and hasattr(bridge, "set_latest_checkpoint_state")
+            ):
                 try:
                     checkpoint_state = self.get_checkpoint_state(
                         current_bar_index=idx,
-                        current_timestamp=current_timestamp.isoformat() if hasattr(current_timestamp, "isoformat") else str(current_timestamp),
+                        current_timestamp=(
+                            current_timestamp.isoformat()
+                            if hasattr(current_timestamp, "isoformat")
+                            else str(current_timestamp)
+                        ),
                         current_price=current_price,
                     )
                     bridge.set_latest_checkpoint_state(checkpoint_state)
@@ -999,13 +1007,25 @@ class BacktestingEngine:
         # Get trade history
         trade_history = [
             {
-                "entry_time": trade.entry_time.isoformat() if hasattr(trade.entry_time, "isoformat") else str(trade.entry_time),
-                "exit_time": trade.exit_time.isoformat() if hasattr(trade.exit_time, "isoformat") else str(trade.exit_time),
+                "entry_time": (
+                    trade.entry_time.isoformat()
+                    if hasattr(trade.entry_time, "isoformat")
+                    else str(trade.entry_time)
+                ),
+                "exit_time": (
+                    trade.exit_time.isoformat()
+                    if hasattr(trade.exit_time, "isoformat")
+                    else str(trade.exit_time)
+                ),
                 "entry_price": trade.entry_price,
                 "exit_price": trade.exit_price,
                 "shares": trade.shares,
                 "pnl": trade.pnl,
-                "side": trade.side.value if hasattr(trade.side, "value") else str(trade.side),
+                "side": (
+                    trade.side.value
+                    if hasattr(trade.side, "value")
+                    else str(trade.side)
+                ),
             }
             for trade in self.position_manager.trade_history
         ]

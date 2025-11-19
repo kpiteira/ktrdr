@@ -1574,9 +1574,6 @@ class OperationsService:
 
         # Step 2: Validate checkpoint exists (but don't load it - worker will handle)
         # Worker will load checkpoint autonomously from database using original_operation_id
-        checkpoint_service = get_checkpoint_service()
-
-        # Quick check: does checkpoint exist? (metadata only, no state loading)
         # NOTE: In future, add checkpoint_service.checkpoint_exists(operation_id) method
         # For now, we rely on worker to fail gracefully if checkpoint missing
 
@@ -1705,7 +1702,9 @@ class OperationsService:
                 # Prepare metadata
                 checkpoint_metadata = metadata or {}
                 checkpoint_metadata["checkpoint_type"] = checkpoint_type.value
-                checkpoint_metadata["created_at"] = datetime.now(timezone.utc).isoformat()
+                checkpoint_metadata["created_at"] = datetime.now(
+                    timezone.utc
+                ).isoformat()
 
                 # Save checkpoint (prepare data dict for CheckpointService)
                 checkpoint_data = {

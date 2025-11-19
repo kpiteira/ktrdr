@@ -58,7 +58,8 @@ class TrainingProgressBridge(ProgressBridge):
 
         # Task 3.7: Checkpoint state caching for cancellation checkpoints
         self._latest_checkpoint_data: dict[str, Any] = {}
-        self._latest_artifacts: dict[str, bytes] = {}
+        # Task 3.8: Changed from bytes to paths for shared filesystem access
+        self._latest_artifacts: dict[str, str] = {}
         self.started_at: Any = None  # Set externally if needed
 
     # ------------------------------------------------------------------
@@ -809,25 +810,29 @@ class TrainingProgressBridge(ProgressBridge):
     def set_latest_checkpoint_state(
         self,
         checkpoint_data: dict[str, Any],
-        artifacts: dict[str, bytes] | None = None,
+        artifacts: dict[str, str] | None = None,
     ) -> None:
         """
         Cache latest checkpoint state for cancellation checkpoints.
 
         Called by ModelTrainer after creating periodic checkpoints to cache
-        domain-specific state (epoch, loss, training history) and artifacts
+        domain-specific state (epoch, loss, training history) and artifact paths
         (model.pt, optimizer.pt) so they can be included in cancellation checkpoints.
 
         This enables resume-from-cancellation without requiring ModelTrainer
         to be accessible during cancellation (improves separation of concerns).
 
+        Task 3.8: Artifacts are now PATHS (not bytes) for shared filesystem access.
+        Both workers and backend mount the same filesystem (Docker volume or NFS),
+        so we only transfer ~1KB JSON metadata over HTTP, not 10s-100s MB of artifacts.
+
         Args:
             checkpoint_data: Checkpoint metadata (epoch, loss, history, config)
-            artifacts: Optional dict of artifact name -> binary data
-                      (e.g., {"model.pt": bytes, "optimizer.pt": bytes})
+            artifacts: Optional dict of artifact name -> filesystem path
+                      (e.g., {"model.pt": "data/checkpoints/artifacts/op_123/model.pt"})
 
         Example:
-            >>> # Called by ModelTrainer after saving checkpoint
+            >>> # Called by ModelTrainer after saving checkpoint to shared filesystem
             >>> bridge.set_latest_checkpoint_state(
             ...     checkpoint_data={
             ...         "epoch": 45,
@@ -836,8 +841,8 @@ class TrainingProgressBridge(ProgressBridge):
             ...         "training_history": [...],
             ...     },
             ...     artifacts={
-            ...         "model.pt": model_state_dict_bytes,
-            ...         "optimizer.pt": optimizer_state_dict_bytes,
+            ...         "model.pt": "data/checkpoints/artifacts/op_123/model.pt",
+            ...         "optimizer.pt": "data/checkpoints/artifacts/op_123/optimizer.pt",
             ...     }
             ... )
         """
@@ -849,9 +854,11 @@ class TrainingProgressBridge(ProgressBridge):
         """
         Get complete operation state for checkpoint creation (async, called by OperationsService).
 
-        Returns current progress state combined with cached checkpoint data and artifacts.
+        Returns current progress state combined with cached checkpoint data and artifact paths.
         This method is called by OperationsService._get_operation_state() when creating
         cancellation checkpoints.
+
+        Task 3.8: Returns artifact PATHS (not bytes) for shared filesystem access.
 
         Returns:
             dict: Complete state including:
@@ -861,7 +868,7 @@ class TrainingProgressBridge(ProgressBridge):
                 - progress: Current progress state (percentage, message, etc.)
                 - started_at: Operation start timestamp (ISO format)
                 - Checkpoint data fields (epoch, loss, etc.) if cached
-                - artifacts: Dict of artifact name -> binary data
+                - artifacts: Dict of artifact name -> filesystem path (not bytes!)
 
         Thread Safety:
             Acquires lock briefly to copy state. Safe for concurrent access.
@@ -869,7 +876,7 @@ class TrainingProgressBridge(ProgressBridge):
         Example:
             >>> state = await bridge.get_state()
             >>> state["epoch"]  # 45
-            >>> state["artifacts"]["model.pt"]  # bytes
+            >>> state["artifacts"]["model.pt"]  # "data/checkpoints/artifacts/op_123/model.pt"
         """
         with self._lock:
             # Get current progress state from base class
@@ -894,7 +901,7 @@ class TrainingProgressBridge(ProgressBridge):
             # Merge cached checkpoint data into state (epoch, loss, history, etc.)
             state.update(self._latest_checkpoint_data)
 
-            # Add artifacts
+            # Task 3.8: Artifact paths (not bytes) for shared filesystem
             state["artifacts"] = self._latest_artifacts.copy()
 
             return state

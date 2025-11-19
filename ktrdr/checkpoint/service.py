@@ -193,15 +193,27 @@ class CheckpointService:
 
             # Write artifacts to filesystem (atomic temp → rename)
             if artifacts and not artifacts_path:
-                with tracer.start_as_current_span("checkpoint.write_artifacts") as artifact_span:
-                    artifacts_path = self._write_artifacts_atomic(operation_id, artifacts)
-                    artifacts_size_bytes = self._calculate_artifacts_size(Path(artifacts_path))
-                    artifact_span.set_attribute("checkpoint.artifacts_size_bytes", artifacts_size_bytes)
+                with tracer.start_as_current_span(
+                    "checkpoint.write_artifacts"
+                ) as artifact_span:
+                    artifacts_path = self._write_artifacts_atomic(
+                        operation_id, artifacts
+                    )
+                    artifacts_size_bytes = self._calculate_artifacts_size(
+                        Path(artifacts_path)
+                    )
+                    artifact_span.set_attribute(
+                        "checkpoint.artifacts_size_bytes", artifacts_size_bytes
+                    )
             elif artifacts_path:
-                artifacts_size_bytes = self._calculate_artifacts_size(Path(artifacts_path))
+                artifacts_size_bytes = self._calculate_artifacts_size(
+                    Path(artifacts_path)
+                )
 
             span.set_attribute("checkpoint.artifacts_size_bytes", artifacts_size_bytes)
-            span.set_attribute("checkpoint.total_size_bytes", state_size_bytes + artifacts_size_bytes)
+            span.set_attribute(
+                "checkpoint.total_size_bytes", state_size_bytes + artifacts_size_bytes
+            )
 
             try:
                 # UPSERT into operation_checkpoints table

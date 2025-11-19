@@ -133,7 +133,10 @@ class TestBacktestProgressBridgeCheckpointCaching:
     async def test_multiple_set_checkpoint_state_updates_cache(self, progress_bridge):
         """Test that calling set_latest_checkpoint_state() multiple times updates cache."""
         # First checkpoint
-        checkpoint_data_1 = {"current_bar_index": 1000, "portfolio_state": {"cash": 100000.0}}
+        checkpoint_data_1 = {
+            "current_bar_index": 1000,
+            "portfolio_state": {"cash": 100000.0},
+        }
         progress_bridge.set_latest_checkpoint_state(checkpoint_data_1)
 
         # Second checkpoint (should replace first)

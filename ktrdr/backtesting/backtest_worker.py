@@ -280,7 +280,9 @@ class BacktestWorker(WorkerAPIBase):
             )
 
             if original_operation is None:
-                error_msg = f"Original operation not found: {request.original_operation_id}"
+                error_msg = (
+                    f"Original operation not found: {request.original_operation_id}"
+                )
                 logger.error(error_msg)
                 await self._operations_service.fail_operation(operation_id, error_msg)
                 raise ValueError(error_msg)
@@ -295,8 +297,16 @@ class BacktestWorker(WorkerAPIBase):
                 symbol=metadata.symbol,
                 timeframe=metadata.timeframe,
                 strategy_name=params.get("strategy_name", ""),
-                start_date=metadata.start_date.isoformat() if hasattr(metadata.start_date, 'isoformat') else metadata.start_date,
-                end_date=metadata.end_date.isoformat() if hasattr(metadata.end_date, 'isoformat') else metadata.end_date,
+                start_date=(
+                    metadata.start_date.isoformat()
+                    if hasattr(metadata.start_date, "isoformat")
+                    else metadata.start_date
+                ),
+                end_date=(
+                    metadata.end_date.isoformat()
+                    if hasattr(metadata.end_date, "isoformat")
+                    else metadata.end_date
+                ),
                 initial_capital=params.get("initial_capital", 100000.0),
                 commission=params.get("commission", 0.001),
                 slippage=params.get("slippage", 0.0),

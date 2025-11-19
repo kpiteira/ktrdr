@@ -269,6 +269,68 @@ class OperationServiceProxy:
             logger.error(f"Connection error cancelling operation {operation_id}: {e}")
             raise
 
+    async def get_operation_state(
+        self,
+        operation_id: str,
+    ) -> dict[str, Any]:
+        """
+        Get complete operation state from worker (Task 3.8).
+
+        Queries the worker's /api/v1/operations/{operation_id}/state endpoint to
+        retrieve cached checkpoint state. Returns ~1KB JSON metadata with artifact
+        PATHS (not bytes), leveraging shared filesystem for artifact access.
+
+        This method is called by OperationsService._get_operation_state() when creating
+        cancellation checkpoints in distributed architecture.
+
+        Args:
+            operation_id: Operation identifier on worker
+
+        Returns:
+            dict: Complete state including checkpoint data and artifact paths.
+                  Returns empty dict {} on any error (graceful fallback).
+
+        Example:
+            >>> async with OperationServiceProxy("http://localhost:5003") as proxy:
+            ...     state = await proxy.get_operation_state("op_backtest_123")
+            ...     print(state["checkpoint_data"]["current_bar_index"])  # 5000
+            ...     print(state["artifacts"]["model.pt"])  # "data/checkpoints/.../model.pt"
+        """
+        url = f"{self.base_url}/api/v1/operations/{operation_id}/state"
+
+        logger.debug(f"GET operation state: operation_id={operation_id}")
+
+        client = self._get_client()
+
+        try:
+            response = await client.get(url)
+
+            # Handle 404 -> return empty dict (graceful fallback)
+            if response.status_code == 404:
+                logger.debug(
+                    f"Operation not found (returning empty state): {operation_id}"
+                )
+                return {}
+
+            # Raise for other HTTP errors
+            response.raise_for_status()
+
+            # Unwrap response - worker returns {success, state}
+            response_data = response.json()
+            if isinstance(response_data, dict) and "state" in response_data:
+                return response_data["state"]
+            return response_data  # Fallback
+
+        except httpx.HTTPStatusError as e:
+            logger.warning(f"HTTP error querying state for {operation_id}: {e}")
+            return {}  # Graceful fallback
+        except (httpx.ConnectError, httpx.TimeoutException) as e:
+            logger.warning(f"Connection error querying state for {operation_id}: {e}")
+            return {}  # Graceful fallback
+        except Exception as e:
+            logger.warning(f"Unexpected error querying state for {operation_id}: {e}")
+            return {}  # Graceful fallback
+
     async def close(self) -> None:
         """
         Close HTTP client and cleanup resources.

@@ -276,3 +276,170 @@ class TestClose:
         await proxy.close()
         await proxy.close()
         await proxy.close()
+
+
+@pytest.mark.asyncio
+class TestGetOperationState:
+    """Test get_operation_state method (Task 3.8)."""
+
+    async def test_successful_get_operation_state(self):
+        """Test successful GET operation state request."""
+        base_url = "http://localhost:5003"
+        operation_id = "op_backtest_123"
+
+        # Mock response with complete checkpoint state
+        mock_response_data = {
+            "success": True,
+            "state": {
+                "operation_id": operation_id,
+                "operation_type": "backtesting",
+                "progress": {"percentage": 50.0, "current_bar": 5000},
+                "checkpoint_data": {
+                    "current_bar_index": 5000,
+                    "portfolio_state": {
+                        "cash": 50000.0,
+                        "positions": [],
+                        "trades": 25,
+                    },
+                },
+            },
+        }
+
+        mock_response = MagicMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        mock_response.json.return_value = mock_response_data
+
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_response
+
+            # Execute
+            proxy = OperationServiceProxy(base_url)
+            result = await proxy.get_operation_state(operation_id)
+
+            # Verify
+            assert result == mock_response_data["state"]
+            assert result["operation_id"] == operation_id
+            assert result["checkpoint_data"]["current_bar_index"] == 5000
+            mock_get.assert_called_once()
+
+            # Verify correct endpoint was called
+            call_args = mock_get.call_args
+            assert "/state" in str(call_args)
+            assert operation_id in str(call_args)
+
+            await proxy.close()
+
+    async def test_get_operation_state_with_artifact_paths(self):
+        """Test GET operation state returns artifact paths (not bytes)."""
+        base_url = "http://localhost:5002"
+        operation_id = "op_training_456"
+
+        # Mock response with artifact paths
+        mock_response_data = {
+            "success": True,
+            "state": {
+                "operation_id": operation_id,
+                "operation_type": "training",
+                "progress": {"percentage": 45.0, "epoch": 45},
+                "epoch": 45,
+                "train_loss": 0.5,
+                "artifacts": {
+                    "model.pt": f"data/checkpoints/artifacts/{operation_id}/model.pt",
+                    "optimizer.pt": f"data/checkpoints/artifacts/{operation_id}/optimizer.pt",
+                },
+            },
+        }
+
+        mock_response = MagicMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        mock_response.json.return_value = mock_response_data
+
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_response
+
+            # Execute
+            proxy = OperationServiceProxy(base_url)
+            result = await proxy.get_operation_state(operation_id)
+
+            # Verify artifact paths are strings (shared filesystem)
+            assert "artifacts" in result
+            assert isinstance(result["artifacts"]["model.pt"], str)
+            assert "data/checkpoints/artifacts" in result["artifacts"]["model.pt"]
+
+            await proxy.close()
+
+    async def test_get_operation_state_404_returns_empty_dict(self):
+        """Test 404 response returns empty dict (graceful fallback)."""
+        base_url = "http://localhost:5003"
+        operation_id = "op_nonexistent"
+
+        # Mock 404 response
+        mock_response = MagicMock(spec=httpx.Response)
+        mock_response.status_code = 404
+        mock_response.json.return_value = {"error": "Operation not found"}
+
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_response
+
+            # Execute - should NOT raise, return empty dict
+            proxy = OperationServiceProxy(base_url)
+            result = await proxy.get_operation_state(operation_id)
+
+            # Verify graceful fallback
+            assert result == {}
+
+            await proxy.close()
+
+    async def test_get_operation_state_connection_error_returns_empty_dict(self):
+        """Test connection error returns empty dict (graceful fallback)."""
+        base_url = "http://localhost:5003"
+        operation_id = "op_backtest_123"
+
+        # Mock connection error
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            mock_get.side_effect = httpx.ConnectError("Connection refused")
+
+            # Execute - should NOT raise, return empty dict
+            proxy = OperationServiceProxy(base_url)
+            result = await proxy.get_operation_state(operation_id)
+
+            # Verify graceful fallback
+            assert result == {}
+
+            await proxy.close()
+
+    async def test_get_operation_state_timeout_returns_empty_dict(self):
+        """Test timeout returns empty dict (graceful fallback)."""
+        base_url = "http://localhost:5003"
+        operation_id = "op_backtest_123"
+
+        # Mock timeout
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            mock_get.side_effect = httpx.TimeoutException("Request timeout")
+
+            # Execute - should NOT raise, return empty dict
+            proxy = OperationServiceProxy(base_url)
+            result = await proxy.get_operation_state(operation_id)
+
+            # Verify graceful fallback
+            assert result == {}
+
+            await proxy.close()
+
+    async def test_get_operation_state_generic_error_returns_empty_dict(self):
+        """Test generic error returns empty dict (graceful fallback)."""
+        base_url = "http://localhost:5003"
+        operation_id = "op_backtest_123"
+
+        # Mock generic error
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            mock_get.side_effect = Exception("Unexpected error")
+
+            # Execute - should NOT raise, return empty dict
+            proxy = OperationServiceProxy(base_url)
+            result = await proxy.get_operation_state(operation_id)
+
+            # Verify graceful fallback
+            assert result == {}
+
+            await proxy.close()

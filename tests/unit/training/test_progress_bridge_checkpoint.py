@@ -119,7 +119,9 @@ class TestTrainingProgressBridgeCheckpointCaching:
     ):
         """Test that get_state() returns basic state when no checkpoint cached."""
         # Update progress first
-        progress_bridge.on_epoch(epoch=10, total_epochs=100, metrics={"train_loss": 0.8})
+        progress_bridge.on_epoch(
+            epoch=10, total_epochs=100, metrics={"train_loss": 0.8}
+        )
 
         # Get state without caching checkpoint data
         state = await progress_bridge.get_state()
@@ -138,7 +140,9 @@ class TestTrainingProgressBridgeCheckpointCaching:
     async def test_get_state_includes_current_progress(self, progress_bridge):
         """Test that get_state() includes current progress info."""
         # Update progress
-        progress_bridge.on_epoch(epoch=50, total_epochs=100, metrics={"train_loss": 0.5})
+        progress_bridge.on_epoch(
+            epoch=50, total_epochs=100, metrics={"train_loss": 0.5}
+        )
 
         # Get state (should include current progress)
         state = await progress_bridge.get_state()
