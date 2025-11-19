@@ -160,14 +160,25 @@ This design establishes a **production-grade deployment architecture** for KTRDR
 
 ---
 
-### Decision 11: Worker Scaling (v1 Scope)
-**Choice**: Single worker per type per node (1 backtest, 1 training)
+### Decision 11: Worker Scaling Strategy
+**Choice**: Profile-based scaling with explicit service definitions (up to 3 workers per type)
 
-**Port Mapping**: Simple static ports (5003 backtest, 5004 training)
+**Port Allocation (Sequential)**:
+- backtest-worker-1: `5003` (default, always running)
+- backtest-worker-2: `5004` (scale-2 profile)
+- backtest-worker-3: `5007` (scale-3 profile)
+- training-worker-1: `5005` (default, always running)
+- training-worker-2: `5006` (scale-2 profile)
+- training-worker-3: `5008` (scale-3 profile)
 
-**Rationale**: Adequate for initial deployment and load observation. Multi-replica scaling requires separate services with unique ports or orchestration tooling - addressed in future performance/scaling specification.
+**Scaling Commands**:
+- 1 of each (default): `docker compose up -d`
+- 2 of each: `docker compose --profile scale-2 up -d`
+- 3 of each: `docker compose --profile scale-2 --profile scale-3 up -d`
 
-**Future Work**: Scaling strategy, load balancing, resource optimization documented separately after load observation.
+**Rationale**: Explicit service definitions avoid docker-compose `--scale` port conflicts. Profile-based approach enables gradual capacity increase based on observed load. Each worker has unique port and self-registers independently with backend.
+
+**Future Work**: Beyond 3 workers per type requires separate scaling specification or orchestration tooling (Swarm/K8s).
 
 ---
 
@@ -261,13 +272,14 @@ This design establishes a **production-grade deployment architecture** for KTRDR
 
 **v1 Approach**: Manual rollback via `IMAGE_TAG` override
 
-### Worker Scaling & Performance
-- Multi-replica worker deployment strategy
-- Load balancing across workers
+### Worker Scaling & Performance (Beyond 3 Workers)
+- Scaling beyond 3 workers per type per node
+- Automatic load balancing across workers
 - Resource optimization based on observed load
 - Auto-scaling based on queue depth
+- Orchestration tooling (Docker Swarm, Kubernetes)
 
-**v1 Approach**: Single worker per type, manual scaling via additional nodes
+**v1 Approach**: Profile-based scaling up to 3 workers per type (supports 1-3 of each via profiles)
 
 ### Monitoring & Alerting
 - Grafana dashboard creation

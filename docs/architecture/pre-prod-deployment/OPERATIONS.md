@@ -506,34 +506,49 @@ curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/workers | jq
 
 ---
 
-### Scaling Worker Replicas (v2 - Future)
+### Scaling Worker Replicas
 
-**v1 Approach**: Single worker per type per node. See DESIGN.md "Future Enhancements" for multi-replica scaling.
+**Scaling Strategy**: Profile-based scaling using docker-compose profiles
 
+**Port Allocation**:
+- backtest-worker-1: 5003 (default)
+- backtest-worker-2: 5004 (scale-2)
+- backtest-worker-3: 5007 (scale-3)
+- training-worker-1: 5005 (default)
+- training-worker-2: 5006 (scale-2)
+- training-worker-3: 5008 (scale-3)
+
+**Scale to 2 workers of each type**:
 ```bash
-# 1. SSH to worker LXC
+# SSH to worker LXC
 ssh workers-b.ktrdr.home.mynerd.place
-
-# 2. Edit compose file
 cd /opt/ktrdr-workers-b
-nano docker-compose.workers.yml
 
-# Change:
-# BACKTEST_WORKER_REPLICAS=1 → BACKTEST_WORKER_REPLICAS=3
+# Deploy with scale-2 profile
+docker compose --profile scale-2 up -d
 
-# 3. Exit and redeploy
-exit
-ktrdr deploy workers B
-
-# 4. Update Prometheus targets
-ssh backend.ktrdr.home.mynerd.place
-cd /opt/ktrdr-core
-nano monitoring/prometheus.yml
-# Add additional worker ports if needed
-
-# 5. Redeploy Prometheus
-ktrdr deploy core prometheus
+# Verify workers registered
+curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/workers | jq
 ```
+
+**Scale to 3 workers of each type**:
+```bash
+# Deploy with both scale-2 and scale-3 profiles
+docker compose --profile scale-2 --profile scale-3 up -d
+
+# Verify all 6 workers registered
+curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/workers | jq
+```
+
+**Scale back down to 1 of each**:
+```bash
+# Deploy with no profiles (default only)
+docker compose up -d
+
+# Removes scale-2 and scale-3 workers
+```
+
+**Note**: Prometheus config already includes all ports (5003-5008). Inactive workers show as DOWN in Prometheus UI.
 
 ---
 

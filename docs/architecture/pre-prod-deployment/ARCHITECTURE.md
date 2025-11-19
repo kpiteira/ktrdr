@@ -67,8 +67,8 @@ See [`docker-compose.core.yml`](docker-compose.core.yml) for complete configurat
 
 **Key Configuration**:
 
-- Single worker per service by default (for simple port mapping)
-- Port mapping: `5003:5003` (backtest), `5004:5004` (training)
+- Profile-based scaling with explicit service definitions
+- Port allocation (sequential): 5003-5008 (see table below)
 - Workers have database access for checkpointing
 - Workers connect to backend at `http://backend.ktrdr.home.mynerd.place:8000`
 - Workers self-register via `WORKER_PUBLIC_BASE_URL` (e.g., `http://workers-b.ktrdr.home.mynerd.place:5003`)
@@ -76,7 +76,21 @@ See [`docker-compose.core.yml`](docker-compose.core.yml) for complete configurat
 - NFS mount at `/mnt/ktrdr-shared` for shared storage
 - All workers send traces to Jaeger at core LXC
 
-**v1 Scaling Approach**: Single worker per type per node (1 backtest, 1 training). Multi-replica scaling deferred to future performance/scaling specification.
+**Port Allocation Table**:
+
+| Worker | Port | Profile | Always Running? |
+|--------|------|---------|-----------------|
+| backtest-worker-1 | 5003 | default | Yes |
+| backtest-worker-2 | 5004 | scale-2 | No (profile) |
+| training-worker-1 | 5005 | default | Yes |
+| training-worker-2 | 5006 | scale-2 | No (profile) |
+| backtest-worker-3 | 5007 | scale-3 | No (profile) |
+| training-worker-3 | 5008 | scale-3 | No (profile) |
+
+**Scaling Examples**:
+- Default: `docker compose up -d` → 2 workers (1 backtest, 1 training)
+- Scale to 2 each: `docker compose --profile scale-2 up -d` → 4 workers
+- Scale to 3 each: `docker compose --profile scale-2 --profile scale-3 up -d` → 6 workers
 
 See [`docker-compose.workers.yml`](docker-compose.workers.yml) for complete configuration.
 
