@@ -1251,6 +1251,205 @@ op_backtest_20250117_160100 | COMPLETED | Bar 10000/10000| None
 
 ---
 
+### Task 3.7: Complete Cancellation Checkpoint State Capture (4-6 hours)
+
+**Problem Identified:**
+
+Task 3.6 delivered worker autonomy infrastructure, but cancellation checkpoints don't capture domain-specific state:
+
+- **Current behavior**: Checkpoints created with only progress metadata (297-319 bytes)
+- **Missing**: Training artifacts (model.pt, optimizer.pt ~100-500 MB), Backtesting state (portfolio, positions)
+- **Root cause**: Progress bridges don't have `get_state()` methods to provide domain state to `OperationsService._get_operation_state()`
+- **Impact**: Checkpoints cannot be used for actual resume - only metadata, no resumable state
+
+**Architectural Insight:**
+
+Progress bridges need to cache domain state and provide it on-demand during cancellation. Cannot call trainer/engine directly due to lifecycle mismatch.
+
+**Checklist:**
+
+**Training State Capture (2-3 hours):**
+
+- [ ] Add state caching to `TrainingProgressBridge`
+  - `set_latest_checkpoint_state(checkpoint_data, artifacts)` - Cache latest state
+  - `get_state()` - Return cached state for checkpoint creation
+  - Store: `_latest_checkpoint_data`, `_latest_artifacts`
+- [ ] Update `ModelTrainer` to cache state in bridge
+  - In existing checkpoint logic (line ~604), after creating checkpoint state
+  - Call `if self.progress_bridge: self.progress_bridge.set_latest_checkpoint_state(...)`
+  - Only 1 line added to existing logic
+- [ ] Test cancellation checkpoint with artifacts
+  - Start training, cancel mid-epoch
+  - Verify checkpoint has model.pt, optimizer.pt artifacts (100-500 MB)
+  - Verify artifacts saved to filesystem
+  - Verify database has artifacts_path and artifacts_size_bytes
+
+**Backtesting State Capture (2-3 hours):**
+
+- [ ] Add `get_checkpoint_state()` to `BacktestingEngine`
+  - Return: bar_index, portfolio state, positions, trades, config
+  - Format matches training pattern
+  - Size: ~1-10 KB (no large artifacts for backtesting)
+- [ ] Add state caching to `BacktestProgressBridge`
+  - `set_latest_checkpoint_state(checkpoint_data)` - Cache latest state
+  - `get_state()` - Return cached state for checkpoint creation
+  - Store: `_latest_checkpoint_data`
+- [ ] Update `BacktestingEngine` main loop to cache state
+  - Periodically (e.g., every 100 bars) call bridge.set_latest_checkpoint_state()
+  - Similar pattern to training
+- [ ] Test cancellation checkpoint with state
+  - Start backtest, cancel mid-run
+  - Verify checkpoint has bar_index, portfolio, positions
+  - Verify state_json contains resumable data
+
+**Acceptance Criteria:**
+
+- ✅ Cancellation checkpoints contain model artifacts for training (model.pt, optimizer.pt)
+- ✅ Cancellation checkpoints contain portfolio state for backtesting (bar_index, positions, trades)
+- ✅ Artifacts saved to filesystem (data/checkpoints/artifacts/)
+- ✅ Database shows artifacts_size_bytes > 0 for training checkpoints
+- ✅ Database shows state_size_bytes > 1KB for backtesting checkpoints
+- ✅ Progress bridges cache state without requiring direct trainer/engine access
+- ✅ Existing periodic checkpoint logic unaffected
+- ✅ All tests pass
+
+**Files Modified:**
+
+- `ktrdr/api/services/training/progress_bridge.py` (add caching methods)
+- `ktrdr/backtesting/progress_bridge.py` (add caching methods)
+- `ktrdr/training/model_trainer.py` (1 line: call bridge.set_latest_checkpoint_state)
+- `ktrdr/backtesting/engine.py` (add get_checkpoint_state + periodic caching)
+- `tests/unit/training/test_progress_bridge_checkpoint.py` (new)
+- `tests/unit/backtesting/test_progress_bridge_checkpoint.py` (new)
+
+**Implementation Pattern (Training):**
+
+```python
+# TrainingProgressBridge (ktrdr/api/services/training/progress_bridge.py)
+
+class TrainingProgressBridge(ProgressBridge):
+    def __init__(self, ...):
+        super().__init__(...)
+        self._latest_checkpoint_data: Optional[dict] = None
+        self._latest_artifacts: Optional[dict] = None
+
+    def set_latest_checkpoint_state(
+        self, checkpoint_data: dict, artifacts: dict
+    ) -> None:
+        """Cache latest checkpoint state for cancellation checkpoints."""
+        self._latest_checkpoint_data = checkpoint_data
+        self._latest_artifacts = artifacts
+
+    async def get_state(self) -> dict[str, Any]:
+        """Get complete training state for checkpoint."""
+        base_state = {
+            "operation_id": self.operation_id,
+            "operation_type": "training",
+            "status": "running",
+            "progress": self.get_progress(),
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+        }
+
+        # Add cached checkpoint data if available
+        if self._latest_checkpoint_data:
+            base_state.update(self._latest_checkpoint_data)
+
+        # Return with artifacts (CheckpointService extracts these)
+        return {
+            **base_state,
+            "artifacts": self._latest_artifacts or {},
+        }
+
+# ModelTrainer (ktrdr/training/model_trainer.py) - line ~660
+if should_checkpoint:
+    checkpoint_state = self.get_checkpoint_state(...)
+    artifacts = {
+        "model.pt": checkpoint_state["model_state_dict"],
+        "optimizer.pt": checkpoint_state["optimizer_state_dict"],
+        # ...
+    }
+
+    # Save to CheckpointService (existing code)
+    self.checkpoint_service.save_checkpoint(...)
+
+    # NEW: Cache in progress bridge for cancellation checkpoints
+    if self.progress_bridge:
+        self.progress_bridge.set_latest_checkpoint_state(
+            checkpoint_data=checkpoint_state,
+            artifacts=artifacts
+        )
+```
+
+**Implementation Pattern (Backtesting):**
+
+```python
+# BacktestProgressBridge (ktrdr/backtesting/progress_bridge.py)
+
+class BacktestProgressBridge(ProgressBridge):
+    def __init__(self, ...):
+        super().__init__(...)
+        self._latest_checkpoint_data: Optional[dict] = None
+
+    def set_latest_checkpoint_state(self, checkpoint_data: dict) -> None:
+        """Cache latest checkpoint state for cancellation checkpoints."""
+        self._latest_checkpoint_data = checkpoint_data
+
+    async def get_state(self) -> dict[str, Any]:
+        """Get complete backtest state for checkpoint."""
+        base_state = {
+            "operation_id": self.operation_id,
+            "operation_type": "backtesting",
+            "status": "running",
+            "progress": self.get_progress(),
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+        }
+
+        # Add cached checkpoint data if available
+        if self._latest_checkpoint_data:
+            base_state["checkpoint_data"] = self._latest_checkpoint_data
+
+        return base_state
+
+# BacktestingEngine (ktrdr/backtesting/engine.py)
+
+def get_checkpoint_state(self) -> dict[str, Any]:
+    """Capture current backtest state for checkpoint."""
+    return {
+        "current_bar_index": self.current_bar_index,
+        "portfolio_state": {
+            "cash": self.portfolio.cash,
+            "positions": [p.to_dict() for p in self.portfolio.positions],
+        },
+        "trade_history": [t.to_dict() for t in self.trades],
+        "performance_metrics": self.performance_tracker.get_metrics(),
+    }
+
+def run(self, bridge, cancellation_token):
+    """Main backtest loop."""
+    for i, bar in enumerate(self.data):
+        # Process bar...
+
+        # Periodically cache state in bridge (e.g., every 100 bars)
+        if i % 100 == 0 and bridge:
+            checkpoint_data = self.get_checkpoint_state()
+            bridge.set_latest_checkpoint_state(checkpoint_data)
+
+    return results
+```
+
+**Dependencies:**
+
+- Requires Task 3.6 (worker autonomy infrastructure) ✅
+- Enables Task 4.1 (backtesting resume logic - needs state to resume from)
+- Completes Phase 2 (training checkpoint state capture)
+
+**Estimated Time:** 4-6 hours
+
+- Training bridge integration: 2-3 hours
+- Backtesting state capture + bridge integration: 2-3 hours
+
+---
+
 ## Phase 4: Backtesting Checkpoints (1.5 days)
 
 **Goal:** Backtesting operations create checkpoints and can resume.
@@ -1259,31 +1458,26 @@ op_backtest_20250117_160100 | COMPLETED | Bar 10000/10000| None
 
 **Estimated Time:** 1.5 days
 
-### Task 4.1: Backtesting State Capture & Resume Integration (6 hours)
+### Task 4.1: Backtesting Resume Logic Implementation (4 hours)
 
-**Note:** Resume architecture already implemented in Task 3.6. This task focuses on domain-specific state capture/restore.
+**Note:** Resume architecture (Task 3.6) and state capture (Task 3.7) already implemented. This task focuses ONLY on resume logic - using saved state to restart execution.
 
 **Checklist:**
 
-- [ ] Add state management to backtesting components
-  - `PositionManager`: `get_state()`, `restore_state()`
-  - `PerformanceTracker`: `get_state()`, `restore_state()`
-  - `BacktestingEngine`: `get_checkpoint_state()`
-  - Include: bar_index, position, performance, config, trade history, equity curve
-- [ ] Integrate `CheckpointService` into backtest loop
-  - Inject service into `BacktestingEngine`
-  - Add checkpoint decision logic (check policy each bar)
-  - Call `save_checkpoint()` when `should_checkpoint()` returns True
-  - Handle checkpoint failures gracefully (backtest continues)
-- [ ] Implement checkpoint resume in `_run_backtest()` worker method
-  - Accept optional `checkpoint_state` parameter (Task 3.6 pattern)
-  - If checkpoint_state: restore PositionManager, PerformanceTracker, start from checkpoint bar
-  - If no checkpoint_state: fresh start
-  - Rebuild feature cache from resume point
+- [ ] Add state restoration to backtesting components
+  - `PositionManager`: `restore_state()` - Restore cash, positions from checkpoint
+  - `PerformanceTracker`: `restore_state()` - Restore metrics, equity curve from checkpoint
+  - `BacktestingEngine`: `restore_checkpoint_state()` - Coordinate restoration
+- [ ] Implement checkpoint resume in worker
+  - Update `_execute_resume_backtest_work()` to pass checkpoint state to engine
+  - Modify `BacktestingEngine.run()` to accept optional `checkpoint_state` parameter
+  - If checkpoint_state: restore state, start from checkpoint bar_index
+  - If no checkpoint_state: fresh start (current behavior)
+  - Rebuild strategy state and feature cache from resume point
 - [ ] Write comprehensive unit tests
-  - State capture/restore (position, performance, trade history)
-  - Checkpoint integration
-  - Resume logic with checkpoint_state parameter
+  - State restore (position, performance, trade history)
+  - Resume from mid-backtest (bar_index)
+  - Verify results match: interrupted + resumed == uninterrupted run
 
 **Acceptance Criteria:**
 
@@ -1684,12 +1878,12 @@ If issues discovered after deployment:
 |-------|----------|----------|-------------|
 | Phase 0: PostgreSQL + TimescaleDB Setup | 0.5 days | Day 0.5 | Database infrastructure ready |
 | Phase 1: Core Infrastructure | 2 days | Day 2.5 | Basic checkpoint CRUD |
-| Phase 2: Training Checkpoints | 2 days | Day 4.5 | Training resume works |
-| Phase 3: Operations API + Recovery + Cancellation/Shutdown + Resume Architecture | 3.75 days | Day 8.25 | CLI resume + startup recovery + cleanup + checkpoint on cancel/shutdown + worker autonomous resume |
-| Phase 4: Backtesting | 1.5 days | Day 9.75 | Backtest resume works |
-| Phase 5: Production | 2.5 days | Day 12.25 | Production ready |
+| Phase 2: Training Checkpoints | 2 days | Day 4.5 | Training resume works (partial - bridge integration in 3.7) |
+| Phase 3: Operations API + Recovery + Cancellation/Shutdown + Resume + State Capture | 4 days | Day 8.5 | CLI resume + startup recovery + cleanup + checkpoint on cancel/shutdown + worker autonomous resume + domain state capture |
+| Phase 4: Backtesting Resume | 0.75 days | Day 9.25 | Backtest resume logic (state capture in 3.7) |
+| Phase 5: Production | 2.5 days | Day 11.75 | Production ready |
 
-**Total:** 12.25 development days (~2.5 work weeks)
+**Total:** 11.75 development days (~2.4 work weeks)
 
 **Phase 3 Breakdown:**
 
@@ -1698,7 +1892,8 @@ If issues discovered after deployment:
 - Task 3.3: CLI Commands & Checkpoint Management (5 hours)
 - Task 3.4: Integration Testing (2 hours)
 - Task 3.5: Checkpoint on Cancellation & Graceful Shutdown (4 hours)
-- **Task 3.6: Refactor Resume Architecture for Worker Autonomy (6 hours)** - NEW (includes worker database setup)
+- Task 3.6: Refactor Resume Architecture for Worker Autonomy (6 hours) - includes worker database setup
+- **Task 3.7: Complete Cancellation Checkpoint State Capture (5 hours)** - NEW (bridges Phase 2 training + enables Phase 4)
 
 ---
 
