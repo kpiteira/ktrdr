@@ -4,6 +4,8 @@ This module provides a ProgressBridge subclass specifically designed for
 backtesting operations, following the same pattern as TrainingProgressBridge.
 """
 
+from typing import Any
+
 from ktrdr.async_infrastructure.progress_bridge import ProgressBridge
 
 
@@ -72,6 +74,10 @@ class BacktestProgressBridge(ProgressBridge):
         self.timeframe = timeframe
         self.total_bars = total_bars
 
+        # Task 3.7: Checkpoint state caching for cancellation checkpoints
+        self._latest_checkpoint_data: dict[str, Any] = {}
+        self.started_at: Any = None  # Set externally if needed
+
     def update_progress(
         self,
         current_bar: int,
@@ -122,3 +128,80 @@ class BacktestProgressBridge(ProgressBridge):
             total_trades=total_trades,
             win_rate=win_rate,
         )
+
+    # ------------------------------------------------------------------
+    # Task 3.7: Checkpoint State Caching (for cancellation checkpoints)
+    # ------------------------------------------------------------------
+    def set_latest_checkpoint_state(self, checkpoint_data: dict[str, Any]) -> None:
+        """
+        Cache latest checkpoint state for cancellation checkpoints.
+
+        Called by BacktestingEngine periodically (e.g., every 100 bars) to cache
+        domain-specific state (bar_index, portfolio, positions, trades) so it can
+        be included in cancellation checkpoints.
+
+        Args:
+            checkpoint_data: Checkpoint state (bar_index, portfolio, trades, etc.)
+
+        Example:
+            >>> # Called by BacktestingEngine every 100 bars
+            >>> bridge.set_latest_checkpoint_state({
+            ...     "current_bar_index": 5000,
+            ...     "current_timestamp": "2024-06-15T14:30:00",
+            ...     "portfolio_state": {
+            ...         "cash": 52000.0,
+            ...         "positions": [{"symbol": "AAPL", "shares": 100}],
+            ...     },
+            ...     "trade_history": [...],
+            ... })
+        """
+        with self._lock:
+            self._latest_checkpoint_data = checkpoint_data.copy()
+
+    async def get_state(self) -> dict[str, Any]:
+        """
+        Get complete operation state for checkpoint creation (async, called by OperationsService).
+
+        Returns current progress state combined with cached checkpoint data.
+        This method is called by OperationsService._get_operation_state() when creating
+        cancellation checkpoints.
+
+        Returns:
+            dict: Complete state including:
+                - operation_id: Operation identifier
+                - operation_type: "backtesting"
+                - status: "running" or "completed"
+                - progress: Current progress state (percentage, message, etc.)
+                - started_at: Operation start timestamp (ISO format)
+                - checkpoint_data: Cached checkpoint state (if available)
+
+        Example:
+            >>> state = await bridge.get_state()
+            >>> state["checkpoint_data"]["current_bar_index"]  # 5000
+            >>> state["checkpoint_data"]["portfolio_state"]["cash"]  # 52000.0
+        """
+        with self._lock:
+            # Get current progress state from base class
+            current_progress = self._current_state.copy()
+
+            # Build complete state
+            state: dict[str, Any] = {
+                "operation_id": self.operation_id,
+                "operation_type": "backtesting",
+                "status": "running",  # Assume running if bridge is alive
+                "progress": current_progress,
+            }
+
+            # Add started_at if available
+            if self.started_at is not None:
+                state["started_at"] = (
+                    self.started_at.isoformat()
+                    if hasattr(self.started_at, "isoformat")
+                    else str(self.started_at)
+                )
+
+            # Add cached checkpoint data (if available)
+            if self._latest_checkpoint_data:
+                state["checkpoint_data"] = self._latest_checkpoint_data.copy()
+
+            return state

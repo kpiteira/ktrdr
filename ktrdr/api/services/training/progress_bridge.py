@@ -56,6 +56,11 @@ class TrainingProgressBridge(ProgressBridge):
         self._last_items_processed = 0
         self._last_emitted_global_batch: int | None = None
 
+        # Task 3.7: Checkpoint state caching for cancellation checkpoints
+        self._latest_checkpoint_data: dict[str, Any] = {}
+        self._latest_artifacts: dict[str, bytes] = {}
+        self.started_at: Any = None  # Set externally if needed
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -797,3 +802,99 @@ class TrainingProgressBridge(ProgressBridge):
                 self._update_callback(**payload)
             except TypeError:
                 self._update_callback(payload)  # type: ignore[misc]
+
+    # ------------------------------------------------------------------
+    # Task 3.7: Checkpoint State Caching (for cancellation checkpoints)
+    # ------------------------------------------------------------------
+    def set_latest_checkpoint_state(
+        self,
+        checkpoint_data: dict[str, Any],
+        artifacts: dict[str, bytes] | None = None,
+    ) -> None:
+        """
+        Cache latest checkpoint state for cancellation checkpoints.
+
+        Called by ModelTrainer after creating periodic checkpoints to cache
+        domain-specific state (epoch, loss, training history) and artifacts
+        (model.pt, optimizer.pt) so they can be included in cancellation checkpoints.
+
+        This enables resume-from-cancellation without requiring ModelTrainer
+        to be accessible during cancellation (improves separation of concerns).
+
+        Args:
+            checkpoint_data: Checkpoint metadata (epoch, loss, history, config)
+            artifacts: Optional dict of artifact name -> binary data
+                      (e.g., {"model.pt": bytes, "optimizer.pt": bytes})
+
+        Example:
+            >>> # Called by ModelTrainer after saving checkpoint
+            >>> bridge.set_latest_checkpoint_state(
+            ...     checkpoint_data={
+            ...         "epoch": 45,
+            ...         "train_loss": 0.65,
+            ...         "val_accuracy": 0.72,
+            ...         "training_history": [...],
+            ...     },
+            ...     artifacts={
+            ...         "model.pt": model_state_dict_bytes,
+            ...         "optimizer.pt": optimizer_state_dict_bytes,
+            ...     }
+            ... )
+        """
+        with self._lock:
+            self._latest_checkpoint_data = checkpoint_data.copy()
+            self._latest_artifacts = (artifacts or {}).copy()
+
+    async def get_state(self) -> dict[str, Any]:
+        """
+        Get complete operation state for checkpoint creation (async, called by OperationsService).
+
+        Returns current progress state combined with cached checkpoint data and artifacts.
+        This method is called by OperationsService._get_operation_state() when creating
+        cancellation checkpoints.
+
+        Returns:
+            dict: Complete state including:
+                - operation_id: Operation identifier
+                - operation_type: "training"
+                - status: "running" or "completed"
+                - progress: Current progress state (percentage, message, etc.)
+                - started_at: Operation start timestamp (ISO format)
+                - Checkpoint data fields (epoch, loss, etc.) if cached
+                - artifacts: Dict of artifact name -> binary data
+
+        Thread Safety:
+            Acquires lock briefly to copy state. Safe for concurrent access.
+
+        Example:
+            >>> state = await bridge.get_state()
+            >>> state["epoch"]  # 45
+            >>> state["artifacts"]["model.pt"]  # bytes
+        """
+        with self._lock:
+            # Get current progress state from base class
+            current_progress = self._current_state.copy()
+
+            # Build complete state
+            state: dict[str, Any] = {
+                "operation_id": self._context.operation_id,
+                "operation_type": "training",
+                "status": "running",  # Assume running if bridge is alive
+                "progress": current_progress,
+            }
+
+            # Add started_at if available
+            if self.started_at is not None:
+                state["started_at"] = (
+                    self.started_at.isoformat()
+                    if hasattr(self.started_at, "isoformat")
+                    else str(self.started_at)
+                )
+
+            # Merge cached checkpoint data into state (epoch, loss, history, etc.)
+            state.update(self._latest_checkpoint_data)
+
+            # Add artifacts
+            state["artifacts"] = self._latest_artifacts.copy()
+
+            return state
