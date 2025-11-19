@@ -663,14 +663,47 @@ class ModelTrainer:
                             checkpoint_data=checkpoint_data,
                         )
 
-                        # Task 3.7: Cache checkpoint state in progress bridge for cancellation checkpoints
+                        # Task 3.8: Write artifacts to shared filesystem for distributed access
+                        # Backend and workers share data/checkpoints/ volume (Docker or NFS)
+                        # Write artifacts to disk so backend can access during resume
+                        artifact_paths = {}
+                        try:
+                            from pathlib import Path
+
+                            artifacts_dir = (
+                                Path("data/checkpoints/artifacts") / self.operation_id
+                            )
+                            artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+                            # Write each artifact to disk
+                            for artifact_name, artifact_bytes in artifacts.items():
+                                if artifact_bytes is not None:
+                                    artifact_file = artifacts_dir / artifact_name
+                                    artifact_file.write_bytes(artifact_bytes)
+                                    # Store relative path (not absolute) for portability
+                                    artifact_paths[artifact_name] = str(
+                                        Path("data/checkpoints/artifacts")
+                                        / self.operation_id
+                                        / artifact_name
+                                    )
+
+                            print(
+                                f"💾 Wrote {len(artifact_paths)} artifacts to {artifacts_dir}"
+                            )
+                        except Exception as e:
+                            print(f"⚠️ Failed to write artifacts to disk: {e}")
+                            # Continue without artifact paths (graceful degradation)
+
+                        # Task 3.7/3.8: Cache checkpoint state in progress bridge for cancellation checkpoints
                         # This enables OperationsService._get_operation_state() to retrieve full state
                         # (including artifacts) when creating cancellation checkpoints
+                        # Task 3.8: Pass artifact PATHS (not bytes) for shared filesystem access
                         if hasattr(
                             self.progress_callback, "set_latest_checkpoint_state"
                         ):
                             self.progress_callback.set_latest_checkpoint_state(
-                                checkpoint_data=json_state, artifacts=artifacts
+                                checkpoint_data=json_state,
+                                artifacts=artifact_paths,  # Task 3.8: Paths not bytes!
                             )
 
                         # Update last checkpoint time
