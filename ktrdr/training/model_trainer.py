@@ -663,6 +663,16 @@ class ModelTrainer:
                             checkpoint_data=checkpoint_data,
                         )
 
+                        # Task 3.7: Cache checkpoint state in progress bridge for cancellation checkpoints
+                        # This enables OperationsService._get_operation_state() to retrieve full state
+                        # (including artifacts) when creating cancellation checkpoints
+                        if hasattr(
+                            self.progress_callback, "set_latest_checkpoint_state"
+                        ):
+                            self.progress_callback.set_latest_checkpoint_state(
+                                checkpoint_data=json_state, artifacts=artifacts
+                            )
+
                         # Update last checkpoint time
                         self.last_checkpoint_time = time.time()
 
