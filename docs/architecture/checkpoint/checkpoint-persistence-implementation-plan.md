@@ -1448,6 +1448,239 @@ def run(self, bridge, cancellation_token):
 - Training bridge integration: 2-3 hours
 - Backtesting state capture + bridge integration: 2-3 hours
 
+**Status:** ✅ COMPLETED (worker-side caching only)
+
+**Note:** Task 3.7 implemented worker-side checkpoint state caching. Task 3.8 required for distributed checkpoint retrieval.
+
+---
+
+### Task 3.8: Distributed Checkpoint State Retrieval (3-4 hours)
+
+**Problem Identified:**
+
+Task 3.7 completed worker-side state caching, but cancellation checkpoints in distributed architecture don't retrieve cached state:
+
+- **Current behavior**: Workers cache checkpoint state locally (ModelTrainer/BacktestingEngine → Bridge)
+- **Missing**: Backend cannot retrieve cached state from remote workers during cancellation
+- **Root cause**: No HTTP endpoint on workers to expose bridge.get_state(), no OperationServiceProxy.get_operation_state()
+- **Impact**: Cancellation checkpoints contain only basic progress (297-319 bytes), no domain state or artifacts
+
+**Architectural Context:**
+
+- **Shared filesystem** (dev: Docker volume, prod: NFS) already configured for `data/checkpoints/`
+- All containers mount same volume → workers and backend see same files
+- **Artifacts transfer NOT needed** - files already accessible via shared filesystem!
+- **Only need**: HTTP endpoint to retrieve checkpoint metadata (~1KB JSON) from worker
+
+**Checklist:**
+
+**Worker API Endpoint (1-1.5 hours):**
+
+- [ ] Add `GET /api/v1/operations/{operation_id}/state` endpoint to `WorkerAPIBase`
+  - Query local OperationsService for operation
+  - Get progress bridge from operation (if running)
+  - Call `bridge.get_state()` to get cached checkpoint data
+  - Return JSON response with checkpoint metadata + artifact paths
+  - Handle cases: operation not found, bridge not available, no cached state
+- [ ] Refactor artifact storage in bridges to cache **paths** (not bytes)
+  - Change `TrainingProgressBridge._latest_artifacts` from `dict[str, bytes]` to `dict[str, str]`
+  - Update `set_latest_checkpoint_state()` signature to accept paths
+  - Update `ModelTrainer` to pass artifact paths (not bytes)
+  - Update tests to use paths instead of bytes
+- [ ] Add unit tests for worker state endpoint
+  - State retrieval for training operations
+  - State retrieval for backtesting operations
+  - Operation not found (404)
+  - Bridge not available (returns basic state)
+  - No cached state (empty artifacts/checkpoint_data)
+
+**Backend Proxy Implementation (1-1.5 hours):**
+
+- [ ] Implement `OperationServiceProxy.get_operation_state()`
+  - Add method to `ktrdr/api/services/adapters/operation_service_proxy.py`
+  - HTTP GET to `{worker_base_url}/api/v1/operations/{operation_id}/state`
+  - Return checkpoint state JSON from worker
+  - Handle errors: connection timeout, 404, worker unreachable
+  - Add 1-second cache TTL (same as get_operation)
+- [ ] Update `OperationsService._get_operation_state()` to use proxy
+  - Line 1794-1797 already has `hasattr(proxy, "get_operation_state")` check
+  - Verify artifact paths in response (don't transfer bytes!)
+  - Fallback to basic state construction if proxy unavailable
+- [ ] Add unit tests for proxy method
+  - Successful state retrieval from worker
+  - Worker connection timeout
+  - Worker returns 404
+  - Cache behavior (TTL)
+
+**Integration Testing (0.5-1 hour):**
+
+- [ ] Test training cancellation checkpoint with artifacts
+  - Start distributed training (worker executes)
+  - Cancel mid-epoch
+  - Verify checkpoint contains: epoch, train_loss, val_accuracy, training_history
+  - Verify checkpoint has artifact **paths**: `data/checkpoints/artifacts/{op_id}/model.pt`
+  - Verify artifacts accessible on backend filesystem (shared volume)
+  - Verify database shows artifacts_size_bytes > 0
+- [ ] Test backtesting cancellation checkpoint with state
+  - Start distributed backtest (worker executes)
+  - Cancel mid-run
+  - Verify checkpoint contains: bar_index, portfolio_state, positions, trades
+  - Verify state_size_bytes > 1KB in database
+- [ ] Test error scenarios
+  - Worker unreachable during cancellation (fallback to basic checkpoint)
+  - No cached state yet (operation just started)
+  - Worker killed before state retrieval completes
+
+**Acceptance Criteria:**
+
+- ✅ Worker exposes `/api/v1/operations/{operation_id}/state` endpoint
+- ✅ `OperationServiceProxy.get_operation_state()` retrieves state from worker
+- ✅ Cancellation checkpoints contain model artifacts **paths** (not bytes)
+- ✅ Cancellation checkpoints contain portfolio state (backtesting)
+- ✅ Artifacts accessible via shared filesystem (no HTTP transfer)
+- ✅ Database shows artifacts_size_bytes > 0 for training
+- ✅ Database shows state_size_bytes > 1KB for backtesting
+- ✅ Graceful fallback when worker unreachable (basic checkpoint)
+- ✅ All tests pass (unit + integration)
+
+**Files Modified:**
+
+- `ktrdr/workers/base.py` (add state endpoint)
+- `ktrdr/api/services/adapters/operation_service_proxy.py` (add get_operation_state)
+- `ktrdr/api/services/training/progress_bridge.py` (change artifacts to paths)
+- `ktrdr/training/model_trainer.py` (pass paths instead of bytes)
+- `tests/unit/workers/test_worker_state_endpoint.py` (new)
+- `tests/unit/api/services/adapters/test_operation_service_proxy_state.py` (new)
+- `tests/integration/checkpoint/test_distributed_cancellation_checkpoint.py` (new)
+
+**Implementation Pattern (Worker Endpoint):**
+
+```python
+# WorkerAPIBase (ktrdr/workers/base.py)
+
+@self.app.get("/api/v1/operations/{operation_id}/state")
+async def get_operation_state(operation_id: str):
+    """Get complete operation state for checkpoint creation."""
+    try:
+        # Get operation from worker's local OperationsService
+        operation = self.operations_service.get_operation(operation_id)
+        if not operation:
+            raise HTTPException(status_code=404, detail="Operation not found")
+
+        # Get progress bridge if operation is running
+        bridge = operation.get("progress_bridge")  # Stored in operation metadata
+        if bridge and hasattr(bridge, "get_state"):
+            # Call bridge.get_state() to get cached checkpoint data + artifact paths
+            state = await bridge.get_state()
+            return {"success": True, "state": state}
+
+        # Fallback: basic state from operation info
+        return {
+            "success": True,
+            "state": {
+                "operation_id": operation_id,
+                "status": operation["status"],
+                "progress": operation.get("progress", {}),
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting operation state: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+```
+
+**Implementation Pattern (Bridge Artifact Paths):**
+
+```python
+# TrainingProgressBridge (ktrdr/api/services/training/progress_bridge.py)
+
+class TrainingProgressBridge(ProgressBridge):
+    def __init__(self, ...):
+        super().__init__(...)
+        self._latest_checkpoint_data: dict[str, Any] = {}
+        self._latest_artifacts: dict[str, str] = {}  # ✅ PATHS not bytes!
+
+    def set_latest_checkpoint_state(
+        self, checkpoint_data: dict, artifacts: dict[str, str] | None = None
+    ) -> None:
+        """Cache latest checkpoint state with artifact PATHS."""
+        with self._lock:
+            self._latest_checkpoint_data = checkpoint_data.copy()
+            self._latest_artifacts = (artifacts or {}).copy()  # Paths!
+
+    async def get_state(self) -> dict[str, Any]:
+        """Get complete state with artifact paths (shared filesystem)."""
+        with self._lock:
+            state = {
+                "operation_id": self._context.operation_id,
+                "operation_type": "training",
+                "progress": self._current_state.copy(),
+                **self._latest_checkpoint_data,  # Epoch, loss, etc.
+                "artifacts": self._latest_artifacts.copy(),  # Paths only!
+            }
+            return state
+
+# ModelTrainer (ktrdr/training/model_trainer.py)
+
+# After saving checkpoint to filesystem (line ~660)
+artifacts_paths = {
+    "model.pt": f"data/checkpoints/artifacts/{self.operation_id}/model.pt",
+    "optimizer.pt": f"data/checkpoints/artifacts/{self.operation_id}/optimizer.pt",
+}
+
+# Cache PATHS in bridge (not bytes!)
+if self.progress_bridge:
+    self.progress_bridge.set_latest_checkpoint_state(
+        checkpoint_data=checkpoint_state,
+        artifacts=artifacts_paths,  # ✅ Paths!
+    )
+```
+
+**Implementation Pattern (Proxy):**
+
+```python
+# OperationServiceProxy (ktrdr/api/services/adapters/operation_service_proxy.py)
+
+async def get_operation_state(self, operation_id: str) -> dict[str, Any]:
+    """
+    Retrieve complete operation state from worker for checkpoint creation.
+
+    Returns checkpoint data + artifact paths (not bytes - shared filesystem).
+    """
+    url = f"{self.base_url}/api/v1/operations/{operation_id}/state"
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            data = response.json()
+            return data.get("state", {})
+    except httpx.TimeoutException:
+        logger.warning(f"Timeout getting state from worker: {operation_id}")
+        return {}  # Fallback to basic checkpoint
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            logger.warning(f"Operation not found on worker: {operation_id}")
+        return {}
+    except Exception as e:
+        logger.error(f"Error getting operation state from worker: {e}")
+        return {}
+```
+
+**Dependencies:**
+
+- Requires Task 3.7 (worker-side state caching) ✅
+- Requires shared filesystem (Docker volume or NFS) ✅ (already configured)
+- Enables full cancellation checkpoints with domain state and artifacts
+- Enables Task 4.1 (backtesting resume - needs complete state)
+
+**Estimated Time:** 3-4 hours
+
+- Worker endpoint + artifact path refactor: 1-1.5 hours
+- Backend proxy implementation: 1-1.5 hours
+- Integration testing: 0.5-1 hour
+
 ---
 
 ## Phase 4: Backtesting Checkpoints (1.5 days)
