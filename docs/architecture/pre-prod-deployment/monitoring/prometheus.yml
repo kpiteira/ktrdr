@@ -9,13 +9,13 @@ scrape_configs:
   - job_name: 'ktrdr-workers-b'
     static_configs:
       - targets:
-        - 'ktrdr-workers-b.internal:5003'
-        - 'ktrdr-workers-b.internal:5004'  # If replica 2 exists
+        - 'workers-b.ktrdr.home.mynerd.place:5003'
+        - 'workers-b.ktrdr.home.mynerd.place:5004'
     metrics_path: '/metrics'
 
   - job_name: 'ktrdr-workers-c'
     static_configs:
       - targets:
-        - 'ktrdr-workers-c.internal:5003'
-        - 'ktrdr-workers-c.internal:5004'  # If replica 2 exists
+        - 'workers-c.ktrdr.home.mynerd.place:5003'
+        - 'workers-c.ktrdr.home.mynerd.place:5004'
     metrics_path: '/metrics'

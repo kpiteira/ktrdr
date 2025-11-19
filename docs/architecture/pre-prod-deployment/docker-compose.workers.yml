@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  backtest-worker:
+    image: ghcr.io/<github-username>/ktrdr-backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 3G
+    ports:
+      - "5003:5003"
+    volumes:
+      - /mnt/ktrdr-shared:/mnt/shared:ro
+    environment:
+      KTRDR_API_URL: http://backend.ktrdr.home.mynerd.place:8000
+      WORKER_TYPE: backtesting
+      WORKER_PORT: 5003
+      WORKER_PUBLIC_BASE_URL: http://${WORKER_HOSTNAME:-workers-b.ktrdr.home.mynerd.place}:5003
+      SHARED_MOUNT_PATH: /mnt/shared
+      OTLP_ENDPOINT: http://backend.ktrdr.home.mynerd.place:4317
+      # Database access for checkpointing
+      DB_HOST: backend.ktrdr.home.mynerd.place
+      DB_PORT: 5432
+      DB_NAME: ktrdr
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+    command: ["uvicorn", "ktrdr.backtesting.backtest_worker:app", "--host", "0.0.0.0", "--port", "5003"]
+    networks:
+      - ktrdr-workers
+
+  training-worker:
+    image: ghcr.io/<github-username>/ktrdr-backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 5G
+    ports:
+      - "5004:5004"
+    volumes:
+      - /mnt/ktrdr-shared:/mnt/shared:rw
+    environment:
+      KTRDR_API_URL: http://backend.ktrdr.home.mynerd.place:8000
+      WORKER_TYPE: training
+      WORKER_PORT: 5004
+      WORKER_PUBLIC_BASE_URL: http://${WORKER_HOSTNAME:-workers-b.ktrdr.home.mynerd.place}:5004
+      SHARED_MOUNT_PATH: /mnt/shared
+      OTLP_ENDPOINT: http://backend.ktrdr.home.mynerd.place:4317
+      # Database access for checkpointing
+      DB_HOST: backend.ktrdr.home.mynerd.place
+      DB_PORT: 5432
+      DB_NAME: ktrdr
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+    command: ["uvicorn", "ktrdr.training.training_worker:app", "--host", "0.0.0.0", "--port", "5004"]
+    networks:
+      - ktrdr-workers
+
+# NOTE: v1 uses single worker per type (no replicas). Multi-replica scaling
+# deferred to v2 (see DESIGN.md "Future Enhancements"). Scaling via --scale has
+# port mapping conflicts.
+
+networks:
+  ktrdr-workers:
+    driver: bridge
