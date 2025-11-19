@@ -632,6 +632,19 @@ class BacktestingEngine:
                 except Exception as e:
                     logger.warning(f"ProgressBridge update failed: {e}")
 
+            # Task 3.7: Cache checkpoint state in bridge (every 100 bars)
+            # This enables cancellation checkpoints to include portfolio state
+            if bridge and (idx - start_idx) % 100 == 0 and hasattr(bridge, "set_latest_checkpoint_state"):
+                try:
+                    checkpoint_state = self.get_checkpoint_state(
+                        current_bar_index=idx,
+                        current_timestamp=current_timestamp.isoformat() if hasattr(current_timestamp, "isoformat") else str(current_timestamp),
+                        current_price=current_price,
+                    )
+                    bridge.set_latest_checkpoint_state(checkpoint_state)
+                except Exception as e:
+                    logger.warning(f"Checkpoint state caching failed: {e}")
+
             # NEW: Cancellation checks (every 100 bars)
             if cancellation_token and (idx - start_idx) % 100 == 0:
                 if cancellation_token.is_cancelled_requested:
@@ -929,6 +942,112 @@ class BacktestingEngine:
             else self.config.initial_capital
         )
         print(f"\n🎯 Final Portfolio Value: ${final_value:,.2f}")
+
+    def get_checkpoint_state(
+        self,
+        current_bar_index: int,
+        current_timestamp: str,
+        current_price: float,
+    ) -> dict[str, Any]:
+        """
+        Capture current backtest state for checkpointing (Task 3.7).
+
+        Called periodically during backtesting (e.g., every 100 bars) to capture
+        domain-specific state that can be included in cancellation checkpoints.
+
+        Args:
+            current_bar_index: Current bar being processed (0-indexed)
+            current_timestamp: Current timestamp (ISO format)
+            current_price: Current bar close price
+
+        Returns:
+            Dictionary containing:
+                - current_bar_index: Current position in data
+                - current_timestamp: Current timestamp
+                - current_price: Current bar close price
+                - portfolio_state: Current portfolio (cash, positions, total_value)
+                - trade_history: List of completed trades
+                - performance_metrics: Current performance metrics (if available)
+                - symbol: Symbol being backtested
+                - timeframe: Timeframe being tested
+                - config: Backtest configuration summary
+
+        Example:
+            >>> state = engine.get_checkpoint_state(5000, "2024-06-15T14:30:00", 185.25)
+            >>> state["current_bar_index"]
+            5000
+            >>> state["portfolio_state"]["cash"]
+            52000.0
+        """
+        # Get current portfolio state
+        portfolio_value = self.position_manager.get_portfolio_value(current_price)
+        portfolio_state = {
+            "cash": self.position_manager.available_capital,
+            "positions": [
+                {
+                    "symbol": pos.symbol,
+                    "shares": pos.shares,
+                    "avg_price": pos.avg_price,
+                    "current_price": current_price,
+                    "unrealized_pnl": (current_price - pos.avg_price) * pos.shares,
+                }
+                for pos in self.position_manager.positions
+            ],
+            "total_value": portfolio_value,
+        }
+
+        # Get trade history
+        trade_history = [
+            {
+                "entry_time": trade.entry_time.isoformat() if hasattr(trade.entry_time, "isoformat") else str(trade.entry_time),
+                "exit_time": trade.exit_time.isoformat() if hasattr(trade.exit_time, "isoformat") else str(trade.exit_time),
+                "entry_price": trade.entry_price,
+                "exit_price": trade.exit_price,
+                "shares": trade.shares,
+                "pnl": trade.pnl,
+                "side": trade.side.value if hasattr(trade.side, "value") else str(trade.side),
+            }
+            for trade in self.position_manager.trade_history
+        ]
+
+        # Try to get current performance metrics (may not be available mid-backtest)
+        performance_metrics = None
+        try:
+            equity_df = self.performance_tracker.get_equity_curve()
+            if len(equity_df) > 0:
+                metrics = self.performance_tracker.calculate_metrics(
+                    equity_df, self.config.initial_capital
+                )
+                performance_metrics = {
+                    "total_return": metrics.total_return,
+                    "total_return_pct": metrics.total_return_pct,
+                    "sharpe_ratio": metrics.sharpe_ratio,
+                    "max_drawdown": metrics.max_drawdown,
+                    "max_drawdown_pct": metrics.max_drawdown_pct,
+                    "total_trades": metrics.total_trades,
+                    "win_rate": metrics.win_rate,
+                }
+        except Exception:
+            # If metrics calculation fails, skip it (not critical for checkpoint)
+            pass
+
+        return {
+            "current_bar_index": current_bar_index,
+            "current_timestamp": current_timestamp,
+            "current_price": current_price,
+            "portfolio_state": portfolio_state,
+            "trade_history": trade_history,
+            "performance_metrics": performance_metrics,
+            "symbol": self.config.symbol,
+            "timeframe": self.config.timeframe,
+            "config": {
+                "initial_capital": self.config.initial_capital,
+                "commission": self.config.commission,
+                "slippage": self.config.slippage,
+                "start_date": self.config.start_date,
+                "end_date": self.config.end_date,
+            },
+        }
 
     def reset(self):
         """Reset the backtesting engine for a new run."""
