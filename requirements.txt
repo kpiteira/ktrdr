@@ -115,7 +115,7 @@ jsonschema-specifications==2025.9.1
     # via jsonschema
 langchain==1.0.5
     # via ktrdr (pyproject.toml)
-langchain-core==1.0.4
+langchain-core==1.0.7
     # via
     #   langchain
     #   langchain-openai
