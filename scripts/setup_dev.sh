@@ -22,8 +22,7 @@ echo "  .venv\\Scripts\\activate  # Windows"
 
 # Install dependencies
 echo "Installing dependencies..."
-uv pip install -r requirements.txt
-uv pip install -r requirements-dev.txt
+uv sync --all-extras --dev
 
 # Create necessary directories
 echo "Creating necessary directories..."
