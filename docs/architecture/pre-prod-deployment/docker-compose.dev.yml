@@ -13,7 +13,7 @@ version: '3.8'
 #   2. docker compose -f docker-compose.dev.yml up
 #   3. Access backend at http://localhost:8000
 #
-# See design-input.md Section 5 for detailed local dev workflow.
+# See ARCHITECTURE.md "Local Development Environment" section for detailed workflow.
 # =============================================================================
 
 services:
