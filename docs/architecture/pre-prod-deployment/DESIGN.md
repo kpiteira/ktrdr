@@ -293,7 +293,13 @@ This design establishes a **production-grade deployment architecture** for KTRDR
 
 ## Next Steps
 
-1. **Implement** per [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) (phased tasks)
+1. **Implement** per phased plans:
+   - [PLAN_1A_DEPENDENCIES.md](PLAN_1A_DEPENDENCIES.md) - Dependencies & Dockerfile
+   - [PLAN_1B_LOCAL_DEV.md](PLAN_1B_LOCAL_DEV.md) - Local Dev Environment
+   - [PLAN_2_CICD_GHCR.md](PLAN_2_CICD_GHCR.md) - CI/CD & GHCR
+   - [PLAN_3_OBSERVABILITY.md](PLAN_3_OBSERVABILITY.md) - Observability Dashboards
+   - [PLAN_4_SECRETS_CLI.md](PLAN_4_SECRETS_CLI.md) - Secrets & Deployment CLI
+   - [PLAN_5_PREPROD.md](PLAN_5_PREPROD.md) - Pre-prod Deployment
 2. **Configure** per [ENV_VARS.md](ENV_VARS.md) (environment variables)
 3. **Deploy** per [OPERATIONS.md](OPERATIONS.md) (operational procedures)
 
@@ -301,7 +307,6 @@ This design establishes a **production-grade deployment architecture** for KTRDR
 
 **Related Documents**:
 - [ARCHITECTURE.md](ARCHITECTURE.md) - Technical specifications
-- [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) - Phased implementation tasks
 - [OPERATIONS.md](OPERATIONS.md) - Operational procedures
 - [ENV_VARS.md](ENV_VARS.md) - Environment variable reference
 - [ktrdr-dns-naming.md](ktrdr-dns-naming.md) - DNS naming strategy
@@ -309,6 +314,15 @@ This design establishes a **production-grade deployment architecture** for KTRDR
 - [.env.workers](.env.workers) - Worker stack non-secret configuration
 - [.env.dev.example](.env.dev.example) - Local development environment template
 - [docker-compose.dev.yml](docker-compose.dev.yml) - Local development compose file
+
+**Implementation Plans**:
+
+- [PLAN_1A_DEPENDENCIES.md](PLAN_1A_DEPENDENCIES.md)
+- [PLAN_1B_LOCAL_DEV.md](PLAN_1B_LOCAL_DEV.md)
+- [PLAN_2_CICD_GHCR.md](PLAN_2_CICD_GHCR.md)
+- [PLAN_3_OBSERVABILITY.md](PLAN_3_OBSERVABILITY.md)
+- [PLAN_4_SECRETS_CLI.md](PLAN_4_SECRETS_CLI.md)
+- [PLAN_5_PREPROD.md](PLAN_5_PREPROD.md)
 
 ---
 

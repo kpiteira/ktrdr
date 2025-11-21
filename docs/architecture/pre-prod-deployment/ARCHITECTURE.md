@@ -432,7 +432,7 @@ ktrdr deploy workers C
 - Hot reload mode (default): bind-mounted code, uvicorn --reload
 - Image mode (testing): toggle to test with CI-built images
 - Simplified networking: single Docker host, localhost access
-- Optional workers: start with `--profile workers`
+- 4 workers included (2 backtest, 2 training) for distributed testing
 
 **Services**:
 - `db` - PostgreSQL + TimescaleDB
@@ -440,17 +440,19 @@ ktrdr deploy workers C
 - `prometheus` - Metrics (7d retention for dev)
 - `grafana` - Dashboards
 - `jaeger` - Tracing
-- `backtest-worker` - Optional backtest worker (profile: workers)
-- `training-worker` - Optional training worker (profile: workers)
+- `backtest-worker-1` - Backtest worker (port 5003)
+- `backtest-worker-2` - Backtest worker (port 5004)
+- `training-worker-1` - Training worker (port 5005)
+- `training-worker-2` - Training worker (port 5006)
 
 **Usage**:
 
 ```bash
-# Start core services only (default)
+# Start all services (backend, workers, observability)
 docker compose -f docker-compose.dev.yml up
 
-# Start with workers for distributed testing
-docker compose -f docker-compose.dev.yml --profile workers up
+# Start in background
+docker compose -f docker-compose.dev.yml up -d
 
 # Test with built images (image mode)
 # 1. Build images: make build-backend TAG=local
@@ -491,7 +493,7 @@ docker pull ghcr.io/<github-username>/ktrdr-backend:latest
 **Automated** (via deployment CLI):
 - `ktrdr deploy` commands automatically authenticate before pulling images
 - Uses token from 1Password
-- See IMPLEMENTATION_PLAN.md Task 0.5 for details
+- See [PLAN_4_SECRETS_CLI.md](PLAN_4_SECRETS_CLI.md) Task 4.6 for details
 
 ---
 
@@ -500,11 +502,19 @@ docker pull ghcr.io/<github-username>/ktrdr-backend:latest
 - [DESIGN.md](DESIGN.md) - Design decisions and rationale
 - [OPERATIONS.md](OPERATIONS.md) - LXC provisioning, network setup, backups, DR
 - [ENV_VARS.md](ENV_VARS.md) - Comprehensive environment variable reference
-- [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) - Phased implementation tasks
 - [.env.core](.env.core) - Core stack non-secret configuration (safe to commit)
 - [.env.workers](.env.workers) - Worker stack non-secret configuration (safe to commit)
 - [.env.dev.example](.env.dev.example) - Local development environment template
 - [docker-compose.dev.yml](docker-compose.dev.yml) - Local development compose file
+
+**Implementation Plans**:
+
+- [PLAN_1A_DEPENDENCIES.md](PLAN_1A_DEPENDENCIES.md) - Dependencies & Dockerfile
+- [PLAN_1B_LOCAL_DEV.md](PLAN_1B_LOCAL_DEV.md) - Local Dev Environment
+- [PLAN_2_CICD_GHCR.md](PLAN_2_CICD_GHCR.md) - CI/CD & GHCR
+- [PLAN_3_OBSERVABILITY.md](PLAN_3_OBSERVABILITY.md) - Observability Dashboards
+- [PLAN_4_SECRETS_CLI.md](PLAN_4_SECRETS_CLI.md) - Secrets & Deployment CLI
+- [PLAN_5_PREPROD.md](PLAN_5_PREPROD.md) - Pre-prod Deployment
 
 ---
 
