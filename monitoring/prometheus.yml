@@ -1,10 +1,21 @@
 global:
   scrape_interval: 15s
-  evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: 'ktrdr-api'
+  - job_name: 'ktrdr-backend'
     static_configs:
       - targets: ['backend:8000']
+
+  - job_name: 'ktrdr-workers-b'
+    static_configs:
+      - targets:
+        - 'ktrdr-workers-b.internal:5003'
+        - 'ktrdr-workers-b.internal:5004'  # If replica 2 exists
     metrics_path: '/metrics'
-    scrape_interval: 15s
+
+  - job_name: 'ktrdr-workers-c'
+    static_configs:
+      - targets:
+        - 'ktrdr-workers-c.internal:5003'
+        - 'ktrdr-workers-c.internal:5004'  # If replica 2 exists
+    metrics_path: '/metrics'
