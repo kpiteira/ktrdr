@@ -17,7 +17,9 @@ from typing import Any, Optional
 
 from fastapi import FastAPI, HTTPException, Path, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from ktrdr.api.models.operations import (
     OperationListResponse,
@@ -136,6 +138,7 @@ class WorkerAPIBase:
         # Register common endpoints
         self._register_operations_endpoints()
         self._register_health_endpoint()
+        self._register_metrics_endpoint()
         self._register_root_endpoint()
         self._register_startup_event()
 
@@ -400,6 +403,21 @@ class WorkerAPIBase:
                     "service": f"{self.worker_type.value}-worker",
                     "error": str(e),
                 }
+
+    def _register_metrics_endpoint(self) -> None:
+        """
+        Register Prometheus metrics endpoint.
+
+        Exposes OpenTelemetry metrics for Prometheus scraping.
+        """
+
+        @self.app.get("/metrics")
+        async def metrics():
+            """Prometheus metrics endpoint."""
+            return Response(
+                content=generate_latest(),
+                media_type=CONTENT_TYPE_LATEST,
+            )
 
     def _register_root_endpoint(self) -> None:
         """Register root endpoint."""
