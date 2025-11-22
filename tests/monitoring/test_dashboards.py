@@ -98,6 +98,66 @@ class TestSystemOverviewDashboard:
                         ), f"Prometheus target in '{panel.get('title')}' missing expr"
 
 
+class TestWorkerStatusDashboard:
+    """Tests for the Worker Status dashboard."""
+
+    @pytest.fixture
+    def dashboard(self) -> dict:
+        """Load the worker status dashboard JSON."""
+        dashboard_path = DASHBOARDS_DIR / "worker-status.json"
+        assert dashboard_path.exists(), f"Dashboard file not found: {dashboard_path}"
+        with open(dashboard_path) as f:
+            return json.load(f)
+
+    def test_dashboard_has_required_fields(self, dashboard: dict) -> None:
+        """Dashboard must have required Grafana fields."""
+        required_fields = ["uid", "title", "panels", "schemaVersion", "timezone"]
+        for field in required_fields:
+            assert field in dashboard, f"Missing required field: {field}"
+
+    def test_dashboard_title_contains_worker(self, dashboard: dict) -> None:
+        """Dashboard title must identify it as Worker Status."""
+        assert "Worker" in dashboard["title"]
+
+    def test_dashboard_has_worker_count_panel(self, dashboard: dict) -> None:
+        """Dashboard must have a worker count panel."""
+        panel_titles = [p.get("title", "").lower() for p in dashboard["panels"]]
+        worker_panels = [t for t in panel_titles if "worker" in t]
+        assert len(worker_panels) > 0, "No worker count panel found"
+
+    def test_dashboard_has_health_matrix_panel(self, dashboard: dict) -> None:
+        """Dashboard must have a health matrix or table panel."""
+        panel_types = [p.get("type") for p in dashboard["panels"]]
+        assert "table" in panel_types or any(
+            "health" in p.get("title", "").lower() for p in dashboard["panels"]
+        ), "No health matrix/table panel found"
+
+    def test_worker_queries_filter_by_port(self, dashboard: dict) -> None:
+        """Worker queries should filter by worker ports (5003-5008)."""
+        found_port_filter = False
+        for panel in dashboard["panels"]:
+            for target in panel.get("targets", []):
+                expr = target.get("expr", "")
+                if "500[3-8]" in expr or "5003" in expr or "500" in expr:
+                    found_port_filter = True
+                    break
+        assert found_port_filter, "No worker port filtering found in queries"
+
+    def test_dashboard_has_refresh_interval(self, dashboard: dict) -> None:
+        """Dashboard must have auto-refresh configured."""
+        assert "refresh" in dashboard, "Dashboard missing refresh interval"
+        assert isinstance(dashboard["refresh"], str)
+
+    def test_all_panels_have_required_fields(self, dashboard: dict) -> None:
+        """Each panel must have required fields."""
+        required_panel_fields = ["id", "type", "title", "gridPos"]
+        for i, panel in enumerate(dashboard["panels"]):
+            if panel.get("type") == "row":
+                continue
+            for field in required_panel_fields:
+                assert field in panel, f"Panel {i} missing field: {field}"
+
+
 class TestDashboardProvisioning:
     """Tests for dashboard provisioning configuration."""
 
