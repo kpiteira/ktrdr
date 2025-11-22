@@ -4,6 +4,8 @@
 **Estimated Effort**: Medium
 **Prerequisites**: Project 1b (Local Dev Environment)
 
+**Branch:** infra/grafana-dashboard
+
 ---
 
 ## Goal
@@ -25,6 +27,7 @@ KTRDR already has comprehensive OpenTelemetry instrumentation with traces going 
 **Goal**: Understand what telemetry data is available
 
 **Actions**:
+
 1. Start local dev environment
 2. Run some operations (backtests, data downloads)
 3. Query Prometheus for available metrics
@@ -32,6 +35,7 @@ KTRDR already has comprehensive OpenTelemetry instrumentation with traces going 
 5. Document available data for dashboard design
 
 **Prometheus Exploration**:
+
 ```bash
 # List all metrics
 curl -s http://localhost:9090/api/v1/label/__name__/values | jq
@@ -41,6 +45,7 @@ curl -s 'http://localhost:9090/api/v1/query?query=up' | jq
 ```
 
 **Jaeger Exploration**:
+
 ```bash
 # List services
 curl -s http://localhost:16686/api/services | jq
@@ -50,6 +55,7 @@ curl -s 'http://localhost:16686/api/operations?service=ktrdr-backend' | jq
 ```
 
 **Acceptance Criteria**:
+
 - [ ] List of available Prometheus metrics documented
 - [ ] List of Jaeger services and operations documented
 - [ ] Key metrics identified for dashboards
@@ -81,12 +87,14 @@ curl -s 'http://localhost:16686/api/operations?service=ktrdr-backend' | jq
    - Operation types breakdown
 
 **Actions**:
+
 1. Sketch dashboard layouts
 2. Define panels for each dashboard
 3. Identify which metrics feed each panel
 4. Plan drill-down from overview to detail
 
 **Acceptance Criteria**:
+
 - [ ] Dashboard structure documented
 - [ ] Panels defined with data sources
 - [ ] Layout makes operational sense
@@ -98,6 +106,7 @@ curl -s 'http://localhost:16686/api/operations?service=ktrdr-backend' | jq
 **File**: `monitoring/grafana/dashboards/system-overview.json`
 
 **Panels to Include**:
+
 - Service Health (stat panel showing up/down)
 - Request Rate (time series)
 - Error Rate (time series)
@@ -105,6 +114,7 @@ curl -s 'http://localhost:16686/api/operations?service=ktrdr-backend' | jq
 - Active Services (table)
 
 **Actions**:
+
 1. Create dashboard JSON file
 2. Add service health panel using `up` metric
 3. Add request rate panel (if HTTP metrics available)
@@ -114,6 +124,7 @@ curl -s 'http://localhost:16686/api/operations?service=ktrdr-backend' | jq
 7. Test in Grafana
 
 **Acceptance Criteria**:
+
 - [ ] Dashboard loads without errors
 - [ ] Service health shows backend and workers
 - [ ] Panels update with real data
@@ -126,12 +137,14 @@ curl -s 'http://localhost:16686/api/operations?service=ktrdr-backend' | jq
 **File**: `monitoring/grafana/dashboards/worker-status.json`
 
 **Panels to Include**:
+
 - Registered Workers (stat)
 - Worker Health Matrix (table)
 - Operations by Worker (bar chart)
 - Worker Availability Timeline (time series)
 
 **Actions**:
+
 1. Create dashboard JSON file
 2. Add registered workers count
 3. Add worker health matrix
@@ -139,6 +152,7 @@ curl -s 'http://localhost:16686/api/operations?service=ktrdr-backend' | jq
 5. Test with multiple workers running
 
 **Acceptance Criteria**:
+
 - [ ] Dashboard shows all 4 workers from local dev
 - [ ] Health status accurate
 - [ ] Operations distribution visible after running tasks
@@ -150,6 +164,7 @@ curl -s 'http://localhost:16686/api/operations?service=ktrdr-backend' | jq
 **File**: `monitoring/grafana/dashboards/operations.json`
 
 **Panels to Include**:
+
 - Active Operations (stat)
 - Operations by Type (pie chart)
 - Operation Duration Distribution (histogram)
@@ -157,6 +172,7 @@ curl -s 'http://localhost:16686/api/operations?service=ktrdr-backend' | jq
 - Success/Failure Rate (time series)
 
 **Actions**:
+
 1. Create dashboard JSON file
 2. Add active operations count
 3. Add operations breakdown by type
@@ -165,6 +181,7 @@ curl -s 'http://localhost:16686/api/operations?service=ktrdr-backend' | jq
 6. Test with actual operations
 
 **Acceptance Criteria**:
+
 - [ ] Dashboard shows operation metrics
 - [ ] Types breakdown accurate
 - [ ] Duration metrics populate after operations
@@ -179,12 +196,14 @@ curl -s 'http://localhost:16686/api/operations?service=ktrdr-backend' | jq
 **Goal**: Auto-provision dashboards on Grafana startup
 
 **Actions**:
+
 1. Update dashboards.yml to point to dashboard directory
 2. Configure dashboard provider
 3. Test dashboards load on fresh Grafana start
 4. Verify dashboards appear in Grafana UI
 
 **Config**:
+
 ```yaml
 apiVersion: 1
 
@@ -200,6 +219,7 @@ providers:
 ```
 
 **Acceptance Criteria**:
+
 - [ ] Dashboards auto-provision on startup
 - [ ] Dashboards appear in KTRDR folder
 - [ ] No manual import required
@@ -211,11 +231,13 @@ providers:
 **Goal**: Mount dashboard files into Grafana container
 
 **Actions**:
+
 1. Add volume mount for dashboards directory
 2. Ensure dashboards.yml provisioning config is mounted
 3. Test fresh start loads dashboards
 
 **Docker Compose Update**:
+
 ```yaml
 grafana:
   image: grafana/grafana:latest
@@ -227,6 +249,7 @@ grafana:
 ```
 
 **Acceptance Criteria**:
+
 - [ ] Dashboard files mounted correctly
 - [ ] Grafana loads dashboards on startup
 - [ ] Changes to JSON files reflected after restart
@@ -238,6 +261,7 @@ grafana:
 **Goal**: Verify dashboards show meaningful data under load
 
 **Actions**:
+
 1. Start local dev environment
 2. Run various operations:
    - Data downloads
@@ -248,6 +272,7 @@ grafana:
 5. Check error scenarios display correctly
 
 **Test Scenarios**:
+
 ```bash
 # Start environment
 docker compose -f docker-compose.dev.yml up -d
@@ -260,6 +285,7 @@ ktrdr operations list
 ```
 
 **Acceptance Criteria**:
+
 - [ ] System Overview shows healthy services
 - [ ] Worker Status shows 4 workers
 - [ ] Operations dashboard populates with tasks
@@ -272,6 +298,7 @@ ktrdr operations list
 **Goal**: Help users understand and use the dashboards
 
 **Actions**:
+
 1. Document each dashboard's purpose
 2. Explain key panels and what they show
 3. Document common diagnostic workflows
@@ -279,12 +306,14 @@ ktrdr operations list
 5. Update CLAUDE.md debugging section to reference dashboards
 
 **Documentation Content**:
+
 - Dashboard descriptions
 - Key metrics explained
 - How to use for troubleshooting
 - How to customize/extend
 
 **Acceptance Criteria**:
+
 - [ ] Each dashboard documented
 - [ ] Diagnostic workflows explained
 - [ ] Screenshots included
@@ -295,6 +324,7 @@ ktrdr operations list
 ## Validation
 
 **Final Verification**:
+
 ```bash
 # 1. Start fresh environment
 docker compose -f docker-compose.dev.yml down -v

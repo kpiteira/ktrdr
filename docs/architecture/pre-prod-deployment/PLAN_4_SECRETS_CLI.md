@@ -4,6 +4,8 @@
 **Estimated Effort**: Large
 **Prerequisites**: Project 2 (CI/CD & GHCR)
 
+**Branch:** infra/secrets-cli
+
 ---
 
 ## Goal
@@ -25,6 +27,7 @@ Per [DESIGN.md](DESIGN.md) Decision 3, secrets are never stored in `.env` files 
 **Goal**: Create 1Password items for KTRDR secrets
 
 **Actions**:
+
 1. Create vault "KTRDR Homelab Secrets" (or use existing)
 2. Create item `ktrdr-homelab-core` with fields:
    - `db_username` - Database username
@@ -36,6 +39,7 @@ Per [DESIGN.md](DESIGN.md) Decision 3, secrets are never stored in `.env` files 
 4. Test access via `op` CLI
 
 **Testing**:
+
 ```bash
 # Verify op CLI installed
 op --version
@@ -48,6 +52,7 @@ op item get ktrdr-homelab-core --format json | jq '.fields[] | {label: .label, t
 ```
 
 **Acceptance Criteria**:
+
 - [ ] Vault created or identified
 - [ ] Item created with all required fields
 - [ ] Can access item via op CLI
@@ -62,6 +67,7 @@ op item get ktrdr-homelab-core --format json | jq '.fields[] | {label: .label, t
 **Goal**: Python module for fetching secrets from 1Password
 
 **Implementation**:
+
 ```python
 import subprocess
 import json
@@ -120,6 +126,7 @@ def check_1password_authenticated() -> bool:
 ```
 
 **Actions**:
+
 1. Create secrets.py module
 2. Implement fetch_secrets_from_1password function
 3. Implement check_1password_authenticated function
@@ -127,6 +134,7 @@ def check_1password_authenticated() -> bool:
 5. Write unit tests with mocked subprocess
 
 **Acceptance Criteria**:
+
 - [ ] Can fetch secrets from 1Password
 - [ ] Proper error messages for common failures
 - [ ] Unit tests pass with mocked subprocess
@@ -141,6 +149,7 @@ def check_1password_authenticated() -> bool:
 **Goal**: Get current git SHA for image tagging
 
 **Implementation**:
+
 ```python
 import subprocess
 
@@ -170,6 +179,7 @@ def get_latest_sha_tag() -> str:
 ```
 
 **Acceptance Criteria**:
+
 - [ ] Returns SHA in correct format
 - [ ] Handles non-git directories
 - [ ] Unit tests pass
@@ -183,6 +193,7 @@ def get_latest_sha_tag() -> str:
 **Goal**: Execute commands on remote hosts with inline env vars
 
 **Implementation**:
+
 ```python
 import subprocess
 import shlex
@@ -250,6 +261,7 @@ def ssh_exec_with_env(
 ```
 
 **Acceptance Criteria**:
+
 - [ ] Properly quotes env var values
 - [ ] Dry-run masks secrets
 - [ ] Handles SSH failures gracefully
@@ -264,6 +276,7 @@ def ssh_exec_with_env(
 **Goal**: Validate prerequisites before deployment
 
 **Implementation**:
+
 ```python
 import socket
 import subprocess
@@ -328,6 +341,7 @@ def validate_deployment_prerequisites(host: str) -> Tuple[bool, List[str]]:
 ```
 
 **Acceptance Criteria**:
+
 - [ ] Checks DNS resolution
 - [ ] Checks SSH connectivity
 - [ ] Checks remote Docker
@@ -344,6 +358,7 @@ def validate_deployment_prerequisites(host: str) -> Tuple[bool, List[str]]:
 **Goal**: Authenticate Docker to GHCR on remote host
 
 **Implementation**:
+
 ```python
 import subprocess
 from ktrdr.cli.helpers.ssh_utils import SSHError
@@ -377,6 +392,7 @@ def docker_login_ghcr(host: str, username: str, token: str) -> None:
 ```
 
 **Acceptance Criteria**:
+
 - [ ] Authenticates Docker on remote host
 - [ ] Token passed via stdin (not visible in ps)
 - [ ] Proper error handling
@@ -390,6 +406,7 @@ def docker_login_ghcr(host: str, username: str, token: str) -> None:
 **Goal**: Deploy core services to pre-prod
 
 **Implementation**:
+
 ```python
 import click
 from ktrdr.cli.helpers.secrets import fetch_secrets_from_1password, OnePasswordError
@@ -463,6 +480,7 @@ def core(service, dry_run, tag, skip_validation):
 ```
 
 **Acceptance Criteria**:
+
 - [ ] `ktrdr deploy core backend` works
 - [ ] `ktrdr deploy core all` deploys all services
 - [ ] Pre-deployment validation runs
@@ -480,6 +498,7 @@ def core(service, dry_run, tag, skip_validation):
 **Goal**: Deploy workers to pre-prod LXCs
 
 **Implementation**:
+
 ```python
 @deploy.command()
 @click.argument('node', type=click.Choice(['B', 'C']))
@@ -539,6 +558,7 @@ def workers(node, dry_run, tag, skip_validation, profile):
 ```
 
 **Acceptance Criteria**:
+
 - [ ] `ktrdr deploy workers B` works
 - [ ] `ktrdr deploy workers C` works
 - [ ] Profile scaling works (--profile scale-2)
@@ -554,11 +574,13 @@ def workers(node, dry_run, tag, skip_validation, profile):
 **Goal**: Register deploy commands with main CLI
 
 **Actions**:
+
 1. Import deploy command group
 2. Add to main CLI
 3. Test command discovery
 
 **Implementation**:
+
 ```python
 from ktrdr.cli.commands.deploy import deploy
 
@@ -567,6 +589,7 @@ cli.add_command(deploy)
 ```
 
 **Acceptance Criteria**:
+
 - [ ] `ktrdr --help` shows deploy command
 - [ ] `ktrdr deploy --help` shows core and workers
 - [ ] Commands accessible
@@ -576,6 +599,7 @@ cli.add_command(deploy)
 ### Task 4.10: Write Tests
 
 **Files**:
+
 - `tests/unit/cli/helpers/test_secrets.py`
 - `tests/unit/cli/helpers/test_ssh_utils.py`
 - `tests/unit/cli/helpers/test_validation.py`
@@ -584,6 +608,7 @@ cli.add_command(deploy)
 **Goal**: Comprehensive test coverage
 
 **Actions**:
+
 1. Write unit tests for each helper module
 2. Mock subprocess calls
 3. Write integration tests for deploy commands
@@ -591,6 +616,7 @@ cli.add_command(deploy)
 5. Aim for >90% coverage on new code
 
 **Acceptance Criteria**:
+
 - [ ] Unit tests for all helpers
 - [ ] Integration tests for deploy commands
 - [ ] Error scenarios covered
@@ -606,6 +632,7 @@ cli.add_command(deploy)
 **Goal**: Complete deployment guide
 
 **Sections**:
+
 1. Prerequisites
    - 1Password setup
    - SSH key configuration
@@ -627,6 +654,7 @@ cli.add_command(deploy)
    - Debug commands
 
 **Acceptance Criteria**:
+
 - [ ] All sections complete
 - [ ] Clear step-by-step instructions
 - [ ] Troubleshooting covers common issues
@@ -637,6 +665,7 @@ cli.add_command(deploy)
 ## Validation
 
 **Final Verification**:
+
 ```bash
 # 1. Test help
 ktrdr deploy --help

@@ -4,6 +4,8 @@
 **Estimated Effort**: Large
 **Prerequisites**: Project 4 (Secrets & Deployment CLI)
 
+**Branch:** infra/preprod
+
 ---
 
 ## Goal
@@ -25,6 +27,7 @@ This project brings together all previous work to deploy KTRDR to the Proxmox ho
 **Goal**: Ensure LXCs are provisioned and accessible
 
 **Prerequisites** (manual, per OPERATIONS.md):
+
 - Node A LXC: ktrdr-core (16GB RAM)
 - Node B LXC: ktrdr-workers-b (16GB RAM)
 - Node C LXC: ktrdr-workers-c (8GB RAM)
@@ -33,6 +36,7 @@ This project brings together all previous work to deploy KTRDR to the Proxmox ho
 - Docker installed on each LXC
 
 **Verification Steps**:
+
 1. SSH to each LXC
 2. Verify Docker is installed and running
 3. Verify disk space available
@@ -40,6 +44,7 @@ This project brings together all previous work to deploy KTRDR to the Proxmox ho
 5. Document IPs and hostnames
 
 **Commands**:
+
 ```bash
 # Test SSH access
 ssh backend.ktrdr.home.mynerd.place 'echo ok'
@@ -57,6 +62,7 @@ ssh workers-b.ktrdr.home.mynerd.place 'ping -c 3 backend.ktrdr.home.mynerd.place
 ```
 
 **Acceptance Criteria**:
+
 - [ ] All 3 LXCs accessible via SSH
 - [ ] Docker installed and running on each
 - [ ] Sufficient disk space (>20GB free on core)
@@ -69,6 +75,7 @@ ssh workers-b.ktrdr.home.mynerd.place 'ping -c 3 backend.ktrdr.home.mynerd.place
 **Goal**: DNS entries resolve correctly
 
 **Required DNS Entries** (in local DNS server):
+
 ```
 backend.ktrdr.home.mynerd.place     -> Node A IP
 postgres.ktrdr.home.mynerd.place    -> Node A IP
@@ -79,11 +86,13 @@ workers-c.ktrdr.home.mynerd.place   -> Node C IP
 ```
 
 **Actions**:
+
 1. Add DNS entries to local DNS server (BIND, Pi-hole, etc.)
 2. Test resolution from each LXC
 3. Test resolution from deployment machine
 
 **Verification**:
+
 ```bash
 # From deployment machine
 dig backend.ktrdr.home.mynerd.place
@@ -94,6 +103,7 @@ ssh backend.ktrdr.home.mynerd.place 'nslookup workers-b.ktrdr.home.mynerd.place'
 ```
 
 **Acceptance Criteria**:
+
 - [ ] All DNS entries configured
 - [ ] Resolution works from deployment machine
 - [ ] Resolution works between LXCs
@@ -105,6 +115,7 @@ ssh backend.ktrdr.home.mynerd.place 'nslookup workers-b.ktrdr.home.mynerd.place'
 **Goal**: NFS share accessible from all LXCs
 
 **On Core LXC** (NFS server):
+
 ```bash
 # Create share directory
 mkdir -p /srv/ktrdr-shared/{data,results,models,db-backups}
@@ -122,6 +133,7 @@ systemctl start nfs-kernel-server
 ```
 
 **On Worker LXCs** (NFS clients):
+
 ```bash
 # Create mount point
 mkdir -p /mnt/ktrdr-shared
@@ -134,6 +146,7 @@ mount -a
 ```
 
 **Verification**:
+
 ```bash
 # On worker LXC
 ls /mnt/ktrdr-shared
@@ -142,6 +155,7 @@ rm /mnt/ktrdr-shared/test-from-worker-b
 ```
 
 **Acceptance Criteria**:
+
 - [ ] NFS server running on core LXC
 - [ ] NFS mounted on worker LXCs
 - [ ] Can read/write from workers
@@ -154,6 +168,7 @@ rm /mnt/ktrdr-shared/test-from-worker-b
 **Goal**: Prepare directories for compose files
 
 **On Core LXC**:
+
 ```bash
 mkdir -p /opt/ktrdr-core
 # Copy docker-compose.core.yml here
@@ -162,6 +177,7 @@ mkdir -p /opt/ktrdr-core
 ```
 
 **On Worker LXCs**:
+
 ```bash
 mkdir -p /opt/ktrdr-workers-{b,c}
 # Copy docker-compose.workers.yml here
@@ -169,12 +185,14 @@ mkdir -p /opt/ktrdr-workers-{b,c}
 ```
 
 **Actions**:
+
 1. Create directories on each LXC
 2. Copy compose files from repository
 3. Copy environment files (non-secrets only)
 4. Copy monitoring configs to core
 
 **Acceptance Criteria**:
+
 - [ ] Directories created on all LXCs
 - [ ] Compose files in place
 - [ ] Monitoring configs in place on core
@@ -187,6 +205,7 @@ mkdir -p /opt/ktrdr-workers-{b,c}
 **Goal**: Ensure compose files are correct for pre-prod topology
 
 **docker-compose.core.yml Updates**:
+
 1. Verify image references use GHCR
 2. Update Prometheus config path
 3. Update Grafana provisioning paths
@@ -194,6 +213,7 @@ mkdir -p /opt/ktrdr-workers-{b,c}
 5. Verify network configuration
 
 **docker-compose.workers.yml Updates**:
+
 1. Customize WORKER_HOSTNAME per node
 2. Set correct KTRDR_API_URL
 3. Set correct OTLP_ENDPOINT
@@ -201,6 +221,7 @@ mkdir -p /opt/ktrdr-workers-{b,c}
 5. Update WORKER_PUBLIC_BASE_URL per node
 
 **Node B Example**:
+
 ```yaml
 environment:
   WORKER_PUBLIC_BASE_URL: http://workers-b.ktrdr.home.mynerd.place:5003
@@ -210,6 +231,7 @@ environment:
 ```
 
 **Acceptance Criteria**:
+
 - [ ] Core compose file correct
 - [ ] Worker compose files customized per node
 - [ ] All URLs point to correct hostnames
@@ -224,6 +246,7 @@ environment:
 **Goal**: Prometheus scrapes all services
 
 **Configuration**:
+
 ```yaml
 global:
   scrape_interval: 15s
@@ -251,6 +274,7 @@ scrape_configs:
 ```
 
 **Acceptance Criteria**:
+
 - [ ] Config includes backend
 - [ ] Config includes all workers on both nodes
 - [ ] Targets use correct hostnames/ports
@@ -262,11 +286,13 @@ scrape_configs:
 **Goal**: Core services running on Node A
 
 **Actions**:
+
 1. Run deployment CLI
 2. Wait for services to start
 3. Verify all services healthy
 
 **Commands**:
+
 ```bash
 # Deploy all core services
 ktrdr deploy core all
@@ -279,6 +305,7 @@ ssh backend.ktrdr.home.mynerd.place 'docker compose -f /opt/ktrdr-core/docker-co
 ```
 
 **Verification**:
+
 ```bash
 # Health checks
 curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/health
@@ -287,6 +314,7 @@ curl http://backend.ktrdr.home.mynerd.place:16686/api/services
 ```
 
 **Acceptance Criteria**:
+
 - [ ] All core services running
 - [ ] Backend API accessible
 - [ ] Grafana accessible
@@ -301,11 +329,13 @@ curl http://backend.ktrdr.home.mynerd.place:16686/api/services
 **Goal**: Workers running on Nodes B and C
 
 **Actions**:
+
 1. Deploy workers to Node B
 2. Deploy workers to Node C
 3. Verify workers register with backend
 
 **Commands**:
+
 ```bash
 # Deploy to Node B
 ktrdr deploy workers B
@@ -318,6 +348,7 @@ curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/workers | jq
 ```
 
 **Acceptance Criteria**:
+
 - [ ] Workers running on Node B
 - [ ] Workers running on Node C
 - [ ] All workers registered with backend
@@ -330,6 +361,7 @@ curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/workers | jq
 **Goal**: End-to-end system verification
 
 **Verification Steps**:
+
 1. Check all services via API
 2. Run sample operation
 3. Verify metrics in Prometheus
@@ -337,6 +369,7 @@ curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/workers | jq
 5. Check NFS access from workers
 
 **Commands**:
+
 ```bash
 # 1. Check registered workers
 curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/workers | jq
@@ -355,6 +388,7 @@ ssh workers-b.ktrdr.home.mynerd.place 'ls /mnt/ktrdr-shared/results'
 ```
 
 **Acceptance Criteria**:
+
 - [ ] All workers registered (expected: 4 on B, 4 on C)
 - [ ] Prometheus shows all targets UP
 - [ ] Sample operation completes successfully
@@ -368,6 +402,7 @@ ssh workers-b.ktrdr.home.mynerd.place 'ls /mnt/ktrdr-shared/results'
 **Goal**: Adapted dashboards for pre-prod topology
 
 **Actions**:
+
 1. Copy dashboards from local dev (Project 3)
 2. Update targets for pre-prod hostnames
 3. Add node-specific panels (Node B vs Node C)
@@ -375,12 +410,14 @@ ssh workers-b.ktrdr.home.mynerd.place 'ls /mnt/ktrdr-shared/results'
 5. Test with real pre-prod data
 
 **Dashboard Updates**:
+
 - System Overview: Show all nodes
 - Worker Status: Group by node
 - Operations: Show distribution across nodes
 - Add: Node health comparison panel
 
 **Acceptance Criteria**:
+
 - [ ] Dashboards loaded in pre-prod Grafana
 - [ ] Show data from all nodes
 - [ ] Node grouping visible
@@ -393,12 +430,14 @@ ssh workers-b.ktrdr.home.mynerd.place 'ls /mnt/ktrdr-shared/results'
 **Goal**: Verify can rollback to previous version
 
 **Actions**:
+
 1. Note current image tag
 2. Deploy new version (or re-deploy same)
 3. Rollback to previous tag
 4. Verify services work
 
 **Commands**:
+
 ```bash
 # Deploy specific older tag
 ktrdr deploy core all --tag sha-abc1234
@@ -410,6 +449,7 @@ curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/health
 ```
 
 **Acceptance Criteria**:
+
 - [ ] Can deploy specific tag
 - [ ] Services start with older version
 - [ ] System functions correctly
@@ -423,6 +463,7 @@ curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/health
 **Goal**: Complete operational documentation
 
 **Sections to Add/Update**:
+
 1. Daily operations checklist
 2. Deployment procedures
 3. Scaling procedures
@@ -431,6 +472,7 @@ curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/health
 6. Disaster recovery
 
 **Content**:
+
 - How to check system health
 - How to deploy updates
 - How to scale workers
@@ -439,6 +481,7 @@ curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/health
 - How to restore from backup
 
 **Acceptance Criteria**:
+
 - [ ] All operational procedures documented
 - [ ] Clear step-by-step instructions
 - [ ] Troubleshooting guide complete
@@ -449,6 +492,7 @@ curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/health
 ## Validation
 
 **Final System Verification**:
+
 ```bash
 # 1. All services healthy
 curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/health
@@ -503,6 +547,7 @@ ktrdr deploy core backend --tag sha-previous
 ## Dependencies
 
 **Depends on**:
+
 - Project 2 (CI/CD & GHCR) - need images to pull
 - Project 3 (Observability Dashboards) - dashboards to evolve
 - Project 4 (Secrets & Deployment CLI) - need deployment commands
@@ -523,6 +568,7 @@ ktrdr deploy core backend --tag sha-previous
 ## Post-Deployment
 
 After successful deployment:
+
 1. Monitor for 24-48 hours
 2. Run various operation types
 3. Check resource usage
@@ -548,6 +594,7 @@ After successful deployment:
 | 5 | Pre-prod Deployment | Ready |
 
 **Dependency Flow**:
+
 ```
 1a ──> 1b ──> 3
   \         /

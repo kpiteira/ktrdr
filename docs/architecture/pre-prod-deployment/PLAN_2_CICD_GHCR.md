@@ -4,6 +4,8 @@
 **Estimated Effort**: Medium
 **Prerequisites**: Project 1a (Dependencies & Dockerfile)
 
+**Branch:** infra/cicd_ghcr
+
 ---
 
 ## Goal
@@ -27,6 +29,7 @@ Per [DESIGN.md](DESIGN.md) Decision 4, CI builds images with git SHA tags for pe
 **Goal**: Automated image building on merge to main
 
 **Actions**:
+
 1. Create new workflow file
 2. Trigger on push to `main` and `workflow_dispatch` (manual)
 3. Set up Docker Buildx for efficient builds
@@ -37,6 +40,7 @@ Per [DESIGN.md](DESIGN.md) Decision 4, CI builds images with git SHA tags for pe
 8. Add build caching for faster subsequent builds
 
 **Workflow Content**:
+
 ```yaml
 name: Build and Push Images
 
@@ -91,6 +95,7 @@ jobs:
 ```
 
 **Acceptance Criteria**:
+
 - [ ] Workflow file created
 - [ ] Triggers on push to main
 - [ ] Manual trigger available
@@ -105,6 +110,7 @@ jobs:
 **Goal**: Verify end-to-end CI pipeline
 
 **Actions**:
+
 1. Merge workflow to main (or test on branch first)
 2. Verify workflow triggers
 3. Check build logs for errors
@@ -113,6 +119,7 @@ jobs:
 6. Verify build time is reasonable (<5 min)
 
 **Acceptance Criteria**:
+
 - [ ] Workflow runs successfully
 - [ ] Image pushed to GHCR
 - [ ] SHA tag created (e.g., `sha-a1b2c3d`)
@@ -127,6 +134,7 @@ jobs:
 **Goal**: Enable local image pulls from private GHCR
 
 **Actions**:
+
 1. Create GitHub Personal Access Token (PAT)
 2. Scope: `read:packages` only
 3. Store securely (will go to 1Password in Project 4)
@@ -134,6 +142,7 @@ jobs:
 5. Document the process
 
 **Testing**:
+
 ```bash
 # Authenticate
 echo $GITHUB_PAT | docker login ghcr.io -u <username> --password-stdin
@@ -146,6 +155,7 @@ docker images | grep ktrdr-backend
 ```
 
 **Acceptance Criteria**:
+
 - [ ] PAT created with read:packages scope
 - [ ] Can authenticate Docker to GHCR locally
 - [ ] Can pull latest image
@@ -158,6 +168,7 @@ docker images | grep ktrdr-backend
 **Goal**: Verify CI-built image works correctly
 
 **Actions**:
+
 1. Pull latest image from GHCR
 2. Run with required environment variables
 3. Verify health check passes
@@ -165,6 +176,7 @@ docker images | grep ktrdr-backend
 5. Compare behavior with locally-built image
 
 **Testing**:
+
 ```bash
 # Pull and run
 docker pull ghcr.io/<username>/ktrdr-backend:latest
@@ -183,6 +195,7 @@ curl http://localhost:8000/api/v1/health
 ```
 
 **Acceptance Criteria**:
+
 - [ ] Image pulls successfully
 - [ ] Container starts without errors
 - [ ] Health check passes
@@ -195,12 +208,14 @@ curl http://localhost:8000/api/v1/health
 **Goal**: Support running with GHCR images instead of local build
 
 **Actions**:
+
 1. Add commented `image:` lines to docker-compose.dev.yml
 2. Document how to switch between build mode and image mode
 3. Support `IMAGE_TAG` environment variable
 4. Test with GHCR images
 
 **Changes to docker-compose.dev.yml**:
+
 ```yaml
 backend:
   # Build mode (default for development)
@@ -212,6 +227,7 @@ backend:
 ```
 
 **Documentation**:
+
 ```markdown
 ## Testing with CI-Built Images
 
@@ -225,6 +241,7 @@ To use a specific version:
 ```bash
 IMAGE_TAG=sha-a1b2c3d docker compose -f docker-compose.dev.yml up
 ```
+
 ```
 
 **Acceptance Criteria**:
@@ -264,6 +281,7 @@ training-worker-1:
 ```
 
 **Acceptance Criteria**:
+
 - [ ] Core compose uses GHCR images
 - [ ] Worker compose uses GHCR images
 - [ ] IMAGE_TAG variable supported
@@ -276,6 +294,7 @@ training-worker-1:
 **Goal**: Clear documentation for image distribution
 
 **Actions**:
+
 1. Document CI workflow in ARCHITECTURE.md
 2. Document image tagging strategy
 3. Document how to find available tags
@@ -283,6 +302,7 @@ training-worker-1:
 5. Add troubleshooting section
 
 **Documentation Content**:
+
 - How CI builds images
 - Tag format (sha-xxx, latest)
 - How to list available tags
@@ -291,6 +311,7 @@ training-worker-1:
 - Troubleshooting common issues
 
 **Acceptance Criteria**:
+
 - [ ] ARCHITECTURE.md updated with CI workflow
 - [ ] Tagging strategy documented
 - [ ] Authentication documented
@@ -301,6 +322,7 @@ training-worker-1:
 ## Validation
 
 **Final Verification**:
+
 ```bash
 # 1. Verify CI workflow exists and runs
 # Check GitHub Actions tab for successful run
