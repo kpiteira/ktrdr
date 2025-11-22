@@ -197,7 +197,7 @@ class TestOperationsDashboard:
         for panel in dashboard["panels"]:
             for target in panel.get("targets", []):
                 expr = target.get("expr", "")
-                if "backtest" in expr or "training" in expr or "http_route" in expr:
+                if "backtest" in expr or "training" in expr or "http_target" in expr:
                     found_endpoint_filter = True
                     break
         assert found_endpoint_filter, "No operation endpoint filtering found in queries"

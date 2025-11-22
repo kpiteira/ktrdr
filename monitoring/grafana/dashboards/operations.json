@@ -36,7 +36,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(http_server_duration_milliseconds_count{http_route=~\".*/backtests/start|.*/training/start\"}[1h]))",
+          "expr": "sum(increase(http_server_duration_milliseconds_count{http_target=~\".*/backtests/start|.*/training/start\"}[1h]))",
           "refId": "A"
         }
       ],
@@ -87,7 +87,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(http_server_duration_milliseconds_count{http_route=~\".*/backtests/start\"}[1h]))",
+          "expr": "sum(increase(http_server_duration_milliseconds_count{http_target=~\".*/backtests/start\"}[1h]))",
           "refId": "A"
         }
       ],
@@ -138,7 +138,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(http_server_duration_milliseconds_count{http_route=~\".*/training/start\"}[1h]))",
+          "expr": "sum(increase(http_server_duration_milliseconds_count{http_target=~\".*/training/start\"}[1h]))",
           "refId": "A"
         }
       ],
@@ -189,7 +189,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(http_server_duration_milliseconds_count{http_route=~\".*/backtests/start|.*/training/start\",http_status_code=\"200\"}[1h])) / sum(rate(http_server_duration_milliseconds_count{http_route=~\".*/backtests/start|.*/training/start\"}[1h])) * 100 or vector(100)",
+          "expr": "sum(rate(http_server_duration_milliseconds_count{http_target=~\".*/backtests/start|.*/training/start\",http_status_code=\"200\"}[1h])) / sum(rate(http_server_duration_milliseconds_count{http_target=~\".*/backtests/start|.*/training/start\"}[1h])) * 100 or vector(100)",
           "refId": "A"
         }
       ],
@@ -242,8 +242,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (http_route) (increase(http_server_duration_milliseconds_count{http_route=~\".*/backtests/start|.*/training/start|.*/data/.*\"}[1h]))",
-          "legendFormat": "{{http_route}}",
+          "expr": "sum by (http_target) (increase(http_server_duration_milliseconds_count{http_target=~\".*/backtests/start|.*/training/start|.*/data/.*\"}[1h]))",
+          "legendFormat": "{{http_target}}",
           "refId": "A"
         }
       ],
@@ -294,7 +294,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(http_server_duration_milliseconds_sum{http_route=~\".*/backtests/start\"}[5m]) / rate(http_server_duration_milliseconds_count{http_route=~\".*/backtests/start\"}[5m])",
+          "expr": "rate(http_server_duration_milliseconds_sum{http_target=~\".*/backtests/start\"}[5m]) / rate(http_server_duration_milliseconds_count{http_target=~\".*/backtests/start\"}[5m])",
           "legendFormat": "Avg Duration",
           "refId": "A"
         }
@@ -364,7 +364,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(http_server_duration_milliseconds_count{http_route=~\".*/backtests/start|.*/training/start\",http_status_code=\"200\"}[5m]))",
+          "expr": "sum(rate(http_server_duration_milliseconds_count{http_target=~\".*/backtests/start|.*/training/start\",http_status_code=\"200\"}[5m]))",
           "legendFormat": "Success",
           "refId": "A"
         },
@@ -373,7 +373,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(http_server_duration_milliseconds_count{http_route=~\".*/backtests/start|.*/training/start\",http_status_code=~\"[45]..\"}[5m]))",
+          "expr": "sum(rate(http_server_duration_milliseconds_count{http_target=~\".*/backtests/start|.*/training/start\",http_status_code=~\"[45]..\"}[5m]))",
           "legendFormat": "Failure",
           "refId": "B"
         }
@@ -457,7 +457,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (http_status_code, http_route) (increase(http_server_duration_milliseconds_count{http_route=~\".*/backtests/start|.*/training/start\"}[1h]))",
+          "expr": "sum by (http_status_code, http_target) (increase(http_server_duration_milliseconds_count{http_target=~\".*/backtests/start|.*/training/start\"}[1h]))",
           "format": "table",
           "instant": true,
           "refId": "A"
@@ -492,7 +492,7 @@
             ]
           },
           {
-            "matcher": {"id": "byName", "options": "http_route"},
+            "matcher": {"id": "byName", "options": "http_target"},
             "properties": [
               {"id": "displayName", "value": "Endpoint"}
             ]
