@@ -321,6 +321,67 @@ ktrdr operations list
 
 ---
 
+### Task 3.10: Implement Custom Business Metrics (Future)
+
+**Goal**: Add custom Prometheus metrics for richer operational visibility
+
+**Background**: The telemetry audit identified gaps where standard OTEL metrics don't provide sufficient business-level visibility. Custom metrics would enable more actionable dashboards.
+
+**Metrics to Implement**:
+
+| Metric | Type | Location | Description |
+|--------|------|----------|-------------|
+| `ktrdr_workers_registered_total` | Gauge | WorkerRegistry | Total registered workers |
+| `ktrdr_workers_available` | Gauge | WorkerRegistry | Currently available workers |
+| `ktrdr_operations_active` | Gauge | OperationsService | Active operations count |
+| `ktrdr_operations_total` | Counter | OperationsService | Total operations (by type, status) |
+| `ktrdr_operation_duration_seconds` | Histogram | OperationsService | Operation duration distribution |
+
+**Actions**:
+
+1. Add prometheus_client dependency (already present)
+2. Create metrics registry in ktrdr/telemetry/metrics.py
+3. Instrument WorkerRegistry with worker count metrics
+4. Instrument OperationsService with operation metrics
+5. Update dashboards to use new metrics
+6. Test metrics populate correctly
+
+**Example Implementation**:
+
+```python
+from prometheus_client import Gauge, Counter, Histogram
+
+# Worker metrics
+workers_registered = Gauge(
+    'ktrdr_workers_registered_total',
+    'Total registered workers',
+    ['worker_type']
+)
+
+workers_available = Gauge(
+    'ktrdr_workers_available',
+    'Currently available workers',
+    ['worker_type']
+)
+
+# In WorkerRegistry
+def register_worker(self, worker):
+    # ... existing logic ...
+    workers_registered.labels(worker_type=worker.type).inc()
+```
+
+**Acceptance Criteria**:
+
+- [ ] Custom metrics exposed at /metrics endpoint
+- [ ] Worker count metrics accurate
+- [ ] Operation metrics populate
+- [ ] Dashboards updated to use new metrics
+- [ ] Documentation updated
+
+**Priority**: Low (existing metrics provide basic visibility)
+
+---
+
 ## Validation
 
 **Final Verification**:
