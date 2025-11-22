@@ -75,6 +75,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy from builder stage - only what's needed for production
 COPY --from=builder /app/.venv/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
 COPY --from=builder /app/ktrdr $APP_HOME/ktrdr
+COPY --from=builder /app/mcp $APP_HOME/mcp
 COPY --from=builder /app/config $APP_HOME/config
 COPY --from=builder /app/pyproject.toml $APP_HOME/
 
