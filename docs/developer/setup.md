@@ -6,7 +6,7 @@ This guide helps new developers set up their development environment for the KTR
 
 Before starting, ensure you have the following installed:
 
-- **Python 3.11+**: Required for running the KTRDR application
+- **Python 3.13+**: Required for running the KTRDR application
 - **Git**: For version control
 - **Docker** and **Docker Compose**: For containerized development
 - **Interactive Brokers TWS or Gateway** (optional): For live data integration
@@ -31,18 +31,8 @@ pip install uv
 Set up your development environment:
 
 ```bash
-# Create virtual environment
-uv venv
-
-# Activate the virtual environment
-# On macOS/Linux:
-source .venv/bin/activate
-# On Windows:
-# .venv\Scripts\activate
-
-# Install dependencies
-uv pip install -r requirements.txt
-uv pip install -r requirements-dev.txt
+# Install all dependencies including dev tools (automatically creates venv)
+uv sync --all-extras --dev
 ```
 
 ### 3. Configuration Setup

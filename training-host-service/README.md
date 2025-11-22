@@ -107,7 +107,7 @@ session_id = response.json()["session_id"]
 training-host-service/
 ├── main.py              # FastAPI application entry point
 ├── config.py            # Configuration management
-├── requirements.txt     # Service-specific dependencies
+├── (uses main project uv.lock for dependencies)
 ├── start.sh            # Service startup script
 ├── stop.sh             # Service shutdown script
 ├── endpoints/          # API endpoint modules

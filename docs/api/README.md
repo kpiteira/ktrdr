@@ -8,16 +8,14 @@ The KTRDR API provides a RESTful interface for accessing KTRDR trading system fu
 
 ### Installing Dependencies
 
-The API dependencies are listed in the main `requirements.txt` file. You can install them with:
+Install all dependencies using uv:
 
 ```bash
-uv pip install -r requirements.txt
-```
+# For production
+uv sync --all-extras
 
-For development and testing, also install the development dependencies:
-
-```bash
-uv pip install -r requirements-dev.txt
+# For development and testing
+uv sync --all-extras --dev
 ```
 
 ### Running the API Server

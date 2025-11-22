@@ -10,7 +10,7 @@ This guide provides step-by-step instructions for installing and setting up the 
 
 Before installing KTRDR, ensure you have the following:
 
-- **Python 3.11+** installed on your system
+- **Python 3.13+** installed on your system
 - **Git** for cloning the repository (or download the ZIP file directly)
 - **Interactive Brokers TWS or Gateway** (optional, for live data)
 
@@ -41,15 +41,11 @@ git clone https://github.com/yourusername/ktrdr2.git
 cd ktrdr2
 ```
 
-### Step 3: Create a Virtual Environment and Install Dependencies
+### Step 3: Install Dependencies
 
 ```bash
-# Create and activate a virtual environment
-uv venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install dependencies
-uv pip install -r requirements.txt
+# Install dependencies (automatically creates venv)
+uv sync --all-extras
 ```
 
 ### Step 4: Verify Installation
@@ -61,7 +57,9 @@ python ktrdr_cli.py --version
 
 You should see the current version of KTRDR displayed.
 
-## Method 2: Using pip
+## Method 2: Using pip (Legacy)
+
+> **Note**: UV is the recommended installation method. This method is provided for compatibility.
 
 ### Step 1: Clone the Repository
 
@@ -70,22 +68,21 @@ git clone https://github.com/yourusername/ktrdr2.git
 cd ktrdr2
 ```
 
-### Step 2: Create a Virtual Environment and Install Dependencies
+### Step 2: Install UV and Dependencies
 
 ```bash
-# Create and activate a virtual environment
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+# Install UV
+pip install uv
 
 # Install dependencies
-pip install -r requirements.txt
+uv sync --all-extras
 ```
 
 ### Step 3: Verify Installation
 
 ```bash
 # Run the CLI to verify installation
-python ktrdr_cli.py --version
+uv run ktrdr --version
 ```
 
 ## Method 3: Using Docker
@@ -131,29 +128,14 @@ git clone https://github.com/yourusername/ktrdr2.git
 cd ktrdr2
 ```
 
-### Step 2: Create a Virtual Environment
+### Step 2: Install in Development Mode
 
 ```bash
-# Using UV (recommended)
-uv venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Or using standard venv
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+# Install all dependencies including dev tools
+uv sync --all-extras --dev
 ```
 
-### Step 3: Install in Development Mode
-
-```bash
-# Install development dependencies
-uv pip install -r requirements-dev.txt
-
-# Install the package in development mode
-pip install -e .
-```
-
-This allows you to modify the code and see changes immediately without reinstalling.
+This installs the package in development mode, allowing you to modify the code and see changes immediately.
 
 ## Configuration
 
