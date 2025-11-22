@@ -54,6 +54,7 @@ dependencies = [
     "prometheus-client>=0.19.0",
     "mcp[cli]>=1.2.0",
     "aiosqlite>=0.21.0",
+    "python-json-logger>=4.0.0",
 ]
 
 [project.optional-dependencies]

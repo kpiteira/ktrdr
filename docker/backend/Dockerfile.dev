@@ -30,11 +30,11 @@ RUN mkdir -p /root/.cache/pip /root/.cache/uv && \
     chmod -R 777 /root/.cache/pip /root/.cache/uv
 
 # Copy ONLY dependency files first - this is the key caching optimization
-COPY requirements.txt requirements-dev.txt ./
+COPY pyproject.toml uv.lock ./
 
-# Install Python dependencies with UV
-# This layer will be cached as long as requirements files don't change
-RUN uv pip install --system -r requirements.txt -r requirements-dev.txt
+# Install Python dependencies with UV sync
+# This layer will be cached as long as dependency files don't change
+RUN uv sync --frozen --no-install-project
 
 # Create non-root user for better security even in development
 RUN useradd -m ktrdr && \
@@ -51,7 +51,7 @@ RUN mkdir -p /app/logs /app/data /app/output /app/tests && \
 USER ktrdr
 
 # Command to run the application with hot-reload enabled
-CMD ["uvicorn", "ktrdr.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-exclude", "logs", "--reload-exclude", "logs/*", "--reload-exclude", "*.log", "--log-config", "/app/ktrdr/config/logging_config.json"]
+CMD ["/app/.venv/bin/uvicorn", "ktrdr.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-exclude", "logs", "--reload-exclude", "logs/*", "--reload-exclude", "*.log", "--log-config", "/app/ktrdr/config/logging_config.json"]
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \

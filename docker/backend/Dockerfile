@@ -25,17 +25,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip install --no-cache-dir uv
 
 # Copy dependency files
-COPY requirements.txt ./
+COPY pyproject.toml uv.lock ./
 
-# Install Python dependencies with uv
-# Note: Using the --system flag to install in the system Python environment
-RUN uv pip install --system --no-cache-dir -r requirements.txt
+# Install Python dependencies with uv sync (creates .venv)
+RUN uv sync --frozen --no-dev --no-install-project
 
 # Copy the project files
 COPY . .
 
-# Build the package with uv
-RUN uv pip install --system --no-cache-dir -e .
+# Install the project package
+RUN uv sync --frozen --no-dev
 
 # --------------------------------------
 # STAGE 2: Runtime stage
@@ -74,10 +73,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy from builder stage - only what's needed for production
-COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
+COPY --from=builder /app/.venv/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
 COPY --from=builder /app/ktrdr $APP_HOME/ktrdr
-COPY --from=builder /app/setup_dev.sh $APP_HOME/
+COPY --from=builder /app/config $APP_HOME/config
 COPY --from=builder /app/pyproject.toml $APP_HOME/
 
 # Change ownership of the app directory
@@ -100,4 +98,4 @@ USER $APP_USER
 ENTRYPOINT ["/usr/bin/tini", "--"]
 
 # Default command to run the FastAPI server
-CMD ["uvicorn", "ktrdr.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--log-config", "/home/ktrdr/app/ktrdr/config/logging_config.json"]
+CMD ["python", "-m", "uvicorn", "ktrdr.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--log-config", "/home/ktrdr/app/ktrdr/config/logging_config.json"]
