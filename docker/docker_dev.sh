@@ -1,5 +1,17 @@
 #!/bin/bash
-# Docker development helper script for KTRDR
+# ⚠️  DEPRECATED: This script is deprecated in favor of direct docker compose commands.
+#
+# Use instead:
+#   docker compose -f docker-compose.dev.yml up        # Start all services
+#   docker compose -f docker-compose.dev.yml up -d     # Start in background
+#   docker compose -f docker-compose.dev.yml logs -f   # View logs
+#   docker compose -f docker-compose.dev.yml down      # Stop all services
+#   docker compose -f docker-compose.dev.yml build     # Rebuild after Dockerfile changes
+#   docker compose -f docker-compose.dev.yml restart backend  # Restart specific service
+#
+# See CLAUDE.md for complete command reference.
+#
+# Docker development helper script for KTRDR (DEPRECATED)
 
 # Change to docker directory for docker-compose commands
 # Get the actual script location (resolving symlinks) - macOS compatible

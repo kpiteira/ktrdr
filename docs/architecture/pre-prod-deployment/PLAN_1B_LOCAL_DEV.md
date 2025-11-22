@@ -4,6 +4,8 @@
 **Estimated Effort**: Medium
 **Prerequisites**: Project 1a (Dependencies & Dockerfile)
 
+**Branch:** update_local_dev_env
+
 ---
 
 ## Goal
@@ -25,6 +27,7 @@ The current Docker setup uses `docker_dev.sh` wrapper script and may have incons
 **Goal**: Understand current state before refactoring
 
 **Actions**:
+
 1. Review existing `docker-compose*.yml` files
 2. Review `docker_dev.sh` to understand what it does
 3. Document current service configuration
@@ -32,6 +35,7 @@ The current Docker setup uses `docker_dev.sh` wrapper script and may have incons
 5. Note any hardcoded values that should be configurable
 
 **Acceptance Criteria**:
+
 - [ ] Current Docker setup documented
 - [ ] Pain points identified
 - [ ] Clear list of what to preserve vs. change
@@ -45,6 +49,7 @@ The current Docker setup uses `docker_dev.sh` wrapper script and may have incons
 **Goal**: Single compose file for local development
 
 **Services to Include**:
+
 - `db` - PostgreSQL 16 + TimescaleDB
 - `backend` - KTRDR backend API (hot reload mode)
 - `prometheus` - Metrics collection
@@ -56,6 +61,7 @@ The current Docker setup uses `docker_dev.sh` wrapper script and may have incons
 - `training-worker-2` - Second training worker
 
 **Configuration Principles**:
+
 - Hot reload by default (bind-mounted code)
 - All services in single network
 - Named volumes for persistence
@@ -63,6 +69,7 @@ The current Docker setup uses `docker_dev.sh` wrapper script and may have incons
 - Sensible resource limits
 
 **Actions**:
+
 1. Create `docker-compose.dev.yml` with all services
 2. Configure PostgreSQL with TimescaleDB extension
 3. Configure backend with volume mounts for hot reload
@@ -72,6 +79,7 @@ The current Docker setup uses `docker_dev.sh` wrapper script and may have incons
 7. Test complete stack startup
 
 **Acceptance Criteria**:
+
 - [ ] All 9 services defined
 - [ ] PostgreSQL uses TimescaleDB image
 - [ ] Backend has hot reload (code mounted, uvicorn --reload)
@@ -88,12 +96,14 @@ The current Docker setup uses `docker_dev.sh` wrapper script and may have incons
 **Goal**: Template for local development secrets
 
 **Actions**:
+
 1. Create template with all required environment variables
 2. Include sensible defaults for local dev
 3. Add comments explaining each variable
 4. Document which are secrets vs. configuration
 
 **Content Structure**:
+
 ```bash
 # Database
 DB_HOST=db
@@ -116,6 +126,7 @@ OTLP_ENDPOINT=http://jaeger:4317
 ```
 
 **Acceptance Criteria**:
+
 - [ ] All required variables documented
 - [ ] Sensible local dev defaults provided
 - [ ] Clear comments explaining purpose
@@ -128,6 +139,7 @@ OTLP_ENDPOINT=http://jaeger:4317
 **Goal**: Database ready for time-series data
 
 **Actions**:
+
 1. Use `timescale/timescaledb:latest-pg16` image
 2. Configure health check
 3. Set up initialization scripts if needed
@@ -135,6 +147,7 @@ OTLP_ENDPOINT=http://jaeger:4317
 5. Test TimescaleDB extension is available
 
 **Docker Compose Config**:
+
 ```yaml
 db:
   image: timescale/timescaledb:latest-pg16
@@ -154,6 +167,7 @@ db:
 ```
 
 **Acceptance Criteria**:
+
 - [ ] TimescaleDB image used
 - [ ] Health check configured
 - [ ] Data persists across restarts
@@ -166,12 +180,14 @@ db:
 **Goal**: Multiple workers running simultaneously
 
 **Port Allocation**:
+
 - backtest-worker-1: 5003
 - backtest-worker-2: 5004
 - training-worker-1: 5005
 - training-worker-2: 5006
 
 **Actions**:
+
 1. Define each worker as separate service (not using --scale)
 2. Configure unique WORKER_PORT for each
 3. Configure WORKER_PUBLIC_BASE_URL for self-registration
@@ -179,6 +195,7 @@ db:
 5. Connect to backend and db
 
 **Docker Compose Config** (example for one worker):
+
 ```yaml
 backtest-worker-1:
   build:
@@ -204,6 +221,7 @@ backtest-worker-1:
 ```
 
 **Acceptance Criteria**:
+
 - [ ] 4 workers defined (2 backtest, 2 training)
 - [ ] Each has unique port
 - [ ] Workers register with backend on startup
@@ -216,6 +234,7 @@ backtest-worker-1:
 **Goal**: Prometheus, Grafana, and Jaeger working
 
 **Actions**:
+
 1. Configure Prometheus with appropriate scrape config
 2. Configure Grafana with Prometheus and Jaeger datasources
 3. Configure Jaeger with OTLP collector
@@ -223,9 +242,10 @@ backtest-worker-1:
 5. Use dev-appropriate retention (7 days for Prometheus)
 
 **Acceptance Criteria**:
-- [ ] Prometheus accessible at http://localhost:9090
-- [ ] Grafana accessible at http://localhost:3000
-- [ ] Jaeger accessible at http://localhost:16686
+
+- [ ] Prometheus accessible at <http://localhost:9090>
+- [ ] Grafana accessible at <http://localhost:3000>
+- [ ] Jaeger accessible at <http://localhost:16686>
 - [ ] Prometheus scrapes backend metrics
 - [ ] Jaeger receives traces from backend
 
@@ -238,11 +258,13 @@ backtest-worker-1:
 **Goal**: Prometheus configuration for local development
 
 **Actions**:
+
 1. Create scrape config for local services (using Docker service names)
 2. Configure scrape interval (15s)
 3. Target backend and all workers
 
 **Content**:
+
 ```yaml
 global:
   scrape_interval: 15s
@@ -262,6 +284,7 @@ scrape_configs:
 ```
 
 **Acceptance Criteria**:
+
 - [ ] Config created
 - [ ] Prometheus loads config successfully
 - [ ] All targets show as UP in Prometheus
@@ -273,6 +296,7 @@ scrape_configs:
 **Goal**: Remove wrapper script in favor of direct commands
 
 **Actions**:
+
 1. Document current `docker_dev.sh` functionality
 2. Create equivalent direct docker compose commands
 3. Update documentation with new commands
@@ -280,6 +304,7 @@ scrape_configs:
 5. Remove from CLAUDE.md recommendations
 
 **New Commands to Document**:
+
 ```bash
 # Start all services
 docker compose -f docker-compose.dev.yml up
@@ -301,6 +326,7 @@ docker compose -f docker-compose.dev.yml restart backend
 ```
 
 **Acceptance Criteria**:
+
 - [ ] All docker_dev.sh functionality available via direct commands
 - [ ] docker_dev.sh marked as deprecated
 - [ ] Documentation updated with new commands
@@ -313,12 +339,14 @@ docker compose -f docker-compose.dev.yml restart backend
 **Goal**: Proper gitignore for local dev files
 
 **Actions**:
+
 1. Add `.env.dev` to .gitignore (contains secrets)
 2. Keep `.env.dev.example` tracked
 3. Add local volume directories if any
 4. Add any other local dev artifacts
 
 **Rules to Add**:
+
 ```gitignore
 # Local development environment (contains secrets)
 .env.dev
@@ -328,6 +356,7 @@ dev-shared/
 ```
 
 **Acceptance Criteria**:
+
 - [ ] `.env.dev` ignored
 - [ ] `.env.dev.example` tracked
 - [ ] Cannot accidentally commit local secrets
@@ -348,6 +377,7 @@ dev-shared/
 4. Make script executable
 
 **Script**:
+
 ```bash
 #!/bin/bash
 # scripts/validate-env.sh
@@ -394,6 +424,7 @@ check_vars
 **Goal**: Clear instructions for local development
 
 **Actions**:
+
 1. Update README with quick start using docker-compose.dev.yml
 2. Update CLAUDE.md "Running the System" section
 3. Document all services and their ports
@@ -401,12 +432,14 @@ check_vars
 5. Remove references to docker_dev.sh
 
 **Documentation Sections**:
+
 - Quick Start
 - Service URLs (backend, grafana, jaeger, etc.)
 - Common Commands
 - Troubleshooting
 
 **Acceptance Criteria**:
+
 - [ ] README has clear quick start
 - [ ] CLAUDE.md updated
 - [ ] All service URLs documented
@@ -417,6 +450,7 @@ check_vars
 ## Validation
 
 **Final Verification**:
+
 ```bash
 # 1. Copy environment template
 cp .env.dev.example .env.dev

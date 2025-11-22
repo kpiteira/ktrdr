@@ -116,8 +116,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      # Note: Task 1.7 will create prometheus-dev.yml with worker targets
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus-dev.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'

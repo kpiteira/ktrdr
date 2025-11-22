@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'backend'
+    static_configs:
+      - targets: ['backend:8000']
+
+  - job_name: 'workers'
+    static_configs:
+      - targets:
+        - 'backtest-worker-1:5003'
+        - 'backtest-worker-2:5004'
+        - 'training-worker-1:5005'
+        - 'training-worker-2:5006'
