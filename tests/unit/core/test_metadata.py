@@ -19,10 +19,17 @@ def test_metadata_module():
 
 def test_environment_override():
     """Test environment-specific configuration override."""
-    # Store original environment
+    # Store original environment variables
     original_env = os.environ.get("KTRDR_ENVIRONMENT")
+    original_port = os.environ.get("KTRDR_API_PORT")
+    original_reload = os.environ.get("KTRDR_API_RELOAD")
+    original_log_level = os.environ.get("KTRDR_API_LOG_LEVEL")
 
     try:
+        # Clear any env var overrides that would interfere with config file values
+        for key in ["KTRDR_API_PORT", "KTRDR_API_RELOAD", "KTRDR_API_LOG_LEVEL"]:
+            os.environ.pop(key, None)
+
         # Set to testing environment
         os.environ["KTRDR_ENVIRONMENT"] = "testing"
         metadata.reload_config()
@@ -46,6 +53,15 @@ def test_environment_override():
             os.environ["KTRDR_ENVIRONMENT"] = original_env
         else:
             os.environ.pop("KTRDR_ENVIRONMENT", None)
+
+        # Restore env var overrides
+        if original_port is not None:
+            os.environ["KTRDR_API_PORT"] = original_port
+        if original_reload is not None:
+            os.environ["KTRDR_API_RELOAD"] = original_reload
+        if original_log_level is not None:
+            os.environ["KTRDR_API_LOG_LEVEL"] = original_log_level
+
         metadata.reload_config()
 
 

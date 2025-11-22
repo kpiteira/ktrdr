@@ -19,16 +19,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v3
         with:
-          python-version: '3.12'
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
 
-      - name: Install uv
-        run: pip install uv
+      - name: Set up Python
+        run: uv python install 3.13
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --all-extras --dev
 
       - name: Start API server
         run: |

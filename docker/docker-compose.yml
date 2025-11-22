@@ -121,7 +121,7 @@ services:
     networks:
       - ktrdr-network
     # Run the backtesting worker (using WorkerAPIBase pattern)
-    command: ["uvicorn", "ktrdr.backtesting.backtest_worker:app", "--host", "0.0.0.0", "--port", "5003", "--reload"]
+    command: ["/app/.venv/bin/uvicorn", "ktrdr.backtesting.backtest_worker:app", "--host", "0.0.0.0", "--port", "5003", "--reload"]
 
   # Frontend React/TypeScript service - Development configuration
   frontend:
@@ -157,12 +157,7 @@ services:
   # MCP Server for Claude research integration - Optional research profile
   mcp:
     profiles: ["research"]
-    build:
-      context: ../mcp
-      dockerfile: Dockerfile
-      cache_from:
-        - ktrdr-mcp:dev
-    image: ktrdr-mcp:dev
+    image: ktrdr-backend:dev
     container_name: ktrdr-mcp
     restart: "no"  # MCP servers run on-demand when clients connect, not as persistent services
     volumes:
