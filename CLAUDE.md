@@ -456,21 +456,35 @@ pytest tests/
 ### Running the System
 
 ```bash
-# Start complete system (IB + Training host services + Docker)
-./start_ktrdr.sh
+# Start complete local dev environment (recommended)
+docker compose -f docker-compose.dev.yml up
 
-# Start Docker development environment only
-./docker_dev.sh start
-./docker_dev.sh logs        # View logs
-./docker_dev.sh stop        # Stop containers
+# Start in background
+docker compose -f docker-compose.dev.yml up -d
 
-# Start API server directly (no Docker)
-uv run python scripts/run_api_server.py
+# View logs
+docker compose -f docker-compose.dev.yml logs -f
 
-# Start host services individually
+# Stop all services
+docker compose -f docker-compose.dev.yml down
+
+# Rebuild after Dockerfile changes
+docker compose -f docker-compose.dev.yml build
+
+# Restart specific service
+docker compose -f docker-compose.dev.yml restart backend
+
+# Start host services (for IB Gateway / GPU training)
 cd ib-host-service && ./start.sh
 cd training-host-service && ./start.sh
 ```
+
+**Service URLs** (when running):
+
+- Backend API: <http://localhost:8000>
+- Grafana: <http://localhost:3000>
+- Jaeger UI: <http://localhost:16686>
+- Prometheus: <http://localhost:9090>
 
 ### CLI Usage
 

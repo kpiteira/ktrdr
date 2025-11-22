@@ -1,0 +1,383 @@
+# KTRDR Local Development Environment
+# Single command startup: docker compose -f docker-compose.dev.yml up
+#
+# Services: db, backend, prometheus, grafana, jaeger, 4 workers
+# All services on single network with hot reload enabled
+
+services:
+  # PostgreSQL + TimescaleDB - Time-series optimized database
+  db:
+    image: timescale/timescaledb:latest-pg16
+    container_name: ktrdr-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-ktrdr}
+      POSTGRES_USER: ${DB_USER:-ktrdr}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-localdev}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-ktrdr}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ktrdr-network
+
+  # FastAPI Backend - Central orchestrator
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile.dev
+      cache_from:
+        - ktrdr-backend:dev
+    image: ktrdr-backend:dev
+    container_name: ktrdr-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount source code for hot-reloading
+      - ./ktrdr:/app/ktrdr
+      - ./tests:/app/tests
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./config:/app/config:ro
+      - ./strategies:/app/strategies:ro
+      - ./models:/app/models
+      - ./output:/app/output
+      - ./training_analytics:/app/training_analytics
+      # Cache directories
+      - pip-cache:/root/.cache/pip
+      - uv-cache:/root/.cache/uv
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+      - PYTHONPATH=/app
+      # Database
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-ktrdr}
+      - DB_USER=${DB_USER:-ktrdr}
+      - DB_PASSWORD=${DB_PASSWORD:-localdev}
+      # Backend API URL
+      - KTRDR_API_URL=http://backend:8000
+      # Observability
+      - OTLP_ENDPOINT=http://jaeger:4317
+      # IB Host Service (runs natively on Mac)
+      - USE_IB_HOST_SERVICE=${USE_IB_HOST_SERVICE:-true}
+      - IB_HOST_SERVICE_URL=http://host.docker.internal:5001
+      # JWT for API auth
+      - JWT_SECRET=${JWT_SECRET:-local-dev-secret-minimum-32-characters-long}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+      jaeger:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - ktrdr-network
+
+  # Jaeger - Distributed tracing
+  jaeger:
+    image: jaegertracing/all-in-one:1.53
+    container_name: ktrdr-jaeger
+    restart: unless-stopped
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4317:4317"    # OTLP gRPC
+      - "4318:4318"    # OTLP HTTP
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - LOG_LEVEL=info
+    networks:
+      - ktrdr-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:16686"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Prometheus - Metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ktrdr-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus-dev.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    networks:
+      - ktrdr-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Grafana - Dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ktrdr-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_ADMIN_PASSWORD:-admin}
+    volumes:
+      - ./monitoring/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./monitoring/grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - jaeger
+    networks:
+      - ktrdr-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Backtest Worker 1
+  backtest-worker-1:
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile.dev
+      cache_from:
+        - ktrdr-backend:dev
+    image: ktrdr-backend:dev
+    container_name: ktrdr-backtest-worker-1
+    restart: unless-stopped
+    ports:
+      - "5003:5003"
+    volumes:
+      - ./ktrdr:/app/ktrdr
+      - ./data:/app/data:ro
+      - ./models:/app/models:ro
+      - ./strategies:/app/strategies:ro
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+      - pip-cache:/root/.cache/pip
+      - uv-cache:/root/.cache/uv
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+      - PYTHONPATH=/app
+      - KTRDR_API_URL=http://backend:8000
+      - WORKER_TYPE=backtesting
+      - WORKER_PORT=5003
+      - WORKER_PUBLIC_BASE_URL=http://backtest-worker-1:5003
+      - OTLP_ENDPOINT=http://jaeger:4317
+      # Database access for checkpointing
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-ktrdr}
+      - DB_USER=${DB_USER:-ktrdr}
+      - DB_PASSWORD=${DB_PASSWORD:-localdev}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - ktrdr-network
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    command: /app/.venv/bin/uvicorn ktrdr.backtesting.backtest_worker:app --host 0.0.0.0 --port 5003 --reload
+
+  # Backtest Worker 2
+  backtest-worker-2:
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile.dev
+      cache_from:
+        - ktrdr-backend:dev
+    image: ktrdr-backend:dev
+    container_name: ktrdr-backtest-worker-2
+    restart: unless-stopped
+    ports:
+      - "5004:5004"
+    volumes:
+      - ./ktrdr:/app/ktrdr
+      - ./data:/app/data:ro
+      - ./models:/app/models:ro
+      - ./strategies:/app/strategies:ro
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+      - pip-cache:/root/.cache/pip
+      - uv-cache:/root/.cache/uv
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+      - PYTHONPATH=/app
+      - KTRDR_API_URL=http://backend:8000
+      - WORKER_TYPE=backtesting
+      - WORKER_PORT=5004
+      - WORKER_PUBLIC_BASE_URL=http://backtest-worker-2:5004
+      - OTLP_ENDPOINT=http://jaeger:4317
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-ktrdr}
+      - DB_USER=${DB_USER:-ktrdr}
+      - DB_PASSWORD=${DB_PASSWORD:-localdev}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - ktrdr-network
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    command: /app/.venv/bin/uvicorn ktrdr.backtesting.backtest_worker:app --host 0.0.0.0 --port 5004 --reload
+
+  # Training Worker 1
+  training-worker-1:
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile.dev
+      cache_from:
+        - ktrdr-backend:dev
+    image: ktrdr-backend:dev
+    container_name: ktrdr-training-worker-1
+    restart: unless-stopped
+    ports:
+      - "5005:5005"
+    volumes:
+      - ./ktrdr:/app/ktrdr
+      - ./data:/app/data:ro
+      - ./models:/app/models
+      - ./strategies:/app/strategies:ro
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+      - pip-cache:/root/.cache/pip
+      - uv-cache:/root/.cache/uv
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+      - PYTHONPATH=/app
+      - KTRDR_API_URL=http://backend:8000
+      - WORKER_TYPE=training
+      - WORKER_PORT=5005
+      - WORKER_PUBLIC_BASE_URL=http://training-worker-1:5005
+      - OTLP_ENDPOINT=http://jaeger:4317
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-ktrdr}
+      - DB_USER=${DB_USER:-ktrdr}
+      - DB_PASSWORD=${DB_PASSWORD:-localdev}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5005/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - ktrdr-network
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    command: /app/.venv/bin/uvicorn ktrdr.training.training_worker:app --host 0.0.0.0 --port 5005 --reload
+
+  # Training Worker 2
+  training-worker-2:
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile.dev
+      cache_from:
+        - ktrdr-backend:dev
+    image: ktrdr-backend:dev
+    container_name: ktrdr-training-worker-2
+    restart: unless-stopped
+    ports:
+      - "5006:5006"
+    volumes:
+      - ./ktrdr:/app/ktrdr
+      - ./data:/app/data:ro
+      - ./models:/app/models
+      - ./strategies:/app/strategies:ro
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+      - pip-cache:/root/.cache/pip
+      - uv-cache:/root/.cache/uv
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+      - PYTHONPATH=/app
+      - KTRDR_API_URL=http://backend:8000
+      - WORKER_TYPE=training
+      - WORKER_PORT=5006
+      - WORKER_PUBLIC_BASE_URL=http://training-worker-2:5006
+      - OTLP_ENDPOINT=http://jaeger:4317
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-ktrdr}
+      - DB_USER=${DB_USER:-ktrdr}
+      - DB_PASSWORD=${DB_PASSWORD:-localdev}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5006/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - ktrdr-network
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    command: /app/.venv/bin/uvicorn ktrdr.training.training_worker:app --host 0.0.0.0 --port 5006 --reload
+
+networks:
+  ktrdr-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  prometheus_data:
+  grafana_data:
+  pip-cache:
+  uv-cache:

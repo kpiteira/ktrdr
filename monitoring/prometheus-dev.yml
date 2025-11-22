@@ -1,0 +1,10 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'backend'
+    static_configs:
+      - targets: ['backend:8000']
+
+  # Note: Workers don't expose /metrics endpoint (pre-existing issue)
+  # TODO: Add metrics support to WorkerAPIBase pattern

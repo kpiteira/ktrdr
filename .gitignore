@@ -98,7 +98,11 @@ training-host-service/models
 *.cert
 .secrets/
 .env
+.env.dev
 credentials.json
+
+# Local development storage
+dev-shared/
 auth_tokens.json
 config/*_secure.yaml
 
