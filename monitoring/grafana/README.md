@@ -36,10 +36,10 @@ This directory contains Grafana dashboard configurations for monitoring KTRDR op
 **Purpose**: Monitor distributed worker capacity and health.
 
 **Panels**:
-- **Registered Workers** - Total worker count
-- **Healthy Workers** - Workers currently up
-- **Backtest Workers** - Backtest worker count (ports 5003-5004)
-- **Training Workers** - Training worker count (ports 5005-5006)
+- **Registered Workers** - Total registered worker count (uses `ktrdr_workers_registered_total`)
+- **Available Workers** - Workers not currently busy (uses `ktrdr_workers_available`)
+- **Backtest Workers** - Registered backtest workers
+- **Training Workers** - Registered training workers
 - **Worker Health Matrix** - Table with per-worker status
 - **Worker CPU Usage** - CPU utilization per worker
 - **Worker Memory Usage** - Memory consumption per worker
@@ -175,12 +175,27 @@ rate(http_server_duration_milliseconds_count{http_status_code=~"5.."}[5m])
 
 # Latency percentiles
 histogram_quantile(0.95, rate(http_server_duration_milliseconds_bucket[5m]) by (le))
+```
 
-# Worker filtering
-{instance=~".*:500[3-8]"}
+### Custom Business Metrics
 
-# Operation filtering
-{http_route=~".*/backtests/start|.*/training/start"}
+KTRDR exposes custom Prometheus metrics for operational visibility:
+
+```promql
+# Worker metrics
+ktrdr_workers_registered_total{worker_type="backtesting|training"}  # Registered workers
+ktrdr_workers_available{worker_type="backtesting|training"}         # Available (not busy) workers
+
+# Operation metrics
+ktrdr_operations_active                                             # Currently active operations
+ktrdr_operations_total{operation_type="...", status="..."}          # Total operations counter
+ktrdr_operation_duration_seconds{operation_type="...", status="..."} # Duration histogram
+
+# Example queries
+sum(ktrdr_workers_registered_total)                                 # Total registered workers
+sum(ktrdr_workers_available)                                        # Total available workers
+sum(increase(ktrdr_operations_total[1h]))                           # Operations in last hour
+sum(ktrdr_operations_total{status="completed"}) / sum(ktrdr_operations_total) * 100  # Success rate
 ```
 
 ---

@@ -35,7 +35,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "count(up{instance=~\".*:500[3-8]\"})",
+          "expr": "sum(ktrdr_workers_registered_total)",
           "refId": "A"
         }
       ],
@@ -68,8 +68,8 @@
     {
       "id": 2,
       "type": "stat",
-      "title": "Healthy Workers",
-      "description": "Number of workers currently healthy",
+      "title": "Available Workers",
+      "description": "Number of workers currently available (not busy)",
       "gridPos": {
         "x": 6,
         "y": 0,
@@ -86,7 +86,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(up{instance=~\".*:500[3-8]\"})",
+          "expr": "sum(ktrdr_workers_available)",
           "refId": "A"
         }
       ],
@@ -122,7 +122,7 @@
       "id": 3,
       "type": "stat",
       "title": "Backtest Workers",
-      "description": "Number of backtest workers (ports 5003, 5004)",
+      "description": "Number of registered backtest workers",
       "gridPos": {
         "x": 12,
         "y": 0,
@@ -139,7 +139,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(up{instance=~\".*:500[34]\"})",
+          "expr": "ktrdr_workers_registered_total{worker_type=\"backtesting\"}",
           "refId": "A"
         }
       ],
@@ -173,7 +173,7 @@
       "id": 4,
       "type": "stat",
       "title": "Training Workers",
-      "description": "Number of training workers (ports 5005, 5006)",
+      "description": "Number of registered training workers",
       "gridPos": {
         "x": 18,
         "y": 0,
@@ -190,7 +190,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(up{instance=~\".*:500[56]\"})",
+          "expr": "ktrdr_workers_registered_total{worker_type=\"training\"}",
           "refId": "A"
         }
       ],

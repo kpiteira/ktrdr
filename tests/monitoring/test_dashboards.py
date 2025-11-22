@@ -182,7 +182,9 @@ class TestOperationsDashboard:
     def test_dashboard_has_operation_count_panel(self, dashboard: dict) -> None:
         """Dashboard must have an operation count panel."""
         panel_titles = [p.get("title", "").lower() for p in dashboard["panels"]]
-        ops_panels = [t for t in panel_titles if "operation" in t or "ops" in t or "backtest" in t]
+        ops_panels = [
+            t for t in panel_titles if "operation" in t or "ops" in t or "backtest" in t
+        ]
         assert len(ops_panels) > 0, "No operation count panel found"
 
     def test_dashboard_has_success_rate_panel(self, dashboard: dict) -> None:

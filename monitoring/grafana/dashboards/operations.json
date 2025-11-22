@@ -36,7 +36,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(http_server_duration_milliseconds_count{http_target=~\".*/backtests/start|.*/trainings/start\"}[1h]))",
+          "expr": "sum(increase(ktrdr_operations_total[1h]))",
           "refId": "A"
         }
       ],
@@ -87,7 +87,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(http_server_duration_milliseconds_count{http_target=~\".*/backtests/start\"}[1h]))",
+          "expr": "sum(increase(ktrdr_operations_total{operation_type=\"backtesting\"}[1h]))",
           "refId": "A"
         }
       ],
@@ -138,7 +138,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(http_server_duration_milliseconds_count{http_target=~\".*/trainings/start\"}[1h]))",
+          "expr": "sum(increase(ktrdr_operations_total{operation_type=\"training\"}[1h]))",
           "refId": "A"
         }
       ],
@@ -189,7 +189,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(http_server_duration_milliseconds_count{http_target=~\".*/backtests/start|.*/trainings/start\",http_status_code=\"200\"}[1h])) / sum(rate(http_server_duration_milliseconds_count{http_target=~\".*/backtests/start|.*/trainings/start\"}[1h])) * 100 or vector(100)",
+          "expr": "sum(ktrdr_operations_total{status=\"completed\"}) / sum(ktrdr_operations_total) * 100 or vector(100)",
           "refId": "A"
         }
       ],
