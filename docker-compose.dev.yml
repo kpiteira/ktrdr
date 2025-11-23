@@ -3,6 +3,12 @@
 #
 # Services: db, backend, prometheus, grafana, jaeger, 4 workers
 # All services on single network with hot reload enabled
+#
+# IMAGE MODE: To test with CI-built images from GHCR instead of building locally:
+# 1. Authenticate: echo $GITHUB_PAT | docker login ghcr.io -u <username> --password-stdin
+# 2. Comment out 'build:' sections below and uncomment 'image:' lines
+# 3. Run: docker compose -f docker-compose.dev.yml up
+# To use a specific version: IMAGE_TAG=sha-abc1234 docker compose -f docker-compose.dev.yml up
 
 services:
   # PostgreSQL + TimescaleDB - Time-series optimized database
@@ -28,12 +34,15 @@ services:
 
   # FastAPI Backend - Central orchestrator
   backend:
+    # Build mode (default for development)
     build:
       context: .
       dockerfile: docker/backend/Dockerfile.dev
       cache_from:
         - ktrdr-backend:dev
     image: ktrdr-backend:dev
+    # Image mode (uncomment to test with CI-built images)
+    # image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     container_name: ktrdr-backend
     restart: unless-stopped
     ports:
@@ -164,12 +173,15 @@ services:
 
   # Backtest Worker 1
   backtest-worker-1:
+    # Build mode (default)
     build:
       context: .
       dockerfile: docker/backend/Dockerfile.dev
       cache_from:
         - ktrdr-backend:dev
     image: ktrdr-backend:dev
+    # Image mode (uncomment to test with CI-built images)
+    # image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     container_name: ktrdr-backtest-worker-1
     restart: unless-stopped
     ports:
@@ -217,12 +229,15 @@ services:
 
   # Backtest Worker 2
   backtest-worker-2:
+    # Build mode (default)
     build:
       context: .
       dockerfile: docker/backend/Dockerfile.dev
       cache_from:
         - ktrdr-backend:dev
     image: ktrdr-backend:dev
+    # Image mode (uncomment to test with CI-built images)
+    # image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     container_name: ktrdr-backtest-worker-2
     restart: unless-stopped
     ports:
@@ -269,12 +284,15 @@ services:
 
   # Training Worker 1
   training-worker-1:
+    # Build mode (default)
     build:
       context: .
       dockerfile: docker/backend/Dockerfile.dev
       cache_from:
         - ktrdr-backend:dev
     image: ktrdr-backend:dev
+    # Image mode (uncomment to test with CI-built images)
+    # image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     container_name: ktrdr-training-worker-1
     restart: unless-stopped
     ports:
@@ -321,12 +339,15 @@ services:
 
   # Training Worker 2
   training-worker-2:
+    # Build mode (default)
     build:
       context: .
       dockerfile: docker/backend/Dockerfile.dev
       cache_from:
         - ktrdr-backend:dev
     image: ktrdr-backend:dev
+    # Image mode (uncomment to test with CI-built images)
+    # image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     container_name: ktrdr-training-worker-2
     restart: unless-stopped
     ports:
