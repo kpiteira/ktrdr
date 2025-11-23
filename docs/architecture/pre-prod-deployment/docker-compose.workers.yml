@@ -22,7 +22,7 @@ services:
   # Backtest Workers
   # ---------------------------------------------------------------------------
   backtest-worker-1:
-    image: ghcr.io/<github-username>/ktrdr-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     container_name: backtest-worker-1
     restart: unless-stopped
     deploy:
@@ -52,7 +52,7 @@ services:
       - ktrdr-workers
 
   backtest-worker-2:
-    image: ghcr.io/<github-username>/ktrdr-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     container_name: backtest-worker-2
     restart: unless-stopped
     deploy:
@@ -83,7 +83,7 @@ services:
       - scale-2
 
   backtest-worker-3:
-    image: ghcr.io/<github-username>/ktrdr-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     container_name: backtest-worker-3
     restart: unless-stopped
     deploy:
@@ -117,7 +117,7 @@ services:
   # Training Workers
   # ---------------------------------------------------------------------------
   training-worker-1:
-    image: ghcr.io/<github-username>/ktrdr-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     container_name: training-worker-1
     restart: unless-stopped
     deploy:
@@ -146,7 +146,7 @@ services:
       - ktrdr-workers
 
   training-worker-2:
-    image: ghcr.io/<github-username>/ktrdr-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     container_name: training-worker-2
     restart: unless-stopped
     deploy:
@@ -177,7 +177,7 @@ services:
       - scale-2
 
   training-worker-3:
-    image: ghcr.io/<github-username>/ktrdr-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     container_name: training-worker-3
     restart: unless-stopped
     deploy:

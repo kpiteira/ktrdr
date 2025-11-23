@@ -20,7 +20,7 @@ services:
       - ktrdr-core
 
   backend:
-    image: ghcr.io/<github-username>/ktrdr-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     container_name: ktrdr-backend
     restart: unless-stopped
     ports:
