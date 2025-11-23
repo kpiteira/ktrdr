@@ -54,10 +54,18 @@ def docker_login_ghcr(
         )
 
         if result.returncode != 0:
-            raise DockerError(f"Docker login failed: {result.stderr}")
+            # Sanitize stderr to avoid exposing sensitive information
+            stderr = result.stderr.strip() if result.stderr else "Unknown error"
+            if len(stderr) > 200:
+                stderr = stderr[:200] + "..."
+            raise DockerError(f"Docker login failed: {stderr}")
 
         return True
     except subprocess.CalledProcessError as e:
-        raise DockerError(f"Docker login failed: {e.stderr}") from e
+        # Sanitize stderr to avoid exposing sensitive information
+        stderr = e.stderr.strip() if e.stderr else "Unknown error"
+        if len(stderr) > 200:
+            stderr = stderr[:200] + "..."
+        raise DockerError(f"Docker login failed: {stderr}") from e
     except subprocess.TimeoutExpired as e:
         raise DockerError("Docker login timed out") from e

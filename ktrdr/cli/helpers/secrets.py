@@ -50,7 +50,11 @@ def fetch_secrets_from_1password(item_name: str) -> dict[str, str]:
                 f"Item '{item_name}' not found in 1Password"
             ) from None
         else:
-            raise OnePasswordError(f"1Password error: {e.stderr}") from e
+            # Sanitize stderr to avoid exposing sensitive information
+            stderr = e.stderr.strip() if e.stderr else "Unknown error"
+            if len(stderr) > 200:
+                stderr = stderr[:200] + "..."
+            raise OnePasswordError(f"1Password error: {stderr}") from e
     except FileNotFoundError as e:
         raise OnePasswordError("1Password CLI (op) not installed") from e
 

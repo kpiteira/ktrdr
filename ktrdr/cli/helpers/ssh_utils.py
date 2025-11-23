@@ -41,8 +41,8 @@ def ssh_exec_with_env(
     env_parts = [f"{k}={shlex.quote(v)}" for k, v in env_vars.items()]
     env_string = " ".join(env_parts)
 
-    # Build full command
-    full_cmd = f"cd {workdir} && {env_string} {command}"
+    # Build full command with proper quoting for workdir
+    full_cmd = f"cd {shlex.quote(workdir)} && {env_string} {command}"
     ssh_cmd = ["ssh", host, full_cmd]
 
     if dry_run:
@@ -66,6 +66,11 @@ def ssh_exec_with_env(
         )
         return result.stdout
     except subprocess.CalledProcessError as e:
-        raise SSHError(f"SSH command failed: {e.stderr}") from e
+        # Sanitize stderr to avoid exposing sensitive information
+        stderr = e.stderr.strip() if e.stderr else "Unknown error"
+        # Truncate long error messages
+        if len(stderr) > 200:
+            stderr = stderr[:200] + "..."
+        raise SSHError(f"SSH command failed: {stderr}") from e
     except subprocess.TimeoutExpired as e:
         raise SSHError("SSH command timed out after 5 minutes") from e
