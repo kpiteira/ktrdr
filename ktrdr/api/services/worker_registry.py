@@ -12,6 +12,7 @@ from typing import Optional
 import httpx
 
 from ktrdr.api.models.workers import WorkerEndpoint, WorkerStatus, WorkerType
+from ktrdr.monitoring.metrics import update_worker_metrics
 from ktrdr.monitoring.service_telemetry import trace_service_method
 
 logger = logging.getLogger(__name__)
@@ -89,6 +90,9 @@ class WorkerRegistry:
             )
             self._workers[worker_id] = worker
             logger.info(f"Worker {worker_id} registered ({worker_type})")
+
+        # Update Prometheus metrics
+        update_worker_metrics(self._workers)
 
         return worker
 
@@ -262,6 +266,8 @@ class WorkerRegistry:
             logger.info(
                 f"Worker {worker_id} marked as BUSY (operation: {operation_id})"
             )
+            # Update Prometheus metrics
+            update_worker_metrics(self._workers)
 
     def mark_available(self, worker_id: str) -> None:
         """
@@ -279,6 +285,8 @@ class WorkerRegistry:
             worker.status = WorkerStatus.AVAILABLE
             worker.current_operation_id = None
             logger.info(f"Worker {worker_id} marked as AVAILABLE")
+            # Update Prometheus metrics
+            update_worker_metrics(self._workers)
 
     async def health_check_worker(self, worker_id: str) -> bool:
         """
@@ -325,6 +333,9 @@ class WorkerRegistry:
                     worker.last_health_check = datetime.utcnow()
                     worker.last_healthy_at = datetime.utcnow()
 
+                    # Update Prometheus metrics
+                    update_worker_metrics(self._workers)
+
                     logger.debug(f"Health check passed for {worker_id}")
                     return True
                 else:
@@ -346,6 +357,8 @@ class WorkerRegistry:
                 f"Worker {worker_id} marked TEMPORARILY_UNAVAILABLE "
                 f"after {worker.health_check_failures} failures"
             )
+            # Update Prometheus metrics
+            update_worker_metrics(self._workers)
 
         return False
 
@@ -379,6 +392,10 @@ class WorkerRegistry:
         for worker_id in to_remove:
             del self._workers[worker_id]
             logger.info(f"Removed dead worker: {worker_id}")
+
+        # Update Prometheus metrics if any workers were removed
+        if to_remove:
+            update_worker_metrics(self._workers)
 
     async def start(self) -> None:
         """

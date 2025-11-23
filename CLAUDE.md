@@ -657,6 +657,27 @@ make ci                # Run unit tests + quality checks
 
 ## 🔍 DEBUGGING TIPS
 
+### Grafana Dashboards (First Stop)
+
+**IMPORTANT**: Check Grafana dashboards first for quick diagnostics before diving into logs.
+
+**Dashboards**: <http://localhost:3000>
+
+| Dashboard | URL | Use Case |
+|-----------|-----|----------|
+| System Overview | `/d/ktrdr-system-overview` | Service health, error rates, latency |
+| Worker Status | `/d/ktrdr-worker-status` | Worker capacity, resource usage |
+| Operations | `/d/ktrdr-operations` | Operation counts, success rates |
+
+**Quick Workflows**:
+
+- **"Is it working?"** → System Overview: Check Healthy Services count
+- **"Why is it slow?"** → System Overview: Check P95 Latency panel
+- **"Workers missing?"** → Worker Status: Check Healthy Workers and Health Matrix
+- **"Operations failing?"** → Operations: Check Success Rate and Status Distribution
+
+**Documentation**: [monitoring/grafana/README.md](monitoring/grafana/README.md)
+
 ### Host Services Not Working
 
 ```bash

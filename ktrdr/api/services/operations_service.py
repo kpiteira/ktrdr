@@ -27,6 +27,11 @@ from ktrdr.async_infrastructure.cancellation import (
 )
 from ktrdr.errors import DataError
 from ktrdr.logging import get_logger
+from ktrdr.monitoring.metrics import (
+    increment_operations_total,
+    operations_active,
+    record_operation_duration,
+)
 from ktrdr.monitoring.service_telemetry import create_service_span, trace_service_method
 
 logger = get_logger(__name__)
@@ -149,6 +154,9 @@ class OperationsService:
 
                 # Add to registry
                 self._operations[operation_id] = operation
+
+                # Update Prometheus metrics
+                operations_active.inc()
 
                 logger.info(
                     f"Created operation: {operation_id} (type: {operation_type})"
@@ -308,6 +316,17 @@ class OperationsService:
             if operation_id in self._operation_tasks:
                 del self._operation_tasks[operation_id]
 
+            # Update Prometheus metrics
+            operations_active.dec()
+            increment_operations_total(operation.operation_type.value, "completed")
+            if operation.started_at and operation.completed_at:
+                duration = (
+                    operation.completed_at - operation.started_at
+                ).total_seconds()
+                record_operation_duration(
+                    operation.operation_type.value, "completed", duration
+                )
+
             logger.info(f"Completed operation: {operation_id}")
 
     async def fail_operation(
@@ -344,6 +363,17 @@ class OperationsService:
             # Clean up task reference
             if operation_id in self._operation_tasks:
                 del self._operation_tasks[operation_id]
+
+            # Update Prometheus metrics
+            operations_active.dec()
+            increment_operations_total(operation.operation_type.value, "failed")
+            if operation.started_at and operation.completed_at:
+                duration = (
+                    operation.completed_at - operation.started_at
+                ).total_seconds()
+                record_operation_duration(
+                    operation.operation_type.value, "failed", duration
+                )
 
             logger.error(f"Failed operation: {operation_id} - {error_message}")
 
@@ -436,6 +466,17 @@ class OperationsService:
                 operation.status = OperationStatus.CANCELLED
                 operation.completed_at = datetime.now(timezone.utc)
                 operation.error_message = reason or "Operation cancelled by user"
+
+            # Update Prometheus metrics
+            operations_active.dec()
+            increment_operations_total(operation.operation_type.value, "cancelled")
+            if operation.started_at and operation.completed_at:
+                duration = (
+                    operation.completed_at - operation.started_at
+                ).total_seconds()
+                record_operation_duration(
+                    operation.operation_type.value, "cancelled", duration
+                )
 
             logger.info(
                 f"Cancelled operation: {operation_id} (task_cancelled: {cancelled_task}, remote_cancelled: {remote_cancelled})"

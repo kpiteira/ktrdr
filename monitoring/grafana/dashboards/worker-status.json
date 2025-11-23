@@ -1,7 +1,7 @@
 {
-  "uid": "ktrdr-operations",
-  "title": "KTRDR Operations Dashboard",
-  "description": "Tracking of KTRDR operations including backtests, training, and data downloads",
+  "uid": "ktrdr-worker-status",
+  "title": "KTRDR Worker Status",
+  "description": "Status of KTRDR workers including health, resources, and availability",
   "schemaVersion": 39,
   "timezone": "browser",
   "refresh": "30s",
@@ -13,13 +13,12 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "links": [],
-  "tags": ["ktrdr", "operations", "monitoring"],
   "panels": [
     {
       "id": 1,
       "type": "stat",
-      "title": "Operations/Hour",
-      "description": "Total operations started in the last hour",
+      "title": "Registered Workers",
+      "description": "Total number of registered workers",
       "gridPos": {
         "x": 0,
         "y": 0,
@@ -36,13 +35,13 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(ktrdr_operations_total[1h]))",
+          "expr": "sum(ktrdr_workers_registered_total)",
           "refId": "A"
         }
       ],
       "options": {
         "colorMode": "value",
-        "graphMode": "area",
+        "graphMode": "none",
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
@@ -69,8 +68,8 @@
     {
       "id": 2,
       "type": "stat",
-      "title": "Backtests/Hour",
-      "description": "Backtest operations in the last hour",
+      "title": "Available Workers",
+      "description": "Number of workers currently available (not busy)",
       "gridPos": {
         "x": 6,
         "y": 0,
@@ -87,109 +86,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(ktrdr_operations_total{operation_type=\"backtesting\"}[1h]))",
-          "refId": "A"
-        }
-      ],
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"color": "blue", "value": null}
-            ]
-          },
-          "mappings": [],
-          "unit": "none"
-        },
-        "overrides": []
-      }
-    },
-    {
-      "id": 3,
-      "type": "stat",
-      "title": "Training/Hour",
-      "description": "Training operations in the last hour",
-      "gridPos": {
-        "x": 12,
-        "y": 0,
-        "w": 6,
-        "h": 4
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(increase(ktrdr_operations_total{operation_type=\"training\"}[1h]))",
-          "refId": "A"
-        }
-      ],
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"color": "purple", "value": null}
-            ]
-          },
-          "mappings": [],
-          "unit": "none"
-        },
-        "overrides": []
-      }
-    },
-    {
-      "id": 4,
-      "type": "stat",
-      "title": "Success Rate",
-      "description": "Percentage of operations completing successfully",
-      "gridPos": {
-        "x": 18,
-        "y": 0,
-        "w": 6,
-        "h": 4
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(ktrdr_operations_total{status=\"completed\"}) / sum(ktrdr_operations_total) * 100 or vector(100)",
+          "expr": "sum(ktrdr_workers_available)",
           "refId": "A"
         }
       ],
@@ -211,26 +108,26 @@
             "mode": "absolute",
             "steps": [
               {"color": "red", "value": null},
-              {"color": "yellow", "value": 80},
-              {"color": "green", "value": 95}
+              {"color": "yellow", "value": 2},
+              {"color": "green", "value": 4}
             ]
           },
           "mappings": [],
-          "unit": "percent"
+          "unit": "none"
         },
         "overrides": []
       }
     },
     {
-      "id": 5,
-      "type": "piechart",
-      "title": "Operations by Type",
-      "description": "Distribution of operation types",
+      "id": 3,
+      "type": "stat",
+      "title": "Backtest Workers",
+      "description": "Number of registered backtest workers",
       "gridPos": {
-        "x": 0,
-        "y": 4,
-        "w": 12,
-        "h": 8
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 4
       },
       "datasource": {
         "type": "prometheus",
@@ -242,95 +139,24 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (http_target) (increase(http_server_duration_milliseconds_count{http_target=~\".*/backtests/start|.*/trainings/start|.*/data/.*\"}[1h]))",
-          "legendFormat": "{{http_target}}",
+          "expr": "ktrdr_workers_registered_total{worker_type=\"backtesting\"}",
           "refId": "A"
         }
       ],
       "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "right",
-          "showLegend": true
-        },
-        "pieType": "pie",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
         "reduceOptions": {
           "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
-        "tooltip": {
-          "mode": "single"
-        }
+        "textMode": "auto"
       },
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": []
-        },
-        "overrides": []
-      }
-    },
-    {
-      "id": 6,
-      "type": "timeseries",
-      "title": "Operation Duration (Backtest)",
-      "description": "Average duration of backtest operations",
-      "gridPos": {
-        "x": 12,
-        "y": 4,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "rate(http_server_duration_milliseconds_sum{http_target=~\".*/backtests/start\"}[5m]) / rate(http_server_duration_milliseconds_count{http_target=~\".*/backtests/start\"}[5m])",
-          "legendFormat": "Avg Duration",
-          "refId": "A"
-        }
-      ],
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "spanNulls": false,
-            "showPoints": "never",
-            "pointSize": 5,
-            "stacking": {
-              "mode": "none"
-            },
-            "axisPlacement": "auto",
-            "axisLabel": "",
-            "scaleDistribution": {
-              "type": "linear"
-            }
-          },
-          "color": {
-            "mode": "palette-classic"
-          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -338,19 +164,157 @@
             ]
           },
           "mappings": [],
-          "unit": "ms"
+          "unit": "none"
         },
         "overrides": []
       }
     },
     {
-      "id": 7,
-      "type": "timeseries",
-      "title": "Success vs Failure Rate",
-      "description": "Operation success and failure rates over time",
+      "id": 4,
+      "type": "stat",
+      "title": "Training Workers",
+      "description": "Number of registered training workers",
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "ktrdr_workers_registered_total{worker_type=\"training\"}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null}
+            ]
+          },
+          "mappings": [],
+          "unit": "none"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Worker Health Matrix",
+      "description": "Detailed status of each worker",
       "gridPos": {
         "x": 0,
-        "y": 12,
+        "y": 4,
+        "w": 24,
+        "h": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "up{instance=~\".*:500[3-8]\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {"text": "Down", "color": "red"},
+                "1": {"text": "Up", "color": "green"}
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "green", "value": 1}
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "instance"},
+            "properties": [
+              {"id": "displayName", "value": "Worker"}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Value"},
+            "properties": [
+              {"id": "displayName", "value": "Status"}
+            ]
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true
+            },
+            "indexByName": {},
+            "renameByName": {}
+          }
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Worker CPU Usage",
+      "description": "CPU usage per worker over time",
+      "gridPos": {
+        "x": 0,
+        "y": 10,
         "w": 12,
         "h": 8
       },
@@ -364,18 +328,9 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(http_server_duration_milliseconds_count{http_target=~\".*/backtests/start|.*/trainings/start\",http_status_code=\"200\"}[5m]))",
-          "legendFormat": "Success",
+          "expr": "rate(process_cpu_seconds_total{instance=~\".*:500[3-8]\"}[5m]) * 100",
+          "legendFormat": "{{instance}}",
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(rate(http_server_duration_milliseconds_count{http_target=~\".*/backtests/start|.*/trainings/start\",http_status_code=~\"[45]..\"}[5m]))",
-          "legendFormat": "Failure",
-          "refId": "B"
         }
       ],
       "options": {
@@ -418,32 +373,19 @@
             ]
           },
           "mappings": [],
-          "unit": "reqps"
+          "unit": "percent"
         },
-        "overrides": [
-          {
-            "matcher": {"id": "byName", "options": "Success"},
-            "properties": [
-              {"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}
-            ]
-          },
-          {
-            "matcher": {"id": "byName", "options": "Failure"},
-            "properties": [
-              {"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}
-            ]
-          }
-        ]
+        "overrides": []
       }
     },
     {
-      "id": 8,
-      "type": "table",
-      "title": "HTTP Status Distribution",
-      "description": "Breakdown of HTTP status codes for operations",
+      "id": 7,
+      "type": "timeseries",
+      "title": "Worker Memory Usage",
+      "description": "Memory usage per worker over time",
       "gridPos": {
         "x": 12,
-        "y": 12,
+        "y": 10,
         "w": 12,
         "h": 8
       },
@@ -457,66 +399,124 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (http_status_code, http_target) (increase(http_server_duration_milliseconds_count{http_target=~\".*/backtests/start|.*/trainings/start\"}[1h]))",
-          "format": "table",
-          "instant": true,
+          "expr": "process_resident_memory_bytes{instance=~\".*:500[3-8]\"}",
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
       "options": {
-        "showHeader": true,
-        "cellHeight": "sm"
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "fieldConfig": {
         "defaults": {
           "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "showPoints": "never",
+            "pointSize": 5,
+            "stacking": {
+              "mode": "none"
             },
-            "inspect": false
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "scaleDistribution": {
+              "type": "linear"
+            }
           },
-          "mappings": [],
+          "color": {
+            "mode": "palette-classic"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {"color": "green", "value": null}
             ]
-          }
+          },
+          "mappings": [],
+          "unit": "bytes"
         },
-        "overrides": [
-          {
-            "matcher": {"id": "byName", "options": "http_status_code"},
-            "properties": [
-              {"id": "displayName", "value": "Status"}
-            ]
-          },
-          {
-            "matcher": {"id": "byName", "options": "http_target"},
-            "properties": [
-              {"id": "displayName", "value": "Endpoint"}
-            ]
-          },
-          {
-            "matcher": {"id": "byName", "options": "Value"},
-            "properties": [
-              {"id": "displayName", "value": "Count"}
-            ]
-          }
-        ]
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "type": "state-timeline",
+      "title": "Worker Availability Timeline",
+      "description": "Worker up/down status over time",
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 24,
+        "h": 6
       },
-      "transformations": [
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
         {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true
-            },
-            "indexByName": {},
-            "renameByName": {}
-          }
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "up{instance=~\".*:500[3-8]\"}",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
         }
-      ]
+      ],
+      "options": {
+        "showValue": "auto",
+        "rowHeight": 0.9,
+        "mergeValues": true,
+        "alignValue": "center",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 0,
+            "fillOpacity": 70
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "green", "value": 1}
+            ]
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {"text": "Down", "color": "red"},
+                "1": {"text": "Up", "color": "green"}
+              },
+              "type": "value"
+            }
+          ]
+        },
+        "overrides": []
+      }
     }
   ],
   "templating": {

@@ -3,11 +3,10 @@ apiVersion: 1
 providers:
   - name: 'KTRDR Dashboards'
     orgId: 1
-    folder: ''
+    folder: 'KTRDR'
     type: file
     disableDeletion: false
-    updateIntervalSeconds: 10
+    updateIntervalSeconds: 30
     allowUiUpdates: true
     options:
       path: /var/lib/grafana/dashboards
-      foldersFromFilesStructure: true
