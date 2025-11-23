@@ -52,6 +52,7 @@ from ktrdr.cli.async_model_commands import async_models_app as models_app
 from ktrdr.cli.backtest_commands import backtest_app
 from ktrdr.cli.commands import cli_app
 from ktrdr.cli.data_commands import data_app
+from ktrdr.cli.deploy_commands import deploy_app
 from ktrdr.cli.dummy_commands import dummy_app
 from ktrdr.cli.fuzzy_commands import fuzzy_app
 from ktrdr.cli.ib_commands import ib_app
@@ -84,6 +85,9 @@ cli_app.add_typer(
     strategies_app, name="strategies", help="Trading strategy management commands"
 )
 cli_app.add_typer(fuzzy_app, name="fuzzy", help="Fuzzy logic operations commands")
+cli_app.add_typer(
+    deploy_app, name="deploy", help="Deploy KTRDR services to pre-production"
+)
 # Temporarily disabled while updating multi-timeframe for pure fuzzy
 # cli_app.add_typer(
 #     multi_timeframe_app,
