@@ -130,8 +130,12 @@ class BacktestProgressBridge(ProgressBridge):
         Args:
             message: Cancellation message
         """
+        # Try to keep the last percentage if available
+        current_status = self.get_status()
+        last_percentage = current_status.get("percentage", 0.0)
+        
         self._update_state(
-            percentage=0.0,  # Reset or keep last? Usually 0 or last is fine, but status will be cancelled
+            percentage=last_percentage,
             message=message,
             phase="cancelled",
         )

@@ -13,7 +13,7 @@ from unittest.mock import Mock
 import pandas as pd
 import pytest
 
-from ktrdr.async_infrastructure.cancellation import CancellationToken
+from ktrdr.async_infrastructure.cancellation import CancellationError, CancellationToken
 from ktrdr.async_infrastructure.progress_bridge import ProgressBridge
 from ktrdr.backtesting import BacktestConfig, BacktestingEngine
 
@@ -260,8 +260,8 @@ class TestEngineProgressBridgeIntegration:
         # Set token to cancelled state
         mock_cancellation_token.is_cancelled_requested = True
 
-        # Should raise CancelledError
-        with pytest.raises(asyncio.CancelledError) as exc_info:
+        # Should raise CancellationError
+        with pytest.raises(CancellationError) as exc_info:
             engine.run(cancellation_token=mock_cancellation_token)
 
         # Verify error message

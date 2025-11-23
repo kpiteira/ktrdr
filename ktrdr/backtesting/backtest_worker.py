@@ -21,6 +21,7 @@ from ktrdr.backtesting.progress_bridge import BacktestProgressBridge
 from ktrdr.logging import get_logger
 from ktrdr.monitoring.setup import instrument_app, setup_monitoring
 from ktrdr.workers.base import WorkerAPIBase, WorkerOperationMixin
+from ktrdr.async_infrastructure.cancellation import CancellationError
 
 logger = get_logger(__name__)
 
@@ -198,19 +199,14 @@ class BacktestWorker(WorkerAPIBase):
                 "result_summary": results_dict.get("result_summary", {}),
             }
 
-        except Exception as e:
-            # Check if it's our custom CancellationError (dynamically imported to avoid circular deps if needed, 
-            # but better to import at top level if possible. Here we'll check class name or import locally)
-            from ktrdr.async_infrastructure.cancellation import CancellationError
-            
-            if isinstance(e, CancellationError):
-                logger.info(f"Backtest operation {operation_id} cancelled")
-                if bridge:
-                    bridge.on_cancellation("Backtest cancelled")
-                return {
-                    "status": "cancelled",
-                    "operation_id": operation_id,
-                }
+        except CancellationError:
+            logger.info(f"Backtest operation {operation_id} cancelled")
+            if bridge:
+                bridge.on_cancellation("Backtest cancelled")
+            return {
+                "status": "cancelled",
+                "operation_id": operation_id,
+            }
             
             # Fail operation on error
             await self._operations_service.fail_operation(operation_id, str(e))

@@ -124,7 +124,7 @@ class BacktestingEngine:
             Comprehensive results including trades, metrics, and analysis
 
         Raises:
-            asyncio.CancelledError: If cancellation is requested via cancellation_token
+            CancellationError: If cancellation is requested via cancellation_token
         """
         start_time = pd.Timestamp.now()
         execution_start = time.time()
@@ -632,16 +632,13 @@ class BacktestingEngine:
                 except Exception as e:
                     logger.warning(f"ProgressBridge update failed: {e}")
 
-            # NEW: Cancellation checks (every 100 bars)
-            if cancellation_token and (idx - start_idx) % 100 == 0:
-                if cancellation_token.is_cancelled_requested:
                     logger.info(
                         f"Backtest cancelled at bar {idx}/{len(data)} ({((idx - start_idx) / (len(data) - start_idx)) * 100:.1f}%)"
                     )
                     # Use custom CancellationError for consistency with other workers
                     from ..async_infrastructure.cancellation import CancellationError
 
-                    raise CancellationError("Backtest cancelled by user request")
+                    raise CancellationError(f"Backtest cancelled by user request at bar {idx}/{len(data)}")
 
         # Force-close any open position at the end of the backtest
         # This prevents unrealized losses from skewing performance metrics
