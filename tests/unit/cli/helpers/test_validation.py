@@ -1,5 +1,6 @@
 """Tests for pre-deployment validation helper module."""
 
+import re
 import socket
 import subprocess
 from unittest.mock import MagicMock, patch
@@ -37,7 +38,8 @@ class TestValidateDeploymentPrerequisites:
 
             assert success is False
             assert any("DNS resolution failed" in e for e in errors)
-            assert "invalid.host.com" in str(errors)
+            # Check error contains the hostname with word boundary (prevents partial matches)
+            assert any(re.search(r"\binvalid\.host\.com\b", e) for e in errors)
 
     def test_ssh_connection_failure(self):
         """Test error when SSH connection fails."""

@@ -1,5 +1,6 @@
 """Tests for Docker utilities helper module."""
 
+import re
 import subprocess
 from unittest.mock import MagicMock, patch
 
@@ -31,7 +32,8 @@ class TestDockerLoginGhcr:
             assert call_args[0] == "ssh"
             assert call_args[1] == "test.host.com"
             assert "docker login" in call_args[2]
-            assert "ghcr.io" in call_args[2]
+            # Check exact registry URL with word boundary (prevents partial matches)
+            assert re.search(r"\bghcr\.io\b", call_args[2]) is not None
 
     def test_masks_token_in_dry_run(self, capsys):
         """Test that token is masked in dry-run output."""
@@ -45,7 +47,7 @@ class TestDockerLoginGhcr:
         captured = capsys.readouterr()
         # Token should be masked
         assert "ghp_supersecrettoken123" not in captured.out
-        assert "***" in captured.out or "ghcr.io" in captured.out
+        assert "***" in captured.out
         # Should show it's a dry run
         assert "DRY RUN" in captured.out
 
@@ -122,4 +124,5 @@ class TestDockerLoginGhcr:
             )
 
             call_args = mock_run.call_args[0][0]
-            assert "ghcr.io" in call_args[2]
+            # Check exact registry URL with word boundary (prevents partial matches)
+            assert re.search(r"\bghcr\.io\b", call_args[2]) is not None
