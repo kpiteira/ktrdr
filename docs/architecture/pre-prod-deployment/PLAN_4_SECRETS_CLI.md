@@ -1,6 +1,6 @@
 # Project 4: Secrets Management & Deployment CLI
 
-**Status**: Ready for Implementation
+**Status**: In Progress (Tasks 4.1-4.9 complete, 4.10-4.11 pending homelab)
 **Estimated Effort**: Large
 **Prerequisites**: Project 2 (CI/CD & GHCR)
 
@@ -53,10 +53,10 @@ op item get ktrdr-homelab-core --format json | jq '.fields[] | {label: .label, t
 
 **Acceptance Criteria**:
 
-- [ ] Vault created or identified
-- [ ] Item created with all required fields
-- [ ] Can access item via op CLI
-- [ ] Field naming documented
+- [x] Vault created or identified
+- [x] Item created with all required fields
+- [x] Can access item via op CLI
+- [x] Field naming documented
 
 ---
 
@@ -135,10 +135,10 @@ def check_1password_authenticated() -> bool:
 
 **Acceptance Criteria**:
 
-- [ ] Can fetch secrets from 1Password
-- [ ] Proper error messages for common failures
-- [ ] Unit tests pass with mocked subprocess
-- [ ] Handles missing op CLI gracefully
+- [x] Can fetch secrets from 1Password
+- [x] Proper error messages for common failures
+- [x] Unit tests pass with mocked subprocess
+- [x] Handles missing op CLI gracefully
 
 ---
 
@@ -180,9 +180,9 @@ def get_latest_sha_tag() -> str:
 
 **Acceptance Criteria**:
 
-- [ ] Returns SHA in correct format
-- [ ] Handles non-git directories
-- [ ] Unit tests pass
+- [x] Returns SHA in correct format
+- [x] Handles non-git directories
+- [x] Unit tests pass
 
 ---
 
@@ -262,10 +262,10 @@ def ssh_exec_with_env(
 
 **Acceptance Criteria**:
 
-- [ ] Properly quotes env var values
-- [ ] Dry-run masks secrets
-- [ ] Handles SSH failures gracefully
-- [ ] Unit tests pass
+- [x] Properly quotes env var values
+- [x] Dry-run masks secrets
+- [x] Handles SSH failures gracefully
+- [x] Unit tests pass
 
 ---
 
@@ -342,12 +342,12 @@ def validate_deployment_prerequisites(host: str) -> Tuple[bool, List[str]]:
 
 **Acceptance Criteria**:
 
-- [ ] Checks DNS resolution
-- [ ] Checks SSH connectivity
-- [ ] Checks remote Docker
-- [ ] Checks local op CLI
-- [ ] Clear error messages
-- [ ] Unit tests pass
+- [x] Checks DNS resolution
+- [x] Checks SSH connectivity
+- [x] Checks remote Docker
+- [x] Checks local op CLI
+- [x] Clear error messages
+- [x] Unit tests pass
 
 ---
 
@@ -393,9 +393,9 @@ def docker_login_ghcr(host: str, username: str, token: str) -> None:
 
 **Acceptance Criteria**:
 
-- [ ] Authenticates Docker on remote host
-- [ ] Token passed via stdin (not visible in ps)
-- [ ] Proper error handling
+- [x] Authenticates Docker on remote host
+- [x] Token passed via stdin (not visible in ps)
+- [x] Proper error handling
 
 ---
 
@@ -481,13 +481,13 @@ def core(service, dry_run, tag, skip_validation):
 
 **Acceptance Criteria**:
 
-- [ ] `ktrdr deploy core backend` works
-- [ ] `ktrdr deploy core all` deploys all services
-- [ ] Pre-deployment validation runs
-- [ ] Docker authenticates to GHCR
-- [ ] Secrets fetched from 1Password
-- [ ] Dry-run mode works
-- [ ] Custom tag override works
+- [x] `ktrdr deploy core backend` works
+- [x] `ktrdr deploy core all` deploys all services
+- [x] Pre-deployment validation runs
+- [x] Docker authenticates to GHCR
+- [x] Secrets fetched from 1Password
+- [x] Dry-run mode works
+- [x] Custom tag override works
 
 ---
 
@@ -559,11 +559,11 @@ def workers(node, dry_run, tag, skip_validation, profile):
 
 **Acceptance Criteria**:
 
-- [ ] `ktrdr deploy workers B` works
-- [ ] `ktrdr deploy workers C` works
-- [ ] Profile scaling works (--profile scale-2)
-- [ ] Workers get DB credentials
-- [ ] Dry-run and tag override work
+- [x] `ktrdr deploy workers B` works
+- [x] `ktrdr deploy workers C` works
+- [x] Profile scaling works (--profile scale-2)
+- [x] Workers get DB credentials
+- [x] Dry-run and tag override work
 
 ---
 
@@ -590,9 +590,9 @@ cli.add_command(deploy)
 
 **Acceptance Criteria**:
 
-- [ ] `ktrdr --help` shows deploy command
-- [ ] `ktrdr deploy --help` shows core and workers
-- [ ] Commands accessible
+- [x] `ktrdr --help` shows deploy command
+- [x] `ktrdr deploy --help` shows core and workers
+- [x] Commands accessible
 
 ---
 
