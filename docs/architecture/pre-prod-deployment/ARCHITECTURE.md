@@ -472,6 +472,36 @@ See [`docker-compose.dev.yml`](docker-compose.dev.yml) for complete configuratio
 
 ---
 
+## CI/CD Image Building
+
+**Workflow**: `.github/workflows/build-images.yml`
+
+**Trigger Events**:
+- Push to `main` branch (automatic)
+- Manual trigger via `workflow_dispatch`
+
+**Build Process**:
+1. GitHub Actions spins up separate runners for amd64 and arm64
+2. Each platform builds and pushes image digest to GHCR
+3. Merge job creates multi-architecture manifest
+4. Final image supports both x86_64 and Apple Silicon
+
+**Image Tags**:
+- `sha-<7-char>` - Git commit SHA (immutable, for reproducibility)
+- `latest` - Most recent successful build
+
+**Finding Available Tags**:
+```bash
+# Via web: https://github.com/kpiteira/ktrdr/pkgs/container/ktrdr-backend
+
+# Pull specific version
+docker pull ghcr.io/kpiteira/ktrdr-backend:sha-fa8fe24
+```
+
+**Build Caching**: Uses GitHub Actions cache (`type=gha`) with per-platform scopes for faster subsequent builds.
+
+---
+
 ## Container Registry Authentication
 
 **GHCR Access**: Private repository requires authentication
