@@ -16,6 +16,7 @@ from opentelemetry import trace
 
 from ktrdr.api.models.operations import OperationMetadata, OperationType
 from ktrdr.api.models.workers import WorkerType
+from ktrdr.async_infrastructure.cancellation import CancellationError
 from ktrdr.backtesting.engine import BacktestConfig, BacktestingEngine
 from ktrdr.backtesting.progress_bridge import BacktestProgressBridge
 from ktrdr.logging import get_logger
@@ -196,6 +197,25 @@ class BacktestWorker(WorkerAPIBase):
 
             return {
                 "result_summary": results_dict.get("result_summary", {}),
+            }
+
+        except CancellationError:
+            logger.info(f"Backtest operation {operation_id} cancelled")
+            if bridge:
+                bridge.on_cancellation("Backtest cancelled")
+            return {
+                "status": "cancelled",
+                "operation_id": operation_id,
+            }
+
+        except asyncio.CancelledError:
+            # Handle standard asyncio cancellation if it occurs
+            logger.info(f"Backtest operation {operation_id} cancelled (asyncio)")
+            if bridge:
+                bridge.on_cancellation("Backtest cancelled")
+            return {
+                "status": "cancelled",
+                "operation_id": operation_id,
             }
 
         except Exception as e:

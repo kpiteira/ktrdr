@@ -242,9 +242,8 @@ To use a specific version:
 IMAGE_TAG=sha-a1b2c3d docker compose -f docker-compose.dev.yml up
 ```
 
-```
-
 **Acceptance Criteria**:
+
 - [ ] Image mode documented in compose file
 - [ ] Can switch to image mode easily
 - [ ] IMAGE_TAG override works
@@ -255,18 +254,21 @@ IMAGE_TAG=sha-a1b2c3d docker compose -f docker-compose.dev.yml up
 ### Task 2.6: Update Pre-prod Compose Files for GHCR
 
 **Files**:
+
 - `docs/architecture/pre-prod-deployment/docker-compose.core.yml`
 - `docs/architecture/pre-prod-deployment/docker-compose.workers.yml`
 
 **Goal**: Pre-prod compose files reference GHCR images
 
 **Actions**:
+
 1. Update image references to use GHCR
 2. Use placeholder for repository owner
 3. Support IMAGE_TAG environment variable
 4. Default to `latest` if not specified
 
 **Changes**:
+
 ```yaml
 # docker-compose.core.yml
 backend:

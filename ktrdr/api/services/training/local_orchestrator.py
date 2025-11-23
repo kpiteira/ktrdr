@@ -68,7 +68,7 @@ class LocalTrainingOrchestrator:
             result = await asyncio.to_thread(self._execute_training)
         except CancellationError:
             logger.info("Local training cancelled for %s", self._context.strategy_name)
-            self._bridge.on_phase("cancelled", message="Training cancelled")
+            self._bridge.on_cancellation(message="Training cancelled")
             raise
 
         self._bridge.on_complete()

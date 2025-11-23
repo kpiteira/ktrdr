@@ -16,6 +16,7 @@ from pydantic import Field
 
 from ktrdr.api.models.operations import OperationMetadata, OperationType
 from ktrdr.api.models.workers import WorkerType
+from ktrdr.async_infrastructure.cancellation import CancellationError
 
 # Note: TrainingProgressBridge requires TrainingOperationContext which is complex
 # For now, we'll use direct progress callbacks instead
@@ -254,6 +255,16 @@ class TrainingWorker(WorkerAPIBase):
                 "model_path": result.get("model_path"),
                 "training_metrics": result.get("training_metrics", {}),
                 "test_metrics": result.get("test_metrics", {}),
+            }
+
+        except CancellationError:
+            # Normal cancellation flow - do not re-raise for background task
+            logger.info(f"Training operation {operation_id} cancelled")
+            # Ensure operation is in correct state (OperationsService handles this via token usually)
+            # but we can explicitly log it.
+            return {
+                "status": "cancelled",
+                "operation_id": operation_id,
             }
 
         except Exception as e:

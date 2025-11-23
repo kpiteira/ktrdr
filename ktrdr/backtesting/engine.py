@@ -1,6 +1,5 @@
 """Backtesting engine for strategy evaluation."""
 
-import asyncio
 import time
 from dataclasses import dataclass
 from typing import Any, Optional, cast
@@ -124,7 +123,7 @@ class BacktestingEngine:
             Comprehensive results including trades, metrics, and analysis
 
         Raises:
-            asyncio.CancelledError: If cancellation is requested via cancellation_token
+            CancellationError: If cancellation is requested via cancellation_token
         """
         start_time = pd.Timestamp.now()
         execution_start = time.time()
@@ -638,7 +637,12 @@ class BacktestingEngine:
                     logger.info(
                         f"Backtest cancelled at bar {idx}/{len(data)} ({((idx - start_idx) / (len(data) - start_idx)) * 100:.1f}%)"
                     )
-                    raise asyncio.CancelledError("Backtest cancelled by user request")
+                    # Use custom CancellationError for consistency with other workers
+                    from ..async_infrastructure.cancellation import CancellationError
+
+                    raise CancellationError(
+                        f"Backtest cancelled by user request at bar {idx}/{len(data)}"
+                    )
 
         # Force-close any open position at the end of the backtest
         # This prevents unrealized losses from skewing performance metrics
