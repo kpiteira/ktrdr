@@ -7,6 +7,7 @@ from ktrdr.cli.helpers.secrets import (
     fetch_secrets_from_1password,
 )
 from ktrdr.cli.helpers.ssh_utils import SSHError, ssh_exec_with_env
+from ktrdr.cli.helpers.validation import validate_deployment_prerequisites
 
 __all__ = [
     "GitError",
@@ -16,4 +17,5 @@ __all__ = [
     "fetch_secrets_from_1password",
     "get_latest_sha_tag",
     "ssh_exec_with_env",
+    "validate_deployment_prerequisites",
 ]
