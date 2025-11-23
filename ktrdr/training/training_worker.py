@@ -16,14 +16,13 @@ from pydantic import Field
 
 from ktrdr.api.models.operations import OperationMetadata, OperationType
 from ktrdr.api.models.workers import WorkerType
+from ktrdr.async_infrastructure.cancellation import CancellationError
 
 # Note: TrainingProgressBridge requires TrainingOperationContext which is complex
 # For now, we'll use direct progress callbacks instead
 from ktrdr.logging import get_logger
 from ktrdr.monitoring.setup import instrument_app, setup_monitoring
-from ktrdr.monitoring.setup import instrument_app, setup_monitoring
 from ktrdr.workers.base import WorkerAPIBase, WorkerOperationMixin
-from ktrdr.async_infrastructure.cancellation import CancellationError
 
 logger = get_logger(__name__)
 

@@ -1,6 +1,5 @@
 """Backtesting engine for strategy evaluation."""
 
-import asyncio
 import time
 from dataclasses import dataclass
 from typing import Any, Optional, cast
@@ -632,13 +631,18 @@ class BacktestingEngine:
                 except Exception as e:
                     logger.warning(f"ProgressBridge update failed: {e}")
 
+            # NEW: Cancellation checks (every 100 bars)
+            if cancellation_token and (idx - start_idx) % 100 == 0:
+                if cancellation_token.is_cancelled_requested:
                     logger.info(
                         f"Backtest cancelled at bar {idx}/{len(data)} ({((idx - start_idx) / (len(data) - start_idx)) * 100:.1f}%)"
                     )
                     # Use custom CancellationError for consistency with other workers
                     from ..async_infrastructure.cancellation import CancellationError
 
-                    raise CancellationError(f"Backtest cancelled by user request at bar {idx}/{len(data)}")
+                    raise CancellationError(
+                        f"Backtest cancelled by user request at bar {idx}/{len(data)}"
+                    )
 
         # Force-close any open position at the end of the backtest
         # This prevents unrealized losses from skewing performance metrics

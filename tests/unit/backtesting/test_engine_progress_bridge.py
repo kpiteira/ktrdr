@@ -7,7 +7,6 @@ This test suite verifies Task 2.1 requirements:
 - Backward compatibility is maintained
 """
 
-import asyncio
 from unittest.mock import Mock
 
 import pandas as pd

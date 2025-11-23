@@ -133,7 +133,7 @@ class BacktestProgressBridge(ProgressBridge):
         # Try to keep the last percentage if available
         current_status = self.get_status()
         last_percentage = current_status.get("percentage", 0.0)
-        
+
         self._update_state(
             percentage=last_percentage,
             message=message,
