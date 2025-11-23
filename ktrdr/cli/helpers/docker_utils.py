@@ -34,16 +34,16 @@ def docker_login_ghcr(
     Raises:
         DockerError: If Docker login fails
     """
-    # Build docker login command with password via stdin
-    docker_cmd = f"echo '{token}' | docker login ghcr.io -u {username} --password-stdin"
-    ssh_cmd = ["ssh", host, docker_cmd]
-
     if dry_run:
-        # Mask token in output
-        masked_cmd = docker_cmd.replace(token, "***")
+        # Build masked command directly for dry-run (never include actual token)
+        masked_cmd = f"echo '***' | docker login ghcr.io -u {username} --password-stdin"
         print(f"[DRY RUN] Would execute on {host}:")
         print(f"  {masked_cmd}")
         return True
+
+    # Build docker login command with password via stdin
+    docker_cmd = f"echo '{token}' | docker login ghcr.io -u {username} --password-stdin"
+    ssh_cmd = ["ssh", host, docker_cmd]
 
     try:
         result = subprocess.run(

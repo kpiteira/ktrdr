@@ -46,12 +46,17 @@ def ssh_exec_with_env(
     ssh_cmd = ["ssh", host, full_cmd]
 
     if dry_run:
-        # Mask secrets in output
-        masked_cmd = full_cmd
-        for key in ["PASSWORD", "SECRET", "TOKEN"]:
-            for k, v in env_vars.items():
-                if key in k.upper():
-                    masked_cmd = masked_cmd.replace(v, "***")
+        # Build masked env string directly (never include actual secret values in output)
+        masked_parts = []
+        for k, v in env_vars.items():
+            # Mask values for keys that likely contain secrets
+            is_secret = any(
+                secret_key in k.upper()
+                for secret_key in ["PASSWORD", "SECRET", "TOKEN"]
+            )
+            masked_parts.append(f"{k}={'***' if is_secret else shlex.quote(v)}")
+        masked_env = " ".join(masked_parts)
+        masked_cmd = f"cd {shlex.quote(workdir)} && {masked_env} {command}"
         print(f"[DRY RUN] Would execute on {host}:")
         print(f"  {masked_cmd}")
         return None
