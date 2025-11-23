@@ -10,10 +10,15 @@ FROM python:3.13-slim AS builder
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    UV_LINK_MODE=copy \
+    TMPDIR=/tmp
 
 # Set work directory
 WORKDIR /app
+
+# Ensure tmp directory exists and is writable
+RUN mkdir -p /tmp && chmod 1777 /tmp
 
 # Install build dependencies
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
