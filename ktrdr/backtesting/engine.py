@@ -638,7 +638,10 @@ class BacktestingEngine:
                     logger.info(
                         f"Backtest cancelled at bar {idx}/{len(data)} ({((idx - start_idx) / (len(data) - start_idx)) * 100:.1f}%)"
                     )
-                    raise asyncio.CancelledError("Backtest cancelled by user request")
+                    # Use custom CancellationError for consistency with other workers
+                    from ..async_infrastructure.cancellation import CancellationError
+
+                    raise CancellationError("Backtest cancelled by user request")
 
         # Force-close any open position at the end of the backtest
         # This prevents unrealized losses from skewing performance metrics

@@ -21,7 +21,9 @@ from ktrdr.api.models.workers import WorkerType
 # For now, we'll use direct progress callbacks instead
 from ktrdr.logging import get_logger
 from ktrdr.monitoring.setup import instrument_app, setup_monitoring
+from ktrdr.monitoring.setup import instrument_app, setup_monitoring
 from ktrdr.workers.base import WorkerAPIBase, WorkerOperationMixin
+from ktrdr.async_infrastructure.cancellation import CancellationError
 
 logger = get_logger(__name__)
 
@@ -254,6 +256,16 @@ class TrainingWorker(WorkerAPIBase):
                 "model_path": result.get("model_path"),
                 "training_metrics": result.get("training_metrics", {}),
                 "test_metrics": result.get("test_metrics", {}),
+            }
+
+        except CancellationError:
+            # Normal cancellation flow - do not re-raise for background task
+            logger.info(f"Training operation {operation_id} cancelled")
+            # Ensure operation is in correct state (OperationsService handles this via token usually)
+            # but we can explicitly log it.
+            return {
+                "status": "cancelled",
+                "operation_id": operation_id,
             }
 
         except Exception as e:

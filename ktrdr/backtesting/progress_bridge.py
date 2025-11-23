@@ -122,3 +122,16 @@ class BacktestProgressBridge(ProgressBridge):
             total_trades=total_trades,
             win_rate=win_rate,
         )
+
+    def on_cancellation(self, message: str = "Backtest cancelled") -> None:
+        """
+        Report cancellation status.
+
+        Args:
+            message: Cancellation message
+        """
+        self._update_state(
+            percentage=0.0,  # Reset or keep last? Usually 0 or last is fine, but status will be cancelled
+            message=message,
+            phase="cancelled",
+        )
