@@ -267,20 +267,117 @@ scp docker-compose.workers.yml workers-c.ktrdr.home.mynerd.place:/opt/ktrdr-work
 
 ### 2. Initial Secrets Setup
 
-Create 1Password vault and items:
+Create 1Password vault and items for KTRDR secrets management.
+
+#### 1Password Structure
 
 **Vault**: `KTRDR Homelab Secrets`
 
 **Item**: `ktrdr-homelab-core`
-- Field `db_username`: `ktrdr`
-- Field `db_password`: (generate strong password)
-- Field `jwt_secret`: (generate 32-char random string)
-- Field `grafana_password`: (generate strong password)
 
-**Verify op CLI access**:
+| Field Label | Type | Description | Example/Requirements |
+|-------------|------|-------------|---------------------|
+| `db_username` | CONCEALED | Database username | `ktrdr` |
+| `db_password` | CONCEALED | Database password | Strong, 20+ chars |
+| `jwt_secret` | CONCEALED | JWT signing secret | Minimum 32 chars, random |
+| `grafana_password` | CONCEALED | Grafana admin password | Strong, 16+ chars |
+| `ghcr_token` | CONCEALED | GitHub PAT for GHCR | `read:packages` scope |
+
+#### Field Naming Conventions
+
+- **Lowercase with underscores**: Use `db_password` not `DB_PASSWORD` or `dbPassword`
+- **Type = CONCEALED**: All secret fields must be marked as "Password" type in 1Password (shows as CONCEALED in JSON)
+- **Label matches env var suffix**: Field label should match the suffix of the corresponding environment variable (e.g., `db_password` → `DB_PASSWORD`)
+- **No special characters in labels**: Avoid spaces, hyphens, or special characters in field labels
+
+#### Create Item via 1Password CLI
+
 ```bash
-op item get "ktrdr-homelab-core" --format json | jq
+# Create item with all required fields
+op item create \
+  --category "Login" \
+  --title "ktrdr-homelab-core" \
+  --vault "KTRDR Homelab Secrets" \
+  'db_username[password]=ktrdr' \
+  'db_password[password]=YOUR_GENERATED_PASSWORD' \
+  'jwt_secret[password]=YOUR_32_CHAR_SECRET' \
+  'grafana_password[password]=YOUR_GRAFANA_PASSWORD' \
+  'ghcr_token[password]=YOUR_GITHUB_PAT'
 ```
+
+**Generate secure values**:
+```bash
+# Generate 32-char JWT secret
+openssl rand -base64 32 | tr -d '/+=' | head -c 32
+
+# Generate strong password
+openssl rand -base64 24
+```
+
+#### Create Item via 1Password UI
+
+1. Open 1Password → Create new vault "KTRDR Homelab Secrets" (if not exists)
+2. Create new Login item named "ktrdr-homelab-core"
+3. Add password fields (use the "Add More" → "Password" option for each):
+   - `db_username`: `ktrdr`
+   - `db_password`: Generate strong password
+   - `jwt_secret`: Generate 32+ char random string
+   - `grafana_password`: Generate strong password
+   - `ghcr_token`: Your GitHub PAT with `read:packages` scope
+
+#### Verify 1Password Access
+
+```bash
+# Check op CLI installed
+op --version
+
+# Sign in (if needed)
+op signin
+
+# Test item access
+op item get ktrdr-homelab-core --format json | jq '.fields[] | {label: .label, type: .type}'
+
+# Expected output (all should be CONCEALED):
+# { "label": "db_username", "type": "CONCEALED" }
+# { "label": "db_password", "type": "CONCEALED" }
+# { "label": "jwt_secret", "type": "CONCEALED" }
+# { "label": "grafana_password", "type": "CONCEALED" }
+# { "label": "ghcr_token", "type": "CONCEALED" }
+
+# Test fetching a specific value (should show value)
+op item get ktrdr-homelab-core --fields db_username
+```
+
+#### Creating GitHub PAT for GHCR
+
+1. Go to GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens
+2. Generate new token with:
+   - Name: `ktrdr-ghcr-read`
+   - Expiration: Set appropriate expiration
+   - Repository access: "Only select repositories" → select `ktrdr`
+   - Permissions: `read:packages`
+3. Copy token to 1Password `ghcr_token` field
+
+#### Troubleshooting 1Password Access
+
+**"not signed in" error**:
+```bash
+op signin
+```
+
+**"item not found" error**:
+```bash
+# List vaults to find correct name
+op vault list
+
+# List items in vault
+op item list --vault "KTRDR Homelab Secrets"
+```
+
+**Fields showing as STRING instead of CONCEALED**:
+
+- Edit item in 1Password UI
+- Change field type from "Text" to "Password"
 
 ---
 
