@@ -15,8 +15,12 @@ class TestDeployCore:
     def test_dry_run_shows_commands(self):
         """Test dry-run mode shows commands without executing."""
         with (
-            patch("ktrdr.cli.deploy_commands.validate_deployment_prerequisites") as mock_validate,
-            patch("ktrdr.cli.deploy_commands.fetch_secrets_from_1password") as mock_secrets,
+            patch(
+                "ktrdr.cli.deploy_commands.validate_deployment_prerequisites"
+            ) as mock_validate,
+            patch(
+                "ktrdr.cli.deploy_commands.fetch_secrets_from_1password"
+            ) as mock_secrets,
             patch("ktrdr.cli.deploy_commands.get_latest_sha_tag") as mock_sha,
             patch("ktrdr.cli.deploy_commands.docker_login_ghcr") as mock_docker,
             patch("ktrdr.cli.deploy_commands.ssh_exec_with_env") as mock_ssh,
@@ -42,8 +46,13 @@ class TestDeployCore:
 
     def test_validation_failure_aborts(self):
         """Test that validation failures abort deployment."""
-        with patch("ktrdr.cli.deploy_commands.validate_deployment_prerequisites") as mock_validate:
-            mock_validate.return_value = (False, ["DNS resolution failed", "SSH failed"])
+        with patch(
+            "ktrdr.cli.deploy_commands.validate_deployment_prerequisites"
+        ) as mock_validate:
+            mock_validate.return_value = (
+                False,
+                ["DNS resolution failed", "SSH failed"],
+            )
 
             result = runner.invoke(deploy_app, ["core"])
 
@@ -54,8 +63,12 @@ class TestDeployCore:
     def test_skip_validation_option(self):
         """Test --skip-validation option skips prerequisite checks."""
         with (
-            patch("ktrdr.cli.deploy_commands.validate_deployment_prerequisites") as mock_validate,
-            patch("ktrdr.cli.deploy_commands.fetch_secrets_from_1password") as mock_secrets,
+            patch(
+                "ktrdr.cli.deploy_commands.validate_deployment_prerequisites"
+            ) as mock_validate,
+            patch(
+                "ktrdr.cli.deploy_commands.fetch_secrets_from_1password"
+            ) as mock_secrets,
             patch("ktrdr.cli.deploy_commands.get_latest_sha_tag") as mock_sha,
             patch("ktrdr.cli.deploy_commands.docker_login_ghcr"),
             patch("ktrdr.cli.deploy_commands.ssh_exec_with_env"),
@@ -63,7 +76,9 @@ class TestDeployCore:
             mock_secrets.return_value = {"ghcr_token": "ghp_xxx"}
             mock_sha.return_value = "sha-abc1234"
 
-            result = runner.invoke(deploy_app, ["core", "--skip-validation", "--dry-run"])
+            result = runner.invoke(
+                deploy_app, ["core", "--skip-validation", "--dry-run"]
+            )
 
             assert result.exit_code == 0
             mock_validate.assert_not_called()
@@ -75,8 +90,12 @@ class TestDeployWorkers:
     def test_deploy_all_workers(self):
         """Test deploying to all workers."""
         with (
-            patch("ktrdr.cli.deploy_commands.validate_deployment_prerequisites") as mock_validate,
-            patch("ktrdr.cli.deploy_commands.fetch_secrets_from_1password") as mock_secrets,
+            patch(
+                "ktrdr.cli.deploy_commands.validate_deployment_prerequisites"
+            ) as mock_validate,
+            patch(
+                "ktrdr.cli.deploy_commands.fetch_secrets_from_1password"
+            ) as mock_secrets,
             patch("ktrdr.cli.deploy_commands.get_latest_sha_tag") as mock_sha,
             patch("ktrdr.cli.deploy_commands.docker_login_ghcr") as mock_docker,
             patch("ktrdr.cli.deploy_commands.ssh_exec_with_env") as mock_ssh,
@@ -95,8 +114,12 @@ class TestDeployWorkers:
     def test_deploy_single_worker(self):
         """Test deploying to a specific worker."""
         with (
-            patch("ktrdr.cli.deploy_commands.validate_deployment_prerequisites") as mock_validate,
-            patch("ktrdr.cli.deploy_commands.fetch_secrets_from_1password") as mock_secrets,
+            patch(
+                "ktrdr.cli.deploy_commands.validate_deployment_prerequisites"
+            ) as mock_validate,
+            patch(
+                "ktrdr.cli.deploy_commands.fetch_secrets_from_1password"
+            ) as mock_secrets,
             patch("ktrdr.cli.deploy_commands.get_latest_sha_tag") as mock_sha,
             patch("ktrdr.cli.deploy_commands.docker_login_ghcr") as mock_docker,
             patch("ktrdr.cli.deploy_commands.ssh_exec_with_env") as mock_ssh,
@@ -114,14 +137,19 @@ class TestDeployWorkers:
 
     def test_worker_validation_failure_continues(self):
         """Test that worker validation failure skips that worker but continues."""
+
         def validate_side_effect(host):
             if "workers-a" in host:
                 return (False, ["SSH failed"])
             return (True, [])
 
         with (
-            patch("ktrdr.cli.deploy_commands.validate_deployment_prerequisites") as mock_validate,
-            patch("ktrdr.cli.deploy_commands.fetch_secrets_from_1password") as mock_secrets,
+            patch(
+                "ktrdr.cli.deploy_commands.validate_deployment_prerequisites"
+            ) as mock_validate,
+            patch(
+                "ktrdr.cli.deploy_commands.fetch_secrets_from_1password"
+            ) as mock_secrets,
             patch("ktrdr.cli.deploy_commands.get_latest_sha_tag") as mock_sha,
             patch("ktrdr.cli.deploy_commands.docker_login_ghcr") as mock_docker,
             patch("ktrdr.cli.deploy_commands.ssh_exec_with_env") as mock_ssh,
