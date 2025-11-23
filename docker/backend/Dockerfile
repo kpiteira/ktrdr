@@ -16,10 +16,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # Install build dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
+    gcc
 
 # Install UV for faster dependency management
 RUN pip install --no-cache-dir uv
@@ -28,13 +29,16 @@ RUN pip install --no-cache-dir uv
 COPY pyproject.toml uv.lock ./
 
 # Install Python dependencies with uv sync (creates .venv)
-RUN uv sync --frozen --no-dev --no-install-project
+# Use BuildKit cache mount to persist uv package cache between CI builds
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-install-project
 
 # Copy the project files
 COPY . .
 
 # Install the project package
-RUN uv sync --frozen --no-dev
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev
 
 # --------------------------------------
 # STAGE 2: Runtime stage
@@ -67,10 +71,11 @@ RUN groupadd -r $APP_USER && \
 WORKDIR $APP_HOME
 
 # Install runtime dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     tini \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+    curl
 
 # Copy from builder stage - only what's needed for production
 COPY --from=builder /app/.venv/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
