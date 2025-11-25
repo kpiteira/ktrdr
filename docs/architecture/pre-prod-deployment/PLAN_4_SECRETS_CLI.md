@@ -1,6 +1,6 @@
 # Project 4: Secrets Management & Deployment CLI
 
-**Status**: In Progress (Tasks 4.1-4.9 complete, 4.10-4.11 pending)
+**Status**: In Progress (Tasks 4.1-4.10 complete, 4.11 pending)
 **Estimated Effort**: Large
 **Prerequisites**: Project 2 (CI/CD & GHCR)
 
@@ -617,11 +617,11 @@ cli.add_command(deploy)
 
 **Acceptance Criteria**:
 
-- [ ] Unit tests for all helpers
-- [ ] Integration tests for deploy commands
-- [ ] Error scenarios covered
-- [ ] Tests run in CI
-- [ ] >90% coverage on new code
+- [x] Unit tests for all helpers
+- [x] Integration tests for deploy commands
+- [x] Error scenarios covered
+- [x] Tests run in CI
+- [x] >90% coverage on new code
 
 ---
 
