@@ -1,6 +1,6 @@
 # Project 4: Secrets Management & Deployment CLI
 
-**Status**: In Progress (Tasks 4.1-4.9 complete, 4.10-4.11 pending homelab)
+**Status**: In Progress (Tasks 4.1-4.9 complete, 4.10-4.11 pending)
 **Estimated Effort**: Large
 **Prerequisites**: Project 2 (CI/CD & GHCR)
 

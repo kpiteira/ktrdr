@@ -107,9 +107,9 @@ class TestDeployWorkers:
             result = runner.invoke(deploy_app, ["workers", "all", "--dry-run"])
 
             assert result.exit_code == 0
-            # Should deploy to 3 worker hosts
-            assert mock_docker.call_count == 3
-            assert mock_ssh.call_count == 3
+            # Should deploy to 2 worker hosts (workers-b and workers-c)
+            assert mock_docker.call_count == 2
+            assert mock_ssh.call_count == 2
 
     def test_deploy_single_worker(self):
         """Test deploying to a specific worker."""
@@ -128,7 +128,7 @@ class TestDeployWorkers:
             mock_secrets.return_value = {"ghcr_token": "ghp_xxx"}
             mock_sha.return_value = "sha-abc1234"
 
-            result = runner.invoke(deploy_app, ["workers", "workers-a", "--dry-run"])
+            result = runner.invoke(deploy_app, ["workers", "workers-b", "--dry-run"])
 
             assert result.exit_code == 0
             # Should only deploy to 1 worker host
@@ -139,7 +139,7 @@ class TestDeployWorkers:
         """Test that worker validation failure skips that worker but continues."""
 
         def validate_side_effect(host):
-            if "workers-a" in host:
+            if "workers-b" in host:
                 return (False, ["SSH failed"])
             return (True, [])
 
@@ -160,11 +160,11 @@ class TestDeployWorkers:
 
             result = runner.invoke(deploy_app, ["workers", "all", "--dry-run"])
 
-            # Should still succeed overall (workers-b and workers-c deployed)
+            # Should still succeed overall (workers-c deployed, workers-b skipped)
             assert result.exit_code == 0
-            # Should only deploy to 2 worker hosts (skipped workers-a)
-            assert mock_docker.call_count == 2
-            assert mock_ssh.call_count == 2
+            # Should only deploy to 1 worker host (skipped workers-b)
+            assert mock_docker.call_count == 1
+            assert mock_ssh.call_count == 1
 
 
 class TestDeployStatus:
@@ -188,5 +188,5 @@ class TestDeployStatus:
             result = runner.invoke(deploy_app, ["status", "all"])
 
             assert result.exit_code == 0
-            # Should check backend + 3 workers = 4 calls
-            assert mock_ssh.call_count == 4
+            # Should check backend + 2 workers = 3 calls
+            assert mock_ssh.call_count == 3

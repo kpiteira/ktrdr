@@ -30,10 +30,6 @@ HOSTS = {
         "host": "backend.ktrdr.home.mynerd.place",
         "workdir": "/opt/ktrdr-backend",
     },
-    "workers-a": {
-        "host": "workers-a.ktrdr.home.mynerd.place",
-        "workdir": "/opt/ktrdr-workers-a",
-    },
     "workers-b": {
         "host": "workers-b.ktrdr.home.mynerd.place",
         "workdir": "/opt/ktrdr-workers-b",
@@ -149,7 +145,7 @@ def workers(
 ):
     """Deploy worker services."""
     # Validate target
-    valid_targets = ["all", "workers-a", "workers-b", "workers-c"]
+    valid_targets = ["all", "workers-b", "workers-c"]
     if target not in valid_targets:
         typer.echo(
             f"❌ Invalid target: {target}. Must be one of: {', '.join(valid_targets)}",
@@ -159,7 +155,7 @@ def workers(
 
     # Determine which workers to deploy
     if target == "all":
-        worker_hosts = ["workers-a", "workers-b", "workers-c"]
+        worker_hosts = ["workers-b", "workers-c"]
     else:
         worker_hosts = [target]
 
@@ -275,7 +271,7 @@ def status(
             typer.echo(f"   ❌ {e}", err=True)
 
     if target in ["workers", "all"]:
-        for worker_name in ["workers-a", "workers-b", "workers-c"]:
+        for worker_name in ["workers-b", "workers-c"]:
             host = HOSTS[worker_name]["host"]
             workdir = HOSTS[worker_name]["workdir"]
             typer.echo(f"\n📊 {worker_name} status ({host}):")
