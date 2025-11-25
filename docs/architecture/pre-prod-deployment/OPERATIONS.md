@@ -1,4 +1,5 @@
 # Pre-Production Deployment Operations
+
 ## Manual Procedures & Runbooks
 
 **Version**: 1.0
@@ -10,6 +11,7 @@
 ## Purpose
 
 This document contains **manual operational procedures** for pre-production infrastructure:
+
 - LXC provisioning
 - Network configuration
 - NFS setup
@@ -26,107 +28,250 @@ This document contains **manual operational procedures** for pre-production infr
 ### Prerequisites
 
 **Proxmox Cluster**:
+
 - 3 Proxmox nodes on shared VLAN
 - Access to Proxmox web UI or CLI
-- Ubuntu 22.04 LTS template available
+- Ubuntu LTS template available (22.04 or 24.04)
 
 **Resources Available**:
-- Node A: 4 cores, 16GB RAM
-- Node B: 4 cores, 16GB RAM
-- Node C: 4 cores, 8GB RAM
+
+- Node A: 4 cores, 16GB RAM, 500GB data disk (for NFS, database, models, backups)
+- Node B: 4 cores, 16GB RAM, 30GB disk
+- Node C: 4 cores, 8GB RAM, 30GB disk
 
 ---
 
-### Creating Core LXC (Node A)
+### Define Your Variables First
+
+**IMPORTANT**: Before running any commands, set these variables in your SSH session on the Proxmox host:
 
 ```bash
-# 1. Create LXC container
-pct create 100 local:vztmpl/ubuntu-22.04-standard.tar.zst \
-  --hostname ktrdr-core \
-  --cores 3 \
-  --memory 14336 \
-  --swap 0 \
-  --rootfs local-lvm:50 \
-  --net0 name=eth0,bridge=vmbr0,ip=<IP>/24,gw=<GATEWAY> \
-  --nameserver <DNS_SERVER> \
-  --unprivileged 1
+# Ubuntu template (adjust to your actual template name)
+UBUNTU_TEMPLATE="local:vztmpl/ubuntu-24.04-standard_24.04-2_amd64.tar.zst"
 
-# 2. Start container
-pct start 100
+# Storage pool (adjust to your Proxmox storage: local-lvm, local-zfs, etc.)
+STORAGE="local-zfs"
 
-# 3. Install Docker
-pct exec 100 -- bash -c "
-  apt-get update
-  apt-get install -y ca-certificates curl gnupg
-  install -m 0755 -d /etc/apt/keyrings
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-  chmod a+r /etc/apt/keyrings/docker.gpg
+# Network configuration (adjust to match your VLAN setup)
+BRIDGE="vmbr0"          # Your Proxmox bridge (e.g., vmbr0, vmbr42)
+CORE_IP="192.168.1.10"
+WORKER_B_IP="192.168.1.20"
+WORKER_C_IP="192.168.1.30"
+GATEWAY="192.168.1.1"
+DNS_SERVER="192.168.1.1"
+NETMASK="24"
+```
 
-  echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu jammy stable' | \
-    tee /etc/apt/sources.list.d/docker.list > /dev/null
+Verify your template name:
 
-  apt-get update
-  apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-"
-
-# 4. Create directory structure
-pct exec 100 -- bash -c "
-  mkdir -p /opt/ktrdr-core
-  mkdir -p /srv/ktrdr-shared/{data,results,models,db-backups}
-"
-
-# 5. Configure SSH access
-pct exec 100 -- bash -c "
-  apt-get install -y openssh-server
-  mkdir -p /root/.ssh
-  chmod 700 /root/.ssh
-"
-
-# Copy your SSH public key
-cat ~/.ssh/id_rsa.pub | pct exec 100 -- bash -c "cat >> /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys"
+```bash
+pveam list local
 ```
 
 ---
 
-### Creating Worker LXC (Nodes B & C)
+### Step 1: Create Base Template (One-Time Setup)
+
+Create a template LXC with all common software installed:
 
 ```bash
-# Node B - Worker LXC
-pct create 201 local:vztmpl/ubuntu-22.04-standard.tar.zst \
-  --hostname ktrdr-workers-b \
+# 1. Create template LXC (ID 900) as PRIVILEGED (required for Tailscale)
+pct create 900 $UBUNTU_TEMPLATE \
+  --hostname ktrdr-template \
+  --cores 2 \
+  --memory 2048 \
+  --swap 0 \
+  --rootfs $STORAGE:8 \
+  --net0 name=eth0,bridge=vmbr0,ip=dhcp \
+  --unprivileged 0
+
+# 2. Start template
+pct start 900
+
+# 3. Install all common software
+pct exec 900 -- bash -c '
+  apt-get update
+  apt-get install -y ca-certificates curl gnupg lsb-release openssh-server nfs-common
+
+  # Docker
+  install -m 0755 -d /etc/apt/keyrings
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  chmod a+r /etc/apt/keyrings/docker.gpg
+  echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | \
+    tee /etc/apt/sources.list.d/docker.list > /dev/null
+  apt-get update
+  apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+  # Tailscale
+  curl -fsSL https://tailscale.com/install.sh | sh
+
+  # SSH setup
+  mkdir -p /root/.ssh
+  chmod 700 /root/.ssh
+
+  # Clean up
+  apt-get clean
+  rm -rf /var/lib/apt/lists/*
+'
+
+# 4. Stop and convert to template
+pct stop 900
+pct template 900
+```
+
+---
+
+### Step 2: Clone and Configure Each LXC
+
+#### Core LXC (Node A)
+
+```bash
+# Clone from template (inherits privileged mode from template)
+pct clone 900 100 --hostname ktrdr-core --full
+
+# Configure resources and network (50GB system disk)
+pct set 100 \
+  --cores 4 \
+  --memory 30336 \
+  --net0 name=eth0,bridge=$BRIDGE,ip=$CORE_IP/$NETMASK,gw=$GATEWAY \
+  --nameserver $DNS_SERVER
+
+# Resize rootfs to 50GB
+pct resize 100 rootfs 50G
+
+# Add 500GB data volume for NFS, database, models, backups
+pct set 100 --mp0 $STORAGE:500,mp=/srv/ktrdr-shared
+
+# Stop container to add TUN device support (required for Tailscale)
+pct stop 100
+
+# Add TUN device support for Tailscale
+echo "lxc.cgroup2.devices.allow: c 10:200 rwm
+lxc.mount.entry: /dev/net dev/net none bind,create=dir" >> /etc/pve/lxc/100.conf
+
+# Create TUN device on Proxmox host (if not already present)
+mkdir -p /dev/net
+mknod /dev/net/tun c 10 200 2>/dev/null || true
+chmod 666 /dev/net/tun
+
+# Start the container
+pct start 100
+
+# Manually configure network (Proxmox's pct set doesn't auto-configure inside container)
+pct exec 100 -- ip link set eth0 up
+pct exec 100 -- ip addr add $CORE_IP/$NETMASK dev eth0
+pct exec 100 -- ip route add default via $GATEWAY dev eth0
+
+# Test network connectivity
+pct exec 100 -- ping -c 3 $GATEWAY
+
+# Start Tailscale daemon and authenticate
+pct exec 100 -- systemctl start tailscaled
+pct exec 100 -- systemctl enable tailscaled
+pct exec 100 -- tailscale up
+# Follow the URL printed to authorize in your browser
+
+# Create Core-specific directories
+pct exec 100 -- bash -c "
+  mkdir -p /opt/ktrdr-core
+  mkdir -p /srv/ktrdr-shared/{data,results,models,db-backups}
+"
+```
+
+**Note**: SSH access from your workstation will be configured via Tailscale hostnames after all containers are provisioned.
+
+#### Worker B LXC (Node B)
+
+```bash
+# Clone from template (inherits privileged mode from template)
+pct clone 900 201 --hostname ktrdr-workers-b --full
+
+# Configure resources and network
+pct set 201 \
   --cores 3 \
   --memory 14336 \
-  --swap 0 \
-  --rootfs local-lvm:30 \
-  --net0 name=eth0,bridge=vmbr0,ip=<IP>/24,gw=<GATEWAY> \
-  --nameserver <DNS_SERVER> \
-  --unprivileged 1
+  --net0 name=eth0,bridge=$BRIDGE,ip=$WORKER_B_IP/$NETMASK,gw=$GATEWAY \
+  --nameserver $DNS_SERVER
 
+# Resize rootfs to 30GB
+pct resize 201 rootfs 30G
+
+# Stop container to add TUN device support (required for Tailscale)
+pct stop 201
+
+# Add TUN device support for Tailscale
+echo "lxc.cgroup2.devices.allow: c 10:200 rwm
+lxc.mount.entry: /dev/net dev/net none bind,create=dir" >> /etc/pve/lxc/201.conf
+
+# Start the container
 pct start 201
 
-# Install Docker (same as core LXC)
-# Install SSH server (same as core LXC)
-# Install NFS client
-pct exec 201 -- apt-get install -y nfs-common
+# Manually configure network
+pct exec 201 -- ip link set eth0 up
+pct exec 201 -- ip addr add $WORKER_B_IP/$NETMASK dev eth0
+pct exec 201 -- ip route add default via $GATEWAY dev eth0
 
-# Create mount point
-pct exec 201 -- mkdir -p /mnt/ktrdr-shared
+# Test network connectivity
+pct exec 201 -- ping -c 3 $GATEWAY
 
-# Create directory structure
-pct exec 201 -- mkdir -p /opt/ktrdr-workers-b
+# Start Tailscale daemon and authenticate
+pct exec 201 -- systemctl start tailscaled
+pct exec 201 -- systemctl enable tailscaled
+pct exec 201 -- tailscale up
+# Follow the URL printed to authorize in your browser
 
-# Node C - Worker LXC (adjust RAM to 6GB)
-pct create 202 local:vztmpl/ubuntu-22.04-standard.tar.zst \
-  --hostname ktrdr-workers-c \
+# Create Worker-specific directories
+pct exec 201 -- bash -c "
+  mkdir -p /mnt/ktrdr-shared
+  mkdir -p /opt/ktrdr-workers-b
+"
+```
+
+#### Worker C LXC (Node C)
+
+```bash
+# Clone from template (inherits privileged mode from template)
+pct clone 900 202 --hostname ktrdr-workers-c --full
+
+# Configure resources and network (6GB RAM for smaller node)
+pct set 202 \
   --cores 3 \
   --memory 6144 \
-  --swap 0 \
-  --rootfs local-lvm:30 \
-  --net0 name=eth0,bridge=vmbr0,ip=<IP>/24,gw=<GATEWAY> \
-  --nameserver <DNS_SERVER> \
-  --unprivileged 1
+  --net0 name=eth0,bridge=$BRIDGE,ip=$WORKER_C_IP/$NETMASK,gw=$GATEWAY \
+  --nameserver $DNS_SERVER
 
-# Repeat Docker, SSH, NFS setup
+# Resize rootfs to 30GB
+pct resize 202 rootfs 30G
+
+# Stop container to add TUN device support (required for Tailscale)
+pct stop 202
+
+# Add TUN device support for Tailscale
+echo "lxc.cgroup2.devices.allow: c 10:200 rwm
+lxc.mount.entry: /dev/net dev/net none bind,create=dir" >> /etc/pve/lxc/202.conf
+
+# Start the container
+pct start 202
+
+# Manually configure network
+pct exec 202 -- ip link set eth0 up
+pct exec 202 -- ip addr add $WORKER_C_IP/$NETMASK dev eth0
+pct exec 202 -- ip route add default via $GATEWAY dev eth0
+
+# Test network connectivity
+pct exec 202 -- ping -c 3 $GATEWAY
+
+# Start Tailscale daemon and authenticate
+pct exec 202 -- systemctl start tailscaled
+pct exec 202 -- systemctl enable tailscaled
+pct exec 202 -- tailscale up
+# Follow the URL printed to authorize in your browser
+
+# Create Worker-specific directories
+pct exec 202 -- bash -c "
+  mkdir -p /mnt/ktrdr-shared
+  mkdir -p /opt/ktrdr-workers-c
+"
 ```
 
 ---
@@ -153,6 +298,7 @@ workers-c.ktrdr.home.mynerd.place.   IN A    <Node C IP>
 ```
 
 Reload DNS server:
+
 ```bash
 rndc reload  # BIND
 # OR
@@ -162,6 +308,7 @@ pihole restartdns  # Pi-hole
 ```
 
 Test DNS resolution:
+
 ```bash
 dig backend.ktrdr.home.mynerd.place
 dig workers-b.ktrdr.home.mynerd.place
@@ -306,6 +453,7 @@ op item create \
 ```
 
 **Generate secure values**:
+
 ```bash
 # Generate 32-char JWT secret
 openssl rand -base64 32 | tr -d '/+=' | head -c 32
@@ -361,11 +509,13 @@ op item get ktrdr-homelab-core --fields db_username
 #### Troubleshooting 1Password Access
 
 **"not signed in" error**:
+
 ```bash
 op signin
 ```
 
 **"item not found" error**:
+
 ```bash
 # List vaults to find correct name
 op vault list
@@ -389,6 +539,7 @@ ktrdr deploy core all
 ```
 
 **Verify**:
+
 ```bash
 ssh backend.ktrdr.home.mynerd.place
 docker ps
@@ -400,6 +551,7 @@ docker logs ktrdr-db
 ```
 
 **Access UIs**:
+
 - Backend: `http://backend.ktrdr.home.mynerd.place:8000/api/v1/docs`
 - Grafana: `http://grafana.ktrdr.home.mynerd.place:3000`
 - Jaeger: `http://backend.ktrdr.home.mynerd.place:16686`
@@ -415,6 +567,7 @@ ktrdr deploy workers C
 ```
 
 **Verify**:
+
 ```bash
 # Check workers registered with backend
 curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/workers | jq
@@ -482,6 +635,7 @@ zfs list -t snapshot -o name,creation -s creation | grep ktrdr-shared | tail -n 
 **Proxmox UI**: Datacenter → LXC → Snapshots → Take Snapshot
 
 **CLI**:
+
 ```bash
 # Weekly snapshots
 pct snapshot 100 weekly-$(date +%Y%m%d)
@@ -573,31 +727,50 @@ curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/workers | jq
 
 ### Adding Worker Capacity
 
-**Example**: Add 4th worker node
+**Example**: Add 4th worker node (uses template created in LXC Provisioning)
 
 ```bash
-# 1. Create new LXC on any Proxmox node
-pct create 203 local:vztmpl/ubuntu-22.04-standard.tar.zst \
-  --hostname ktrdr-workers-d \
+# Set variables for new worker
+WORKER_D_IP="192.168.1.103"
+
+# 1. Clone from template (inherits privileged mode from template)
+pct clone 900 203 --hostname ktrdr-workers-d --full
+
+# 2. Configure resources and network
+pct set 203 \
   --cores 3 \
   --memory 14336 \
-  --rootfs local-lvm:30 \
-  --net0 name=eth0,bridge=vmbr0,ip=<IP>/24,gw=<GATEWAY>
+  --net0 name=eth0,bridge=vmbr0,ip=$WORKER_D_IP/$NETMASK,gw=$GATEWAY \
+  --nameserver $DNS_SERVER
 
-# 2. Install Docker, SSH, NFS client (see Worker LXC provisioning)
+# Resize rootfs to 30GB
+pct resize 203 rootfs 30G
 
-# 3. Mount NFS share (see NFS Configuration)
+# 3. Start and configure
+pct start 203
 
-# 4. Add DNS entry
-# workers-d.ktrdr.home.mynerd.place.   IN A    <IP>
+# 4. Start Tailscale daemon and authenticate
+pct exec 203 -- systemctl start tailscaled
+pct exec 203 -- systemctl enable tailscaled
+pct exec 203 -- tailscale up
+# Follow the URL printed to authorize in your browser
 
-# 5. Copy docker-compose.workers.yml
+# 5. Create Worker-specific directories
+pct exec 203 -- bash -c "
+  mkdir -p /mnt/ktrdr-shared
+  mkdir -p /opt/ktrdr-workers-d
+"
+
+# 6. Add DNS entry (add to your DNS server)
+# workers-d.ktrdr.home.mynerd.place.   IN A    192.168.1.103
+
+# 7. Copy docker-compose.workers.yml
 scp docker-compose.workers.yml workers-d.ktrdr.home.mynerd.place:/opt/ktrdr-workers-d/
 
-# 6. Deploy workers
+# 8. Deploy workers
 ktrdr deploy workers D  # (requires updating CLI to support node D)
 
-# 7. Verify
+# 9. Verify
 curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/workers | jq
 ```
 
@@ -608,6 +781,7 @@ curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/workers | jq
 **Scaling Strategy**: Profile-based scaling using docker-compose profiles
 
 **Port Allocation**:
+
 - backtest-worker-1: 5003 (default)
 - backtest-worker-2: 5004 (scale-2)
 - backtest-worker-3: 5007 (scale-3)
@@ -616,6 +790,7 @@ curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/workers | jq
 - training-worker-3: 5008 (scale-3)
 
 **Scale to 2 workers of each type**:
+
 ```bash
 # SSH to worker LXC
 ssh workers-b.ktrdr.home.mynerd.place
@@ -629,6 +804,7 @@ curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/workers | jq
 ```
 
 **Scale to 3 workers of each type**:
+
 ```bash
 # Deploy with both scale-2 and scale-3 profiles
 docker compose --profile scale-2 --profile scale-3 up -d
@@ -638,6 +814,7 @@ curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/workers | jq
 ```
 
 **Scale back down to 1 of each**:
+
 ```bash
 # Deploy with no profiles (default only)
 docker compose up -d
@@ -710,6 +887,7 @@ ssh workers-c.ktrdr.home.mynerd.place "df -h | grep ktrdr-shared"
 **Symptoms**: `curl /api/v1/workers` returns empty array
 
 **Checks**:
+
 1. Worker containers running: `ssh workers-b.ktrdr.home.mynerd.place "docker ps"`
 2. Worker logs show registration attempt: `docker logs <container>`
 3. DNS resolution works: `ssh workers-b.ktrdr.home.mynerd.place "dig backend.ktrdr.home.mynerd.place"`
@@ -723,6 +901,7 @@ ssh workers-c.ktrdr.home.mynerd.place "df -h | grep ktrdr-shared"
 **Symptoms**: `/mnt/ktrdr-shared` not accessible on workers
 
 **Checks**:
+
 1. NFS server running: `ssh backend.ktrdr.home.mynerd.place "docker ps | grep nfs"`
 2. Export visible: `showmount -e backend.ktrdr.home.mynerd.place`
 3. Mount attempt: `ssh workers-b.ktrdr.home.mynerd.place "mount -a"`
@@ -735,6 +914,7 @@ ssh workers-c.ktrdr.home.mynerd.place "df -h | grep ktrdr-shared"
 **Symptoms**: Backend logs show "could not connect to database"
 
 **Checks**:
+
 1. PostgreSQL container running: `docker ps | grep ktrdr-db`
 2. PostgreSQL health check: `docker exec ktrdr-db pg_isready -U ktrdr`
 3. Backend can resolve db hostname: `docker exec ktrdr-backend ping db`
