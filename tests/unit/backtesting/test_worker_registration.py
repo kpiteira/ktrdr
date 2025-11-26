@@ -45,7 +45,7 @@ class TestWorkerRegistration:
                 assert registration.backend_url == "http://backend:8000"
 
     def test_get_endpoint_url_with_hostname(self):
-        """Test endpoint URL construction using hostname."""
+        """Test endpoint URL construction using hostname as fallback."""
         with patch.dict(
             os.environ,
             {"WORKER_ID": "backtest-1", "KTRDR_API_URL": "http://backend:8000"},
@@ -55,9 +55,44 @@ class TestWorkerRegistration:
                 return_value="worker-host",
             ):
                 registration = WorkerRegistration()
+                # Mock _detect_ip_address to return None so it falls back to hostname
+                with patch.object(
+                    registration, "_detect_ip_address", return_value=None
+                ):
+                    endpoint_url = registration.get_endpoint_url()
+
+                    assert endpoint_url == "http://worker-host:5003"
+
+    def test_get_endpoint_url_with_ip_detection(self):
+        """Test endpoint URL construction using auto-detected IP address."""
+        with patch.dict(
+            os.environ,
+            {"WORKER_ID": "backtest-1", "KTRDR_API_URL": "http://backend:8000"},
+        ):
+            registration = WorkerRegistration()
+            # Mock _detect_ip_address to return a specific IP
+            with patch.object(
+                registration, "_detect_ip_address", return_value="192.168.1.100"
+            ):
                 endpoint_url = registration.get_endpoint_url()
 
-                assert endpoint_url == "http://worker-host:5003"
+                assert endpoint_url == "http://192.168.1.100:5003"
+
+    def test_get_endpoint_url_with_explicit_env(self):
+        """Test endpoint URL from WORKER_ENDPOINT_URL env var takes precedence."""
+        with patch.dict(
+            os.environ,
+            {
+                "WORKER_ID": "backtest-1",
+                "KTRDR_API_URL": "http://backend:8000",
+                "WORKER_ENDPOINT_URL": "http://explicit-url:5003",
+            },
+        ):
+            registration = WorkerRegistration()
+            endpoint_url = registration.get_endpoint_url()
+
+            # Explicit env var takes precedence over everything
+            assert endpoint_url == "http://explicit-url:5003"
 
     def test_get_capabilities_default(self):
         """Test getting default capabilities."""
