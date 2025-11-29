@@ -107,6 +107,31 @@ services:
     networks:
       - ktrdr-core
 
+  # MCP Server - For Claude Code automation on pre-prod
+  # NOTE: In production image, mcp code is at /app/mcp but we set PYTHONPATH
+  # to prioritize pip packages over local mcp directory
+  mcp:
+    image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
+    container_name: ktrdr-mcp
+    restart: unless-stopped
+    volumes:
+      - /srv/ktrdr-shared:/mnt/shared:ro
+    environment:
+      ENVIRONMENT: homelab
+      LOG_LEVEL: INFO
+      # PYTHONPATH order matters: site-packages first to avoid shadowing pip mcp package
+      PYTHONPATH: /app/.venv/lib/python3.13/site-packages:/app:/app/mcp
+      KTRDR_API_URL: http://backend:8000/api/v1
+      OTLP_ENDPOINT: http://jaeger:4317
+    working_dir: /app/mcp
+    stdin_open: true  # Required for stdio MCP transport
+    networks:
+      - ktrdr-core
+    depends_on:
+      - backend
+    # Container stays running, Claude exec's into it
+    command: ["sleep", "infinity"]
+
 networks:
   ktrdr-core:
     driver: bridge

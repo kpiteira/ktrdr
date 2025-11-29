@@ -8,16 +8,177 @@ Model Context Protocol (MCP) server for KTRDR trading strategy research and deve
 - **Architecture**: Pure interface layer delegating to backend API (no local state)
 - **Response Pattern**: Hybrid extraction for safety + convenience
 
+## 🏗️ Deployment Architecture
+
+The MCP server runs as a Docker container that makes HTTP calls to the backend API. It uses **stdio transport** (stdin/stdout), meaning Claude launches it as a subprocess.
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Machine with Claude Code/Desktop                                            │
+│                                                                             │
+│   Claude ←──stdio──→ MCP Container ──http──→ Backend API                   │
+│                      (subprocess)            (local or remote)              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Multi-Instance Setup
+
+| Container | Location | Target Backend | Use Case |
+|-----------|----------|----------------|----------|
+| `ktrdr-mcp-local` | Mac | `localhost:8000` | Local development |
+| `ktrdr-mcp-preprod` | Mac | `preprod:8000` | Testing against pre-prod from Mac |
+| `ktrdr-mcp` | Pre-prod LXC | `backend:8000` | AI agent automation on pre-prod |
+
 ## 🚀 Quick Start
 
-All MCP tools have comprehensive docstrings with:
-- Clear parameter descriptions and valid values
-- Complete return structure documentation
+### 1. Start Development Environment
+
+```bash
+# Start all services including MCP containers
+docker compose -f docker-compose.dev.yml up -d
+
+# Or build/start MCP containers only
+./mcp/build_mcp.sh
+```
+
+### 2. Configure Claude
+
+Copy the MCP server configuration to your Claude config file:
+
+**Mac location**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "ktrdr-local": {
+      "command": "docker",
+      "args": ["exec", "-i", "ktrdr-mcp-local", "/app/.venv/bin/python", "-m", "src.main"],
+      "description": "KTRDR MCP Server - Local Development Backend"
+    },
+    "ktrdr-preprod": {
+      "command": "docker",
+      "args": ["exec", "-i", "ktrdr-mcp-preprod", "/app/.venv/bin/python", "-m", "src.main"],
+      "description": "KTRDR MCP Server - Pre-production Backend"
+    }
+  }
+}
+```
+
+### 3. Restart Claude
+
+Restart Claude Desktop or Claude Code to pick up the new configuration.
+
+## 📦 Container Management
+
+### Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `./build_mcp.sh` | Build and start MCP containers |
+| `./restart_mcp.sh [local\|preprod\|all]` | Restart MCP container(s) |
+| `./stop_mcp.sh [local\|preprod\|all]` | Stop MCP container(s) |
+
+### Direct Docker Commands
+
+```bash
+# Restart specific MCP container
+docker compose -f docker-compose.dev.yml restart mcp-local
+docker compose -f docker-compose.dev.yml restart mcp-preprod
+
+# View MCP logs
+docker logs ktrdr-mcp-local
+docker logs ktrdr-mcp-preprod
+
+# Check MCP container status
+docker ps --filter "name=ktrdr-mcp"
+```
+
+## 🖥️ Pre-prod Deployment
+
+On the pre-prod LXC (core node), the MCP container is part of `docker-compose.core.yml`:
+
+```yaml
+mcp:
+  image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
+  container_name: ktrdr-mcp
+  environment:
+    KTRDR_API_URL: http://backend:8000/api/v1
+  # ... see docker-compose.core.yml for full config
+```
+
+**Pre-prod Claude config** (`claude_mcp_config.preprod.json`):
+
+```json
+{
+  "mcpServers": {
+    "ktrdr": {
+      "command": "docker",
+      "args": ["exec", "-i", "ktrdr-mcp", "/app/.venv/bin/python", "-m", "src.main"]
+    }
+  }
+}
+```
+
+## 🔧 Configuration
+
+The MCP server is configured via environment variables:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `KTRDR_API_URL` | Backend API URL | `http://backend:8000/api/v1` |
+| `OTLP_ENDPOINT` | OpenTelemetry collector | `http://jaeger:4317` |
+| `LOG_LEVEL` | Logging verbosity | `INFO` |
+
+## 🧪 Testing MCP Changes
+
+1. Make changes to `mcp/src/` code
+2. Restart the relevant container:
+
+   ```bash
+   ./mcp/restart_mcp.sh local
+   ```
+
+3. In Claude, test the MCP tools
+
+4. Check logs:
+
+   ```bash
+   docker logs ktrdr-mcp-local --tail 50
+   ```
+
+## 🔍 Signature Validation
+
+The project includes automated validation to ensure MCP tool signatures match backend API contracts.
+
+### Running Validation
+
+```bash
+# Ensure backend is running
+docker compose -f docker-compose.dev.yml up -d backend
+
+# Run validation
+make validate-mcp
+
+# Or directly
+uv run python scripts/validate_mcp_signatures.py
+```
+
+### Configuration
+
+Tool-to-endpoint mapping is defined in [`endpoint_mapping.json`](endpoint_mapping.json).
+
+## 📝 MCP Tools Reference
+
+See **[MCP_TOOLS.md](MCP_TOOLS.md)** for complete tool documentation including:
+
+- Parameter descriptions and valid values
+- Return structure documentation
 - Working code examples
-- Related tools for discovery ("See Also")
+- Related tools for discovery
 - Behavioral notes and best practices
 
-Example - Starting a training operation:
+### Example Usage
+
 ```python
 # Start training (returns operation_id)
 result = await start_training(
@@ -32,105 +193,3 @@ result = await start_training(
 status = await get_operation_status(result["data"]["operation_id"])
 print(f"Progress: {status['data']['progress_percentage']}%")
 ```
-
-## 🏗️ Architecture
-
-### Response Handling Pattern
-
-The MCP clients use a **hybrid response extraction pattern**:
-
-1. **Critical operations** → `_extract_or_raise()`: Validates responses for operations that must succeed
-2. **Discovery operations** → `_extract_list/dict()`: Graceful defaults for browsing/listing
-3. **Status operations** → Full response: Maximum information for monitoring
-
-See [MCP_TOOLS.md](MCP_TOOLS.md#response-handling-architecture) for details.
-
-## 📦 Container Management
-
-This directory contains scripts for safely managing the MCP container without affecting the backend or frontend.
-
-## 🚨 CRITICAL RULE 🚨
-
-**NEVER touch the backend or frontend containers when working on MCP features!**
-
-## Safe MCP Scripts
-
-Use these scripts to manage ONLY the MCP container:
-
-### `./restart_mcp.sh`
-Restarts only the MCP container. Use this when you've made configuration changes.
-
-### `./build_mcp.sh`  
-Rebuilds and starts only the MCP container. Use this when you've made code changes.
-
-### `./stop_mcp.sh`
-Stops only the MCP container. Use this for maintenance or debugging.
-
-## Direct Docker Commands
-
-If you prefer direct docker-compose commands, use these SAFE patterns:
-
-```bash
-# ✅ SAFE - Only affects MCP
-docker-compose -f docker/docker-compose.yml restart mcp
-docker-compose -f docker/docker-compose.yml build mcp
-docker-compose -f docker/docker-compose.yml up -d mcp
-docker-compose -f docker/docker-compose.yml stop mcp
-
-# ❌ DANGEROUS - Affects ALL containers  
-docker-compose --profile research up -d
-docker-compose build
-docker-compose restart
-```
-
-## Why This Matters
-
-The backend and frontend containers are:
-- Complex to rebuild
-- Sensitive to environment changes  
-- Not related to MCP development
-- Working correctly and should not be disturbed
-
-The MCP container is:
-- Independent and isolated
-- Safe to rebuild frequently
-- What you're actually working on
-
-## Testing MCP Changes
-
-After making changes:
-1. Run `./build_mcp.sh` to rebuild only MCP
-2. Restart Claude Desktop to reconnect
-3. Test your MCP tools
-
-Never restart other containers - they don't need it for MCP changes!
-
-## 🔍 Signature Validation
-
-The project includes automated validation to ensure MCP tool signatures match backend API contracts.
-
-### How It Works
-
-- **Pre-commit hook**: Validates signatures when modifying `mcp/src/server.py`
-- **CI validation**: Runs on PRs affecting MCP or backend code
-- **Type safety**: Ensures parameters match between MCP tools and backend endpoints
-
-### Running Validation Manually
-
-```bash
-# Ensure backend is running
-./start_ktrdr.sh
-
-# Run validation (via Makefile - recommended)
-make validate-mcp
-
-# Or run script directly
-uv run python scripts/validate_mcp_signatures.py
-
-# See detailed docs
-cat scripts/README.md
-```
-
-### Configuration
-
-Tool-to-endpoint mapping is defined in [`endpoint_mapping.json`](endpoint_mapping.json).

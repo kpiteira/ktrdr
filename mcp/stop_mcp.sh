@@ -1,15 +1,43 @@
 #!/bin/bash
 # MCP Container Stop Script
-# This script ONLY stops the MCP container, never touches backend/frontend
+# This script ONLY stops the MCP containers, never touches other services
 
 set -e
 
-echo "🛑 Stopping ONLY the MCP container..."
-echo "⚠️  This will NOT affect backend or frontend containers"
+SCRIPT_DIR="$(dirname "$0")"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-cd "$(dirname "$0")/.."
-docker-compose -f docker/docker-compose.yml stop mcp
+# Parse arguments
+TARGET="${1:-all}"
 
-echo "✅ MCP container stopped successfully"
-echo "📊 Current container status:"
-docker ps --filter "name=ktrdr" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+echo "=========================================="
+echo "  KTRDR MCP Container Stop"
+echo "=========================================="
+echo ""
+
+cd "$PROJECT_ROOT"
+
+case "$TARGET" in
+    local)
+        echo "Stopping ktrdr-mcp-local..."
+        docker compose -f docker-compose.dev.yml stop mcp-local
+        ;;
+    preprod)
+        echo "Stopping ktrdr-mcp-preprod..."
+        docker compose -f docker-compose.dev.yml stop mcp-preprod
+        ;;
+    all|*)
+        echo "Stopping all MCP containers..."
+        docker compose -f docker-compose.dev.yml stop mcp-local mcp-preprod
+        ;;
+esac
+
+echo ""
+echo "MCP containers stopped successfully"
+echo ""
+echo "Container status:"
+docker ps -a --filter "name=ktrdr-mcp" --format "table {{.Names}}\t{{.Status}}"
+
+echo ""
+echo "Usage: $0 [local|preprod|all]"
+echo ""

@@ -2,26 +2,32 @@
 
 ## 🚨 CRITICAL: NEVER TOUCH OTHER CONTAINERS
 
-**WHEN WORKING ON MCP, NEVER REBUILD BACKEND OR FRONTEND!**
+**WHEN WORKING ON MCP, NEVER REBUILD BACKEND OR WORKERS!**
 
-### ✅ ALLOWED Commands:
+### ALLOWED Commands
+
 ```bash
-./mcp/restart_mcp.sh              # Restart ONLY MCP
-./mcp/build_mcp.sh                 # Build ONLY MCP
-./mcp/stop_mcp.sh                  # Stop ONLY MCP
-docker-compose -f docker/docker-compose.yml restart --no-deps mcp
+./mcp/restart_mcp.sh              # Restart all MCP containers
+./mcp/restart_mcp.sh local        # Restart only mcp-local
+./mcp/restart_mcp.sh preprod      # Restart only mcp-preprod
+./mcp/build_mcp.sh                # Build and start MCP containers
+./mcp/stop_mcp.sh                 # Stop all MCP containers
+docker compose -f docker-compose.dev.yml restart mcp-local
+docker compose -f docker-compose.dev.yml restart mcp-preprod
 ```
 
-### ❌ FORBIDDEN Commands:
+### FORBIDDEN Commands
+
 ```bash
-docker-compose --profile research up -d    # NO! Rebuilds everything
-docker-compose build                       # NO! Rebuilds everything
-docker-compose restart                     # NO! Affects all containers
+docker compose -f docker-compose.dev.yml up -d    # NO! Affects all containers
+docker compose build                              # NO! Rebuilds everything
+docker compose restart                            # NO! Affects all containers
 ```
 
 ## 🏗️ MCP ARCHITECTURE
 
 MCP (Model Context Protocol) server enables Claude to:
+
 - Access market data (read-only)
 - Run strategy research
 - Train and test models
@@ -29,33 +35,40 @@ MCP (Model Context Protocol) server enables Claude to:
 
 **Safety First**: No access to live trading or production systems
 
+## 📦 Multi-Instance Setup
+
+| Container | Target Backend | Purpose |
+|-----------|----------------|---------|
+| `ktrdr-mcp-local` | `http://backend:8000` | Local dev |
+| `ktrdr-mcp-preprod` | `http://preprod:8000` | Pre-prod from Mac |
+| `ktrdr-mcp` (pre-prod) | `http://backend:8000` | AI automation |
+
 ## 📁 MCP STRUCTURE
 
-```
+```text
 mcp/
-├── server/          # MCP server implementation
-├── tools/           # Available tools for Claude
-├── config/          # MCP configuration
-└── scripts/         # Build and deployment scripts
+├── src/              # MCP server implementation
+│   ├── main.py       # Entry point
+│   ├── server.py     # Tool definitions
+│   ├── config.py     # Configuration
+│   └── clients/      # Backend API clients
+├── claude_mcp_config.json         # Mac Claude config template
+├── claude_mcp_config.preprod.json # Pre-prod Claude config template
+└── scripts           # Build and management scripts
 ```
 
 ## 🔧 DEVELOPMENT WORKFLOW
 
-1. Make changes to MCP code
-2. Run `./mcp/build_mcp.sh` (builds ONLY MCP)
-3. Test with Claude Desktop
-4. Check logs: `docker logs mcp`
+1. Make changes to MCP code in `mcp/src/`
+2. Run `./mcp/restart_mcp.sh local` to restart
+3. Test with Claude Desktop/Code
+4. Check logs: `docker logs ktrdr-mcp-local`
 
 ## 🚫 MCP ANTI-PATTERNS
 
-❌ Giving access to order execution
-✅ Research and analysis only
-
-❌ Modifying production data
-✅ Read-only access to market data
-
-❌ Uncontrolled resource usage
-✅ Set limits on compute and memory
+- Giving access to order execution (research only)
+- Modifying production data (read-only access)
+- Uncontrolled resource usage (set limits)
 
 ## 🧪 TESTING MCP
 

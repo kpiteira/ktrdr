@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "ktrdr": {
+      "command": "docker",
+      "args": ["exec", "-i", "ktrdr-mcp", "/app/.venv/bin/python", "-m", "src.main"],
+      "description": "KTRDR MCP Server - Pre-production Environment"
+    }
+  }
+}
