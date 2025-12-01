@@ -87,6 +87,7 @@ COPY --from=builder /app/.venv/lib/python3.13/site-packages /usr/local/lib/pytho
 COPY --from=builder /app/ktrdr $APP_HOME/ktrdr
 COPY --from=builder /app/mcp $APP_HOME/mcp
 COPY --from=builder /app/config $APP_HOME/config
+COPY --from=builder /app/strategies $APP_HOME/strategies
 COPY --from=builder /app/pyproject.toml $APP_HOME/
 
 # Change ownership of the app directory

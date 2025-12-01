@@ -1,0 +1,160 @@
+# =============================================================================
+# KTRDR Canary Environment - Production Image Testing
+# =============================================================================
+# Tests the actual production container before merge/deploy.
+# Runs on separate ports so it doesn't conflict with dev environment.
+#
+# Usage:
+#   1. Build production image:  make test-container-build
+#   2. Start canary:            docker compose -f docker-compose.canary.yml up -d
+#   3. Test:                    make test-canary-functional
+#   4. Stop canary:             docker compose -f docker-compose.canary.yml down
+#
+# Ports:
+#   - Backend API:      18000 (dev uses 8000)
+#   - Backtest Worker:  15003 (dev uses 5003)
+#   - Training Worker:  15004 (dev uses 5004)
+#   - Database:         15432 (dev uses 5432)
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Database
+  # ---------------------------------------------------------------------------
+  db:
+    image: timescale/timescaledb-ha:pg15
+    container_name: ktrdr-db-canary
+    ports:
+      - "15432:5432"
+    volumes:
+      - postgres_data_canary:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: ktrdr_canary
+      POSTGRES_USER: ktrdr_canary
+      POSTGRES_PASSWORD: canary_password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ktrdr_canary"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ktrdr-canary
+
+  # ---------------------------------------------------------------------------
+  # Backend API (Production Image)
+  # ---------------------------------------------------------------------------
+  backend:
+    image: ktrdr-backend:test
+    container_name: ktrdr-backend-canary
+    ports:
+      - "18000:8000"
+    volumes:
+      # Shared storage for models/data
+      - canary_shared:/mnt/shared
+      # Mount local data directory for test data access
+      - ./data:/home/ktrdr/app/data:ro
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ktrdr_canary
+      DB_USER: ktrdr_canary
+      DB_PASSWORD: canary_password
+      JWT_SECRET: canary_jwt_secret_at_least_32_characters
+      KTRDR_API_HOST: 0.0.0.0
+      KTRDR_API_PORT: 8000
+      ENVIRONMENT: canary
+      LOG_LEVEL: INFO
+      SHARED_MOUNT_PATH: /mnt/shared
+    # Override command to avoid log-config path issue (uses /app/logs but container uses /home/ktrdr/app)
+    command: ["python", "-m", "uvicorn", "ktrdr.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - ktrdr-canary
+
+  # ---------------------------------------------------------------------------
+  # Backtest Worker (Production Image)
+  # ---------------------------------------------------------------------------
+  backtest-worker:
+    image: ktrdr-backend:test
+    container_name: ktrdr-backtest-worker-canary
+    ports:
+      - "15003:5003"
+    volumes:
+      - canary_shared:/mnt/shared
+      - ./data:/home/ktrdr/app/data:ro
+    environment:
+      KTRDR_API_URL: http://backend:8000
+      WORKER_TYPE: backtesting
+      WORKER_PORT: 5003
+      # Workers inside Docker network can reach each other, but backend
+      # needs to call back to worker - use Docker service name
+      WORKER_PUBLIC_BASE_URL: http://backtest-worker:5003
+      SHARED_MOUNT_PATH: /mnt/shared
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ktrdr_canary
+      DB_USER: ktrdr_canary
+      DB_PASSWORD: canary_password
+    command: ["python", "-m", "uvicorn", "ktrdr.backtesting.backtest_worker:app", "--host", "0.0.0.0", "--port", "5003"]
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5003/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - ktrdr-canary
+
+  # ---------------------------------------------------------------------------
+  # Training Worker (Production Image)
+  # ---------------------------------------------------------------------------
+  training-worker:
+    image: ktrdr-backend:test
+    container_name: ktrdr-training-worker-canary
+    ports:
+      - "15004:5004"
+    volumes:
+      - canary_shared:/mnt/shared:rw
+      - ./data:/home/ktrdr/app/data:ro
+    environment:
+      KTRDR_API_URL: http://backend:8000
+      WORKER_TYPE: training
+      WORKER_PORT: 5004
+      WORKER_PUBLIC_BASE_URL: http://training-worker:5004
+      SHARED_MOUNT_PATH: /mnt/shared
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ktrdr_canary
+      DB_USER: ktrdr_canary
+      DB_PASSWORD: canary_password
+    command: ["python", "-m", "uvicorn", "ktrdr.training.training_worker:app", "--host", "0.0.0.0", "--port", "5004"]
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5004/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - ktrdr-canary
+
+networks:
+  ktrdr-canary:
+    driver: bridge
+
+volumes:
+  postgres_data_canary:
+  canary_shared:
