@@ -59,21 +59,19 @@ LABEL org.opencontainers.image.authors="KTRDR Team"
 LABEL org.opencontainers.image.source="https://github.com/username/ktrdr"
 LABEL org.opencontainers.image.documentation="https://ktrdr.io/docs"
 
-# Set environment variables
+# Set environment variables - use /app (industry standard for containers)
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    APP_USER=ktrdr \
-    APP_HOME=/home/ktrdr/app
+    APP_USER=ktrdr
 
-# Create a non-root user
+# Set the working directory (before creating user so we can set ownership)
+WORKDIR /app
+
+# Create a non-root user for security
 RUN groupadd -r $APP_USER && \
-    useradd -r -g $APP_USER -d $APP_HOME -s /bin/bash -c "KTRDR user" $APP_USER && \
-    mkdir -p $APP_HOME && \
-    mkdir -p $APP_HOME/logs && \
-    mkdir -p $APP_HOME/data
-
-# Set the working directory
-WORKDIR $APP_HOME
+    useradd -r -g $APP_USER -d /app -s /sbin/nologin -c "KTRDR service user" $APP_USER && \
+    mkdir -p /app/logs /app/data && \
+    chown -R $APP_USER:$APP_USER /app
 
 # Install runtime dependencies
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -84,17 +82,17 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 # Copy from builder stage - only what's needed for production
 COPY --from=builder /app/.venv/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
-COPY --from=builder /app/ktrdr $APP_HOME/ktrdr
-COPY --from=builder /app/mcp $APP_HOME/mcp
-COPY --from=builder /app/config $APP_HOME/config
-COPY --from=builder /app/strategies $APP_HOME/strategies
-COPY --from=builder /app/pyproject.toml $APP_HOME/
+COPY --from=builder /app/ktrdr /app/ktrdr
+COPY --from=builder /app/mcp /app/mcp
+COPY --from=builder /app/config /app/config
+COPY --from=builder /app/strategies /app/strategies
+COPY --from=builder /app/pyproject.toml /app/
 
-# Change ownership of the app directory
-RUN chown -R $APP_USER:$APP_USER $APP_HOME
+# Change ownership of the app directory (after copying files)
+RUN chown -R $APP_USER:$APP_USER /app
 
 # Setup volume for data persistence
-VOLUME ["$APP_HOME/data", "$APP_HOME/logs"]
+VOLUME ["/app/data", "/app/logs"]
 
 # Configure health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
@@ -110,4 +108,4 @@ USER $APP_USER
 ENTRYPOINT ["/usr/bin/tini", "--"]
 
 # Default command to run the FastAPI server
-CMD ["python", "-m", "uvicorn", "ktrdr.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--log-config", "/home/ktrdr/app/ktrdr/config/logging_config.json"]
+CMD ["python", "-m", "uvicorn", "ktrdr.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--log-config", "/app/ktrdr/config/logging_config.json"]

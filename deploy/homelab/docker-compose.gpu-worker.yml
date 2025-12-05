@@ -1,0 +1,77 @@
+# =============================================================================
+# KTRDR GPU Worker Stack - Training with GPU Acceleration
+# =============================================================================
+# Runs on GPU VM (ktrdr-gpuworker) with GPU passthrough
+# Training operations are routed here preferentially (10-100x faster)
+#
+# Prerequisites:
+#   - NVIDIA Container Toolkit installed on host
+#   - GPU passthrough configured in VM
+#   - NFS mounted at /mnt/ktrdr_data
+# =============================================================================
+
+services:
+  training-worker-gpu:
+    image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
+    container_name: training-worker-gpu
+    restart: unless-stopped
+    user: "0:0"  # Run as root for NFS access
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+        limits:
+          cpus: '4'
+          memory: 16G
+    ports:
+      - "5005:5005"
+    volumes:
+      - /mnt/ktrdr_data:/mnt/ktrdr_data:rw
+    environment:
+      KTRDR_API_URL: http://backend.ktrdr.home.mynerd.place:8000
+      WORKER_TYPE: training
+      WORKER_PORT: 5005
+      WORKER_PUBLIC_BASE_URL: http://ktrdr-gpuworker.ktrdr.home.mynerd.place:5005
+      WORKER_HAS_GPU: "true"
+      SHARED_MOUNT_PATH: /mnt/ktrdr_data
+      OTLP_ENDPOINT: http://backend.ktrdr.home.mynerd.place:4317
+      # Database access for checkpointing
+      DB_HOST: backend.ktrdr.home.mynerd.place
+      DB_PORT: 5432
+      DB_NAME: ktrdr
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      # GPU-specific settings
+      NVIDIA_VISIBLE_DEVICES: all
+      CUDA_VISIBLE_DEVICES: "0"
+    command: ["uvicorn", "ktrdr.training.training_worker:app", "--host", "0.0.0.0", "--port", "5005"]
+    networks:
+      - ktrdr-gpu-workers
+
+networks:
+  ktrdr-gpu-workers:
+    driver: bridge
+
+# =============================================================================
+# GPU Worker Notes
+# =============================================================================
+#
+# This worker registers with gpu: true capability
+# WorkerRegistry prioritizes GPU workers for training operations
+#
+# Resource requirements:
+#   - NVIDIA GPU with CUDA support
+#   - 16GB+ GPU memory recommended
+#   - 4+ CPU cores
+#   - 16GB+ RAM
+#
+# Deployment:
+#   ktrdr deploy gpu
+#
+# Verification:
+#   curl http://ktrdr-gpuworker.ktrdr.home.mynerd.place:5005/health
+#   # Should show: {"gpu": true, ...}
+# =============================================================================
