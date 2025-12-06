@@ -47,7 +47,7 @@ services:
       # GPU-specific settings
       NVIDIA_VISIBLE_DEVICES: all
       CUDA_VISIBLE_DEVICES: "0"
-    command: ["uvicorn", "ktrdr.training.training_worker:app", "--host", "0.0.0.0", "--port", "5005"]
+    command: ["python", "-m", "uvicorn", "ktrdr.training.training_worker:app", "--host", "0.0.0.0", "--port", "5005"]
     networks:
       - ktrdr-gpu-workers
 

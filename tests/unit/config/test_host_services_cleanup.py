@@ -92,25 +92,28 @@ class TestDeprecatedEnvVarsNotUsed:
 class TestDockerComposeClean:
     """Docker compose should not reference deprecated variables."""
 
+    # Path to local dev compose file (restructured location)
+    COMPOSE_PATH = "deploy/environments/local/docker-compose.yml"
+
     def test_docker_compose_no_training_host_vars(self):
-        """docker-compose.dev.yml should not reference USE_TRAINING_HOST_SERVICE."""
-        with open("docker-compose.dev.yml") as f:
+        """Local dev compose should not reference USE_TRAINING_HOST_SERVICE."""
+        with open(self.COMPOSE_PATH) as f:
             content = f.read()
 
         assert "USE_TRAINING_HOST_SERVICE" not in content
         assert "TRAINING_HOST_SERVICE_URL" not in content
 
     def test_docker_compose_no_remote_backtest_vars(self):
-        """docker-compose.dev.yml should not reference USE_REMOTE_BACKTEST_SERVICE."""
-        with open("docker-compose.dev.yml") as f:
+        """Local dev compose should not reference USE_REMOTE_BACKTEST_SERVICE."""
+        with open(self.COMPOSE_PATH) as f:
             content = f.read()
 
         assert "USE_REMOTE_BACKTEST_SERVICE" not in content
         assert "REMOTE_BACKTEST_SERVICE_URL" not in content
 
     def test_docker_compose_still_has_ib_vars(self):
-        """docker-compose.dev.yml should still have IB host service variables."""
-        with open("docker-compose.dev.yml") as f:
+        """Local dev compose should still have IB host service variables."""
+        with open(self.COMPOSE_PATH) as f:
             content = f.read()
 
         # IB variables should still exist

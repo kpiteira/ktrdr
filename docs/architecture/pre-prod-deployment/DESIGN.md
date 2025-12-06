@@ -226,12 +226,34 @@ This design establishes a **production-grade deployment architecture** for KTRDR
 
 ## System Topology
 
-**Node A** (16GB RAM): Core LXC → DB, Backend, Prometheus, Grafana, Jaeger, NFS
-**Node B** (16GB RAM): Worker LXC → Backtest/Training replicas
-**Node C** (8GB RAM): Worker LXC → Additional capacity
+**Node A** (16GB RAM): Core LXC → DB, Backend, Prometheus, Grafana, Jaeger, NFS Server
+**Node B** (16GB RAM): Worker LXC → Backtest/Training workers (CPU)
+**Node C** (8GB RAM): Worker LXC → Backtest/Training workers (CPU)
+**GPU Host**: GPU Worker VM → Training workers (GPU-accelerated, preferred for training)
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│ Node A: Core LXC                                            │
+│  └─ backend, db, prometheus, grafana, jaeger               │
+├─────────────────────────────────────────────────────────────┤
+│ Node B: Worker LXC (CPU)                                    │
+│  └─ backtest-worker, training-worker (fallback)            │
+├─────────────────────────────────────────────────────────────┤
+│ Node C: Worker LXC (CPU)                                    │
+│  └─ backtest-worker, training-worker (fallback)            │
+├─────────────────────────────────────────────────────────────┤
+│ GPU Host: GPU Worker VM (ktrdr-gpuworker)                  │
+│  └─ training-worker-gpu (preferred for training, CUDA)     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Worker Routing**:
+- Training operations → GPU worker preferred (registers with `gpu: true`), CPU workers as fallback
+- Backtest operations → Round-robin across CPU workers (Nodes B & C)
 
 **Communication**:
 - LXC-to-LXC: DNS (`backend.ktrdr.home.mynerd.place`, `workers-b.ktrdr.home.mynerd.place`)
+- LXC-to-VM: DNS (`ktrdr-gpuworker.ktrdr.home.mynerd.place`)
 - Docker-to-Docker: Service names (`db`, `prometheus`)
 - External: Proxmox port forwards (Grafana, API)
 

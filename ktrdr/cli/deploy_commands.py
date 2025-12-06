@@ -61,7 +61,10 @@ def core(
         str, typer.Option("--tag", "-t", help="Image tag to deploy (default: latest)")
     ] = "latest",
     verbose: Annotated[
-        bool, typer.Option("--verbose", "-v", help="Show detailed output from remote commands")
+        bool,
+        typer.Option(
+            "--verbose", "-v", help="Show detailed output from remote commands"
+        ),
     ] = False,
 ):
     """Deploy core services (backend, db, observability)."""

@@ -135,8 +135,8 @@ class TestDeployCore:
             assert result.exit_code != 0
             assert "1Password error" in result.output
 
-    def test_git_sha_failure_aborts(self):
-        """Test that git SHA fetch failure aborts deployment."""
+    def test_custom_tag_used(self):
+        """Test that custom tag is used in deployment."""
         with (
             patch(
                 "ktrdr.cli.deploy_commands.validate_deployment_prerequisites"
@@ -144,16 +144,20 @@ class TestDeployCore:
             patch(
                 "ktrdr.cli.deploy_commands.fetch_secrets_from_1password"
             ) as mock_secrets,
-            patch("ktrdr.cli.deploy_commands.get_latest_sha_tag") as mock_sha,
+            patch("ktrdr.cli.deploy_commands.docker_login_ghcr") as mock_docker,
+            patch("ktrdr.cli.deploy_commands.ssh_exec_with_env") as mock_ssh,
         ):
             mock_validate.return_value = (True, [])
             mock_secrets.return_value = {"ghcr_token": "ghp_xxx"}
-            mock_sha.side_effect = Exception("Git error: not a git repository")
+            mock_docker.return_value = True
+            mock_ssh.return_value = "output"
 
-            result = runner.invoke(deploy_app, ["core"])
+            result = runner.invoke(
+                deploy_app, ["core", "--tag", "sha-abc1234", "--skip-validation"]
+            )
 
-            assert result.exit_code != 0
-            assert "Git error" in result.output
+            assert result.exit_code == 0
+            assert "sha-abc1234" in result.output
 
     def test_docker_login_failure_aborts(self):
         """Test that Docker login failure aborts deployment."""
@@ -225,7 +229,7 @@ class TestDeployWorkers:
             result = runner.invoke(deploy_app, ["workers", "all", "--dry-run"])
 
             assert result.exit_code == 0
-            # Should deploy to 2 worker hosts (workers-b and workers-c)
+            # Should deploy to 2 worker hosts (workers-b, workers-c)
             assert mock_docker.call_count == 2
             assert mock_ssh.call_count == 2
 
@@ -280,7 +284,7 @@ class TestDeployWorkers:
 
             # Should still succeed overall (workers-c deployed, workers-b skipped)
             assert result.exit_code == 0
-            # Should only deploy to 1 worker host (skipped workers-b)
+            # Should deploy to 1 worker host (skipped workers-b, deployed workers-c)
             assert mock_docker.call_count == 1
             assert mock_ssh.call_count == 1
 
@@ -303,21 +307,30 @@ class TestDeployWorkers:
             assert result.exit_code != 0
             assert "1Password error" in result.output
 
-    def test_workers_git_sha_failure_aborts(self):
-        """Test that git SHA fetch failure aborts worker deployment."""
+    def test_workers_custom_tag_used(self):
+        """Test that custom tag is used in worker deployment."""
         with (
+            patch(
+                "ktrdr.cli.deploy_commands.validate_deployment_prerequisites"
+            ) as mock_validate,
             patch(
                 "ktrdr.cli.deploy_commands.fetch_secrets_from_1password"
             ) as mock_secrets,
-            patch("ktrdr.cli.deploy_commands.get_latest_sha_tag") as mock_sha,
+            patch("ktrdr.cli.deploy_commands.docker_login_ghcr") as mock_docker,
+            patch("ktrdr.cli.deploy_commands.ssh_exec_with_env") as mock_ssh,
         ):
+            mock_validate.return_value = (True, [])
             mock_secrets.return_value = {"ghcr_token": "ghp_xxx"}
-            mock_sha.side_effect = Exception("Git error: not a git repository")
+            mock_docker.return_value = True
+            mock_ssh.return_value = "output"
 
-            result = runner.invoke(deploy_app, ["workers", "workers-b"])
+            result = runner.invoke(
+                deploy_app,
+                ["workers", "workers-b", "--tag", "sha-abc1234", "--skip-validation"],
+            )
 
-            assert result.exit_code != 0
-            assert "Git error" in result.output
+            assert result.exit_code == 0
+            assert "sha-abc1234" in result.output
 
     def test_worker_docker_login_failure_skips(self):
         """Test that Docker login failure skips that worker."""
@@ -350,7 +363,7 @@ class TestDeployWorkers:
             assert result.exit_code == 0
             # Both workers attempted docker login
             assert mock_docker.call_count == 2
-            # Only one worker got to SSH step
+            # Only one worker got to SSH step (workers-c)
             assert mock_ssh.call_count == 1
 
     def test_worker_ssh_failure_skips(self):
@@ -434,8 +447,8 @@ class TestDeployStatus:
             result = runner.invoke(deploy_app, ["status", "all"])
 
             assert result.exit_code == 0
-            # Should check backend + 2 workers = 3 calls
-            assert mock_ssh.call_count == 3
+            # Should check backend + 3 workers (workers-b, workers-c, gpu) = 4 calls
+            assert mock_ssh.call_count == 4
 
     def test_status_workers_only(self):
         """Test checking workers status only."""
@@ -445,7 +458,7 @@ class TestDeployStatus:
             result = runner.invoke(deploy_app, ["status", "workers"])
 
             assert result.exit_code == 0
-            # Should check 2 worker hosts only
+            # Should check 2 worker hosts only (workers-b, workers-c)
             assert mock_ssh.call_count == 2
 
     def test_status_invalid_target(self):

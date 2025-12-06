@@ -72,7 +72,7 @@ def ssh_exec_with_env(
     try:
         if verbose:
             # Stream output in real-time (for long-running commands like docker pull)
-            result = subprocess.run(
+            subprocess.run(
                 ssh_cmd,
                 check=True,
                 timeout=600,  # 10 minute timeout for verbose mode

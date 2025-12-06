@@ -16,8 +16,8 @@ _original_stdout = sys.stdout
 sys.stdout = sys.stderr
 
 # Now import MCP server components - logging will go to stderr
-from .config import setup_logging
-from .server import KTRDRMCPServer
+from .config import setup_logging  # noqa: E402
+from .server import KTRDRMCPServer  # noqa: E402
 
 # Restore stdout for JSON-RPC communication
 sys.stdout = _original_stdout
@@ -62,8 +62,11 @@ try:
     # Redirect stdout during imports again
     sys.stdout = sys.stderr
 
-    from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
-    from ktrdr.monitoring.setup import setup_monitoring
+    from opentelemetry.instrumentation.httpx import (
+        HTTPXClientInstrumentor,  # noqa: E402
+    )
+
+    from ktrdr.monitoring.setup import setup_monitoring  # noqa: E402
 
     # Restore stdout
     sys.stdout = _original_stdout
