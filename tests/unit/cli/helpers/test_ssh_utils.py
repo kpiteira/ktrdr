@@ -158,4 +158,6 @@ class TestSshExecWithEnv:
             )
 
             call_args = mock_run.call_args[0][0]
-            assert "cd /opt/app &&  echo test" in call_args[2]
+            # No env vars means no export statement, just cd && command
+            # shlex.quote doesn't quote paths without special characters
+            assert "cd /opt/app && echo test" in call_args[2]

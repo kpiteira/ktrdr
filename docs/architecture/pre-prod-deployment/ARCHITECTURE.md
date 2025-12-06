@@ -318,10 +318,11 @@ See [`monitoring/grafana/dashboards.yml`](monitoring/grafana/dashboards.yml) for
 
 ### NFS Share Structure
 
-**Path on core LXC**: `/srv/ktrdr-shared`
+**NFS Server Path** (Proxmox Node A): `/srv/ktrdr_data`
+**Mount Path** (all LXCs and GPU VM): `/mnt/ktrdr_data`
 
-```
-/srv/ktrdr-shared/
+```text
+/mnt/ktrdr_data/
 ├── data/                    # Market data CSVs
 │   ├── AAPL/
 │   ├── EURUSD/
@@ -334,6 +335,15 @@ See [`monitoring/grafana/dashboards.yml`](monitoring/grafana/dashboards.yml) for
 └── db-backups/              # PostgreSQL dumps
     └── ktrdr_YYYYMMDD.sql.gz
 ```
+
+**Access Method**:
+
+| Node | Type | How NFS is accessed |
+|------|------|---------------------|
+| Node A | LXC | Proxmox bind mount from `/srv/ktrdr_data` |
+| Node B | LXC | Proxmox NFS client → bind mount |
+| Node C | LXC | Proxmox NFS client → bind mount |
+| GPU Host | VM | Direct NFS client mount (VM has kernel access) |
 
 ### Docker Volumes
 
@@ -353,16 +363,19 @@ See [`monitoring/grafana/dashboards.yml`](monitoring/grafana/dashboards.yml) for
 
 **DNS configuration** per [ktrdr-dns-naming.md](ktrdr-dns-naming.md) using `ktrdr.home.mynerd.place` zone:
 
-```
+```text
 ; Core services
-backend.ktrdr.home.mynerd.place.     IN A    <Node A IP>
-postgres.ktrdr.home.mynerd.place.    IN A    <Node A IP>
-grafana.ktrdr.home.mynerd.place.     IN A    <Node A IP>
-prometheus.ktrdr.home.mynerd.place.  IN A    <Node A IP>
+backend.ktrdr.home.mynerd.place.         IN A    <Node A IP>
+postgres.ktrdr.home.mynerd.place.        IN A    <Node A IP>
+grafana.ktrdr.home.mynerd.place.         IN A    <Node A IP>
+prometheus.ktrdr.home.mynerd.place.      IN A    <Node A IP>
 
-; Worker nodes
-workers-b.ktrdr.home.mynerd.place.   IN A    <Node B IP>
-workers-c.ktrdr.home.mynerd.place.   IN A    <Node C IP>
+; Worker nodes (CPU - LXCs)
+workers-b.ktrdr.home.mynerd.place.       IN A    <Node B IP>
+workers-c.ktrdr.home.mynerd.place.       IN A    <Node C IP>
+
+; GPU Worker (VM with GPU passthrough)
+ktrdr-gpuworker.ktrdr.home.mynerd.place. IN A    <GPU Host IP>
 ```
 
 **See**: [OPERATIONS.md](OPERATIONS.md) for DNS server setup
@@ -379,10 +392,15 @@ workers-c.ktrdr.home.mynerd.place.   IN A    <Node C IP>
 - `4317` - Jaeger OTLP (internal only)
 - `2049` - NFS (accessible to workers)
 
-**Worker LXCs**:
+**Worker LXCs** (Nodes B & C):
 
 - `5003+` - Backtest workers (sequential per replica)
-- `5004+` - Training workers (sequential per replica)
+- `5004+` - Training workers (sequential per replica, CPU fallback)
+
+**GPU Worker VM** (`ktrdr-gpuworker`):
+
+- `5003` - Training worker with GPU (preferred for training operations)
+- Registers with `gpu: true` capability → automatically prioritized by WorkerRegistry
 
 ---
 

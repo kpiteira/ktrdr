@@ -171,8 +171,19 @@ class AsyncCLIClient:
                     except Exception:
                         error_detail = {"message": response.text}
 
+                    # FastAPI uses 'detail', our custom errors use 'message'
+                    if isinstance(error_detail, dict):
+                        error_message = (
+                            error_detail.get("detail")
+                            or error_detail.get("message")
+                            or "Unknown error"
+                        )
+                    else:
+                        # Handle case where detail is a string directly
+                        error_message = str(error_detail) if error_detail else "Unknown error"
+
                     raise AsyncCLIClientError(
-                        f"API request failed: {error_detail.get('message', 'Unknown error')}",
+                        f"API request failed: {error_message}",
                         error_code=f"CLI-{response.status_code}",
                         details={
                             "url": url,

@@ -36,7 +36,9 @@ def fetch_secrets_from_1password(item_name: str) -> dict[str, str]:
         secrets = {}
         for field in item.get("fields", []):
             if field.get("type") == "CONCEALED":
-                secrets[field["label"]] = field["value"]
+                value = field.get("value")
+                if value is not None:
+                    secrets[field["label"]] = value
 
         return secrets
 

@@ -124,10 +124,10 @@ We provide a Docker setup for consistent development environments:
 
 ```bash
 # Build and start the development container
-docker-compose -f docker-compose.dev.yml up -d
+docker compose up -d
 
 # Stop the container
-docker-compose -f docker-compose.dev.yml down
+docker compose down
 ```
 
 ## Development Workflow

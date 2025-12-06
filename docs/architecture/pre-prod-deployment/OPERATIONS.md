@@ -23,6 +23,40 @@ This document contains **manual operational procedures** for pre-production infr
 
 ---
 
+## Infrastructure Verification Record
+
+**Last Verified**: 2025-11-25
+**Verified By**: Task 5.1 (Pre-prod Deployment Plan)
+
+### LXC Summary
+
+| Node | Hostname | IP Address | Role | RAM | CPUs | System Disk | Data Disk | Docker |
+|------|----------|------------|------|-----|------|-------------|-----------|--------|
+| A | backend | 10.42.1.10 | Core (DB, Backend, Observability) | 29GB | 4 | 50GB | 500GB (/srv/ktrdr-shared) | 29.0.4 |
+| B | workers-b | 10.42.1.11 | Workers | 14GB | 3 | 30GB | - | 29.0.4 |
+| C | workers-c | 10.42.1.12 | Workers | 6GB | 3 | 30GB | - | 29.0.4 |
+
+### Verification Status
+
+| Check | Status | Notes |
+|-------|--------|-------|
+| SSH Access (all nodes) | ✅ PASS | All 3 LXCs accessible via Tailscale DNS |
+| Docker Installed | ✅ PASS | Docker 29.0.4 on all nodes |
+| Disk Space (core >20GB) | ✅ PASS | 50GB available |
+| Network Connectivity | ✅ PASS | 0% packet loss between all pairs |
+
+### DNS Configuration
+
+All hostnames resolve via `ktrdr.home.mynerd.place` zone:
+
+```text
+backend.ktrdr.home.mynerd.place    -> 10.42.1.10
+workers-b.ktrdr.home.mynerd.place  -> 10.42.1.11
+workers-c.ktrdr.home.mynerd.place  -> 10.42.1.12
+```
+
+---
+
 ## LXC Provisioning
 
 ### Prerequisites

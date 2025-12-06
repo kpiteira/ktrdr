@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   db:
     image: timescale/timescaledb-ha:pg15
@@ -23,10 +21,15 @@ services:
     image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     container_name: ktrdr-backend
     restart: unless-stopped
+    group_add:
+      - "1500"  # ktrdr group for NFS access
     ports:
       - "8000:8000"
     volumes:
-      - /srv/ktrdr-shared:/mnt/shared
+      - /mnt/ktrdr_data:/mnt/ktrdr_data
+      - /mnt/ktrdr_data/strategies:/app/strategies:ro
+      - /mnt/ktrdr_data/models:/app/models:ro
+      - /mnt/ktrdr_data/data:/app/data:ro
     environment:
       DB_HOST: db
       DB_PORT: 5432
@@ -39,10 +42,16 @@ services:
       ENVIRONMENT: homelab
       LOG_LEVEL: INFO
       OTLP_ENDPOINT: http://jaeger:4317
-      SHARED_MOUNT_PATH: /mnt/shared
+      # Shared NFS mount paths for data, models, and strategies
+      SHARED_MOUNT_PATH: /mnt/ktrdr_data
+      DATA_DIR: /mnt/ktrdr_data/data
+      MODELS_DIR: /mnt/ktrdr_data/models
+      STRATEGIES_DIR: /mnt/ktrdr_data/strategies
     depends_on:
       db:
         condition: service_healthy
+    # Override command to avoid log-config path issue
+    command: ["python", "-m", "uvicorn", "ktrdr.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
     networks:
       - ktrdr-core
 
@@ -74,6 +83,8 @@ services:
       GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
     volumes:
       - ./monitoring/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./monitoring/grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
     depends_on:
       - prometheus
@@ -93,19 +104,28 @@ services:
     networks:
       - ktrdr-core
 
-  nfs-server:
-    image: itsthenetwork/nfs-server-alpine:latest
-    container_name: ktrdr-nfs
+  # MCP Server - For Claude Code automation on pre-prod
+  mcp:
+    image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
+    container_name: ktrdr-mcp
     restart: unless-stopped
-    privileged: true
-    environment:
-      SHARED_DIRECTORY: /exports
+    group_add:
+      - "1500"  # ktrdr group for NFS access
     volumes:
-      - /srv/ktrdr-shared:/exports:rw
-    ports:
-      - "2049:2049"
+      - /mnt/ktrdr_data:/mnt/ktrdr_data:ro
+    environment:
+      ENVIRONMENT: homelab
+      LOG_LEVEL: INFO
+      PYTHONPATH: /app/.venv/lib/python3.13/site-packages:/app:/app/mcp
+      KTRDR_API_URL: http://backend:8000/api/v1
+      OTLP_ENDPOINT: http://jaeger:4317
+    working_dir: /app/mcp
+    stdin_open: true
     networks:
       - ktrdr-core
+    depends_on:
+      - backend
+    command: ["sleep", "infinity"]
 
 networks:
   ktrdr-core:

@@ -1,7 +1,14 @@
 {
-  "ktrdr": {
-    "command": "docker",
-    "args": ["exec", "-i", "ktrdr-mcp", "python", "-m", "src.main"],
-    "description": "KTRDR Trading Strategy Research Tools"
+  "mcpServers": {
+    "ktrdr-local": {
+      "command": "docker",
+      "args": ["exec", "-i", "ktrdr-mcp-local", "/app/.venv/bin/python", "-m", "src.main"],
+      "description": "KTRDR MCP Server - Local Development Backend"
+    },
+    "ktrdr-preprod": {
+      "command": "docker",
+      "args": ["exec", "-i", "ktrdr-mcp-preprod", "/app/.venv/bin/python", "-m", "src.main"],
+      "description": "KTRDR MCP Server - Pre-production Backend"
+    }
   }
 }

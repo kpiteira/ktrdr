@@ -125,7 +125,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./monitoring/prometheus-dev.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -155,9 +155,9 @@ services:
       - GF_SECURITY_ALLOW_EMBEDDING=true
       - GF_SECURITY_ADMIN_PASSWORD=${GF_ADMIN_PASSWORD:-admin}
     volumes:
-      - ./monitoring/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
-      - ./monitoring/grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
-      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ../../shared/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ../../shared/grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ../../shared/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
     depends_on:
       - prometheus
@@ -391,6 +391,65 @@ services:
       backend:
         condition: service_started
     command: /app/.venv/bin/uvicorn ktrdr.training.training_worker:app --host 0.0.0.0 --port 5006 --reload
+
+  # MCP Server (Local) - For Claude Code/Desktop targeting local backend
+  # NOTE: MCP code is mounted at /mcp (not /app/mcp) to avoid shadowing the pip 'mcp' package
+  mcp-local:
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile.dev
+      cache_from:
+        - ktrdr-backend:dev
+    image: ktrdr-backend:dev
+    container_name: ktrdr-mcp-local
+    restart: unless-stopped
+    volumes:
+      - ./mcp:/mcp:ro           # Mount outside /app to avoid shadowing pip mcp package
+      - ./ktrdr:/app/ktrdr:ro
+      - ./logs:/app/logs
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+      - PYTHONPATH=/app:/mcp    # Include both /app (for ktrdr) and /mcp (for src)
+      - KTRDR_API_URL=http://backend:8000/api/v1
+      - OTLP_ENDPOINT=http://jaeger:4317
+    working_dir: /mcp
+    stdin_open: true  # Required for stdio MCP transport
+    networks:
+      - ktrdr-network
+    depends_on:
+      backend:
+        condition: service_healthy
+    # No command - container stays running, Claude exec's into it
+    command: ["sleep", "infinity"]
+
+  # MCP Server (Pre-prod) - For Claude Code/Desktop targeting pre-prod backend
+  # NOTE: MCP code is mounted at /mcp (not /app/mcp) to avoid shadowing the pip 'mcp' package
+  mcp-preprod:
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile.dev
+      cache_from:
+        - ktrdr-backend:dev
+    image: ktrdr-backend:dev
+    container_name: ktrdr-mcp-preprod
+    restart: unless-stopped
+    volumes:
+      - ./mcp:/mcp:ro           # Mount outside /app to avoid shadowing pip mcp package
+      - ./ktrdr:/app/ktrdr:ro
+      - ./logs:/app/logs
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+      - PYTHONPATH=/app:/mcp    # Include both /app (for ktrdr) and /mcp (for src)
+      - KTRDR_API_URL=http://backend.ktrdr.home.mynerd.place:8000/api/v1
+      - OTLP_ENDPOINT=http://backend.ktrdr.home.mynerd.place:4317
+    working_dir: /mcp
+    stdin_open: true  # Required for stdio MCP transport
+    networks:
+      - ktrdr-network
+    # No depends_on - pre-prod backend is external
+    command: ["sleep", "infinity"]
 
 networks:
   ktrdr-network:

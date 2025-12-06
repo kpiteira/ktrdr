@@ -282,7 +282,7 @@ services:
   backend:
     build:
       context: ..
-      dockerfile: docker/backend/Dockerfile.dev
+      dockerfile: deploy/docker/Dockerfile.dev
     ports:
       - "8000:8000"  # ← CRITICAL: Expose to host network!
     environment:
