@@ -12,16 +12,16 @@
 ./mcp/restart_mcp.sh preprod      # Restart only mcp-preprod
 ./mcp/build_mcp.sh                # Build and start MCP containers
 ./mcp/stop_mcp.sh                 # Stop all MCP containers
-docker compose -f docker-compose.dev.yml restart mcp-local
-docker compose -f docker-compose.dev.yml restart mcp-preprod
+docker compose restart mcp-local
+docker compose restart mcp-preprod
 ```
 
 ### FORBIDDEN Commands
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d    # NO! Affects all containers
-docker compose build                              # NO! Rebuilds everything
-docker compose restart                            # NO! Affects all containers
+docker compose up -d              # NO! Affects all containers
+docker compose build              # NO! Rebuilds everything
+docker compose restart            # NO! Affects all containers
 ```
 
 ## 🏗️ MCP ARCHITECTURE

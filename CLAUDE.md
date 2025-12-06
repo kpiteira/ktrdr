@@ -457,22 +457,22 @@ pytest tests/
 
 ```bash
 # Start complete local dev environment (recommended)
-docker compose -f docker-compose.dev.yml up
+docker compose up
 
 # Start in background
-docker compose -f docker-compose.dev.yml up -d
+docker compose up -d
 
 # View logs
-docker compose -f docker-compose.dev.yml logs -f
+docker compose logs -f
 
 # Stop all services
-docker compose -f docker-compose.dev.yml down
+docker compose down
 
 # Rebuild after Dockerfile changes
-docker compose -f docker-compose.dev.yml build
+docker compose build
 
 # Restart specific service
-docker compose -f docker-compose.dev.yml restart backend
+docker compose restart backend
 
 # Start host services (for IB Gateway / GPU training)
 cd ib-host-service && ./start.sh
@@ -676,7 +676,7 @@ make ci                # Run unit tests + quality checks
 - **"Workers missing?"** → Worker Status: Check Healthy Workers and Health Matrix
 - **"Operations failing?"** → Operations: Check Success Rate and Status Distribution
 
-**Documentation**: [monitoring/grafana/README.md](monitoring/grafana/README.md)
+**Dashboard Files**: [deploy/shared/grafana/dashboards/](deploy/shared/grafana/dashboards/)
 
 ### Host Services Not Working
 

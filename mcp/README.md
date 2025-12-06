@@ -35,7 +35,7 @@ The MCP server runs as a Docker container that makes HTTP calls to the backend A
 
 ```bash
 # Start all services including MCP containers
-docker compose -f docker-compose.dev.yml up -d
+docker compose up -d
 
 # Or build/start MCP containers only
 ./mcp/build_mcp.sh
@@ -82,8 +82,8 @@ Restart Claude Desktop or Claude Code to pick up the new configuration.
 
 ```bash
 # Restart specific MCP container
-docker compose -f docker-compose.dev.yml restart mcp-local
-docker compose -f docker-compose.dev.yml restart mcp-preprod
+docker compose restart mcp-local
+docker compose restart mcp-preprod
 
 # View MCP logs
 docker logs ktrdr-mcp-local
@@ -154,7 +154,7 @@ The project includes automated validation to ensure MCP tool signatures match ba
 
 ```bash
 # Ensure backend is running
-docker compose -f docker-compose.dev.yml up -d backend
+docker compose up -d backend
 
 # Run validation
 make validate-mcp
