@@ -23,6 +23,10 @@ services:
     image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     container_name: backtest-worker-1
     restart: unless-stopped
+    group_add:
+      - "1500"  # ktrdr group for NFS access
+    security_opt:
+      - apparmor:unconfined
     deploy:
       resources:
         limits:
@@ -38,6 +42,9 @@ services:
       WORKER_PORT: 5003
       WORKER_PUBLIC_BASE_URL: http://${WORKER_HOSTNAME:-workers-b.ktrdr.home.mynerd.place}:5003
       SHARED_MOUNT_PATH: /mnt/ktrdr_data
+      DATA_DIR: /mnt/ktrdr_data/data
+      MODELS_DIR: /mnt/ktrdr_data/models
+      STRATEGIES_DIR: /mnt/ktrdr_data/strategies
       OTLP_ENDPOINT: http://backend.ktrdr.home.mynerd.place:4317
       # Database access for checkpointing
       DB_HOST: backend.ktrdr.home.mynerd.place
@@ -53,6 +60,10 @@ services:
     image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     container_name: backtest-worker-2
     restart: unless-stopped
+    group_add:
+      - "1500"  # ktrdr group for NFS access
+    security_opt:
+      - apparmor:unconfined
     deploy:
       resources:
         limits:
@@ -68,6 +79,9 @@ services:
       WORKER_PORT: 5004
       WORKER_PUBLIC_BASE_URL: http://${WORKER_HOSTNAME:-workers-b.ktrdr.home.mynerd.place}:5004
       SHARED_MOUNT_PATH: /mnt/ktrdr_data
+      DATA_DIR: /mnt/ktrdr_data/data
+      MODELS_DIR: /mnt/ktrdr_data/models
+      STRATEGIES_DIR: /mnt/ktrdr_data/strategies
       OTLP_ENDPOINT: http://backend.ktrdr.home.mynerd.place:4317
       DB_HOST: backend.ktrdr.home.mynerd.place
       DB_PORT: 5432
@@ -84,6 +98,10 @@ services:
     image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     container_name: backtest-worker-3
     restart: unless-stopped
+    group_add:
+      - "1500"  # ktrdr group for NFS access
+    security_opt:
+      - apparmor:unconfined
     deploy:
       resources:
         limits:
@@ -99,6 +117,9 @@ services:
       WORKER_PORT: 5007
       WORKER_PUBLIC_BASE_URL: http://${WORKER_HOSTNAME:-workers-b.ktrdr.home.mynerd.place}:5007
       SHARED_MOUNT_PATH: /mnt/ktrdr_data
+      DATA_DIR: /mnt/ktrdr_data/data
+      MODELS_DIR: /mnt/ktrdr_data/models
+      STRATEGIES_DIR: /mnt/ktrdr_data/strategies
       OTLP_ENDPOINT: http://backend.ktrdr.home.mynerd.place:4317
       DB_HOST: backend.ktrdr.home.mynerd.place
       DB_PORT: 5432
@@ -118,6 +139,10 @@ services:
     image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     container_name: training-worker-1
     restart: unless-stopped
+    group_add:
+      - "1500"  # ktrdr group for NFS access
+    security_opt:
+      - apparmor:unconfined
     deploy:
       resources:
         limits:
@@ -133,6 +158,9 @@ services:
       WORKER_PORT: 5005
       WORKER_PUBLIC_BASE_URL: http://${WORKER_HOSTNAME:-workers-b.ktrdr.home.mynerd.place}:5005
       SHARED_MOUNT_PATH: /mnt/ktrdr_data
+      DATA_DIR: /mnt/ktrdr_data/data
+      MODELS_DIR: /mnt/ktrdr_data/models
+      STRATEGIES_DIR: /mnt/ktrdr_data/strategies
       OTLP_ENDPOINT: http://backend.ktrdr.home.mynerd.place:4317
       DB_HOST: backend.ktrdr.home.mynerd.place
       DB_PORT: 5432
@@ -147,6 +175,10 @@ services:
     image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     container_name: training-worker-2
     restart: unless-stopped
+    group_add:
+      - "1500"  # ktrdr group for NFS access
+    security_opt:
+      - apparmor:unconfined
     deploy:
       resources:
         limits:
@@ -162,6 +194,9 @@ services:
       WORKER_PORT: 5006
       WORKER_PUBLIC_BASE_URL: http://${WORKER_HOSTNAME:-workers-b.ktrdr.home.mynerd.place}:5006
       SHARED_MOUNT_PATH: /mnt/ktrdr_data
+      DATA_DIR: /mnt/ktrdr_data/data
+      MODELS_DIR: /mnt/ktrdr_data/models
+      STRATEGIES_DIR: /mnt/ktrdr_data/strategies
       OTLP_ENDPOINT: http://backend.ktrdr.home.mynerd.place:4317
       DB_HOST: backend.ktrdr.home.mynerd.place
       DB_PORT: 5432
@@ -178,6 +213,10 @@ services:
     image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     container_name: training-worker-3
     restart: unless-stopped
+    group_add:
+      - "1500"  # ktrdr group for NFS access
+    security_opt:
+      - apparmor:unconfined
     deploy:
       resources:
         limits:
@@ -193,6 +232,9 @@ services:
       WORKER_PORT: 5008
       WORKER_PUBLIC_BASE_URL: http://${WORKER_HOSTNAME:-workers-b.ktrdr.home.mynerd.place}:5008
       SHARED_MOUNT_PATH: /mnt/ktrdr_data
+      DATA_DIR: /mnt/ktrdr_data/data
+      MODELS_DIR: /mnt/ktrdr_data/models
+      STRATEGIES_DIR: /mnt/ktrdr_data/strategies
       OTLP_ENDPOINT: http://backend.ktrdr.home.mynerd.place:4317
       DB_HOST: backend.ktrdr.home.mynerd.place
       DB_PORT: 5432

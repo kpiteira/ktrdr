@@ -64,7 +64,7 @@ ci: test-unit lint format typecheck
 # Build the production container locally
 test-container-build:
 	@echo "🐳 Building production container..."
-	docker build -f docker/backend/Dockerfile -t ktrdr-backend:test .
+	docker build -f deploy/docker/Dockerfile -t ktrdr-backend:test .
 	@echo "✅ Container built: ktrdr-backend:test"
 
 # Quick smoke test - validates container can start and imports work

@@ -477,15 +477,22 @@ class WorkerAPIBase:
             except ImportError:
                 logger.debug("PyTorch not available - no GPU detection")
 
-        # Detect actual resolvable hostname (Docker container name)
-        import socket
-
-        hostname = socket.gethostname()
+        # Use WORKER_PUBLIC_BASE_URL if set (for distributed deployments),
+        # otherwise fall back to container hostname (for local Docker Compose)
+        public_url = os.getenv("WORKER_PUBLIC_BASE_URL")
+        if public_url:
+            endpoint_url = public_url
+            logger.info(f"Using WORKER_PUBLIC_BASE_URL: {endpoint_url}")
+        else:
+            import socket
+            hostname = socket.gethostname()
+            endpoint_url = f"http://{hostname}:{self.worker_port}"
+            logger.info(f"No WORKER_PUBLIC_BASE_URL set, using hostname: {endpoint_url}")
 
         payload = {
             "worker_id": self.worker_id,
             "worker_type": self.worker_type.value,
-            "endpoint_url": f"http://{hostname}:{self.worker_port}",
+            "endpoint_url": endpoint_url,
             "capabilities": capabilities,
         }
 

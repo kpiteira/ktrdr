@@ -12,11 +12,12 @@ from ..training.model_storage import ModelStorage
 class ModelLoader:
     """Load trained models for inference in backtesting and decision making."""
 
-    def __init__(self, models_dir: str = "models"):
+    def __init__(self, models_dir: Optional[str] = None):
         """Initialize model loader.
 
         Args:
-            models_dir: Base directory containing trained models
+            models_dir: Base directory containing trained models. If None, uses
+                       MODELS_DIR environment variable or defaults to 'models'.
         """
         self.model_storage = ModelStorage(models_dir)
 

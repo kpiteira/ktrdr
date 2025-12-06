@@ -21,10 +21,15 @@ services:
     image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     container_name: ktrdr-backend
     restart: unless-stopped
+    group_add:
+      - "1500"  # ktrdr group for NFS access
     ports:
       - "8000:8000"
     volumes:
       - /mnt/ktrdr_data:/mnt/ktrdr_data
+      - /mnt/ktrdr_data/strategies:/app/strategies:ro
+      - /mnt/ktrdr_data/models:/app/models:ro
+      - /mnt/ktrdr_data/data:/app/data:ro
     environment:
       DB_HOST: db
       DB_PORT: 5432
@@ -37,10 +42,16 @@ services:
       ENVIRONMENT: homelab
       LOG_LEVEL: INFO
       OTLP_ENDPOINT: http://jaeger:4317
+      # Shared NFS mount paths for data, models, and strategies
       SHARED_MOUNT_PATH: /mnt/ktrdr_data
+      DATA_DIR: /mnt/ktrdr_data/data
+      MODELS_DIR: /mnt/ktrdr_data/models
+      STRATEGIES_DIR: /mnt/ktrdr_data/strategies
     depends_on:
       db:
         condition: service_healthy
+    # Override command to avoid log-config path issue
+    command: ["python", "-m", "uvicorn", "ktrdr.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
     networks:
       - ktrdr-core
 
@@ -98,6 +109,8 @@ services:
     image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     container_name: ktrdr-mcp
     restart: unless-stopped
+    group_add:
+      - "1500"  # ktrdr group for NFS access
     volumes:
       - /mnt/ktrdr_data:/mnt/ktrdr_data:ro
     environment:

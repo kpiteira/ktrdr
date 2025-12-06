@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -15,11 +16,27 @@ from ktrdr.api.endpoints.strategies import _validate_strategy_config
 from ktrdr.api.models.operations import OperationMetadata
 from ktrdr.errors import ConfigurationError, ValidationError
 
+
+def _get_default_strategy_paths() -> tuple[Path, ...]:
+    """Get strategy search paths, including STRATEGIES_DIR env var if set."""
+    paths: list[Path] = []
+
+    # Check STRATEGIES_DIR environment variable first (highest priority)
+    strategies_dir = os.getenv("STRATEGIES_DIR")
+    if strategies_dir:
+        paths.append(Path(strategies_dir))
+
+    # Add standard paths
+    paths.extend([
+        Path("/app/strategies"),
+        Path("strategies"),
+    ])
+
+    return tuple(paths)
+
+
 # Default locations where strategy YAML files may live (docker + host paths)
-DEFAULT_STRATEGY_PATHS: tuple[Path, ...] = (
-    Path("/app/strategies"),
-    Path("strategies"),
-)
+DEFAULT_STRATEGY_PATHS: tuple[Path, ...] = _get_default_strategy_paths()
 
 _SAFE_STRATEGY_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 

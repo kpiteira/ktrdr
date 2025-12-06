@@ -49,10 +49,10 @@ services:
     ports:
       - "18000:8000"
     volumes:
-      # Shared storage for models/data
-      - canary_shared:/mnt/shared
-      # Mount local data directory for test data access
-      - ./data:/home/ktrdr/app/data:ro
+      # Mount local directories to simulate NFS shared storage
+      - ../../../data:/mnt/ktrdr_data/data:ro
+      - ../../../models:/mnt/ktrdr_data/models:ro
+      - ../../../strategies:/mnt/ktrdr_data/strategies:ro
     environment:
       DB_HOST: db
       DB_PORT: 5432
@@ -64,7 +64,11 @@ services:
       KTRDR_API_PORT: 8000
       ENVIRONMENT: canary
       LOG_LEVEL: INFO
-      SHARED_MOUNT_PATH: /mnt/shared
+      # NFS-like shared storage paths (same as homelab pre-prod)
+      SHARED_MOUNT_PATH: /mnt/ktrdr_data
+      DATA_DIR: /mnt/ktrdr_data/data
+      MODELS_DIR: /mnt/ktrdr_data/models
+      STRATEGIES_DIR: /mnt/ktrdr_data/strategies
     # Override command to avoid log-config path issue (uses /app/logs but container uses /home/ktrdr/app)
     command: ["python", "-m", "uvicorn", "ktrdr.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
     depends_on:
@@ -88,8 +92,10 @@ services:
     ports:
       - "15003:5003"
     volumes:
-      - canary_shared:/mnt/shared
-      - ./data:/home/ktrdr/app/data:ro
+      # Mount local directories to simulate NFS shared storage
+      - ../../../data:/mnt/ktrdr_data/data:ro
+      - ../../../models:/mnt/ktrdr_data/models:ro
+      - ../../../strategies:/mnt/ktrdr_data/strategies:ro
     environment:
       KTRDR_API_URL: http://backend:8000
       WORKER_TYPE: backtesting
@@ -97,7 +103,11 @@ services:
       # Workers inside Docker network can reach each other, but backend
       # needs to call back to worker - use Docker service name
       WORKER_PUBLIC_BASE_URL: http://backtest-worker:5003
-      SHARED_MOUNT_PATH: /mnt/shared
+      # NFS-like shared storage paths (same as homelab pre-prod)
+      SHARED_MOUNT_PATH: /mnt/ktrdr_data
+      DATA_DIR: /mnt/ktrdr_data/data
+      MODELS_DIR: /mnt/ktrdr_data/models
+      STRATEGIES_DIR: /mnt/ktrdr_data/strategies
       DB_HOST: db
       DB_PORT: 5432
       DB_NAME: ktrdr_canary
@@ -125,14 +135,20 @@ services:
     ports:
       - "15004:5004"
     volumes:
-      - canary_shared:/mnt/shared:rw
-      - ./data:/home/ktrdr/app/data:ro
+      # Mount local directories to simulate NFS shared storage
+      - ../../../data:/mnt/ktrdr_data/data:ro
+      - ../../../models:/mnt/ktrdr_data/models:rw
+      - ../../../strategies:/mnt/ktrdr_data/strategies:ro
     environment:
       KTRDR_API_URL: http://backend:8000
       WORKER_TYPE: training
       WORKER_PORT: 5004
       WORKER_PUBLIC_BASE_URL: http://training-worker:5004
-      SHARED_MOUNT_PATH: /mnt/shared
+      # NFS-like shared storage paths (same as homelab pre-prod)
+      SHARED_MOUNT_PATH: /mnt/ktrdr_data
+      DATA_DIR: /mnt/ktrdr_data/data
+      MODELS_DIR: /mnt/ktrdr_data/models
+      STRATEGIES_DIR: /mnt/ktrdr_data/strategies
       DB_HOST: db
       DB_PORT: 5432
       DB_NAME: ktrdr_canary
@@ -157,4 +173,3 @@ networks:
 
 volumes:
   postgres_data_canary:
-  canary_shared:

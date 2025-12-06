@@ -382,8 +382,13 @@ class AsyncOperationExecutor:
                             if error_detail.get("suggestion"):
                                 console.print("\n[yellow]Suggestion:[/yellow]")
                                 console.print(f"  {error_detail['suggestion']}")
+                        elif isinstance(error_detail, str):
+                            # Plain string error from FastAPI (e.g., ValidationError)
+                            console.print(
+                                f"[red bold]Error:[/red bold] {error_detail}"
+                            )
                         else:
-                            # Not a structured error, show generic message
+                            # Not a structured error, show generic message with detail
                             console.print(
                                 f"[red]Failed to start operation: {e}[/red]",
                                 style="bold",

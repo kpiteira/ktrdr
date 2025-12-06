@@ -1,6 +1,7 @@
 """Model storage and versioning system."""
 
 import json
+import os
 import pickle
 import shutil
 from datetime import datetime
@@ -10,17 +11,25 @@ from typing import Any, Optional
 import torch
 
 
+def _get_default_models_dir() -> str:
+    """Get models directory from MODELS_DIR env var or default to 'models'."""
+    return os.getenv("MODELS_DIR", "models")
+
+
 class ModelStorage:
     """Handle model persistence with versioning."""
 
-    def __init__(self, base_path: str = "models"):
+    def __init__(self, base_path: Optional[str] = None):
         """Initialize model storage.
 
         Args:
-            base_path: Base directory for model storage
+            base_path: Base directory for model storage. If None, uses
+                      MODELS_DIR environment variable or defaults to 'models'.
         """
+        if base_path is None:
+            base_path = _get_default_models_dir()
         self.base_path = Path(base_path)
-        self.base_path.mkdir(exist_ok=True)
+        self.base_path.mkdir(exist_ok=True, parents=True)
 
     def save_model(
         self,
