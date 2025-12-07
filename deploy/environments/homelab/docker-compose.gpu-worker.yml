@@ -37,6 +37,9 @@ services:
       WORKER_PUBLIC_BASE_URL: http://ktrdr-gpuworker.ktrdr.home.mynerd.place:5005
       WORKER_HAS_GPU: "true"
       SHARED_MOUNT_PATH: /mnt/ktrdr_data
+      DATA_DIR: /mnt/ktrdr_data/data
+      MODELS_DIR: /mnt/ktrdr_data/models
+      STRATEGIES_DIR: /mnt/ktrdr_data/strategies
       OTLP_ENDPOINT: http://backend.ktrdr.home.mynerd.place:4317
       # Database access for checkpointing
       DB_HOST: backend.ktrdr.home.mynerd.place
