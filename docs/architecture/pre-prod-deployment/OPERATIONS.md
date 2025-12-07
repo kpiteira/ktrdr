@@ -391,23 +391,66 @@ iptables -t nat -A PREROUTING -p tcp --dport 16686 -j DNAT --to-destination <Nod
 
 ## NFS Configuration
 
-### Core LXC - NFS Server
+### Overview
 
-**Already configured via docker-compose.core.yml**, but verify:
+NFS shared storage enables all workers and the GPU VM to access shared data, models, and strategies. The NFS server runs on the Proxmox host (not in a container) for reliability.
+
+**Mount Path**: `/mnt/ktrdr_data` (consistent across all nodes)
+
+### User/Group Configuration
+
+**CRITICAL**: Docker containers run as `ktrdr` (UID 999, GID 1500). All NFS files must be accessible by this user.
+
+#### On NFS Server (Proxmox host)
 
 ```bash
-# Verify NFS container is running
-ssh backend.ktrdr.home.mynerd.place
-docker ps | grep nfs
+# Create ktrdr group and user
+groupadd -g 1500 ktrdr
+useradd -u 999 -g 1500 -M -s /sbin/nologin -c 'KTRDR Docker user' ktrdr
 
-# Test NFS export
-showmount -e localhost
-# Should show: /exports *
+# Set ownership and permissions on NFS directory
+chown -R ktrdr:ktrdr /mnt/ktrdr_data/
+
+# Set directory permissions (2775 = rwxrwsr-x + setgid)
+find /mnt/ktrdr_data -type d -exec chmod 2775 {} \;
+
+# Set file permissions (664 = rw-rw-r--)
+find /mnt/ktrdr_data -type f -exec chmod 664 {} \;
 ```
 
----
+**Permission Explanation**:
 
-### Worker LXCs - NFS Client
+- `2775` = setgid bit + owner rwx + group rwx + others rx
+- The **setgid bit** ensures new files inherit the ktrdr group
+- Group write permission allows Docker containers (GID 1500) to write
+
+#### On Each LXC/VM (for SSH access and group visibility)
+
+```bash
+# Create the ktrdr group (GID 1500) for consistent naming
+groupadd -g 1500 ktrdr
+
+# For SSH users who need write access (e.g., on GPU Worker VM)
+usermod -aG ktrdr <username>
+# User must log out/in for group change to take effect
+```
+
+### NFS Server Configuration
+
+**On Proxmox host** (`/etc/exports`):
+
+```bash
+/mnt/ktrdr_data 10.42.0.0/22(rw,sync,no_subtree_check,no_root_squash)
+```
+
+**Apply changes**:
+
+```bash
+exportfs -ra
+systemctl restart nfs-server
+```
+
+### NFS Client Configuration (LXCs)
 
 Configure `/etc/fstab` on worker LXCs:
 
@@ -415,18 +458,56 @@ Configure `/etc/fstab` on worker LXCs:
 # On worker LXCs
 ssh workers-b.ktrdr.home.mynerd.place
 
-# Add to /etc/fstab
-echo "backend.ktrdr.home.mynerd.place:/srv/ktrdr-shared  /mnt/ktrdr-shared  nfs  defaults,_netdev  0 0" | tee -a /etc/fstab
+# Add to /etc/fstab (NFSv3 for better LXC compatibility)
+echo "10.42.0.11:/mnt/ktrdr_data  /mnt/ktrdr_data  nfs  rw,relatime,vers=3,hard,proto=tcp  0 0" | tee -a /etc/fstab
 
-# Mount NFS share
+# Create mount point and mount
+mkdir -p /mnt/ktrdr_data
 mount -a
 
 # Verify mount
-df -h | grep ktrdr-shared
-ls -la /mnt/ktrdr-shared
+df -h | grep ktrdr_data
+ls -la /mnt/ktrdr_data
 ```
 
-Repeat for `workers-c.ktrdr.home.mynerd.place`.
+Repeat for `workers-c` and GPU Worker VM.
+
+### NFS Client Configuration (GPU Worker VM)
+
+The GPU Worker VM uses NFSv4:
+
+```bash
+# Add to /etc/fstab
+echo "10.42.0.11:/mnt/ktrdr_data  /mnt/ktrdr_data  nfs4  rw,relatime,vers=4.2,hard,proto=tcp  0 0" | tee -a /etc/fstab
+
+mkdir -p /mnt/ktrdr_data
+mount -a
+```
+
+### Docker Container Access
+
+Docker containers access NFS via volume mounts with `group_add`:
+
+```yaml
+# In docker-compose.yml
+services:
+  training-worker-1:
+    group_add:
+      - "1500"  # ktrdr group for NFS access
+    volumes:
+      - /mnt/ktrdr_data:/mnt/ktrdr_data:rw
+```
+
+### Verify NFS Permissions
+
+```bash
+# Test write from Docker container
+docker exec training-worker-1 touch /mnt/ktrdr_data/test_write && echo "OK" || echo "FAILED"
+docker exec training-worker-1 rm /mnt/ktrdr_data/test_write
+
+# Check file ownership (should show ktrdr:ktrdr)
+ls -la /mnt/ktrdr_data/
+```
 
 ---
 
@@ -932,14 +1013,72 @@ ssh workers-c.ktrdr.home.mynerd.place "df -h | grep ktrdr-shared"
 
 ### NFS Mount Failures
 
-**Symptoms**: `/mnt/ktrdr-shared` not accessible on workers
+**Symptoms**: `/mnt/ktrdr_data` not accessible on workers
 
 **Checks**:
 
-1. NFS server running: `ssh backend.ktrdr.home.mynerd.place "docker ps | grep nfs"`
-2. Export visible: `showmount -e backend.ktrdr.home.mynerd.place`
+1. NFS server running on Proxmox host: `systemctl status nfs-server`
+2. Export visible: `showmount -e 10.42.0.11`
 3. Mount attempt: `ssh workers-b.ktrdr.home.mynerd.place "mount -a"`
 4. Check `/var/log/syslog` on worker LXC for NFS errors
+
+---
+
+### NFS Permission Denied
+
+**Symptoms**: Docker containers get "Permission denied" when writing to NFS
+
+**Checks**:
+
+1. **Verify container user/groups**:
+
+   ```bash
+   docker exec training-worker-1 id
+   # Expected: uid=999(ktrdr) gid=999(ktrdr) groups=999(ktrdr),1500
+   ```
+
+2. **Check directory permissions on NFS server**:
+
+   ```bash
+   ssh proxmox4 "ls -la /mnt/ktrdr_data/"
+   # Directories should show: drwxrwsr-x (2775)
+   # Files should show: -rw-rw-r-- (664)
+   # Owner:Group should be: ktrdr:ktrdr
+   ```
+
+3. **Fix permissions if wrong**:
+
+   ```bash
+   # On NFS server (Proxmox host)
+   chown -R ktrdr:ktrdr /mnt/ktrdr_data/
+   find /mnt/ktrdr_data -type d -exec chmod 2775 {} \;
+   find /mnt/ktrdr_data -type f -exec chmod 664 {} \;
+   ```
+
+4. **Verify ktrdr group exists on NFS server**:
+
+   ```bash
+   getent group ktrdr
+   # Expected: ktrdr:x:1500:
+
+   id ktrdr
+   # Expected: uid=999(ktrdr) gid=1500(ktrdr) groups=1500(ktrdr)
+   ```
+
+5. **Check docker-compose has group_add**:
+
+   ```yaml
+   services:
+     training-worker-1:
+       group_add:
+         - "1500"  # Must be present!
+   ```
+
+**Common Causes**:
+
+- Files created from macOS (UID 501) without proper group permissions
+- Missing setgid bit on directories (new files don't inherit group)
+- `group_add: "1500"` missing from docker-compose.yml
 
 ---
 
