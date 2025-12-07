@@ -62,3 +62,44 @@ class AgentInvoker(Protocol):
 ```
 
 `ClaudeCodeInvoker` implements this via subprocess. Future implementations could use direct API calls.
+
+### E2E Integration Test Pattern (Task 0.7)
+
+E2E tests for the agent system use a `MockAgentInvoker` that simulates Claude's behavior:
+
+```python
+class MockAgentInvoker:
+    """Simulates agent behavior for E2E testing."""
+
+    def __init__(self, db: AgentDatabase):
+        self.db = db
+
+    async def invoke(self, prompt, system_prompt=None, session_context=None):
+        # Simulate agent workflow:
+        session = await self.db.create_session()
+        await self.db.update_session(session_id=session.id, phase=SessionPhase.DESIGNING)
+        await self.db.complete_session(session_id=session.id, outcome=SessionOutcome.SUCCESS)
+        return InvocationResult(success=True, ...)
+```
+
+This allows testing the full trigger → agent → database flow without invoking Claude.
+
+### Async Fixture Pattern for pytest
+
+Use `@pytest_asyncio.fixture` (not `@pytest.fixture`) for async fixtures:
+
+```python
+import pytest_asyncio
+
+@pytest_asyncio.fixture
+async def agent_db():
+    db = AgentDatabase()
+    try:
+        await db.connect(os.getenv("DATABASE_URL"))
+    except Exception as e:
+        pytest.skip(f"Could not connect to database: {e}")
+    yield db
+    await db.disconnect()
+```
+
+The `pytest.skip()` in fixture setup allows graceful skipping when database is unavailable.
