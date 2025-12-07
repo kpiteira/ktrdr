@@ -43,6 +43,12 @@ pool.acquire.return_value = acquire_cm
 config = TriggerConfig(interval_seconds=0.01, enabled=True)
 ```
 
+### 5. AgentInvoker Protocol Type Mismatch
+
+**Problem**: `AgentInvoker` protocol expects `dict` return, but `ClaudeCodeInvoker` returns `InvocationResult`
+**Symptom**: mypy errors when passing `ClaudeCodeInvoker` to `TriggerService`
+**Solution**: Use `# type: ignore[arg-type]` for now; fix properly by updating protocol or adapter
+
 ## Emergent Patterns
 
 ### Service Layer Separation

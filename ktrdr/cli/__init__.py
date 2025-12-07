@@ -48,6 +48,7 @@ except Exception:
     # or Jaeger isn't running - CLI should still work
     pass
 
+from ktrdr.cli.agent_commands import agent_app
 from ktrdr.cli.async_model_commands import async_models_app as models_app
 from ktrdr.cli.backtest_commands import backtest_app
 from ktrdr.cli.commands import cli_app
@@ -64,6 +65,7 @@ from ktrdr.cli.strategy_commands import strategies_app
 # from ktrdr.cli.multi_timeframe_commands import multi_timeframe_app
 
 # Register command subgroups following industry best practices
+cli_app.add_typer(agent_app, name="agent", help="Research agent management commands")
 cli_app.add_typer(data_app, name="data", help="Data management commands")
 cli_app.add_typer(
     backtest_app, name="backtest", help="Backtesting commands for trading strategies"
