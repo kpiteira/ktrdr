@@ -79,6 +79,15 @@ class WorkerRegistry:
             worker.last_healthy_at = datetime.utcnow()
             logger.info(f"Worker {worker_id} re-registered")
         else:
+            # Check for stale workers with the same endpoint_url (worker restarted with new ID)
+            stale_worker_ids = [
+                wid for wid, w in self._workers.items()
+                if w.endpoint_url == endpoint_url and wid != worker_id
+            ]
+            for stale_id in stale_worker_ids:
+                logger.info(f"Removing stale worker {stale_id} (same endpoint as {worker_id})")
+                del self._workers[stale_id]
+
             # Create new worker
             worker = WorkerEndpoint(
                 worker_id=worker_id,

@@ -13,6 +13,7 @@ is delegated to OperationAdapter implementations.
 """
 
 import asyncio
+import logging
 import signal
 from typing import Any, Callable, Optional
 
@@ -31,6 +32,38 @@ from ktrdr.config.host_services import get_api_base_url
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def _suppress_console_logging() -> tuple[logging.Handler | None, int]:
+    """
+    Suppress console logging during progress display.
+
+    Rich's Progress display uses cursor control to update a single line.
+    If log messages are printed to stdout during progress, they break the display
+    and cause new lines to appear instead of updating in place.
+
+    Returns:
+        Tuple of (handler, original_level) to restore later, or (None, 0) if not found.
+    """
+    import sys
+
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers:
+        if isinstance(handler, logging.StreamHandler):
+            # Check if this handler writes to stdout
+            # (handle both real stdout and test mocks)
+            stream = getattr(handler, "stream", None)
+            if stream is sys.stdout or getattr(stream, "name", None) == "<stdout>":
+                original_level = handler.level
+                handler.setLevel(logging.CRITICAL)  # Suppress all but CRITICAL
+                return handler, original_level
+    return None, 0
+
+
+def _restore_console_logging(handler: logging.Handler | None, level: int) -> None:
+    """Restore console logging to its original level."""
+    if handler is not None:
+        handler.setLevel(level)
 
 
 class AsyncOperationExecutor:
@@ -413,23 +446,30 @@ class AsyncOperationExecutor:
 
                 # Poll until complete (with or without progress display)
                 if show_progress:
-                    # Create Rich progress bar and poll with updates
-                    with Progress(
-                        SpinnerColumn(),
-                        TextColumn("[progress.description]{task.description}"),
-                        BarColumn(),
-                        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-                        TimeElapsedColumn(),
-                        console=console,
-                    ) as progress:
-                        task_id = progress.add_task("Starting operation...", total=100)
-                        final_status = await self._poll_until_complete(
-                            operation_id,
-                            http_client,
-                            progress,
-                            task_id,
-                            progress_callback,
-                        )
+                    # Suppress console logging during progress display
+                    # (log output to stdout breaks Rich's single-line progress updates)
+                    handler, original_level = _suppress_console_logging()
+                    try:
+                        # Create Rich progress bar and poll with updates
+                        with Progress(
+                            SpinnerColumn(),
+                            TextColumn("[progress.description]{task.description}"),
+                            BarColumn(),
+                            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                            TimeElapsedColumn(),
+                            console=console,
+                        ) as progress:
+                            task_id = progress.add_task("Starting operation...", total=100)
+                            final_status = await self._poll_until_complete(
+                                operation_id,
+                                http_client,
+                                progress,
+                                task_id,
+                                progress_callback,
+                            )
+                    finally:
+                        # Always restore console logging
+                        _restore_console_logging(handler, original_level)
                 else:
                     # Poll without progress display
                     final_status = await self._poll_until_complete(
