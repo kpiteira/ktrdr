@@ -6,12 +6,54 @@ hosts with inline environment variable injection.
 
 import shlex
 import subprocess
+from pathlib import Path
 
 
 class SSHError(Exception):
     """Raised when SSH operations fail."""
 
     pass
+
+
+def scp_file(
+    local_path: str | Path,
+    host: str,
+    remote_path: str,
+    dry_run: bool = False,
+) -> None:
+    """
+    Copy a file to a remote host via SCP.
+
+    Args:
+        local_path: Path to local file
+        host: SSH host (e.g., 'backend.ktrdr.home.mynerd.place')
+        remote_path: Destination path on remote host
+        dry_run: If True, print command without executing
+
+    Raises:
+        SSHError: If SCP fails
+        FileNotFoundError: If local file doesn't exist
+    """
+    local_path = Path(local_path)
+    if not local_path.exists():
+        raise FileNotFoundError(f"Local file not found: {local_path}")
+
+    scp_cmd = ["scp", str(local_path), f"{host}:{remote_path}"]
+
+    if dry_run:
+        print(f"[DRY RUN] Would execute: {' '.join(scp_cmd)}")
+        return
+
+    try:
+        subprocess.run(
+            scp_cmd,
+            check=True,
+            timeout=600,  # 10 minute timeout for large files
+        )
+    except subprocess.CalledProcessError as e:
+        raise SSHError(f"SCP failed: {e}") from e
+    except subprocess.TimeoutExpired as e:
+        raise SSHError("SCP timed out after 10 minutes") from e
 
 
 def ssh_exec_with_env(

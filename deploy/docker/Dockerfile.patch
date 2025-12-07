@@ -1,0 +1,117 @@
+# KTRDR Patch Dockerfile - CPU-only for fast local builds
+# =============================================================================
+# This Dockerfile builds a lightweight CPU-only image (~500MB vs ~3.3GB)
+# for rapid patching of preprod environments without waiting for CI/CD.
+#
+# Usage:
+#   make docker-build-patch   # Build the patch image
+#   make deploy-patch         # Deploy to preprod (core + workers)
+#
+# NOT for production - use the main Dockerfile and CI/CD pipeline for that.
+# =============================================================================
+
+# --------------------------------------
+# STAGE 1: Builder stage
+# --------------------------------------
+FROM python:3.13-slim AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    UV_LINK_MODE=copy
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install UV via official installer (no pip)
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
+
+# Copy dependency files
+COPY pyproject.toml uv.lock ./
+
+# Add UV source override for CPU-only PyTorch
+# This tells UV to get torch from the CPU index instead of PyPI (which includes CUDA)
+RUN cat >> pyproject.toml << 'TOML'
+
+# --- PATCH: CPU-only PyTorch (added by Dockerfile.patch) ---
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+TOML
+
+# Re-lock with CPU torch, then sync dependencies
+RUN uv lock && uv sync --no-dev --no-install-project
+
+# Copy the project files
+COPY . .
+
+# Install the project package
+RUN uv lock && uv sync --no-dev
+
+# --------------------------------------
+# STAGE 2: Runtime stage
+# --------------------------------------
+FROM python:3.13-slim AS runtime
+
+# Set metadata labels
+LABEL org.opencontainers.image.title="KTRDR Backend (CPU Patch)"
+LABEL org.opencontainers.image.description="CPU-only patch build for rapid preprod deployment"
+LABEL org.opencontainers.image.authors="KTRDR Team"
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    APP_USER=ktrdr
+
+WORKDIR /app
+
+# Create non-root user for security
+RUN groupadd -r $APP_USER && \
+    useradd -r -g $APP_USER -d /app -s /sbin/nologin -c "KTRDR service user" $APP_USER && \
+    mkdir -p /app/logs /app/data && \
+    chown -R $APP_USER:$APP_USER /app
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tini \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy from builder stage - only what's needed for production
+COPY --from=builder /app/.venv/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
+COPY --from=builder /app/ktrdr /app/ktrdr
+COPY --from=builder /app/mcp /app/mcp
+COPY --from=builder /app/config /app/config
+COPY --from=builder /app/strategies /app/strategies
+COPY --from=builder /app/pyproject.toml /app/
+
+# Change ownership of the app directory
+RUN chown -R $APP_USER:$APP_USER /app
+
+# Setup volume for data persistence
+VOLUME ["/app/data", "/app/logs"]
+
+# Configure health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -fs http://localhost:8000/api/v1/health || exit 1
+
+# Expose the API port
+EXPOSE 8000
+
+# Switch to non-root user
+USER $APP_USER
+
+# Set up entrypoint with tini for proper signal handling
+ENTRYPOINT ["/usr/bin/tini", "--"]
+
+# Default command to run the FastAPI server
+CMD ["python", "-m", "uvicorn", "ktrdr.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

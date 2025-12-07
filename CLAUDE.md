@@ -512,6 +512,40 @@ ktrdr ib test-connection
 ktrdr ib check-status
 ```
 
+### Patch Deployment (Fast Preprod Hotfixes)
+
+For rapid iteration during preprod debugging, use the patch deployment workflow instead of waiting for CI/CD (~30+ min):
+
+```bash
+# Step 1: Build CPU-only image locally (~6 min, ~500MB vs 3.3GB)
+make docker-build-patch
+
+# Step 2: Deploy to preprod (core + workers-b + workers-c)
+make deploy-patch
+
+# Or with options:
+uv run ktrdr deploy patch --dry-run     # Preview what would happen
+uv run ktrdr deploy patch --verbose     # See detailed output
+```
+
+**How it works:**
+
+- Builds a CPU-only image using PyTorch's CPU index (excludes ~2.7GB of CUDA dependencies)
+- Transfers the compressed tarball (~150MB) to each host via SCP
+- Loads the image and restarts services with `IMAGE_TAG=patch`
+- GPU worker is excluded (it requires CUDA)
+
+**When to use:**
+
+- Debugging preprod issues that require code changes
+- Testing fixes before merging to main
+- Any situation where CI/CD is too slow
+
+**When NOT to use:**
+
+- Production deployments (always use CI/CD)
+- GPU worker patches (needs CUDA - use CI/CD or build on GPU host)
+
 ## 🏭 PROXMOX PRODUCTION DEPLOYMENT
 
 **For production deployments**, KTRDR uses Proxmox LXC containers for better performance and lower overhead than Docker.

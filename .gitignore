@@ -73,11 +73,12 @@ frontend/.turbo
 **/.svelte-kit
 
 # Project specific
-data/** 
+data/**
 config/*.secret.yaml
 logs/
 .DS_Store
 *.log
+ktrdr-patch.tar.gz
 
 # Output files
 output/

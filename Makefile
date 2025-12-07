@@ -1,4 +1,4 @@
-.PHONY: test-unit test-integration test-e2e test-host test-coverage test-all test-performance lint lint-fix format typecheck quality test-fast ci validate-mcp test-container-build test-container-smoke test-container canary-up canary-down canary-logs canary-test canary-status
+.PHONY: test-unit test-integration test-e2e test-host test-coverage test-all test-performance lint lint-fix format typecheck quality test-fast ci validate-mcp test-container-build test-container-smoke test-container canary-up canary-down canary-logs canary-test canary-status docker-build-patch deploy-patch
 
 # Test commands
 test-unit:
@@ -150,3 +150,48 @@ canary-status:
 canary-test:
 	@echo "🧪 Running functional tests against canary..."
 	@./scripts/test-canary.sh
+
+# =============================================================================
+# Patch Deployment - Fast local builds for preprod hotfixes
+# =============================================================================
+# Build a CPU-only image (~500MB vs ~3.3GB) for rapid preprod patching.
+# This bypasses CI/CD for quick iteration during debugging.
+#
+# Usage:
+#   make docker-build-patch   # Build CPU-only image (~6 min on Mac)
+#   make deploy-patch         # Deploy to preprod (core + all workers)
+#
+# The patch image excludes CUDA/GPU dependencies since preprod workers
+# are CPU-only. GPU worker is excluded from patch deployment.
+
+PATCH_IMAGE := ghcr.io/kpiteira/ktrdr-backend:patch
+PATCH_TARBALL := ktrdr-patch.tar.gz
+
+# Build CPU-only patch image for x86_64 (preprod architecture)
+docker-build-patch:
+	@echo "🔧 Building CPU-only patch image for x86_64..."
+	@echo "   This will take ~6 minutes (cross-compile from ARM)"
+	docker buildx build --platform linux/amd64 \
+		-f deploy/docker/Dockerfile.patch \
+		-t $(PATCH_IMAGE) \
+		--load .
+	@echo ""
+	@echo "📦 Saving image to tarball..."
+	docker save $(PATCH_IMAGE) | gzip > $(PATCH_TARBALL)
+	@echo ""
+	@echo "✅ Patch image built successfully!"
+	@echo "   Image: $(PATCH_IMAGE)"
+	@echo "   Size:  $$(docker images $(PATCH_IMAGE) --format '{{.Size}}')"
+	@echo "   Tarball: $(PATCH_TARBALL) ($$(ls -lh $(PATCH_TARBALL) | awk '{print $$5}'))"
+	@echo ""
+	@echo "Next step: make deploy-patch"
+
+# Deploy patch image to preprod (core + workers, excluding GPU)
+deploy-patch:
+	@if [ ! -f $(PATCH_TARBALL) ]; then \
+		echo "❌ Patch tarball not found: $(PATCH_TARBALL)"; \
+		echo "   Run 'make docker-build-patch' first"; \
+		exit 1; \
+	fi
+	@echo "🚀 Deploying patch to preprod..."
+	uv run ktrdr deploy patch
