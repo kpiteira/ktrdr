@@ -4,7 +4,7 @@
 
 **Date:** 2024-12-07
 **Branch:** `feature/agent-mvp`
-**Commits:** 4 commits made
+**Commits:** 5 commits made
 
 ## Completed Tasks
 
@@ -38,19 +38,32 @@
 - `get_phase0_prompt()` function for prompt retrieval
 - **5 unit tests passing**
 
+### Task 0.5: Agent Invocation ✅
+
+- Created `ClaudeCodeInvoker` class in `research_agents/services/invoker.py`
+- Uses subprocess to invoke Claude CLI with MCP config
+- Configuration via `InvokerConfig` with env var support:
+  - `AGENT_INVOKER_TIMEOUT_SECONDS` (default: 300)
+  - `CLAUDE_PATH` (default: "claude")
+  - `AGENT_MCP_CONFIG_PATH` (default: mcp/claude_mcp_config.json)
+- Features implemented:
+  - Subprocess invocation with `asyncio.create_subprocess_exec`
+  - JSON output parsing with raw output fallback
+  - Timeout handling with process kill
+  - Success/failure detection via exit code
+  - Session context injection into prompt
+- **16 unit tests passing**
+
 ## Remaining Tasks
 
-### Task 0.5: Agent Invocation (Next)
-- Trigger service needs to invoke Claude CLI via subprocess
-- Pass MCP config and prompts
-- File: `research_agents/services/invoker.py`
+### Task 0.6: Basic CLI Commands (Next)
 
-### Task 0.6: Basic CLI Commands
 - Add `ktrdr agent` command group
 - Commands: `status`, `trigger`
 - File: `ktrdr/cli/commands/agent.py`
 
 ### Task 0.7: E2E Test
+
 - Full cycle validation
 - File: `tests/integration/research_agents/test_agent_e2e.py`
 
@@ -113,7 +126,8 @@ research_agents/
 └── services/
     ├── __init__.py
     ├── trigger.py         # TriggerConfig, TriggerService
-    └── agent_state.py     # create_agent_session, get_agent_state, update_agent_state
+    ├── agent_state.py     # create_agent_session, get_agent_state, update_agent_state
+    └── invoker.py         # InvokerConfig, ClaudeCodeInvoker, InvocationResult
 
 mcp/src/tools/
 └── agent_tools.py         # MCP tool wrappers, register_agent_tools()
@@ -123,6 +137,7 @@ tests/unit/agent_tests/
 ├── conftest.py
 ├── test_agent_db.py       # 18 tests
 ├── test_agent_tools.py    # 12 tests
+├── test_invoker.py        # 16 tests
 ├── test_prompts.py        # 5 tests
 └── test_trigger.py        # 8 tests
 ```
@@ -130,7 +145,7 @@ tests/unit/agent_tests/
 ## Running Tests
 
 ```bash
-# All agent tests (43 tests, ~0.35s)
+# All agent tests (59 tests, ~0.5s)
 uv run pytest tests/unit/agent_tests/ -v --no-cov
 
 # Quality checks
@@ -140,11 +155,12 @@ make quality
 ## Git Status
 
 ```bash
-git log --oneline -4
+git log --oneline -5
+# feat(agents): Add agent invoker for Claude CLI (Task 0.5)
 # 36c2ce6 feat(agents): Add agent state MCP tools (Task 0.2)
 # 3df0b9a docs(agents): Add Phase 0 implementation handoff document
 # d3d4112 feat(agents): Add trigger service and Phase 0 test prompt (Tasks 0.3, 0.4)
 # 5b73606 feat(agents): Add database schema for research agents (Task 0.1)
 ```
 
-Ready to continue with Task 0.5 (Agent Invocation).
+Ready to continue with Task 0.6 (Basic CLI Commands).
