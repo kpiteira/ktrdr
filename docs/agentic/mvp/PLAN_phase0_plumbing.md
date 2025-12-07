@@ -45,11 +45,11 @@ Before implementing any tool or service, check if similar functionality exists:
 
 ## Success Criteria
 
-- [ ] Trigger service runs and invokes agent on schedule
+- [x] Trigger service runs and invokes agent on schedule
 - [x] Agent can call MCP tools successfully
 - [x] Agent state persists to PostgreSQL
-- [ ] End-to-end flow completes without errors
-- [ ] Basic logging shows what happened
+- [x] End-to-end flow completes without errors
+- [x] Basic logging shows what happened
 
 ---
 
@@ -252,7 +252,7 @@ Full CLI in Phase 3.
 | 0.4 | Minimal agent prompt | 1-2h | None | ✅ Done |
 | 0.5 | Agent invocation | 3-4h | 0.2, 0.3, 0.4 | ✅ Done |
 | 0.6 | Basic CLI | 2h | 0.1 | ✅ Done |
-| 0.7 | E2E test | 2-3h | All above | Pending |
+| 0.7 | E2E test | 2-3h | All above | ✅ Done |
 
 **Total estimated effort:** 16-22 hours (2-3 days)
 
@@ -295,7 +295,7 @@ mcp/
 ktrdr/
 └── cli/
     └── commands/
-        └── agent.py                # 0.6 - CLI commands (pending)
+        └── agent.py                # ✅ 0.6 - CLI commands
 
 tests/unit/agent_tests/             # ✅ Created (NOT research_agents/ - see HANDOFF)
 ├── conftest.py
@@ -304,9 +304,8 @@ tests/unit/agent_tests/             # ✅ Created (NOT research_agents/ - see HA
 ├── test_prompts.py                 # ✅ 5 tests
 └── test_trigger.py                 # ✅ 8 tests
 
-tests/integration/
-└── research_agents/
-    └── test_agent_e2e.py           # 0.7 (pending)
+tests/integration/agent_tests/      # ✅ Created (follows same naming pattern)
+└── test_agent_e2e.py               # ✅ 0.7 - 5 E2E tests
 ```
 
 **Note:** See HANDOFF_phase0.md for important learnings about test directory naming and MCP package conflicts.
