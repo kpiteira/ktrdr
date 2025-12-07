@@ -46,8 +46,8 @@ Before implementing any tool or service, check if similar functionality exists:
 ## Success Criteria
 
 - [ ] Trigger service runs and invokes agent on schedule
-- [ ] Agent can call MCP tools successfully
-- [ ] Agent state persists to PostgreSQL
+- [x] Agent can call MCP tools successfully
+- [x] Agent state persists to PostgreSQL
 - [ ] End-to-end flow completes without errors
 - [ ] Basic logging shows what happened
 
@@ -75,37 +75,43 @@ Skip for now (Phase 3): `agent_triggers`, `agent_metrics`, `agent_budget`
 
 ---
 
-### 0.2 Create Agent State MCP Tools
+### 0.2 Create Agent State MCP Tools ✅ COMPLETE
 
 **Goal:** Agent can read/write its own state
 
-**Tools to implement:**
+**Tools implemented:**
 
 ```python
 @mcp.tool()
-def get_agent_state(session_id: int) -> dict:
-    """Get current session state"""
-    
+async def create_agent_session() -> dict:
+    """Create new session, return session_id"""
+
 @mcp.tool()
-def update_agent_state(
+async def get_agent_state(session_id: int) -> dict:
+    """Get current session state"""
+
+@mcp.tool()
+async def update_agent_state(
     session_id: int,
     phase: str,
     strategy_name: str | None = None,
     operation_id: str | None = None
 ) -> dict:
     """Update session state"""
-
-@mcp.tool()
-def create_agent_session() -> dict:
-    """Create new session, return session_id"""
 ```
 
-**File:** `mcp/src/tools/agent_tools.py`
+**Files:**
 
-**Acceptance:**
-- Tools registered in MCP server
-- Can call from Claude Code manually
-- State persists to database
+- `research_agents/services/agent_state.py` - Service layer (testable)
+- `mcp/src/tools/agent_tools.py` - MCP tool wrappers
+- `mcp/src/server.py` - Added `register_agent_tools(mcp)` call
+
+**Acceptance:** ✅ All met
+
+- ✅ Tools registered in MCP server
+- ✅ Can call from Claude Code manually
+- ✅ State persists to database
+- ✅ 12 unit tests passing
 
 **Effort:** 3-4 hours
 
@@ -238,15 +244,15 @@ Full CLI in Phase 3.
 
 ## Task Summary
 
-| Task | Description | Effort | Dependencies |
-|------|-------------|--------|--------------|
-| 0.1 | Database tables | 2-3h | None |
-| 0.2 | Agent state MCP tools | 3-4h | 0.1 |
-| 0.3 | Basic trigger service | 3-4h | None |
-| 0.4 | Minimal agent prompt | 1-2h | None |
-| 0.5 | Agent invocation | 3-4h | 0.2, 0.3, 0.4 |
-| 0.6 | Basic CLI | 2h | 0.1 |
-| 0.7 | E2E test | 2-3h | All above |
+| Task | Description | Effort | Dependencies | Status |
+|------|-------------|--------|--------------|--------|
+| 0.1 | Database tables | 2-3h | None | ✅ Done |
+| 0.2 | Agent state MCP tools | 3-4h | 0.1 | ✅ Done |
+| 0.3 | Basic trigger service | 3-4h | None | ✅ Done |
+| 0.4 | Minimal agent prompt | 1-2h | None | ✅ Done |
+| 0.5 | Agent invocation | 3-4h | 0.2, 0.3, 0.4 | 🔜 Next |
+| 0.6 | Basic CLI | 2h | 0.1 | Pending |
+| 0.7 | E2E test | 2-3h | All above | Pending |
 
 **Total estimated effort:** 16-22 hours (2-3 days)
 
@@ -266,40 +272,44 @@ Full CLI in Phase 3.
 ## Files to Create
 
 ```
-research_agents/                    # Fresh start (old folder will be deleted)
+research_agents/                    # ✅ Created
 ├── __init__.py
 ├── database/
 │   ├── __init__.py
-│   ├── schema.py                   # 0.1 - Table definitions
-│   └── queries.py                  # 0.1 - Query helpers
+│   ├── schema.py                   # ✅ 0.1 - Table definitions
+│   └── queries.py                  # ✅ 0.1 - Query helpers
 ├── services/
 │   ├── __init__.py
-│   ├── trigger.py                  # 0.3 - Trigger service
-│   └── invoker.py                  # 0.5 - Agent invocation
+│   ├── trigger.py                  # ✅ 0.3 - Trigger service
+│   ├── agent_state.py              # ✅ 0.2 - Agent state service (testable)
+│   └── invoker.py                  # 0.5 - Agent invocation (pending)
 └── prompts/
     ├── __init__.py
-    └── phase0_test.py              # 0.4 - Test prompt
+    └── phase0_test.py              # ✅ 0.4 - Test prompt
 
 mcp/
 └── src/
     └── tools/
-        └── agent_tools.py          # 0.2 - Agent state tools (new file)
+        └── agent_tools.py          # ✅ 0.2 - Agent state MCP wrappers
 
 ktrdr/
 └── cli/
     └── commands/
-        └── agent.py                # 0.6 - CLI commands (new file)
+        └── agent.py                # 0.6 - CLI commands (pending)
 
-tests/
-├── unit/
-│   └── research_agents/            # New directory
-│       └── test_agent_db.py
-└── integration/
-    └── research_agents/            # New directory
-        └── test_agent_e2e.py       # 0.7
+tests/unit/agent_tests/             # ✅ Created (NOT research_agents/ - see HANDOFF)
+├── conftest.py
+├── test_agent_db.py                # ✅ 18 tests
+├── test_agent_tools.py             # ✅ 12 tests
+├── test_prompts.py                 # ✅ 5 tests
+└── test_trigger.py                 # ✅ 8 tests
+
+tests/integration/
+└── research_agents/
+    └── test_agent_e2e.py           # 0.7 (pending)
 ```
 
-**Note:** The existing `research_agents/` folder contains old broken code and will be deleted before starting Phase 0.
+**Note:** See HANDOFF_phase0.md for important learnings about test directory naming and MCP package conflicts.
 
 ---
 

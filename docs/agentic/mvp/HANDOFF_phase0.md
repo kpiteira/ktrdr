@@ -4,7 +4,7 @@
 
 **Date:** 2024-12-07
 **Branch:** `feature/agent-mvp`
-**Commits:** 2 commits made
+**Commits:** 4 commits made
 
 ## Completed Tasks
 
@@ -14,6 +14,17 @@
 - Implemented `AgentDatabase` class with asyncpg in `queries.py`
 - Full CRUD operations: create_session, get_session, update_session, complete_session, log_action
 - **18 unit tests passing**
+
+### Task 0.2: Agent State MCP Tools ✅
+
+- Created service layer in `research_agents/services/agent_state.py` (testable business logic)
+- Created MCP tool wrappers in `mcp/src/tools/agent_tools.py`
+- Registered tools via `register_agent_tools(mcp)` in `mcp/src/server.py`
+- Tools implemented:
+  - `create_agent_session()` - Creates new session, returns session_id
+  - `get_agent_state(session_id)` - Returns current session state
+  - `update_agent_state(session_id, phase, strategy_name?, operation_id?)` - Updates session
+- **12 unit tests passing**
 
 ### Task 0.3: Basic Trigger Service ✅
 - Implemented `TriggerConfig` with env var loading
@@ -29,24 +40,19 @@
 
 ## Remaining Tasks
 
-### Task 0.2: Agent State MCP Tools (Next)
-- Need to add tools to `mcp/src/server.py`:
-  - `create_agent_session()` - Creates new session, returns session_id
-  - `get_agent_state(session_id)` - Returns current session state
-  - `update_agent_state(session_id, phase, strategy_name?, operation_id?)` - Updates session
-- Should connect to database via `research_agents.database.AgentDatabase`
-- Follow existing MCP tool patterns with `@mcp.tool()` and `@trace_mcp_tool()`
-
-### Task 0.5: Agent Invocation
+### Task 0.5: Agent Invocation (Next)
 - Trigger service needs to invoke Claude CLI via subprocess
 - Pass MCP config and prompts
+- File: `research_agents/services/invoker.py`
 
 ### Task 0.6: Basic CLI Commands
 - Add `ktrdr agent` command group
-- Commands: `status`, `start`, `stop`
+- Commands: `status`, `trigger`
+- File: `ktrdr/cli/commands/agent.py`
 
 ### Task 0.7: E2E Test
 - Full cycle validation
+- File: `tests/integration/research_agents/test_agent_e2e.py`
 
 ## Key Learnings for Next Implementer
 
@@ -57,7 +63,16 @@
 
 The import `import research_agents` was resolving to the test directory instead of the actual package.
 
-### 2. Async Mock Pattern for asyncpg
+### 2. MCP Package Naming Conflict
+
+**CRITICAL:** The `mcp/` directory conflicts with the installed `mcp` package!
+
+- The local `mcp/` directory cannot be imported as `mcp.src.tools...`
+- Solution: Put testable business logic in `research_agents/services/`
+- MCP tools are thin wrappers that call the service layer
+- Tests import from `research_agents.services.agent_state`, not from `mcp.src.tools`
+
+### 3. Async Mock Pattern for asyncpg
 When mocking `asyncpg.Pool.acquire()` context manager:
 
 ```python
@@ -71,19 +86,19 @@ acquire_cm.__aexit__ = AsyncMock(return_value=None)
 pool.acquire.return_value = acquire_cm
 ```
 
-### 3. Test Timing for Async Services
+### 4. Test Timing for Async Services
 For trigger service loop tests, use very short intervals:
 ```python
 config = TriggerConfig(interval_seconds=0.01, enabled=True)  # Not 1 second!
 ```
 
-### 4. Package Configuration
+### 5. Package Configuration
 `research_agents` was added to:
 - `pyproject.toml`: `[tool.hatch.build.targets.wheel] packages = ["ktrdr", "research_agents"]`
 - `pyproject.toml`: `dependencies` includes `asyncpg>=0.30.0`
 - `pytest.ini`: `pythonpath = .`
 
-### 5. File Structure Created
+### 6. File Structure Created
 
 ```
 research_agents/
@@ -97,12 +112,17 @@ research_agents/
 │   └── phase0_test.py     # PHASE0_SYSTEM_PROMPT, PHASE0_TEST_PROMPT
 └── services/
     ├── __init__.py
-    └── trigger.py         # TriggerConfig, TriggerService
+    ├── trigger.py         # TriggerConfig, TriggerService
+    └── agent_state.py     # create_agent_session, get_agent_state, update_agent_state
+
+mcp/src/tools/
+└── agent_tools.py         # MCP tool wrappers, register_agent_tools()
 
 tests/unit/agent_tests/
 ├── __init__.py
 ├── conftest.py
 ├── test_agent_db.py       # 18 tests
+├── test_agent_tools.py    # 12 tests
 ├── test_prompts.py        # 5 tests
 └── test_trigger.py        # 8 tests
 ```
@@ -110,7 +130,7 @@ tests/unit/agent_tests/
 ## Running Tests
 
 ```bash
-# All agent tests (31 tests, ~0.3s)
+# All agent tests (43 tests, ~0.35s)
 uv run pytest tests/unit/agent_tests/ -v --no-cov
 
 # Quality checks
@@ -120,9 +140,11 @@ make quality
 ## Git Status
 
 ```bash
-git log --oneline -3
+git log --oneline -4
+# 36c2ce6 feat(agents): Add agent state MCP tools (Task 0.2)
+# 3df0b9a docs(agents): Add Phase 0 implementation handoff document
 # d3d4112 feat(agents): Add trigger service and Phase 0 test prompt (Tasks 0.3, 0.4)
 # 5b73606 feat(agents): Add database schema for research agents (Task 0.1)
 ```
 
-Ready to continue with Task 0.2 (MCP tools).
+Ready to continue with Task 0.5 (Agent Invocation).
