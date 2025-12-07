@@ -250,8 +250,8 @@ Full CLI in Phase 3.
 | 0.2 | Agent state MCP tools | 3-4h | 0.1 | ✅ Done |
 | 0.3 | Basic trigger service | 3-4h | None | ✅ Done |
 | 0.4 | Minimal agent prompt | 1-2h | None | ✅ Done |
-| 0.5 | Agent invocation | 3-4h | 0.2, 0.3, 0.4 | 🔜 Next |
-| 0.6 | Basic CLI | 2h | 0.1 | Pending |
+| 0.5 | Agent invocation | 3-4h | 0.2, 0.3, 0.4 | ✅ Done |
+| 0.6 | Basic CLI | 2h | 0.1 | 🔜 Next |
 | 0.7 | E2E test | 2-3h | All above | Pending |
 
 **Total estimated effort:** 16-22 hours (2-3 days)
