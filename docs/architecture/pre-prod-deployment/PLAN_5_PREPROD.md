@@ -117,7 +117,7 @@ scrape_configs:
   - job_name: 'workers-b'
     metrics_path: '/metrics/'
     static_configs:
-      - targets: ['workers-b.ktrdr.home.mynerd.place:5003', ...]  # External
+      - targets: ['workers-b.ktrdr.<YOUR_DOMAIN>:5003', ...]  # External
 ```
 
 **Note**: The `/metrics/` trailing slash is required because FastAPI's mounted app redirects `/metrics` to `/metrics/`. This is documented behavior, not a workaround.
@@ -247,18 +247,18 @@ file: deploy/docker/Dockerfile
 
 ```bash
 # Test SSH access
-ssh backend.ktrdr.home.mynerd.place 'echo ok'
-ssh workers-b.ktrdr.home.mynerd.place 'echo ok'
-ssh workers-c.ktrdr.home.mynerd.place 'echo ok'
+ssh backend.ktrdr.<YOUR_DOMAIN> 'echo ok'
+ssh workers-b.ktrdr.<YOUR_DOMAIN> 'echo ok'
+ssh workers-c.ktrdr.<YOUR_DOMAIN> 'echo ok'
 
 # Check Docker
-ssh backend.ktrdr.home.mynerd.place 'docker --version && docker ps'
+ssh backend.ktrdr.<YOUR_DOMAIN> 'docker --version && docker ps'
 
 # Check disk space
-ssh backend.ktrdr.home.mynerd.place 'df -h'
+ssh backend.ktrdr.<YOUR_DOMAIN> 'df -h'
 
 # Test inter-LXC connectivity
-ssh workers-b.ktrdr.home.mynerd.place 'ping -c 3 backend.ktrdr.home.mynerd.place'
+ssh workers-b.ktrdr.<YOUR_DOMAIN> 'ping -c 3 backend.ktrdr.<YOUR_DOMAIN>'
 ```
 
 **Acceptance Criteria**:
@@ -281,17 +281,17 @@ ssh workers-b.ktrdr.home.mynerd.place 'ping -c 3 backend.ktrdr.home.mynerd.place
 
 ```text
 ; Core services (Node A)
-backend.ktrdr.home.mynerd.place         -> Node A IP
-postgres.ktrdr.home.mynerd.place        -> Node A IP
-grafana.ktrdr.home.mynerd.place         -> Node A IP
-prometheus.ktrdr.home.mynerd.place      -> Node A IP
+backend.ktrdr.<YOUR_DOMAIN>         -> Node A IP
+postgres.ktrdr.<YOUR_DOMAIN>        -> Node A IP
+grafana.ktrdr.<YOUR_DOMAIN>         -> Node A IP
+prometheus.ktrdr.<YOUR_DOMAIN>      -> Node A IP
 
 ; CPU Workers (Nodes B & C)
-workers-b.ktrdr.home.mynerd.place       -> Node B IP
-workers-c.ktrdr.home.mynerd.place       -> Node C IP
+workers-b.ktrdr.<YOUR_DOMAIN>       -> Node B IP
+workers-c.ktrdr.<YOUR_DOMAIN>       -> Node C IP
 
 ; GPU Worker (VM with GPU passthrough)
-ktrdr-gpuworker.ktrdr.home.mynerd.place -> GPU Host IP
+ktrdr-gpuworker.ktrdr.<YOUR_DOMAIN> -> GPU Host IP
 ```
 
 **Acceptance Criteria**:
@@ -310,8 +310,8 @@ ktrdr-gpuworker.ktrdr.home.mynerd.place -> GPU Host IP
 
 **Implementation Details**:
 
-1. **NFS Server** (proxmox4 host):
-   - Export: `/mnt/ktrdr_data 10.42.0.0/22(rw,sync,no_subtree_check,no_root_squash)`
+1. **NFS Server** (Proxmox host):
+   - Export: `/mnt/ktrdr_data <YOUR_SUBNET>(rw,sync,no_subtree_check,no_root_squash)`
    - User: `ktrdr` (UID 999, GID 1500) created for Docker container compatibility
 
 2. **Permissions Configuration**:
@@ -320,8 +320,8 @@ ktrdr-gpuworker.ktrdr.home.mynerd.place -> GPU Host IP
    - All files owned by `ktrdr:ktrdr` (999:1500)
 
 3. **Client Configuration**:
-   - LXCs use NFSv3: `10.42.0.11:/mnt/ktrdr_data /mnt/ktrdr_data nfs rw,relatime,vers=3,hard,proto=tcp 0 0`
-   - GPU VM uses NFSv4: `10.42.0.11:/mnt/ktrdr_data /mnt/ktrdr_data nfs4 rw,relatime,vers=4.2,hard,proto=tcp 0 0`
+   - LXCs use NFSv3: `<NFS_SERVER_IP>:/mnt/ktrdr_data /mnt/ktrdr_data nfs rw,relatime,vers=3,hard,proto=tcp 0 0`
+   - GPU VM uses NFSv4: `<NFS_SERVER_IP>:/mnt/ktrdr_data /mnt/ktrdr_data nfs4 rw,relatime,vers=4.2,hard,proto=tcp 0 0`
 
 4. **Docker Access**:
    - Containers use `group_add: ["1500"]` in docker-compose
@@ -329,7 +329,7 @@ ktrdr-gpuworker.ktrdr.home.mynerd.place -> GPU Host IP
 
 5. **Group Configuration** (all nodes):
    - `ktrdr` group (GID 1500) created on all LXCs and GPU VM for consistent naming
-   - SSH users added to ktrdr group where needed (e.g., `karl` on GPU VM)
+   - SSH users added to ktrdr group where needed (e.g., your SSH user on GPU VM)
 
 **Acceptance Criteria**:
 
@@ -367,21 +367,21 @@ mkdir -p /opt/ktrdr-workers-{b,c}
 ```bash
 # Core deployment
 scp deploy/environments/homelab/docker-compose.core.yml \
-    backend.ktrdr.home.mynerd.place:/opt/ktrdr-core/
+    backend.ktrdr.<YOUR_DOMAIN>:/opt/ktrdr-core/
 
 scp deploy/environments/homelab/prometheus.yml \
-    backend.ktrdr.home.mynerd.place:/opt/ktrdr-core/monitoring/
+    backend.ktrdr.<YOUR_DOMAIN>:/opt/ktrdr-core/monitoring/
 
 scp -r deploy/shared/grafana/* \
-    backend.ktrdr.home.mynerd.place:/opt/ktrdr-core/monitoring/grafana/
+    backend.ktrdr.<YOUR_DOMAIN>:/opt/ktrdr-core/monitoring/grafana/
 
 # Worker deployment (Node B)
 scp deploy/environments/homelab/docker-compose.workers.yml \
-    workers-b.ktrdr.home.mynerd.place:/opt/ktrdr-workers-b/
+    workers-b.ktrdr.<YOUR_DOMAIN>:/opt/ktrdr-workers-b/
 
 # Worker deployment (Node C)
 scp deploy/environments/homelab/docker-compose.workers.yml \
-    workers-c.ktrdr.home.mynerd.place:/opt/ktrdr-workers-c/
+    workers-c.ktrdr.<YOUR_DOMAIN>:/opt/ktrdr-workers-c/
 ```
 
 **Acceptance Criteria**:
@@ -447,29 +447,29 @@ scrape_configs:
     metrics_path: '/metrics/'
     static_configs:
       - targets:
-        - 'workers-b.ktrdr.home.mynerd.place:5003'
-        - 'workers-b.ktrdr.home.mynerd.place:5004'
-        - 'workers-b.ktrdr.home.mynerd.place:5005'
-        - 'workers-b.ktrdr.home.mynerd.place:5006'
-        - 'workers-b.ktrdr.home.mynerd.place:5007'
-        - 'workers-b.ktrdr.home.mynerd.place:5008'
+        - 'workers-b.ktrdr.<YOUR_DOMAIN>:5003'
+        - 'workers-b.ktrdr.<YOUR_DOMAIN>:5004'
+        - 'workers-b.ktrdr.<YOUR_DOMAIN>:5005'
+        - 'workers-b.ktrdr.<YOUR_DOMAIN>:5006'
+        - 'workers-b.ktrdr.<YOUR_DOMAIN>:5007'
+        - 'workers-b.ktrdr.<YOUR_DOMAIN>:5008'
 
   - job_name: 'ktrdr-workers-c'
     metrics_path: '/metrics/'
     static_configs:
       - targets:
-        - 'workers-c.ktrdr.home.mynerd.place:5003'
-        - 'workers-c.ktrdr.home.mynerd.place:5004'
-        - 'workers-c.ktrdr.home.mynerd.place:5005'
-        - 'workers-c.ktrdr.home.mynerd.place:5006'
-        - 'workers-c.ktrdr.home.mynerd.place:5007'
-        - 'workers-c.ktrdr.home.mynerd.place:5008'
+        - 'workers-c.ktrdr.<YOUR_DOMAIN>:5003'
+        - 'workers-c.ktrdr.<YOUR_DOMAIN>:5004'
+        - 'workers-c.ktrdr.<YOUR_DOMAIN>:5005'
+        - 'workers-c.ktrdr.<YOUR_DOMAIN>:5006'
+        - 'workers-c.ktrdr.<YOUR_DOMAIN>:5007'
+        - 'workers-c.ktrdr.<YOUR_DOMAIN>:5008'
 
   - job_name: 'ktrdr-gpu-worker'
     metrics_path: '/metrics/'
     static_configs:
       - targets:
-        - 'ktrdr-gpuworker.ktrdr.home.mynerd.place:5005'
+        - 'ktrdr-gpuworker.ktrdr.<YOUR_DOMAIN>:5005'
 ```
 
 **Acceptance Criteria**:
@@ -497,10 +497,10 @@ scrape_configs:
 
 ```bash
 # Deploy core services
-ssh backend.ktrdr.home.mynerd.place 'cd /opt/ktrdr-core && docker compose -f docker-compose.core.yml up -d'
+ssh backend.ktrdr.<YOUR_DOMAIN> 'cd /opt/ktrdr-core && docker compose -f docker-compose.core.yml up -d'
 
 # Verify
-curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/health
+curl http://backend.ktrdr.<YOUR_DOMAIN>:8000/api/v1/health
 ```
 
 **Acceptance Criteria**:
@@ -530,13 +530,13 @@ curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/health
 
 ```bash
 # Deploy to Node B
-ssh workers-b.ktrdr.home.mynerd.place 'cd /opt/ktrdr-workers-b && docker compose -f docker-compose.workers.yml up -d'
+ssh workers-b.ktrdr.<YOUR_DOMAIN> 'cd /opt/ktrdr-workers-b && docker compose -f docker-compose.workers.yml up -d'
 
 # Deploy to Node C
-ssh workers-c.ktrdr.home.mynerd.place 'cd /opt/ktrdr-workers-c && docker compose -f docker-compose.workers.yml up -d'
+ssh workers-c.ktrdr.<YOUR_DOMAIN> 'cd /opt/ktrdr-workers-c && docker compose -f docker-compose.workers.yml up -d'
 
 # Verify registration
-curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/workers | jq
+curl http://backend.ktrdr.<YOUR_DOMAIN>:8000/api/v1/workers | jq
 ```
 
 **Acceptance Criteria**:
@@ -551,11 +551,11 @@ curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/workers | jq
 
 | Worker ID | Type | Endpoint | Status |
 |-----------|------|----------|--------|
-| training-worker-22c2939c | training | 10.42.1.13:5002 (GPU VM) | available |
-| backtesting-worker-df53cf77 | backtesting | workers-b:5003 | available |
-| training-worker-d4f2a0da | training | workers-b:5005 | available |
-| backtesting-worker-b1944d7e | backtesting | workers-c:5003 | available |
-| training-worker-95355759 | training | workers-c:5005 | available |
+| training-worker-xxxxx | training | gpu-worker:5002 (GPU VM) | available |
+| backtesting-worker-xxxxx | backtesting | workers-b:5003 | available |
+| training-worker-xxxxx | training | workers-b:5005 | available |
+| backtesting-worker-xxxxx | backtesting | workers-c:5003 | available |
+| training-worker-xxxxx | training | workers-c:5005 | available |
 
 **Note**: GPU worker currently registers with `gpu: false`. Fix planned for next release to enable GPU-priority routing.
 
@@ -571,10 +571,10 @@ curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/workers | jq
 
 ```bash
 # Deploy GPU worker
-ssh ktrdr-gpuworker.ktrdr.home.mynerd.place 'cd /opt/ktrdr-gpu && docker compose -f docker-compose.gpu-worker.yml up -d'
+ssh ktrdr-gpuworker.ktrdr.<YOUR_DOMAIN> 'cd /opt/ktrdr-gpu && docker compose -f docker-compose.gpu-worker.yml up -d'
 
 # Verify registration (should show gpu: true)
-curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/workers | jq '.[] | select(.capabilities.gpu == true)'
+curl http://backend.ktrdr.<YOUR_DOMAIN>:8000/api/v1/workers | jq '.[] | select(.capabilities.gpu == true)'
 ```
 
 **Acceptance Criteria**:
@@ -645,19 +645,19 @@ Grafana Dashboards:
 
 ```bash
 # 1. Check registered workers
-curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/workers | jq
+curl http://backend.ktrdr.<YOUR_DOMAIN>:8000/api/v1/workers | jq
 
 # 2. Check Prometheus targets
-curl http://backend.ktrdr.home.mynerd.place:9090/api/v1/targets | jq '.data.activeTargets[] | {job: .labels.job, health: .health}'
+curl http://backend.ktrdr.<YOUR_DOMAIN>:9090/api/v1/targets | jq '.data.activeTargets[] | {job: .labels.job, health: .health}'
 
 # 3. Run test operation
 # (via CLI or API)
 
 # 4. Check Jaeger for traces
-curl http://backend.ktrdr.home.mynerd.place:16686/api/services | jq
+curl http://backend.ktrdr.<YOUR_DOMAIN>:16686/api/services | jq
 
 # 5. Verify Grafana dashboards show data
-# Open http://grafana.ktrdr.home.mynerd.place:3000
+# Open http://grafana.ktrdr.<YOUR_DOMAIN>:3000
 ```
 
 **Verification Results (2025-12-06)**:
@@ -682,13 +682,195 @@ curl http://backend.ktrdr.home.mynerd.place:16686/api/services | jq
 
 **File**: Update `docs/architecture/pre-prod-deployment/OPERATIONS.md`
 
-**Goal**: Complete operational documentation
+**Goal**: Create the definitive guide for reinstalling pre-prod from scratch
+
+**Status**: PENDING
+
+---
+
+#### Phase 1: Deep Infrastructure Study
+
+Before writing documentation, conduct a comprehensive study of all infrastructure components:
+
+**1.1 Deployment Artifacts** (in `/deploy/`):
+- `deploy/environments/homelab/docker-compose.core.yml` - Core services (backend, db, monitoring)
+- `deploy/environments/homelab/docker-compose.workers.yml` - CPU workers (backtest + training)
+- `deploy/environments/homelab/docker-compose.gpu-worker.yml` - GPU training worker
+- `deploy/environments/homelab/prometheus.yml` - Prometheus scrape targets
+- `deploy/shared/grafana/` - Dashboards and datasources
+
+**1.2 CLI Deploy Commands** (in `ktrdr/cli/deploy_commands.py`):
+- `ktrdr deploy core` - Deploy backend, db, observability stack
+- `ktrdr deploy workers <target>` - Deploy CPU workers (all, workers-b, workers-c)
+- `ktrdr deploy gpu` - Deploy GPU training worker
+- `ktrdr deploy status` - Check deployment status
+- `ktrdr deploy patch` - Fast patch deployment for hotfixes
+- Study how CLI fetches secrets from 1Password and injects via SSH
+
+**1.3 Infrastructure Components**:
+- **LXCs**: backend, workers-b, workers-c (see internal network docs for IPs)
+- **GPU VM**: ktrdr-gpuworker - different from LXCs (runs as non-root user)
+- **NFS Server**: Proxmox host exports `/mnt/ktrdr_data`
+- **DNS Server**: BIND9 in Docker on dedicated server
+
+**1.4 Key Configuration Details to Document**:
+
+- SSH config: LXCs use `root`, GPU VM uses a non-root user (see ~/.ssh/config patterns)
+- NFS permissions: UID 999 (ktrdr), GID 1500 (ktrdr group), setgid bit (2775)
+- Docker user mapping: containers run as ktrdr with `group_add: "1500"`
+- Environment variables: `DATA_DIR`, `MODELS_DIR`, `STRATEGIES_DIR`, `SHARED_MOUNT_PATH`
+- Prometheus metrics path requires trailing slash (`/metrics/`)
+- GPU worker needs Docker Compose plugin (Ubuntu's `docker.io` package doesn't include it)
+
+**1.5 1Password Secrets Structure**:
+
+- Vault and item names configured in CLI (see `deploy_commands.py`)
+- Required fields: DB_USER, DB_PASSWORD, JWT_SECRET, GF_ADMIN_PASSWORD, GHCR_TOKEN
+
+---
+
+#### Phase 2: Rewrite OPERATIONS.md
+
+Create a comprehensive document that enables complete reinstallation from scratch:
+
+**2.1 Document Structure**:
+
+```markdown
+# Pre-Production Operations Guide
+
+## Quick Reference
+- Service URLs and ports
+- SSH access patterns
+- Common commands cheatsheet
+
+## Prerequisites
+- Proxmox cluster setup
+- DNS server (BIND9 in Docker)
+- NFS server on Proxmox host
+- 1Password CLI configured
+- SSH keys deployed
+
+## Infrastructure Overview
+- Architecture diagram
+- Node specifications (LXCs + GPU VM)
+- Network topology (IPs, DNS names)
+- Storage layout (NFS paths)
+
+## DNS Configuration
+- Zone file format and location
+- Adding/modifying entries
+- Serial number format (YYYYMMDDNN - max 10 digits!)
+- Reloading BIND (docker restart bind9)
+- Troubleshooting DNS cache issues
+
+## NFS Setup
+- Server configuration (/etc/exports)
+- Client mounts (NFSv3 for LXCs, NFSv4 for VMs)
+- User/group setup (ktrdr UID 999, GID 1500)
+- Permission structure (2775 directories, 664 files)
+- Verifying container access
+
+## LXC Provisioning
+- Template creation with Docker + nesting
+- Cloning and configuring each node
+- Network configuration
+- Enabling Docker-in-LXC (nesting=1,keyctl=1)
+
+## GPU Worker VM Setup
+- VM creation (different from LXC!)
+- NVIDIA driver and Container Toolkit
+- Docker Compose plugin installation
+- NFS mount configuration
+- SSH user setup (not root)
+
+## SSH Configuration
+- Key deployment to all nodes
+- ~/.ssh/config patterns (different users for LXC vs VM)
+- Testing connectivity
+
+## Deployment Procedures
+### Initial Deployment (from scratch)
+1. Verify prerequisites
+2. Deploy core: `ktrdr deploy core`
+3. Deploy workers: `ktrdr deploy workers all`
+4. Deploy GPU: `ktrdr deploy gpu`
+5. Verify worker registration
+
+### Updating Existing Deployment
+- Pulling new images
+- Rolling restarts
+- Using patch deployment for hotfixes
+
+### Scaling Workers
+- Profile-based scaling
+- Adding new nodes
+
+## Monitoring Setup
+- Grafana dashboards (provisioned from /deploy/shared/grafana/)
+- Prometheus targets configuration
+- Jaeger tracing
+- Accessing UIs
+
+## Verification Checklist
+- All services healthy
+- Workers registered (5 expected: 2 backtest, 3 training)
+- GPU worker shows `gpu: true`
+- Prometheus targets UP
+- Grafana dashboards loading
+- Test training routes to GPU worker
+
+## Troubleshooting
+- Workers not registering
+- NFS permission denied
+- DNS not resolving
+- GPU worker issues
+- Container health failures
+
+## Backup & Recovery
+- Database backups
+- NFS snapshots
+- LXC snapshots
+- Disaster recovery procedures
+```
+
+**2.2 Key Learnings to Include**:
+
+| Issue | Root Cause | Solution |
+|-------|-----------|----------|
+| DNS NXDOMAIN after zone edit | Serial number too long (12 digits) | Use YYYYMMDDNN format (10 digits max) |
+| DNS still returning old data | BIND cached negative response | Restart BIND container to clear cache |
+| GPU deploy fails SSH | Wildcard SSH config uses wrong user | Add specific host entry BEFORE wildcard |
+| GPU worker "command not found" | Ubuntu docker.io lacks compose plugin | Install plugin manually from GitHub |
+| Training "data not found" | Missing DATA_DIR env var | Add DATA_DIR, MODELS_DIR, STRATEGIES_DIR |
+| Container conflict on redeploy | Old container with same name | Stop and remove old container first |
+| NFS permission denied | Wrong UID/GID or missing setgid | Use ktrdr:ktrdr (999:1500) with 2775 perms |
+
+---
+
+#### Phase 3: Validate Documentation
+
+Test the documentation by having someone unfamiliar with the setup follow it:
+
+- [ ] All commands are copy-pasteable
+- [ ] No assumed knowledge not documented
+- [ ] Troubleshooting covers common issues
+- [ ] Recovery procedures are tested
+
+---
 
 **Acceptance Criteria**:
 
-- [ ] All operational procedures documented
-- [ ] Clear step-by-step instructions
-- [ ] Troubleshooting guide complete
+- [ ] Complete infrastructure study documented in OPERATIONS.md
+- [ ] Step-by-step reinstallation guide from bare Proxmox
+- [ ] All configuration files and their purposes explained
+- [ ] DNS setup including BIND-in-Docker specifics
+- [ ] NFS setup with exact permissions and user/group config
+- [ ] LXC vs GPU VM differences clearly explained
+- [ ] SSH configuration requirements documented
+- [ ] CLI deploy commands with examples
+- [ ] Monitoring stack setup and verification
+- [ ] Comprehensive troubleshooting section with known issues
+- [ ] Verification checklist that confirms full functionality
 
 ---
 
@@ -698,17 +880,17 @@ curl http://backend.ktrdr.home.mynerd.place:16686/api/services | jq
 
 ```bash
 # 1. All services healthy
-curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/health
+curl http://backend.ktrdr.<YOUR_DOMAIN>:8000/api/v1/health
 
 # 2. Workers registered (expected: 4+ workers)
-curl http://backend.ktrdr.home.mynerd.place:8000/api/v1/workers | jq 'length'
+curl http://backend.ktrdr.<YOUR_DOMAIN>:8000/api/v1/workers | jq 'length'
 
 # 3. Prometheus targets UP
-curl -s http://backend.ktrdr.home.mynerd.place:9090/api/v1/targets | \
+curl -s http://backend.ktrdr.<YOUR_DOMAIN>:9090/api/v1/targets | \
   jq '[.data.activeTargets[] | select(.health=="up")] | length'
 
 # 4. Grafana dashboards
-# Open http://grafana.ktrdr.home.mynerd.place:3000
+# Open http://grafana.ktrdr.<YOUR_DOMAIN>:3000
 # Verify all 3 dashboards show data
 ```
 
@@ -730,10 +912,11 @@ curl -s http://backend.ktrdr.home.mynerd.place:9090/api/v1/targets | \
 - [x] Jaeger receiving traces
 - [ ] Documentation complete (Task 5.12 in progress)
 
-**Known Issues for Future Releases**:
+**Resolved Issues (2025-12-06)**:
 
-1. GPU worker registers with `gpu: false` (should be `gpu: true` for priority routing)
-2. Prometheus GPU worker target on wrong port (5005 vs actual 5002)
+1. ~~GPU worker registers with `gpu: false`~~ → Fixed: Now registers with `gpu: true` (CUDA)
+2. ~~Prometheus GPU worker target on wrong port~~ → Fixed: Now uses port 5005
+3. ~~GPU worker missing DATA_DIR env vars~~ → Fixed: Added DATA_DIR, MODELS_DIR, STRATEGIES_DIR
 
 ---
 
