@@ -241,7 +241,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "up{instance=~\".*:500[3-8]\"}",
+          "expr": "up{instance=~\".*:500[35]\"}",
           "format": "table",
           "instant": true,
           "refId": "A"
@@ -328,7 +328,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(process_cpu_seconds_total{instance=~\".*:500[3-8]\"}[5m]) * 100",
+          "expr": "rate(process_cpu_seconds_total{instance=~\".*:500[35]\"}[5m]) * 100",
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
@@ -399,7 +399,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "process_resident_memory_bytes{instance=~\".*:500[3-8]\"}",
+          "expr": "process_resident_memory_bytes{instance=~\".*:500[35]\"}",
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
@@ -470,7 +470,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "up{instance=~\".*:500[3-8]\"}",
+          "expr": "up{instance=~\".*:500[35]\"}",
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
