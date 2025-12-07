@@ -178,6 +178,7 @@ class TrainingWorker(WorkerAPIBase):
 
             # Extract strategy name from YAML content using proper YAML parsing
             import yaml
+
             strategy_name = "neuro_mean_reversion"  # Default
             try:
                 yaml_content = yaml.safe_load(request.strategy_yaml)
