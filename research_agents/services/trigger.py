@@ -10,12 +10,17 @@ Future phases will add:
 - Time-of-day constraints
 """
 
+from __future__ import annotations
+
 import asyncio
 import os
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import structlog
+
+if TYPE_CHECKING:
+    from research_agents.services.invoker import InvocationResult
 
 logger = structlog.get_logger(__name__)
 
@@ -33,7 +38,7 @@ class TriggerConfig:
     enabled: bool = True
 
     @classmethod
-    def from_env(cls) -> "TriggerConfig":
+    def from_env(cls) -> TriggerConfig:
         """Load configuration from environment variables.
 
         Environment variables:
@@ -56,7 +61,9 @@ class AgentInvoker(Protocol):
     - Future: Direct API calls to Anthropic
     """
 
-    async def invoke(self, prompt: str, system_prompt: str | None = None) -> dict:
+    async def invoke(
+        self, prompt: str, system_prompt: str | None = None
+    ) -> InvocationResult:
         """Invoke the agent with the given prompt.
 
         Args:
@@ -64,7 +71,7 @@ class AgentInvoker(Protocol):
             system_prompt: Optional system prompt.
 
         Returns:
-            Dict with invocation results (success, session_id, etc.)
+            InvocationResult with success status, output, and any errors.
         """
         ...
 
@@ -153,17 +160,26 @@ class TriggerService:
                 system_prompt=prompts["system"],
             )
 
+            # Extract session_id from output if available
+            session_id = None
+            if result.output and isinstance(result.output, dict):
+                session_id = result.output.get("session_id")
+
             logger.info(
                 "Agent invocation completed",
-                success=result.get("success"),
-                session_id=result.get("session_id"),
+                success=result.success,
+                session_id=session_id,
             )
 
             return {
                 "triggered": True,
                 "reason": "no_active_session",
-                "session_id": result.get("session_id"),
-                "invocation_result": result,
+                "session_id": session_id,
+                "invocation_result": {
+                    "success": result.success,
+                    "exit_code": result.exit_code,
+                    "error": result.error,
+                },
             }
 
         except Exception as e:

@@ -208,7 +208,7 @@ async def _trigger_agent_async(dry_run: bool, verbose: bool):
             console.print("[dim]Set AGENT_ENABLED=true to enable[/dim]")
             return
 
-        service = TriggerService(config=config, db=db, invoker=invoker)  # type: ignore[arg-type]
+        service = TriggerService(config=config, db=db, invoker=invoker)
 
         if verbose:
             console.print("[dim]Invoking agent...[/dim]")

@@ -13,10 +13,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from research_agents.services.trigger import (
-    TriggerConfig,
-    TriggerService,
-)
+from research_agents.services.invoker import InvocationResult
+from research_agents.services.trigger import TriggerConfig, TriggerService
 
 
 class TestTriggerConfig:
@@ -62,7 +60,13 @@ class TestTriggerService:
     def mock_invoker(self):
         """Create a mock agent invoker."""
         invoker = AsyncMock()
-        invoker.invoke.return_value = {"success": True, "session_id": 1}
+        invoker.invoke.return_value = InvocationResult(
+            success=True,
+            exit_code=0,
+            output={"session_id": 1},
+            raw_output="",
+            error=None,
+        )
         return invoker
 
     @pytest.fixture
