@@ -176,12 +176,16 @@ class TrainingWorker(WorkerAPIBase):
                 operation_id
             )
 
-            # Extract strategy name from YAML content FIRST
+            # Extract strategy name from YAML content using proper YAML parsing
+            import yaml
             strategy_name = "neuro_mean_reversion"  # Default
-            for line in request.strategy_yaml.split("\n"):
-                if line.strip().startswith("name:"):
-                    strategy_name = line.split(":", 1)[1].strip().strip('"').strip("'")
-                    break
+            try:
+                yaml_content = yaml.safe_load(request.strategy_yaml)
+                if yaml_content and "name" in yaml_content:
+                    strategy_name = yaml_content["name"]
+            except yaml.YAMLError:
+                # Fallback: if YAML parsing fails, use default
+                logger.warning("Failed to parse strategy YAML, using default name")
 
             # Create temp directory and file with CORRECT strategy name
             # This is critical: build_training_context() looks for {strategy_name}.yaml
