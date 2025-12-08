@@ -103,3 +103,32 @@ async def agent_db():
 ```
 
 The `pytest.skip()` in fixture setup allows graceful skipping when database is unavailable.
+
+## Known Limitations (Phase 1+ Improvements)
+
+### Session Not Visible During Invocation
+
+**Problem**: In Phase 0, Claude creates the session via MCP tool. During the ~90 second invocation, `agent status` shows "No active session" because no session exists yet.
+
+**Current flow**:
+
+```text
+Trigger starts → Invokes Claude (90s) → Claude calls create_agent_session() → Session exists
+                 ^                       ^
+                 No session visible      Session only created here
+```
+
+**Recommended fix for Phase 1**:
+
+```text
+Trigger creates session → Sets phase=DESIGNING → Invokes Claude with session_id → Claude updates existing session
+```
+
+This requires:
+
+1. Trigger creates session BEFORE invoking Claude
+2. Session ID passed to Claude in prompt context
+3. Agent prompt updated to use existing session (not create new)
+4. Phase immediately set to DESIGNING so `agent status` shows work in progress
+
+**Impact**: Currently minor (Phase 0 is just proving plumbing). Should be addressed when building real workflow in Phase 1.
