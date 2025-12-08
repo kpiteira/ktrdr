@@ -9,6 +9,7 @@ from mcp.server.fastmcp import FastMCP
 from .api_client import get_api_client
 from .telemetry import trace_mcp_tool
 from .tools.agent_tools import register_agent_tools
+from .tools.strategy_tools import register_strategy_tools
 
 logger = structlog.get_logger()
 
@@ -1261,6 +1262,9 @@ async def start_backtest(
 
 # Register Agent State Management Tools
 register_agent_tools(mcp)
+
+# Register Strategy Management Tools (Task 1.3)
+register_strategy_tools(mcp)
 
 
 class KTRDRMCPServer:
