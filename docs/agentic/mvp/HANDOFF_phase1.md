@@ -1,0 +1,73 @@
+# Phase 1: Implementation Learnings
+
+> **Purpose**: Learnings that weren't anticipated by the plan.
+
+## Critical Gotchas
+
+### 1. Read Phase 0 Handoff First
+
+**Problem**: Phase 0 handoff contains a known limitation that Phase 1 should fix
+**What to check**: "Session Not Visible During Invocation" section in `HANDOFF_phase0.md`
+
+**Impact on Phase 1**:
+
+- Task 1.1 (prompt builder): Already designed with `session_id` as required parameter
+- Task 1.7 (trigger service): Must implement the fix - create session BEFORE invoking agent
+
+The recommended flow from Phase 0:
+
+```text
+Trigger creates session → Sets phase=DESIGNING → Invokes Claude with session_id → Claude updates existing session
+```
+
+Task 1.7 must implement this pattern, not the Phase 0 pattern where Claude creates the session.
+
+### 2. Behavioral Acceptance Criteria Require Integration Testing
+
+**Problem**: Task 1.1 acceptance criteria are behavioral ("agent designs coherent strategies") but unit tests only validate prompt mechanics.
+
+**What unit tests validate**: Prompt structure, context injection, trigger reason handling.
+
+**What requires integration**: Agent actually produces coherent designs, understands options, explains choices.
+
+**When to validate**: End of Phase 1, after Task 1.7 (trigger service) is complete. Run manual test: trigger agent → observe strategy output → verify quality.
+
+## Emergent Patterns
+
+### Prompt Builder Pattern (Task 1.1)
+
+The prompt system uses a two-part structure matching the Phase 0 pattern:
+
+```python
+result = {"system": "...", "user": "..."}
+```
+
+**System prompt**: Static instructions that define the agent's role, available tools, and behavior guidelines. This is the same regardless of trigger reason.
+
+**User prompt**: Dynamic context that changes based on trigger reason, session state, and available resources (indicators, symbols, recent strategies).
+
+This separation allows:
+
+- System prompt to be long and detailed (YAML template, design guidelines)
+- User prompt to be focused on the current task with injected context
+- Easy testing of context injection without testing full prompt
+
+### Context Injection Helpers
+
+Private methods format complex data for display:
+
+- `_format_indicators()` - Formats indicators with descriptions and params
+- `_format_symbols()` - Formats symbols with timeframes and date ranges
+- `_format_recent_strategies()` - Formats strategies with outcomes for novelty
+
+These could be reused by other prompts if needed.
+
+### Convenience Function Pattern
+
+`get_strategy_designer_prompt()` provides a one-call interface that:
+
+1. Accepts string or enum for trigger_reason (auto-converts)
+2. Creates PromptContext internally
+3. Builds and returns the prompt dict
+
+This simplifies integration with the trigger service.
