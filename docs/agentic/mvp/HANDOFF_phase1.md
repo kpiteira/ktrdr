@@ -97,3 +97,34 @@ result = validator.validate_strategy_config(config)
 if not result.is_valid:
     return {"success": False, "errors": result.errors, "suggestions": result.suggestions}
 ```
+
+### Strategy Save Pattern (Task 1.3)
+
+The save_strategy_config tool follows the Phase 0 service layer pattern:
+
+```text
+MCP Tool (mcp/src/tools/strategy_tools.py)
+    ↓
+Service Layer (research_agents/services/strategy_service.py)
+    ↓
+StrategyValidator (ktrdr/config/strategy_validator.py)
+```
+
+**Key Design Decisions:**
+
+- Tool uses `strategies_dir` parameter with default `"strategies"` for testability
+- Name parameter takes precedence over config's internal name field
+- Creates directory if it doesn't exist (agent-friendly)
+- Returns absolute path on success for clear feedback
+
+**Integration with Agent:**
+
+Agent uses save_strategy_config after designing:
+
+```yaml
+# In strategy_designer.py prompt:
+After designing your strategy configuration:
+1. Call save_strategy_config(name, config, description)
+2. If errors returned, fix the config and retry
+3. On success, note the path for training
+```
