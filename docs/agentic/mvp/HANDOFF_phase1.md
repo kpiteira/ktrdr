@@ -128,3 +128,31 @@ After designing your strategy configuration:
 2. If errors returned, fix the config and retry
 3. On success, note the path for training
 ```
+
+### Get Recent Strategies Pattern (Task 1.4)
+
+The get_recent_strategies tool uses a hybrid data source pattern:
+
+```text
+Database (agent_sessions)     Strategy Files (strategies/*.yaml)
+       │                              │
+       └──────────┬───────────────────┘
+                  ▼
+      get_recent_strategies()
+                  │
+                  ▼
+    [{name, type, indicators, outcome, created_at}]
+```
+
+**Why Hybrid:**
+
+- Database has session metadata (outcome, created_at)
+- YAML files have strategy details (model.type, indicators)
+- Avoids schema changes to store full config in sessions table
+
+**Key Design Decisions:**
+
+- Graceful degradation: missing/corrupt YAML returns null for type/indicators
+- Sessions without strategy_name are filtered out (e.g., failed_design)
+- Order preserved from database (most recent first)
+- `strategies_dir` parameter for testability (same pattern as save)
