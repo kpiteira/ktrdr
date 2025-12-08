@@ -42,10 +42,26 @@ class TestInvokerConfig:
                 "AGENT_MCP_CONFIG_PATH": "/custom/mcp.json",
             },
         ):
-            config = InvokerConfig.from_env()
-            assert config.timeout_seconds == 600
-            assert config.claude_path == "/custom/claude"
-            assert config.mcp_config_path == "/custom/mcp.json"
+            # Mock Path.exists() to return True for the custom path
+            with patch("research_agents.services.invoker.Path") as mock_path:
+                mock_path.return_value.exists.return_value = True
+                mock_path.return_value.__truediv__ = lambda s, x: mock_path.return_value
+                mock_path.return_value.__str__ = lambda s: "/custom/mcp.json"
+                config = InvokerConfig.from_env()
+                assert config.timeout_seconds == 600
+                assert config.claude_path == "/custom/claude"
+                assert config.mcp_config_path == "/custom/mcp.json"
+
+    def test_config_from_env_missing_mcp_file(self):
+        """Test that missing MCP config file raises FileNotFoundError."""
+        with patch.dict(
+            "os.environ",
+            {"AGENT_MCP_CONFIG_PATH": "/nonexistent/mcp.json"},
+        ):
+            with pytest.raises(FileNotFoundError) as exc_info:
+                InvokerConfig.from_env()
+            assert "MCP config file not found" in str(exc_info.value)
+            assert "/nonexistent/mcp.json" in str(exc_info.value)
 
     def test_config_from_env_defaults(self):
         """Test that missing env vars use defaults."""
