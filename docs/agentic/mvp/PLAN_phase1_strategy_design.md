@@ -271,27 +271,42 @@ For Phase 1, we stop at DESIGNED. Phase 2 adds training.
 
 ---
 
-### 1.8 Strategy Design Tests
+### 1.8 Strategy Design Tests & Behavioral Validation
 
-**Goal:** Verify agent designs valid strategies
+**Goal:** Verify agent designs valid strategies AND validate behavioral acceptance criteria from earlier tasks
 
-**Test cases:**
-1. Agent generates valid YAML
-2. Agent uses available indicators
-3. Agent uses available symbols
-4. Agent avoids recent strategy patterns
-5. Invalid config rejected with helpful error
+**Why this task exists:** Tasks 1.1, 1.3, 1.4 have behavioral acceptance criteria ("agent designs coherent strategies", "agent understands options") that cannot be unit tested - they require actual agent invocation. This task is where those criteria are validated.
 
-**Files:** 
+**Unit test cases:**
+
+1. Strategy validator rejects invalid YAML
+2. Strategy validator rejects missing required fields
+3. Strategy validator rejects unknown indicators
+4. Strategy validator provides helpful error messages
+
+**Integration/behavioral test cases:**
+
+1. Agent generates valid YAML (Task 1.1 behavioral)
+2. Agent uses available indicators correctly (Task 1.1 behavioral)
+3. Agent uses available symbols correctly (Task 1.1 behavioral)
+4. Agent avoids recent strategy patterns (Task 1.1 behavioral)
+5. Agent explains design choices (Task 1.1 behavioral)
+6. save_strategy_config saves valid strategies (Task 1.3 behavioral)
+7. get_recent_strategies returns useful context (Task 1.4 behavioral)
+
+**Files:**
+
 - `tests/unit/research_agents/test_strategy_validator.py`
 - `tests/integration/research_agents/test_strategy_design.py`
 
 **Acceptance:**
-- Unit tests for validator
-- Integration test for full design flow
-- Can observe agent designing strategies
 
-**Effort:** 3-4 hours
+- Unit tests for validator pass
+- Integration test invokes agent and observes real output
+- All behavioral acceptance criteria from Tasks 1.1, 1.3, 1.4 validated
+- Agent produces coherent, valid strategy designs
+
+**Effort:** 4-5 hours (increased to account for behavioral validation)
 
 ---
 
@@ -306,9 +321,9 @@ For Phase 1, we stop at DESIGNED. Phase 2 adds training.
 | 1.5 | get_available_indicators (check-first) | 0-2h | Check if exists |
 | 1.6 | get_available_symbols (check-first) | 0-2h | Check if exists |
 | 1.7 | Trigger service updates | 2-3h | 1.1, 1.3 |
-| 1.8 | Tests | 3-4h | All above |
+| 1.8 | Tests & behavioral validation | 4-5h | All above |
 
-**Total estimated effort:** 13-24 hours (2-3 days)
+**Total estimated effort:** 14-25 hours (2-3 days)
 
 *Note: Effort varies based on what already exists. Tasks 1.2, 1.5, 1.6 may require minimal work if existing code is sufficient.*
 
