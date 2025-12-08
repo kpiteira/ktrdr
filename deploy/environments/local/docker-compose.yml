@@ -404,8 +404,10 @@ services:
     container_name: ktrdr-mcp-local
     restart: unless-stopped
     volumes:
-      - ./mcp:/mcp:ro           # Mount outside /app to avoid shadowing pip mcp package
-      - ./ktrdr:/app/ktrdr:ro
+      - ../../../mcp:/mcp:ro           # Mount outside /app to avoid shadowing pip mcp package
+      - ../../../ktrdr:/app/ktrdr:ro
+      - ../../../research_agents:/app/research_agents:ro  # Agent research package
+      - ../../../config:/app/config:ro  # Config files for KTRDR
       - ./logs:/app/logs
     environment:
       - ENVIRONMENT=development
@@ -435,8 +437,10 @@ services:
     container_name: ktrdr-mcp-preprod
     restart: unless-stopped
     volumes:
-      - ./mcp:/mcp:ro           # Mount outside /app to avoid shadowing pip mcp package
-      - ./ktrdr:/app/ktrdr:ro
+      - ../../../mcp:/mcp:ro           # Mount outside /app to avoid shadowing pip mcp package
+      - ../../../ktrdr:/app/ktrdr:ro
+      - ../../../research_agents:/app/research_agents:ro  # Agent research package
+      - ../../../config:/app/config:ro  # Config files for KTRDR
       - ./logs:/app/logs
     environment:
       - ENVIRONMENT=development
