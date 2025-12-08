@@ -1,9 +1,20 @@
-"""Strategy configuration validation and upgrade utilities."""
+"""Strategy configuration validation and upgrade utilities.
+
+This module provides comprehensive validation for KTRDR strategy configurations,
+including validation for agent-generated strategies.
+
+Agent-Specific Validations (Task 1.2):
+- Indicator type existence (validates against BUILT_IN_INDICATORS)
+- Fuzzy membership parameter validation (correct param counts for types)
+- Duplicate strategy name detection
+- Dict-based validation (for agent-generated configs, not just files)
+"""
 
 from copy import deepcopy
 from dataclasses import dataclass, field
+from difflib import get_close_matches
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 import yaml
 from pydantic import ValidationError as PydanticValidationError
@@ -11,8 +22,24 @@ from pydantic import ValidationError as PydanticValidationError
 from ktrdr import get_logger
 from ktrdr.config.models import LegacyStrategyConfiguration, StrategyConfigurationV2
 from ktrdr.config.strategy_loader import strategy_loader
+from ktrdr.indicators.indicator_factory import BUILT_IN_INDICATORS
 
 logger = get_logger(__name__)
+
+# Valid fuzzy membership types and their required parameter counts
+FUZZY_TYPE_PARAM_COUNTS: dict[str, int] = {
+    "triangular": 3,
+    "triangle": 3,
+    "trapezoid": 4,
+    "trapezoidal": 4,
+    "gaussian": 2,
+    "sigmoid": 2,
+}
+
+# Normalized names for case-insensitive matching
+_NORMALIZED_INDICATOR_NAMES: set[str] = {
+    name.lower() for name in BUILT_IN_INDICATORS.keys()
+}
 
 
 @dataclass
@@ -320,6 +347,13 @@ class StrategyValidator:
             result.suggestions.append(
                 "Universal scope strategy - excellent for cross-market trading"
             )
+
+        # Run agent-specific validations (Task 1.2)
+        if config.indicators:
+            self._validate_indicator_types(config.indicators, result)
+
+        if config.fuzzy_sets:
+            self._validate_fuzzy_membership_params(config.fuzzy_sets, result)
 
         return result
 
@@ -701,3 +735,260 @@ Missing feature_ids: {', '.join(missing_list)}
             )
             result.warnings.append(warning_msg)
             logger.warning(f"Orphaned fuzzy_sets detected: {warning_msg}")
+
+    def _validate_indicator_types(
+        self,
+        indicators: list[dict[str, Any]],
+        result: ValidationResult,
+    ) -> None:
+        """
+        Validate that indicator types exist in KTRDR's BUILT_IN_INDICATORS.
+
+        This is an agent-specific validation (Task 1.2) that ensures the agent
+        only uses indicators that actually exist in KTRDR.
+
+        Args:
+            indicators: List of indicator configuration dictionaries
+            result: ValidationResult to update with errors/suggestions
+        """
+        for idx, indicator_dict in enumerate(indicators):
+            # Get indicator type from 'name' or 'type' field
+            indicator_type = indicator_dict.get("name") or indicator_dict.get("type")
+
+            if not indicator_type:
+                continue  # Will be caught by Pydantic validation
+
+            # Check case-insensitively against BUILT_IN_INDICATORS
+            indicator_type_lower = indicator_type.lower()
+            if indicator_type_lower not in _NORMALIZED_INDICATOR_NAMES:
+                result.is_valid = False
+
+                # Find similar indicator names for suggestions
+                similar = get_close_matches(
+                    indicator_type_lower,
+                    list(_NORMALIZED_INDICATOR_NAMES),
+                    n=3,
+                    cutoff=0.6,
+                )
+
+                error_msg = (
+                    f"Unknown indicator type '{indicator_type}' at index {idx}. "
+                    f"This indicator is not available in KTRDR."
+                )
+                result.errors.append(error_msg)
+                logger.error(f"Indicator type validation failed: {error_msg}")
+
+                # Add suggestion with similar indicators
+                if similar:
+                    suggestion = (
+                        f"Did you mean one of these indicators? {', '.join(similar)}. "
+                        f"Use 'get_available_indicators()' to see all available indicators."
+                    )
+                    result.suggestions.append(suggestion)
+                else:
+                    result.suggestions.append(
+                        "Use 'get_available_indicators()' to see all available indicators."
+                    )
+
+    def _validate_fuzzy_membership_params(
+        self,
+        fuzzy_sets: dict[str, Any],
+        result: ValidationResult,
+    ) -> None:
+        """
+        Validate fuzzy membership function parameters.
+
+        Validates:
+        - Membership type is known (triangular, trapezoid, gaussian, sigmoid)
+        - Parameter count matches expected for the type
+        - Parameters are in ascending order (where applicable)
+
+        Args:
+            fuzzy_sets: Fuzzy sets configuration dictionary
+            result: ValidationResult to update with errors
+        """
+        for feature_id, sets in fuzzy_sets.items():
+            if not isinstance(sets, dict):
+                continue
+
+            for set_name, set_config in sets.items():
+                if not isinstance(set_config, dict):
+                    continue
+
+                # Get type and parameters
+                fuzzy_type = set_config.get("type", "").lower()
+                params = set_config.get("parameters", [])
+
+                if not fuzzy_type:
+                    continue  # Will be caught elsewhere
+
+                # Check if type is valid
+                if fuzzy_type not in FUZZY_TYPE_PARAM_COUNTS:
+                    result.is_valid = False
+                    valid_types = ", ".join(sorted(FUZZY_TYPE_PARAM_COUNTS.keys()))
+                    error_msg = (
+                        f"Unknown fuzzy membership type '{fuzzy_type}' for "
+                        f"{feature_id}.{set_name}. "
+                        f"Valid types are: {valid_types}."
+                    )
+                    result.errors.append(error_msg)
+                    logger.error(f"Fuzzy type validation failed: {error_msg}")
+                    continue
+
+                # Check parameter count
+                expected_count = FUZZY_TYPE_PARAM_COUNTS[fuzzy_type]
+                actual_count = len(params) if isinstance(params, list) else 0
+
+                if actual_count != expected_count:
+                    result.is_valid = False
+                    error_msg = (
+                        f"Fuzzy membership '{fuzzy_type}' for {feature_id}.{set_name} "
+                        f"requires exactly {expected_count} parameters, but got {actual_count}. "
+                    )
+                    # Add type-specific guidance
+                    if fuzzy_type in ("triangular", "triangle"):
+                        error_msg += "Expected format: [left, peak, right]"
+                    elif fuzzy_type in ("trapezoid", "trapezoidal"):
+                        error_msg += "Expected format: [left_foot, left_shoulder, right_shoulder, right_foot]"
+                    elif fuzzy_type == "gaussian":
+                        error_msg += "Expected format: [mean, standard_deviation]"
+                    elif fuzzy_type == "sigmoid":
+                        error_msg += "Expected format: [center, width]"
+
+                    result.errors.append(error_msg)
+                    logger.error(f"Fuzzy parameter validation failed: {error_msg}")
+
+    def check_strategy_name_unique(
+        self,
+        name: str,
+        strategies_dir: Union[str, Path] = Path("strategies"),
+    ) -> ValidationResult:
+        """
+        Check if a strategy name is unique (not already taken).
+
+        This is used by the agent's save_strategy_config tool to prevent
+        overwriting existing strategies.
+
+        Args:
+            name: Strategy name to check (with or without .yaml extension)
+            strategies_dir: Directory containing strategy files
+
+        Returns:
+            ValidationResult with is_valid=True if name is unique
+        """
+        result = ValidationResult(is_valid=True)
+
+        strategies_dir = Path(strategies_dir)
+
+        # Handle case where directory doesn't exist
+        if not strategies_dir.exists():
+            # Can't be duplicate if directory doesn't exist
+            return result
+
+        # Normalize name (remove .yaml extension if present)
+        clean_name = name.replace(".yaml", "").replace(".yml", "")
+
+        # Check for existing file
+        yaml_path = strategies_dir / f"{clean_name}.yaml"
+        yml_path = strategies_dir / f"{clean_name}.yml"
+
+        if yaml_path.exists() or yml_path.exists():
+            result.is_valid = False
+            error_msg = (
+                f"Strategy name '{clean_name}' already exists. "
+                f"Please choose a different name or append a version/timestamp suffix."
+            )
+            result.errors.append(error_msg)
+            logger.warning(f"Duplicate strategy name: {clean_name}")
+
+            # Suggest alternative names
+            import time
+
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            suggestion = (
+                f"Suggested alternatives: '{clean_name}_v2', "
+                f"'{clean_name}_{timestamp}', or describe what makes this version different."
+            )
+            result.suggestions.append(suggestion)
+
+        return result
+
+    def validate_strategy_config(
+        self,
+        config: dict[str, Any],
+        check_name_unique: bool = False,
+        strategies_dir: Union[str, Path] = Path("strategies"),
+    ) -> ValidationResult:
+        """
+        Validate a strategy configuration dictionary (for agent-generated configs).
+
+        This is the main entry point for validating configs that are generated
+        programmatically (e.g., by the agent) rather than loaded from files.
+
+        Args:
+            config: Strategy configuration as a dictionary
+            check_name_unique: If True, also check if strategy name is unique
+            strategies_dir: Directory to check for existing strategies
+
+        Returns:
+            ValidationResult with validation details
+        """
+        result = ValidationResult(is_valid=True)
+
+        # First, check name uniqueness if requested
+        if check_name_unique and "name" in config:
+            name_result = self.check_strategy_name_unique(
+                config["name"], strategies_dir
+            )
+            if not name_result.is_valid:
+                result.is_valid = False
+                result.errors.extend(name_result.errors)
+                result.suggestions.extend(name_result.suggestions)
+
+        # Try to validate using Pydantic models
+        try:
+            # Detect format and create appropriate config object
+            is_v2 = self._detect_v2_format(config)
+
+            if is_v2:
+                v2_config = StrategyConfigurationV2(**config)
+                return self._validate_v2_strategy_full(v2_config, result)
+            else:
+                # Add legacy defaults before validation
+                config = strategy_loader._add_legacy_defaults(config)
+                v1_config = LegacyStrategyConfiguration(**config)
+                return self._validate_v1_strategy(v1_config, result)
+
+        except PydanticValidationError as e:
+            result.is_valid = False
+            error_messages, missing_sections = self._format_pydantic_error(e)
+            result.errors.extend(error_messages)
+            result.missing_sections.extend(missing_sections)
+            return result
+        except Exception as e:
+            result.is_valid = False
+            result.errors.append(f"Validation failed: {e}")
+            return result
+
+    def _detect_v2_format(self, config: dict[str, Any]) -> bool:
+        """
+        Detect if configuration uses v2 format.
+
+        V2 format indicators:
+        - Has 'scope' field
+        - Has 'training_data' section
+        - Has 'deployment' section
+        """
+        v2_indicators = ["scope", "training_data", "deployment"]
+        return any(field in config for field in v2_indicators)
+
+    def _validate_v2_strategy_full(
+        self, config: StrategyConfigurationV2, result: ValidationResult
+    ) -> ValidationResult:
+        """
+        Full validation for v2 strategy including agent-specific checks.
+
+        This delegates to _validate_v2_strategy which now includes all
+        agent-specific validations (indicator types, fuzzy params).
+        """
+        return self._validate_v2_strategy(config, result)
