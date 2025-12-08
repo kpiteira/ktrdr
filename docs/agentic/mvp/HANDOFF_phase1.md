@@ -71,3 +71,29 @@ These could be reused by other prompts if needed.
 3. Builds and returns the prompt dict
 
 This simplifies integration with the trigger service.
+
+### Strategy Validation Pattern (Task 1.2)
+
+The validation system was enhanced (not duplicated) in `ktrdr/config/strategy_validator.py`:
+
+**Key Methods for Agent Use:**
+
+- `validate_strategy_config(config_dict)` - Main entry point for agent-generated configs
+- `check_strategy_name_unique(name, strategies_dir)` - Pre-save duplicate check
+
+**Agent-Specific Validations Added:**
+
+- Indicator type existence (checked against `BUILT_IN_INDICATORS`)
+- Fuzzy membership param counts (triangular=3, trapezoid=4, etc.)
+- Helpful error messages with suggestions (e.g., typo corrections)
+
+**Integration Point for Task 1.3:**
+
+```python
+from ktrdr.config.strategy_validator import StrategyValidator
+
+validator = StrategyValidator()
+result = validator.validate_strategy_config(config)
+if not result.is_valid:
+    return {"success": False, "errors": result.errors, "suggestions": result.suggestions}
+```
