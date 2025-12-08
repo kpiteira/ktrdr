@@ -50,13 +50,24 @@ class InvokerConfig:
 
         Returns:
             InvokerConfig instance with values from environment.
+
+        Raises:
+            FileNotFoundError: If MCP config file does not exist.
         """
         timeout = int(os.getenv("AGENT_INVOKER_TIMEOUT_SECONDS", "300"))
         claude_path = os.getenv("CLAUDE_PATH", "claude")
-        mcp_config_path = os.getenv(
-            "AGENT_MCP_CONFIG_PATH",
-            str(Path(__file__).parent.parent.parent / "mcp" / "claude_mcp_config.json"),
+        default_mcp_path = str(
+            Path(__file__).parent.parent.parent / "mcp" / "claude_mcp_config.json"
         )
+        mcp_config_path = os.getenv("AGENT_MCP_CONFIG_PATH", default_mcp_path)
+
+        # Validate MCP config file exists
+        if not Path(mcp_config_path).exists():
+            raise FileNotFoundError(
+                f"MCP config file not found: {mcp_config_path}. "
+                f"Set AGENT_MCP_CONFIG_PATH to a valid path."
+            )
+
         return cls(
             timeout_seconds=timeout,
             claude_path=claude_path,

@@ -49,7 +49,7 @@ async def create_agent_session() -> dict[str, Any]:
         return result
 
     except Exception as e:
-        logger.error("Failed to create agent session", error=str(e))
+        logger.error("Failed to create agent session", error=str(e), exc_info=True)
         return {
             "success": False,
             "error": str(e),
@@ -98,7 +98,10 @@ async def get_agent_state(session_id: int) -> dict[str, Any]:
 
     except Exception as e:
         logger.error(
-            "Failed to get agent state", session_id=session_id, error=str(e)
+            "Failed to get agent state",
+            session_id=session_id,
+            error=str(e),
+            exc_info=True,
         )
         return {
             "success": False,
@@ -196,6 +199,7 @@ async def update_agent_state(
             session_id=session_id,
             phase=phase,
             error=str(e),
+            exc_info=True,
         )
         return {
             "success": False,
