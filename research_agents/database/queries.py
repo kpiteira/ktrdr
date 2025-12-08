@@ -321,6 +321,40 @@ class AgentDatabase:
 
         return [self._row_to_action(row) for row in rows]
 
+    async def get_recent_completed_sessions(
+        self, n: int = 5
+    ) -> list[dict[str, Any]]:
+        """Get the N most recent completed sessions with strategy info.
+
+        Returns sessions that have an outcome (completed), ordered by created_at DESC.
+
+        Args:
+            n: Maximum number of sessions to return.
+
+        Returns:
+            List of dicts with: id, strategy_name, outcome, created_at
+        """
+        query = """
+            SELECT id, strategy_name, outcome, created_at
+            FROM agent_sessions
+            WHERE outcome IS NOT NULL
+            ORDER BY created_at DESC
+            LIMIT $1
+        """
+
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, n)
+
+        return [
+            {
+                "id": row["id"],
+                "strategy_name": row["strategy_name"],
+                "outcome": row["outcome"],
+                "created_at": row["created_at"],
+            }
+            for row in rows
+        ]
+
     # Helper methods
 
     def _row_to_session(self, row: asyncpg.Record) -> AgentSession:
