@@ -251,7 +251,9 @@ grep -r "available_symbols\|get_symbols" mcp/src/tools/
 
 ---
 
-### 1.7 Update Trigger Service for Design Phase
+### 1.7 Update Trigger Service for Design Phase ✅ DONE
+
+**Status:** Implemented "session first" pattern - trigger creates session before invoking Claude.
 
 **Goal:** Trigger invokes agent for strategy design
 
