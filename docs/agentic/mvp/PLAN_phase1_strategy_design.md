@@ -183,7 +183,9 @@ def get_recent_strategies(n: int = 5) -> list[dict]:
 
 ---
 
-### 1.5 get_available_indicators MCP Tool (Check-First)
+### 1.5 get_available_indicators MCP Tool (Check-First) ✅ DONE
+
+**Status:** Existing tool at `mcp/src/server.py:259` meets all requirements (30 indicators with params).
 
 **⚠️ CHECK FIRST:** This likely exists in `mcp/src/tools/`
 
@@ -214,7 +216,12 @@ grep -r "available_indicators\|get_indicators" mcp/src/tools/
 
 ---
 
-### 1.6 get_available_symbols MCP Tool (Check-First)
+### 1.6 get_available_symbols MCP Tool (Check-First) ✅ DONE
+
+**Status:** Existing tools meet all requirements:
+
+- `get_available_symbols()` at line 86 (32 symbols with timeframes)
+- `get_data_summary()` at line 188 (date ranges for splits)
 
 **⚠️ CHECK FIRST:** This likely exists in `mcp/src/tools/`
 
