@@ -134,9 +134,17 @@ After designing your strategy configuration:
 Both indicator and symbol tools already exist in `mcp/src/server.py`:
 
 - `get_available_indicators()` - Line 259, returns 30 indicators with params
-- `get_available_symbols()` - Check line ~311 (needs verification for Task 1.6)
+- `get_available_symbols()` - Line 86, returns 32 symbols with `available_timeframes`
+- `get_data_summary(symbol, timeframe)` - Line 188, returns date ranges for train/test splits
 
-**No new tools needed** - verify completeness and document, don't duplicate.
+**Agent Data Discovery Workflow:**
+
+```text
+1. get_available_symbols() → symbols with available_timeframes
+2. get_data_summary(symbol, tf) → start_date, end_date, point_count
+```
+
+**No new tools needed** - existing tools provide all required capabilities.
 
 ### Get Recent Strategies Pattern (Task 1.4)
 
