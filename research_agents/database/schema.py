@@ -16,6 +16,7 @@ class SessionPhase(str, Enum):
 
     IDLE = "idle"
     DESIGNING = "designing"
+    DESIGNED = "designed"  # Design complete, ready for training (Phase 1 end state)
     TRAINING = "training"
     BACKTESTING = "backtesting"
     ASSESSING = "assessing"

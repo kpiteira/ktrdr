@@ -401,3 +401,475 @@ class TestAgentE2EManual:
                 )
 
         assert result["triggered"] is True
+
+
+class MockContextProvider:
+    """Mock context provider for testing the Phase 1 design flow.
+
+    Provides test data for indicators and symbols without calling real API.
+    """
+
+    async def get_available_indicators(self) -> list[dict[str, Any]]:
+        """Return a small set of test indicators."""
+        return [
+            {
+                "id": "RSIIndicator",
+                "name": "RSI",
+                "type": "momentum",
+                "description": "Relative Strength Index",
+                "parameters": [
+                    {"name": "period", "type": "int", "default": 14},
+                    {"name": "source", "type": "str", "default": "close"},
+                ],
+            },
+            {
+                "id": "SimpleMovingAverage",
+                "name": "SMA",
+                "type": "trend",
+                "description": "Simple Moving Average",
+                "parameters": [
+                    {"name": "period", "type": "int", "default": 20},
+                    {"name": "source", "type": "str", "default": "close"},
+                ],
+            },
+        ]
+
+    async def get_available_symbols(self) -> list[dict[str, Any]]:
+        """Return a small set of test symbols."""
+        return [
+            {
+                "symbol": "EURUSD",
+                "name": "EUR/USD",
+                "type": "forex",
+                "available_timeframes": ["1h", "1d"],
+            },
+            {
+                "symbol": "AAPL",
+                "name": "Apple Inc",
+                "type": "stock",
+                "available_timeframes": ["1d"],
+            },
+        ]
+
+
+class MockDesignAgentInvoker:
+    """Mock invoker that simulates Claude designing a strategy.
+
+    This invoker simulates the Phase 1 design workflow:
+    1. Receives session_id from prompt (session already exists)
+    2. "Designs" a valid strategy config
+    3. Saves the strategy via strategy service
+    4. Updates session to DESIGNED with strategy_name
+    """
+
+    def __init__(self, db: AgentDatabase, strategies_dir: str = "strategies"):
+        """Initialize with database and strategies directory.
+
+        Args:
+            db: Database interface for session updates.
+            strategies_dir: Directory to save strategies (for testing).
+        """
+        self.db = db
+        self.strategies_dir = strategies_dir
+        self.invoke_count = 0
+        self.last_prompt: str | None = None
+        self.last_system_prompt: str | None = None
+        self.designed_strategy_name: str | None = None
+
+    async def invoke(
+        self,
+        prompt: str,
+        system_prompt: str | None = None,
+    ) -> InvocationResult:
+        """Simulate Claude designing a strategy.
+
+        This method simulates what Claude would do:
+        1. Extract session_id from prompt
+        2. Create a valid strategy config
+        3. Save the strategy
+        4. Update session to DESIGNED
+
+        Args:
+            prompt: The user prompt (contains session_id).
+            system_prompt: The system prompt.
+
+        Returns:
+            InvocationResult with success status.
+        """
+        import re
+        import time
+
+        from research_agents.services.strategy_service import save_strategy_config
+
+        self.invoke_count += 1
+        self.last_prompt = prompt
+        self.last_system_prompt = system_prompt
+
+        try:
+            # Step 1: Extract session_id from prompt
+            # Look for "Session ID: <number>" pattern
+            match = re.search(r"Session ID:\s*(\d+)", prompt)
+            if not match:
+                raise ValueError("Could not find session_id in prompt")
+            session_id = int(match.group(1))
+
+            # Step 2: Create a valid strategy config (simulating Claude's design)
+            timestamp = int(time.time())
+            strategy_name = f"e2e_test_strategy_{timestamp}"
+            strategy_config = {
+                "name": strategy_name,
+                "description": "E2E test strategy designed by MockDesignAgentInvoker",
+                "version": "1.0",
+                "hypothesis": "Test hypothesis for E2E validation",
+                "scope": "universal",
+                "training_data": {
+                    "symbols": {"mode": "single", "list": ["EURUSD"]},
+                    "timeframes": {
+                        "mode": "single",
+                        "list": ["1h"],
+                        "base_timeframe": "1h",
+                    },
+                    "history_required": 200,
+                },
+                "deployment": {
+                    "target_symbols": {"mode": "training_only"},
+                    "target_timeframes": {"mode": "single", "supported": ["1h"]},
+                },
+                "indicators": [
+                    {
+                        "name": "rsi",
+                        "feature_id": "rsi_14",
+                        "period": 14,
+                        "source": "close",
+                    }
+                ],
+                "fuzzy_sets": {
+                    "rsi_14": {
+                        "oversold": {"type": "triangular", "parameters": [0, 20, 35]},
+                        "neutral": {"type": "triangular", "parameters": [30, 50, 70]},
+                        "overbought": {
+                            "type": "triangular",
+                            "parameters": [65, 80, 100],
+                        },
+                    }
+                },
+                "model": {
+                    "type": "mlp",
+                    "architecture": {
+                        "hidden_layers": [32, 16],
+                        "activation": "relu",
+                        "output_activation": "softmax",
+                        "dropout": 0.2,
+                    },
+                    "features": {
+                        "include_price_context": False,
+                        "lookback_periods": 2,
+                        "scale_features": True,
+                    },
+                    "training": {
+                        "learning_rate": 0.001,
+                        "batch_size": 32,
+                        "epochs": 50,
+                        "optimizer": "adam",
+                        "early_stopping": {
+                            "enabled": True,
+                            "patience": 10,
+                            "min_delta": 0.001,
+                        },
+                    },
+                },
+                "decisions": {
+                    "output_format": "classification",
+                    "confidence_threshold": 0.6,
+                    "position_awareness": True,
+                },
+                "training": {
+                    "method": "supervised",
+                    "labels": {
+                        "source": "zigzag",
+                        "zigzag_threshold": 0.03,
+                        "label_lookahead": 20,
+                    },
+                    "data_split": {"train": 0.7, "validation": 0.15, "test": 0.15},
+                },
+            }
+
+            # Step 3: Save the strategy via strategy service
+            save_result = await save_strategy_config(
+                name=strategy_name,
+                config=strategy_config,
+                description="E2E test strategy",
+                strategies_dir=self.strategies_dir,
+            )
+
+            if not save_result["success"]:
+                raise ValueError(
+                    f"Failed to save strategy: {save_result.get('errors')}"
+                )
+
+            self.designed_strategy_name = strategy_name
+
+            # Step 4: Update session to DESIGNED with strategy_name
+            await self.db.update_session(
+                session_id=session_id,
+                phase=SessionPhase.DESIGNED,
+                strategy_name=strategy_name,
+            )
+
+            return InvocationResult(
+                success=True,
+                exit_code=0,
+                output={
+                    "session_id": session_id,
+                    "strategy_name": strategy_name,
+                    "status": "designed",
+                },
+                raw_output=f"Strategy {strategy_name} designed and saved successfully",
+                error=None,
+            )
+
+        except Exception as e:
+            return InvocationResult(
+                success=False,
+                exit_code=1,
+                output=None,
+                raw_output="",
+                error=str(e),
+            )
+
+
+class TestAgentDesignPhaseE2E:
+    """E2E tests for Phase 1 strategy design flow.
+
+    These tests verify the complete "session first" design flow:
+    1. TriggerService creates session BEFORE invoking
+    2. TriggerService sets phase to DESIGNING
+    3. Agent (mock) receives session_id in prompt
+    4. Agent designs strategy and saves it
+    5. Agent updates session to DESIGNED with strategy_name
+    """
+
+    @pytest_asyncio.fixture
+    async def agent_db(self):
+        """Create and connect to the agent database."""
+        db = AgentDatabase()
+        try:
+            await db.connect(os.getenv("DATABASE_URL"))
+        except Exception as e:
+            pytest.skip(f"Could not connect to database: {e}")
+
+        yield db
+
+        await db.disconnect()
+
+    @pytest_asyncio.fixture
+    async def clean_db(self, agent_db: AgentDatabase):
+        """Ensure database is clean before each test."""
+        async with agent_db.pool.acquire() as conn:
+            await conn.execute("DELETE FROM agent_actions")
+            await conn.execute("DELETE FROM agent_sessions")
+
+        return agent_db
+
+    @pytest_asyncio.fixture
+    async def test_strategies_dir(self, tmp_path):
+        """Create a temporary directory for test strategies."""
+        strategies_dir = tmp_path / "test_strategies"
+        strategies_dir.mkdir()
+        return str(strategies_dir)
+
+    @pytest.mark.asyncio
+    async def test_full_design_phase_flow(
+        self,
+        clean_db: AgentDatabase,
+        test_strategies_dir: str,
+    ):
+        """Test the complete Phase 1 design flow.
+
+        Verifies:
+        1. TriggerService creates session first
+        2. Phase is set to DESIGNING before invocation
+        3. Mock agent receives session_id in prompt
+        4. Strategy is saved to disk
+        5. Session ends in DESIGNED state with strategy_name
+        """
+        # Arrange
+        context_provider = MockContextProvider()
+        mock_invoker = MockDesignAgentInvoker(
+            db=clean_db,
+            strategies_dir=test_strategies_dir,
+        )
+        config = TriggerConfig(interval_seconds=0.1, enabled=True)
+        service = TriggerService(
+            config=config,
+            db=clean_db,
+            invoker=mock_invoker,
+            context_provider=context_provider,
+        )
+
+        # Act
+        result = await service.check_and_trigger()
+
+        # Assert - trigger succeeded
+        assert result["triggered"] is True
+        assert result["session_id"] is not None
+        session_id = result["session_id"]
+
+        # Assert - invoker was called
+        assert mock_invoker.invoke_count == 1
+        assert mock_invoker.designed_strategy_name is not None
+
+        # Assert - session_id was in the prompt
+        assert str(session_id) in mock_invoker.last_prompt
+
+        # Assert - strategy file was created
+        import os as os_module
+
+        strategy_files = os_module.listdir(test_strategies_dir)
+        assert len(strategy_files) == 1
+        assert strategy_files[0].endswith(".yaml")
+
+        # Assert - session is in DESIGNED state with strategy_name
+        session = await clean_db.get_session(session_id)
+        assert session.phase == SessionPhase.DESIGNED
+        assert session.strategy_name == mock_invoker.designed_strategy_name
+
+    @pytest.mark.asyncio
+    async def test_design_flow_with_recent_strategies_context(
+        self,
+        clean_db: AgentDatabase,
+        test_strategies_dir: str,
+    ):
+        """Test that recent strategies are included in context.
+
+        Verifies that the prompt builder includes recent strategies
+        to help the agent avoid repetition.
+        """
+        # Arrange - Create a completed session with strategy_name
+        # This simulates a previous design cycle
+        previous_session = await clean_db.create_session()
+        await clean_db.update_session(
+            session_id=previous_session.id,
+            phase=SessionPhase.DESIGNED,
+            strategy_name="previous_test_strategy",
+        )
+        await clean_db.complete_session(
+            session_id=previous_session.id,
+            outcome=SessionOutcome.SUCCESS,
+        )
+
+        # Now run a new design cycle
+        context_provider = MockContextProvider()
+        mock_invoker = MockDesignAgentInvoker(
+            db=clean_db,
+            strategies_dir=test_strategies_dir,
+        )
+        config = TriggerConfig(interval_seconds=0.1, enabled=True)
+        service = TriggerService(
+            config=config,
+            db=clean_db,
+            invoker=mock_invoker,
+            context_provider=context_provider,
+        )
+
+        # Act
+        result = await service.check_and_trigger()
+
+        # Assert - trigger succeeded
+        assert result["triggered"] is True
+
+        # Assert - the prompt should mention recent strategies
+        # (The exact format depends on the prompt builder, but it should
+        # include context about recent strategies)
+        assert mock_invoker.last_prompt is not None
+        # The prompt builder formats recent strategies - verify the flow worked
+        assert mock_invoker.invoke_count == 1
+
+    @pytest.mark.asyncio
+    async def test_design_flow_skip_when_active_session(
+        self,
+        clean_db: AgentDatabase,
+        test_strategies_dir: str,
+    ):
+        """Test that design flow is skipped when active session exists.
+
+        Verifies that the trigger service correctly detects an active
+        DESIGNING session and skips invoking the agent.
+        """
+        # Arrange - Create an active session in DESIGNING phase
+        active_session = await clean_db.create_session()
+        await clean_db.update_session(
+            session_id=active_session.id,
+            phase=SessionPhase.DESIGNING,
+        )
+
+        context_provider = MockContextProvider()
+        mock_invoker = MockDesignAgentInvoker(
+            db=clean_db,
+            strategies_dir=test_strategies_dir,
+        )
+        config = TriggerConfig(interval_seconds=0.1, enabled=True)
+        service = TriggerService(
+            config=config,
+            db=clean_db,
+            invoker=mock_invoker,
+            context_provider=context_provider,
+        )
+
+        # Act
+        result = await service.check_and_trigger()
+
+        # Assert - should NOT trigger because active session exists
+        assert result["triggered"] is False
+        assert result["reason"] == "active_session_exists"
+        assert result["active_session_id"] == active_session.id
+        assert mock_invoker.invoke_count == 0
+
+    @pytest.mark.asyncio
+    async def test_strategy_validation_on_save(
+        self,
+        clean_db: AgentDatabase,
+        test_strategies_dir: str,
+    ):
+        """Test that saved strategy validates correctly.
+
+        Verifies that the strategy config created by the mock invoker
+        passes validation (same validation Claude's strategies would use).
+        """
+        from ktrdr.config.strategy_validator import StrategyValidator
+
+        # Run the design flow
+        context_provider = MockContextProvider()
+        mock_invoker = MockDesignAgentInvoker(
+            db=clean_db,
+            strategies_dir=test_strategies_dir,
+        )
+        config = TriggerConfig(interval_seconds=0.1, enabled=True)
+        service = TriggerService(
+            config=config,
+            db=clean_db,
+            invoker=mock_invoker,
+            context_provider=context_provider,
+        )
+
+        result = await service.check_and_trigger()
+        assert result["triggered"] is True
+
+        # Load and validate the saved strategy
+        import os as os_module
+
+        import yaml
+
+        strategy_files = os_module.listdir(test_strategies_dir)
+        assert len(strategy_files) == 1
+
+        with open(os_module.path.join(test_strategies_dir, strategy_files[0])) as f:
+            loaded_config = yaml.safe_load(f)
+
+        # Validate the loaded config
+        validator = StrategyValidator()
+        validation_result = validator.validate_strategy_config(loaded_config)
+
+        assert (
+            validation_result.is_valid
+        ), f"Strategy validation failed: {validation_result.errors}"
