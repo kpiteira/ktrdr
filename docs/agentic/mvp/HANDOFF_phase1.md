@@ -129,6 +129,15 @@ After designing your strategy configuration:
 3. On success, note the path for training
 ```
 
+### Existing MCP Tools Found (Tasks 1.5-1.6)
+
+Both indicator and symbol tools already exist in `mcp/src/server.py`:
+
+- `get_available_indicators()` - Line 259, returns 30 indicators with params
+- `get_available_symbols()` - Check line ~311 (needs verification for Task 1.6)
+
+**No new tools needed** - verify completeness and document, don't duplicate.
+
 ### Get Recent Strategies Pattern (Task 1.4)
 
 The get_recent_strategies tool uses a hybrid data source pattern:
