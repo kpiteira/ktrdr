@@ -151,3 +151,187 @@ class TestTriggerService:
         await run_task
 
         assert service._running is False
+
+
+class TestTriggerServiceDesignPhase:
+    """Tests for Phase 1 design phase behavior.
+
+    These tests verify the trigger service correctly implements the
+    "session first" pattern where session is created BEFORE invoking Claude.
+    """
+
+    @pytest.fixture
+    def mock_db(self):
+        """Create a mock database with full interface."""
+        db = AsyncMock()
+        # Mock session creation
+        mock_session = MagicMock()
+        mock_session.id = 42
+        mock_session.phase = "designing"
+        db.create_session.return_value = mock_session
+        db.update_session.return_value = mock_session
+        db.get_active_session.return_value = None
+        db.get_recent_completed_sessions.return_value = []
+        return db
+
+    @pytest.fixture
+    def mock_invoker(self):
+        """Create a mock agent invoker."""
+        invoker = AsyncMock()
+        invoker.invoke.return_value = InvocationResult(
+            success=True,
+            exit_code=0,
+            output={"status": "designed"},
+            raw_output="",
+            error=None,
+        )
+        return invoker
+
+    @pytest.fixture
+    def mock_context_provider(self):
+        """Create a mock context provider for indicators/symbols."""
+        provider = AsyncMock()
+        provider.get_available_indicators.return_value = [
+            {"id": "RSI", "name": "RSI", "type": "momentum"}
+        ]
+        provider.get_available_symbols.return_value = [
+            {"symbol": "EURUSD", "available_timeframes": ["1h", "1d"]}
+        ]
+        return provider
+
+    @pytest.fixture
+    def config(self):
+        """Create test configuration."""
+        return TriggerConfig(interval_seconds=1, enabled=True)
+
+    @pytest.mark.asyncio
+    async def test_session_created_before_invocation(
+        self, mock_db, mock_invoker, mock_context_provider, config
+    ):
+        """Test that session is created BEFORE agent is invoked.
+
+        This is the key Phase 1 behavior change: create session first,
+        then invoke agent with session_id in context.
+        """
+        service = TriggerService(
+            config=config,
+            db=mock_db,
+            invoker=mock_invoker,
+            context_provider=mock_context_provider,
+        )
+
+        await service.check_and_trigger()
+
+        # Session should be created
+        mock_db.create_session.assert_called_once()
+
+        # Invoker should be called with session_id in context
+        mock_invoker.invoke.assert_called_once()
+        call_kwargs = mock_invoker.invoke.call_args
+
+        # The prompt should contain the session ID
+        assert "42" in call_kwargs.kwargs.get("prompt", "") or "42" in str(
+            call_kwargs.args
+        )
+
+    @pytest.mark.asyncio
+    async def test_session_phase_set_to_designing(
+        self, mock_db, mock_invoker, mock_context_provider, config
+    ):
+        """Test that session phase is set to DESIGNING before invocation."""
+        from research_agents.database.schema import SessionPhase
+
+        service = TriggerService(
+            config=config,
+            db=mock_db,
+            invoker=mock_invoker,
+            context_provider=mock_context_provider,
+        )
+
+        await service.check_and_trigger()
+
+        # Session should be updated to DESIGNING phase
+        mock_db.update_session.assert_called()
+        update_call = mock_db.update_session.call_args
+        assert update_call.kwargs.get("phase") == SessionPhase.DESIGNING
+
+    @pytest.mark.asyncio
+    async def test_uses_strategy_designer_prompt(
+        self, mock_db, mock_invoker, mock_context_provider, config
+    ):
+        """Test that strategy designer prompt is used (not phase0)."""
+        service = TriggerService(
+            config=config,
+            db=mock_db,
+            invoker=mock_invoker,
+            context_provider=mock_context_provider,
+        )
+
+        await service.check_and_trigger()
+
+        # Check that invoke was called with strategy designer prompt content
+        call_kwargs = mock_invoker.invoke.call_args
+        system_prompt = call_kwargs.kwargs.get("system_prompt", "")
+
+        # Strategy designer prompt should contain these key elements
+        assert "Strategy Designer" in system_prompt or "neuro-fuzzy" in system_prompt
+
+    @pytest.mark.asyncio
+    async def test_fetches_context_data(
+        self, mock_db, mock_invoker, mock_context_provider, config
+    ):
+        """Test that indicators/symbols/recent strategies are fetched."""
+        service = TriggerService(
+            config=config,
+            db=mock_db,
+            invoker=mock_invoker,
+            context_provider=mock_context_provider,
+        )
+
+        await service.check_and_trigger()
+
+        # Context provider should be called to fetch data
+        mock_context_provider.get_available_indicators.assert_called_once()
+        mock_context_provider.get_available_symbols.assert_called_once()
+        mock_db.get_recent_completed_sessions.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_result_includes_session_id(
+        self, mock_db, mock_invoker, mock_context_provider, config
+    ):
+        """Test that the trigger result includes the created session ID."""
+        service = TriggerService(
+            config=config,
+            db=mock_db,
+            invoker=mock_invoker,
+            context_provider=mock_context_provider,
+        )
+
+        result = await service.check_and_trigger()
+
+        assert result["triggered"] is True
+        assert result["session_id"] == 42
+
+    @pytest.mark.asyncio
+    async def test_invocation_failure_marks_session_failed(
+        self, mock_db, mock_context_provider, config
+    ):
+        """Test that invocation failure marks the session as failed."""
+        from research_agents.database.schema import SessionOutcome
+
+        mock_invoker = AsyncMock()
+        mock_invoker.invoke.side_effect = Exception("Claude API error")
+
+        service = TriggerService(
+            config=config,
+            db=mock_db,
+            invoker=mock_invoker,
+            context_provider=mock_context_provider,
+        )
+
+        await service.check_and_trigger()
+
+        # Should complete session with failed outcome
+        mock_db.complete_session.assert_called_once()
+        complete_call = mock_db.complete_session.call_args
+        assert complete_call.kwargs.get("outcome") == SessionOutcome.FAILED_DESIGN
