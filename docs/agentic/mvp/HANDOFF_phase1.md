@@ -22,6 +22,14 @@ Trigger creates session → Sets phase=DESIGNING → Invokes Claude with session
 
 Task 1.7 must implement this pattern, not the Phase 0 pattern where Claude creates the session.
 
+**✅ IMPLEMENTED**: Task 1.7 completed. TriggerService now:
+
+- Creates session BEFORE invoking Claude
+- Sets phase to DESIGNING immediately
+- Uses strategy designer prompt with full context
+- Accepts `context_provider` for testable indicator/symbol fetching
+- Falls back to Phase 0 behavior when `context_provider` is None
+
 ### 2. Behavioral Acceptance Criteria Require Integration Testing
 
 **Problem**: Task 1.1 acceptance criteria are behavioral ("agent designs coherent strategies") but unit tests only validate prompt mechanics.
@@ -145,6 +153,43 @@ Both indicator and symbol tools already exist in `mcp/src/server.py`:
 ```
 
 **No new tools needed** - existing tools provide all required capabilities.
+
+### Trigger Service Design Phase Pattern (Task 1.7)
+
+The trigger service implements a "session first" pattern for the design phase:
+
+```python
+# 1. Create session BEFORE invoking Claude
+session = await self.db.create_session()
+
+# 2. Set phase to DESIGNING immediately
+await self.db.update_session(session_id=session.id, phase=SessionPhase.DESIGNING)
+
+# 3. Fetch context data
+indicators = await self.context_provider.get_available_indicators()
+symbols = await self.context_provider.get_available_symbols()
+recent_sessions = await self.db.get_recent_completed_sessions()
+
+# 4. Build strategy designer prompt with full context
+prompts = get_strategy_designer_prompt(
+    trigger_reason=TriggerReason.START_NEW_CYCLE,
+    session_id=session.id,
+    phase="designing",
+    available_indicators=indicators,
+    available_symbols=symbols,
+    recent_strategies=recent_strategies,
+)
+
+# 5. Invoke agent
+result = await self.invoker.invoke(prompt=prompts["user"], system_prompt=prompts["system"])
+```
+
+**Key Design Decisions:**
+
+- `ContextProvider` protocol enables testable context fetching (mock in tests, API client in production)
+- Falls back to Phase 0 behavior when `context_provider` is None (backward compatibility)
+- Marks session as `FAILED_DESIGN` on invocation errors (clean failure handling)
+- Agent is responsible for transitioning to DESIGNED phase when complete
 
 ### Get Recent Strategies Pattern (Task 1.4)
 
