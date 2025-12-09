@@ -218,3 +218,51 @@ Database (agent_sessions)     Strategy Files (strategies/*.yaml)
 - Sessions without strategy_name are filtered out (e.g., failed_design)
 - Order preserved from database (most recent first)
 - `strategies_dir` parameter for testability (same pattern as save)
+
+### E2E Testing Pattern (After Task 1.7)
+
+The Phase 1 E2E tests use `MockDesignAgentInvoker` to simulate Claude designing a strategy:
+
+```python
+class MockDesignAgentInvoker:
+    """Simulates Claude designing a strategy."""
+
+    async def invoke(self, prompt, system_prompt):
+        # 1. Extract session_id from prompt
+        session_id = int(re.search(r"Session ID:\s*(\d+)", prompt).group(1))
+
+        # 2. Create valid strategy config
+        strategy_config = {...}
+
+        # 3. Save via strategy service
+        await save_strategy_config(name, strategy_config, description, strategies_dir)
+
+        # 4. Update session to DESIGNED
+        await db.update_session(session_id, phase=SessionPhase.DESIGNED, strategy_name=name)
+```
+
+**Schema Addition:**
+
+Added `SessionPhase.DESIGNED` to mark design completion (Phase 1 end state):
+
+```python
+class SessionPhase(str, Enum):
+    IDLE = "idle"
+    DESIGNING = "designing"
+    DESIGNED = "designed"  # NEW: Design complete, ready for training
+    TRAINING = "training"
+    ...
+```
+
+**Database Credentials (Local):**
+
+```bash
+DATABASE_URL="postgresql://ktrdr:localdev@localhost:5432/ktrdr"
+```
+
+**Running E2E Tests:**
+
+```bash
+export DATABASE_URL="postgresql://ktrdr:localdev@localhost:5432/ktrdr"
+uv run pytest tests/integration/agent_tests/test_agent_e2e.py::TestAgentDesignPhaseE2E -v
+```
