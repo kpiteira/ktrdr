@@ -15,6 +15,11 @@ Task 1.10 updates:
 - Accepts optional tool_executor for tool execution
 - Background loop integration with API startup
 
+Task 1.11 updates:
+- Uses AGENT_TOOLS from ktrdr.agents.tools (centralized tool definitions)
+- ToolExecutor from ktrdr.agents.executor used by startup.py
+- Removed duplicate DEFAULT_AGENT_TOOLS definition
+
 Future phases will add:
 - Quality gate checks
 - Budget verification
@@ -31,56 +36,27 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 import structlog
 
+# Import tool definitions from ktrdr.agents (Task 1.11)
+# Note: ToolExecutor is imported where needed (e.g., ktrdr/api/startup.py)
+from ktrdr.agents.tools import AGENT_TOOLS
+
 if TYPE_CHECKING:
     from research_agents.database.schema import SessionOutcome, SessionPhase
     from research_agents.services.invoker import InvocationResult
 
 logger = structlog.get_logger(__name__)
 
-# Type alias for tool executor function (matches ktrdr.agents.invoker.ToolExecutor)
-ToolExecutorFunc = Callable[[str, dict[str, Any]], Coroutine[Any, Any, dict[str, Any]]]
+# Type alias for tool executor function result type
+# Tool results can be dict or list (for tools returning collections)
+ToolExecutorResult = dict[str, Any] | list[dict[str, Any]]
+
+# Type alias for tool executor function
+ToolExecutorFunc = Callable[[str, dict[str, Any]], Coroutine[Any, Any, ToolExecutorResult]]
 
 
-# Default agent tools for strategy design (placeholder - Task 1.11 will expand this)
-DEFAULT_AGENT_TOOLS: list[dict[str, Any]] = [
-    {
-        "name": "save_strategy_config",
-        "description": "Save a strategy configuration to the strategies directory",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "name": {"type": "string", "description": "Strategy name"},
-                "config": {"type": "object", "description": "Strategy configuration"},
-                "description": {"type": "string", "description": "Strategy description"},
-            },
-            "required": ["name", "config"],
-        },
-    },
-    {
-        "name": "get_available_indicators",
-        "description": "Get list of available technical indicators with parameters",
-        "input_schema": {"type": "object", "properties": {}},
-    },
-    {
-        "name": "get_available_symbols",
-        "description": "Get list of available trading symbols with timeframes",
-        "input_schema": {"type": "object", "properties": {}},
-    },
-    {
-        "name": "get_recent_strategies",
-        "description": "Get recently designed strategies to avoid repetition",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "n": {
-                    "type": "integer",
-                    "description": "Number of strategies to return",
-                    "default": 5,
-                }
-            },
-        },
-    },
-]
+# Backward compatibility alias for DEFAULT_AGENT_TOOLS
+# New code should import directly from ktrdr.agents.tools
+DEFAULT_AGENT_TOOLS = AGENT_TOOLS
 
 
 @dataclass
