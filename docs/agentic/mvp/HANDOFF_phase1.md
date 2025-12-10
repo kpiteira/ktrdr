@@ -4,7 +4,24 @@
 
 ## Critical Gotchas
 
-### 1. Read Phase 0 Handoff First
+### 1. Docker Volume Mount for research_agents
+
+**Problem**: Agent API endpoints fail with `ModuleNotFoundError: No module named 'research_agents'`
+
+**Symptom**: API calls to `/agent/*` endpoints hang, backend logs show import error
+
+**Solution**: Added `./research_agents:/app/research_agents` volume mount in `deploy/environments/local/docker-compose.yml`
+
+**Impact**: After changing docker-compose volumes, must recreate container (restart won't pick up new mounts):
+
+```bash
+docker stop ktrdr-backend && docker rm ktrdr-backend
+docker-compose -f deploy/environments/local/docker-compose.yml up -d backend
+```
+
+**Lesson**: Unit tests pass but don't catch Docker integration issues. Always E2E test against running containers.
+
+### 2. Read Phase 0 Handoff First
 
 **Problem**: Phase 0 handoff contains a known limitation that Phase 1 should fix
 **What to check**: "Session Not Visible During Invocation" section in `HANDOFF_phase0.md`
