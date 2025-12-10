@@ -48,6 +48,7 @@ services:
     volumes:
       # Mount source code for hot-reloading
       - ./ktrdr:/app/ktrdr
+      - ./research_agents:/app/research_agents
       - ./tests:/app/tests
       - ./data:/app/data
       - ./logs:/app/logs
