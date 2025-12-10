@@ -158,6 +158,9 @@ class TestTriggerServiceDesignPhase:
 
     These tests verify the trigger service correctly implements the
     "session first" pattern where session is created BEFORE invoking Claude.
+
+    Note: These tests use legacy invoker (invoke() method) to test Phase 1
+    design phase logic independently of the Anthropic API integration.
     """
 
     @pytest.fixture
@@ -176,15 +179,29 @@ class TestTriggerServiceDesignPhase:
 
     @pytest.fixture
     def mock_invoker(self):
-        """Create a mock agent invoker."""
-        invoker = AsyncMock()
-        invoker.invoke.return_value = InvocationResult(
-            success=True,
-            exit_code=0,
-            output={"status": "designed"},
-            raw_output="",
-            error=None,
-        )
+        """Create a mock LEGACY agent invoker (with invoke() method only).
+
+        This ensures the TriggerService uses the legacy path for testing
+        the Phase 1 design logic. The invoker explicitly does NOT have a
+        'run' method, so TriggerService won't use the modern invoker path.
+        """
+        # Create a mock with only 'invoke' method, not 'run'
+        invoker = MagicMock()
+        # Remove 'run' attribute if present (force legacy path)
+        if hasattr(invoker, "run"):
+            del invoker.run
+
+        # Make invoke async
+        async def mock_invoke(prompt, system_prompt=None):
+            return InvocationResult(
+                success=True,
+                exit_code=0,
+                output={"status": "designed"},
+                raw_output="",
+                error=None,
+            )
+
+        invoker.invoke = AsyncMock(side_effect=mock_invoke)
         return invoker
 
     @pytest.fixture
@@ -319,8 +336,11 @@ class TestTriggerServiceDesignPhase:
         """Test that invocation failure marks the session as failed."""
         from research_agents.database.schema import SessionOutcome
 
-        mock_invoker = AsyncMock()
-        mock_invoker.invoke.side_effect = Exception("Claude API error")
+        # Create a LEGACY invoker (no 'run' method) that fails
+        mock_invoker = MagicMock()
+        if hasattr(mock_invoker, "run"):
+            del mock_invoker.run
+        mock_invoker.invoke = AsyncMock(side_effect=Exception("Claude API error"))
 
         service = TriggerService(
             config=config,

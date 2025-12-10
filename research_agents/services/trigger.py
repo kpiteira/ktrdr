@@ -10,6 +10,11 @@ Phase 1 behavior:
 - Uses strategy designer prompt with full context
 - Marks session as failed on invocation errors
 
+Task 1.10 updates:
+- Supports AnthropicAgentInvoker with tools
+- Accepts optional tool_executor for tool execution
+- Background loop integration with API startup
+
 Future phases will add:
 - Quality gate checks
 - Budget verification
@@ -20,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -30,6 +36,51 @@ if TYPE_CHECKING:
     from research_agents.services.invoker import InvocationResult
 
 logger = structlog.get_logger(__name__)
+
+# Type alias for tool executor function (matches ktrdr.agents.invoker.ToolExecutor)
+ToolExecutorFunc = Callable[[str, dict[str, Any]], Coroutine[Any, Any, dict[str, Any]]]
+
+
+# Default agent tools for strategy design (placeholder - Task 1.11 will expand this)
+DEFAULT_AGENT_TOOLS: list[dict[str, Any]] = [
+    {
+        "name": "save_strategy_config",
+        "description": "Save a strategy configuration to the strategies directory",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Strategy name"},
+                "config": {"type": "object", "description": "Strategy configuration"},
+                "description": {"type": "string", "description": "Strategy description"},
+            },
+            "required": ["name", "config"],
+        },
+    },
+    {
+        "name": "get_available_indicators",
+        "description": "Get list of available technical indicators with parameters",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "get_available_symbols",
+        "description": "Get list of available trading symbols with timeframes",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "get_recent_strategies",
+        "description": "Get recently designed strategies to avoid repetition",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "n": {
+                    "type": "integer",
+                    "description": "Number of strategies to return",
+                    "default": 5,
+                }
+            },
+        },
+    },
+]
 
 
 @dataclass
@@ -63,15 +114,17 @@ class TriggerConfig:
 class AgentInvoker(Protocol):
     """Protocol for agent invocation.
 
-    This allows different implementations:
-    - Phase 0: subprocess call to Claude CLI
-    - Future: Direct API calls to Anthropic
+    This protocol supports two invocation patterns:
+    - Legacy: `invoke(prompt, system_prompt)` for Phase 0 ClaudeCodeInvoker
+    - Modern: `run(prompt, tools, system_prompt, tool_executor)` for AnthropicAgentInvoker
+
+    The TriggerService detects which pattern is supported and uses the appropriate one.
     """
 
     async def invoke(
         self, prompt: str, system_prompt: str | None = None
     ) -> InvocationResult:
-        """Invoke the agent with the given prompt.
+        """Legacy: Invoke the agent with the given prompt (Phase 0).
 
         Args:
             prompt: The user prompt to send to the agent.
@@ -79,6 +132,33 @@ class AgentInvoker(Protocol):
 
         Returns:
             InvocationResult with success status, output, and any errors.
+        """
+        ...
+
+
+class ModernAgentInvoker(Protocol):
+    """Protocol for modern agent invocation with tool support.
+
+    This is the preferred pattern for AnthropicAgentInvoker.
+    """
+
+    async def run(
+        self,
+        prompt: str,
+        tools: list[dict[str, Any]],
+        system_prompt: str,
+        tool_executor: ToolExecutorFunc | None = None,
+    ) -> Any:
+        """Invoke the agent with tools.
+
+        Args:
+            prompt: The user prompt to send to the agent.
+            tools: List of tool definitions in Anthropic format.
+            system_prompt: System prompt for the agent.
+            tool_executor: Async function to execute tool calls.
+
+        Returns:
+            AgentResult with success status, output, token counts, and errors.
         """
         ...
 
@@ -150,23 +230,39 @@ class TriggerService:
        - Invokes agent with strategy designer prompt
        - Handles failures by marking session as failed
 
-    Usage:
+    Task 1.10 additions:
+    - Supports AnthropicAgentInvoker with `run()` method
+    - Passes tool definitions and tool_executor to invoker
+    - Background loop integration for API startup
+
+    Usage (modern - AnthropicAgentInvoker):
         config = TriggerConfig.from_env()
         service = TriggerService(
             config=config,
             db=db,
-            invoker=invoker,
+            invoker=AnthropicAgentInvoker(),
             context_provider=context_provider,
+            tool_executor=my_tool_executor,
         )
         await service.start()  # Runs until stop() is called
+
+    Usage (legacy - ClaudeCodeInvoker):
+        service = TriggerService(
+            config=config,
+            db=db,
+            invoker=ClaudeCodeInvoker(),
+            context_provider=context_provider,
+        )
     """
 
     def __init__(
         self,
         config: TriggerConfig,
         db: AgentDatabase,
-        invoker: AgentInvoker,
+        invoker: AgentInvoker | ModernAgentInvoker,
         context_provider: ContextProvider | None = None,
+        tool_executor: ToolExecutorFunc | None = None,
+        tools: list[dict[str, Any]] | None = None,
     ):
         """Initialize the trigger service.
 
@@ -174,15 +270,25 @@ class TriggerService:
             config: Service configuration.
             db: Database interface for managing sessions.
             invoker: Agent invoker for starting new cycles.
+                Can be either legacy AgentInvoker (with invoke()) or
+                modern ModernAgentInvoker (with run()).
             context_provider: Optional context provider for indicators/symbols.
                 If None, uses Phase 0 behavior (for backward compatibility).
+            tool_executor: Optional async function to execute tool calls.
+                Required for modern invokers (AnthropicAgentInvoker).
+            tools: Optional list of tool definitions. If None, uses DEFAULT_AGENT_TOOLS.
         """
         self.config = config
         self.db = db
         self.invoker = invoker
         self.context_provider = context_provider
+        self.tool_executor = tool_executor
+        self.tools = tools or DEFAULT_AGENT_TOOLS
         self._running = False
         self._stop_event = asyncio.Event()
+
+        # Detect if invoker is modern (has run() method)
+        self._is_modern_invoker = hasattr(invoker, "run") and callable(invoker.run)
 
     async def check_and_trigger(self) -> dict:
         """Check conditions and potentially trigger an agent cycle.
@@ -276,28 +382,54 @@ class TriggerService:
                 recent_strategies=recent_strategies,
             )
 
-            # Step 5: Invoke agent
-            result = await self.invoker.invoke(
-                prompt=prompts["user"],
-                system_prompt=prompts["system"],
-            )
-
-            logger.info(
-                "Agent invocation completed",
-                success=result.success,
-                session_id=session_id,
-            )
-
-            return {
-                "triggered": True,
-                "reason": "no_active_session",
-                "session_id": session_id,
-                "invocation_result": {
-                    "success": result.success,
-                    "exit_code": result.exit_code,
-                    "error": result.error,
-                },
-            }
+            # Step 5: Invoke agent (use modern or legacy pattern)
+            if self._is_modern_invoker:
+                # Modern pattern: AnthropicAgentInvoker with tools
+                result = await self.invoker.run(
+                    prompt=prompts["user"],
+                    tools=self.tools,
+                    system_prompt=prompts["system"],
+                    tool_executor=self.tool_executor,
+                )
+                logger.info(
+                    "Agent invocation completed (modern)",
+                    success=result.success,
+                    input_tokens=result.input_tokens,
+                    output_tokens=result.output_tokens,
+                    session_id=session_id,
+                )
+                return {
+                    "triggered": True,
+                    "reason": "no_active_session",
+                    "session_id": session_id,
+                    "invocation_result": {
+                        "success": result.success,
+                        "input_tokens": result.input_tokens,
+                        "output_tokens": result.output_tokens,
+                        "error": result.error,
+                    },
+                }
+            else:
+                # Legacy pattern: ClaudeCodeInvoker
+                result = await self.invoker.invoke(
+                    prompt=prompts["user"],
+                    system_prompt=prompts["system"],
+                )
+                logger.info(
+                    "Agent invocation completed (legacy)",
+                    success=result.success,
+                    session_id=session_id,
+                )
+                return {
+                    "triggered": True,
+                    "reason": "no_active_session",
+                    "session_id": session_id,
+                    "invocation_result": {
+                        "success": result.success,
+                        "exit_code": result.exit_code,
+                        "error": result.error,
+                    },
+                }
 
         except Exception as e:
             # Step 6: Handle failure by marking session as failed

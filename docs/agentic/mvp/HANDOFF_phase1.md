@@ -413,3 +413,67 @@ async def get_available_indicators(self):
 ```
 
 This enables testability via mock API responses.
+
+### Background Trigger Loop Pattern (Task 1.10)
+
+The background trigger loop integrates with FastAPI's lifespan context manager:
+
+```python
+# In startup.py lifespan:
+if os.getenv("AGENT_ENABLED", "false").lower() in ("true", "1", "yes"):
+    _agent_trigger_task = asyncio.create_task(start_agent_trigger_loop())
+
+# On shutdown:
+if _agent_trigger_task is not None:
+    await stop_agent_trigger_loop()
+```
+
+**Dual Invoker Support:**
+
+TriggerService now supports both legacy and modern invokers:
+
+```python
+# Detection logic in __init__:
+self._is_modern_invoker = hasattr(invoker, "run") and callable(invoker.run)
+
+# In _trigger_design_phase:
+if self._is_modern_invoker:
+    # Modern: AnthropicAgentInvoker with tools
+    result = await self.invoker.run(
+        prompt=prompts["user"],
+        tools=self.tools,
+        system_prompt=prompts["system"],
+        tool_executor=self.tool_executor,
+    )
+else:
+    # Legacy: ClaudeCodeInvoker
+    result = await self.invoker.invoke(
+        prompt=prompts["user"],
+        system_prompt=prompts["system"],
+    )
+```
+
+**Tool Executor Placeholder:**
+
+Task 1.10 adds `tool_executor` parameter but passes `None` - Task 1.11 will provide the actual executor. Until then, tool calls will return error responses but the agent loop still works.
+
+**Testing Legacy vs Modern:**
+
+When mocking invokers in tests, remove the `run` attribute to force legacy path:
+
+```python
+invoker = MagicMock()
+if hasattr(invoker, "run"):
+    del invoker.run  # Force legacy invoke() path
+invoker.invoke = AsyncMock(...)
+```
+
+**Environment Variables for Background Loop:**
+
+```bash
+AGENT_ENABLED=true              # Required to start loop
+AGENT_TRIGGER_INTERVAL_SECONDS=300  # Default: 5 minutes
+AGENT_MODEL=claude-sonnet-4-20250514  # Claude model
+ANTHROPIC_API_KEY=sk-...       # Required for Anthropic API
+DATABASE_URL=postgresql://...  # Required for session DB
+```
