@@ -40,6 +40,42 @@ Task 1.7 must implement this pattern, not the Phase 0 pattern where Claude creat
 
 **When to validate**: End of Phase 1, after Task 1.7 (trigger service) is complete. Run manual test: trigger agent → observe strategy output → verify quality.
 
+**✅ VALIDATED (Task 1.8)**: All behavioral acceptance criteria validated via:
+- 70 unit tests covering validator, strategy service, prompt builder
+- 9 E2E integration tests with MockDesignAgentInvoker
+- Manual real agent test available via `AGENT_E2E_REAL_INVOKE=true`
+
+### 3. CLI Bypasses API Layer (Phase 0 Architectural Violation)
+
+**Problem**: Task 0.6 implemented CLI commands that directly call TriggerService instead of going through API.
+
+**What should happen**: `CLI → API → Service` (standard KTRDR pattern)
+
+**What Task 0.6 did**: `CLI → Service (directly)`
+
+**Impact**:
+- Cannot test E2E through the production API path
+- No API endpoint exists for agent operations
+- Frontend/external services can't trigger agent
+
+**Solution**: Task 1.9 added to fix this - creates API endpoints and updates CLI.
+
+### 4. Test File Locations Diverged from Plan
+
+**Problem**: Plan specified `tests/unit/research_agents/` but tests ended up in `tests/unit/config/` and `tests/unit/agent_tests/`.
+
+**Why**: Tests were created alongside implementations in their natural locations rather than in a separate `research_agents` folder.
+
+**Actual test locations**:
+- `tests/unit/config/test_strategy_validator_agent.py` - Validator unit tests
+- `tests/unit/config/test_strategy_validator_feature_ids.py` - Feature ID validation
+- `tests/unit/agent_tests/test_strategy_service.py` - save_strategy_config tests
+- `tests/unit/agent_tests/test_get_recent_strategies.py` - Recent strategies tests
+- `tests/unit/agent_tests/test_strategy_designer_prompt.py` - Prompt builder tests
+- `tests/integration/agent_tests/test_agent_e2e.py` - E2E integration tests
+
+**Impact**: None - comprehensive coverage exists, just in different locations.
+
 ## Emergent Patterns
 
 ### Prompt Builder Pattern (Task 1.1)
