@@ -6,8 +6,7 @@ research agent system:
 - status: Show current agent state and session info
 - trigger: Manually trigger an agent research cycle
 
-Phase 0: Basic visibility commands for plumbing validation.
-Future phases: history, budget, pause/resume, etc.
+Phase 1: Commands now use API endpoints instead of direct service calls.
 """
 
 import asyncio
@@ -17,10 +16,9 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from ktrdr.cli.async_cli_client import AsyncCLIClient, AsyncCLIClientError
 from ktrdr.cli.telemetry import trace_cli_command
 from ktrdr.logging import get_logger
-from research_agents.database.queries import get_agent_db
-from research_agents.services.trigger import TriggerConfig, TriggerService
 
 # Setup logging and console
 logger = get_logger(__name__)
@@ -62,17 +60,17 @@ def show_status(
 
 
 async def _show_status_async(verbose: bool):
-    """Async implementation of status command."""
+    """Async implementation of status command using API."""
     try:
-        db = await get_agent_db()
+        async with AsyncCLIClient() as client:
+            result = await client._make_request(
+                "GET", "/agent/status", params={"verbose": verbose}
+            )
 
         console.print("\n[bold]Agent Research System Status[/bold]")
         console.print()
 
-        # Get active session
-        active_session = await db.get_active_session()
-
-        if active_session is None:
+        if not result.get("has_active_session"):
             console.print("[dim]No active session[/dim]")
             console.print()
             console.print(
@@ -80,39 +78,34 @@ async def _show_status_async(verbose: bool):
             )
             return
 
-        # Display active session info
-        console.print(f"[green]Active Session: #{active_session.id}[/green]")
+        session = result.get("session", {})
+        session_id = session.get("id")
+
+        console.print(f"[green]Active Session: #{session_id}[/green]")
 
         # Create info table
         table = Table(show_header=False, box=None)
         table.add_column("Property", style="cyan")
         table.add_column("Value", style="white")
 
-        table.add_row("Phase", active_session.phase.value.upper())
-        table.add_row(
-            "Created", active_session.created_at.strftime("%Y-%m-%d %H:%M:%S")
-        )
-
-        if active_session.updated_at:
-            table.add_row(
-                "Updated", active_session.updated_at.strftime("%Y-%m-%d %H:%M:%S")
-            )
-
-        if active_session.strategy_name:
-            table.add_row("Strategy", active_session.strategy_name)
-
-        if active_session.operation_id:
-            table.add_row("Operation", active_session.operation_id)
+        table.add_row("Phase", session.get("phase", "unknown").upper())
+        if session.get("created_at"):
+            table.add_row("Created", session["created_at"])
+        if session.get("updated_at"):
+            table.add_row("Updated", session["updated_at"])
+        if session.get("strategy_name"):
+            table.add_row("Strategy", session["strategy_name"])
+        if session.get("operation_id"):
+            table.add_row("Operation", session["operation_id"])
 
         console.print(table)
 
         # Verbose mode: show recent actions
-        if verbose:
+        if verbose and result.get("recent_actions"):
             console.print()
             console.print("[bold]Recent Actions[/bold]")
 
-            actions = await db.get_session_actions(active_session.id)
-
+            actions = result["recent_actions"]
             if not actions:
                 console.print("[dim]No actions recorded yet[/dim]")
             else:
@@ -121,13 +114,17 @@ async def _show_status_async(verbose: bool):
                 action_table.add_column("Tool", style="cyan")
                 action_table.add_column("Result", style="green")
 
-                for action in actions[-5:]:  # Last 5 actions
-                    time_str = action.created_at.strftime("%H:%M:%S")
-                    result_status = "OK" if action.result.get("success") else "FAIL"
-                    action_table.add_row(time_str, action.tool_name, result_status)
+                for action in actions[-5:]:
+                    time_str = action.get("created_at", "")
+                    tool = action.get("tool_name", "unknown")
+                    result_status = action.get("result", "unknown")
+                    action_table.add_row(time_str, tool, result_status)
 
                 console.print(action_table)
 
+    except AsyncCLIClientError as e:
+        logger.error(f"API error: {e}")
+        raise
     except Exception as e:
         logger.error(f"Failed to get agent status: {e}")
         raise
@@ -167,53 +164,27 @@ def trigger_agent(
 
 
 async def _trigger_agent_async(dry_run: bool, verbose: bool):
-    """Async implementation of trigger command."""
+    """Async implementation of trigger command using API."""
     try:
-        db = await get_agent_db()
-
         if verbose:
-            console.print("[dim]Checking trigger conditions...[/dim]")
+            console.print("[dim]Sending trigger request to API...[/dim]")
 
-        # Check for active session first
-        active_session = await db.get_active_session()
-
-        if active_session is not None:
-            console.print(
-                f"\n[yellow]Cannot trigger:[/yellow] Active session exists (#{active_session.id})"
+        async with AsyncCLIClient() as client:
+            result = await client._make_request(
+                "POST", "/agent/trigger", params={"dry_run": dry_run}
             )
-            console.print(f"  Phase: {active_session.phase.value}")
-            if active_session.strategy_name:
-                console.print(f"  Strategy: {active_session.strategy_name}")
-            console.print()
-            console.print(
-                "Wait for the current session to complete before triggering a new one."
-            )
-            return
 
         if dry_run:
-            console.print("\n[cyan]DRY RUN:[/cyan] Would trigger a new research cycle")
-            console.print("[dim]No active session found - conditions are met[/dim]")
+            if result.get("would_trigger"):
+                console.print(
+                    "\n[cyan]DRY RUN:[/cyan] Would trigger a new research cycle"
+                )
+                console.print("[dim]No active session found - conditions are met[/dim]")
+            else:
+                console.print("\n[cyan]DRY RUN:[/cyan] Would NOT trigger")
+                reason = result.get("reason", "unknown")
+                console.print(f"[dim]Reason: {reason}[/dim]")
             return
-
-        # Create trigger service with a mock invoker for now
-        # In production, this would use ClaudeCodeInvoker
-        from research_agents.services.invoker import ClaudeCodeInvoker
-
-        config = TriggerConfig.from_env()
-        invoker = ClaudeCodeInvoker()
-
-        # Check if service is enabled
-        if not config.enabled:
-            console.print("\n[yellow]Agent trigger is disabled[/yellow]")
-            console.print("[dim]Set AGENT_ENABLED=true to enable[/dim]")
-            return
-
-        service = TriggerService(config=config, db=db, invoker=invoker)
-
-        if verbose:
-            console.print("[dim]Invoking agent...[/dim]")
-
-        result = await service.check_and_trigger()
 
         if result.get("triggered"):
             console.print("\n[green]Agent triggered successfully![/green]")
@@ -223,10 +194,29 @@ async def _trigger_agent_async(dry_run: bool, verbose: bool):
             console.print("Use [cyan]ktrdr agent status[/cyan] to monitor progress.")
         else:
             reason = result.get("reason", "unknown")
-            console.print(f"\n[yellow]Agent not triggered:[/yellow] {reason}")
+            message = result.get("message", f"Agent not triggered: {reason}")
+
+            if reason == "active_session_exists":
+                active_id = result.get("active_session_id", "unknown")
+                console.print(
+                    f"\n[yellow]Cannot trigger:[/yellow] Active session exists (#{active_id})"
+                )
+                console.print()
+                console.print(
+                    "Wait for the current session to complete before triggering a new one."
+                )
+            elif reason == "disabled":
+                console.print("\n[yellow]Agent trigger is disabled[/yellow]")
+                console.print("[dim]Set AGENT_ENABLED=true to enable[/dim]")
+            else:
+                console.print(f"\n[yellow]Agent not triggered:[/yellow] {message}")
+
             if result.get("error"):
                 console.print(f"[red]Error:[/red] {result['error']}")
 
+    except AsyncCLIClientError as e:
+        logger.error(f"API error: {e}")
+        raise
     except Exception as e:
         logger.error(f"Failed to trigger agent: {e}")
         raise
