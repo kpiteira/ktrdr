@@ -75,7 +75,9 @@ class AnthropicInvokerConfig:
 
 
 # Type alias for tool executor function
-ToolExecutor = Callable[[str, dict[str, Any]], Coroutine[Any, Any, dict[str, Any]]]
+# Tool results can be dict or list (for tools returning collections)
+ToolExecutorResult = dict[str, Any] | list[dict[str, Any]]
+ToolExecutor = Callable[[str, dict[str, Any]], Coroutine[Any, Any, ToolExecutorResult]]
 
 
 class AnthropicAgentInvoker:
@@ -291,6 +293,9 @@ class AnthropicAgentInvoker:
                 tool_name=tool_name,
                 tool_use_id=tool_use_id,
             )
+
+            # Type hint for result_content - can be dict or list from tool executor
+            result_content: ToolExecutorResult
 
             if tool_executor is None:
                 # No executor provided - return error

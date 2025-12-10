@@ -73,9 +73,15 @@ async def start_agent_trigger_loop() -> None:
         db = await get_agent_db()
         context_provider = AgentMCPContextProvider()
 
-        # Create tool executor (placeholder - Task 1.11 will provide full implementation)
-        # For now, we don't pass a tool_executor - the invoker will handle this
-        # by returning an error for tool calls until Task 1.11 is complete
+        # Create tool executor (Task 1.11)
+        # The ToolExecutor routes tool calls to appropriate handlers:
+        # - save_strategy_config → strategy service
+        # - get_available_indicators → API call
+        # - get_available_symbols → API call
+        # - get_recent_strategies → strategy service
+        from ktrdr.agents.executor import ToolExecutor
+
+        tool_executor = ToolExecutor()
 
         # Create and start the trigger service
         _agent_trigger_service = TriggerService(
@@ -83,7 +89,7 @@ async def start_agent_trigger_loop() -> None:
             db=db,
             invoker=invoker,
             context_provider=context_provider,
-            tool_executor=None,  # Task 1.11 will add ToolExecutor
+            tool_executor=tool_executor,
         )
 
         # Run the service loop
