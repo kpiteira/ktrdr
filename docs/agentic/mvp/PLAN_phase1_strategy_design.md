@@ -464,7 +464,7 @@ class AnthropicAgentInvoker:
 
 ### 1.10 Background Trigger Loop
 
-**Status:** TODO
+**Status:** ✅ DONE
 
 **Goal:** Integrate trigger service as a background task in the backend
 
@@ -686,8 +686,8 @@ class ToolExecutor:
 | 1.6 | get_available_symbols (check-first) | 0-2h | Check if exists | ✅ Done |
 | 1.7 | Trigger service updates | 2-3h | 1.1, 1.3 | ✅ Done |
 | 1.8 | Tests & behavioral validation | 4-5h | All above | ✅ Done |
-| 1.9 | Agent API & Anthropic Integration | 4-5h | 1.8 | **TODO** |
-| 1.10 | Background Trigger Loop | 2-3h | 1.9 | **TODO** |
+| 1.9 | Agent API & Anthropic Integration | 4-5h | 1.8 | ✅ Done |
+| 1.10 | Background Trigger Loop | 2-3h | 1.9 | ✅ Done |
 | 1.11 | Tool Definitions & Executor | 3-4h | 1.9 | **TODO** |
 | 1.12 | Real E2E Integration Test | 2-3h | 1.10, 1.11 | **TODO** |
 
