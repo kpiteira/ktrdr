@@ -8,6 +8,47 @@
 
 ---
 
+## ⚠️ Architecture Update (Anthropic API Direct Integration)
+
+**Decision:** Use Anthropic Python SDK directly instead of Claude Code CLI.
+
+See [ARCHITECTURE_DECISION_anthropic_api.md](ARCHITECTURE_DECISION_anthropic_api.md) for full context.
+
+**Key Changes:**
+- ❌ No Claude Code CLI (Node.js dependency, subprocess)
+- ❌ No agent-host-service (runs in backend)
+- ❌ No MCP protocol for agent (tools execute in-process)
+- ✅ Anthropic Python SDK (`uv add anthropic`)
+- ✅ Agent runs in backend Docker container
+- ✅ Tools execute directly via ToolExecutor
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│ Backend (Docker Container, Port 8000)                          │
+│                                                                 │
+│  ┌─────────────┐    ┌──────────────────┐    ┌───────────────┐  │
+│  │ Agent API   │───▶│ AnthropicInvoker │───▶│ Tool Executor │  │
+│  │ /agent/*    │    │ (Python SDK)     │    │ (internal)    │  │
+│  └─────────────┘    └──────────────────┘    └───────────────┘  │
+│                                                                 │
+│  • No host service needed                                       │
+│  • No Node.js/Claude CLI needed                                 │
+│  • Tools execute in-process                                     │
+│  • Full observability control                                   │
+└─────────────────────────────────────────────────────────────────┘
+         │
+         │ HTTPS (api.anthropic.com)
+         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     Anthropic API                                │
+│  • Claude Sonnet/Opus models                                     │
+│  • Tool use (function calling)                                  │
+│  • Token counting                                                │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## Branch Strategy
 
 **Branch:** `feature/agent-mvp`
@@ -321,214 +362,271 @@ For Phase 1, we stop at DESIGNED. Phase 2 adds training.
 
 ---
 
-### 1.9 Agent API Endpoints & CLI Fix (Architecture Correction)
+### 1.9 Agent API & Anthropic Integration
 
-**Status:** NEW - Critical bug fix for Phase 0 oversight
+**Status:** TODO - Critical for new architecture
 
-**Goal:** Fix architectural violation where CLI directly calls TriggerService instead of going through API
+**Goal:** Create Agent API endpoints and implement Anthropic SDK integration
 
-**Problem:** Task 0.6 implemented CLI commands that bypass the API layer:
+**What this replaces:** This task now includes the Anthropic integration work that was previously split across host service tasks. The agent runs entirely within the backend.
 
-```python
-# Current (WRONG) - CLI directly instantiates service
-service = TriggerService(config=config, db=db, invoker=invoker)
-result = await service.check_and_trigger()
-```
+**Components:**
 
-```
-KTRDR Pattern:    CLI → API → Service
-What Task 0.6 did: CLI → Service (directly)
-```
-
-**Impact:**
-- Cannot test E2E through production path
-- No API endpoint for frontend/external services
-- Observability not centralized at API level
-
-**Solution:**
-
-1. **Create Agent API Endpoints** (`ktrdr/api/endpoints/agent.py`):
+1. **Agent API Endpoints** (`ktrdr/api/endpoints/agent.py`):
    - `POST /api/v1/agent/trigger` - Trigger research cycle
    - `GET /api/v1/agent/status` - Get current status
-   - `GET /api/v1/agent/sessions` - List recent sessions (optional)
+   - `GET /api/v1/agent/sessions` - List recent sessions
 
-2. **Create Agent API Service** (`ktrdr/api/services/agent_service.py`):
-   - Wraps TriggerService for API consumption
-   - Handles context provider injection
-   - Returns API-friendly responses
+2. **AnthropicAgentInvoker** (`ktrdr/agents/invoker.py`):
 
-3. **Update CLI** (`ktrdr/cli/agent_commands.py`):
-   - Remove direct TriggerService instantiation
-   - Use `AsyncCLIClient` to call API endpoints
-   - Follow pattern from other CLI commands (data, training, etc.)
+```python
+import anthropic
+
+class AnthropicAgentInvoker:
+    def __init__(self, model: str = "claude-sonnet-4-20250514"):
+        self.client = anthropic.Anthropic()  # Uses ANTHROPIC_API_KEY
+        self.model = model
+
+    async def run(self, prompt: str, tools: list[dict], system_prompt: str) -> AgentResult:
+        messages = [{"role": "user", "content": prompt}]
+        total_input_tokens = 0
+        total_output_tokens = 0
+
+        while True:
+            response = await asyncio.to_thread(
+                self.client.messages.create,
+                model=self.model,
+                max_tokens=4096,
+                system=system_prompt,
+                tools=tools,
+                messages=messages
+            )
+
+            total_input_tokens += response.usage.input_tokens
+            total_output_tokens += response.usage.output_tokens
+
+            tool_calls = [b for b in response.content if b.type == "tool_use"]
+            if not tool_calls:
+                break  # Done - no more tools
+
+            # Execute tools and continue loop
+            messages.append({"role": "assistant", "content": response.content})
+            tool_results = await self._execute_tools(tool_calls)
+            messages.append({"role": "user", "content": tool_results})
+
+        return AgentResult(
+            success=True,
+            output=self._extract_text(response),
+            input_tokens=total_input_tokens,
+            output_tokens=total_output_tokens
+        )
+```
+
+**Agent API Service** (`ktrdr/api/services/agent_service.py`):
+
+- Wraps TriggerService for API consumption
+- Handles context provider injection
+- Returns API-friendly responses
+
+**Update CLI** (`ktrdr/cli/agent_commands.py`):
+
+- Remove direct TriggerService instantiation
+- Use `AsyncCLIClient` to call API endpoints
+- Follow pattern from other CLI commands
+
+**Add Anthropic dependency**:
+
+- `uv add anthropic`
 
 **Files:**
 
+- `ktrdr/agents/__init__.py` - NEW: Agent module
+- `ktrdr/agents/invoker.py` - NEW: AnthropicAgentInvoker
 - `ktrdr/api/endpoints/agent.py` - NEW: API endpoints
 - `ktrdr/api/services/agent_service.py` - NEW: API service layer
 - `ktrdr/api/models/agent.py` - NEW: Request/response models
 - `ktrdr/cli/agent_commands.py` - MODIFY: Use API instead of direct service
 - `ktrdr/api/endpoints/__init__.py` - MODIFY: Register agent router
+- `pyproject.toml` - MODIFY: Add anthropic dependency
 
 **Acceptance:**
 
 - `POST /api/v1/agent/trigger` endpoint works
 - `GET /api/v1/agent/status` endpoint works
+- AnthropicAgentInvoker calls Anthropic API correctly
+- Token counts captured from API response
 - CLI `ktrdr agent trigger` calls API (not direct service)
 - CLI `ktrdr agent status` calls API (not direct service)
-- E2E test can run through API path
-- Existing E2E tests still pass
+
+**Effort:** 4-5 hours
+
+---
+
+### 1.10 Background Trigger Loop
+
+**Status:** TODO
+
+**Goal:** Integrate trigger service as a background task in the backend
+
+**Implementation:**
+
+The trigger service runs as a background asyncio task in the backend:
+
+```python
+# In backend startup (ktrdr/api/main.py)
+
+async def start_agent_trigger_loop():
+    """Background task that runs the trigger service."""
+    trigger_service = TriggerService(
+        config=TriggerConfig.from_env(),
+        invoker=AnthropicAgentInvoker(),
+        db=AgentDatabase(),
+        tool_executor=ToolExecutor()
+    )
+    await trigger_service.start()  # Runs every 5 minutes
+
+@app.on_event("startup")
+async def startup():
+    if os.getenv("AGENT_ENABLED", "false").lower() == "true":
+        asyncio.create_task(start_agent_trigger_loop())
+```
+
+**Configuration:**
+
+```bash
+AGENT_ENABLED=true                    # Enable background trigger loop
+AGENT_TRIGGER_INTERVAL_SECONDS=300    # 5 minutes
+AGENT_MODEL=claude-sonnet-4-20250514  # Or claude-opus-4-20250514
+```
+
+**Components:**
+
+1. **Update TriggerService** to work with new invoker:
+   - Accept `AnthropicAgentInvoker` instead of `ClaudeCodeInvoker`
+   - Accept `ToolExecutor` for tool execution
+   - Remove subprocess/MCP dependencies
+
+2. **Backend startup integration**:
+   - Add startup event handler
+   - Conditional on `AGENT_ENABLED` env var
+   - Graceful shutdown handling
+
+**Files:**
+
+- `ktrdr/api/main.py` - MODIFY: Add startup event for trigger loop
+- `research_agents/services/trigger.py` - MODIFY: Update for new invoker pattern
+
+**Acceptance:**
+
+- Background loop starts when `AGENT_ENABLED=true`
+- Loop triggers every 5 minutes (configurable)
+- Graceful shutdown on backend stop
+- Manual trigger via API still works
+
+**Effort:** 2-3 hours
+
+---
+
+### 1.11 Tool Definitions & Executor
+
+**Status:** TODO
+
+**Goal:** Define tool schemas for Anthropic API and implement ToolExecutor
+
+**What this replaces:** MCP tools are no longer used for the agent. Instead, tools are defined as Anthropic tool schemas and executed locally.
+
+**Tool Definitions** (`ktrdr/agents/tools.py`):
+
+```python
+AGENT_TOOLS = [
+    {
+        "name": "save_strategy_config",
+        "description": "Save a strategy configuration to the strategies directory",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Strategy name"},
+                "config": {"type": "object", "description": "Strategy configuration"}
+            },
+            "required": ["name", "config"]
+        }
+    },
+    {
+        "name": "get_available_indicators",
+        "description": "Get list of available technical indicators with parameters",
+        "input_schema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "get_available_symbols",
+        "description": "Get list of available trading symbols with timeframes",
+        "input_schema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "get_recent_strategies",
+        "description": "Get recently designed strategies to avoid repetition",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "n": {"type": "integer", "description": "Number of strategies", "default": 5}
+            }
+        }
+    }
+]
+```
+
+**Tool Executor** (`ktrdr/agents/executor.py`):
+
+```python
+class ToolExecutor:
+    def __init__(self, db: AgentDatabase):
+        self.db = db
+        self.handlers = {
+            "save_strategy_config": self._save_strategy_config,
+            "get_available_indicators": self._get_available_indicators,
+            "get_available_symbols": self._get_available_symbols,
+            "get_recent_strategies": self._get_recent_strategies,
+        }
+
+    async def execute(self, tool_name: str, tool_input: dict) -> dict:
+        handler = self.handlers.get(tool_name)
+        if not handler:
+            return {"error": f"Unknown tool: {tool_name}"}
+        return await handler(**tool_input)
+```
+
+**Implementation Notes:**
+
+- Reuse logic from existing MCP tools (`mcp/src/tools/`)
+- Tools execute in the same process as the agent (no protocol overhead)
+- Direct access to KTRDR services (indicators, data, etc.)
+
+**Files:**
+
+- `ktrdr/agents/tools.py` - NEW: Tool schema definitions
+- `ktrdr/agents/executor.py` - NEW: ToolExecutor implementation
+
+**Acceptance:**
+
+- All required tools defined with proper schemas
+- ToolExecutor handles all tool calls
+- Tools reuse existing KTRDR logic
+- Unit tests for tool execution
 
 **Effort:** 3-4 hours
 
 ---
 
-### 1.10 Agent Host Service (Claude Code Execution Environment)
-
-**Status:** NEW - Required for production deployment
-
-**Goal:** Create host service for running Claude Code agent (follows ib-host-service, training-host-service pattern)
-
-**Problem:** `ClaudeCodeInvoker` uses subprocess to call `claude` CLI. This works on Mac but:
-
-- Docker containers don't have Claude Code installed
-- Claude Code requires Node.js runtime (~500MB)
-- Claude Code needs MCP server access and file system access
-
-**Solution:** Follow KTRDR's existing host service pattern:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│ Backend (Docker Container, Port 8000)                       │
-│  └─ POST /api/v1/agent/trigger → Proxy to agent-host-service│
-└─────────────────────────────────────────────────────────────┘
-         │
-         │ HTTP (localhost:5005)
-         ▼
-┌─────────────────────────────────────────────────────────────┐
-│ Agent Host Service (Native, Port 5005)                      │
-│  ├─ POST /agent/trigger - Trigger research cycle            │
-│  ├─ GET /agent/status - Get current status                  │
-│  ├─ GET /health - Health check                              │
-│  │                                                          │
-│  ├─ TriggerService (background loop optional)               │
-│  ├─ ClaudeCodeInvoker (subprocess to claude CLI)            │
-│  └─ MCP Server Access (localhost:3100)                      │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Why Host Service:**
-
-- Claude Code CLI installed natively on host (like IB Gateway on ib-host-service)
-- MCP server runs on host, accessible via localhost
-- File system access for strategies directory
-- Consistent with KTRDR architecture
-
-**Components:**
-
-1. **Agent Host Service** (`agent-host-service/`):
-
-```
-agent-host-service/
-├── main.py              # FastAPI app
-├── requirements.txt     # Python deps (minimal)
-├── start.sh            # Startup script
-├── stop.sh             # Shutdown script
-└── README.md           # Setup instructions
-```
-
-2. **API Endpoints**:
-   - `POST /agent/trigger` - Run `TriggerService.check_and_trigger()`
-   - `GET /agent/status` - Query database for current session
-   - `GET /agent/sessions` - List recent sessions
-   - `GET /health` - Health check
-
-3. **Background Trigger Loop** (optional):
-   - Configurable via `AGENT_AUTONOMOUS_MODE=true/false`
-   - When enabled, runs every 5 minutes automatically
-   - When disabled, only responds to manual triggers
-
-4. **Backend Integration**:
-   - `USE_AGENT_HOST_SERVICE=true` environment variable
-   - Backend proxies `/api/v1/agent/*` to host service
-   - Falls back to local execution (for development on Mac)
-
-**Files:**
-
-- `agent-host-service/main.py` - NEW: FastAPI host service
-- `agent-host-service/start.sh` - NEW: Startup script
-- `agent-host-service/stop.sh` - NEW: Shutdown script
-- `agent-host-service/requirements.txt` - NEW: Dependencies
-- `ktrdr/api/services/agent_service.py` - MODIFY: Add host service proxy
-
-**Acceptance:**
-
-- Agent host service starts and runs
-- `POST /agent/trigger` invokes Claude and creates session
-- Background loop triggers autonomously (when enabled)
-- Backend proxies requests correctly
-- Works on Mac (development) and preprod (production)
-
-**Effort:** 4-6 hours
-
----
-
-### 1.11 MCP Server Configuration for Agent
-
-**Status:** NEW - Required for MCP tool access
-
-**Goal:** Ensure MCP server is properly configured and accessible for agent invocations
-
-**Problem:** Claude Code needs MCP configuration to access KTRDR tools. Current setup:
-
-- MCP server runs as part of backend (port 3100)
-- Claude config at `mcp/claude_mcp_config.json` points to localhost:3100
-- This works locally but may need adjustment for host service
-
-**Tasks:**
-
-1. **Verify MCP Server Accessibility**:
-   - MCP server should be accessible from host (for agent-host-service)
-   - May need to bind to 0.0.0.0 instead of localhost
-
-2. **MCP Config for Agent**:
-   - Ensure `claude_mcp_config.json` is correct for host service environment
-   - May need environment-specific configs
-
-3. **Test MCP Tool Access**:
-   - Verify agent can call: `get_available_indicators`, `get_available_symbols`
-   - Verify agent can call: `save_strategy_config`, `get_recent_strategies`
-   - Verify agent can call: `get_agent_state`, `update_agent_state`
-
-**Files:**
-
-- `mcp/claude_mcp_config.json` - VERIFY/MODIFY
-- `mcp/src/server.py` - VERIFY binding address
-- `agent-host-service/README.md` - Document MCP setup
-
-**Acceptance:**
-
-- MCP server accessible from agent-host-service
-- All agent MCP tools callable
-- Configuration documented
-
-**Effort:** 1-2 hours
-
----
-
 ### 1.12 End-to-End Integration Test (Real Agent)
 
-**Status:** NEW - Validates complete system
+**Status:** TODO
 
-**Goal:** Verify the complete agent system works end-to-end with real Claude invocation
+**Goal:** Verify the complete agent system works end-to-end with real Anthropic API invocation
 
 **Test Scenario:**
 
-```
+```text
 1. Start services:
-   - Backend (Docker)
-   - MCP Server
-   - Agent Host Service
+   - Backend (Docker) with AGENT_ENABLED=true
    - PostgreSQL
 
 2. Trigger via CLI:
@@ -536,7 +634,8 @@ agent-host-service/
 
 3. Verify:
    - Session created in database
-   - Claude invoked with correct prompt
+   - Anthropic API called with correct prompt
+   - Tools executed correctly
    - Strategy YAML saved to disk
    - Session updated to DESIGNED
    - Strategy validates correctly
@@ -545,12 +644,17 @@ agent-host-service/
 **What This Tests:**
 
 - CLI → API communication
-- API → Host Service proxy
-- Host Service → Claude Code invocation
-- Claude → MCP tools access
-- MCP tools → Database operations
+- API → AnthropicAgentInvoker
+- Anthropic API → Tool calls
+- ToolExecutor → KTRDR services
 - Strategy validation
 - Full Phase 1 design flow
+
+**Simplified Architecture (vs old plan):**
+
+- No host service to start
+- No MCP server needed for agent
+- Single service (backend) handles everything
 
 **Files:**
 
@@ -559,10 +663,11 @@ agent-host-service/
 
 **Acceptance:**
 
-- E2E test passes with real Claude invocation
+- E2E test passes with real Anthropic API invocation
 - Strategy file created in `strategies/`
 - Strategy passes validation
 - Session in DESIGNED state with strategy_name
+- Token counts captured and logged
 - Can run manually with clear instructions
 
 **Effort:** 2-3 hours
@@ -581,16 +686,16 @@ agent-host-service/
 | 1.6 | get_available_symbols (check-first) | 0-2h | Check if exists | ✅ Done |
 | 1.7 | Trigger service updates | 2-3h | 1.1, 1.3 | ✅ Done |
 | 1.8 | Tests & behavioral validation | 4-5h | All above | ✅ Done |
-| 1.9 | Agent API & CLI fix | 3-4h | 1.8 | **TODO** |
-| 1.10 | Agent Host Service | 4-6h | 1.9 | **TODO** |
-| 1.11 | MCP Server Configuration | 1-2h | 1.10 | **TODO** |
+| 1.9 | Agent API & Anthropic Integration | 4-5h | 1.8 | **TODO** |
+| 1.10 | Background Trigger Loop | 2-3h | 1.9 | **TODO** |
+| 1.11 | Tool Definitions & Executor | 3-4h | 1.9 | **TODO** |
 | 1.12 | Real E2E Integration Test | 2-3h | 1.10, 1.11 | **TODO** |
 
-**Total estimated effort:** 27-41 hours (4-5 days)
+**Total estimated effort:** 26-38 hours (3-4 days)
 
-**Critical Path:** 1.9 → 1.10 → 1.11 → 1.12
+**Critical Path:** 1.9 → 1.10/1.11 (parallel) → 1.12
 
-*Note: Tasks 1.9-1.12 are new additions to address architectural gaps discovered during Task 1.8.*
+*Note: Tasks 1.9-1.12 updated for Anthropic API architecture. See [ARCHITECTURE_DECISION_anthropic_api.md](ARCHITECTURE_DECISION_anthropic_api.md).*
 
 ---
 
@@ -606,36 +711,49 @@ agent-host-service/
 
 ## Files to Create/Modify
 
-**Note:** Several items require check-first - actual files created depend on what exists.
+**Note:** Architecture updated to use Anthropic API directly. MCP tools still exist but are not used by the agent.
 
-```
+```text
+ktrdr/
+├── agents/                          # NEW: Agent module
+│   ├── __init__.py                  # 1.9 - NEW
+│   ├── invoker.py                   # 1.9 - NEW: AnthropicAgentInvoker
+│   ├── tools.py                     # 1.11 - NEW: Tool schema definitions
+│   └── executor.py                  # 1.11 - NEW: ToolExecutor
+├── api/
+│   ├── endpoints/
+│   │   └── agent.py                 # 1.9 - NEW: Agent API endpoints
+│   ├── services/
+│   │   └── agent_service.py         # 1.9 - NEW: Agent API service
+│   ├── models/
+│   │   └── agent.py                 # 1.9 - NEW: Request/response models
+│   └── main.py                      # 1.10 - MODIFY: Add startup event
+└── cli/
+    └── agent_commands.py            # 1.9 - MODIFY: Use API
+
 research_agents/
 ├── prompts/
-│   └── strategy_designer.py        # 1.1 - NEW
-├── validation/                     # 1.2 - ONLY if ktrdr/validation/ insufficient
-│   └── strategy_validator.py       #       (prefer enhancing existing)
+│   └── strategy_designer.py         # 1.1 - DONE
+├── validation/                      # 1.2 - DONE
+│   └── strategy_validator.py
 └── services/
-    └── trigger.py                  # 1.7 - MODIFY
-
-mcp/src/tools/
-├── strategy_tools.py               # 1.3, 1.4 - NEW (agent-specific tools)
-├── [existing tools]                # 1.5 - CHECK if indicator tools exist
-└── [existing tools]                # 1.6 - CHECK if symbol/data tools exist
-
-ktrdr/validation/                   # 1.2 - ENHANCE if needed
-└── [existing files]                #       (preferred over new files)
+    └── trigger.py                   # 1.10 - MODIFY: Update for new invoker
 
 tests/
-├── unit/research_agents/
-│   └── test_strategy_validator.py  # 1.8
-└── integration/research_agents/
-    └── test_strategy_design.py     # 1.8
+├── unit/
+│   └── agents/
+│       └── test_tool_executor.py    # 1.11 - NEW
+└── integration/
+    └── agent_tests/
+        └── test_agent_real_e2e.py   # 1.12 - NEW
+
+pyproject.toml                       # 1.9 - MODIFY: Add anthropic dependency
 ```
 
-**Check-first files** (may already exist):
-- `mcp/src/tools/` - search for indicator and symbol tools
-- `ktrdr/validation/` - review existing validation logic
-- `ktrdr/cli/commands/strategies.py` - review validate command
+**No longer needed (for agent):**
+
+- `agent-host-service/` - Agent runs in backend
+- MCP protocol for agent - Tools execute in-process
 
 ---
 
