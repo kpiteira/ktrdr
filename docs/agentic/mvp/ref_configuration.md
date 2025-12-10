@@ -4,16 +4,30 @@ This document specifies all configuration options for the agent system.
 
 ---
 
+## ⚠️ Architecture Update (December 2024)
+
+The agent now uses the Anthropic Python SDK directly instead of Claude Code CLI.
+
+See [ARCHITECTURE_DECISION_anthropic_api.md](ARCHITECTURE_DECISION_anthropic_api.md) for details.
+
+---
+
 ## Environment Variables
+
+### Anthropic API Settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ANTHROPIC_API_KEY` | (required) | Anthropic API key for Claude access |
+| `AGENT_MODEL` | `claude-sonnet-4-20250514` | Model ID (sonnet for cost, opus for quality) |
 
 ### Core Settings
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AGENT_ENABLED` | `true` | Enable/disable agent system |
-| `AGENT_TRIGGER_INTERVAL_SECONDS` | `300` | Polling interval (5 minutes) |
+| `AGENT_ENABLED` | `false` | Enable/disable agent background loop |
+| `AGENT_TRIGGER_INTERVAL_SECONDS` | `300` | Trigger interval (5 minutes) |
 | `AGENT_RECENT_STRATEGIES_COUNT` | `5` | How many recent strategies to show agent |
-| `AGENT_MODEL` | `claude-opus` | LLM model for agent reasoning |
 
 ### Budget Settings
 
@@ -59,11 +73,14 @@ This document specifies all configuration options for the agent system.
 ## Example .env
 
 ```bash
+# Anthropic API
+ANTHROPIC_API_KEY=sk-ant-api03-...
+AGENT_MODEL=claude-sonnet-4-20250514  # Or claude-opus-4-20250514 for higher quality
+
 # Agent Core
 AGENT_ENABLED=true
 AGENT_TRIGGER_INTERVAL_SECONDS=300
 AGENT_RECENT_STRATEGIES_COUNT=5
-AGENT_MODEL=claude-opus
 
 # Budget
 AGENT_BUDGET_DAILY_USD=5.00
