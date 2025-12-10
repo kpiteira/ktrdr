@@ -280,7 +280,9 @@ For Phase 1, we stop at DESIGNED. Phase 2 adds training.
 
 ---
 
-### 1.8 Strategy Design Tests & Behavioral Validation
+### 1.8 Strategy Design Tests & Behavioral Validation ✅ DONE
+
+**Status:** All tests exist and pass. Test files at different locations than planned (documented in handoff).
 
 **Goal:** Verify agent designs valid strategies AND validate behavioral acceptance criteria from earlier tasks
 
@@ -319,22 +321,276 @@ For Phase 1, we stop at DESIGNED. Phase 2 adds training.
 
 ---
 
+### 1.9 Agent API Endpoints & CLI Fix (Architecture Correction)
+
+**Status:** NEW - Critical bug fix for Phase 0 oversight
+
+**Goal:** Fix architectural violation where CLI directly calls TriggerService instead of going through API
+
+**Problem:** Task 0.6 implemented CLI commands that bypass the API layer:
+
+```python
+# Current (WRONG) - CLI directly instantiates service
+service = TriggerService(config=config, db=db, invoker=invoker)
+result = await service.check_and_trigger()
+```
+
+```
+KTRDR Pattern:    CLI → API → Service
+What Task 0.6 did: CLI → Service (directly)
+```
+
+**Impact:**
+- Cannot test E2E through production path
+- No API endpoint for frontend/external services
+- Observability not centralized at API level
+
+**Solution:**
+
+1. **Create Agent API Endpoints** (`ktrdr/api/endpoints/agent.py`):
+   - `POST /api/v1/agent/trigger` - Trigger research cycle
+   - `GET /api/v1/agent/status` - Get current status
+   - `GET /api/v1/agent/sessions` - List recent sessions (optional)
+
+2. **Create Agent API Service** (`ktrdr/api/services/agent_service.py`):
+   - Wraps TriggerService for API consumption
+   - Handles context provider injection
+   - Returns API-friendly responses
+
+3. **Update CLI** (`ktrdr/cli/agent_commands.py`):
+   - Remove direct TriggerService instantiation
+   - Use `AsyncCLIClient` to call API endpoints
+   - Follow pattern from other CLI commands (data, training, etc.)
+
+**Files:**
+
+- `ktrdr/api/endpoints/agent.py` - NEW: API endpoints
+- `ktrdr/api/services/agent_service.py` - NEW: API service layer
+- `ktrdr/api/models/agent.py` - NEW: Request/response models
+- `ktrdr/cli/agent_commands.py` - MODIFY: Use API instead of direct service
+- `ktrdr/api/endpoints/__init__.py` - MODIFY: Register agent router
+
+**Acceptance:**
+
+- `POST /api/v1/agent/trigger` endpoint works
+- `GET /api/v1/agent/status` endpoint works
+- CLI `ktrdr agent trigger` calls API (not direct service)
+- CLI `ktrdr agent status` calls API (not direct service)
+- E2E test can run through API path
+- Existing E2E tests still pass
+
+**Effort:** 3-4 hours
+
+---
+
+### 1.10 Agent Host Service (Claude Code Execution Environment)
+
+**Status:** NEW - Required for production deployment
+
+**Goal:** Create host service for running Claude Code agent (follows ib-host-service, training-host-service pattern)
+
+**Problem:** `ClaudeCodeInvoker` uses subprocess to call `claude` CLI. This works on Mac but:
+
+- Docker containers don't have Claude Code installed
+- Claude Code requires Node.js runtime (~500MB)
+- Claude Code needs MCP server access and file system access
+
+**Solution:** Follow KTRDR's existing host service pattern:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Backend (Docker Container, Port 8000)                       │
+│  └─ POST /api/v1/agent/trigger → Proxy to agent-host-service│
+└─────────────────────────────────────────────────────────────┘
+         │
+         │ HTTP (localhost:5005)
+         ▼
+┌─────────────────────────────────────────────────────────────┐
+│ Agent Host Service (Native, Port 5005)                      │
+│  ├─ POST /agent/trigger - Trigger research cycle            │
+│  ├─ GET /agent/status - Get current status                  │
+│  ├─ GET /health - Health check                              │
+│  │                                                          │
+│  ├─ TriggerService (background loop optional)               │
+│  ├─ ClaudeCodeInvoker (subprocess to claude CLI)            │
+│  └─ MCP Server Access (localhost:3100)                      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Why Host Service:**
+
+- Claude Code CLI installed natively on host (like IB Gateway on ib-host-service)
+- MCP server runs on host, accessible via localhost
+- File system access for strategies directory
+- Consistent with KTRDR architecture
+
+**Components:**
+
+1. **Agent Host Service** (`agent-host-service/`):
+
+```
+agent-host-service/
+├── main.py              # FastAPI app
+├── requirements.txt     # Python deps (minimal)
+├── start.sh            # Startup script
+├── stop.sh             # Shutdown script
+└── README.md           # Setup instructions
+```
+
+2. **API Endpoints**:
+   - `POST /agent/trigger` - Run `TriggerService.check_and_trigger()`
+   - `GET /agent/status` - Query database for current session
+   - `GET /agent/sessions` - List recent sessions
+   - `GET /health` - Health check
+
+3. **Background Trigger Loop** (optional):
+   - Configurable via `AGENT_AUTONOMOUS_MODE=true/false`
+   - When enabled, runs every 5 minutes automatically
+   - When disabled, only responds to manual triggers
+
+4. **Backend Integration**:
+   - `USE_AGENT_HOST_SERVICE=true` environment variable
+   - Backend proxies `/api/v1/agent/*` to host service
+   - Falls back to local execution (for development on Mac)
+
+**Files:**
+
+- `agent-host-service/main.py` - NEW: FastAPI host service
+- `agent-host-service/start.sh` - NEW: Startup script
+- `agent-host-service/stop.sh` - NEW: Shutdown script
+- `agent-host-service/requirements.txt` - NEW: Dependencies
+- `ktrdr/api/services/agent_service.py` - MODIFY: Add host service proxy
+
+**Acceptance:**
+
+- Agent host service starts and runs
+- `POST /agent/trigger` invokes Claude and creates session
+- Background loop triggers autonomously (when enabled)
+- Backend proxies requests correctly
+- Works on Mac (development) and preprod (production)
+
+**Effort:** 4-6 hours
+
+---
+
+### 1.11 MCP Server Configuration for Agent
+
+**Status:** NEW - Required for MCP tool access
+
+**Goal:** Ensure MCP server is properly configured and accessible for agent invocations
+
+**Problem:** Claude Code needs MCP configuration to access KTRDR tools. Current setup:
+
+- MCP server runs as part of backend (port 3100)
+- Claude config at `mcp/claude_mcp_config.json` points to localhost:3100
+- This works locally but may need adjustment for host service
+
+**Tasks:**
+
+1. **Verify MCP Server Accessibility**:
+   - MCP server should be accessible from host (for agent-host-service)
+   - May need to bind to 0.0.0.0 instead of localhost
+
+2. **MCP Config for Agent**:
+   - Ensure `claude_mcp_config.json` is correct for host service environment
+   - May need environment-specific configs
+
+3. **Test MCP Tool Access**:
+   - Verify agent can call: `get_available_indicators`, `get_available_symbols`
+   - Verify agent can call: `save_strategy_config`, `get_recent_strategies`
+   - Verify agent can call: `get_agent_state`, `update_agent_state`
+
+**Files:**
+
+- `mcp/claude_mcp_config.json` - VERIFY/MODIFY
+- `mcp/src/server.py` - VERIFY binding address
+- `agent-host-service/README.md` - Document MCP setup
+
+**Acceptance:**
+
+- MCP server accessible from agent-host-service
+- All agent MCP tools callable
+- Configuration documented
+
+**Effort:** 1-2 hours
+
+---
+
+### 1.12 End-to-End Integration Test (Real Agent)
+
+**Status:** NEW - Validates complete system
+
+**Goal:** Verify the complete agent system works end-to-end with real Claude invocation
+
+**Test Scenario:**
+
+```
+1. Start services:
+   - Backend (Docker)
+   - MCP Server
+   - Agent Host Service
+   - PostgreSQL
+
+2. Trigger via CLI:
+   ktrdr agent trigger
+
+3. Verify:
+   - Session created in database
+   - Claude invoked with correct prompt
+   - Strategy YAML saved to disk
+   - Session updated to DESIGNED
+   - Strategy validates correctly
+```
+
+**What This Tests:**
+
+- CLI → API communication
+- API → Host Service proxy
+- Host Service → Claude Code invocation
+- Claude → MCP tools access
+- MCP tools → Database operations
+- Strategy validation
+- Full Phase 1 design flow
+
+**Files:**
+
+- `tests/integration/agent_tests/test_agent_real_e2e.py` - NEW: Real E2E test
+- `docs/testing/AGENT_E2E_TESTING.md` - NEW: E2E testing guide
+
+**Acceptance:**
+
+- E2E test passes with real Claude invocation
+- Strategy file created in `strategies/`
+- Strategy passes validation
+- Session in DESIGNED state with strategy_name
+- Can run manually with clear instructions
+
+**Effort:** 2-3 hours
+
+---
+
 ## Task Summary
 
-| Task | Description | Effort | Dependencies |
-|------|-------------|--------|--------------|
-| 1.1 | Full agent prompt | 3-4h | Phase 0 |
-| 1.2 | Strategy validation (check-first) | 2-4h | Review existing |
-| 1.3 | save_strategy_config tool | 2-3h | 1.2 |
-| 1.4 | get_recent_strategies tool | 1-2h | Phase 0 |
-| 1.5 | get_available_indicators (check-first) | 0-2h | Check if exists |
-| 1.6 | get_available_symbols (check-first) | 0-2h | Check if exists |
-| 1.7 | Trigger service updates | 2-3h | 1.1, 1.3 |
-| 1.8 | Tests & behavioral validation | 4-5h | All above |
+| Task | Description | Effort | Dependencies | Status |
+|------|-------------|--------|--------------|--------|
+| 1.1 | Full agent prompt | 3-4h | Phase 0 | ✅ Done |
+| 1.2 | Strategy validation (check-first) | 2-4h | Review existing | ✅ Done |
+| 1.3 | save_strategy_config tool | 2-3h | 1.2 | ✅ Done |
+| 1.4 | get_recent_strategies tool | 1-2h | Phase 0 | ✅ Done |
+| 1.5 | get_available_indicators (check-first) | 0-2h | Check if exists | ✅ Done |
+| 1.6 | get_available_symbols (check-first) | 0-2h | Check if exists | ✅ Done |
+| 1.7 | Trigger service updates | 2-3h | 1.1, 1.3 | ✅ Done |
+| 1.8 | Tests & behavioral validation | 4-5h | All above | ✅ Done |
+| 1.9 | Agent API & CLI fix | 3-4h | 1.8 | **TODO** |
+| 1.10 | Agent Host Service | 4-6h | 1.9 | **TODO** |
+| 1.11 | MCP Server Configuration | 1-2h | 1.10 | **TODO** |
+| 1.12 | Real E2E Integration Test | 2-3h | 1.10, 1.11 | **TODO** |
 
-**Total estimated effort:** 14-25 hours (2-3 days)
+**Total estimated effort:** 27-41 hours (4-5 days)
 
-*Note: Effort varies based on what already exists. Tasks 1.2, 1.5, 1.6 may require minimal work if existing code is sufficient.*
+**Critical Path:** 1.9 → 1.10 → 1.11 → 1.12
+
+*Note: Tasks 1.9-1.12 are new additions to address architectural gaps discovered during Task 1.8.*
 
 ---
 

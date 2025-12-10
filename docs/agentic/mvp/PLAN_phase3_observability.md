@@ -8,6 +8,47 @@
 
 ---
 
+## ⚠️ Architectural Context (from Phase 1)
+
+**Phase 1 established a multi-service architecture. Phase 3 must instrument ALL components:**
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                    COMPONENTS TO INSTRUMENT                       │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌─────────────────┐     ┌─────────────────┐     ┌────────────┐ │
+│  │  Backend API    │     │  Agent Host     │     │    MCP     │ │
+│  │  (Docker:8000)  │     │  Service (:5005)│     │  Server    │ │
+│  │                 │     │                 │     │  (:3100)   │ │
+│  │  • API metrics  │     │  • Trigger      │     │  • Tool    │ │
+│  │  • Operation    │     │    metrics      │     │    metrics │ │
+│  │    tracking     │     │  • Claude       │     │  • OTEL    │ │
+│  │  • Budget DB    │     │    invocation   │     │    traces  │ │
+│  │                 │     │    traces       │     │            │ │
+│  └─────────────────┘     └─────────────────┘     └────────────┘ │
+│           │                       │                     │       │
+│           └───────────────────────┴─────────────────────┘       │
+│                               │                                  │
+│                               ▼                                  │
+│                    ┌─────────────────────┐                      │
+│                    │  Observability Stack │                      │
+│                    │                     │                      │
+│                    │  Prometheus → Grafana                      │
+│                    │  Jaeger (OTEL traces)                      │
+│                    └─────────────────────┘                      │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Key Points:**
+
+- **Cost tracking** happens in agent-host-service (where Claude runs), reported to backend
+- **CLI uses API** (Task 1.9 pattern) - CLI commands call backend API
+- **Three metrics endpoints**: Backend (:8000/metrics), Host Service (:5005/metrics), MCP (:3100/metrics)
+
+---
+
 ## Branch Strategy
 
 **Branch:** `feature/agent-mvp`
@@ -78,17 +119,37 @@ KTRDR has extensive observability infrastructure. Before implementing:
 
 **Goal:** Track tokens and cost for every agent invocation
 
-**Implementation:**
-- After each agent invocation, parse token usage from response
-- Calculate cost using Opus 4.5 pricing ($5/MTok input, $25/MTok output)
-- Store in `agent_actions` table
-- Update `agent_budget` table
+**⚠️ Architecture Note:** Cost tracking happens in TWO places:
 
-**File:** `research_agents/services/cost_tracker.py`
+1. **Agent Host Service** - Captures token counts from Claude response
+2. **Backend** - Stores costs in database, maintains budget totals
+
+**Implementation:**
+
+```python
+# In agent-host-service: capture tokens from Claude response
+async def report_cost_to_backend(session_id: int, tokens_in: int, tokens_out: int):
+    """Report token usage to backend for storage."""
+    await http_client.post(
+        "http://localhost:8000/api/v1/agent/cost",
+        json={"session_id": session_id, "tokens_in": tokens_in, "tokens_out": tokens_out}
+    )
+
+# In backend: calculate and store
+def calculate_cost(tokens_in: int, tokens_out: int) -> float:
+    return (tokens_in * 5.0 / 1_000_000) + (tokens_out * 25.0 / 1_000_000)
+```
+
+**Files:**
+
+- `agent-host-service/cost_reporter.py` - Capture and report tokens
+- `ktrdr/api/endpoints/agent.py` - Add `POST /api/v1/agent/cost` endpoint
+- `research_agents/services/cost_tracker.py` - Calculate and store costs
 
 **Acceptance:**
-- Token counts recorded accurately
-- Cost calculated correctly
+
+- Token counts captured in host service
+- Costs stored in backend database
 - Running totals maintained
 
 **Effort:** 2-3 hours
@@ -131,51 +192,82 @@ async def check_budget() -> tuple[bool, float]:
 
 ---
 
-### 3.4 Instrument MCP Server with OTEL
+### 3.4 Instrument MCP Server AND Agent Host Service with OTEL
 
-**Goal:** Traces for all MCP tool calls
+**Goal:** Traces for all MCP tool calls AND agent invocations
+
+**⚠️ Both services need OTEL instrumentation:**
+
+1. **MCP Server** - Traces for tool calls (save_strategy, get_indicators, etc.)
+2. **Agent Host Service** - Traces for trigger cycles, Claude invocations
 
 **Implementation:**
+
+**MCP Server:**
 - Add OTEL tracer to MCP server
 - Wrap each tool handler with span
 - Record tool name, duration, success/failure
-- Propagate trace context to backend
 
-**File:** `mcp/src/telemetry.py`
+**Agent Host Service:**
+- Add OTEL tracer to host service
+- Trace trigger cycles (`agent.trigger_cycle`)
+- Trace Claude invocations (`agent.claude_invocation`)
+- Record session_id, phase, duration, success/failure
+
+**Files:**
+
+- `mcp/src/telemetry.py` - MCP OTEL setup
+- `agent-host-service/telemetry.py` - Host service OTEL setup
 
 **Reference:** See `ref_observability.md` for span structure
 
 **Acceptance:**
-- Traces visible in Jaeger
-- Spans have correct attributes
-- Context flows to backend
 
-**Effort:** 3-4 hours
+- Traces visible in Jaeger for both services
+- Spans have correct attributes
+- Full trace from trigger → Claude → MCP tools
+
+**Effort:** 4-5 hours (increased to cover both services)
 
 ---
 
-### 3.5 Add Prometheus Metrics to MCP Server
+### 3.5 Add Prometheus Metrics to MCP Server AND Agent Host Service
 
-**Goal:** Expose metrics endpoint for scraping
+**Goal:** Expose metrics endpoints for scraping from both services
 
-**Metrics to add:**
+**⚠️ Both services need Prometheus metrics:**
+
+**MCP Server Metrics (port 3100):**
+
 - `mcp_tool_calls_total{tool, status}`
 - `mcp_tool_duration_seconds{tool}`
 - `mcp_tool_errors_total{tool, error_type}`
 
-**Implementation:**
-- Add prometheus_client to MCP server
-- Instrument tool handlers
-- Expose `/metrics` endpoint
+**Agent Host Service Metrics (port 5005):**
 
-**File:** `mcp/src/metrics.py`
+- `agent_trigger_total{reason, invoked}`
+- `agent_invocation_duration_seconds`
+- `agent_tokens_total{direction}` (input/output)
+- `agent_errors_total{error_type}`
+
+**Implementation:**
+
+- Add prometheus_client to both services
+- Instrument handlers
+- Expose `/metrics` endpoint on each
+
+**Files:**
+
+- `mcp/src/metrics.py` - MCP metrics
+- `agent-host-service/metrics.py` - Host service metrics
 
 **Acceptance:**
-- Metrics endpoint accessible
-- Prometheus can scrape
+
+- Both `/metrics` endpoints accessible
+- Prometheus can scrape both
 - Metrics accurate
 
-**Effort:** 2-3 hours
+**Effort:** 3-4 hours (increased to cover both services)
 
 ---
 
@@ -272,15 +364,22 @@ async def check_budget() -> tuple[bool, float]:
 
 **Goal:** Complete CLI for visibility and control
 
+**⚠️ Architecture Note:** CLI commands call Backend API (Task 1.9 pattern). The CLI does NOT directly call services.
+
+```
+CLI → Backend API → (proxy to Host Service if needed)
+```
+
 **Commands:**
+
 ```bash
-# Status and monitoring
+# Status and monitoring (call GET /api/v1/agent/*)
 ktrdr agent status              # Current state + recent history + budget
 ktrdr agent history [--limit N] # Detailed cycle history
 ktrdr agent session <id>        # Full session details
 ktrdr agent budget              # Budget status
 
-# Control
+# Control (call POST /api/v1/agent/*)
 ktrdr agent trigger             # Manual trigger (testing)
 ktrdr agent pause               # Pause automatic triggers
 ktrdr agent resume              # Resume automatic triggers
@@ -289,16 +388,24 @@ ktrdr agent resume              # Resume automatic triggers
 ktrdr agent logs [--session ID] # View logs for session
 ```
 
-**File:** `ktrdr/cli/commands/agent.py`
+**Implementation:**
+
+- Extend CLI from Task 1.9 (which established basic trigger/status)
+- Use `AsyncCLIClient` pattern (like data, training commands)
+- All commands call backend API endpoints
+
+**File:** `ktrdr/cli/agent_commands.py` (extend from Task 1.9)
 
 **Reference:** See `ref_cli_commands.md` for specifications
 
 **Acceptance:**
-- All commands work
+
+- All commands work via API
 - Output is clear and useful
 - Help text accurate
+- No direct service calls (API only)
 
-**Effort:** 4-5 hours
+**Effort:** 3-4 hours (reduced since Task 1.9 establishes base)
 
 ---
 

@@ -4,7 +4,38 @@
 
 **Duration:** 3-4 days
 
-**Prerequisites:** Phase 1 complete (strategy design works)
+**Prerequisites:** Phase 1 complete (strategy design works, agent-host-service operational)
+
+---
+
+## ⚠️ Architectural Context (from Phase 1)
+
+**Phase 1 established the following architecture that Phase 2 builds upon:**
+
+```
+┌──────────┐     ┌─────────────────┐     ┌───────────────────────┐
+│   CLI    │────▶│  Backend API    │────▶│  Agent Host Service   │
+│          │     │  (Docker:8000)  │     │  (Native:5005)        │
+└──────────┘     └─────────────────┘     │                       │
+                         │               │  • TriggerService     │
+                         │               │  • ClaudeCodeInvoker  │
+                         │               │  • MCP Access         │
+                         │               └───────────────────────┘
+                         │                          │
+                         │ Operation status         │ Claude invocation
+                         │ notifications            │
+                         ▼                          ▼
+                 ┌───────────────┐        ┌─────────────────┐
+                 │  PostgreSQL   │        │  Claude Code    │
+                 │  + KTRDR Ops  │        │  + MCP Tools    │
+                 └───────────────┘        └─────────────────┘
+```
+
+**Key Points:**
+- **TriggerService runs in agent-host-service**, not in backend
+- **CLI calls Backend API**, which proxies to agent-host-service
+- **Operation status** (training/backtest) is tracked in backend, host service polls for updates
+- All MCP tool calls happen from agent-host-service (where Claude runs)
 
 ---
 
@@ -205,7 +236,10 @@ def evaluate_backtest_gate(results: dict) -> tuple[bool, str]:
 
 **Goal:** Handle all state transitions and gate evaluations
 
+**⚠️ Architecture Note:** TriggerService runs in `agent-host-service` (Phase 1 Task 1.10). It needs to poll the backend API for operation status since training/backtest operations run in KTRDR backend.
+
 **Full state machine:**
+
 ```
 IDLE
   ↓ (trigger: start_new_cycle)
@@ -224,19 +258,36 @@ ASSESSING                IDLE (outcome: failed_backtest_gate)
 IDLE (outcome: success)
 ```
 
+**Operation Status Polling:**
+
+The host service polls backend API for operation status:
+
+```python
+# In agent-host-service, poll for operation completion
+async def check_operation_status(operation_id: str) -> dict:
+    """Poll backend API for operation status."""
+    response = await http_client.get(
+        f"http://localhost:8000/api/v1/operations/{operation_id}"
+    )
+    return response.json()
+```
+
 **Trigger events:**
+
 - `start_new_cycle`: No active session
-- `training_completed`: Training operation finished
+- `training_completed`: Training operation finished (detected via polling)
 - `training_failed`: Training operation errored
-- `backtest_completed`: Backtest operation finished
+- `backtest_completed`: Backtest operation finished (detected via polling)
 - `backtest_failed`: Backtest operation errored
 
-**File:** `research_agents/services/trigger.py`
+**File:** `agent-host-service/trigger_service.py` (extends from `research_agents/services/trigger.py`)
 
 **Acceptance:**
+
 - All state transitions work
 - Gates evaluated at correct points
 - Correct outcomes recorded
+- Host service polls backend for operation status
 
 **Effort:** 4-5 hours
 
@@ -341,9 +392,12 @@ async def check_for_resumable_operations(session):
 4. Training error: design → train (error) → end
 5. Checkpoint recovery: interrupt training → resume → complete
 
-**File:** `tests/integration/research_agents/test_full_cycle.py`
+**File:** `tests/integration/agent_tests/test_full_cycle.py`
+
+**Note:** Test directory is `agent_tests/` not `research_agents/` (see Phase 1 handoff for naming convention).
 
 **Acceptance:**
+
 - All scenarios pass
 - State transitions correct
 - Outcomes recorded correctly
