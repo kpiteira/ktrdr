@@ -302,3 +302,65 @@ DATABASE_URL="postgresql://ktrdr:localdev@localhost:5432/ktrdr"
 export DATABASE_URL="postgresql://ktrdr:localdev@localhost:5432/ktrdr"
 uv run pytest tests/integration/agent_tests/test_agent_e2e.py::TestAgentDesignPhaseE2E -v
 ```
+
+### Agent API & Anthropic Integration Pattern (Task 1.9)
+
+The Agent API follows standard KTRDR patterns with API-based CLI:
+
+```text
+CLI (agent_commands.py)
+    ↓ AsyncCLIClient
+API Endpoints (agent.py)
+    ↓
+Agent Service (agent_service.py)
+    ↓
+TriggerService / AgentDatabase
+```
+
+**CLI to API Migration:**
+
+The CLI now uses `AsyncCLIClient` instead of direct service calls:
+
+```python
+async with AsyncCLIClient() as client:
+    result = await client._make_request("POST", "/agent/trigger", params={"dry_run": dry_run})
+```
+
+**AnthropicAgentInvoker Pattern:**
+
+The invoker implements an agentic loop with tool support:
+
+```python
+class AnthropicAgentInvoker:
+    async def run(self, prompt, tools, system_prompt, tool_executor):
+        while True:
+            response = await asyncio.to_thread(self._create_message, ...)
+            tool_calls = [b for b in response.content if b.type == "tool_use"]
+            if not tool_calls:
+                return AgentResult(output=self._extract_text(response.content), ...)
+            # Execute tools and continue loop
+            tool_results = await self._execute_tools(tool_calls, tool_executor)
+            messages.append({"role": "user", "content": tool_results})
+```
+
+**Token Tracking:**
+
+Tokens are accumulated across all API calls in the loop:
+
+```python
+total_input_tokens += response.usage.input_tokens
+total_output_tokens += response.usage.output_tokens
+```
+
+**API Context Provider:**
+
+`AgentMCPContextProvider` fetches indicators/symbols from local API (not MCP):
+
+```python
+async def get_available_indicators(self):
+    async with httpx.AsyncClient() as client:
+        response = await client.get(f"{self.base_url}/indicators/available")
+        return response.json().get("indicators", [])
+```
+
+This enables testability via mock API responses.
