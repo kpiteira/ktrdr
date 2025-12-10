@@ -46,15 +46,15 @@ async def get_indicators_from_api() -> list[dict[str, Any]]:
 
     # Get API URL from environment
     base_url = os.getenv("KTRDR_API_URL", "http://localhost:8000")
-    api_url = f"{base_url}/api/v1/indicators/available"
+    api_url = f"{base_url}/api/v1/indicators/"
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(api_url)
             response.raise_for_status()
             data = response.json()
-            # API returns {"indicators": [...]}
-            return data.get("indicators", [])
+            # API returns {"success": true, "data": [...]}
+            return data.get("data", [])
     except Exception as e:
         logger.error("Failed to get indicators from API", error=str(e))
         return []
@@ -70,17 +70,15 @@ async def get_symbols_from_api() -> list[dict[str, Any]]:
 
     # Get API URL from environment
     base_url = os.getenv("KTRDR_API_URL", "http://localhost:8000")
-    api_url = f"{base_url}/api/v1/data/symbols"
+    api_url = f"{base_url}/api/v1/symbols"
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(api_url)
             response.raise_for_status()
             data = response.json()
-            # API returns {"symbols": [...]} or list directly
-            if isinstance(data, list):
-                return data
-            return data.get("symbols", data.get("data", []))
+            # API returns {"success": true, "data": [...]}
+            return data.get("data", [])
     except Exception as e:
         logger.error("Failed to get symbols from API", error=str(e))
         return []
