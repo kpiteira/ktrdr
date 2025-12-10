@@ -148,21 +148,55 @@ class AgentService:
         operation_id: str,
         db: Any,
     ) -> None:
-        """Execute agent with progress tracking.
+        """Execute agent with progress tracking (Task 1.13b: cancellation & error handling).
 
         This method runs in background and tracks progress through OperationsService.
+        On cancellation/timeout/error, updates both operation and session state.
 
         Args:
             operation_id: Operation ID for progress tracking
             db: Agent database instance
         """
+        from research_agents.database.schema import SessionOutcome
+
         session_id: Optional[int] = None
+        partial_tokens: dict[str, int] = {"input": 0, "output": 0}
+
+        # Task 1.13b: Get cancellation token for checking during execution
+        cancellation_token = self._operations_service.get_cancellation_token(
+            operation_id
+        )
+
+        async def _check_cancellation() -> None:
+            """Check if operation was cancelled and raise if so."""
+            if cancellation_token and cancellation_token.is_cancelled():
+                raise asyncio.CancelledError("Operation cancelled by user")
+
+        async def _get_active_session_id() -> Optional[int]:
+            """Get the active session ID (for error handling when session_id not yet captured)."""
+            active = await db.get_active_session()
+            return active.id if active else None
+
+        async def _complete_session_with_outcome(outcome: SessionOutcome) -> None:
+            """Complete the active session with the given outcome."""
+            sid = session_id or await _get_active_session_id()
+            if sid:
+                try:
+                    await db.complete_session(session_id=sid, outcome=outcome)
+                    logger.info(
+                        f"Session {sid} completed with outcome: {outcome.value}"
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to complete session {sid}: {e}")
 
         try:
             with create_service_span(
                 "agent.design_strategy",
                 operation_id=operation_id,
             ) as span:
+                # Check cancellation before starting
+                await _check_cancellation()
+
                 # Progress: Preparing context (5%)
                 await self._operations_service.update_progress(
                     operation_id,
@@ -186,6 +220,9 @@ class AgentService:
                 from ktrdr.api.services.agent_context import AgentMCPContextProvider
                 from research_agents.services.trigger import TriggerService
 
+                # Check cancellation after imports
+                await _check_cancellation()
+
                 # Create invoker and tools
                 invoker_config = AnthropicInvokerConfig.from_env()
                 invoker = AnthropicAgentInvoker(config=invoker_config)
@@ -205,6 +242,9 @@ class AgentService:
                         current_item=None,
                     ),
                 )
+
+                # Check cancellation before API call
+                await _check_cancellation()
 
                 service = TriggerService(
                     config=self._config,
@@ -236,6 +276,14 @@ class AgentService:
                 if session_id:
                     span.set_attribute("agent.session_id", session_id)
 
+                # Capture token counts from invocation_result
+                invocation = result.get("invocation_result", {})
+                partial_tokens["input"] = invocation.get("input_tokens", 0)
+                partial_tokens["output"] = invocation.get("output_tokens", 0)
+
+                # Check cancellation after API call
+                await _check_cancellation()
+
                 # Progress: Processing response (80%)
                 await self._operations_service.update_progress(
                     operation_id,
@@ -251,8 +299,8 @@ class AgentService:
                 )
 
                 # Get token counts from result (if available)
-                input_tokens = result.get("input_tokens", 0)
-                output_tokens = result.get("output_tokens", 0)
+                input_tokens = partial_tokens["input"]
+                output_tokens = partial_tokens["output"]
                 total_tokens = input_tokens + output_tokens
 
                 if total_tokens > 0:
@@ -279,14 +327,28 @@ class AgentService:
                 )
 
         except asyncio.CancelledError:
-            # Handle cancellation
+            # Task 1.13b: Handle cancellation - update session state
             logger.info(f"Agent operation {operation_id} cancelled")
-            # OperationsService handles marking as CANCELLED
+            await _complete_session_with_outcome(SessionOutcome.CANCELLED)
+            # OperationsService handles marking operation as CANCELLED
+            raise
+
+        except asyncio.TimeoutError:
+            # Task 1.13b: Handle timeout - update session state
+            logger.error(f"Agent operation {operation_id} timed out")
+            await _complete_session_with_outcome(SessionOutcome.FAILED_TIMEOUT)
+            # Fail operation with partial token info
+            await self._operations_service.fail_operation(
+                operation_id,
+                f"Anthropic API timeout (tokens used: {partial_tokens['input']}in/{partial_tokens['output']}out)",
+            )
             raise
 
         except Exception as e:
-            # Fail operation on error
+            # Task 1.13b: Handle other errors - update session state
             logger.error(f"Agent operation {operation_id} failed: {e}")
+            await _complete_session_with_outcome(SessionOutcome.FAILED_DESIGN)
+            # Fail operation with error message
             await self._operations_service.fail_operation(operation_id, str(e))
             raise
 

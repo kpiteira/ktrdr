@@ -33,6 +33,10 @@ class SessionOutcome(str, Enum):
     FAILED_BACKTEST = "failed_backtest"
     FAILED_BACKTEST_GATE = "failed_backtest_gate"
     FAILED_ASSESSMENT = "failed_assessment"
+    # Task 1.13b: Cancellation and error handling outcomes
+    CANCELLED = "cancelled"  # User cancelled operation
+    FAILED_TIMEOUT = "failed_timeout"  # Anthropic API timeout
+    FAILED_INTERRUPTED = "failed_interrupted"  # Backend restart recovery
 
 
 @dataclass
