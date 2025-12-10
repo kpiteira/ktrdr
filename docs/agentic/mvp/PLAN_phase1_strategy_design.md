@@ -705,65 +705,532 @@ These tasks address quality-of-life improvements discovered during E2E testing. 
 
 | Task | Description | Effort | Dependencies | Status |
 |------|-------------|--------|--------------|--------|
-| 1.13 | Add OperationsService to agent trigger | 2-3h | 1.12 | **TODO** |
-| 1.14 | Improve prompt to reduce validation errors | 1-2h | 1.12 | **TODO** |
+| 1.13a | Core OperationsService Integration | 2-3h | 1.12 | **TODO** |
+| 1.13b | Cancellation, Error Handling & Recovery | 2-3h | 1.13a | **TODO** |
+| 1.14 | Improve prompt to reduce validation errors | 2-3h | 1.12 | **TODO** |
 
-### 1.13 Add OperationsService Integration
+### 1.13a Core OperationsService Integration
 
 **Status:** TODO
 
-**Goal:** Add progress tracking to agent operations using existing OperationsService pattern (same as training/backtesting).
+**Goal:** Add basic async operation tracking to agent invocations using the **exact same patterns** as training and backtesting operations.
 
-**What This Enables:**
+**⚠️ CRITICAL REQUIREMENT: STRICT PATTERN ADHERENCE**
 
-- Progress visibility ("Calling Anthropic API...", "Executing tool: save_strategy_config...")
-- Operation ID for polling via `/api/v1/operations/{id}`
-- Cancellation support
-- Consistent UX across all long-running operations
+This task is NOT about "adding progress tracking." It is about integrating the agent with KTRDR's unified async operations infrastructure such that:
+1. Agent operations are **indistinguishable** from training/backtest operations to API consumers
+2. The same CLI polling patterns work (`ktrdr operations status <id>`)
+3. The same observability (Jaeger traces, Prometheus metrics) applies
+
+**Reference Implementations (MUST study before implementing):**
+
+- `ktrdr/api/services/operations_service.py` - OperationsService class
+- `ktrdr/async_infrastructure/service_orchestrator.py` - ServiceOrchestrator.start_managed_operation()
+- `ktrdr/training/training_manager.py` - How training uses these patterns
+- `ktrdr/backtesting/backtesting_service.py` - How backtesting uses these patterns
+
+---
+
+**Implementation Requirements:**
+
+**1. Operation Type Registration**
+
+Add `AGENT_DESIGN` to `OperationType` enum in `ktrdr/api/models/operations.py`:
+
+```python
+class OperationType(str, Enum):
+    DATA_LOAD = "data_load"
+    TRAINING = "training"
+    BACKTESTING = "backtesting"
+    AGENT_DESIGN = "agent_design"  # NEW
+```
+
+**2. OperationsService Lifecycle (MANDATORY)**
+
+Agent operations MUST follow this exact lifecycle:
+
+```python
+# In agent_service.py
+
+async def trigger_agent(self, ...) -> dict:
+    # 1. Create operation via OperationsService
+    operation = await operations_service.create_operation(
+        operation_type=OperationType.AGENT_DESIGN,
+        metadata=OperationMetadata(
+            symbol="N/A",  # Agent doesn't operate on symbols
+            timeframe="N/A",
+            mode="strategy_design",
+            parameters={"session_id": session.id, "trigger_reason": reason}
+        )
+    )
+    operation_id = operation.operation_id
+
+    # 2. Create background task
+    task = asyncio.create_task(self._run_agent_with_tracking(operation_id, session, ...))
+
+    # 3. Start operation (registers task for cancellation)
+    await operations_service.start_operation(operation_id, task)
+
+    # 4. Return immediately with operation_id
+    return {
+        "operation_id": operation_id,
+        "status": "started",
+        "session_id": session.id
+    }
+```
+
+**3. Progress Updates During Execution (MANDATORY)**
+
+During agent execution, emit progress updates at these checkpoints:
+
+```python
+async def _run_agent_with_tracking(self, operation_id: str, ...):
+    try:
+        # Progress: Preparing context
+        await operations_service.update_progress(
+            operation_id,
+            OperationProgress(
+                percentage=5.0,
+                current_step="Preparing agent context",
+                steps_completed=1,
+                steps_total=5,
+            )
+        )
+
+        # Progress: Calling Anthropic API
+        await operations_service.update_progress(
+            operation_id,
+            OperationProgress(
+                percentage=20.0,
+                current_step="Calling Anthropic API",
+                steps_completed=2,
+                steps_total=5,
+            )
+        )
+
+        # Execute tool calls with progress updates
+        for i, tool_call in enumerate(tool_calls):
+            await operations_service.update_progress(
+                operation_id,
+                OperationProgress(
+                    percentage=20 + (60 * (i+1) / len(tool_calls)),
+                    current_step=f"Executing tool: {tool_call.name}",
+                    steps_completed=2,
+                    steps_total=5,
+                    items_processed=i+1,
+                    items_total=len(tool_calls),
+                )
+            )
+
+        # Progress: Complete
+        await operations_service.complete_operation(
+            operation_id,
+            result_summary={
+                "session_id": session.id,
+                "strategy_name": strategy_name,
+                "input_tokens": total_input_tokens,
+                "output_tokens": total_output_tokens,
+            }
+        )
+
+    except Exception as e:
+        await operations_service.fail_operation(operation_id, str(e))
+        raise
+```
+
+**4. OpenTelemetry Spans (MANDATORY)**
+
+Wrap agent operations with proper spans:
+
+```python
+from ktrdr.observability.helpers import create_service_span, trace_service_method
+
+@trace_service_method("agent.trigger")
+async def trigger_agent(self, ...):
+    with create_service_span("agent.design_strategy",
+                             operation_id=operation_id,
+                             session_id=session.id) as span:
+        span.set_attribute("agent.trigger_reason", trigger_reason)
+        # ... operation execution ...
+        span.set_attribute("agent.tokens_used", total_tokens)
+```
+
+---
 
 **Files to Modify:**
 
-- `ktrdr/api/services/agent_service.py` - Register operation, track progress
-- `research_agents/services/trigger.py` - Emit progress events
+- `ktrdr/api/models/operations.py` - Add `AGENT_DESIGN` to OperationType enum
+- `ktrdr/api/services/agent_service.py` - OperationsService integration (lifecycle + progress)
 
-**Acceptance:**
+---
 
-- Operation ID returned from `/agent/trigger`
-- Progress queryable via `/operations/{id}`
-- Token counts visible in progress
+**Acceptance Criteria (ALL MUST PASS):**
+
+1. ✅ Operation ID returned from `POST /agent/trigger`
+2. ✅ Progress queryable via `GET /operations/{id}` shows real-time progress
+3. ✅ Token counts visible in operation result_summary on success
+4. ✅ OpenTelemetry spans visible in Jaeger with operation.id attribute
+5. ✅ `ktrdr operations list` shows agent operations alongside training/backtest
+6. ✅ `ktrdr operations status <op_id>` works identically to training operations
+
+**Verification Commands:**
+
+```bash
+# Trigger agent and get operation ID
+curl -X POST http://localhost:8000/api/v1/agent/trigger | jq '.operation_id'
+
+# Poll progress (should show "Calling Anthropic API...", etc.)
+curl http://localhost:8000/api/v1/operations/<op_id> | jq '.data.progress'
+
+# Verify in Jaeger
+# Query: service="ktrdr-backend" AND tags.operation.id="<op_id>"
+```
 
 **Effort:** 2-3 hours
 
 ---
 
-### 1.14 Prompt Engineering for Validation
+### 1.13b Cancellation, Error Handling & Recovery
 
 **Status:** TODO
 
-**Goal:** Reduce validation errors by improving prompt with explicit enum values and constraints.
+**Goal:** Add cancellation support, comprehensive error handling, and backend restart recovery to agent operations.
 
-**Issues Observed:**
+**Dependencies:** 1.13a (core OperationsService integration must be in place)
+
+**Reference:** This task completes the pattern adherence started in 1.13a by adding the edge case handling that training/backtesting also implement.
+
+---
+
+**Implementation Requirements:**
+
+**1. Cancellation Token Support (MANDATORY)**
+
+Agent MUST check cancellation token during execution AND update database on cancellation:
+
+```python
+async def _run_agent_with_tracking(self, operation_id: str, session: AgentSession, ...):
+    # Get cancellation token
+    cancellation_token = operations_service.get_cancellation_token(operation_id)
+
+    try:
+        # Check before each major step
+        if cancellation_token and cancellation_token.is_cancelled():
+            raise asyncio.CancelledError("Agent operation cancelled by user")
+
+        # Before calling Anthropic API
+        if cancellation_token and cancellation_token.is_cancelled():
+            raise asyncio.CancelledError("Agent operation cancelled by user")
+
+        # Before each tool execution
+        for tool_call in tool_calls:
+            if cancellation_token and cancellation_token.is_cancelled():
+                raise asyncio.CancelledError("Agent operation cancelled by user")
+            # execute tool...
+
+    except asyncio.CancelledError:
+        # CRITICAL: Update agent_sessions table on cancellation
+        await db.update_session(
+            session_id=session.id,
+            phase="idle",
+            outcome="cancelled",
+            error_message="Operation cancelled by user"
+        )
+        # OperationsService already marked operation as CANCELLED
+        raise  # Re-raise to propagate cancellation
+```
+
+**Database State on Cancellation:**
+
+When cancelled, the `agent_sessions` table MUST be updated:
+
+- `phase` → `"idle"` (allows new cycle to start)
+- `outcome` → `"cancelled"` (distinct from failures)
+- `error_message` → cancellation reason
+- `completed_at` → current timestamp
+
+This mirrors how training/backtesting handle cancellation - both the OperationsService operation AND the domain-specific state (session) must be updated.
+
+**2. Comprehensive Error Handling (MANDATORY)**
+
+Handle all edge cases that training/backtesting also handle:
+
+```python
+async def _run_agent_with_tracking(self, operation_id: str, session: AgentSession, ...):
+    try:
+        # ... main execution ...
+
+    except asyncio.CancelledError:
+        # Cancellation handling (see above)
+        await db.update_session(session.id, phase="idle", outcome="cancelled")
+        raise
+
+    except asyncio.TimeoutError:
+        # Anthropic API timeout
+        await db.update_session(session.id, phase="idle", outcome="failed_timeout")
+        await operations_service.fail_operation(operation_id, "Anthropic API timeout")
+        raise
+
+    except Exception as e:
+        # General failure - capture partial token counts if available
+        await db.update_session(
+            session.id,
+            phase="idle",
+            outcome="failed_design",
+            error_message=str(e),
+            # Capture tokens consumed before failure (if available)
+            tokens_used=getattr(self, '_partial_token_count', 0)
+        )
+        await operations_service.fail_operation(operation_id, str(e))
+        raise
+```
+
+**3. Timeout Configuration**
+
+Set explicit timeout for Anthropic API calls (prevents hung operations):
+
+```python
+# In invoker.py
+self.client = anthropic.Anthropic(timeout=300.0)  # 5 minute timeout
+```
+
+**4. Backend Restart Recovery**
+
+On backend startup, check for orphaned sessions (added to trigger service):
+
+```python
+async def recover_orphaned_sessions(self):
+    """Reset sessions stuck in non-idle phase (e.g., after backend restart)."""
+    orphaned = await db.get_sessions_by_phase(["designing", "training", "backtesting"])
+    for session in orphaned:
+        # Check if corresponding operation exists and is still running
+        # If not, reset session to idle with outcome="failed_interrupted"
+        await db.update_session(session.id, phase="idle", outcome="failed_interrupted")
+```
+
+**Concurrent Operation Prevention:**
+
+The trigger service naturally prevents concurrent operations via session state:
+
+- If `session.phase != "idle"`, trigger won't start new operation
+- This matches training/backtesting pattern (relies on domain state, not operation count)
+
+---
+
+**Files to Modify:**
+
+- `ktrdr/api/services/agent_service.py` - Add error handling to _run_agent_with_tracking
+- `ktrdr/agents/invoker.py` - Accept cancellation_token parameter, add timeout config
+- `research_agents/services/trigger.py` - Pass cancellation_token, add recover_orphaned_sessions
+
+---
+
+**Acceptance Criteria (ALL MUST PASS):**
+
+1. ✅ Cancellation via `DELETE /operations/{id}/cancel` stops agent execution
+2. ✅ **On cancellation: agent_sessions.outcome = "cancelled", phase = "idle"**
+3. ✅ **On timeout: agent_sessions.outcome = "failed_timeout", phase = "idle"**
+4. ✅ **On error: agent_sessions.outcome = "failed_design", phase = "idle"**
+5. ✅ Token counts captured even on partial failure
+6. ✅ Backend restart: orphaned sessions recovered to idle state
+
+**Verification Commands:**
+
+```bash
+# Cancel mid-operation
+curl -X DELETE http://localhost:8000/api/v1/operations/<op_id>/cancel
+
+# Verify operation status is CANCELLED
+curl http://localhost:8000/api/v1/operations/<op_id> | jq '.data.status'
+# Expected: "cancelled"
+
+# Verify session state in database (via API or direct query)
+curl http://localhost:8000/api/v1/agent/sessions | jq '.[-1] | {phase, outcome}'
+# Expected: {"phase": "idle", "outcome": "cancelled"}
+
+# Test restart recovery:
+# 1. Start an agent operation
+# 2. Restart backend (docker-compose restart backend)
+# 3. Check session state is reset to idle
+```
+
+**Effort:** 2-3 hours
+
+---
+
+### 1.14 Prompt Engineering for Validation Success
+
+**Status:** TODO
+
+**Goal:** Reduce validation errors by improving prompt with explicit enum values and constraints, targeting >80% first-attempt validation success.
+
+**⚠️ ROOT CAUSE ANALYSIS**
+
+The current prompt has these gaps that cause validation failures:
+
+1. **Missing enum constraints** - Claude invents values like `mode: "universal"` instead of valid `"multi_symbol"` or `"single_symbol"`
+2. **Indicator name case sensitivity** - Claude uses `williams_r` instead of exact name `WilliamsR`
+3. **Parameter name ambiguity** - Claude uses `params` instead of `parameters` for fuzzy sets
+4. **Missing required fields** - Claude omits `feature_id` for indicators
+
+**Issues Observed in E2E Testing:**
 
 - Claude uses wrong enum values (e.g., `mode: "universal"` instead of `mode: "multi_symbol"`)
 - Claude invents indicators that don't exist (e.g., `williams_r` instead of `WilliamsR`)
 - Multiple retry attempts waste tokens (~$0.05-0.10 per failed attempt)
+- Total token cost per session approximately doubles due to validation retries
 
-**Approach:**
+---
 
-1. Add explicit enum values to prompt (valid modes, indicator names)
-2. Include example valid strategy YAML in prompt
-3. Possibly add schema validation tool for Claude to self-check
+**Implementation Requirements:**
+
+**1. Add Explicit Enum Constraints to System Prompt**
+
+Add a new section after the YAML template listing ALL valid enum values:
+
+```markdown
+## ⚠️ CRITICAL: Valid Enum Values
+
+You MUST use these exact values (validation will fail otherwise):
+
+### training_data.symbols.mode
+- `"single_symbol"` - Train on one symbol
+- `"multi_symbol"` - Train on multiple symbols
+
+### training_data.timeframes.mode
+- `"single_timeframe"` - One timeframe only
+- `"multi_timeframe"` - Multiple timeframes
+
+### deployment.target_symbols.mode
+- `"same_as_training"` - Use training symbols
+- `"all_available"` - All available symbols
+- `"custom"` - Custom list
+
+### model.type
+- `"mlp"` - Multi-layer perceptron (recommended)
+
+### model.architecture.activation
+- `"relu"` - Recommended
+- `"tanh"`
+- `"sigmoid"`
+
+### model.architecture.output_activation
+- `"softmax"` - For classification
+- `"sigmoid"` - For binary
+
+### model.training.optimizer
+- `"adam"` - Recommended
+- `"sgd"`
+- `"adamw"`
+
+### training.method
+- `"supervised"` - Labeled data
+
+### training.labels.source
+- `"zigzag"` - ZigZag indicator for swing detection
+
+### fuzzy_sets.<feature_id>.<membership>.type
+- `"triangular"` - 3 parameters: [left, center, right]
+- `"trapezoidal"` - 4 parameters: [left_foot, left_shoulder, right_shoulder, right_foot]
+- `"gaussian"` - 2 parameters: [mean, std_dev]
+```
+
+**2. Add Indicator Name Reference**
+
+Inject exact indicator names in the user prompt context. Modify `_format_indicators()` to emphasize case-sensitive exact names:
+
+```python
+def _format_indicators(self, indicators: list[dict[str, Any]]) -> str:
+    """Format indicators list with exact names for validation."""
+    lines = ["**You MUST use these exact indicator names (case-sensitive):**\n"]
+    for ind in indicators:
+        name = ind.get("name", "unknown")
+        # Emphasize the exact name
+        lines.append(f"- `{name}` - {ind.get('description', '')}")
+    return "\n".join(lines)
+```
+
+**3. Add feature_id Requirement**
+
+Update the YAML template to emphasize `feature_id` is required:
+
+```yaml
+indicators:
+  - name: "rsi"           # MUST match available indicator name exactly
+    feature_id: rsi_14    # REQUIRED: unique identifier for fuzzy_sets
+    period: 14
+    source: "close"
+```
+
+**4. Add Validation Error Prevention Notes**
+
+Add common mistakes section to system prompt:
+
+```markdown
+## ⚠️ Common Validation Errors (AVOID THESE)
+
+1. **Wrong enum values**: Use ONLY values listed above
+2. **Wrong indicator names**: Use ONLY names from Available Indicators list (case-sensitive)
+3. **Missing feature_id**: Every indicator MUST have a unique feature_id
+4. **Wrong fuzzy parameter key**: Use `parameters`, NOT `params`
+5. **Fuzzy set key mismatch**: fuzzy_sets keys MUST match indicator feature_id exactly
+```
+
+**5. (Optional) Add validate_strategy_config Tool**
+
+Consider adding a self-check tool that Claude can use before calling `save_strategy_config`:
+
+```python
+# In ktrdr/agents/tools.py
+{
+    "name": "validate_strategy_config",
+    "description": "Validate a strategy config BEFORE saving. Returns validation errors if any.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "config": {"type": "object", "description": "Strategy config to validate"}
+        },
+        "required": ["config"]
+    }
+}
+```
+
+This allows Claude to catch errors before saving, reducing retry loops.
+
+---
 
 **Files to Modify:**
 
-- `research_agents/prompts/strategy_designer.py` - Enhance prompt
+- `research_agents/prompts/strategy_designer.py`:
+  - Add enum constraints section to `SYSTEM_PROMPT_TEMPLATE`
+  - Modify `_format_indicators()` to emphasize exact names
+  - Add common errors section
+- `ktrdr/agents/tools.py` - (Optional) Add validate_strategy_config tool
+- `ktrdr/agents/executor.py` - (Optional) Implement validate_strategy_config handler
 
-**Acceptance:**
+---
 
-- < 20% validation failure rate on first attempt
-- Token usage reduced by 20%+
+**Acceptance Criteria:**
 
-**Effort:** 1-2 hours
+1. ✅ System prompt includes explicit enum values section
+2. ✅ Indicator names displayed with exact case in context
+3. ✅ Common validation errors section in prompt
+4. ✅ **>80% first-attempt validation success rate** (measure over 5+ test runs)
+5. ✅ Token usage reduced by 20%+ compared to pre-improvement baseline
+6. ✅ (Optional) validate_strategy_config tool available and working
+
+**Measurement Protocol:**
+
+Run 5 agent design cycles and record:
+- First-attempt validation result (pass/fail)
+- Number of retry attempts needed
+- Total tokens used per successful strategy
+
+Calculate: `success_rate = first_attempt_passes / total_cycles`
+
+Target: `success_rate >= 0.80` (4/5 or better)
+
+**Effort:** 2-3 hours
 
 ---
 
