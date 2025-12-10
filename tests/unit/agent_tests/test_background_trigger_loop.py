@@ -465,8 +465,9 @@ class TestAgentServiceWithAnthropicInvoker:
 
         from ktrdr.api.services.agent_service import AgentService
 
-        # Get the source code of the trigger method
-        source = inspect.getsource(AgentService.trigger)
+        # Get the source code of the _run_agent_with_tracking method
+        # (Agent execution is now in background task, invoker created there)
+        source = inspect.getsource(AgentService._run_agent_with_tracking)
 
         # Should use AnthropicAgentInvoker, not ClaudeCodeInvoker
         assert "AnthropicAgentInvoker" in source or "anthropic" in source.lower()

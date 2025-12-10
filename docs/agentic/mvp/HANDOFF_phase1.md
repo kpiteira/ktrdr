@@ -574,3 +574,58 @@ service = TriggerService(..., tool_executor=tool_executor)
 ```
 
 This aligns with `startup.py` which was already doing this correctly for the background loop.
+
+### OperationsService Integration Pattern (Task 1.13a)
+
+Agent operations now integrate with KTRDR's unified async operations infrastructure:
+
+```python
+# In agent_service.py trigger():
+operation = await self._operations_service.create_operation(
+    operation_type=OperationType.AGENT_DESIGN,
+    metadata=OperationMetadata(...)
+)
+operation_id = operation.operation_id
+
+task = asyncio.create_task(self._run_agent_with_tracking(operation_id, db))
+await self._operations_service.start_operation(operation_id, task)
+
+# Return immediately
+return {"operation_id": operation_id, "status": "started", ...}
+```
+
+**Key Architectural Decision:**
+
+Agent execution moved to background task (`_run_agent_with_tracking`) so trigger returns immediately with `operation_id`. This follows the exact same pattern as training/backtesting operations.
+
+**Progress Checkpoints:**
+
+```text
+5%  - Preparing agent context
+10% - Creating agent session
+20% - Calling Anthropic API
+80% - Processing agent response
+100% - Complete (via complete_operation)
+```
+
+**Token Tracking:**
+
+Result summary includes token counts for cost monitoring:
+
+```python
+await self._operations_service.complete_operation(
+    operation_id,
+    result_summary={
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": total_tokens,
+        ...
+    }
+)
+```
+
+**OpenTelemetry Spans:**
+
+- `@trace_service_method("agent.trigger")` - On trigger entry point
+- `create_service_span("agent.design_strategy", operation_id=...)` - During execution
+- Span attributes: `agent.session_id`, `agent.input_tokens`, etc.

@@ -1,13 +1,26 @@
 """
-Agent API service layer.
+Agent API service layer with OperationsService integration (Task 1.13a).
 
 This service wraps the TriggerService to provide API-compatible responses
-for agent management endpoints.
+for agent management endpoints. Agent operations follow the same patterns
+as training/backtesting operations:
+- Operations tracked via OperationsService
+- Progress queryable via standard operations API
+- Token counts visible in result_summary
+- OpenTelemetry spans for observability
 """
 
-from typing import Any
+import asyncio
+from typing import Any, Optional
 
 from ktrdr import get_logger
+from ktrdr.api.models.operations import (
+    OperationMetadata,
+    OperationProgress,
+    OperationType,
+)
+from ktrdr.api.services.operations_service import get_operations_service
+from ktrdr.monitoring.service_telemetry import create_service_span, trace_service_method
 from research_agents.database.queries import get_agent_db
 from research_agents.services.trigger import TriggerConfig
 
@@ -18,18 +31,24 @@ class AgentService:
     """Service layer for agent API operations.
 
     This class provides methods that map to the API endpoints:
-    - trigger: Trigger a research cycle
+    - trigger: Trigger a research cycle (returns operation_id)
     - get_status: Get current agent status
     - list_sessions: List recent sessions
 
-    The service wraps the TriggerService and AgentDatabase to provide
-    API-compatible response structures.
+    The service integrates with OperationsService for unified operation tracking,
+    following the same patterns as training and backtesting operations.
     """
 
-    def __init__(self):
-        """Initialize the agent service."""
+    def __init__(self, operations_service: Optional[Any] = None):
+        """Initialize the agent service.
+
+        Args:
+            operations_service: Optional OperationsService instance (for testing).
+                               If not provided, uses the global singleton.
+        """
         self._config = TriggerConfig.from_env()
         self._db = None  # Lazy initialization
+        self._operations_service = operations_service or get_operations_service()
 
     async def _get_db(self):
         """Get database instance (lazy initialization)."""
@@ -37,8 +56,12 @@ class AgentService:
             self._db = await get_agent_db()
         return self._db
 
+    @trace_service_method("agent.trigger")
     async def trigger(self, dry_run: bool = False) -> dict[str, Any]:
         """Trigger a research cycle.
+
+        Returns operation_id immediately. Agent execution runs in background.
+        Progress can be queried via GET /operations/{operation_id}.
 
         Args:
             dry_run: If True, check conditions but don't actually trigger.
@@ -47,6 +70,7 @@ class AgentService:
             Dict with trigger result including:
             - success: Whether the operation completed
             - triggered: Whether a new cycle was started
+            - operation_id: Operation ID for tracking (if triggered)
             - session_id: New session ID (if triggered)
             - reason: Why it wasn't triggered (if not)
             - message: Human-readable status message
@@ -82,48 +106,191 @@ class AgentService:
                 "message": "Dry run - would trigger new cycle",
             }
 
-        # Import here to avoid circular imports
-        from ktrdr.agents.executor import ToolExecutor
-        from ktrdr.agents.invoker import AnthropicAgentInvoker, AnthropicInvokerConfig
-        from ktrdr.api.services.agent_context import AgentMCPContextProvider
-        from research_agents.services.trigger import TriggerService
+        # Create operation in OperationsService BEFORE starting work
+        operation = await self._operations_service.create_operation(
+            operation_type=OperationType.AGENT_DESIGN,
+            metadata=OperationMetadata(
+                symbol="N/A",  # Agent doesn't operate on specific symbols
+                timeframe="N/A",
+                mode="strategy_design",
+                start_date=None,
+                end_date=None,
+                parameters={
+                    "trigger_reason": "start_new_cycle",
+                    "agent_enabled": self._config.enabled,
+                },
+            ),
+        )
+        operation_id = operation.operation_id
 
-        # Create and use TriggerService with modern AnthropicAgentInvoker
-        invoker_config = AnthropicInvokerConfig.from_env()
-        invoker = AnthropicAgentInvoker(config=invoker_config)
-        context_provider = AgentMCPContextProvider()
-        tool_executor = ToolExecutor()
-
-        service = TriggerService(
-            config=self._config,
-            db=db,
-            invoker=invoker,
-            context_provider=context_provider,
-            tool_executor=tool_executor,
+        # Create background task for agent execution
+        task = asyncio.create_task(
+            self._run_agent_with_tracking(operation_id, db),
+            name=f"agent_design_{operation_id}",
         )
 
-        try:
-            result = await service.check_and_trigger()
-            return {
-                "success": True,
-                "triggered": result.get("triggered", False),
-                "session_id": result.get("session_id"),
-                "reason": result.get("reason"),
-                "message": (
-                    "Research cycle started"
-                    if result.get("triggered")
-                    else result.get("reason", "Not triggered")
-                ),
-            }
-        except Exception as e:
-            logger.error(f"Failed to trigger agent: {e}")
-            return {
-                "success": False,
-                "triggered": False,
-                "error": str(e),
-                "message": f"Failed to trigger: {str(e)}",
-            }
+        # Start operation (registers task for cancellation)
+        await self._operations_service.start_operation(operation_id, task)
 
+        logger.info(f"Started agent design operation: {operation_id}")
+
+        # Return immediately with operation_id
+        return {
+            "success": True,
+            "triggered": True,
+            "operation_id": operation_id,
+            "status": "started",
+            "message": "Research cycle started - query progress via /operations/{operation_id}",
+        }
+
+    async def _run_agent_with_tracking(
+        self,
+        operation_id: str,
+        db: Any,
+    ) -> None:
+        """Execute agent with progress tracking.
+
+        This method runs in background and tracks progress through OperationsService.
+
+        Args:
+            operation_id: Operation ID for progress tracking
+            db: Agent database instance
+        """
+        session_id: Optional[int] = None
+
+        try:
+            with create_service_span(
+                "agent.design_strategy",
+                operation_id=operation_id,
+            ) as span:
+                # Progress: Preparing context (5%)
+                await self._operations_service.update_progress(
+                    operation_id,
+                    OperationProgress(
+                        percentage=5.0,
+                        current_step="Preparing agent context",
+                        steps_completed=1,
+                        steps_total=5,
+                        items_processed=0,
+                        items_total=None,
+                        current_item=None,
+                    ),
+                )
+
+                # Import components (done here to avoid circular imports)
+                from ktrdr.agents.executor import ToolExecutor
+                from ktrdr.agents.invoker import (
+                    AnthropicAgentInvoker,
+                    AnthropicInvokerConfig,
+                )
+                from ktrdr.api.services.agent_context import AgentMCPContextProvider
+                from research_agents.services.trigger import TriggerService
+
+                # Create invoker and tools
+                invoker_config = AnthropicInvokerConfig.from_env()
+                invoker = AnthropicAgentInvoker(config=invoker_config)
+                context_provider = AgentMCPContextProvider()
+                tool_executor = ToolExecutor()
+
+                # Progress: Creating session (10%)
+                await self._operations_service.update_progress(
+                    operation_id,
+                    OperationProgress(
+                        percentage=10.0,
+                        current_step="Creating agent session",
+                        steps_completed=1,
+                        steps_total=5,
+                        items_processed=0,
+                        items_total=None,
+                        current_item=None,
+                    ),
+                )
+
+                service = TriggerService(
+                    config=self._config,
+                    db=db,
+                    invoker=invoker,
+                    context_provider=context_provider,
+                    tool_executor=tool_executor,
+                )
+
+                # Progress: Calling Anthropic API (20%)
+                await self._operations_service.update_progress(
+                    operation_id,
+                    OperationProgress(
+                        percentage=20.0,
+                        current_step="Calling Anthropic API",
+                        steps_completed=2,
+                        steps_total=5,
+                        items_processed=0,
+                        items_total=None,
+                        current_item=None,
+                    ),
+                )
+                span.set_attribute("agent.phase", "invoking_anthropic")
+
+                # Execute trigger (this does the actual work)
+                result = await service.check_and_trigger()
+
+                session_id = result.get("session_id")
+                if session_id:
+                    span.set_attribute("agent.session_id", session_id)
+
+                # Progress: Processing response (80%)
+                await self._operations_service.update_progress(
+                    operation_id,
+                    OperationProgress(
+                        percentage=80.0,
+                        current_step="Processing agent response",
+                        steps_completed=4,
+                        steps_total=5,
+                        items_processed=0,
+                        items_total=None,
+                        current_item=None,
+                    ),
+                )
+
+                # Get token counts from result (if available)
+                input_tokens = result.get("input_tokens", 0)
+                output_tokens = result.get("output_tokens", 0)
+                total_tokens = input_tokens + output_tokens
+
+                if total_tokens > 0:
+                    span.set_attribute("agent.input_tokens", input_tokens)
+                    span.set_attribute("agent.output_tokens", output_tokens)
+                    span.set_attribute("agent.total_tokens", total_tokens)
+
+                # Complete operation with result summary
+                await self._operations_service.complete_operation(
+                    operation_id,
+                    result_summary={
+                        "session_id": session_id,
+                        "strategy_name": result.get("strategy_name"),
+                        "triggered": result.get("triggered", False),
+                        "input_tokens": input_tokens,
+                        "output_tokens": output_tokens,
+                        "total_tokens": total_tokens,
+                    },
+                )
+
+                logger.info(
+                    f"Agent design operation {operation_id} completed: "
+                    f"session_id={session_id}, tokens={total_tokens}"
+                )
+
+        except asyncio.CancelledError:
+            # Handle cancellation
+            logger.info(f"Agent operation {operation_id} cancelled")
+            # OperationsService handles marking as CANCELLED
+            raise
+
+        except Exception as e:
+            # Fail operation on error
+            logger.error(f"Agent operation {operation_id} failed: {e}")
+            await self._operations_service.fail_operation(operation_id, str(e))
+            raise
+
+    @trace_service_method("agent.get_status")
     async def get_status(self, verbose: bool = False) -> dict[str, Any]:
         """Get current agent status.
 
@@ -178,6 +345,7 @@ class AgentService:
 
         return result
 
+    @trace_service_method("agent.list_sessions")
     async def list_sessions(self, limit: int = 10) -> dict[str, Any]:
         """List recent sessions.
 

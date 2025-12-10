@@ -30,6 +30,7 @@ class OperationType(str, Enum):
     BACKTESTING = "backtesting"
     INDICATOR_COMPUTE = "indicator_compute"
     FUZZY_ANALYSIS = "fuzzy_analysis"
+    AGENT_DESIGN = "agent_design"  # Agent strategy design operation
     DUMMY = "dummy"
 
 
