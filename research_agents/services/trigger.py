@@ -374,6 +374,28 @@ class TriggerService:
                     output_tokens=result.output_tokens,
                     session_id=session_id,
                 )
+
+                # Step 6: Update session to DESIGNED if successful
+                if result.success:
+                    # Find the most recently saved strategy
+                    from research_agents.services.strategy_service import (
+                        get_recent_strategies,
+                    )
+
+                    recent = await get_recent_strategies(n=1)
+                    strategy_name = recent[0]["name"] if recent else None
+
+                    await self.db.update_session(
+                        session_id=session_id,
+                        phase=SessionPhase.DESIGNED,
+                        strategy_name=strategy_name,
+                    )
+                    logger.info(
+                        "Session updated to DESIGNED",
+                        session_id=session_id,
+                        strategy_name=strategy_name,
+                    )
+
                 return {
                     "triggered": True,
                     "reason": "no_active_session",

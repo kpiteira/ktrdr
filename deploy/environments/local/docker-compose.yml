@@ -53,7 +53,7 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./config:/app/config:ro
-      - ./strategies:/app/strategies:ro
+      - ./strategies:/app/strategies  # Writable for agent to save strategies
       - ./models:/app/models
       - ./output:/app/output
       - ./training_analytics:/app/training_analytics
@@ -81,6 +81,9 @@ services:
       - IB_HOST_SERVICE_URL=http://host.docker.internal:5001
       # JWT for API auth
       - JWT_SECRET=${JWT_SECRET:-local-dev-secret-minimum-32-characters-long}
+      # Agent configuration (Phase 1)
+      - AGENT_ENABLED=${AGENT_ENABLED:-false}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
