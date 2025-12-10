@@ -529,7 +529,7 @@ AGENT_MODEL=claude-sonnet-4-20250514  # Or claude-opus-4-20250514
 
 ### 1.11 Tool Definitions & Executor
 
-**Status:** TODO
+**Status:** DONE (2025-12-09)
 
 **Goal:** Define tool schemas for Anthropic API and implement ToolExecutor
 
