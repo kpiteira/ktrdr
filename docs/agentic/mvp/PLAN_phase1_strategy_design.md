@@ -706,7 +706,7 @@ These tasks address quality-of-life improvements discovered during E2E testing. 
 | Task | Description | Effort | Dependencies | Status |
 |------|-------------|--------|--------------|--------|
 | 1.13a | Core OperationsService Integration | 2-3h | 1.12 | **REVIEW** |
-| 1.13b | Cancellation, Error Handling & Recovery | 2-3h | 1.13a | **TODO** |
+| 1.13b | Cancellation, Error Handling & Recovery | 2-3h | 1.13a | **REVIEW** |
 | 1.14 | Improve prompt to reduce validation errors | 2-3h | 1.12 | **TODO** |
 
 ### 1.13a Core OperationsService Integration
@@ -892,7 +892,7 @@ curl http://localhost:8000/api/v1/operations/<op_id> | jq '.data.progress'
 
 ### 1.13b Cancellation, Error Handling & Recovery
 
-**Status:** TODO
+**Status:** REVIEW
 
 **Goal:** Add cancellation support, comprehensive error handling, and backend restart recovery to agent operations.
 
