@@ -699,6 +699,74 @@ class ToolExecutor:
 
 ---
 
+## Phase 1.5: Polish (Optional, Recommended Before Phase 2)
+
+These tasks address quality-of-life improvements discovered during E2E testing. Not blocking, but improve consistency with rest of KTRDR.
+
+| Task | Description | Effort | Dependencies | Status |
+|------|-------------|--------|--------------|--------|
+| 1.13 | Add OperationsService to agent trigger | 2-3h | 1.12 | **TODO** |
+| 1.14 | Improve prompt to reduce validation errors | 1-2h | 1.12 | **TODO** |
+
+### 1.13 Add OperationsService Integration
+
+**Status:** TODO
+
+**Goal:** Add progress tracking to agent operations using existing OperationsService pattern (same as training/backtesting).
+
+**What This Enables:**
+
+- Progress visibility ("Calling Anthropic API...", "Executing tool: save_strategy_config...")
+- Operation ID for polling via `/api/v1/operations/{id}`
+- Cancellation support
+- Consistent UX across all long-running operations
+
+**Files to Modify:**
+
+- `ktrdr/api/services/agent_service.py` - Register operation, track progress
+- `research_agents/services/trigger.py` - Emit progress events
+
+**Acceptance:**
+
+- Operation ID returned from `/agent/trigger`
+- Progress queryable via `/operations/{id}`
+- Token counts visible in progress
+
+**Effort:** 2-3 hours
+
+---
+
+### 1.14 Prompt Engineering for Validation
+
+**Status:** TODO
+
+**Goal:** Reduce validation errors by improving prompt with explicit enum values and constraints.
+
+**Issues Observed:**
+
+- Claude uses wrong enum values (e.g., `mode: "universal"` instead of `mode: "multi_symbol"`)
+- Claude invents indicators that don't exist (e.g., `williams_r` instead of `WilliamsR`)
+- Multiple retry attempts waste tokens (~$0.05-0.10 per failed attempt)
+
+**Approach:**
+
+1. Add explicit enum values to prompt (valid modes, indicator names)
+2. Include example valid strategy YAML in prompt
+3. Possibly add schema validation tool for Claude to self-check
+
+**Files to Modify:**
+
+- `research_agents/prompts/strategy_designer.py` - Enhance prompt
+
+**Acceptance:**
+
+- < 20% validation failure rate on first attempt
+- Token usage reduced by 20%+
+
+**Effort:** 1-2 hours
+
+---
+
 ## Out of Scope for Phase 1
 
 - Starting training (Phase 2)
