@@ -83,21 +83,23 @@ class AgentService:
             }
 
         # Import here to avoid circular imports
+        from ktrdr.agents.executor import ToolExecutor
         from ktrdr.agents.invoker import AnthropicAgentInvoker, AnthropicInvokerConfig
         from ktrdr.api.services.agent_context import AgentMCPContextProvider
         from research_agents.services.trigger import TriggerService
 
-        # Create and use TriggerService with modern AnthropicAgentInvoker (Task 1.10)
+        # Create and use TriggerService with modern AnthropicAgentInvoker
         invoker_config = AnthropicInvokerConfig.from_env()
         invoker = AnthropicAgentInvoker(config=invoker_config)
         context_provider = AgentMCPContextProvider()
+        tool_executor = ToolExecutor()
 
         service = TriggerService(
             config=self._config,
             db=db,
             invoker=invoker,
             context_provider=context_provider,
-            tool_executor=None,  # Task 1.11 will add ToolExecutor
+            tool_executor=tool_executor,
         )
 
         try:

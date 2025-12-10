@@ -539,3 +539,38 @@ HandlerResult = dict[str, Any] | list[dict[str, Any]]
 ```
 
 This enables tools like `get_available_indicators` to return lists directly without wrapping.
+
+### Real E2E Testing Pattern (Task 1.12)
+
+Real E2E tests that invoke the actual Anthropic API are opt-in via environment variables:
+
+```bash
+# Enable real tests (expensive, 30-120s per invocation)
+AGENT_E2E_REAL_INVOKE=true DATABASE_URL="..." ANTHROPIC_API_KEY="..." \
+    uv run pytest tests/integration/agent_tests/test_agent_real_e2e.py -v -s
+```
+
+**Key Design Decisions:**
+
+1. **Opt-in via env vars**: Tests skip by default, require `AGENT_E2E_REAL_INVOKE=true`
+2. **Temporary strategies dir**: Tests use `tmp_path` to avoid polluting real `strategies/`
+3. **Token tracking verification**: Dedicated test validates token counts from API
+4. **Tool integration test**: Verifies ToolExecutor works correctly with real API loop
+
+**Test Files:**
+
+- `tests/integration/agent_tests/test_agent_real_e2e.py` - Real E2E tests
+- `docs/testing/AGENT_E2E_TESTING.md` - Testing guide
+
+**Bug Fixed (Task 1.12):**
+
+`ktrdr/api/services/agent_service.py` was passing `tool_executor=None` to TriggerService, causing manual API triggers to fail tool execution. Fixed by importing and instantiating `ToolExecutor()`:
+
+```python
+from ktrdr.agents.executor import ToolExecutor
+
+tool_executor = ToolExecutor()
+service = TriggerService(..., tool_executor=tool_executor)
+```
+
+This aligns with `startup.py` which was already doing this correctly for the background loop.
