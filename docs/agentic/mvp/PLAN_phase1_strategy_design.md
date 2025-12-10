@@ -705,13 +705,13 @@ These tasks address quality-of-life improvements discovered during E2E testing. 
 
 | Task | Description | Effort | Dependencies | Status |
 |------|-------------|--------|--------------|--------|
-| 1.13a | Core OperationsService Integration | 2-3h | 1.12 | **TODO** |
+| 1.13a | Core OperationsService Integration | 2-3h | 1.12 | **REVIEW** |
 | 1.13b | Cancellation, Error Handling & Recovery | 2-3h | 1.13a | **TODO** |
 | 1.14 | Improve prompt to reduce validation errors | 2-3h | 1.12 | **TODO** |
 
 ### 1.13a Core OperationsService Integration
 
-**Status:** TODO
+**Status:** REVIEW
 
 **Goal:** Add basic async operation tracking to agent invocations using the **exact same patterns** as training and backtesting operations.
 

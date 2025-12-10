@@ -197,9 +197,9 @@ class TestAgentRealE2E:
         # Assert - Session exists and is in DESIGNED state
         session = await clean_db.get_session(session_id)
         assert session is not None, "Session not found in database"
-        assert session.phase == SessionPhase.DESIGNED, (
-            f"Session phase is {session.phase}, expected DESIGNED"
-        )
+        assert (
+            session.phase == SessionPhase.DESIGNED
+        ), f"Session phase is {session.phase}, expected DESIGNED"
         assert session.strategy_name is not None, "Strategy name not set on session"
 
         print(f"✅ Session {session_id} in DESIGNED state")
@@ -207,7 +207,9 @@ class TestAgentRealE2E:
 
         # Assert - Strategy file was created
         strategy_files = list(Path(test_strategies_dir).glob("*.yaml"))
-        assert len(strategy_files) >= 1, f"No strategy files created in {test_strategies_dir}"
+        assert (
+            len(strategy_files) >= 1
+        ), f"No strategy files created in {test_strategies_dir}"
 
         strategy_file = strategy_files[0]
         print(f"✅ Strategy file created: {strategy_file.name}")
@@ -223,13 +225,17 @@ class TestAgentRealE2E:
         validator = StrategyValidator()
         validation_result = validator.validate_strategy_config(loaded_config)
 
-        assert validation_result.is_valid, (
-            f"Strategy validation failed: {validation_result.errors}"
-        )
+        assert (
+            validation_result.is_valid
+        ), f"Strategy validation failed: {validation_result.errors}"
 
         print("✅ Strategy file validates successfully")
-        print(f"   Strategy type: {loaded_config.get('model', {}).get('type', 'unknown')}")
-        print(f"   Indicators: {[i.get('name') for i in loaded_config.get('indicators', [])]}")
+        print(
+            f"   Strategy type: {loaded_config.get('model', {}).get('type', 'unknown')}"
+        )
+        print(
+            f"   Indicators: {[i.get('name') for i in loaded_config.get('indicators', [])]}"
+        )
 
         # Log token usage from the result
         if "input_tokens" in result and "output_tokens" in result:
@@ -280,7 +286,9 @@ class TestAgentRealE2E:
         # Assert - The trigger should succeed
         # If tool_executor is None, the agent will fail to execute tools
         assert result["success"] is True, f"Trigger failed: {result.get('error')}"
-        assert result["triggered"] is True, f"Trigger not triggered: {result.get('reason')}"
+        assert (
+            result["triggered"] is True
+        ), f"Trigger not triggered: {result.get('reason')}"
 
         # Get the session to verify state
         db = await service._get_db()
@@ -339,8 +347,11 @@ class TestAgentRealE2E:
 
         async def test_save(name: str, config: dict, description: str = ""):
             from research_agents.services.strategy_service import save_strategy_config
+
             return await save_strategy_config(
-                name=name, config=config, description=description,
+                name=name,
+                config=config,
+                description=description,
                 strategies_dir=test_strategies_dir,
             )
 
@@ -370,9 +381,9 @@ class TestAgentRealE2E:
 
         # Strategy design typically uses 3000-5000 input tokens
         # and 500-2000 output tokens
-        assert result.input_tokens > 1000, (
-            f"Input tokens suspiciously low: {result.input_tokens}"
-        )
+        assert (
+            result.input_tokens > 1000
+        ), f"Input tokens suspiciously low: {result.input_tokens}"
 
 
 class MockContextProviderForRealTest:
@@ -390,7 +401,13 @@ class MockContextProviderForRealTest:
                 "type": "momentum",
                 "description": "Relative Strength Index - momentum oscillator",
                 "parameters": [
-                    {"name": "period", "type": "int", "default": 14, "min": 2, "max": 100},
+                    {
+                        "name": "period",
+                        "type": "int",
+                        "default": 14,
+                        "min": 2,
+                        "max": 100,
+                    },
                     {"name": "source", "type": "str", "default": "close"},
                 ],
             },
@@ -399,7 +416,13 @@ class MockContextProviderForRealTest:
                 "type": "trend",
                 "description": "Simple Moving Average",
                 "parameters": [
-                    {"name": "period", "type": "int", "default": 20, "min": 1, "max": 500},
+                    {
+                        "name": "period",
+                        "type": "int",
+                        "default": 20,
+                        "min": 1,
+                        "max": 500,
+                    },
                     {"name": "source", "type": "str", "default": "close"},
                 ],
             },
@@ -494,8 +517,11 @@ class TestAgentToolExecution:
 
         async def test_save(name: str, config: dict, description: str = ""):
             from research_agents.services.strategy_service import save_strategy_config
+
             return await save_strategy_config(
-                name=name, config=config, description=description,
+                name=name,
+                config=config,
+                description=description,
                 strategies_dir=test_strategies_dir,
             )
 
@@ -543,8 +569,8 @@ Save the strategy when complete."""
 
         # Check that a strategy file was created
         strategy_files = list(Path(test_strategies_dir).glob("*.yaml"))
-        assert len(strategy_files) >= 1, (
-            "No strategy file created - tool execution may have failed"
-        )
+        assert (
+            len(strategy_files) >= 1
+        ), "No strategy file created - tool execution may have failed"
 
         print(f"   Strategy file: {strategy_files[0].name}")
