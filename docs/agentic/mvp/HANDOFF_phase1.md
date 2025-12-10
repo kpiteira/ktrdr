@@ -21,6 +21,38 @@ docker-compose -f deploy/environments/local/docker-compose.yml up -d backend
 
 **Lesson**: Unit tests pass but don't catch Docker integration issues. Always E2E test against running containers.
 
+### 1b. Worker Import Chain Breaks When Agent Endpoint Added
+
+**Problem**: Workers crash with `ModuleNotFoundError: No module named 'research_agents'` after adding agent endpoint
+
+**Root Cause**: Import chain:
+
+```text
+workers import ktrdr.api.models.operations
+  → ktrdr/api/__init__.py imports main.py
+  → main.py imports all endpoints including agent
+  → agent imports research_agents
+  → workers don't have research_agents
+```
+
+**Solution**: Removed `app` and `create_application` from `ktrdr/api/__init__.py`. Nothing uses `from ktrdr.api import app` - everything imports directly from `ktrdr.api.main`.
+
+**Lesson**: Be careful about imports in package `__init__.py` files - they trigger on any sub-module import.
+
+### 1c. DATABASE_URL Required for Agent Endpoints
+
+**Problem**: Agent endpoints fail with `No database URL provided and DATABASE_URL not set`
+
+**Symptom**: HTTP 500 on `/agent/status` or `/agent/trigger`
+
+**Solution**: Added to docker-compose backend environment:
+
+```yaml
+- DATABASE_URL=postgresql://${DB_USER:-ktrdr}:${DB_PASSWORD:-localdev}@db:5432/${DB_NAME:-ktrdr}
+```
+
+**Lesson**: The agent session database uses `DATABASE_URL` (PostgreSQL connection string format), not the separate `DB_*` environment variables.
+
 ### 2. Read Phase 0 Handoff First
 
 **Problem**: Phase 0 handoff contains a known limitation that Phase 1 should fix

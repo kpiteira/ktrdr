@@ -70,6 +70,8 @@ services:
       - DB_NAME=${DB_NAME:-ktrdr}
       - DB_USER=${DB_USER:-ktrdr}
       - DB_PASSWORD=${DB_PASSWORD:-localdev}
+      # Full DATABASE_URL for agent sessions (research_agents module)
+      - DATABASE_URL=postgresql://${DB_USER:-ktrdr}:${DB_PASSWORD:-localdev}@db:5432/${DB_NAME:-ktrdr}
       # Backend API URL
       - KTRDR_API_URL=http://backend:8000
       # Observability
