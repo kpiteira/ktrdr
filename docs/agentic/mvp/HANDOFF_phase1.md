@@ -477,3 +477,65 @@ AGENT_MODEL=claude-sonnet-4-20250514  # Claude model
 ANTHROPIC_API_KEY=sk-...       # Required for Anthropic API
 DATABASE_URL=postgresql://...  # Required for session DB
 ```
+
+### ToolExecutor Pattern (Task 1.11)
+
+The ToolExecutor replaces MCP tool execution with in-process handlers:
+
+```python
+# ktrdr/agents/executor.py
+class ToolExecutor:
+    def __init__(self):
+        self.handlers = {
+            "save_strategy_config": self._handle_save_strategy_config,
+            "get_available_indicators": self._handle_get_available_indicators,
+            "get_available_symbols": self._handle_get_available_symbols,
+            "get_recent_strategies": self._handle_get_recent_strategies,
+        }
+
+    async def execute(self, tool_name: str, tool_input: dict) -> dict | list:
+        handler = self.handlers.get(tool_name)
+        if handler is None:
+            return {"error": f"Unknown tool: {tool_name}"}
+        return await handler(**tool_input)
+
+    async def __call__(self, tool_name: str, tool_input: dict) -> dict | list:
+        # Callable interface for invoker compatibility
+        return await self.execute(tool_name, tool_input)
+```
+
+**Tool Implementations:**
+
+- `save_strategy_config` → Uses `research_agents.services.strategy_service.save_strategy_config()`
+- `get_recent_strategies` → Uses `research_agents.services.strategy_service.get_recent_strategies()`
+- `get_available_indicators` → HTTP call to `KTRDR_API_URL/api/v1/indicators/available`
+- `get_available_symbols` → HTTP call to `KTRDR_API_URL/api/v1/data/symbols`
+
+**Integration Point:**
+
+In `startup.py`, the ToolExecutor is now created and passed to TriggerService:
+
+```python
+from ktrdr.agents.executor import ToolExecutor
+
+tool_executor = ToolExecutor()
+
+_agent_trigger_service = TriggerService(
+    config=config,
+    db=db,
+    invoker=invoker,
+    context_provider=context_provider,
+    tool_executor=tool_executor,  # Now provides actual tool execution
+)
+```
+
+**Type Flexibility:**
+
+Tool results can be either `dict` or `list[dict]`:
+
+```python
+# ktrdr/agents/executor.py
+HandlerResult = dict[str, Any] | list[dict[str, Any]]
+```
+
+This enables tools like `get_available_indicators` to return lists directly without wrapping.
