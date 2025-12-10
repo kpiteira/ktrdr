@@ -618,7 +618,7 @@ class ToolExecutor:
 
 ### 1.12 End-to-End Integration Test (Real Agent)
 
-**Status:** TODO
+**Status:** DONE (2025-12-09)
 
 **Goal:** Verify the complete agent system works end-to-end with real Anthropic API invocation
 
@@ -688,8 +688,8 @@ class ToolExecutor:
 | 1.8 | Tests & behavioral validation | 4-5h | All above | ✅ Done |
 | 1.9 | Agent API & Anthropic Integration | 4-5h | 1.8 | ✅ Done |
 | 1.10 | Background Trigger Loop | 2-3h | 1.9 | ✅ Done |
-| 1.11 | Tool Definitions & Executor | 3-4h | 1.9 | **TODO** |
-| 1.12 | Real E2E Integration Test | 2-3h | 1.10, 1.11 | **TODO** |
+| 1.11 | Tool Definitions & Executor | 3-4h | 1.9 | ✅ Done |
+| 1.12 | Real E2E Integration Test | 2-3h | 1.10, 1.11 | ✅ Done |
 
 **Total estimated effort:** 26-38 hours (3-4 days)
 
