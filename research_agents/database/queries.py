@@ -355,6 +355,36 @@ class AgentDatabase:
             for row in rows
         ]
 
+    async def get_sessions_by_phase(
+        self, phases: list[str]
+    ) -> list[AgentSession]:
+        """Get sessions in specific phases (Task 1.13b - orphaned session recovery).
+
+        Used to find sessions stuck in non-idle phases after backend restart.
+
+        Args:
+            phases: List of phase values to filter by (e.g., ["designing", "training"])
+
+        Returns:
+            List of AgentSession objects in the specified phases.
+        """
+        if not phases:
+            return []
+
+        # Build parameterized query with multiple phases
+        placeholders = ", ".join(f"${i+1}" for i in range(len(phases)))
+        query = f"""
+            SELECT id, phase, created_at, updated_at, strategy_name, operation_id, outcome
+            FROM agent_sessions
+            WHERE phase IN ({placeholders})
+            ORDER BY created_at DESC
+        """
+
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, *phases)
+
+        return [self._row_to_session(row) for row in rows]
+
     # Helper methods
 
     def _row_to_session(self, row: asyncpg.Record) -> AgentSession:

@@ -53,10 +53,12 @@ class AnthropicInvokerConfig:
     Attributes:
         model: The Claude model to use (e.g., claude-sonnet-4-20250514)
         max_tokens: Maximum tokens for response generation
+        timeout_seconds: Timeout for API calls in seconds (default: 300 = 5 minutes)
     """
 
     model: str = "claude-sonnet-4-20250514"
     max_tokens: int = 4096
+    timeout_seconds: int = 300  # 5 minutes default (Task 1.13b)
 
     @classmethod
     def from_env(cls) -> AnthropicInvokerConfig:
@@ -65,13 +67,15 @@ class AnthropicInvokerConfig:
         Environment variables:
             AGENT_MODEL: Claude model to use (default: claude-sonnet-4-20250514)
             AGENT_MAX_TOKENS: Maximum tokens for response (default: 4096)
+            AGENT_TIMEOUT_SECONDS: Timeout for API calls (default: 300)
 
         Returns:
             AnthropicInvokerConfig instance with values from environment.
         """
         model = os.getenv("AGENT_MODEL", "claude-sonnet-4-20250514")
         max_tokens = int(os.getenv("AGENT_MAX_TOKENS", "4096"))
-        return cls(model=model, max_tokens=max_tokens)
+        timeout_seconds = int(os.getenv("AGENT_TIMEOUT_SECONDS", "300"))
+        return cls(model=model, max_tokens=max_tokens, timeout_seconds=timeout_seconds)
 
 
 # Type alias for tool executor function
@@ -114,15 +118,20 @@ class AnthropicAgentInvoker:
         """Initialize the Anthropic client.
 
         Lazy import to avoid requiring anthropic package at module load time.
+        Task 1.13b: Configure client with timeout to prevent hung operations.
         """
         try:
             import anthropic
 
-            self.client = anthropic.Anthropic()
+            # Task 1.13b: Set explicit timeout for API calls
+            self.client = anthropic.Anthropic(
+                timeout=float(self.config.timeout_seconds)
+            )
             logger.info(
                 "Initialized Anthropic client",
                 model=self.config.model,
                 max_tokens=self.config.max_tokens,
+                timeout_seconds=self.config.timeout_seconds,
             )
         except ImportError:
             logger.warning("anthropic package not installed - client not initialized")

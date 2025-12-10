@@ -175,6 +175,10 @@ class AgentDatabase(Protocol):
         """Get recent completed sessions for context."""
         ...
 
+    async def get_sessions_by_phase(self, phases: list[str]) -> list[Any]:
+        """Get sessions in specific phases (Task 1.13b)."""
+        ...
+
 
 class ContextProvider(Protocol):
     """Protocol for fetching context data for prompts.
@@ -555,3 +559,50 @@ class TriggerService:
         logger.info("Stopping trigger service")
         self._running = False
         self._stop_event.set()
+
+    async def recover_orphaned_sessions(self) -> int:
+        """Recover orphaned sessions after backend restart (Task 1.13b).
+
+        Sessions can be orphaned when:
+        - Backend crashes or restarts during agent execution
+        - Operation completes but session state wasn't updated
+
+        This method finds sessions stuck in non-idle phases and resets them
+        to allow new cycles to start.
+
+        Returns:
+            Number of sessions recovered.
+        """
+        from research_agents.database.schema import SessionOutcome
+
+        # Non-terminal phases that indicate an interrupted operation
+        # IDLE and COMPLETE are terminal states, all others are active
+        active_phases = ["designing", "designed", "training", "backtesting", "assessing"]
+
+        orphaned = await self.db.get_sessions_by_phase(active_phases)
+
+        if not orphaned:
+            logger.info("No orphaned sessions found")
+            return 0
+
+        logger.info(f"Found {len(orphaned)} orphaned sessions to recover")
+
+        for session in orphaned:
+            try:
+                await self.db.complete_session(
+                    session_id=session.id,
+                    outcome=SessionOutcome.FAILED_INTERRUPTED,
+                )
+                logger.info(
+                    "Recovered orphaned session",
+                    session_id=session.id,
+                    original_phase=session.phase.value if hasattr(session.phase, 'value') else session.phase,
+                )
+            except Exception as e:
+                logger.error(
+                    f"Failed to recover session {session.id}: {e}",
+                    session_id=session.id,
+                    error=str(e),
+                )
+
+        return len(orphaned)
