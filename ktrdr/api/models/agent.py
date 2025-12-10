@@ -14,12 +14,14 @@ class TriggerResponse(BaseModel):
 
     success: bool
     triggered: bool
+    operation_id: Optional[str] = None  # Task 1.13a: Operation ID for tracking
     session_id: Optional[int] = None
     reason: Optional[str] = None
     active_session_id: Optional[int] = None
     message: Optional[str] = None
     dry_run: Optional[bool] = None
     would_trigger: Optional[bool] = None
+    status: Optional[str] = None  # Task 1.13a: Operation status
 
 
 class SessionInfo(BaseModel):
