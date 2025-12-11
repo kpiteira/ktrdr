@@ -1234,6 +1234,149 @@ Target: `success_rate >= 0.80` (4/5 or better)
 
 ---
 
+### 1.15 Parent-Child Operations for Agent Session Lifecycle
+
+**Status:** TODO
+
+**Goal:** Enable proper tracking and cancellation of agent sessions that span multiple operations (design → training → backtest).
+
+**Problem Statement:**
+
+The current architecture has a mismatch between two concepts:
+1. **Operations** - Individual async tasks (design, training, backtest) tracked by OperationsService
+2. **Agent Sessions** - The full research cycle that spans multiple operations
+
+Currently:
+- Each phase (design) creates its own Operation that completes independently
+- Session stays in `DESIGNED` phase (correct - waiting for training in Phase 2)
+- User cannot cancel the session because the Operation is already COMPLETED
+- `ktrdr operations cancel <id>` fails with "Operation cannot be cancelled"
+
+**Example Flow (Current - Broken):**
+```
+Session created → DESIGNING → DESIGNED (session still active!)
+Operation created → RUNNING → COMPLETED (operation done)
+
+User: "ktrdr agent trigger" → "Active session exists (#101)"
+User: "ktrdr operations cancel <id>" → "Operation cannot be cancelled" (already completed)
+User: Stuck - can't start new session, can't cancel existing one
+```
+
+---
+
+**Solution: Parent-Child Operations**
+
+Create a parent Operation that represents the entire Agent Session, with child operations for each phase:
+
+```
+Agent Session Operation (op_agent_session_xxx)  ← RUNNING (parent)
+├── Design Operation (op_agent_design_xxx)       ← COMPLETED (child)
+├── Training Operation (op_training_xxx)         ← PENDING (child, Phase 2)
+└── Backtest Operation (op_backtest_xxx)         ← PENDING (child, Phase 3)
+```
+
+**Benefits:**
+- Each child operation keeps its natural 0-100% progress (ProgressBridges unchanged)
+- Parent aggregates child status for session-level view
+- `ktrdr operations cancel <parent_id>` cancels session + any active child
+- Clear visibility into multi-phase agent lifecycle
+
+---
+
+**Implementation Requirements:**
+
+**1. Extend OperationsService for Parent-Child Relationships**
+
+Add optional `parent_operation_id` field to operations:
+
+```python
+# ktrdr/api/models/operations.py
+class Operation:
+    operation_id: str
+    parent_operation_id: Optional[str] = None  # NEW
+    operation_type: OperationType
+    status: OperationStatus
+    # ... existing fields
+```
+
+**2. Parent Operation Lifecycle**
+
+- Parent created when session starts (before first child)
+- Parent stays RUNNING until:
+  - All children complete successfully → Parent COMPLETED
+  - Any child fails → Parent FAILED
+  - User cancels parent → Parent CANCELLED + cancel active child
+- Parent progress = aggregate of child phases (Design 0-33%, Training 33-66%, Backtest 66-100%)
+
+**3. Cancellation Cascade**
+
+When parent cancelled:
+1. Set parent status to CANCELLED
+2. Find active child operations (status = RUNNING)
+3. Cancel active children (existing cancellation logic)
+4. Mark session as CANCELLED in agent database
+
+**4. CLI/API Updates**
+
+- `ktrdr operations list` - Show parent operations (optionally expand to show children)
+- `ktrdr operations cancel <parent_id>` - Cancels session (existing behavior, now works)
+- `GET /operations/{id}/children` - New endpoint to list child operations
+
+---
+
+**Files to Modify:**
+
+- `ktrdr/api/models/operations.py` - Add `parent_operation_id` field
+- `ktrdr/api/services/operations_service.py`:
+  - Add parent-child relationship methods
+  - Update cancel to cascade to children
+  - Add method to aggregate child status
+- `ktrdr/api/services/agent_service.py`:
+  - Create parent operation on session start
+  - Create child operations for each phase
+  - Link children to parent
+- `ktrdr/api/endpoints/operations.py` - Add children endpoint
+- `ktrdr/cli/operations_commands.py` - Update display for parent operations
+
+---
+
+**Acceptance Criteria:**
+
+1. [ ] Parent operation created when agent session starts
+2. [ ] Design operation created as child of parent
+3. [ ] Parent stays RUNNING while session is active (DESIGNED phase)
+4. [ ] `ktrdr operations list` shows parent operation in RUNNING state
+5. [ ] `ktrdr operations cancel <parent_id>` cancels session successfully
+6. [ ] Session marked CANCELLED in database after cancel
+7. [ ] `ktrdr agent trigger` works after session cancelled
+8. [ ] Existing ProgressBridges work unchanged for child operations
+9. [ ] Unit tests for parent-child operation lifecycle
+10. [ ] Integration test: trigger → design completes → cancel session → trigger again
+
+---
+
+**Design Decisions to Resolve:**
+
+1. **Progress aggregation strategy:**
+   - Option A: Simple phase-based (Design 0-33%, Training 33-66%, Backtest 66-100%)
+   - Option B: Weighted by expected duration
+   - Option C: Just show current phase + child progress
+
+2. **Display format for CLI:**
+   - Option A: Show parent only, children on expand/detail
+   - Option B: Show parent with inline child status
+   - Option C: Separate section for session vs phase operations
+
+3. **Operation type for parent:**
+   - New type: `OperationType.AGENT_SESSION`?
+   - Or reuse: `OperationType.AGENT_DESIGN` with parent flag?
+
+---
+
+**Effort:** 4-6 hours
+
+---
+
 ## Out of Scope for Phase 1
 
 - Starting training (Phase 2)
