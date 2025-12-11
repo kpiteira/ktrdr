@@ -170,13 +170,9 @@ async def _list_operations_async(
             if op.get("duration_seconds"):
                 duration = api_client.format_duration(op["duration_seconds"])
 
-            # Basic row
+            # Basic row - show full operation_id for easy copy-paste
             row = [
-                (
-                    op["operation_id"][-20:] + "..."
-                    if len(op["operation_id"]) > 23
-                    else op["operation_id"]
-                ),  # Truncate long IDs
+                op["operation_id"],
                 op["operation_type"],
                 status_display,
                 progress,
