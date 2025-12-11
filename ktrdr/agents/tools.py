@@ -20,6 +20,29 @@ from typing import Any
 # Tool schema definitions for Anthropic API
 AGENT_TOOLS: list[dict[str, Any]] = [
     {
+        "name": "validate_strategy_config",
+        "description": (
+            "Validate a strategy configuration before saving. Returns validation "
+            "results including any errors, warnings, and suggestions. Use this to "
+            "check your strategy config is valid BEFORE calling save_strategy_config. "
+            "This helps catch issues early and reduces save failures."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "config": {
+                    "type": "object",
+                    "description": (
+                        "Complete strategy configuration dictionary to validate. "
+                        "Must include: scope, training_data, deployment, indicators, "
+                        "fuzzy_sets, model, decisions, and training sections."
+                    ),
+                },
+            },
+            "required": ["config"],
+        },
+    },
+    {
         "name": "save_strategy_config",
         "description": (
             "Save a strategy configuration to the strategies directory. "

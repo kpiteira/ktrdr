@@ -206,6 +206,66 @@ training:
     test: 0.15
 ```
 
+## CRITICAL: Valid Enum Values
+
+You MUST use ONLY these exact values. Using any other value will cause validation failure.
+
+### training_data.symbols.mode
+- `"single_symbol"` - Train on one symbol only
+- `"multi_symbol"` - Train on multiple symbols
+
+### training_data.timeframes.mode
+- `"single_timeframe"` - Use one timeframe only
+- `"multi_timeframe"` - Use multiple timeframes
+
+### deployment.target_symbols.mode
+- `"same_as_training"` - Deploy to same symbols as training
+- `"all_available"` - Deploy to all available symbols
+- `"custom"` - Specify custom symbol list
+
+### deployment.target_timeframes.mode
+- `"single_timeframe"` - Deploy to single timeframe
+- `"same_as_training"` - Deploy to same timeframes as training
+
+### fuzzy_sets type (with required parameter counts)
+- `"triangular"` - Requires exactly 3 parameters: [left, center, right]
+- `"trapezoidal"` - Requires exactly 4 parameters: [left_bottom, left_top, right_top, right_bottom]
+- `"gaussian"` - Requires exactly 2 parameters: [mean, sigma]
+- `"sigmoid"` - Requires exactly 2 parameters: [center, slope]
+
+### model.type
+- `"mlp"` - Multi-layer perceptron (currently the only supported type)
+
+### model.architecture.activation
+- `"relu"` - ReLU activation
+- `"tanh"` - Hyperbolic tangent
+- `"sigmoid"` - Sigmoid activation
+
+### model.architecture.output_activation
+- `"softmax"` - For classification (3-class: buy/hold/sell)
+- `"sigmoid"` - For binary classification
+
+### model.training.optimizer
+- `"adam"` - Adam optimizer (recommended)
+- `"sgd"` - Stochastic gradient descent
+
+## CRITICAL: Common Validation Errors (AVOID THESE)
+
+1. **Missing feature_id**: Every indicator MUST have a `feature_id` field. This is REQUIRED.
+   - WRONG: `- name: "RSI", period: 14`
+   - CORRECT: `- name: "RSI", feature_id: "rsi_14", period: 14`
+
+2. **fuzzy_sets keys must match feature_id exactly**: The keys in `fuzzy_sets` must match the `feature_id` of the corresponding indicator.
+   - If indicator has `feature_id: "rsi_14"`, then fuzzy_sets must have key `rsi_14:`
+
+3. **Use `parameters` not `params`**: The field name is `parameters` (not `params`) for fuzzy set definitions.
+   - WRONG: `params: [0, 30, 50]`
+   - CORRECT: `parameters: [0, 30, 50]`
+
+4. **Indicator names are case-sensitive**: Use the exact name as shown in the Available Indicators list (with backticks).
+
+5. **DO NOT invent enum values**: Only use values listed above. Never use values like `mode: "universal"` or `type: "adaptive"`.
+
 ## Design Guidelines
 
 1. **Be creative**: Try different approaches, don't just vary parameters
@@ -402,15 +462,24 @@ Then update your state with the assessment and mark the cycle as complete."""
         return "\n\n".join(sections)
 
     def _format_indicators(self, indicators: list[dict[str, Any]]) -> str:
-        """Format indicators list for display."""
+        """Format indicators list for display.
+
+        Uses backticks around indicator names to emphasize exact case and
+        adds a case-sensitivity warning.
+        """
         lines = []
+        # Add case sensitivity warning at the top
+        lines.append(
+            "**⚠️ Indicator names are case-sensitive. You must use the exact name below.**\n"
+        )
         for ind in indicators:
             name = ind.get("name", "unknown")
             desc = ind.get("description", "")
             params = ind.get("parameters", [])
             param_str = ", ".join(p.get("name", "") for p in params) if params else ""
+            # Use backticks around indicator name for code formatting
             lines.append(
-                f"- **{name}**: {desc}"
+                f"- `{name}`: {desc}"
                 + (f" (params: {param_str})" if param_str else "")
             )
         return "\n".join(lines) if lines else "No indicators available"
