@@ -1,0 +1,136 @@
+name: trend_momentum_divergence_v1
+description: Mean reversion strategy detecting trend exhaustion through divergence
+  between trend strength (ADX), momentum (Williams %R), and volume patterns (MFI)
+version: '1.0'
+hypothesis: Strong trends exhibit momentum exhaustion detectable through divergence
+  between ADX trend strength, Williams %R momentum, and MFI volume patterns, creating
+  mean reversion opportunities
+scope: universal
+training_data:
+  symbols:
+    mode: multi_symbol
+    list:
+    - EURUSD
+    - GBPUSD
+    - USDJPY
+  timeframes:
+    mode: single
+    list:
+    - 1h
+    base_timeframe: 1h
+  history_required: 150
+deployment:
+  target_symbols:
+    mode: universal
+  target_timeframes:
+    mode: single
+    supported:
+    - 1h
+indicators:
+- name: ADX
+  feature_id: adx_21
+  period: 21
+  source: close
+- name: WilliamsR
+  feature_id: williams_r_14
+  period: 14
+  source: close
+- name: MFI
+  feature_id: mfi_20
+  period: 20
+  source: close
+fuzzy_sets:
+  adx_21:
+    weak_trend:
+      type: triangular
+      parameters:
+      - 0
+      - 15
+      - 25
+    moderate_trend:
+      type: triangular
+      parameters:
+      - 20
+      - 35
+      - 50
+    strong_trend:
+      type: triangular
+      parameters:
+      - 45
+      - 65
+      - 100
+  williams_r_14:
+    oversold:
+      type: triangular
+      parameters:
+      - -100
+      - -85
+      - -70
+    neutral:
+      type: triangular
+      parameters:
+      - -65
+      - -50
+      - -35
+    overbought:
+      type: triangular
+      parameters:
+      - -30
+      - -15
+      - 0
+  mfi_20:
+    low_volume:
+      type: triangular
+      parameters:
+      - 0
+      - 20
+      - 35
+    normal_volume:
+      type: triangular
+      parameters:
+      - 30
+      - 50
+      - 70
+    high_volume:
+      type: triangular
+      parameters:
+      - 65
+      - 80
+      - 100
+model:
+  type: mlp
+  architecture:
+    hidden_layers:
+    - 48
+    - 24
+    - 12
+    activation: relu
+    output_activation: softmax
+    dropout: 0.25
+  features:
+    include_price_context: false
+    lookback_periods: 3
+    scale_features: true
+  training:
+    learning_rate: 0.0015
+    batch_size: 64
+    epochs: 75
+    optimizer: adam
+    early_stopping:
+      enabled: true
+      patience: 12
+      min_delta: 0.0005
+decisions:
+  output_format: classification
+  confidence_threshold: 0.65
+  position_awareness: true
+training:
+  method: supervised
+  labels:
+    source: zigzag
+    zigzag_threshold: 0.025
+    label_lookahead: 16
+  data_split:
+    train: 0.7
+    validation: 0.15
+    test: 0.15

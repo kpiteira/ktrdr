@@ -135,19 +135,19 @@ scope: "universal"
 
 training_data:
   symbols:
-    mode: "multi_symbol"  # or "single_symbol"
+    mode: "multi_symbol"  # or "single"
     list: ["EURUSD"]
   timeframes:
-    mode: "single_timeframe"  # or "multi_timeframe"
+    mode: "single"  # or "multi_timeframe"
     list: ["1h"]
     base_timeframe: "1h"
   history_required: 200
 
 deployment:
   target_symbols:
-    mode: "same_as_training"
+    mode: "universal"  # or "training_only" or "group_restricted"
   target_timeframes:
-    mode: "single_timeframe"
+    mode: "single"  # or "multi_timeframe"
     supported: ["1h"]
 
 indicators:
@@ -211,21 +211,21 @@ training:
 You MUST use ONLY these exact values. Using any other value will cause validation failure.
 
 ### training_data.symbols.mode
-- `"single_symbol"` - Train on one symbol only
+- `"single"` - Train on one symbol only (legacy mode)
 - `"multi_symbol"` - Train on multiple symbols
 
 ### training_data.timeframes.mode
-- `"single_timeframe"` - Use one timeframe only
+- `"single"` - Use one timeframe only (legacy mode)
 - `"multi_timeframe"` - Use multiple timeframes
 
 ### deployment.target_symbols.mode
-- `"same_as_training"` - Deploy to same symbols as training
-- `"all_available"` - Deploy to all available symbols
-- `"custom"` - Specify custom symbol list
+- `"universal"` - No symbol restrictions (recommended for new strategies)
+- `"group_restricted"` - Restricted to specific symbol groups
+- `"training_only"` - Only deploy to symbols used in training
 
 ### deployment.target_timeframes.mode
-- `"single_timeframe"` - Deploy to single timeframe
-- `"same_as_training"` - Deploy to same timeframes as training
+- `"single"` - Deploy to single timeframe
+- `"multi_timeframe"` - Deploy to multiple timeframes
 
 ### fuzzy_sets type (with required parameter counts)
 - `"triangular"` - Requires exactly 3 parameters: [left, center, right]
@@ -264,7 +264,7 @@ You MUST use ONLY these exact values. Using any other value will cause validatio
 
 4. **Indicator names are case-sensitive**: Use the exact name as shown in the Available Indicators list (with backticks).
 
-5. **DO NOT invent enum values**: Only use values listed above. Never use values like `mode: "universal"` or `type: "adaptive"`.
+5. **DO NOT invent enum values**: Only use values listed above. Never use values like `mode: "adaptive"` or `type: "lstm"`.
 
 ## Design Guidelines
 
