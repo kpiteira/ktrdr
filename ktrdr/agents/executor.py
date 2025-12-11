@@ -27,6 +27,9 @@ from research_agents.services.strategy_service import (
 from research_agents.services.strategy_service import (
     save_strategy_config as _save_strategy_config,
 )
+from research_agents.services.strategy_service import (
+    validate_strategy_config as _validate_strategy_config,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -106,6 +109,7 @@ class ToolExecutor:
     def __init__(self) -> None:
         """Initialize the tool executor with handler mappings."""
         self.handlers: dict[str, HandlerFunc] = {
+            "validate_strategy_config": self._handle_validate_strategy_config,
             "save_strategy_config": self._handle_save_strategy_config,
             "get_available_indicators": self._handle_get_available_indicators,
             "get_available_symbols": self._handle_get_available_symbols,
@@ -165,6 +169,22 @@ class ToolExecutor:
     # ================
     # Handler Methods
     # ================
+
+    async def _handle_validate_strategy_config(
+        self,
+        config: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Handle validate_strategy_config tool call.
+
+        Validates a strategy configuration without saving.
+
+        Args:
+            config: Strategy configuration dict.
+
+        Returns:
+            Dict with valid status, errors, warnings, and suggestions.
+        """
+        return await _validate_strategy_config(config=config)
 
     async def _handle_save_strategy_config(
         self,

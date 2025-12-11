@@ -365,6 +365,253 @@ class TestStrategyDesignerPromptBuilder:
         )
 
 
+class TestPromptEnumConstraints:
+    """Tests for Task 1.14: Explicit enum constraints in prompts."""
+
+    @pytest.fixture
+    def builder(self):
+        """Create a prompt builder instance."""
+        return StrategyDesignerPromptBuilder()
+
+    def test_system_prompt_contains_enum_constraints_section(self, builder):
+        """System prompt should include explicit enum constraints section."""
+        ctx = PromptContext(
+            trigger_reason=TriggerReason.START_NEW_CYCLE,
+            session_id=1,
+            phase="idle",
+        )
+        result = builder.build(ctx)
+        system = result["system"]
+
+        # Should have a section about valid enum values
+        assert "valid enum" in system.lower() or "critical" in system.lower()
+        # Should explicitly list training_data.symbols.mode values
+        assert "single_symbol" in system
+        assert "multi_symbol" in system
+
+    def test_system_prompt_contains_timeframe_mode_enums(self, builder):
+        """System prompt should list timeframe mode enum values."""
+        ctx = PromptContext(
+            trigger_reason=TriggerReason.START_NEW_CYCLE,
+            session_id=1,
+            phase="idle",
+        )
+        result = builder.build(ctx)
+        system = result["system"]
+
+        # Should list timeframe mode values
+        assert "single_timeframe" in system
+        assert "multi_timeframe" in system
+
+    def test_system_prompt_contains_deployment_mode_enums(self, builder):
+        """System prompt should list deployment target mode enum values."""
+        ctx = PromptContext(
+            trigger_reason=TriggerReason.START_NEW_CYCLE,
+            session_id=1,
+            phase="idle",
+        )
+        result = builder.build(ctx)
+        system = result["system"]
+
+        # Should list deployment mode values
+        assert "same_as_training" in system
+        assert "all_available" in system or "custom" in system
+
+    def test_system_prompt_contains_fuzzy_type_enums(self, builder):
+        """System prompt should list valid fuzzy membership types with param counts."""
+        ctx = PromptContext(
+            trigger_reason=TriggerReason.START_NEW_CYCLE,
+            session_id=1,
+            phase="idle",
+        )
+        result = builder.build(ctx)
+        system = result["system"]
+
+        # Should list fuzzy types with parameter requirements
+        assert "triangular" in system.lower()
+        assert "trapezoidal" in system.lower() or "trapezoid" in system.lower()
+        assert "gaussian" in system.lower()
+        # Should mention parameter counts
+        assert "3" in system or "three" in system.lower()
+
+    def test_system_prompt_contains_model_type_enums(self, builder):
+        """System prompt should list valid model types."""
+        ctx = PromptContext(
+            trigger_reason=TriggerReason.START_NEW_CYCLE,
+            session_id=1,
+            phase="idle",
+        )
+        result = builder.build(ctx)
+        system = result["system"]
+
+        # Should list model type
+        assert "mlp" in system.lower()
+
+    def test_system_prompt_contains_activation_enums(self, builder):
+        """System prompt should list valid activation functions."""
+        ctx = PromptContext(
+            trigger_reason=TriggerReason.START_NEW_CYCLE,
+            session_id=1,
+            phase="idle",
+        )
+        result = builder.build(ctx)
+        system = result["system"]
+
+        # Should list activation functions
+        assert "relu" in system.lower()
+        assert "softmax" in system.lower()
+
+    def test_system_prompt_contains_optimizer_enums(self, builder):
+        """System prompt should list valid optimizers."""
+        ctx = PromptContext(
+            trigger_reason=TriggerReason.START_NEW_CYCLE,
+            session_id=1,
+            phase="idle",
+        )
+        result = builder.build(ctx)
+        system = result["system"]
+
+        # Should list optimizer options
+        assert "adam" in system.lower()
+
+
+class TestPromptValidationErrorPrevention:
+    """Tests for Task 1.14: Common validation errors section."""
+
+    @pytest.fixture
+    def builder(self):
+        """Create a prompt builder instance."""
+        return StrategyDesignerPromptBuilder()
+
+    def test_system_prompt_contains_common_errors_section(self, builder):
+        """System prompt should include common validation errors section."""
+        ctx = PromptContext(
+            trigger_reason=TriggerReason.START_NEW_CYCLE,
+            session_id=1,
+            phase="idle",
+        )
+        result = builder.build(ctx)
+        system = result["system"]
+
+        # Should have a section about common errors
+        assert "common" in system.lower() and "error" in system.lower()
+        # Should warn about parameters vs params
+        assert "parameters" in system.lower()
+
+    def test_system_prompt_warns_about_feature_id_requirement(self, builder):
+        """System prompt should emphasize feature_id is required."""
+        ctx = PromptContext(
+            trigger_reason=TriggerReason.START_NEW_CYCLE,
+            session_id=1,
+            phase="idle",
+        )
+        result = builder.build(ctx)
+        system = result["system"]
+
+        # Should emphasize feature_id is required
+        assert "feature_id" in system
+        # Should mention it's required or mandatory
+        assert "required" in system.lower() or "must" in system.lower()
+
+    def test_system_prompt_warns_about_fuzzy_set_key_matching(self, builder):
+        """System prompt should warn fuzzy_sets keys must match feature_id."""
+        ctx = PromptContext(
+            trigger_reason=TriggerReason.START_NEW_CYCLE,
+            session_id=1,
+            phase="idle",
+        )
+        result = builder.build(ctx)
+        system = result["system"]
+
+        # Should mention fuzzy_sets key matching
+        assert "fuzzy_sets" in system or "fuzzy sets" in system.lower()
+        assert "match" in system.lower() or "exact" in system.lower()
+
+
+class TestPromptIndicatorFormatting:
+    """Tests for Task 1.14: Case-sensitive indicator name formatting."""
+
+    @pytest.fixture
+    def builder(self):
+        """Create a prompt builder instance."""
+        return StrategyDesignerPromptBuilder()
+
+    @pytest.fixture
+    def sample_indicators_with_case(self):
+        """Sample indicators with proper case-sensitive names."""
+        return [
+            {
+                "name": "RSI",  # Proper case
+                "description": "Relative Strength Index",
+                "parameters": [{"name": "period", "type": "int", "default": 14}],
+            },
+            {
+                "name": "WilliamsR",  # Proper PascalCase
+                "description": "Williams %R",
+                "parameters": [{"name": "period", "type": "int", "default": 14}],
+            },
+            {
+                "name": "BollingerBands",  # Proper PascalCase
+                "description": "Bollinger Bands",
+                "parameters": [],
+            },
+        ]
+
+    def test_indicator_formatting_preserves_exact_case(
+        self, builder, sample_indicators_with_case
+    ):
+        """Indicator names should be displayed with exact case."""
+        ctx = PromptContext(
+            trigger_reason=TriggerReason.START_NEW_CYCLE,
+            session_id=1,
+            phase="idle",
+            available_indicators=sample_indicators_with_case,
+        )
+        result = builder.build(ctx)
+        combined = result["system"] + result["user"]
+
+        # Should preserve exact case
+        assert "RSI" in combined
+        assert "WilliamsR" in combined
+        assert "BollingerBands" in combined
+
+    def test_indicator_formatting_warns_about_case_sensitivity(
+        self, builder, sample_indicators_with_case
+    ):
+        """Indicator section should warn about case sensitivity."""
+        ctx = PromptContext(
+            trigger_reason=TriggerReason.START_NEW_CYCLE,
+            session_id=1,
+            phase="idle",
+            available_indicators=sample_indicators_with_case,
+        )
+        result = builder.build(ctx)
+        combined = result["system"] + result["user"]
+
+        # Should mention case sensitivity
+        assert (
+            "case-sensitive" in combined.lower()
+            or "exact" in combined.lower()
+            or "must use" in combined.lower()
+        )
+
+    def test_indicator_formatting_uses_code_backticks(
+        self, builder, sample_indicators_with_case
+    ):
+        """Indicator names should use backticks for code formatting."""
+        ctx = PromptContext(
+            trigger_reason=TriggerReason.START_NEW_CYCLE,
+            session_id=1,
+            phase="idle",
+            available_indicators=sample_indicators_with_case,
+        )
+        result = builder.build(ctx)
+        user = result["user"]
+
+        # Should use backticks around indicator names for clarity
+        assert "`RSI`" in user or "**RSI**" in user
+
+
 class TestPromptBuilderIntegration:
     """Integration tests for prompt builder with full context."""
 

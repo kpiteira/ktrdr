@@ -23,6 +23,55 @@ logger = structlog.get_logger(__name__)
 DEFAULT_STRATEGIES_DIR = "strategies"
 
 
+async def validate_strategy_config(
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Validate a strategy configuration without saving.
+
+    This allows the agent to check a config before saving, catching
+    errors early and reducing save failures.
+
+    Args:
+        config: Strategy configuration dictionary
+
+    Returns:
+        Dict with structure:
+        {
+            "valid": bool,          # True if config is valid
+            "errors": list,         # List of error messages
+            "warnings": list,       # List of warnings
+            "suggestions": list     # Suggestions for fixing errors
+        }
+    """
+    try:
+        # Create validator
+        validator = StrategyValidator()
+
+        # Validate the configuration
+        validation_result = validator.validate_strategy_config(config)
+
+        return {
+            "valid": validation_result.is_valid,
+            "errors": validation_result.errors,
+            "warnings": validation_result.warnings,
+            "suggestions": validation_result.suggestions,
+        }
+
+    except Exception as e:
+        logger.error(
+            "Failed to validate strategy",
+            error=str(e),
+            exc_info=True,
+        )
+        return {
+            "valid": False,
+            "errors": [f"Validation error: {e}"],
+            "warnings": [],
+            "suggestions": [],
+        }
+
+
 async def save_strategy_config(
     name: str,
     config: dict[str, Any],

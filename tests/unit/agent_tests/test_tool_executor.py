@@ -304,6 +304,94 @@ class TestToolExecutorCallableInterface:
         assert "error" in result
 
 
+class TestValidateStrategyConfigTool:
+    """Tests for validate_strategy_config tool (Task 1.14 optional)."""
+
+    def test_validate_strategy_config_in_tools(self):
+        """validate_strategy_config tool should be in AGENT_TOOLS."""
+        tool_names = {tool["name"] for tool in AGENT_TOOLS}
+        assert "validate_strategy_config" in tool_names
+
+    def test_validate_strategy_config_schema(self):
+        """validate_strategy_config tool should have correct schema."""
+        tool = next(
+            (t for t in AGENT_TOOLS if t["name"] == "validate_strategy_config"), None
+        )
+        assert tool is not None, "validate_strategy_config tool not found"
+
+        schema = tool["input_schema"]
+        props = schema.get("properties", {})
+
+        # Should have config property
+        assert "config" in props
+        assert props["config"]["type"] == "object"
+
+        # config should be required
+        required = schema.get("required", [])
+        assert "config" in required
+
+    def test_validate_strategy_config_has_handler(self):
+        """ToolExecutor should have handler for validate_strategy_config."""
+        executor = ToolExecutor()
+        assert "validate_strategy_config" in executor.handlers
+
+    @pytest.mark.asyncio
+    async def test_validate_strategy_config_returns_validation_result(self):
+        """validate_strategy_config should return validation result."""
+        executor = ToolExecutor()
+
+        # Valid config should pass
+        valid_config = {
+            "name": "test_strategy",
+            "scope": "universal",
+            "indicators": [{"name": "rsi", "feature_id": "rsi_14", "period": 14}],
+            "fuzzy_sets": {
+                "rsi_14": {"low": {"type": "triangular", "parameters": [0, 30, 50]}}
+            },
+            "model": {"type": "mlp", "architecture": {"hidden_layers": [32]}},
+            "decisions": {"output_format": "classification"},
+            "training": {"method": "supervised"},
+        }
+
+        with patch("ktrdr.agents.executor._validate_strategy_config") as mock_validate:
+            mock_validate.return_value = {"valid": True, "errors": []}
+
+            result = await executor.execute(
+                "validate_strategy_config", {"config": valid_config}
+            )
+
+            mock_validate.assert_called_once()
+            assert "valid" in result
+
+    @pytest.mark.asyncio
+    async def test_validate_strategy_config_returns_errors(self):
+        """validate_strategy_config should return errors for invalid config."""
+        executor = ToolExecutor()
+
+        invalid_config = {
+            "name": "bad_strategy",
+            "indicators": [{"name": "unknown_indicator"}],  # Missing feature_id
+        }
+
+        with patch("ktrdr.agents.executor._validate_strategy_config") as mock_validate:
+            mock_validate.return_value = {
+                "valid": False,
+                "errors": [
+                    "Unknown indicator: unknown_indicator",
+                    "Missing feature_id",
+                ],
+                "suggestions": ["Did you mean 'RSI'?"],
+            }
+
+            result = await executor.execute(
+                "validate_strategy_config", {"config": invalid_config}
+            )
+
+            assert result["valid"] is False
+            assert len(result["errors"]) > 0
+            assert "suggestions" in result
+
+
 class TestToolExecutorWithRealServices:
     """Integration-style tests with mocked services.
 
