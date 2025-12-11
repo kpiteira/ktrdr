@@ -386,8 +386,9 @@ class TestPromptEnumConstraints:
         # Should have a section about valid enum values
         assert "valid enum" in system.lower() or "critical" in system.lower()
         # Should explicitly list training_data.symbols.mode values
-        assert "single_symbol" in system
+        # Correct values: "single" and "multi_symbol"
         assert "multi_symbol" in system
+        assert '"single"' in system  # The "single" legacy mode
 
     def test_system_prompt_contains_timeframe_mode_enums(self, builder):
         """System prompt should list timeframe mode enum values."""
@@ -400,8 +401,9 @@ class TestPromptEnumConstraints:
         system = result["system"]
 
         # Should list timeframe mode values
-        assert "single_timeframe" in system
+        # Correct values: "single" and "multi_timeframe"
         assert "multi_timeframe" in system
+        assert '"single"' in system  # The "single" legacy mode
 
     def test_system_prompt_contains_deployment_mode_enums(self, builder):
         """System prompt should list deployment target mode enum values."""
@@ -414,8 +416,9 @@ class TestPromptEnumConstraints:
         system = result["system"]
 
         # Should list deployment mode values
-        assert "same_as_training" in system
-        assert "all_available" in system or "custom" in system
+        # Correct values: "universal", "group_restricted", "training_only"
+        assert "universal" in system
+        assert "training_only" in system or "group_restricted" in system
 
     def test_system_prompt_contains_fuzzy_type_enums(self, builder):
         """System prompt should list valid fuzzy membership types with param counts."""
