@@ -270,8 +270,12 @@ class TriggerService:
         # Detect if invoker is modern (has run() method)
         self._is_modern_invoker = hasattr(invoker, "run") and callable(invoker.run)
 
-    async def check_and_trigger(self) -> dict:
+    async def check_and_trigger(self, operation_id: str | None = None) -> dict:
         """Check conditions and potentially trigger an agent cycle.
+
+        Args:
+            operation_id: Optional operation ID to link with session for tracking.
+                         This enables operation recovery after backend restart.
 
         Returns:
             Dict with:
@@ -303,20 +307,23 @@ class TriggerService:
 
         # Use Phase 1 behavior if context_provider is available
         if self.context_provider is not None:
-            return await self._trigger_design_phase()
+            return await self._trigger_design_phase(operation_id=operation_id)
         else:
             # Fallback to Phase 0 behavior for backward compatibility
             return await self._trigger_phase0()
 
-    async def _trigger_design_phase(self) -> dict:
+    async def _trigger_design_phase(self, operation_id: str | None = None) -> dict:
         """Trigger a new design phase cycle (Phase 1 behavior).
 
         This method:
         1. Creates session BEFORE invoking Claude
-        2. Sets phase to DESIGNING immediately
+        2. Sets phase to DESIGNING immediately (with operation_id for tracking)
         3. Fetches context data (indicators, symbols, recent strategies)
         4. Invokes agent with strategy designer prompt
         5. Handles failures by marking session as failed
+
+        Args:
+            operation_id: Optional operation ID to link with session for tracking.
 
         Returns:
             Dict with trigger result.
@@ -332,9 +339,17 @@ class TriggerService:
         session_id = session.id
         logger.info("Created new session", session_id=session_id)
 
-        # Step 2: Set phase to DESIGNING immediately
-        await self.db.update_session(session_id=session_id, phase=SessionPhase.DESIGNING)
-        logger.info("Set session phase to DESIGNING", session_id=session_id)
+        # Step 2: Set phase to DESIGNING immediately (with operation_id for restart recovery)
+        await self.db.update_session(
+            session_id=session_id,
+            phase=SessionPhase.DESIGNING,
+            operation_id=operation_id,  # Link operation for tracking
+        )
+        logger.info(
+            "Set session phase to DESIGNING",
+            session_id=session_id,
+            operation_id=operation_id,
+        )
 
         try:
             # Step 3: Fetch context data

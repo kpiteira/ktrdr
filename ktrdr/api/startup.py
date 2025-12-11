@@ -33,6 +33,95 @@ _agent_trigger_task: asyncio.Task | None = None
 _agent_trigger_service: TriggerService | None = None
 
 
+async def _recover_orphaned_agent_sessions() -> None:
+    """Recover orphaned agent sessions after backend restart (Task 1.13b).
+
+    When the backend restarts, any in-progress agent operations are lost
+    (operations are in-memory). This function:
+    1. Finds sessions stuck in active phases with operation_ids
+    2. Recreates stub operations in FAILED state for visibility
+    3. Marks sessions as interrupted
+
+    This ensures users can see what happened and the system isn't blocked.
+    """
+    try:
+        from ktrdr.api.models.operations import (
+            OperationMetadata,
+            OperationType,
+        )
+        from ktrdr.api.services.operations_service import get_operations_service
+        from research_agents.database.queries import get_agent_db
+        from research_agents.database.schema import SessionOutcome
+
+        db = await get_agent_db()
+        ops_service = get_operations_service()
+
+        # Find orphaned sessions (active phases that indicate interrupted operations)
+        active_phases = [
+            "designing",
+            "designed",
+            "training",
+            "backtesting",
+            "assessing",
+        ]
+        orphaned = await db.get_sessions_by_phase(active_phases)
+
+        if not orphaned:
+            logger.info("✅ No orphaned agent sessions to recover")
+            return
+
+        logger.info(f"🔄 Recovering {len(orphaned)} orphaned agent sessions...")
+
+        for session in orphaned:
+            operation_id = session.operation_id
+
+            # If session had an operation_id, recreate a stub operation
+            if operation_id:
+                # Create stub operation in OperationsService so it shows in CLI
+                await ops_service.create_operation(
+                    operation_type=OperationType.AGENT_DESIGN,
+                    metadata=OperationMetadata(
+                        symbol="N/A",
+                        timeframe="N/A",
+                        mode="strategy_design",
+                        start_date=None,
+                        end_date=None,
+                        parameters={
+                            "recovered": True,
+                            "original_session_id": session.id,
+                            "original_phase": session.phase.value,
+                        },
+                    ),
+                    operation_id=operation_id,  # Use same ID for continuity
+                )
+
+                # Mark as failed immediately
+                await ops_service.fail_operation(
+                    operation_id,
+                    "Operation interrupted by backend restart",
+                )
+
+                logger.info(
+                    f"  ↳ Recreated operation {operation_id} (session {session.id})"
+                )
+
+            # Mark session as interrupted
+            await db.complete_session(
+                session_id=session.id,
+                outcome=SessionOutcome.FAILED_INTERRUPTED,
+            )
+            logger.info(
+                f"  ↳ Marked session {session.id} as interrupted "
+                f"(was: {session.phase.value})"
+            )
+
+        logger.info(f"✅ Recovered {len(orphaned)} orphaned agent sessions")
+
+    except Exception as e:
+        logger.error(f"❌ Failed to recover orphaned sessions: {e}", exc_info=True)
+        # Don't block startup on recovery failure
+
+
 async def start_agent_trigger_loop() -> None:
     """Start the background agent trigger loop.
 
@@ -171,6 +260,9 @@ async def lifespan(app: FastAPI):
     # Start agent trigger loop if enabled (Task 1.10)
     agent_enabled = os.getenv("AGENT_ENABLED", "false").lower() in ("true", "1", "yes")
     if agent_enabled:
+        # Task 1.13b: Recover orphaned sessions/operations from previous crash
+        await _recover_orphaned_agent_sessions()
+
         logger.info("🤖 Starting agent trigger loop (AGENT_ENABLED=true)...")
         _agent_trigger_task = asyncio.create_task(start_agent_trigger_loop())
         logger.info("✅ Agent trigger loop started in background")

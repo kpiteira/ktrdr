@@ -270,7 +270,8 @@ class AgentService:
                 span.set_attribute("agent.phase", "invoking_anthropic")
 
                 # Execute trigger (this does the actual work)
-                result = await service.check_and_trigger()
+                # Pass operation_id so it's saved to session for restart recovery
+                result = await service.check_and_trigger(operation_id=operation_id)
 
                 session_id = result.get("session_id")
                 if session_id:
