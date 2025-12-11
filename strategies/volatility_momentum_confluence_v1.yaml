@@ -1,0 +1,135 @@
+name: volatility_momentum_confluence_v1
+description: Multi-dimensional breakout strategy combining volatility expansion, momentum
+  extremes, and trend strength
+version: '1.0'
+hypothesis: Strong directional moves occur when volatility expansion coincides with
+  momentum extremes and rising trend strength
+scope: universal
+training_data:
+  symbols:
+    mode: multi_symbol
+    list:
+    - EURUSD
+    - GBPUSD
+    - USDJPY
+  timeframes:
+    mode: single
+    list:
+    - 1h
+    base_timeframe: 1h
+  history_required: 250
+deployment:
+  target_symbols:
+    mode: universal
+  target_timeframes:
+    mode: single
+    supported:
+    - 1h
+indicators:
+- name: BollingerBandWidth
+  feature_id: bb_width_20
+  period: 20
+  source: close
+- name: FisherTransform
+  feature_id: fisher_14
+  period: 14
+  source: close
+- name: ADX
+  feature_id: adx_14
+  period: 14
+  source: close
+fuzzy_sets:
+  bb_width_20:
+    low_volatility:
+      type: triangular
+      parameters:
+      - 0.0
+      - 0.015
+      - 0.03
+    expanding_volatility:
+      type: triangular
+      parameters:
+      - 0.025
+      - 0.045
+      - 0.07
+    high_volatility:
+      type: triangular
+      parameters:
+      - 0.06
+      - 0.1
+      - 0.2
+  fisher_14:
+    strong_bearish:
+      type: triangular
+      parameters:
+      - -4.0
+      - -2.5
+      - -1.5
+    neutral:
+      type: triangular
+      parameters:
+      - -1.0
+      - 0.0
+      - 1.0
+    strong_bullish:
+      type: triangular
+      parameters:
+      - 1.5
+      - 2.5
+      - 4.0
+  adx_14:
+    weak_trend:
+      type: triangular
+      parameters:
+      - 0
+      - 15
+      - 25
+    building_trend:
+      type: triangular
+      parameters:
+      - 20
+      - 35
+      - 50
+    strong_trend:
+      type: triangular
+      parameters:
+      - 45
+      - 65
+      - 100
+model:
+  type: mlp
+  architecture:
+    hidden_layers:
+    - 48
+    - 24
+    - 12
+    activation: relu
+    output_activation: softmax
+    dropout: 0.3
+  features:
+    include_price_context: false
+    lookback_periods: 3
+    scale_features: true
+  training:
+    learning_rate: 0.0008
+    batch_size: 64
+    epochs: 75
+    optimizer: adam
+    early_stopping:
+      enabled: true
+      patience: 12
+      min_delta: 0.0008
+decisions:
+  output_format: classification
+  confidence_threshold: 0.7
+  position_awareness: true
+training:
+  method: supervised
+  labels:
+    source: zigzag
+    zigzag_threshold: 0.025
+    label_lookahead: 24
+  data_split:
+    train: 0.7
+    validation: 0.15
+    test: 0.15
