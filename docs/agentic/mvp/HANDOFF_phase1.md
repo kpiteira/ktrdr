@@ -629,3 +629,68 @@ await self._operations_service.complete_operation(
 - `@trace_service_method("agent.trigger")` - On trigger entry point
 - `create_service_span("agent.design_strategy", operation_id=...)` - During execution
 - Span attributes: `agent.session_id`, `agent.input_tokens`, etc.
+
+### Prompt Validation Engineering Pattern (Task 1.14)
+
+Task 1.14 adds explicit constraints to reduce validation failures:
+
+**System Prompt Additions:**
+
+1. **CRITICAL: Valid Enum Values section** - Explicit list of all valid enum values:
+   - `training_data.symbols.mode`: `single_symbol`, `multi_symbol`
+   - `training_data.timeframes.mode`: `single_timeframe`, `multi_timeframe`
+   - `deployment.target_symbols.mode`: `same_as_training`, `all_available`, `custom`
+   - `fuzzy_sets type`: `triangular` (3 params), `trapezoidal` (4), `gaussian` (2), `sigmoid` (2)
+   - `model.type`, `activation`, `optimizer` options
+
+2. **CRITICAL: Common Validation Errors section** - Explicit warnings about:
+   - Missing `feature_id` (REQUIRED field)
+   - `fuzzy_sets` keys must match `feature_id` exactly
+   - Use `parameters` not `params`
+   - Indicator name case sensitivity
+   - Never invent enum values
+
+**Indicator Formatting Enhancement:**
+
+```python
+def _format_indicators(self, indicators: list[dict[str, Any]]) -> str:
+    lines = []
+    # Add case sensitivity warning
+    lines.append("**⚠️ Indicator names are case-sensitive. You must use the exact name below.**\n")
+    for ind in indicators:
+        name = ind.get("name", "unknown")
+        # Use backticks for code formatting
+        lines.append(f"- `{name}`: {ind.get('description', '')}")
+```
+
+**New Tool: validate_strategy_config**
+
+Pre-save validation tool that helps Claude catch errors before attempting save:
+
+```python
+# In ktrdr/agents/tools.py
+{
+    "name": "validate_strategy_config",
+    "description": "Validate a strategy configuration before saving...",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "config": {"type": "object", "description": "Strategy config to validate"}
+        },
+        "required": ["config"]
+    }
+}
+
+# In ktrdr/agents/executor.py
+async def _handle_validate_strategy_config(self, config):
+    return await _validate_strategy_config(config=config)
+```
+
+**Measuring Success Rate:**
+
+To validate >80% first-attempt success rate, run 5+ agent design cycles and record:
+- First-attempt validation pass/fail
+- Number of retry attempts
+- Token usage per session
+
+Compare with pre-improvement baseline to measure token reduction.
