@@ -139,7 +139,7 @@ async def _list_operations_async(
 
         # Create table
         table = Table()
-        table.add_column("Operation ID", style="cyan", max_width=30)
+        table.add_column("Operation ID", style="cyan", no_wrap=True, min_width=45)
         table.add_column("Type", style="green")
         table.add_column("Status", style="yellow")
         table.add_column("Progress", style="blue")
