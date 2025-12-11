@@ -637,9 +637,10 @@ Task 1.14 adds explicit constraints to reduce validation failures:
 **System Prompt Additions:**
 
 1. **CRITICAL: Valid Enum Values section** - Explicit list of all valid enum values:
-   - `training_data.symbols.mode`: `single_symbol`, `multi_symbol`
-   - `training_data.timeframes.mode`: `single_timeframe`, `multi_timeframe`
-   - `deployment.target_symbols.mode`: `same_as_training`, `all_available`, `custom`
+   - `training_data.symbols.mode`: `single`, `multi_symbol`
+   - `training_data.timeframes.mode`: `single`, `multi_timeframe`
+   - `deployment.target_symbols.mode`: `universal`, `group_restricted`, `training_only`
+   - `deployment.target_timeframes.mode`: `single`, `multi_timeframe`
    - `fuzzy_sets type`: `triangular` (3 params), `trapezoidal` (4), `gaussian` (2), `sigmoid` (2)
    - `model.type`, `activation`, `optimizer` options
 
