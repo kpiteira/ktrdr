@@ -1060,7 +1060,7 @@ curl http://localhost:8000/api/v1/agent/sessions | jq '.[-1] | {phase, outcome}'
 
 ### 1.14 Prompt Engineering for Validation Success
 
-**Status:** TODO
+**Status:** REVIEW
 
 **Goal:** Reduce validation errors by improving prompt with explicit enum values and constraints, targeting >80% first-attempt validation success.
 
