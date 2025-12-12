@@ -180,7 +180,9 @@ class AsyncCLIClient:
                         )
                     else:
                         # Handle case where detail is a string directly
-                        error_message = str(error_detail) if error_detail else "Unknown error"
+                        error_message = (
+                            str(error_detail) if error_detail else "Unknown error"
+                        )
 
                     raise AsyncCLIClientError(
                         f"API request failed: {error_message}",

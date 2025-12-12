@@ -2,9 +2,54 @@
 
 **Objective:** Full visibility and budget enforcement for production operation
 
-**Duration:** 3-4 days
+**Duration:** 2-3 days
 
 **Prerequisites:** Phase 2 complete (full cycle works)
+
+---
+
+## ⚠️ Architectural Context (Simplified - Single Service)
+
+**With Anthropic API direct integration, observability is simpler - only ONE service to instrument:**
+
+```text
+┌──────────────────────────────────────────────────────────────────┐
+│                    COMPONENTS TO INSTRUMENT                       │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │                   Backend (Docker:8000)                      │ │
+│  │                                                              │ │
+│  │  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐ │ │
+│  │  │  Agent System  │  │  API Metrics   │  │  Budget/Cost   │ │ │
+│  │  │                │  │                │  │                │ │ │
+│  │  │  • Trigger     │  │  • Request     │  │  • Token       │ │ │
+│  │  │    metrics     │  │    latency     │  │    tracking    │ │ │
+│  │  │  • Anthropic   │  │  • Error       │  │  • Daily       │ │ │
+│  │  │    invocation  │  │    rates       │  │    budget      │ │ │
+│  │  │    traces      │  │  • Operation   │  │  • Cost per    │ │ │
+│  │  │  • Tool calls  │  │    tracking    │  │    cycle       │ │ │
+│  │  └────────────────┘  └────────────────┘  └────────────────┘ │ │
+│  │                                                              │ │
+│  └─────────────────────────────────────────────────────────────┘ │
+│                               │                                  │
+│                               ▼                                  │
+│                    ┌─────────────────────┐                      │
+│                    │  Observability Stack │                      │
+│                    │                     │                      │
+│                    │  Prometheus → Grafana                      │
+│                    │  Jaeger (OTEL traces)                      │
+│                    └─────────────────────┘                      │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Key Simplifications:**
+
+- **Single service** - Only backend to instrument (no host service, no MCP for agent)
+- **Cost tracking in-process** - Token counts from Anthropic API response
+- **Single metrics endpoint** - Backend (:8000/metrics)
+- **Unified traces** - All spans in one service (no cross-service correlation needed)
 
 ---
 
@@ -78,20 +123,39 @@ KTRDR has extensive observability infrastructure. Before implementing:
 
 **Goal:** Track tokens and cost for every agent invocation
 
-**Implementation:**
-- After each agent invocation, parse token usage from response
-- Calculate cost using Opus 4.5 pricing ($5/MTok input, $25/MTok output)
-- Store in `agent_actions` table
-- Update `agent_budget` table
+**Architecture Note (Simplified):** Everything runs in the backend - no HTTP calls needed.
 
-**File:** `research_agents/services/cost_tracker.py`
+**Implementation:**
+
+Token counts come directly from Anthropic API response in `AnthropicAgentInvoker`:
+
+```python
+# In AnthropicAgentInvoker.run() - tokens already captured
+return AgentResult(
+    success=True,
+    output=self._extract_text(response),
+    input_tokens=total_input_tokens,   # From response.usage
+    output_tokens=total_output_tokens  # From response.usage
+)
+
+# Cost calculation (same process)
+def calculate_cost(tokens_in: int, tokens_out: int) -> float:
+    # Opus 4.5 pricing
+    return (tokens_in * 5.0 / 1_000_000) + (tokens_out * 25.0 / 1_000_000)
+```
+
+**Files:**
+
+- `ktrdr/agents/invoker.py` - Already captures tokens from API response
+- `research_agents/services/cost_tracker.py` - Calculate and store costs
 
 **Acceptance:**
-- Token counts recorded accurately
-- Cost calculated correctly
+
+- Token counts captured from Anthropic API response
+- Costs stored in database
 - Running totals maintained
 
-**Effort:** 2-3 hours
+**Effort:** 1-2 hours (simplified - no HTTP calls)
 
 ---
 
@@ -131,51 +195,114 @@ async def check_budget() -> tuple[bool, float]:
 
 ---
 
-### 3.4 Instrument MCP Server with OTEL
+### 3.4 Instrument Agent System with OTEL
 
-**Goal:** Traces for all MCP tool calls
+**Goal:** Traces for agent invocations and tool calls
+
+**Architecture Note (Simplified):** Only ONE service to instrument - the backend. No cross-service tracing needed.
 
 **Implementation:**
-- Add OTEL tracer to MCP server
-- Wrap each tool handler with span
-- Record tool name, duration, success/failure
-- Propagate trace context to backend
 
-**File:** `mcp/src/telemetry.py`
+Add OTEL tracing to agent components in backend:
 
-**Reference:** See `ref_observability.md` for span structure
+```python
+from opentelemetry import trace
+
+tracer = trace.get_tracer("ktrdr.agents")
+
+class AnthropicAgentInvoker:
+    async def run(self, prompt: str, tools: list, system_prompt: str):
+        with tracer.start_as_current_span("agent.invocation") as span:
+            span.set_attribute("agent.model", self.model)
+            span.set_attribute("agent.prompt_length", len(prompt))
+
+            # ... invoke Claude ...
+
+            span.set_attribute("agent.tokens_in", total_input_tokens)
+            span.set_attribute("agent.tokens_out", total_output_tokens)
+            return result
+
+class ToolExecutor:
+    async def execute(self, tool_name: str, tool_input: dict):
+        with tracer.start_as_current_span(f"agent.tool.{tool_name}") as span:
+            span.set_attribute("tool.name", tool_name)
+            result = await self._execute(tool_name, tool_input)
+            span.set_attribute("tool.success", "error" not in result)
+            return result
+```
+
+**Spans to create:**
+
+- `agent.trigger_cycle` - Full trigger cycle
+- `agent.invocation` - Single Claude API call
+- `agent.tool.{name}` - Individual tool executions
+
+**Files:**
+
+- `ktrdr/agents/invoker.py` - Add OTEL tracing
+- `ktrdr/agents/executor.py` - Add OTEL tracing
+- `research_agents/services/trigger.py` - Add trigger cycle span
 
 **Acceptance:**
-- Traces visible in Jaeger
-- Spans have correct attributes
-- Context flows to backend
 
-**Effort:** 3-4 hours
+- Traces visible in Jaeger
+- Spans have correct attributes (tokens, duration, success)
+- Full trace from trigger → invocation → tools
+
+**Effort:** 2-3 hours (simplified - single service)
 
 ---
 
-### 3.5 Add Prometheus Metrics to MCP Server
+### 3.5 Add Agent Prometheus Metrics to Backend
 
-**Goal:** Expose metrics endpoint for scraping
+**Goal:** Expose agent-specific metrics on backend's existing `/metrics` endpoint
 
-**Metrics to add:**
-- `mcp_tool_calls_total{tool, status}`
-- `mcp_tool_duration_seconds{tool}`
-- `mcp_tool_errors_total{tool, error_type}`
+**Architecture Note (Simplified):** Single metrics endpoint on backend (:8000/metrics). No separate MCP or host service metrics.
+
+**Agent Metrics to Add:**
+
+- `ktrdr_agent_trigger_total{reason, invoked}` - Trigger attempts
+- `ktrdr_agent_invocation_duration_seconds` - Claude API call duration
+- `ktrdr_agent_tokens_total{direction}` - Input/output tokens
+- `ktrdr_agent_tool_calls_total{tool, status}` - Tool executions
+- `ktrdr_agent_errors_total{error_type}` - Agent errors
 
 **Implementation:**
-- Add prometheus_client to MCP server
-- Instrument tool handlers
-- Expose `/metrics` endpoint
 
-**File:** `mcp/src/metrics.py`
+```python
+from prometheus_client import Counter, Histogram
+
+agent_trigger_total = Counter(
+    'ktrdr_agent_trigger_total',
+    'Agent trigger attempts',
+    ['reason', 'invoked']
+)
+
+agent_invocation_duration = Histogram(
+    'ktrdr_agent_invocation_duration_seconds',
+    'Claude API invocation duration'
+)
+
+agent_tokens_total = Counter(
+    'ktrdr_agent_tokens_total',
+    'Agent tokens used',
+    ['direction']  # input/output
+)
+```
+
+**Files:**
+
+- `ktrdr/agents/metrics.py` - NEW: Agent metrics definitions
+- `ktrdr/agents/invoker.py` - MODIFY: Instrument with metrics
+- `ktrdr/agents/executor.py` - MODIFY: Instrument tool calls
 
 **Acceptance:**
-- Metrics endpoint accessible
+
+- Agent metrics visible at `/metrics`
 - Prometheus can scrape
 - Metrics accurate
 
-**Effort:** 2-3 hours
+**Effort:** 2-3 hours (simplified - single service)
 
 ---
 
@@ -272,15 +399,22 @@ async def check_budget() -> tuple[bool, float]:
 
 **Goal:** Complete CLI for visibility and control
 
+**⚠️ Architecture Note:** CLI commands call Backend API (Task 1.9 pattern). The CLI does NOT directly call services.
+
+```
+CLI → Backend API → (proxy to Host Service if needed)
+```
+
 **Commands:**
+
 ```bash
-# Status and monitoring
+# Status and monitoring (call GET /api/v1/agent/*)
 ktrdr agent status              # Current state + recent history + budget
 ktrdr agent history [--limit N] # Detailed cycle history
 ktrdr agent session <id>        # Full session details
 ktrdr agent budget              # Budget status
 
-# Control
+# Control (call POST /api/v1/agent/*)
 ktrdr agent trigger             # Manual trigger (testing)
 ktrdr agent pause               # Pause automatic triggers
 ktrdr agent resume              # Resume automatic triggers
@@ -289,16 +423,24 @@ ktrdr agent resume              # Resume automatic triggers
 ktrdr agent logs [--session ID] # View logs for session
 ```
 
-**File:** `ktrdr/cli/commands/agent.py`
+**Implementation:**
+
+- Extend CLI from Task 1.9 (which established basic trigger/status)
+- Use `AsyncCLIClient` pattern (like data, training commands)
+- All commands call backend API endpoints
+
+**File:** `ktrdr/cli/agent_commands.py` (extend from Task 1.9)
 
 **Reference:** See `ref_cli_commands.md` for specifications
 
 **Acceptance:**
-- All commands work
+
+- All commands work via API
 - Output is clear and useful
 - Help text accurate
+- No direct service calls (API only)
 
-**Effort:** 4-5 hours
+**Effort:** 3-4 hours (reduced since Task 1.9 establishes base)
 
 ---
 
@@ -392,46 +534,48 @@ async def aggregate_cycle_metrics(session_id: int):
 | Task | Description | Effort | Dependencies |
 |------|-------------|--------|--------------|
 | 3.1 | Remaining DB tables | 2-3h | Phase 2 |
-| 3.2 | Cost tracking | 2-3h | 3.1 |
+| 3.2 | Cost tracking | 1-2h | 3.1 |
 | 3.3 | Budget enforcement | 2-3h | 3.2 |
-| 3.4 | MCP OTEL instrumentation | 3-4h | None |
-| 3.5 | MCP Prometheus metrics | 2-3h | None |
+| 3.4 | Agent OTEL instrumentation | 2-3h | None |
+| 3.5 | Agent Prometheus metrics | 2-3h | None |
 | 3.6 | Trigger Prometheus metrics | 2-3h | 3.2 |
 | 3.7 | Grafana dashboard | 3-4h | 3.5, 3.6 |
 | 3.8 | Alert rules | 2h | 3.6 |
-| 3.9 | Full CLI | 4-5h | 3.1 |
+| 3.9 | Full CLI | 3-4h | 3.1 |
 | 3.10 | Trigger logging | 1-2h | 3.1 |
 | 3.11 | Metrics aggregation | 2-3h | 3.1 |
 | 3.12 | E2E observability test | 2-3h | All above |
 
-**Total estimated effort:** 28-38 hours (3-4 days)
+**Total estimated effort:** 24-33 hours (2-3 days)
+
+*Note: Effort reduced - single service to instrument (no MCP/host service), no HTTP calls for cost tracking.*
 
 ---
 
 ## Files to Create/Modify
 
-```
+**Note:** Simplified architecture - all instrumentation in backend (no MCP/host service files).
+
+```text
+ktrdr/
+├── agents/
+│   ├── invoker.py                  # 3.4, 3.5 - MODIFY: Add OTEL & metrics
+│   ├── executor.py                 # 3.4, 3.5 - MODIFY: Add OTEL & metrics
+│   └── metrics.py                  # 3.5 - NEW: Agent metrics definitions
+└── cli/
+    └── agent_commands.py           # 3.9 - MODIFY: Expand commands
+
 research_agents/
 ├── database/
 │   └── schema.py                   # 3.1 (add remaining tables)
 ├── services/
-│   ├── trigger.py                  # 3.6 (add metrics)
-│   ├── cost_tracker.py             # 3.2
-│   ├── budget.py                   # 3.3
-│   └── logging.py                  # 3.10
+│   ├── trigger.py                  # 3.4, 3.6 - MODIFY: Add OTEL & metrics
+│   ├── cost_tracker.py             # 3.2 - NEW
+│   ├── budget.py                   # 3.3 - NEW
+│   └── logging.py                  # 3.10 - NEW
 └── metrics/
     ├── __init__.py
     └── aggregator.py               # 3.11
-
-mcp/
-└── src/
-    ├── telemetry.py                # 3.4 (new)
-    └── metrics.py                  # 3.5 (new)
-
-ktrdr/
-└── cli/
-    └── commands/
-        └── agent.py                # 3.9 (expand)
 
 monitoring/
 └── grafana/
@@ -445,16 +589,28 @@ config/
 
 tests/
 └── integration/
-    └── research_agents/
+    └── agent_tests/
         └── test_observability.py   # 3.12
 ```
+
+**No longer needed:**
+
+- `mcp/src/telemetry.py` - Agent doesn't use MCP
+- `mcp/src/metrics.py` - Agent doesn't use MCP
+- `agent-host-service/` - Agent runs in backend
 
 ---
 
 ## Configuration
 
 **Environment variables for Phase 3:**
+
 ```bash
+# Agent (from Phase 1)
+ANTHROPIC_API_KEY=sk-ant-...
+AGENT_ENABLED=true
+AGENT_MODEL=claude-sonnet-4-20250514
+
 # Budget
 AGENT_DAILY_BUDGET_USD=5.0
 AGENT_BUDGET_BUFFER_USD=0.10
@@ -463,9 +619,9 @@ AGENT_BUDGET_BUFFER_USD=0.10
 AGENT_COST_PER_MTOK_INPUT=5.0
 AGENT_COST_PER_MTOK_OUTPUT=25.0
 
-# Observability
+# Observability (uses existing KTRDR stack)
 OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
-PROMETHEUS_PUSHGATEWAY_URL=http://pushgateway:9091
+# Note: Metrics use existing backend /metrics endpoint
 ```
 
 ---

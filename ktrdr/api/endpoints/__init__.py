@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends
 
 from ktrdr.api.config import APIConfig
 from ktrdr.api.dependencies import get_api_config
+from ktrdr.api.endpoints.agent import router as agent_router
 from ktrdr.api.endpoints.backtesting import router as backtesting_router
 from ktrdr.api.endpoints.data import router as data_router
 from ktrdr.api.endpoints.dummy import router as dummy_router
@@ -63,6 +64,7 @@ api_router.include_router(training_router, tags=["Training"])
 api_router.include_router(models_router, tags=["Models"])
 api_router.include_router(operations_router, tags=["Operations"])
 api_router.include_router(workers_router, tags=["Workers"])
+api_router.include_router(agent_router, tags=["Agent"])
 # Temporarily disabled while updating multi-timeframe for pure fuzzy
 # api_router.include_router(
 #     multi_timeframe_decisions_router, tags=["Multi-Timeframe Decisions"]

@@ -417,9 +417,7 @@ class AsyncOperationExecutor:
                                 console.print(f"  {error_detail['suggestion']}")
                         elif isinstance(error_detail, str):
                             # Plain string error from FastAPI (e.g., ValidationError)
-                            console.print(
-                                f"[red bold]Error:[/red bold] {error_detail}"
-                            )
+                            console.print(f"[red bold]Error:[/red bold] {error_detail}")
                         else:
                             # Not a structured error, show generic message with detail
                             console.print(
@@ -459,7 +457,9 @@ class AsyncOperationExecutor:
                             TimeElapsedColumn(),
                             console=console,
                         ) as progress:
-                            task_id = progress.add_task("Starting operation...", total=100)
+                            task_id = progress.add_task(
+                                "Starting operation...", total=100
+                            )
                             final_status = await self._poll_until_complete(
                                 operation_id,
                                 http_client,

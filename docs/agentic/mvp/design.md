@@ -1,5 +1,21 @@
 # MVP Design: Autonomous Strategy Designer
 
+## ⚠️ Architecture Update (December 2024)
+
+**This design document describes the original architecture using Claude Code CLI + MCP.**
+
+**We have since decided to use the Anthropic Python SDK directly instead.**
+
+See [ARCHITECTURE_DECISION_anthropic_api.md](ARCHITECTURE_DECISION_anthropic_api.md) for:
+
+- Why we changed (simpler, no Node.js dependency, better observability)
+- What changed (AnthropicAgentInvoker + ToolExecutor instead of Claude Code + MCP)
+- Updated phase plans with correct implementation details
+
+**The phase plan documents (`PLAN_phase*.md`) have been updated to reflect the new architecture.**
+
+---
+
 ## Purpose
 
 This document describes the technical design for the MVP autonomous research system. It explains *what* we're building and *why*, with implementation details in separate reference documents.

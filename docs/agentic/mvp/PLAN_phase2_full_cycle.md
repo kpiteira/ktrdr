@@ -4,7 +4,50 @@
 
 **Duration:** 3-4 days
 
-**Prerequisites:** Phase 1 complete (strategy design works)
+**Prerequisites:** Phase 1 complete (strategy design works, Anthropic integration operational)
+
+---
+
+## ⚠️ Architectural Context (Anthropic API Integration)
+
+**Phase 1 established direct Anthropic API integration. Phase 2 builds on this simplified architecture:**
+
+```text
+┌──────────┐     ┌─────────────────────────────────────────────────────────┐
+│   CLI    │────▶│  Backend (Docker:8000)                                  │
+│          │     │                                                         │
+└──────────┘     │  ┌─────────────────────────────────────────────────┐   │
+                 │  │              Agent System                        │   │
+                 │  │                                                  │   │
+                 │  │  Agent API → AnthropicAgentInvoker → ToolExecutor│   │
+                 │  │                      │                           │   │
+                 │  │                      ▼                           │   │
+                 │  │              Anthropic API                       │   │
+                 │  │         (Claude Sonnet/Opus)                     │   │
+                 │  └─────────────────────────────────────────────────┘   │
+                 │                                                         │
+                 │  ┌─────────────────────────────────────────────────┐   │
+                 │  │         Existing KTRDR Services                  │   │
+                 │  │  • Training Service (distributed workers)        │   │
+                 │  │  • Backtest Service (distributed workers)        │   │
+                 │  │  • Operations Service (in-process)               │   │
+                 │  └─────────────────────────────────────────────────┘   │
+                 │                                                         │
+                 └─────────────────────────────────────────────────────────┘
+                         │
+                         ▼
+                 ┌───────────────┐
+                 │  PostgreSQL   │
+                 └───────────────┘
+```
+
+**Key Points:**
+
+- **Everything runs in backend** - No separate host service
+- **TriggerService runs as background task** in backend
+- **Tools execute in-process** via ToolExecutor (no MCP)
+- **Operations Service in same process** - No polling needed, direct access
+- **Distributed workers** for training/backtest operations (unchanged)
 
 ---
 
@@ -46,91 +89,106 @@ For ANY functionality that might already exist in KTRDR:
 
 ## Tasks
 
-### 2.1 start_training MCP Tool (Check-First)
+### 2.1 start_training Tool (ToolExecutor)
 
-**⚠️ CHECK FIRST:** Training tools likely exist in `mcp/src/tools/`
+**Goal:** Add training tool to ToolExecutor (from Phase 1 Task 1.11)
 
-**Step 1: Search existing MCP tools**
-```bash
-grep -r "start_training\|training" mcp/src/tools/
-ls mcp/src/tools/
+**Architecture Note:** Tools are now defined in `ktrdr/agents/tools.py` and executed by `ToolExecutor` - not MCP.
+
+**Tool Definition:**
+
+```python
+{
+    "name": "start_training",
+    "description": "Start training a strategy model",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "strategy_name": {"type": "string"},
+            "symbols": {"type": "array", "items": {"type": "string"}},
+            "timeframes": {"type": "array", "items": {"type": "string"}},
+            "start_date": {"type": "string"},
+            "end_date": {"type": "string"}
+        },
+        "required": ["strategy_name"]
+    }
+}
 ```
 
-**Step 2: If exists, verify it supports:**
-- Starting training with strategy name
-- Symbol and timeframe selection
-- Date range specification
-- Returns operation_id for tracking
-- Async operation (non-blocking)
+**ToolExecutor Handler:**
 
-**Step 3: Action**
-- If exists and complete: Document location, move on
-- If exists but incomplete: Enhance existing tool
-- If missing: Create in `mcp/src/tools/training_tools.py`
-
-**Required interface:**
 ```python
-def start_training(
-    strategy_name: str,
-    symbols: list[str],
-    timeframes: list[str],
-    start_date: str,
-    end_date: str,
-    config_overrides: dict | None = None
-) -> dict:  # Returns {operation_id, status}
+async def _start_training(self, strategy_name: str, **kwargs) -> dict:
+    """Start training via KTRDR Training Service."""
+    # Direct call to training service (same process)
+    result = await training_service.start_training(
+        strategy_name=strategy_name,
+        **kwargs
+    )
+    return {"operation_id": result.operation_id, "status": "started"}
 ```
 
 **Acceptance:**
-- Tool starts training via KTRDR API
+
+- Tool defined in `ktrdr/agents/tools.py`
+- Handler implemented in `ktrdr/agents/executor.py`
 - Returns operation_id for tracking
 - Handles errors gracefully
 
-**Effort:** 0-3 hours (depends on what exists)
+**Effort:** 2-3 hours
 
 ---
 
-### 2.2 start_backtest MCP Tool (Check-First)
+### 2.2 start_backtest Tool (ToolExecutor)
 
-**⚠️ CHECK FIRST:** Backtest tools likely exist in `mcp/src/tools/`
+**Goal:** Add backtest tool to ToolExecutor (from Phase 1 Task 1.11)
 
-**Step 1: Search existing MCP tools**
-```bash
-grep -r "start_backtest\|backtest" mcp/src/tools/
-ls mcp/src/tools/
+**Architecture Note:** Tools are now defined in `ktrdr/agents/tools.py` and executed by `ToolExecutor` - not MCP.
+
+**Tool Definition:**
+
+```python
+{
+    "name": "start_backtest",
+    "description": "Start backtesting a trained model",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "strategy_name": {"type": "string"},
+            "model_path": {"type": "string"},
+            "symbols": {"type": "array", "items": {"type": "string"}},
+            "timeframes": {"type": "array", "items": {"type": "string"}},
+            "start_date": {"type": "string"},
+            "end_date": {"type": "string"},
+            "initial_capital": {"type": "number", "default": 100000}
+        },
+        "required": ["strategy_name", "model_path"]
+    }
+}
 ```
 
-**Step 2: If exists, verify it supports:**
-- Starting backtest with strategy name
-- Model path specification
-- Symbol and timeframe selection
-- Date range for backtest period
-- Initial capital setting
-- Returns operation_id for tracking
+**ToolExecutor Handler:**
 
-**Step 3: Action**
-- If exists and complete: Document location, move on
-- If exists but incomplete: Enhance existing tool
-- If missing: Create in `mcp/src/tools/backtest_tools.py`
-
-**Required interface:**
 ```python
-def start_backtest(
-    strategy_name: str,
-    model_path: str,
-    symbols: list[str],
-    timeframes: list[str],
-    start_date: str,
-    end_date: str,
-    initial_capital: float = 100000
-) -> dict:  # Returns {operation_id, status}
+async def _start_backtest(self, strategy_name: str, model_path: str, **kwargs) -> dict:
+    """Start backtest via KTRDR Backtest Service."""
+    # Direct call to backtest service (same process)
+    result = await backtest_service.start_backtest(
+        strategy_name=strategy_name,
+        model_path=model_path,
+        **kwargs
+    )
+    return {"operation_id": result.operation_id, "status": "started"}
 ```
 
 **Acceptance:**
-- Tool starts backtest via KTRDR API
+
+- Tool defined in `ktrdr/agents/tools.py`
+- Handler implemented in `ktrdr/agents/executor.py`
 - Returns operation_id for tracking
 - Handles errors gracefully
 
-**Effort:** 0-4 hours (depends on what exists)
+**Effort:** 2-3 hours
 
 ---
 
@@ -205,8 +263,11 @@ def evaluate_backtest_gate(results: dict) -> tuple[bool, str]:
 
 **Goal:** Handle all state transitions and gate evaluations
 
+**Architecture Note:** TriggerService runs as a background task in the backend (Phase 1 Task 1.10). Operations Service is in the same process - **no polling needed**.
+
 **Full state machine:**
-```
+
+```text
 IDLE
   ↓ (trigger: start_new_cycle)
 DESIGNING
@@ -224,21 +285,37 @@ ASSESSING                IDLE (outcome: failed_backtest_gate)
 IDLE (outcome: success)
 ```
 
+**Operation Status (Direct Access):**
+
+Since everything runs in the same process, we can directly access Operations Service:
+
+```python
+# Direct access - no HTTP polling needed
+async def check_operation_status(operation_id: str) -> dict:
+    """Direct access to operations service."""
+    from ktrdr.api.services.operations_service import get_operations_service
+    ops_service = get_operations_service()
+    return await ops_service.get_operation(operation_id)
+```
+
 **Trigger events:**
+
 - `start_new_cycle`: No active session
-- `training_completed`: Training operation finished
+- `training_completed`: Training operation finished (direct check)
 - `training_failed`: Training operation errored
-- `backtest_completed`: Backtest operation finished
+- `backtest_completed`: Backtest operation finished (direct check)
 - `backtest_failed`: Backtest operation errored
 
 **File:** `research_agents/services/trigger.py`
 
 **Acceptance:**
+
 - All state transitions work
 - Gates evaluated at correct points
 - Correct outcomes recorded
+- Direct access to operations service (no polling)
 
-**Effort:** 4-5 hours
+**Effort:** 3-4 hours (reduced - no HTTP polling complexity)
 
 ---
 
@@ -341,9 +418,12 @@ async def check_for_resumable_operations(session):
 4. Training error: design → train (error) → end
 5. Checkpoint recovery: interrupt training → resume → complete
 
-**File:** `tests/integration/research_agents/test_full_cycle.py`
+**File:** `tests/integration/agent_tests/test_full_cycle.py`
+
+**Note:** Test directory is `agent_tests/` not `research_agents/` (see Phase 1 handoff for naming convention).
 
 **Acceptance:**
+
 - All scenarios pass
 - State transitions correct
 - Outcomes recorded correctly
@@ -356,19 +436,19 @@ async def check_for_resumable_operations(session):
 
 | Task | Description | Effort | Dependencies |
 |------|-------------|--------|--------------|
-| 2.1 | start_training tool (check-first) | 0-3h | Phase 1 |
-| 2.2 | start_backtest tool (check-first) | 0-4h | Phase 1 |
+| 2.1 | start_training tool (ToolExecutor) | 2-3h | Phase 1 |
+| 2.2 | start_backtest tool (ToolExecutor) | 2-3h | Phase 1 |
 | 2.3 | Training quality gate | 2-3h | None |
 | 2.4 | Backtest quality gate | 2-3h | None |
-| 2.5 | Full state machine | 4-5h | 2.1-2.4 |
+| 2.5 | Full state machine | 3-4h | 2.1-2.4 |
 | 2.6 | Updated agent prompt | 3-4h | 2.5 |
 | 2.7 | Assessment storage | 1-2h | 2.6 |
 | 2.8 | Checkpoint recovery | 2-3h | 2.5 |
 | 2.9 | Integration tests | 4-5h | All above |
 
-**Total estimated effort:** 18-32 hours (3-4 days)
+**Total estimated effort:** 21-30 hours (3-4 days)
 
-*Note: Effort varies based on what already exists. Tasks 2.1, 2.2 may require minimal work if MCP tools exist.*
+*Note: Effort reduced since there's no HTTP polling or MCP protocol complexity. Tools extend ToolExecutor from Phase 1.*
 
 ---
 
@@ -383,7 +463,13 @@ async def check_for_resumable_operations(session):
 
 ## Files to Create/Modify
 
-```
+**Note:** Architecture uses ToolExecutor (not MCP) for agent tools.
+
+```text
+ktrdr/agents/
+├── tools.py                        # 2.1, 2.2 - MODIFY: Add training/backtest tools
+└── executor.py                     # 2.1, 2.2 - MODIFY: Add handlers
+
 research_agents/
 ├── database/
 │   └── schema.py                   # 2.7 (modify - add assessment fields)
@@ -397,17 +483,17 @@ research_agents/
 └── prompts/
     └── strategy_designer.py        # 2.6 (modify - full cycle)
 
-mcp/
-└── src/
-    └── tools/
-        ├── training_tools.py       # 2.1 (check if exists in mcp/src/tools/)
-        └── backtest_tools.py       # 2.2 (likely new)
-
 tests/
 └── integration/
-    └── research_agents/
+    └── agent_tests/
         └── test_full_cycle.py      # 2.9
 ```
+
+**No longer needed:**
+
+- `mcp/src/tools/training_tools.py` - Tools in ToolExecutor
+- `mcp/src/tools/backtest_tools.py` - Tools in ToolExecutor
+- `agent-host-service/` - Agent runs in backend
 
 ---
 

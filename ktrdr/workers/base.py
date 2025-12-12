@@ -485,9 +485,12 @@ class WorkerAPIBase:
             logger.info(f"Using WORKER_PUBLIC_BASE_URL: {endpoint_url}")
         else:
             import socket
+
             hostname = socket.gethostname()
             endpoint_url = f"http://{hostname}:{self.worker_port}"
-            logger.info(f"No WORKER_PUBLIC_BASE_URL set, using hostname: {endpoint_url}")
+            logger.info(
+                f"No WORKER_PUBLIC_BASE_URL set, using hostname: {endpoint_url}"
+            )
 
         payload = {
             "worker_id": self.worker_id,
