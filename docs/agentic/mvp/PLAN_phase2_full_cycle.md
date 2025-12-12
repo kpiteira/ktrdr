@@ -78,12 +78,12 @@ For ANY functionality that might already exist in KTRDR:
 
 ## Success Criteria
 
-- [ ] Agent designs strategy, triggers training, waits for completion
-- [ ] Training quality gate evaluates results
-- [ ] Passing strategies proceed to backtest
-- [ ] Backtest quality gate evaluates results
-- [ ] Agent assesses final results and writes explanation
-- [ ] Full cycle completes autonomously
+- [x] Agent designs strategy, triggers training, waits for completion
+- [x] Training quality gate evaluates results
+- [x] Passing strategies proceed to backtest
+- [x] Backtest quality gate evaluates results
+- [x] Agent assesses final results and writes explanation
+- [x] Full cycle completes autonomously
 
 ---
 
@@ -381,6 +381,8 @@ assessment_metrics JSONB       -- Structured metrics summary
 
 ### 2.8 Implement Checkpoint Recovery
 
+**Status:** ⏸️ DEFERRED - Not needed for MVP. Checkpoint infrastructure not yet implemented in KTRDR.
+
 **Goal:** Resume interrupted operations
 
 **Logic in trigger service:**
@@ -408,6 +410,8 @@ async def check_for_resumable_operations(session):
 ---
 
 ### 2.9 Full Cycle Integration Tests
+
+**Status:** ✅ COMPLETE - 9 test scenarios implemented and passing.
 
 **Goal:** Verify complete cycle works
 
