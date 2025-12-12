@@ -87,6 +87,75 @@ async def get_symbols_from_api() -> list[dict[str, Any]]:
         return []
 
 
+async def start_training_via_api(
+    strategy_name: str,
+    symbols: list[str] | None = None,
+    timeframes: list[str] | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict[str, Any]:
+    """Start training via the KTRDR Training API.
+
+    Args:
+        strategy_name: Name of the strategy to train.
+        symbols: List of symbols to train on (optional).
+        timeframes: List of timeframes to use (optional).
+        start_date: Training data start date (optional).
+        end_date: Training data end date (optional).
+
+    Returns:
+        Dict with operation_id, status, and other training info.
+    """
+    import httpx
+
+    # Get API URL from environment
+    base_url = os.getenv("KTRDR_API_URL", "http://localhost:8000")
+    api_url = f"{base_url}/api/v1/training/start"
+
+    # Build request payload - only include non-None values
+    payload: dict[str, Any] = {"strategy_name": strategy_name}
+
+    if symbols is not None:
+        payload["symbols"] = symbols
+    if timeframes is not None:
+        payload["timeframes"] = timeframes
+    if start_date is not None:
+        payload["start_date"] = start_date
+    if end_date is not None:
+        payload["end_date"] = end_date
+
+    try:
+        # Training can take a while to initialize, use longer timeout
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(api_url, json=payload)
+            response.raise_for_status()
+            data = response.json()
+
+            # Map API response to tool result
+            return {
+                "success": data.get("success", True),
+                "operation_id": data.get("task_id"),  # API uses task_id
+                "status": data.get("status", "started"),
+                "message": data.get("message", "Training started"),
+                "symbols": data.get("symbols", symbols or []),
+                "timeframes": data.get("timeframes", timeframes or []),
+                "strategy_name": data.get("strategy_name", strategy_name),
+            }
+    except httpx.HTTPStatusError as e:
+        logger.error(
+            "Training API returned error",
+            status_code=e.response.status_code,
+            detail=e.response.text,
+        )
+        return {
+            "success": False,
+            "error": f"Training API error: {e.response.text}",
+        }
+    except Exception as e:
+        logger.error("Failed to start training via API", error=str(e))
+        raise
+
+
 class ToolExecutor:
     """Executor for agent tool calls.
 
@@ -114,6 +183,7 @@ class ToolExecutor:
             "get_available_indicators": self._handle_get_available_indicators,
             "get_available_symbols": self._handle_get_available_symbols,
             "get_recent_strategies": self._handle_get_recent_strategies,
+            "start_training": self._handle_start_training,
         }
 
     async def execute(
@@ -241,6 +311,36 @@ class ToolExecutor:
         # Clamp n to valid range
         n = max(1, min(n, 20))
         return await _get_recent_strategies(n=n)
+
+    async def _handle_start_training(
+        self,
+        strategy_name: str,
+        symbols: list[str] | None = None,
+        timeframes: list[str] | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> dict[str, Any]:
+        """Handle start_training tool call.
+
+        Starts a training operation via the KTRDR Training API.
+
+        Args:
+            strategy_name: Name of the strategy to train.
+            symbols: List of symbols to train on (optional).
+            timeframes: List of timeframes to use (optional).
+            start_date: Training data start date (optional).
+            end_date: Training data end date (optional).
+
+        Returns:
+            Dict with operation_id, status, success flag, and other info.
+        """
+        return await start_training_via_api(
+            strategy_name=strategy_name,
+            symbols=symbols,
+            timeframes=timeframes,
+            start_date=start_date,
+            end_date=end_date,
+        )
 
 
 # Convenience function for creating executor

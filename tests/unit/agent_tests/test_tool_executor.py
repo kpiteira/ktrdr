@@ -450,3 +450,188 @@ class TestToolExecutorWithRealServices:
             assert result["success"] is False
             assert "errors" in result
             assert len(result["errors"]) > 0
+
+
+class TestStartTrainingToolSchema:
+    """Tests for start_training tool schema (Task 2.1)."""
+
+    def test_start_training_in_agent_tools(self):
+        """start_training tool should be in AGENT_TOOLS."""
+        tool_names = {tool["name"] for tool in AGENT_TOOLS}
+        assert "start_training" in tool_names
+
+    def test_start_training_schema(self):
+        """start_training tool should have correct schema."""
+        tool = next((t for t in AGENT_TOOLS if t["name"] == "start_training"), None)
+        assert tool is not None, "start_training tool not found"
+
+        schema = tool["input_schema"]
+        props = schema.get("properties", {})
+
+        # Should have required properties
+        assert "strategy_name" in props
+        assert props["strategy_name"]["type"] == "string"
+
+        # Should have optional properties
+        assert "symbols" in props
+        assert props["symbols"]["type"] == "array"
+
+        assert "timeframes" in props
+        assert props["timeframes"]["type"] == "array"
+
+        assert "start_date" in props
+        assert props["start_date"]["type"] == "string"
+
+        assert "end_date" in props
+        assert props["end_date"]["type"] == "string"
+
+        # strategy_name should be required
+        required = schema.get("required", [])
+        assert "strategy_name" in required
+
+    def test_start_training_has_description(self):
+        """start_training tool should have meaningful description."""
+        tool = next((t for t in AGENT_TOOLS if t["name"] == "start_training"), None)
+        assert tool is not None
+        assert "description" in tool
+        assert "training" in tool["description"].lower()
+        assert len(tool["description"]) > 20
+
+
+class TestStartTrainingToolHandler:
+    """Tests for start_training tool handler (Task 2.1)."""
+
+    def test_start_training_has_handler(self):
+        """ToolExecutor should have handler for start_training."""
+        executor = ToolExecutor()
+        assert "start_training" in executor.handlers
+
+    @pytest.mark.asyncio
+    async def test_start_training_calls_training_service(self):
+        """start_training should call training service."""
+        executor = ToolExecutor()
+
+        with patch("ktrdr.agents.executor.start_training_via_api") as mock_start:
+            mock_start.return_value = {
+                "success": True,
+                "operation_id": "op_training_123",
+                "status": "started",
+            }
+
+            result = await executor.execute(
+                "start_training",
+                {
+                    "strategy_name": "test_strategy",
+                    "symbols": ["EURUSD"],
+                    "timeframes": ["1h"],
+                },
+            )
+
+            mock_start.assert_called_once()
+            assert result["success"] is True
+            assert "operation_id" in result
+
+    @pytest.mark.asyncio
+    async def test_start_training_passes_all_parameters(self):
+        """start_training should pass all parameters correctly."""
+        executor = ToolExecutor()
+
+        with patch("ktrdr.agents.executor.start_training_via_api") as mock_start:
+            mock_start.return_value = {
+                "success": True,
+                "operation_id": "op_training_456",
+            }
+
+            await executor.execute(
+                "start_training",
+                {
+                    "strategy_name": "momentum_v1",
+                    "symbols": ["EURUSD", "GBPUSD"],
+                    "timeframes": ["1h", "4h"],
+                    "start_date": "2024-01-01",
+                    "end_date": "2024-06-30",
+                },
+            )
+
+            # Verify all parameters passed
+            call_kwargs = mock_start.call_args.kwargs
+            assert call_kwargs.get("strategy_name") == "momentum_v1"
+            assert call_kwargs.get("symbols") == ["EURUSD", "GBPUSD"]
+            assert call_kwargs.get("timeframes") == ["1h", "4h"]
+            assert call_kwargs.get("start_date") == "2024-01-01"
+            assert call_kwargs.get("end_date") == "2024-06-30"
+
+    @pytest.mark.asyncio
+    async def test_start_training_with_defaults(self):
+        """start_training should work with only required parameters."""
+        executor = ToolExecutor()
+
+        with patch("ktrdr.agents.executor.start_training_via_api") as mock_start:
+            mock_start.return_value = {
+                "success": True,
+                "operation_id": "op_training_789",
+            }
+
+            result = await executor.execute(
+                "start_training",
+                {"strategy_name": "simple_strategy"},
+            )
+
+            mock_start.assert_called_once()
+            assert result["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_start_training_returns_operation_id(self):
+        """start_training should return operation_id for tracking."""
+        executor = ToolExecutor()
+
+        with patch("ktrdr.agents.executor.start_training_via_api") as mock_start:
+            mock_start.return_value = {
+                "success": True,
+                "operation_id": "op_training_abc123",
+                "status": "started",
+                "message": "Training started",
+            }
+
+            result = await executor.execute(
+                "start_training",
+                {"strategy_name": "test_strategy"},
+            )
+
+            assert "operation_id" in result
+            assert result["operation_id"] == "op_training_abc123"
+
+    @pytest.mark.asyncio
+    async def test_start_training_handles_api_error(self):
+        """start_training should handle API errors gracefully."""
+        executor = ToolExecutor()
+
+        with patch("ktrdr.agents.executor.start_training_via_api") as mock_start:
+            mock_start.side_effect = Exception("API connection failed")
+
+            result = await executor.execute(
+                "start_training",
+                {"strategy_name": "test_strategy"},
+            )
+
+            assert "error" in result
+            assert "API connection failed" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_start_training_handles_service_failure(self):
+        """start_training should return failure response from service."""
+        executor = ToolExecutor()
+
+        with patch("ktrdr.agents.executor.start_training_via_api") as mock_start:
+            mock_start.return_value = {
+                "success": False,
+                "error": "Strategy not found: unknown_strategy",
+            }
+
+            result = await executor.execute(
+                "start_training",
+                {"strategy_name": "unknown_strategy"},
+            )
+
+            assert result["success"] is False
+            assert "error" in result

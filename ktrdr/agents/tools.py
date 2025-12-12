@@ -125,6 +125,57 @@ AGENT_TOOLS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "name": "start_training",
+        "description": (
+            "Start training a strategy model. This initiates a training operation "
+            "that runs in the background. Returns an operation_id that can be used "
+            "to track progress. The training will use distributed workers if available."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "strategy_name": {
+                    "type": "string",
+                    "description": (
+                        "Name of the strategy to train (must exist in strategies/ folder). "
+                        "This should match a previously saved strategy configuration."
+                    ),
+                },
+                "symbols": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "List of symbols to train on (e.g., ['EURUSD', 'GBPUSD']). "
+                        "If not provided, uses symbols from strategy config."
+                    ),
+                },
+                "timeframes": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "List of timeframes to use (e.g., ['1h', '4h']). "
+                        "If not provided, uses timeframes from strategy config."
+                    ),
+                },
+                "start_date": {
+                    "type": "string",
+                    "description": (
+                        "Training data start date in YYYY-MM-DD format. "
+                        "If not provided, uses default from strategy config."
+                    ),
+                },
+                "end_date": {
+                    "type": "string",
+                    "description": (
+                        "Training data end date in YYYY-MM-DD format. "
+                        "If not provided, uses default from strategy config."
+                    ),
+                },
+            },
+            "required": ["strategy_name"],
+        },
+    },
 ]
 
 
