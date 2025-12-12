@@ -1236,7 +1236,7 @@ Target: `success_rate >= 0.80` (4/5 or better)
 
 ### 1.15 Parent-Child Operations for Agent Session Lifecycle
 
-**Status:** TODO
+**Status:** REVIEW
 
 **Goal:** Enable proper tracking and cancellation of agent sessions that span multiple operations (design → training → backtest).
 
@@ -1342,34 +1342,33 @@ When parent cancelled:
 
 **Acceptance Criteria:**
 
-1. [ ] Parent operation created when agent session starts
-2. [ ] Design operation created as child of parent
-3. [ ] Parent stays RUNNING while session is active (DESIGNED phase)
-4. [ ] `ktrdr operations list` shows parent operation in RUNNING state
-5. [ ] `ktrdr operations cancel <parent_id>` cancels session successfully
-6. [ ] Session marked CANCELLED in database after cancel
-7. [ ] `ktrdr agent trigger` works after session cancelled
-8. [ ] Existing ProgressBridges work unchanged for child operations
-9. [ ] Unit tests for parent-child operation lifecycle
-10. [ ] Integration test: trigger → design completes → cancel session → trigger again
+1. [x] Parent operation created when agent session starts
+2. [x] Design operation created as child of parent
+3. [x] Parent stays RUNNING while session is active (DESIGNED phase)
+4. [x] `ktrdr operations list` shows parent operation in RUNNING state
+5. [x] `ktrdr operations cancel <parent_id>` cancels session successfully
+6. [x] Session marked CANCELLED in database after cancel
+7. [x] `ktrdr agent trigger` works after session cancelled
+8. [x] Existing ProgressBridges work unchanged for child operations
+9. [x] Unit tests for parent-child operation lifecycle
+10. [x] Integration test: trigger → design completes → cancel session → trigger again
 
 ---
 
-**Design Decisions to Resolve:**
+**Design Decisions (RESOLVED):**
 
-1. **Progress aggregation strategy:**
-   - Option A: Simple phase-based (Design 0-33%, Training 33-66%, Backtest 66-100%)
-   - Option B: Weighted by expected duration
-   - Option C: Just show current phase + child progress
+1. **Progress aggregation strategy:** ✅ Option A (weighted)
+   - Design: 0-5%
+   - Training: 5-80%
+   - Backtest: 80-100%
+   - Constants defined in `operations_service.py` for easy adjustment
 
-2. **Display format for CLI:**
-   - Option A: Show parent only, children on expand/detail
-   - Option B: Show parent with inline child status
-   - Option C: Separate section for session vs phase operations
+2. **Display format for CLI:** ✅ Option A + tree view
+   - Parent only in list, children in detail
+   - Tree view with progress bars for status command
 
-3. **Operation type for parent:**
-   - New type: `OperationType.AGENT_SESSION`?
-   - Or reuse: `OperationType.AGENT_DESIGN` with parent flag?
+3. **Operation type for parent:** ✅ New type `OperationType.AGENT_SESSION`
+   - Clear separation between session-level and phase-level operations
 
 ---
 

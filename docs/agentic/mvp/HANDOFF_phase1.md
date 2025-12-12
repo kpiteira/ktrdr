@@ -695,3 +695,70 @@ To validate >80% first-attempt success rate, run 5+ agent design cycles and reco
 - Token usage per session
 
 Compare with pre-improvement baseline to measure token reduction.
+
+### Parent-Child Operations Pattern (Task 1.15)
+
+Task 1.15 introduces parent-child relationships for agent session operations:
+
+**Problem Solved:**
+- Agent sessions span multiple operations (design → training → backtest)
+- Each phase creates its own Operation that completes independently
+- Users couldn't cancel sessions stuck in DESIGNED phase (Operation already COMPLETED)
+
+**Solution: AGENT_SESSION Parent Operations**
+
+```text
+Agent Session Operation (AGENT_SESSION)  ← RUNNING (parent)
+├── Design Operation (AGENT_DESIGN)       ← COMPLETED (child)
+├── Training Operation (TRAINING)         ← PENDING (child, Phase 2)
+└── Backtest Operation (BACKTESTING)      ← PENDING (child, Phase 3)
+```
+
+**Key Files Modified:**
+
+- `ktrdr/api/models/operations.py`:
+  - Added `OperationType.AGENT_SESSION` enum value
+  - Added `parent_operation_id: Optional[str]` field to `OperationInfo`
+
+- `ktrdr/api/services/operations_service.py`:
+  - Added phase weight constants: `PHASE_WEIGHT_DESIGN_START/END`, etc.
+  - Modified `create_operation()` to accept `parent_operation_id`
+  - Added `get_children()` to retrieve child operations
+  - Added `get_aggregated_progress()` for parent progress calculation
+  - Modified `cancel_operation()` to cascade to children
+  - Modified `fail_operation()` with `fail_parent` parameter
+
+- `ktrdr/api/services/agent_service.py`:
+  - `trigger()` now creates AGENT_SESSION parent + AGENT_DESIGN child
+  - Added `_session_lifecycle_tracker()` for parent operation lifecycle
+
+- `ktrdr/api/endpoints/operations.py`:
+  - Added `GET /operations/{id}/children` endpoint
+
+- `ktrdr/cli/operations_commands.py`:
+  - Added tree view display for session phases (`_display_children_tree()`)
+
+**Phase Weight Constants (Easy to Adjust):**
+
+```python
+# ktrdr/api/services/operations_service.py
+PHASE_WEIGHT_DESIGN_START = 0.0
+PHASE_WEIGHT_DESIGN_END = 5.0
+PHASE_WEIGHT_TRAINING_START = 5.0
+PHASE_WEIGHT_TRAINING_END = 80.0
+PHASE_WEIGHT_BACKTEST_START = 80.0
+PHASE_WEIGHT_BACKTEST_END = 100.0
+```
+
+**CLI Tree View Output:**
+
+```text
+🌳 Session Phases
+├── Design       ████████████ 100% COMPLETED
+├── Training     ████░░░░░░░░  45% RUNNING
+└── Backtest     ░░░░░░░░░░░░   0% PENDING
+```
+
+**Tests:**
+- `tests/unit/api/services/test_operations_parent_child.py` - 17 unit tests
+- `tests/unit/api/services/test_agent_parent_child_integration.py` - 8 integration tests

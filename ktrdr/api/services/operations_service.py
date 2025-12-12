@@ -36,6 +36,16 @@ from ktrdr.monitoring.service_telemetry import create_service_span, trace_servic
 
 logger = get_logger(__name__)
 
+# Phase weight constants for parent operation progress aggregation (Task 1.15)
+# These determine how child operation progress maps to parent progress
+# Design: 0-5%, Training: 5-80%, Backtest: 80-100%
+PHASE_WEIGHT_DESIGN_START = 0.0
+PHASE_WEIGHT_DESIGN_END = 5.0
+PHASE_WEIGHT_TRAINING_START = 5.0
+PHASE_WEIGHT_TRAINING_END = 80.0
+PHASE_WEIGHT_BACKTEST_START = 80.0
+PHASE_WEIGHT_BACKTEST_END = 100.0
+
 
 class OperationsService:
     """
@@ -103,6 +113,7 @@ class OperationsService:
         operation_type: OperationType,
         metadata: OperationMetadata,
         operation_id: Optional[str] = None,
+        parent_operation_id: Optional[str] = None,
     ) -> OperationInfo:
         """
         Create a new operation in the registry.
@@ -111,6 +122,7 @@ class OperationsService:
             operation_type: Type of operation
             metadata: Operation metadata
             operation_id: Optional custom operation ID
+            parent_operation_id: Optional parent operation ID for child operations
 
         Returns:
             Created operation info
@@ -127,6 +139,14 @@ class OperationsService:
                     details={"operation_id": operation_id},
                 )
 
+            # Validate parent operation exists if specified
+            if parent_operation_id and parent_operation_id not in self._operations:
+                raise DataError(
+                    message=f"Parent operation not found: {parent_operation_id}",
+                    error_code="OPERATIONS-ParentNotFound",
+                    details={"parent_operation_id": parent_operation_id},
+                )
+
             # Create operation with telemetry
             with create_service_span(
                 "operation.register",
@@ -137,10 +157,13 @@ class OperationsService:
                 # Add operation-specific attributes
                 span.set_attribute("operation.type", operation_type.value)
                 span.set_attribute("operation.status", OperationStatus.PENDING.value)
+                if parent_operation_id:
+                    span.set_attribute("operation.parent_id", parent_operation_id)
 
                 # Create operation
                 operation = OperationInfo(
                     operation_id=operation_id,
+                    parent_operation_id=parent_operation_id,
                     operation_type=operation_type,
                     status=OperationStatus.PENDING,
                     created_at=datetime.now(timezone.utc),
@@ -160,6 +183,11 @@ class OperationsService:
 
                 logger.info(
                     f"Created operation: {operation_id} (type: {operation_type})"
+                    + (
+                        f", parent: {parent_operation_id}"
+                        if parent_operation_id
+                        else ""
+                    )
                 )
                 return operation
 
@@ -333,6 +361,7 @@ class OperationsService:
         self,
         operation_id: str,
         error_message: str,
+        fail_parent: bool = False,
     ) -> None:
         """
         Mark an operation as failed.
@@ -340,6 +369,7 @@ class OperationsService:
         Args:
             operation_id: Operation identifier
             error_message: Error description
+            fail_parent: If True and operation has a parent, also fail the parent (Task 1.15)
         """
         async with self._lock:
             if operation_id not in self._operations:
@@ -377,6 +407,33 @@ class OperationsService:
 
             logger.error(f"Failed operation: {operation_id} - {error_message}")
 
+            # Task 1.15: Cascade failure to parent if requested
+            if fail_parent and operation.parent_operation_id:
+                parent = self._operations.get(operation.parent_operation_id)
+                if parent and parent.status in [
+                    OperationStatus.PENDING,
+                    OperationStatus.RUNNING,
+                ]:
+                    parent.status = OperationStatus.FAILED
+                    parent.completed_at = datetime.now(timezone.utc)
+                    parent.error_message = f"Child operation failed: {error_message}"
+
+                    # Clean up parent task if exists
+                    if parent.operation_id in self._operation_tasks:
+                        parent_task = self._operation_tasks[parent.operation_id]
+                        if not parent_task.done():
+                            parent_task.cancel()
+                        del self._operation_tasks[parent.operation_id]
+
+                    # Update metrics for parent
+                    operations_active.dec()
+                    increment_operations_total(parent.operation_type.value, "failed")
+
+                    logger.error(
+                        f"Cascade-failed parent operation: {parent.operation_id} "
+                        f"(child: {operation_id})"
+                    )
+
     async def cancel_operation(
         self,
         operation_id: str,
@@ -385,6 +442,8 @@ class OperationsService:
     ) -> dict[str, Any]:
         """
         Cancel a running operation.
+
+        For parent operations (Task 1.15): Also cancels all running children.
 
         Args:
             operation_id: Operation identifier
@@ -414,7 +473,44 @@ class OperationsService:
                     "error": f"Operation {operation_id} is already finished (status: {operation.status})",
                 }
 
-            # Use unified cancellation coordinator
+            # Task 1.15: Cancel children first (cascade cancellation)
+            children_cancelled = []
+            children = [
+                op
+                for op in self._operations.values()
+                if op.parent_operation_id == operation_id
+            ]
+            for child in children:
+                if child.status in [OperationStatus.PENDING, OperationStatus.RUNNING]:
+                    # Cancel child's task if exists
+                    if child.operation_id in self._operation_tasks:
+                        child_task = self._operation_tasks[child.operation_id]
+                        if not child_task.done():
+                            child_task.cancel()
+                        del self._operation_tasks[child.operation_id]
+
+                    # Update child status
+                    child.status = OperationStatus.CANCELLED
+                    child.completed_at = datetime.now(timezone.utc)
+                    child.error_message = (
+                        f"Parent operation cancelled: {reason or 'User cancelled'}"
+                    )
+
+                    # Cancel via cancellation coordinator
+                    self._cancellation_coordinator.cancel_operation(
+                        child.operation_id, f"Parent cancelled: {reason}"
+                    )
+
+                    # Update metrics for child
+                    operations_active.dec()
+                    increment_operations_total(child.operation_type.value, "cancelled")
+
+                    children_cancelled.append(child.operation_id)
+                    logger.info(
+                        f"Cascade-cancelled child operation: {child.operation_id}"
+                    )
+
+            # Use unified cancellation coordinator for parent
             cancellation_reason = reason or f"Operation {operation_id} cancelled"
             self._cancellation_coordinator.cancel_operation(
                 operation_id, cancellation_reason
@@ -462,6 +558,10 @@ class OperationsService:
                 )
                 if reason:
                     span.set_attribute("operation.cancellation_reason", reason)
+                if children_cancelled:
+                    span.set_attribute(
+                        "operation.children_cancelled", len(children_cancelled)
+                    )
 
                 operation.status = OperationStatus.CANCELLED
                 operation.completed_at = datetime.now(timezone.utc)
@@ -479,7 +579,8 @@ class OperationsService:
                 )
 
             logger.info(
-                f"Cancelled operation: {operation_id} (task_cancelled: {cancelled_task}, remote_cancelled: {remote_cancelled})"
+                f"Cancelled operation: {operation_id} (task_cancelled: {cancelled_task}, "
+                f"remote_cancelled: {remote_cancelled}, children_cancelled: {len(children_cancelled)})"
             )
 
             return {
@@ -490,6 +591,7 @@ class OperationsService:
                 "cancellation_reason": reason,
                 "task_cancelled": cancelled_task,
                 "remote_cancelled": remote_cancelled,
+                "children_cancelled": children_cancelled,
             }
 
     async def get_operation(
@@ -652,6 +754,7 @@ class OperationsService:
 
             new_operation = OperationInfo(
                 operation_id=new_operation_id,
+                parent_operation_id=original_operation.parent_operation_id,  # Preserve parent link
                 operation_type=original_operation.operation_type,
                 status=OperationStatus.PENDING,
                 created_at=datetime.now(timezone.utc),
@@ -670,6 +773,120 @@ class OperationsService:
                 f"Created retry operation: {new_operation_id} (original: {operation_id})"
             )
             return new_operation
+
+    async def get_children(self, parent_operation_id: str) -> list[OperationInfo]:
+        """
+        Get all child operations for a parent operation (Task 1.15).
+
+        Returns children in creation order (oldest first).
+
+        Args:
+            parent_operation_id: Parent operation identifier
+
+        Returns:
+            List of child operations in creation order
+        """
+        async with self._lock:
+            children = [
+                op
+                for op in self._operations.values()
+                if op.parent_operation_id == parent_operation_id
+            ]
+            # Sort by creation time (oldest first)
+            children.sort(key=lambda op: op.created_at)
+            return children
+
+    async def get_aggregated_progress(
+        self, parent_operation_id: str
+    ) -> OperationProgress:
+        """
+        Get aggregated progress for a parent operation based on children (Task 1.15).
+
+        Progress is weighted by phase:
+        - Design (AGENT_DESIGN): 0-5%
+        - Training (TRAINING): 5-80%
+        - Backtest (BACKTESTING): 80-100%
+
+        Args:
+            parent_operation_id: Parent operation identifier
+
+        Returns:
+            Aggregated progress information
+        """
+        children = await self.get_children(parent_operation_id)
+
+        if not children:
+            return OperationProgress(
+                percentage=0.0,
+                current_step="No phases started",
+                steps_completed=0,
+                steps_total=3,  # design, train, backtest
+                items_processed=0,
+                items_total=None,
+                current_item=None,
+            )
+
+        # Find the currently active child (or most recent)
+        active_child = None
+        for child in reversed(children):  # Check from newest first
+            if child.status == OperationStatus.RUNNING:
+                active_child = child
+                break
+            elif child.status == OperationStatus.PENDING:
+                active_child = child
+                break
+
+        # If no running/pending, use most recent child
+        if not active_child:
+            active_child = children[-1]
+
+        # Determine phase name and weight range based on operation type
+        if active_child.operation_type == OperationType.AGENT_DESIGN:
+            phase_name = "Design"
+            start_weight = PHASE_WEIGHT_DESIGN_START
+            end_weight = PHASE_WEIGHT_DESIGN_END
+        elif active_child.operation_type == OperationType.TRAINING:
+            phase_name = "Training"
+            start_weight = PHASE_WEIGHT_TRAINING_START
+            end_weight = PHASE_WEIGHT_TRAINING_END
+        elif active_child.operation_type == OperationType.BACKTESTING:
+            phase_name = "Backtest"
+            start_weight = PHASE_WEIGHT_BACKTEST_START
+            end_weight = PHASE_WEIGHT_BACKTEST_END
+        else:
+            # Unknown phase - use simple average
+            phase_name = active_child.operation_type.value
+            start_weight = 0.0
+            end_weight = 100.0
+
+        # Calculate weighted progress
+        child_progress_pct = active_child.progress.percentage / 100.0
+        weight_range = end_weight - start_weight
+        aggregated_percentage = start_weight + (weight_range * child_progress_pct)
+
+        # If child is completed, use the end weight
+        if active_child.status == OperationStatus.COMPLETED:
+            aggregated_percentage = end_weight
+
+        # Count completed phases
+        completed_phases = sum(
+            1 for c in children if c.status == OperationStatus.COMPLETED
+        )
+
+        return OperationProgress(
+            percentage=min(aggregated_percentage, 100.0),
+            current_step=f"{phase_name} ({active_child.progress.percentage:.0f}%)",
+            steps_completed=completed_phases,
+            steps_total=3,  # design, train, backtest
+            items_processed=0,
+            items_total=None,
+            current_item=None,
+            context={
+                "current_phase": phase_name,
+                "phase_progress": active_child.progress.percentage,
+                "child_operation_id": active_child.operation_id,
+            },
+        )
 
     async def cleanup_old_operations(self, max_age_hours: int = 24) -> int:
         """

@@ -106,8 +106,35 @@ class AgentService:
                 "message": "Dry run - would trigger new cycle",
             }
 
-        # Create operation in OperationsService BEFORE starting work
-        operation = await self._operations_service.create_operation(
+        # Task 1.15: Create AGENT_SESSION parent operation for the full research cycle
+        session_operation = await self._operations_service.create_operation(
+            operation_type=OperationType.AGENT_SESSION,
+            metadata=OperationMetadata(
+                symbol="N/A",  # Agent session doesn't operate on specific symbols
+                timeframe="N/A",
+                mode="research_cycle",
+                start_date=None,
+                end_date=None,
+                parameters={
+                    "trigger_reason": "start_new_cycle",
+                    "agent_enabled": self._config.enabled,
+                },
+            ),
+        )
+        session_operation_id = session_operation.operation_id
+
+        # Start the session operation (it stays RUNNING until session completes/cancels)
+        # Create a placeholder task for cancellation tracking
+        session_task = asyncio.create_task(
+            self._session_lifecycle_tracker(session_operation_id),
+            name=f"agent_session_{session_operation_id}",
+        )
+        await self._operations_service.start_operation(
+            session_operation_id, session_task
+        )
+
+        # Task 1.15: Create AGENT_DESIGN child operation
+        design_operation = await self._operations_service.create_operation(
             operation_type=OperationType.AGENT_DESIGN,
             metadata=OperationMetadata(
                 symbol="N/A",  # Agent doesn't operate on specific symbols
@@ -118,35 +145,72 @@ class AgentService:
                 parameters={
                     "trigger_reason": "start_new_cycle",
                     "agent_enabled": self._config.enabled,
+                    "session_operation_id": session_operation_id,
                 },
             ),
+            parent_operation_id=session_operation_id,  # Task 1.15: Link to parent
         )
-        operation_id = operation.operation_id
+        design_operation_id = design_operation.operation_id
 
         # Create background task for agent execution
         task = asyncio.create_task(
-            self._run_agent_with_tracking(operation_id, db),
-            name=f"agent_design_{operation_id}",
+            self._run_agent_with_tracking(
+                design_operation_id, db, session_operation_id
+            ),
+            name=f"agent_design_{design_operation_id}",
         )
 
-        # Start operation (registers task for cancellation)
-        await self._operations_service.start_operation(operation_id, task)
+        # Start design operation (registers task for cancellation)
+        await self._operations_service.start_operation(design_operation_id, task)
 
-        logger.info(f"Started agent design operation: {operation_id}")
+        logger.info(
+            f"Started agent session: {session_operation_id} "
+            f"with design operation: {design_operation_id}"
+        )
 
-        # Return immediately with operation_id
+        # Return session operation_id (parent) for tracking
         return {
             "success": True,
             "triggered": True,
-            "operation_id": operation_id,
+            "operation_id": session_operation_id,  # Return parent ID for tracking
+            "design_operation_id": design_operation_id,  # Also include child ID
             "status": "started",
             "message": "Research cycle started - query progress via /operations/{operation_id}",
         }
+
+    async def _session_lifecycle_tracker(self, session_operation_id: str) -> None:
+        """Track session lifecycle - keeps session operation alive (Task 1.15).
+
+        This async task runs in background, keeping the AGENT_SESSION operation
+        in RUNNING state until the session completes or is cancelled.
+        The actual work is done by child operations (design, train, backtest).
+
+        Args:
+            session_operation_id: The parent session operation ID
+        """
+        try:
+            # Just wait indefinitely - cancellation happens via cancel_operation
+            # which will cancel this task
+            while True:
+                await asyncio.sleep(60)  # Check every minute
+                # Update progress from children if needed
+                progress = await self._operations_service.get_aggregated_progress(
+                    session_operation_id
+                )
+                await self._operations_service.update_progress(
+                    session_operation_id, progress
+                )
+        except asyncio.CancelledError:
+            logger.info(
+                f"Session operation {session_operation_id} lifecycle tracker cancelled"
+            )
+            raise
 
     async def _run_agent_with_tracking(
         self,
         operation_id: str,
         db: Any,
+        session_operation_id: Optional[str] = None,
     ) -> None:
         """Execute agent with progress tracking (Task 1.13b: cancellation & error handling).
 
@@ -154,8 +218,9 @@ class AgentService:
         On cancellation/timeout/error, updates both operation and session state.
 
         Args:
-            operation_id: Operation ID for progress tracking
+            operation_id: Design operation ID for progress tracking
             db: Agent database instance
+            session_operation_id: Parent session operation ID (Task 1.15)
         """
         from research_agents.database.schema import SessionOutcome
 
