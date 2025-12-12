@@ -1,0 +1,192 @@
+name: multidim_squeeze_breakout
+description: Multi-dimensional volatility breakout strategy combining Bollinger Bands
+  squeeze, volume confirmation, and trend strength analysis
+version: '1.0'
+hypothesis: Markets tend to have explosive moves after periods of low volatility.
+  By identifying volatility squeezes using Bollinger Bands and ATR, then confirming
+  breakouts with volume and trend strength, we can capture significant price movements.
+scope: universal
+training_data:
+  symbols:
+    mode: multi_symbol
+    list:
+    - EURUSD
+    - GBPUSD
+    - USDJPY
+  timeframes:
+    mode: single
+    list:
+    - 1h
+    base_timeframe: 1h
+  history_required: 250
+deployment:
+  target_symbols:
+    mode: universal
+  target_timeframes:
+    mode: single
+    supported:
+    - 1h
+indicators:
+- name: BollingerBands
+  feature_id: bb_20
+  period: 20
+  source: close
+- name: ATR
+  feature_id: atr_14
+  period: 14
+  source: close
+- name: ADX
+  feature_id: adx_14
+  period: 14
+  source: close
+- name: MFI
+  feature_id: mfi_14
+  period: 14
+  source: close
+- name: BollingerBandWidth
+  feature_id: bbw_20
+  period: 20
+  source: close
+fuzzy_sets:
+  bb_20:
+    lower_band:
+      type: trapezoidal
+      parameters:
+      - -2.0
+      - -1.5
+      - -0.5
+      - 0.0
+    middle_zone:
+      type: triangular
+      parameters:
+      - -0.3
+      - 0.0
+      - 0.3
+    upper_band:
+      type: trapezoidal
+      parameters:
+      - 0.0
+      - 0.5
+      - 1.5
+      - 2.0
+  atr_14:
+    low_volatility:
+      type: trapezoidal
+      parameters:
+      - 0.0
+      - 0.0
+      - 0.3
+      - 0.5
+    medium_volatility:
+      type: triangular
+      parameters:
+      - 0.4
+      - 0.6
+      - 0.8
+    high_volatility:
+      type: trapezoidal
+      parameters:
+      - 0.7
+      - 0.9
+      - 1.0
+      - 1.0
+  adx_14:
+    weak_trend:
+      type: trapezoidal
+      parameters:
+      - 0
+      - 0
+      - 20
+      - 25
+    moderate_trend:
+      type: triangular
+      parameters:
+      - 20
+      - 30
+      - 40
+    strong_trend:
+      type: trapezoidal
+      parameters:
+      - 35
+      - 45
+      - 100
+      - 100
+  mfi_14:
+    oversold:
+      type: trapezoidal
+      parameters:
+      - 0
+      - 0
+      - 15
+      - 25
+    neutral:
+      type: triangular
+      parameters:
+      - 20
+      - 50
+      - 80
+    overbought:
+      type: trapezoidal
+      parameters:
+      - 75
+      - 85
+      - 100
+      - 100
+  bbw_20:
+    squeeze:
+      type: trapezoidal
+      parameters:
+      - 0.0
+      - 0.0
+      - 0.05
+      - 0.1
+    normal:
+      type: triangular
+      parameters:
+      - 0.08
+      - 0.15
+      - 0.25
+    expansion:
+      type: trapezoidal
+      parameters:
+      - 0.2
+      - 0.3
+      - 1.0
+      - 1.0
+model:
+  type: mlp
+  architecture:
+    hidden_layers:
+    - 48
+    - 24
+    - 12
+    activation: relu
+    output_activation: softmax
+    dropout: 0.25
+  features:
+    include_price_context: false
+    lookback_periods: 3
+    scale_features: true
+  training:
+    learning_rate: 0.001
+    batch_size: 64
+    epochs: 75
+    optimizer: adam
+    early_stopping:
+      enabled: true
+      patience: 15
+      min_delta: 0.0005
+decisions:
+  output_format: classification
+  confidence_threshold: 0.65
+  position_awareness: true
+training:
+  method: supervised
+  labels:
+    source: zigzag
+    zigzag_threshold: 0.025
+    label_lookahead: 24
+  data_split:
+    train: 0.7
+    validation: 0.15
+    test: 0.15

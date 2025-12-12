@@ -550,12 +550,7 @@ class TriggerService:
         )
 
         while self._running:
-            try:
-                await self.check_and_trigger()
-            except Exception as e:
-                logger.error("Error in trigger check", error=str(e))
-
-            # Wait for interval or stop signal
+            # Wait for interval or stop signal FIRST (avoid trigger on every restart)
             try:
                 await asyncio.wait_for(
                     self._stop_event.wait(),
@@ -564,8 +559,13 @@ class TriggerService:
                 # Stop event was set
                 break
             except asyncio.TimeoutError:
-                # Normal timeout, continue loop
+                # Normal timeout, continue to trigger check
                 pass
+
+            try:
+                await self.check_and_trigger()
+            except Exception as e:
+                logger.error("Error in trigger check", error=str(e))
 
         logger.info("Trigger service stopped")
 

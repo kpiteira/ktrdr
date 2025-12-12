@@ -1,0 +1,136 @@
+name: volatility_squeeze_fisher_v1
+description: Volatility squeeze breakout strategy combining Bollinger Band Width,
+  ATR, and Fisher Transform for multi-dimensional market timing
+version: '1.0'
+hypothesis: Markets compress into low volatility squeezes before explosive breakouts.
+  By combining volatility compression signals with momentum turning points, we can
+  capture these high-probability moves.
+scope: universal
+training_data:
+  symbols:
+    mode: multi_symbol
+    list:
+    - EURUSD
+    - GBPUSD
+    - USDJPY
+  timeframes:
+    mode: single
+    list:
+    - 1h
+    base_timeframe: 1h
+  history_required: 250
+deployment:
+  target_symbols:
+    mode: universal
+  target_timeframes:
+    mode: single
+    supported:
+    - 1h
+indicators:
+- name: BollingerBandWidth
+  feature_id: bb_width_20
+  period: 20
+  source: close
+- name: ATR
+  feature_id: atr_14
+  period: 14
+  source: close
+- name: FisherTransform
+  feature_id: fisher_10
+  period: 10
+  source: close
+fuzzy_sets:
+  bb_width_20:
+    squeezed:
+      type: triangular
+      parameters:
+      - 0.0
+      - 0.15
+      - 0.3
+    normal:
+      type: triangular
+      parameters:
+      - 0.25
+      - 0.5
+      - 0.75
+    expanded:
+      type: triangular
+      parameters:
+      - 0.7
+      - 0.85
+      - 1.0
+  atr_14:
+    low_volatility:
+      type: triangular
+      parameters:
+      - 0.0
+      - 0.2
+      - 0.4
+    medium_volatility:
+      type: triangular
+      parameters:
+      - 0.3
+      - 0.5
+      - 0.7
+    high_volatility:
+      type: triangular
+      parameters:
+      - 0.6
+      - 0.8
+      - 1.0
+  fisher_10:
+    oversold:
+      type: triangular
+      parameters:
+      - -3.0
+      - -2.0
+      - -1.0
+    neutral:
+      type: triangular
+      parameters:
+      - -0.5
+      - 0.0
+      - 0.5
+    overbought:
+      type: triangular
+      parameters:
+      - 1.0
+      - 2.0
+      - 3.0
+model:
+  type: mlp
+  architecture:
+    hidden_layers:
+    - 48
+    - 24
+    - 12
+    activation: relu
+    output_activation: softmax
+    dropout: 0.25
+  features:
+    include_price_context: false
+    lookback_periods: 3
+    scale_features: true
+  training:
+    learning_rate: 0.0015
+    batch_size: 64
+    epochs: 75
+    optimizer: adam
+    early_stopping:
+      enabled: true
+      patience: 12
+      min_delta: 0.001
+decisions:
+  output_format: classification
+  confidence_threshold: 0.65
+  position_awareness: true
+training:
+  method: supervised
+  labels:
+    source: zigzag
+    zigzag_threshold: 0.025
+    label_lookahead: 24
+  data_split:
+    train: 0.7
+    validation: 0.15
+    test: 0.15

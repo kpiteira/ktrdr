@@ -83,6 +83,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:-local-dev-secret-minimum-32-characters-long}
       # Agent configuration (Phase 1)
       - AGENT_ENABLED=${AGENT_ENABLED:-false}
+      - AGENT_TRIGGER_INTERVAL_SECONDS=${AGENT_TRIGGER_INTERVAL_SECONDS:-300}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
