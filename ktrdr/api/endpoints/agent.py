@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ktrdr import get_logger
 from ktrdr.api.models.agent import (
+    CancelSessionResponse,
     SessionsListResponse,
     StatusResponse,
     TriggerResponse,
@@ -89,4 +90,23 @@ async def list_sessions(
         return SessionsListResponse(**result)
     except Exception as e:
         logger.error(f"Failed to list sessions: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.delete("/sessions/{session_id}/cancel", response_model=CancelSessionResponse)
+async def cancel_session(
+    session_id: int,
+    service: AgentService = Depends(get_agent_service),
+) -> CancelSessionResponse:
+    """
+    Cancel a session.
+
+    Cancels any session regardless of its current state. If the session
+    has an associated operation, attempts to cancel it (best effort).
+    """
+    try:
+        result = await service.cancel_session(session_id=session_id)
+        return CancelSessionResponse(**result)
+    except Exception as e:
+        logger.error(f"Failed to cancel session {session_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e

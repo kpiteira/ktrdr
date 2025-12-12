@@ -243,6 +243,7 @@ class TriggerService:
         context_provider: ContextProvider | None = None,
         tool_executor: ToolExecutorFunc | None = None,
         tools: list[dict[str, Any]] | None = None,
+        operations_service: Any | None = None,
     ):
         """Initialize the trigger service.
 
@@ -257,6 +258,8 @@ class TriggerService:
             tool_executor: Optional async function to execute tool calls.
                 Required for modern invokers (AnthropicAgentInvoker).
             tools: Optional list of tool definitions. If None, uses DEFAULT_AGENT_TOOLS.
+            operations_service: Optional OperationsService for checking operation status.
+                Used for orphan detection during trigger checks.
         """
         self.config = config
         self.db = db
@@ -264,6 +267,7 @@ class TriggerService:
         self.context_provider = context_provider
         self.tool_executor = tool_executor
         self.tools = tools or DEFAULT_AGENT_TOOLS
+        self.operations_service = operations_service
         self._running = False
         self._stop_event = asyncio.Event()
 
@@ -540,7 +544,7 @@ class TriggerService:
         Returns:
             Dict with handling result.
         """
-        from research_agents.database.schema import SessionPhase
+        from research_agents.database.schema import SessionOutcome, SessionPhase
 
         phase = session.phase
         logger.info(
@@ -548,6 +552,28 @@ class TriggerService:
             session_id=session.id,
             phase=phase.value if hasattr(phase, "value") else phase,
         )
+
+        # Orphan detection: Check if session's operation still exists
+        if session.operation_id and self.operations_service is not None:
+            operation = await self.operations_service.get_operation(session.operation_id)
+            if operation is None:
+                # Orphan detected - operation disappeared
+                logger.warning(
+                    f"Orphan session {session.id} detected: "
+                    f"operation {session.operation_id} not found. Marking as failed.",
+                    session_id=session.id,
+                    operation_id=session.operation_id,
+                )
+                await self.db.complete_session(
+                    session_id=session.id,
+                    outcome=SessionOutcome.FAILED_ORPHAN,
+                )
+                return {
+                    "triggered": False,
+                    "reason": "orphan_recovered",
+                    "session_id": session.id,
+                    "operation_id": session.operation_id,
+                }
 
         # Route based on phase
         if phase == SessionPhase.DESIGNED:

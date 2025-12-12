@@ -60,3 +60,13 @@ class SessionsListResponse(BaseModel):
 
     sessions: list[SessionSummary]
     total: int
+
+
+class CancelSessionResponse(BaseModel):
+    """Response model for DELETE /agent/sessions/{session_id}/cancel."""
+
+    success: bool
+    session_id: int
+    operation_id: Optional[str] = None
+    message: Optional[str] = None
+    error: Optional[str] = None

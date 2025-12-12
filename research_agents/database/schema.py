@@ -37,6 +37,8 @@ class SessionOutcome(str, Enum):
     CANCELLED = "cancelled"  # User cancelled operation
     FAILED_TIMEOUT = "failed_timeout"  # Anthropic API timeout
     FAILED_INTERRUPTED = "failed_interrupted"  # Backend restart recovery
+    # Session cancellation task: Orphan detection
+    FAILED_ORPHAN = "failed_orphan"  # Session's operation_id points to non-existent operation
 
 
 @dataclass

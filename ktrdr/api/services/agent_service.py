@@ -505,3 +505,70 @@ class AgentService:
             "sessions": sessions,
             "total": len(sessions),
         }
+
+    @trace_service_method("agent.cancel_session")
+    async def cancel_session(self, session_id: int) -> dict[str, Any]:
+        """Cancel a session (Session Cancellation Task).
+
+        Cancels any session regardless of its current state. If the session
+        has an associated operation, attempts to cancel it (best effort).
+
+        Args:
+            session_id: The session ID to cancel.
+
+        Returns:
+            Dict with cancellation result:
+            - success: Whether the session was cancelled
+            - session_id: The cancelled session ID
+            - error: Error message if failed
+        """
+        from research_agents.database.schema import SessionOutcome
+
+        db = await self._get_db()
+
+        # Get the session
+        session = await db.get_session(session_id)
+        if session is None:
+            logger.warning(f"Cancel session failed: session {session_id} not found")
+            return {
+                "success": False,
+                "session_id": session_id,
+                "error": f"Session {session_id} not found",
+            }
+
+        # Try to cancel operation if it exists (best effort)
+        if session.operation_id:
+            try:
+                await self._operations_service.cancel_operation(
+                    session.operation_id, "User cancelled session"
+                )
+                logger.info(
+                    f"Cancelled operation {session.operation_id} for session {session_id}"
+                )
+            except Exception as e:
+                # Operation might not exist (orphan) - that's fine, continue
+                logger.debug(f"Could not cancel operation {session.operation_id}: {e}")
+
+        # Always complete the session with CANCELLED outcome
+        try:
+            await db.complete_session(
+                session_id=session_id,
+                outcome=SessionOutcome.CANCELLED,
+            )
+            logger.info(
+                f"Cancelled session {session_id} (operation_id={session.operation_id})"
+            )
+        except Exception as e:
+            logger.error(f"Failed to complete session {session_id}: {e}")
+            return {
+                "success": False,
+                "session_id": session_id,
+                "error": f"Failed to update session: {e}",
+            }
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "operation_id": session.operation_id,
+            "message": f"Session {session_id} cancelled",
+        }

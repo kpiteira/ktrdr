@@ -435,3 +435,372 @@ class TestAgentServiceIntegrationWithCancellation:
             # Operation should be marked CANCELLED
             op = await ops_service.get_operation(operation_id)
             assert op.status == OperationStatus.CANCELLED
+
+
+# ============================================================================
+# Session Cancellation Task Tests (NEW)
+# Tests for: docs/agentic/mvp/TASK_session_cancellation.md
+# ============================================================================
+
+
+class TestOrphanDetectionDuringTriggerCheck:
+    """Test automatic orphan detection during check_and_trigger().
+
+    Acceptance Criteria:
+    - TriggerService detects orphan sessions (operation_id exists but operation doesn't)
+    - Orphan sessions automatically marked as FAILED
+    - Orphan detection logged
+    """
+
+    @pytest.fixture
+    def mock_agent_db_with_orphan(self):
+        """Create mock database with an orphan session (has operation_id but operation gone)."""
+        db = AsyncMock()
+
+        # Create orphan session - has operation_id but operation is gone
+        orphan_session = MagicMock()
+        orphan_session.id = 201
+        orphan_session.phase = MagicMock(value="training")
+        orphan_session.operation_id = (
+            "op_training_fake_12345"  # Points to non-existent operation
+        )
+        orphan_session.strategy_name = "test_strategy"
+
+        db.get_active_session = AsyncMock(return_value=orphan_session)
+        db.complete_session = AsyncMock(return_value=orphan_session)
+
+        return db, orphan_session
+
+    @pytest.fixture
+    def mock_operations_service_no_operation(self):
+        """Create mock operations service that returns None for operation lookup."""
+        ops = MagicMock(spec=OperationsService)
+        # Operation doesn't exist - returns None
+        ops.get_operation = AsyncMock(return_value=None)
+        return ops
+
+    @pytest.mark.asyncio
+    async def test_orphan_session_detected_when_operation_missing(
+        self, mock_agent_db_with_orphan, mock_operations_service_no_operation
+    ):
+        """Trigger check should detect session with missing operation."""
+        from research_agents.database.schema import SessionOutcome
+        from research_agents.services.trigger import TriggerConfig, TriggerService
+
+        db, orphan_session = mock_agent_db_with_orphan
+
+        config = TriggerConfig(enabled=True)
+        mock_invoker = MagicMock()
+        mock_invoker.run = AsyncMock()
+
+        service = TriggerService(
+            config=config,
+            db=db,
+            invoker=mock_invoker,
+            operations_service=mock_operations_service_no_operation,
+        )
+
+        # Trigger check should detect orphan
+        result = await service.check_and_trigger()
+
+        # Should return orphan_recovered reason
+        assert result["triggered"] is False
+        assert result["reason"] == "orphan_recovered"
+
+        # Session should be marked as failed with FAILED_ORPHAN outcome
+        db.complete_session.assert_called_once()
+        call_kwargs = db.complete_session.call_args[1]
+        assert call_kwargs["session_id"] == 201
+        assert call_kwargs["outcome"] == SessionOutcome.FAILED_ORPHAN
+
+    @pytest.mark.asyncio
+    async def test_orphan_detection_returns_operation_id(
+        self, mock_agent_db_with_orphan, mock_operations_service_no_operation
+    ):
+        """Orphan detection should include operation_id in the returned result.
+
+        This verifies the logging code path was executed since it's in the same block.
+        Direct log verification is complex with structlog, so we verify the code path
+        by checking the returned result contains the operation_id for debugging.
+        """
+        from research_agents.services.trigger import TriggerConfig, TriggerService
+
+        db, orphan_session = mock_agent_db_with_orphan
+
+        config = TriggerConfig(enabled=True)
+        mock_invoker = MagicMock()
+        mock_invoker.run = AsyncMock()
+
+        service = TriggerService(
+            config=config,
+            db=db,
+            invoker=mock_invoker,
+            operations_service=mock_operations_service_no_operation,
+        )
+
+        result = await service.check_and_trigger()
+
+        # Result should contain operation_id for debugging (confirms logging code was reached)
+        assert result["reason"] == "orphan_recovered"
+        assert result["session_id"] == 201
+        assert result["operation_id"] == orphan_session.operation_id
+
+    @pytest.mark.asyncio
+    async def test_normal_session_not_marked_as_orphan(self):
+        """Session with existing operation should NOT be marked as orphan."""
+        from research_agents.services.trigger import TriggerConfig, TriggerService
+
+        db = AsyncMock()
+        # Active session with valid operation
+        active_session = MagicMock()
+        active_session.id = 202
+        active_session.phase = MagicMock(value="training")
+        active_session.operation_id = "op_training_valid_12345"
+
+        db.get_active_session = AsyncMock(return_value=active_session)
+        db.complete_session = AsyncMock()
+
+        # Operations service returns valid operation
+        ops = MagicMock(spec=OperationsService)
+        mock_op = MagicMock()
+        mock_op.status = OperationStatus.RUNNING
+        ops.get_operation = AsyncMock(return_value=mock_op)
+
+        config = TriggerConfig(enabled=True)
+        mock_invoker = MagicMock()
+        mock_invoker.run = AsyncMock()
+
+        service = TriggerService(
+            config=config,
+            db=db,
+            invoker=mock_invoker,
+            operations_service=ops,
+        )
+
+        result = await service.check_and_trigger()
+
+        # Should NOT be orphan_recovered
+        assert result["reason"] != "orphan_recovered"
+        # Session should NOT be completed
+        db.complete_session.assert_not_called()
+
+
+class TestSessionOutcomeFailedOrphan:
+    """Test that FAILED_ORPHAN outcome exists for orphan detection."""
+
+    def test_failed_orphan_outcome_exists(self):
+        """SessionOutcome should have FAILED_ORPHAN value."""
+        from research_agents.database.schema import SessionOutcome
+
+        assert hasattr(SessionOutcome, "FAILED_ORPHAN")
+        assert SessionOutcome.FAILED_ORPHAN.value == "failed_orphan"
+
+
+class TestManualCancelSession:
+    """Test manual session cancellation via AgentService.
+
+    Acceptance Criteria:
+    - `ktrdr agent cancel <session_id>` cancels any session
+    - Cancel works even if operation doesn't exist
+    - Cancellation logged
+    """
+
+    @pytest.fixture
+    def mock_agent_db_with_session(self):
+        """Create mock database with an active session."""
+        db = AsyncMock()
+
+        session = MagicMock()
+        session.id = 301
+        session.phase = MagicMock(value="training")
+        session.operation_id = "op_training_12345"
+        session.strategy_name = "test_strategy"
+
+        db.get_session = AsyncMock(return_value=session)
+        db.complete_session = AsyncMock(return_value=session)
+
+        return db, session
+
+    @pytest.mark.asyncio
+    async def test_cancel_session_success(self, mock_agent_db_with_session):
+        """cancel_session should successfully cancel a session."""
+        from research_agents.database.schema import SessionOutcome
+
+        db, session = mock_agent_db_with_session
+
+        # Mock operations service
+        ops = MagicMock(spec=OperationsService)
+        ops.cancel_operation = AsyncMock(return_value={"success": True})
+
+        # AgentService should have cancel_session method
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=ops)
+
+        with patch(
+            "ktrdr.api.services.agent_service.get_agent_db",
+            new=AsyncMock(return_value=db),
+        ):
+            result = await service.cancel_session(session_id=301)
+
+        assert result["success"] is True
+        assert result["session_id"] == 301
+
+        # Session should be completed with CANCELLED outcome
+        db.complete_session.assert_called_once()
+        call_kwargs = db.complete_session.call_args[1]
+        assert call_kwargs["session_id"] == 301
+        assert call_kwargs["outcome"] == SessionOutcome.CANCELLED
+
+    @pytest.mark.asyncio
+    async def test_cancel_session_works_when_operation_missing(self):
+        """cancel_session should work even if operation doesn't exist."""
+        from research_agents.database.schema import SessionOutcome
+
+        db = AsyncMock()
+        session = MagicMock()
+        session.id = 302
+        session.phase = MagicMock(value="training")
+        session.operation_id = "op_training_nonexistent"
+
+        db.get_session = AsyncMock(return_value=session)
+        db.complete_session = AsyncMock(return_value=session)
+
+        # Mock operations service - cancel fails because operation doesn't exist
+        ops = MagicMock(spec=OperationsService)
+        ops.cancel_operation = AsyncMock(side_effect=Exception("Operation not found"))
+
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=ops)
+
+        with patch(
+            "ktrdr.api.services.agent_service.get_agent_db",
+            new=AsyncMock(return_value=db),
+        ):
+            result = await service.cancel_session(session_id=302)
+
+        # Should still succeed - operation error is caught and ignored
+        assert result["success"] is True
+        assert result["session_id"] == 302
+
+        # Session should still be completed
+        db.complete_session.assert_called_once()
+        call_kwargs = db.complete_session.call_args[1]
+        assert call_kwargs["outcome"] == SessionOutcome.CANCELLED
+
+    @pytest.mark.asyncio
+    async def test_cancel_session_not_found(self):
+        """cancel_session should return error if session doesn't exist."""
+        db = AsyncMock()
+        db.get_session = AsyncMock(return_value=None)
+
+        ops = MagicMock(spec=OperationsService)
+
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=ops)
+
+        with patch(
+            "ktrdr.api.services.agent_service.get_agent_db",
+            new=AsyncMock(return_value=db),
+        ):
+            result = await service.cancel_session(session_id=999)
+
+        assert result["success"] is False
+        assert "not found" in result["error"].lower()
+
+    @pytest.mark.asyncio
+    async def test_cancel_session_logged(self, mock_agent_db_with_session, caplog):
+        """Cancellation should be logged."""
+        import logging
+
+        db, _ = mock_agent_db_with_session
+
+        ops = MagicMock(spec=OperationsService)
+        ops.cancel_operation = AsyncMock(return_value={"success": True})
+
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=ops)
+
+        with (
+            patch(
+                "ktrdr.api.services.agent_service.get_agent_db",
+                new=AsyncMock(return_value=db),
+            ),
+            caplog.at_level(logging.INFO),
+        ):
+            await service.cancel_session(session_id=301)
+
+        # Should log cancellation
+        assert any("cancel" in record.message.lower() for record in caplog.records)
+        assert any("301" in record.message for record in caplog.records)
+
+
+class TestCancelSessionAPIEndpoint:
+    """Test cancel session API endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_cancel_endpoint_exists(self):
+        """Agent API should have cancel endpoint."""
+        from ktrdr.api.endpoints.agent import router
+
+        # Find the cancel route
+        cancel_routes = [
+            r for r in router.routes if hasattr(r, "path") and "cancel" in r.path
+        ]
+        assert len(cancel_routes) > 0, "No cancel endpoint found in agent router"
+
+    @pytest.mark.asyncio
+    async def test_cancel_endpoint_accepts_session_id(self):
+        """Cancel endpoint should accept session_id parameter."""
+        from fastapi.testclient import TestClient
+
+        from ktrdr.api.main import create_application
+
+        app = create_application()
+        client = TestClient(app)
+
+        # Should accept DELETE /agent/sessions/{session_id}/cancel
+        # or POST /agent/cancel with session_id in body
+        # Testing the expected pattern based on existing endpoints
+        response = client.delete("/api/v1/agent/sessions/123/cancel")
+
+        # Should not be 404 (endpoint exists)
+        assert response.status_code != 404
+
+
+class TestCancelSessionCLICommand:
+    """Test cancel session CLI command."""
+
+    def test_cancel_command_exists(self):
+        """CLI should have 'ktrdr agent cancel' command."""
+        from ktrdr.cli.agent_commands import agent_app
+
+        # Check that cancel command is registered
+        command_names = [cmd.name for cmd in agent_app.registered_commands]
+        assert "cancel" in command_names, "cancel command not found in agent_app"
+
+    @pytest.mark.asyncio
+    async def test_cancel_command_calls_api(self):
+        """Cancel command should call the cancel API endpoint."""
+        from unittest.mock import patch
+
+        from ktrdr.cli.agent_commands import _cancel_session_async
+
+        with patch("ktrdr.cli.agent_commands.AsyncCLIClient") as MockClient:
+            mock_client = AsyncMock()
+            mock_client.__aenter__.return_value = mock_client
+            mock_client._make_request = AsyncMock(
+                return_value={"success": True, "session_id": 123}
+            )
+            MockClient.return_value = mock_client
+
+            await _cancel_session_async(session_id=123)
+
+            # Should have made DELETE request to cancel endpoint
+            mock_client._make_request.assert_called_once()
+            call_args = mock_client._make_request.call_args
+            assert call_args[0][0] == "DELETE"  # HTTP method
+            assert "cancel" in call_args[0][1]  # URL contains cancel

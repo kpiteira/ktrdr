@@ -1,297 +1,125 @@
-# Task: Unified Session-Operation Lifecycle
+# Task: Session Recovery & Cancellation
 
-**Priority:** High (architectural consistency + operability)
-**Effort:** 4-6 hours
+**Priority:** High (system reliability)
+**Effort:** 2-3 hours
 **Branch:** `feature/agent-mvp`
 
 ---
 
-## Problem Statement
+## The Problem
 
-Agent sessions and operations have inconsistent lifecycles:
+Sessions can get into inconsistent states:
 
-| Phase | Has Operation? | Cancellable? | Observable? | Cost Tracked? |
-|-------|---------------|--------------|-------------|---------------|
-| DESIGNING | ❌ No | ❌ No | ❌ No | ❌ No |
-| TRAINING | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
-| BACKTESTING | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
-| ASSESSING | ❌ No | ❌ No | ❌ No | ❌ No |
+| Situation | Example | Impact |
+|-----------|---------|--------|
+| Operation disappeared | Session in TRAINING with `operation_id` that doesn't exist | Session stuck, no way forward |
+| Test artifacts | Integration test left session pointing to mock operation | Blocks real cycles |
+| Backend restart | Operations lost, session thinks work is ongoing | Manual DB fix needed |
 
-**Consequences:**
-1. Sessions can become stuck with no way to cancel
-2. DESIGNING and ASSESSING phases are invisible to operations
-3. Token costs during agent invocation aren't tracked
-4. No unified view of agent work in progress
-5. Parent-child operation aggregation not used
+**Common thread:** Session claims to have an operation, but the operation doesn't exist.
 
 ---
 
-## Vision: Unified Lifecycle
+## Solution
 
-Every agent session should be fully observable and cancellable through the operations system.
+### 1. Orphan Detection (Automatic)
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  Agent Session = Parent Operation                                │
-│  OperationType: AGENT_SESSION                                    │
-│  operation_id: op_agent_session_20241212_123456_abc123          │
-│                                                                  │
-│  Progress: Aggregated from children (0-100%)                    │
-│  Status: RUNNING while any child active                         │
-│                                                                  │
-│    ┌─────────────────────────────────────────────────────────┐  │
-│    │  Child: AGENT_DESIGN                                     │  │
-│    │  - Tracks: tokens, duration, strategy output            │  │
-│    │  - Progress: 0-25% of parent                            │  │
-│    └─────────────────────────────────────────────────────────┘  │
-│                        │                                        │
-│                        ▼                                        │
-│    ┌─────────────────────────────────────────────────────────┐  │
-│    │  Child: TRAINING                                         │  │
-│    │  - Tracks: epochs, loss, accuracy                       │  │
-│    │  - Progress: 25-60% of parent                           │  │
-│    └─────────────────────────────────────────────────────────┘  │
-│                        │                                        │
-│                        ▼                                        │
-│    ┌─────────────────────────────────────────────────────────┐  │
-│    │  Child: BACKTESTING                                      │  │
-│    │  - Tracks: trades, equity curve, metrics                │  │
-│    │  - Progress: 60-90% of parent                           │  │
-│    └─────────────────────────────────────────────────────────┘  │
-│                        │                                        │
-│                        ▼                                        │
-│    ┌─────────────────────────────────────────────────────────┐  │
-│    │  Child: AGENT_ASSESSMENT                                 │  │
-│    │  - Tracks: tokens, analysis output                      │  │
-│    │  - Progress: 90-100% of parent                          │  │
-│    └─────────────────────────────────────────────────────────┘  │
-│                                                                  │
-│  CANCEL parent → cancels all children → ends session            │
-└─────────────────────────────────────────────────────────────────┘
-```
+On each trigger check, verify session's operation actually exists:
 
----
-
-## Benefits
-
-1. **Unified Cancellation**: `ktrdr operations cancel <session_op_id>` cancels everything
-2. **Full Observability**: All phases visible in `ktrdr operations list`
-3. **Cost Tracking**: Token usage for DESIGNING/ASSESSING tracked as operation metrics
-4. **Progress Aggregation**: Parent shows overall session progress (existing infrastructure)
-5. **Consistent Model**: Same patterns for all agent work
-6. **Debugging**: Can see exactly where a session is stuck
-
----
-
-## Implementation Plan
-
-### Phase A: Schema & Types (1 hour)
-
-1. **Add OperationType values** (ktrdr/api/models/operations.py):
 ```python
-class OperationType(str, Enum):
-    # ... existing ...
-    AGENT_SESSION = "agent_session"      # Parent operation for session
-    AGENT_ASSESSMENT = "agent_assessment"  # Assessment phase
+# In TriggerService.check_and_trigger()
+if session.operation_id:
+    operation = await self.get_operation(session.operation_id)
+    if not operation:
+        # Orphan detected - operation disappeared
+        await self.db.update_session(
+            session_id=session.id,
+            phase=SessionPhase.FAILED,
+            is_active=False,
+            completed_at=datetime.utcnow(),
+            failure_reason="Operation disappeared"
+        )
+        logger.warning(
+            f"Orphan session {session.id} detected: "
+            f"operation {session.operation_id} not found. Marked as failed."
+        )
+        return {"triggered": False, "reason": "orphan_recovered"}
 ```
 
-2. **Add SessionOutcome** (research_agents/database/schema.py):
-```python
-class SessionOutcome(str, Enum):
-    # ... existing ...
-    CANCELLED = "cancelled"  # User-initiated cancellation
+This handles the common case automatically - no manual intervention needed.
+
+### 2. Manual Cancel (Backstop)
+
+For anything else, add a CLI command:
+
+```bash
+ktrdr agent cancel <session_id>
 ```
 
-### Phase B: Session Operation Creation (2 hours)
+Implementation:
 
-3. **TriggerService creates parent operation** when session starts:
 ```python
-async def _trigger_design_phase(self, operation_id: str | None = None) -> dict:
-    # Create session FIRST
-    session = await self.db.create_session()
-
-    # Create PARENT operation for entire session
-    ops_service = get_operations_service()
-    session_op_id = await ops_service.create_operation(
-        operation_type=OperationType.AGENT_SESSION,
-        metadata=OperationMetadata(
-            description=f"Agent research session #{session.id}"
-        ),
-    )
-
-    # Link session to parent operation
-    await self.db.update_session(
-        session_id=session.id,
-        operation_id=session_op_id,  # Now DESIGNING has operation!
-    )
-
-    # Create CHILD operation for design phase
-    design_op_id = await ops_service.create_operation(
-        operation_type=OperationType.AGENT_DESIGN,
-        parent_operation_id=session_op_id,  # Linked to parent
-        metadata=OperationMetadata(
-            description=f"Design strategy for session #{session.id}"
-        ),
-    )
-
-    # ... invoke agent, track tokens in design operation ...
-```
-
-4. **Training/Backtest operations become children**:
-```python
-async def _handle_designed_session(self, session: Any) -> dict:
-    # Get parent operation from session
-    parent_op_id = session.operation_id
-
-    # Start training with parent linkage
-    result = await start_training_via_api(
-        strategy_name=session.strategy_name,
-        parent_operation_id=parent_op_id,  # NEW: link to session
-    )
-```
-
-5. **Assessment creates child operation**:
-```python
-async def _invoke_assessment(self, session: Any, backtest_results: dict) -> dict:
-    parent_op_id = session.operation_id
-
-    # Create assessment operation
-    assess_op_id = await ops_service.create_operation(
-        operation_type=OperationType.AGENT_ASSESSMENT,
-        parent_operation_id=parent_op_id,
-        metadata=OperationMetadata(
-            description=f"Assess results for session #{session.id}"
-        ),
-    )
-
-    # ... invoke agent, track tokens ...
-```
-
-### Phase C: Cancellation Flow (1 hour)
-
-6. **Operation cancellation cascades to session**:
-```python
-# In OperationsService.cancel_operation():
-async def cancel_operation(self, operation_id: str) -> bool:
-    operation = await self.get_operation(operation_id)
-
-    # If this is an AGENT_SESSION, also cancel the DB session
-    if operation.operation_type == OperationType.AGENT_SESSION:
-        # Find linked session and cancel it
-        await self._cancel_linked_session(operation_id)
-
-    # Existing: cancel children, update status
-    ...
-```
-
-7. **AgentDatabase cancel method** (backstop for direct access):
-```python
-async def cancel_session(self, session_id: int) -> dict:
-    """Cancel session - also cancels linked operation."""
-    session = await self.get_session(session_id)
-
-    # Cancel via operation if exists (preferred path)
-    if session.operation_id:
-        ops_service = get_operations_service()
-        await ops_service.cancel_operation(session.operation_id)
-
-    # Mark session as cancelled
-    await self.complete_session(session_id, SessionOutcome.CANCELLED)
-
-    return {"success": True, ...}
-```
-
-### Phase D: CLI & API (1 hour)
-
-8. **API endpoint** (ktrdr/api/endpoints/agent.py):
-```python
-@router.delete("/sessions/{session_id}")
 async def cancel_session(session_id: int) -> dict:
-    """Cancel an agent session and all its operations."""
-    return await agent_service.cancel_session(session_id)
-```
+    """Cancel session - works regardless of state."""
+    session = await db.get_session(session_id)
+    if not session:
+        return {"success": False, "error": "Session not found"}
 
-9. **CLI command** (ktrdr/cli/agent_commands.py):
-```python
-@agent_app.command()
-def cancel(session_id: Optional[int] = None):
-    """Cancel agent session (and all child operations).
+    # Try to cancel operation if it exists (best effort)
+    if session.operation_id:
+        try:
+            await operations_service.cancel(session.operation_id)
+        except Exception:
+            pass  # Operation might not exist, that's fine
 
-    Examples:
-        ktrdr agent cancel        # Cancel active session
-        ktrdr agent cancel 146    # Cancel specific session
+    # Always update session
+    await db.update_session(
+        session_id=session_id,
+        phase=SessionPhase.CANCELLED,
+        is_active=False,
+        completed_at=datetime.utcnow()
+    )
 
-    Note: You can also use 'ktrdr operations cancel <op_id>'
-    to cancel the session's parent operation directly.
-    """
-```
-
-### Phase E: Token Tracking (1 hour)
-
-10. **Track tokens in design/assessment operations**:
-```python
-# After agent invocation completes:
-await ops_service.add_metrics(design_op_id, {
-    "input_tokens": result.input_tokens,
-    "output_tokens": result.output_tokens,
-    "total_tokens": result.input_tokens + result.output_tokens,
-    "model": "claude-sonnet-4-20250514",
-})
+    return {"success": True, "session_id": session_id}
 ```
 
 ---
 
 ## Acceptance Criteria
 
-### Core Functionality
-- [ ] Session creation creates AGENT_SESSION parent operation
-- [ ] DESIGNING phase has child AGENT_DESIGN operation
-- [ ] TRAINING operation is child of session operation
-- [ ] BACKTESTING operation is child of session operation
-- [ ] ASSESSING phase has child AGENT_ASSESSMENT operation
-- [ ] All phases visible in `ktrdr operations list`
-
-### Cancellation
-- [ ] `ktrdr operations cancel <session_op_id>` cancels entire session
-- [ ] `ktrdr agent cancel` cancels active session
-- [ ] Cancelling parent cancels all children
-- [ ] Session outcome = CANCELLED after cancel
-
-### Observability
-- [ ] Parent operation shows aggregated progress
-- [ ] Token usage tracked for design/assessment phases
-- [ ] `ktrdr agent status` shows current operation
-
-### Backwards Compatibility
-- [ ] Existing sessions without operation_id still work (graceful degradation)
-- [ ] Tests updated for new operation structure
+- [x] TriggerService detects orphan sessions (operation_id exists but operation doesn't)
+- [x] Orphan sessions automatically marked as FAILED (FAILED_ORPHAN outcome)
+- [x] `ktrdr agent cancel <session_id>` cancels any session
+- [x] Cancel works even if operation doesn't exist
+- [x] Orphan detection and cancellation logged
 
 ---
 
 ## Test Scenarios
 
-1. **Full cycle creates proper operation tree**
-2. **Cancel via operations cancels session**
-3. **Cancel via agent cancel cancels operations**
-4. **Token usage recorded for design phase**
-5. **Token usage recorded for assessment phase**
-6. **Progress aggregation works across phases**
-7. **Existing sessions without operations still complete**
+1. **Orphan detection**
+   - Create session with fake operation_id
+   - Run trigger check
+   - Verify session marked as FAILED
+
+2. **Manual cancel - normal session**
+   - Create active session
+   - Run `ktrdr agent cancel`
+   - Verify session marked as CANCELLED
+
+3. **Manual cancel - orphan session**
+   - Create session with non-existent operation_id
+   - Run `ktrdr agent cancel`
+   - Verify it works without error
 
 ---
 
-## Migration Notes
+## Future Work (Not This Task)
 
-- Existing sessions won't have parent operations (that's OK)
-- New sessions will have full operation tree
-- No database migration needed (operation_id column exists)
-- Consider: cleanup script for orphan sessions?
+If we encounter other failure modes:
 
----
+- **Stuck operations** (progress not advancing) - Add progress tracking
+- **Retry logic** - Auto-retry failed phases
+- **Checkpoints** - Resume from progress point instead of scratch
 
-## Future Enhancements
-
-1. **Cost estimation**: Use token counts to estimate $ cost
-2. **Time tracking**: Duration per phase for optimization
-3. **Retry with history**: Failed operations retain metrics for analysis
-4. **Dashboard**: Grafana dashboard for agent session metrics
+These can be added when/if we actually see those problems.

@@ -220,3 +220,67 @@ async def _trigger_agent_async(dry_run: bool, verbose: bool):
     except Exception as e:
         logger.error(f"Failed to trigger agent: {e}")
         raise
+
+
+@agent_app.command("cancel")
+@trace_cli_command("agent_cancel")
+def cancel_session(
+    session_id: int = typer.Argument(help="Session ID to cancel"),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show detailed information"
+    ),
+):
+    """
+    Cancel an agent session.
+
+    Cancels any session regardless of its current state. If the session
+    has an associated operation, attempts to cancel it (best effort).
+
+    Examples:
+        ktrdr agent cancel 123
+        ktrdr agent cancel 123 --verbose
+    """
+    try:
+        asyncio.run(_cancel_session_async(session_id, verbose))
+    except Exception as e:
+        error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        if verbose:
+            logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+        sys.exit(1)
+
+
+async def _cancel_session_async(session_id: int, verbose: bool = False):
+    """Async implementation of cancel command using API."""
+    try:
+        if verbose:
+            console.print(
+                f"[dim]Sending cancel request for session {session_id}...[/dim]"
+            )
+
+        async with AsyncCLIClient() as client:
+            result = await client._make_request(
+                "DELETE", f"/agent/sessions/{session_id}/cancel"
+            )
+
+        if result.get("success"):
+            console.print(
+                f"\n[green]Session {session_id} cancelled successfully![/green]"
+            )
+            if result.get("operation_id"):
+                console.print(f"  Operation ID: {result['operation_id']}")
+            if result.get("message"):
+                console.print(f"  {result['message']}")
+        else:
+            error_msg = result.get("error", "Unknown error")
+            console.print(
+                f"\n[red]Failed to cancel session {session_id}:[/red] {error_msg}"
+            )
+
+        return result
+
+    except AsyncCLIClientError as e:
+        logger.error(f"API error: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Failed to cancel session: {e}")
+        raise
