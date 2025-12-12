@@ -179,7 +179,11 @@ class TestStrategyDesignerPromptBuilder:
         assert "autonomous" in system.lower() or "research" in system.lower()
 
     def test_system_prompt_lists_available_tools(self, builder):
-        """System prompt should list available MCP tools."""
+        """System prompt should list available tools.
+
+        Note: Task 2.6 updated the tools list to match actual ToolExecutor tools.
+        get_agent_state and update_agent_state were removed (they don't exist).
+        """
         ctx = PromptContext(
             trigger_reason=TriggerReason.START_NEW_CYCLE,
             session_id=1,
@@ -188,11 +192,13 @@ class TestStrategyDesignerPromptBuilder:
         result = builder.build(ctx)
         system = result["system"]
 
-        # Should mention key tools
-        assert "get_agent_state" in system
-        assert "update_agent_state" in system
+        # Should mention key tools (actual tools from ToolExecutor)
         assert "save_strategy_config" in system
         assert "get_recent_strategies" in system
+        assert "validate_strategy_config" in system
+        assert "get_available_indicators" in system
+        assert "start_training" in system
+        assert "start_backtest" in system
 
     def test_system_prompt_contains_yaml_template(self, builder):
         """System prompt should include strategy YAML template."""
