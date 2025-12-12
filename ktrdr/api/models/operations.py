@@ -30,7 +30,8 @@ class OperationType(str, Enum):
     BACKTESTING = "backtesting"
     INDICATOR_COMPUTE = "indicator_compute"
     FUZZY_ANALYSIS = "fuzzy_analysis"
-    AGENT_DESIGN = "agent_design"  # Agent strategy design operation
+    AGENT_DESIGN = "agent_design"  # Agent strategy design phase operation
+    AGENT_SESSION = "agent_session"  # Parent operation for full agent research cycle
     DUMMY = "dummy"
 
 
@@ -105,6 +106,10 @@ class OperationInfo(BaseModel):
     """Complete information about an operation."""
 
     operation_id: str = Field(..., description="Unique operation identifier")
+    parent_operation_id: Optional[str] = Field(
+        None,
+        description="Parent operation ID for child operations (e.g., design/training/backtest under agent session)",
+    )
     operation_type: OperationType = Field(..., description="Type of operation")
     status: OperationStatus = Field(..., description="Current operation status")
     created_at: datetime = Field(..., description="When operation was created")

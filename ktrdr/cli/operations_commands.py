@@ -27,6 +27,72 @@ logger = get_logger(__name__)
 console = Console()
 error_console = Console(stderr=True)
 
+
+def _display_children_tree(children: list[dict]) -> None:
+    """
+    Display children operations as a tree view (Task 1.15).
+
+    Format:
+    ├── Child: Design Op    ████████████ 100% COMPLETED
+    ├── Child: Training Op  ████░░░░░░░░  45% RUNNING
+    └── Child: Backtest Op  ░░░░░░░░░░░░   0% PENDING
+    """
+    if not children:
+        console.print("  (no phases started)")
+        return
+
+    # Map operation types to readable names
+    type_names = {
+        "agent_design": "Design",
+        "training": "Training",
+        "backtesting": "Backtest",
+    }
+
+    for i, child in enumerate(children):
+        is_last = i == len(children) - 1
+        prefix = "└──" if is_last else "├──"
+
+        # Get display values
+        op_type = child.get("operation_type", "unknown")
+        phase_name = type_names.get(op_type, op_type.title())
+        status = child.get("status", "unknown").upper()
+        progress_pct = child.get("progress_percentage", 0)
+
+        # Build progress bar (12 chars)
+        filled = int(progress_pct / 100 * 12)
+        bar = "█" * filled + "░" * (12 - filled)
+
+        # Format status with colors
+        status_colored = status
+        if status == "RUNNING":
+            status_colored = f"[green]{status}[/green]"
+        elif status == "COMPLETED":
+            status_colored = f"[bright_green]{status}[/bright_green]"
+        elif status == "FAILED":
+            status_colored = f"[red]{status}[/red]"
+        elif status == "CANCELLED":
+            status_colored = f"[yellow]{status}[/yellow]"
+        elif status == "PENDING":
+            status_colored = f"[dim]{status}[/dim]"
+
+        # Format progress color
+        if status == "COMPLETED":
+            bar_colored = f"[bright_green]{bar}[/bright_green]"
+        elif status == "RUNNING":
+            bar_colored = f"[green]{bar}[/green]"
+        elif status == "FAILED":
+            bar_colored = f"[red]{bar}[/red]"
+        else:
+            bar_colored = f"[dim]{bar}[/dim]"
+
+        # Build the line
+        line = (
+            f"{prefix} [cyan]{phase_name:<12}[/cyan] "
+            f"{bar_colored} {progress_pct:3.0f}% {status_colored}"
+        )
+        console.print(line)
+
+
 # Create the CLI app for operations commands
 operations_app = typer.Typer(
     name="operations",
@@ -347,6 +413,22 @@ async def _get_operation_status_async(operation_id: str, verbose: bool):
                 result_table.add_row(key.title(), str(value))
 
             console.print(result_table)
+
+        # Task 1.15: Show children tree for AGENT_SESSION operations
+        op_type = operation.get("operation_type", "")
+        if op_type == "agent_session" or op_type == "AGENT_SESSION":
+            try:
+                children_response = await api_client.get_operation_children(
+                    operation_id
+                )
+                children = children_response.get("data", [])
+
+                if children:
+                    console.print("\n🌳 [bold]Session Phases[/bold]")
+                    _display_children_tree(children)
+            except Exception as e:
+                if verbose:
+                    console.print(f"\n⚠️ Could not fetch children: {str(e)}")
 
         if verbose:
             console.print("\n✅ Retrieved operation status")
