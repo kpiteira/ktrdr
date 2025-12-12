@@ -247,10 +247,15 @@ class TestBackgroundTriggerLoop:
 
     @pytest.mark.asyncio
     async def test_background_loop_starts_when_enabled(self):
-        """Background loop should start when AGENT_ENABLED=true."""
+        """Background loop should start when AGENT_ENABLED=true.
+
+        Note: TriggerService.start() waits for interval FIRST before triggering,
+        so we need to wait longer than the interval for a trigger to occur.
+        """
         from research_agents.services.trigger import TriggerConfig, TriggerService
 
-        config = TriggerConfig(interval_seconds=1, enabled=True)
+        # Use a short interval so the test completes quickly
+        config = TriggerConfig(interval_seconds=0.1, enabled=True)
         db = MockDatabase()
         invoker = MockAnthropicInvoker()
         context_provider = MockContextProvider()
@@ -265,8 +270,9 @@ class TestBackgroundTriggerLoop:
         # Start in a task
         task = asyncio.create_task(service.start())
 
-        # Wait a bit for at least one trigger
-        await asyncio.sleep(0.2)
+        # Wait longer than the interval for at least one trigger
+        # (interval is 0.1s, so 0.3s should allow for at least one trigger)
+        await asyncio.sleep(0.3)
 
         # Stop the service
         service.stop()

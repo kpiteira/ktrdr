@@ -360,7 +360,11 @@ class TestAgentServiceTriggerIntegration:
 
     @pytest.mark.asyncio
     async def test_trigger_creates_operation_before_work(self, ops_service):
-        """trigger() should create operation BEFORE starting background work."""
+        """trigger() should create operation BEFORE starting background work.
+
+        Note: Task 1.15 introduced parent-child operations. The returned operation_id
+        is now the AGENT_SESSION parent operation (not AGENT_DESIGN child).
+        """
         from ktrdr.api.services.agent_service import AgentService
 
         mock_db = AsyncMock()
@@ -386,9 +390,10 @@ class TestAgentServiceTriggerIntegration:
             operation_id = result["operation_id"]
 
             # Operation should exist and be RUNNING
+            # Task 1.15: Returns AGENT_SESSION (parent), not AGENT_DESIGN (child)
             op = await ops_service.get_operation(operation_id)
             assert op is not None
-            assert op.operation_type == OperationType.AGENT_DESIGN
+            assert op.operation_type == OperationType.AGENT_SESSION
             assert op.status == OperationStatus.RUNNING
 
             # Allow background task to start
