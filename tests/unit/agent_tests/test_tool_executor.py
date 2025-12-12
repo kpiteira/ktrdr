@@ -635,3 +635,247 @@ class TestStartTrainingToolHandler:
 
             assert result["success"] is False
             assert "error" in result
+
+
+class TestStartBacktestToolSchema:
+    """Tests for start_backtest tool schema (Task 2.2)."""
+
+    def test_start_backtest_in_agent_tools(self):
+        """start_backtest tool should be in AGENT_TOOLS."""
+        tool_names = {tool["name"] for tool in AGENT_TOOLS}
+        assert "start_backtest" in tool_names
+
+    def test_start_backtest_schema(self):
+        """start_backtest tool should have correct schema."""
+        tool = next((t for t in AGENT_TOOLS if t["name"] == "start_backtest"), None)
+        assert tool is not None, "start_backtest tool not found"
+
+        schema = tool["input_schema"]
+        props = schema.get("properties", {})
+
+        # Should have required properties
+        assert "strategy_name" in props
+        assert props["strategy_name"]["type"] == "string"
+
+        assert "model_path" in props
+        assert props["model_path"]["type"] == "string"
+
+        # Should have optional properties
+        assert "symbol" in props
+        assert props["symbol"]["type"] == "string"
+
+        assert "timeframe" in props
+        assert props["timeframe"]["type"] == "string"
+
+        assert "start_date" in props
+        assert props["start_date"]["type"] == "string"
+
+        assert "end_date" in props
+        assert props["end_date"]["type"] == "string"
+
+        assert "initial_capital" in props
+        assert props["initial_capital"]["type"] == "number"
+
+        # strategy_name and model_path should be required
+        required = schema.get("required", [])
+        assert "strategy_name" in required
+        assert "model_path" in required
+
+    def test_start_backtest_has_description(self):
+        """start_backtest tool should have meaningful description."""
+        tool = next((t for t in AGENT_TOOLS if t["name"] == "start_backtest"), None)
+        assert tool is not None
+        assert "description" in tool
+        assert "backtest" in tool["description"].lower()
+        assert len(tool["description"]) > 20
+
+
+class TestStartBacktestToolHandler:
+    """Tests for start_backtest tool handler (Task 2.2)."""
+
+    def test_start_backtest_has_handler(self):
+        """ToolExecutor should have handler for start_backtest."""
+        executor = ToolExecutor()
+        assert "start_backtest" in executor.handlers
+
+    @pytest.mark.asyncio
+    async def test_start_backtest_calls_backtest_service(self):
+        """start_backtest should call backtest service."""
+        executor = ToolExecutor()
+
+        with patch("ktrdr.agents.executor.start_backtest_via_api") as mock_start:
+            mock_start.return_value = {
+                "success": True,
+                "operation_id": "op_backtest_123",
+                "status": "started",
+            }
+
+            result = await executor.execute(
+                "start_backtest",
+                {
+                    "strategy_name": "test_strategy",
+                    "model_path": "models/test_strategy/v1/model.pt",
+                    "symbol": "EURUSD",
+                    "timeframe": "1h",
+                    "start_date": "2024-01-01",
+                    "end_date": "2024-06-30",
+                },
+            )
+
+            mock_start.assert_called_once()
+            assert result["success"] is True
+            assert "operation_id" in result
+
+    @pytest.mark.asyncio
+    async def test_start_backtest_passes_all_parameters(self):
+        """start_backtest should pass all parameters correctly."""
+        executor = ToolExecutor()
+
+        with patch("ktrdr.agents.executor.start_backtest_via_api") as mock_start:
+            mock_start.return_value = {
+                "success": True,
+                "operation_id": "op_backtest_456",
+            }
+
+            await executor.execute(
+                "start_backtest",
+                {
+                    "strategy_name": "momentum_v1",
+                    "model_path": "models/momentum_v1/latest/model.pt",
+                    "symbol": "EURUSD",
+                    "timeframe": "1h",
+                    "start_date": "2024-01-01",
+                    "end_date": "2024-06-30",
+                    "initial_capital": 50000.0,
+                },
+            )
+
+            # Verify all parameters passed
+            call_kwargs = mock_start.call_args.kwargs
+            assert call_kwargs.get("strategy_name") == "momentum_v1"
+            assert call_kwargs.get("model_path") == "models/momentum_v1/latest/model.pt"
+            assert call_kwargs.get("symbol") == "EURUSD"
+            assert call_kwargs.get("timeframe") == "1h"
+            assert call_kwargs.get("start_date") == "2024-01-01"
+            assert call_kwargs.get("end_date") == "2024-06-30"
+            assert call_kwargs.get("initial_capital") == 50000.0
+
+    @pytest.mark.asyncio
+    async def test_start_backtest_with_required_only(self):
+        """start_backtest should work with only required parameters."""
+        executor = ToolExecutor()
+
+        with patch("ktrdr.agents.executor.start_backtest_via_api") as mock_start:
+            mock_start.return_value = {
+                "success": True,
+                "operation_id": "op_backtest_789",
+            }
+
+            result = await executor.execute(
+                "start_backtest",
+                {
+                    "strategy_name": "simple_strategy",
+                    "model_path": "models/simple_strategy/v1/model.pt",
+                },
+            )
+
+            mock_start.assert_called_once()
+            assert result["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_start_backtest_returns_operation_id(self):
+        """start_backtest should return operation_id for tracking."""
+        executor = ToolExecutor()
+
+        with patch("ktrdr.agents.executor.start_backtest_via_api") as mock_start:
+            mock_start.return_value = {
+                "success": True,
+                "operation_id": "op_backtest_abc123",
+                "status": "started",
+                "message": "Backtest started",
+                "symbol": "EURUSD",
+                "timeframe": "1h",
+            }
+
+            result = await executor.execute(
+                "start_backtest",
+                {
+                    "strategy_name": "test_strategy",
+                    "model_path": "models/test/model.pt",
+                    "symbol": "EURUSD",
+                    "timeframe": "1h",
+                    "start_date": "2024-01-01",
+                    "end_date": "2024-06-30",
+                },
+            )
+
+            assert "operation_id" in result
+            assert result["operation_id"] == "op_backtest_abc123"
+
+    @pytest.mark.asyncio
+    async def test_start_backtest_handles_api_error(self):
+        """start_backtest should handle API errors gracefully."""
+        executor = ToolExecutor()
+
+        with patch("ktrdr.agents.executor.start_backtest_via_api") as mock_start:
+            mock_start.side_effect = Exception("API connection failed")
+
+            result = await executor.execute(
+                "start_backtest",
+                {
+                    "strategy_name": "test_strategy",
+                    "model_path": "models/test/model.pt",
+                },
+            )
+
+            assert "error" in result
+            assert "API connection failed" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_start_backtest_handles_service_failure(self):
+        """start_backtest should return failure response from service."""
+        executor = ToolExecutor()
+
+        with patch("ktrdr.agents.executor.start_backtest_via_api") as mock_start:
+            mock_start.return_value = {
+                "success": False,
+                "error": "Model not found: models/unknown/model.pt",
+            }
+
+            result = await executor.execute(
+                "start_backtest",
+                {
+                    "strategy_name": "unknown_strategy",
+                    "model_path": "models/unknown/model.pt",
+                },
+            )
+
+            assert result["success"] is False
+            assert "error" in result
+
+    @pytest.mark.asyncio
+    async def test_start_backtest_default_initial_capital(self):
+        """start_backtest should use default initial_capital if not provided."""
+        executor = ToolExecutor()
+
+        with patch("ktrdr.agents.executor.start_backtest_via_api") as mock_start:
+            mock_start.return_value = {
+                "success": True,
+                "operation_id": "op_backtest_default",
+            }
+
+            await executor.execute(
+                "start_backtest",
+                {
+                    "strategy_name": "test_strategy",
+                    "model_path": "models/test/model.pt",
+                    "symbol": "EURUSD",
+                    "timeframe": "1h",
+                    "start_date": "2024-01-01",
+                    "end_date": "2024-06-30",
+                },
+            )
+
+            # Default initial_capital should be 100000
+            call_kwargs = mock_start.call_args.kwargs
+            assert call_kwargs.get("initial_capital") == 100000.0

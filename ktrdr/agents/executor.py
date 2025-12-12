@@ -156,6 +156,88 @@ async def start_training_via_api(
         raise
 
 
+async def start_backtest_via_api(
+    strategy_name: str,
+    model_path: str,
+    symbol: str | None = None,
+    timeframe: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    initial_capital: float = 100000.0,
+) -> dict[str, Any]:
+    """Start backtest via the KTRDR Backtest API.
+
+    Args:
+        strategy_name: Name of the strategy to backtest.
+        model_path: Path to the trained model file.
+        symbol: Symbol to backtest on (optional).
+        timeframe: Timeframe to use (optional).
+        start_date: Backtest start date (optional).
+        end_date: Backtest end date (optional).
+        initial_capital: Initial capital for backtest (default: 100000).
+
+    Returns:
+        Dict with operation_id, status, and other backtest info.
+    """
+    import httpx
+
+    # Get API URL from environment
+    base_url = os.getenv("KTRDR_API_URL", "http://localhost:8000")
+    api_url = f"{base_url}/api/v1/backtests/start"
+
+    # Build request payload - only include non-None values
+    # API requires: strategy_name, symbol, timeframe, start_date, end_date
+    payload: dict[str, Any] = {"strategy_name": strategy_name}
+
+    # model_path is passed but may not be in the API schema yet
+    # The API endpoint will use it if provided, or auto-discover
+    if model_path:
+        payload["model_path"] = model_path
+
+    if symbol is not None:
+        payload["symbol"] = symbol
+    if timeframe is not None:
+        payload["timeframe"] = timeframe
+    if start_date is not None:
+        payload["start_date"] = start_date
+    if end_date is not None:
+        payload["end_date"] = end_date
+    if initial_capital != 100000.0:
+        payload["initial_capital"] = initial_capital
+
+    try:
+        # Backtest can take a while to initialize, use longer timeout
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(api_url, json=payload)
+            response.raise_for_status()
+            data = response.json()
+
+            # Map API response to tool result
+            return {
+                "success": data.get("success", True),
+                "operation_id": data.get("operation_id"),
+                "status": data.get("status", "started"),
+                "message": data.get("message", "Backtest started"),
+                "symbol": data.get("symbol", symbol),
+                "timeframe": data.get("timeframe", timeframe),
+                "strategy_name": data.get("strategy_name", strategy_name),
+                "mode": data.get("mode"),
+            }
+    except httpx.HTTPStatusError as e:
+        logger.error(
+            "Backtest API returned error",
+            status_code=e.response.status_code,
+            detail=e.response.text,
+        )
+        return {
+            "success": False,
+            "error": f"Backtest API error: {e.response.text}",
+        }
+    except Exception as e:
+        logger.error("Failed to start backtest via API", error=str(e))
+        raise
+
+
 class ToolExecutor:
     """Executor for agent tool calls.
 
@@ -184,6 +266,7 @@ class ToolExecutor:
             "get_available_symbols": self._handle_get_available_symbols,
             "get_recent_strategies": self._handle_get_recent_strategies,
             "start_training": self._handle_start_training,
+            "start_backtest": self._handle_start_backtest,
         }
 
     async def execute(
@@ -340,6 +423,42 @@ class ToolExecutor:
             timeframes=timeframes,
             start_date=start_date,
             end_date=end_date,
+        )
+
+    async def _handle_start_backtest(
+        self,
+        strategy_name: str,
+        model_path: str,
+        symbol: str | None = None,
+        timeframe: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        initial_capital: float = 100000.0,
+    ) -> dict[str, Any]:
+        """Handle start_backtest tool call.
+
+        Starts a backtest operation via the KTRDR Backtest API.
+
+        Args:
+            strategy_name: Name of the strategy to backtest.
+            model_path: Path to the trained model file.
+            symbol: Symbol to backtest on (optional).
+            timeframe: Timeframe to use (optional).
+            start_date: Backtest start date (optional).
+            end_date: Backtest end date (optional).
+            initial_capital: Initial capital for backtest (default: 100000).
+
+        Returns:
+            Dict with operation_id, status, success flag, and other info.
+        """
+        return await start_backtest_via_api(
+            strategy_name=strategy_name,
+            model_path=model_path,
+            symbol=symbol,
+            timeframe=timeframe,
+            start_date=start_date,
+            end_date=end_date,
+            initial_capital=initial_capital,
         )
 
 

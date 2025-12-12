@@ -176,6 +176,71 @@ AGENT_TOOLS: list[dict[str, Any]] = [
             "required": ["strategy_name"],
         },
     },
+    {
+        "name": "start_backtest",
+        "description": (
+            "Start backtesting a trained model. This initiates a backtest operation "
+            "that runs in the background. Returns an operation_id that can be used "
+            "to track progress. The backtest will evaluate the strategy's performance "
+            "on historical data using the specified trained model."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "strategy_name": {
+                    "type": "string",
+                    "description": (
+                        "Name of the strategy to backtest (must exist in strategies/ folder). "
+                        "This should match the strategy used during training."
+                    ),
+                },
+                "model_path": {
+                    "type": "string",
+                    "description": (
+                        "Path to the trained model file (e.g., 'models/momentum_v1/1d_v1/model.pt'). "
+                        "This should be the model output from a successful training run."
+                    ),
+                },
+                "symbol": {
+                    "type": "string",
+                    "description": (
+                        "Symbol to backtest on (e.g., 'EURUSD', 'AAPL'). "
+                        "If not provided, uses symbol from strategy config."
+                    ),
+                },
+                "timeframe": {
+                    "type": "string",
+                    "description": (
+                        "Timeframe to use (e.g., '1h', '4h', '1d'). "
+                        "If not provided, uses timeframe from strategy config."
+                    ),
+                },
+                "start_date": {
+                    "type": "string",
+                    "description": (
+                        "Backtest start date in YYYY-MM-DD format. "
+                        "Should typically be different from training period for out-of-sample testing."
+                    ),
+                },
+                "end_date": {
+                    "type": "string",
+                    "description": (
+                        "Backtest end date in YYYY-MM-DD format. "
+                        "If not provided, uses current date."
+                    ),
+                },
+                "initial_capital": {
+                    "type": "number",
+                    "description": (
+                        "Initial capital for the backtest (default: 100000). "
+                        "This is the starting account balance for simulation."
+                    ),
+                    "default": 100000,
+                },
+            },
+            "required": ["strategy_name", "model_path"],
+        },
+    },
 ]
 
 
