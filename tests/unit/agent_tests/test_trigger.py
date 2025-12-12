@@ -92,18 +92,21 @@ class TestTriggerService:
     async def test_check_and_trigger_active_session_exists(
         self, mock_db, mock_invoker, config
     ):
-        """Test that agent is NOT invoked when active session exists."""
-        # Mock an active session
+        """Test that agent is NOT invoked when active session exists in DESIGNING phase."""
+        from research_agents.database.schema import SessionPhase
+
+        # Mock an active session in DESIGNING phase
         mock_session = MagicMock()
         mock_session.id = 1
-        mock_session.phase = "training"
+        mock_session.phase = SessionPhase.DESIGNING  # Use proper enum
         mock_db.get_active_session.return_value = mock_session
 
         service = TriggerService(config=config, db=mock_db, invoker=mock_invoker)
         result = await service.check_and_trigger()
 
         assert result["triggered"] is False
-        assert result["reason"] == "active_session_exists"
+        # With Phase 2 state machine, DESIGNING phase returns "design_in_progress"
+        assert result["reason"] == "design_in_progress"
         mock_db.get_active_session.assert_called_once()
         mock_invoker.invoke.assert_not_called()
 

@@ -291,16 +291,8 @@ class TriggerService:
         # Check for active session
         active_session = await self.db.get_active_session()
         if active_session is not None:
-            logger.info(
-                "Active session exists, skipping trigger",
-                session_id=active_session.id,
-                phase=active_session.phase,
-            )
-            return {
-                "triggered": False,
-                "reason": "active_session_exists",
-                "active_session_id": active_session.id,
-            }
+            # Route to phase-specific handler (Phase 2: full state machine)
+            return await self._handle_active_session(active_session)
 
         # No active session - start a new cycle
         logger.info("No active session, triggering new research cycle")
@@ -534,6 +526,593 @@ class TriggerService:
                     }
                 )
         return strategies
+
+    # =========================================================================
+    # Phase 2: Full State Machine Handlers
+    # =========================================================================
+
+    async def _handle_active_session(self, session: Any) -> dict:
+        """Route active session to appropriate phase handler.
+
+        Args:
+            session: Active session from database.
+
+        Returns:
+            Dict with handling result.
+        """
+        from research_agents.database.schema import SessionPhase
+
+        phase = session.phase
+        logger.info(
+            "Handling active session",
+            session_id=session.id,
+            phase=phase.value if hasattr(phase, "value") else phase,
+        )
+
+        # Route based on phase
+        if phase == SessionPhase.DESIGNED:
+            return await self._handle_designed_session(session)
+        elif phase == SessionPhase.TRAINING:
+            return await self._handle_training_session(session)
+        elif phase == SessionPhase.BACKTESTING:
+            return await self._handle_backtesting_session(session)
+        elif phase == SessionPhase.ASSESSING:
+            return await self._handle_assessing_session(session)
+        elif phase == SessionPhase.DESIGNING:
+            # Design still in progress - no action needed
+            return {
+                "triggered": False,
+                "reason": "design_in_progress",
+                "session_id": session.id,
+            }
+        else:
+            # Unknown/unexpected phase
+            logger.warning(
+                "Unknown session phase",
+                session_id=session.id,
+                phase=phase,
+            )
+            return {
+                "triggered": False,
+                "reason": "unknown_phase",
+                "session_id": session.id,
+            }
+
+    async def _handle_designed_session(self, session: Any) -> dict:
+        """Handle session in DESIGNED phase - start training.
+
+        Args:
+            session: Session in DESIGNED phase.
+
+        Returns:
+            Dict with handling result.
+        """
+        from ktrdr.agents.executor import start_training_via_api
+        from research_agents.database.schema import SessionOutcome, SessionPhase
+
+        logger.info(
+            "Starting training for designed strategy",
+            session_id=session.id,
+            strategy_name=session.strategy_name,
+        )
+
+        try:
+            # Start training via API
+            result = await start_training_via_api(
+                strategy_name=session.strategy_name,
+            )
+
+            if not result.get("success"):
+                # Training failed to start
+                logger.error(
+                    "Failed to start training",
+                    session_id=session.id,
+                    error=result.get("error"),
+                )
+                await self.db.complete_session(
+                    session_id=session.id,
+                    outcome=SessionOutcome.FAILED_TRAINING,
+                )
+                return {
+                    "triggered": False,
+                    "reason": "training_start_failed",
+                    "session_id": session.id,
+                    "error": result.get("error"),
+                }
+
+            # Update session to TRAINING phase with operation ID
+            operation_id = result.get("operation_id")
+            await self.db.update_session(
+                session_id=session.id,
+                phase=SessionPhase.TRAINING,
+                operation_id=operation_id,
+            )
+
+            logger.info(
+                "Training started",
+                session_id=session.id,
+                operation_id=operation_id,
+            )
+            return {
+                "triggered": False,
+                "reason": "handled_designed_session",
+                "session_id": session.id,
+                "operation_id": operation_id,
+            }
+
+        except Exception as e:
+            logger.error(
+                "Exception starting training",
+                session_id=session.id,
+                error=str(e),
+            )
+            await self.db.complete_session(
+                session_id=session.id,
+                outcome=SessionOutcome.FAILED_TRAINING,
+            )
+            return {
+                "triggered": False,
+                "reason": "training_start_exception",
+                "session_id": session.id,
+                "error": str(e),
+            }
+
+    async def _handle_training_session(self, session: Any) -> dict:
+        """Handle session in TRAINING phase - check operation and apply gate.
+
+        Args:
+            session: Session in TRAINING phase.
+
+        Returns:
+            Dict with handling result.
+        """
+        from ktrdr.agents.executor import start_backtest_via_api
+        from ktrdr.api.services.operations_service import get_operations_service
+        from research_agents.database.schema import SessionOutcome, SessionPhase
+        from research_agents.gates.training_gate import (
+            TrainingGateConfig,
+            evaluate_training_gate,
+        )
+
+        # Check if operation ID exists
+        if not session.operation_id:
+            logger.error(
+                "Training session missing operation_id",
+                session_id=session.id,
+            )
+            await self.db.complete_session(
+                session_id=session.id,
+                outcome=SessionOutcome.FAILED_TRAINING,
+            )
+            return {
+                "triggered": False,
+                "reason": "missing_operation_id",
+                "session_id": session.id,
+            }
+
+        # Check operation status
+        ops_service = get_operations_service()
+        operation = await ops_service.get_operation(session.operation_id)
+
+        if operation is None:
+            logger.error(
+                "Training operation not found",
+                session_id=session.id,
+                operation_id=session.operation_id,
+            )
+            await self.db.complete_session(
+                session_id=session.id,
+                outcome=SessionOutcome.FAILED_TRAINING,
+            )
+            return {
+                "triggered": False,
+                "reason": "operation_not_found",
+                "session_id": session.id,
+            }
+
+        status = operation.status
+        logger.info(
+            "Checking training operation status",
+            session_id=session.id,
+            operation_id=session.operation_id,
+            status=status,
+        )
+
+        # Handle based on status
+        if status in ("PENDING", "RUNNING"):
+            # Still in progress
+            return {
+                "triggered": False,
+                "reason": "operation_in_progress",
+                "session_id": session.id,
+                "operation_id": session.operation_id,
+            }
+
+        if status == "FAILED":
+            # Operation failed
+            logger.error(
+                "Training operation failed",
+                session_id=session.id,
+                operation_id=session.operation_id,
+                error=getattr(operation, "error_message", None),
+            )
+            await self.db.complete_session(
+                session_id=session.id,
+                outcome=SessionOutcome.FAILED_TRAINING,
+            )
+            return {
+                "triggered": False,
+                "reason": "training_operation_failed",
+                "session_id": session.id,
+            }
+
+        if status == "COMPLETED":
+            # Apply training gate
+            results = operation.result_summary or {}
+            gate_config = TrainingGateConfig.from_env()
+            passed, reason = evaluate_training_gate(results, gate_config)
+
+            logger.info(
+                "Training gate evaluation",
+                session_id=session.id,
+                passed=passed,
+                reason=reason,
+                accuracy=results.get("accuracy"),
+                final_loss=results.get("final_loss"),
+            )
+
+            if not passed:
+                # Gate failed
+                await self.db.complete_session(
+                    session_id=session.id,
+                    outcome=SessionOutcome.FAILED_TRAINING_GATE,
+                )
+                return {
+                    "triggered": False,
+                    "reason": "training_gate_failed",
+                    "session_id": session.id,
+                    "gate_reason": reason,
+                }
+
+            # Gate passed - start backtest
+            model_path = results.get("model_path", "")
+            try:
+                backtest_result = await start_backtest_via_api(
+                    strategy_name=session.strategy_name,
+                    model_path=model_path,
+                )
+
+                if not backtest_result.get("success"):
+                    logger.error(
+                        "Failed to start backtest",
+                        session_id=session.id,
+                        error=backtest_result.get("error"),
+                    )
+                    await self.db.complete_session(
+                        session_id=session.id,
+                        outcome=SessionOutcome.FAILED_BACKTEST,
+                    )
+                    return {
+                        "triggered": False,
+                        "reason": "backtest_start_failed",
+                        "session_id": session.id,
+                    }
+
+                # Update session to BACKTESTING
+                backtest_op_id = backtest_result.get("operation_id")
+                await self.db.update_session(
+                    session_id=session.id,
+                    phase=SessionPhase.BACKTESTING,
+                    operation_id=backtest_op_id,
+                )
+
+                logger.info(
+                    "Backtest started after training gate passed",
+                    session_id=session.id,
+                    operation_id=backtest_op_id,
+                )
+                return {
+                    "triggered": False,
+                    "reason": "training_gate_passed_backtest_started",
+                    "session_id": session.id,
+                    "operation_id": backtest_op_id,
+                }
+
+            except Exception as e:
+                logger.error(
+                    "Exception starting backtest",
+                    session_id=session.id,
+                    error=str(e),
+                )
+                await self.db.complete_session(
+                    session_id=session.id,
+                    outcome=SessionOutcome.FAILED_BACKTEST,
+                )
+                return {
+                    "triggered": False,
+                    "reason": "backtest_start_exception",
+                    "session_id": session.id,
+                    "error": str(e),
+                }
+
+        # Unknown status
+        logger.warning(
+            "Unknown operation status",
+            session_id=session.id,
+            status=status,
+        )
+        return {
+            "triggered": False,
+            "reason": "unknown_operation_status",
+            "session_id": session.id,
+        }
+
+    async def _handle_backtesting_session(self, session: Any) -> dict:
+        """Handle session in BACKTESTING phase - check operation and apply gate.
+
+        Args:
+            session: Session in BACKTESTING phase.
+
+        Returns:
+            Dict with handling result.
+        """
+        from ktrdr.api.services.operations_service import get_operations_service
+        from research_agents.database.schema import SessionOutcome, SessionPhase
+        from research_agents.gates.backtest_gate import (
+            BacktestGateConfig,
+            evaluate_backtest_gate,
+        )
+
+        # Check if operation ID exists
+        if not session.operation_id:
+            logger.error(
+                "Backtest session missing operation_id",
+                session_id=session.id,
+            )
+            await self.db.complete_session(
+                session_id=session.id,
+                outcome=SessionOutcome.FAILED_BACKTEST,
+            )
+            return {
+                "triggered": False,
+                "reason": "missing_operation_id",
+                "session_id": session.id,
+            }
+
+        # Check operation status
+        ops_service = get_operations_service()
+        operation = await ops_service.get_operation(session.operation_id)
+
+        if operation is None:
+            logger.error(
+                "Backtest operation not found",
+                session_id=session.id,
+                operation_id=session.operation_id,
+            )
+            await self.db.complete_session(
+                session_id=session.id,
+                outcome=SessionOutcome.FAILED_BACKTEST,
+            )
+            return {
+                "triggered": False,
+                "reason": "operation_not_found",
+                "session_id": session.id,
+            }
+
+        status = operation.status
+        logger.info(
+            "Checking backtest operation status",
+            session_id=session.id,
+            operation_id=session.operation_id,
+            status=status,
+        )
+
+        # Handle based on status
+        if status in ("PENDING", "RUNNING"):
+            return {
+                "triggered": False,
+                "reason": "operation_in_progress",
+                "session_id": session.id,
+                "operation_id": session.operation_id,
+            }
+
+        if status == "FAILED":
+            logger.error(
+                "Backtest operation failed",
+                session_id=session.id,
+                operation_id=session.operation_id,
+                error=getattr(operation, "error_message", None),
+            )
+            await self.db.complete_session(
+                session_id=session.id,
+                outcome=SessionOutcome.FAILED_BACKTEST,
+            )
+            return {
+                "triggered": False,
+                "reason": "backtest_operation_failed",
+                "session_id": session.id,
+            }
+
+        if status == "COMPLETED":
+            # Apply backtest gate
+            results = operation.result_summary or {}
+            gate_config = BacktestGateConfig.from_env()
+            passed, reason = evaluate_backtest_gate(results, gate_config)
+
+            logger.info(
+                "Backtest gate evaluation",
+                session_id=session.id,
+                passed=passed,
+                reason=reason,
+                win_rate=results.get("win_rate"),
+                max_drawdown=results.get("max_drawdown"),
+                sharpe_ratio=results.get("sharpe_ratio"),
+            )
+
+            if not passed:
+                await self.db.complete_session(
+                    session_id=session.id,
+                    outcome=SessionOutcome.FAILED_BACKTEST_GATE,
+                )
+                return {
+                    "triggered": False,
+                    "reason": "backtest_gate_failed",
+                    "session_id": session.id,
+                    "gate_reason": reason,
+                }
+
+            # Gate passed - invoke agent for assessment
+            await self.db.update_session(
+                session_id=session.id,
+                phase=SessionPhase.ASSESSING,
+            )
+
+            # Trigger assessment invocation
+            return await self._invoke_assessment(session, results)
+
+        # Unknown status
+        return {
+            "triggered": False,
+            "reason": "unknown_operation_status",
+            "session_id": session.id,
+        }
+
+    async def _handle_assessing_session(self, session: Any) -> dict:
+        """Handle session in ASSESSING phase - invoke assessment if needed.
+
+        Args:
+            session: Session in ASSESSING phase.
+
+        Returns:
+            Dict with handling result.
+        """
+        # Session is already in ASSESSING - invoke assessment
+        # Get backtest results from last operation (would need to be stored)
+        return await self._invoke_assessment(session, {})
+
+    async def _invoke_assessment(self, session: Any, backtest_results: dict) -> dict:
+        """Invoke agent to assess results and complete the cycle.
+
+        Args:
+            session: Current session.
+            backtest_results: Results from backtesting.
+
+        Returns:
+            Dict with assessment result.
+        """
+        from research_agents.database.schema import SessionOutcome
+        from research_agents.prompts.strategy_designer import (
+            TriggerReason,
+            get_strategy_designer_prompt,
+        )
+
+        logger.info(
+            "Invoking agent for assessment",
+            session_id=session.id,
+            strategy_name=session.strategy_name,
+        )
+
+        try:
+            # Get context for assessment prompt
+            recent_sessions = await self.db.get_recent_completed_sessions(n=5)
+            recent_strategies = self._convert_sessions_to_strategies(recent_sessions)
+
+            # Build assessment prompt
+            prompts = get_strategy_designer_prompt(
+                trigger_reason=TriggerReason.BACKTEST_COMPLETED,
+                session_id=session.id,
+                phase="assessing",
+                available_indicators=[],  # Not needed for assessment
+                available_symbols=[],
+                recent_strategies=recent_strategies,
+                backtest_results=backtest_results,
+            )
+
+            # Invoke agent
+            if self._is_modern_invoker:
+                result = await self.invoker.run(
+                    prompt=prompts["user"],
+                    tools=self.tools,
+                    system_prompt=prompts["system"],
+                    tool_executor=self.tool_executor,
+                )
+
+                if result.success:
+                    # Assessment complete - mark as success
+                    await self.db.complete_session(
+                        session_id=session.id,
+                        outcome=SessionOutcome.SUCCESS,
+                    )
+                    logger.info(
+                        "Assessment completed successfully",
+                        session_id=session.id,
+                    )
+                    return {
+                        "triggered": True,
+                        "reason": "assessment_completed",
+                        "session_id": session.id,
+                        "outcome": "success",
+                    }
+                else:
+                    # Assessment failed
+                    await self.db.complete_session(
+                        session_id=session.id,
+                        outcome=SessionOutcome.FAILED_ASSESSMENT,
+                    )
+                    logger.error(
+                        "Assessment invocation failed",
+                        session_id=session.id,
+                        error=result.error,
+                    )
+                    return {
+                        "triggered": True,
+                        "reason": "assessment_failed",
+                        "session_id": session.id,
+                        "error": result.error,
+                    }
+            else:
+                # Legacy invoker
+                result = await self.invoker.invoke(
+                    prompt=prompts["user"],
+                    system_prompt=prompts["system"],
+                )
+                if result.success:
+                    await self.db.complete_session(
+                        session_id=session.id,
+                        outcome=SessionOutcome.SUCCESS,
+                    )
+                    return {
+                        "triggered": True,
+                        "reason": "assessment_completed",
+                        "session_id": session.id,
+                    }
+                else:
+                    await self.db.complete_session(
+                        session_id=session.id,
+                        outcome=SessionOutcome.FAILED_ASSESSMENT,
+                    )
+                    return {
+                        "triggered": True,
+                        "reason": "assessment_failed",
+                        "session_id": session.id,
+                    }
+
+        except Exception as e:
+            logger.error(
+                "Exception during assessment",
+                session_id=session.id,
+                error=str(e),
+            )
+            await self.db.complete_session(
+                session_id=session.id,
+                outcome=SessionOutcome.FAILED_ASSESSMENT,
+            )
+            return {
+                "triggered": False,
+                "reason": "assessment_exception",
+                "session_id": session.id,
+                "error": str(e),
+            }
 
     async def start(self) -> None:
         """Start the trigger service loop.
