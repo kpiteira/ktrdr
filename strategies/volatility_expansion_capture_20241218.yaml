@@ -1,0 +1,136 @@
+name: volatility_expansion_capture_20241218
+description: Volatility expansion trend capture strategy using ADX trend strength,
+  ATR volatility levels, and Bollinger Band Width squeeze identification
+version: '1.0'
+hypothesis: Markets experience explosive moves when volatility contracts then expands.
+  Combining trend strength (ADX) with volatility metrics (ATR, BB Width) identifies
+  high-probability breakout opportunities while avoiding choppy markets.
+scope: universal
+training_data:
+  symbols:
+    mode: multi_symbol
+    list:
+    - EURUSD
+    - GBPUSD
+    - USDJPY
+  timeframes:
+    mode: single
+    list:
+    - 1h
+    base_timeframe: 1h
+  history_required: 250
+deployment:
+  target_symbols:
+    mode: universal
+  target_timeframes:
+    mode: single
+    supported:
+    - 1h
+indicators:
+- name: ADX
+  feature_id: adx_14
+  period: 14
+  source: close
+- name: ATR
+  feature_id: atr_14
+  period: 14
+  source: close
+- name: BollingerBandWidth
+  feature_id: bb_width_20
+  period: 20
+  source: close
+fuzzy_sets:
+  adx_14:
+    weak_trend:
+      type: triangular
+      parameters:
+      - 0
+      - 15
+      - 25
+    moderate_trend:
+      type: triangular
+      parameters:
+      - 20
+      - 35
+      - 50
+    strong_trend:
+      type: triangular
+      parameters:
+      - 45
+      - 65
+      - 100
+  atr_14:
+    low_volatility:
+      type: triangular
+      parameters:
+      - 0.0
+      - 0.002
+      - 0.006
+    normal_volatility:
+      type: triangular
+      parameters:
+      - 0.004
+      - 0.008
+      - 0.012
+    high_volatility:
+      type: triangular
+      parameters:
+      - 0.01
+      - 0.015
+      - 0.03
+  bb_width_20:
+    squeezed:
+      type: triangular
+      parameters:
+      - 0.0
+      - 0.01
+      - 0.03
+    normal_width:
+      type: triangular
+      parameters:
+      - 0.02
+      - 0.04
+      - 0.06
+    expanded:
+      type: triangular
+      parameters:
+      - 0.05
+      - 0.08
+      - 0.15
+model:
+  type: mlp
+  architecture:
+    hidden_layers:
+    - 48
+    - 24
+    - 12
+    activation: relu
+    output_activation: softmax
+    dropout: 0.3
+  features:
+    include_price_context: true
+    lookback_periods: 3
+    scale_features: true
+  training:
+    learning_rate: 0.001
+    batch_size: 64
+    epochs: 75
+    optimizer: adam
+    early_stopping:
+      enabled: true
+      patience: 12
+      min_delta: 0.0005
+decisions:
+  output_format: classification
+  confidence_threshold: 0.65
+  position_awareness: true
+training:
+  method: supervised
+  labels:
+    source: zigzag
+    zigzag_threshold: 0.025
+    label_lookahead: 15
+  data_split:
+    train: 0.7
+    validation: 0.15
+    test: 0.15
