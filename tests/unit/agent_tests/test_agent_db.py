@@ -84,6 +84,82 @@ class TestAgentSession:
         assert session.strategy_name == "neuro_mean_reversion"
         assert session.operation_id == "op_training_123"
 
+    def test_session_assessment_fields_default_to_none(self):
+        """Test that assessment fields default to None (Task 2.7)."""
+        session = AgentSession(
+            id=1,
+            phase=SessionPhase.IDLE,
+            created_at=datetime.now(timezone.utc),
+        )
+        assert session.assessment_text is None
+        assert session.assessment_metrics is None
+
+    def test_session_with_assessment_text(self):
+        """Test session with assessment text populated (Task 2.7)."""
+        now = datetime.now(timezone.utc)
+        assessment = """
+        ## Strategy Assessment
+
+        This strategy showed promise with stable training convergence.
+        The model achieved 52% accuracy which exceeds threshold.
+
+        ### What Worked
+        - RSI indicator provided good mean reversion signals
+        - Gaussian fuzzy sets captured gradual transitions well
+
+        ### What Didn't Work
+        - Sharpe ratio was below expectations
+
+        ### Suggestions
+        - Try adding volume as secondary indicator
+        - Consider longer training period
+        """
+        session = AgentSession(
+            id=1,
+            phase=SessionPhase.COMPLETE,
+            created_at=now,
+            updated_at=now,
+            strategy_name="test_strategy",
+            outcome=SessionOutcome.SUCCESS,
+            assessment_text=assessment,
+        )
+        assert session.assessment_text == assessment
+        assert "RSI indicator" in session.assessment_text
+
+    def test_session_with_assessment_metrics(self):
+        """Test session with assessment metrics populated (Task 2.7)."""
+        now = datetime.now(timezone.utc)
+        metrics = {
+            "training": {
+                "accuracy": 0.52,
+                "final_loss": 0.65,
+                "initial_loss": 0.95,
+                "loss_reduction": 0.316,
+            },
+            "backtest": {
+                "win_rate": 0.48,
+                "sharpe_ratio": 0.12,
+                "max_drawdown": 0.18,
+                "total_return": 0.05,
+            },
+            "gate_results": {
+                "training_gate_passed": True,
+                "backtest_gate_passed": True,
+            },
+        }
+        session = AgentSession(
+            id=1,
+            phase=SessionPhase.COMPLETE,
+            created_at=now,
+            updated_at=now,
+            strategy_name="test_strategy",
+            outcome=SessionOutcome.SUCCESS,
+            assessment_metrics=metrics,
+        )
+        assert session.assessment_metrics == metrics
+        assert session.assessment_metrics["training"]["accuracy"] == 0.52
+        assert session.assessment_metrics["backtest"]["win_rate"] == 0.48
+
     def test_session_is_active(self):
         """Test is_active property."""
         active_session = AgentSession(
@@ -277,6 +353,8 @@ class TestAgentDatabase:
             "strategy_name": "my_strategy",
             "operation_id": None,
             "outcome": "success",
+            "assessment_text": None,
+            "assessment_metrics": None,
         }
 
         db = AgentDatabase(pool)
@@ -287,6 +365,68 @@ class TestAgentDatabase:
 
         assert session.phase == SessionPhase.COMPLETE
         assert session.outcome == SessionOutcome.SUCCESS
+
+    @pytest.mark.asyncio
+    async def test_complete_session_with_assessment(self, mock_pool):
+        """Test completing a session with assessment data (Task 2.7)."""
+        pool, conn = mock_pool
+        now = datetime.now(timezone.utc)
+        assessment_text = "Strategy showed promising results with 52% accuracy."
+        assessment_metrics = {
+            "training": {"accuracy": 0.52, "final_loss": 0.65},
+            "backtest": {"win_rate": 0.48, "sharpe_ratio": 0.12},
+        }
+        conn.fetchrow.return_value = {
+            "id": 1,
+            "phase": "complete",
+            "created_at": now,
+            "updated_at": now,
+            "strategy_name": "my_strategy",
+            "operation_id": None,
+            "outcome": "success",
+            "assessment_text": assessment_text,
+            "assessment_metrics": assessment_metrics,
+        }
+
+        db = AgentDatabase(pool)
+        session = await db.complete_session(
+            session_id=1,
+            outcome=SessionOutcome.SUCCESS,
+            assessment_text=assessment_text,
+            assessment_metrics=assessment_metrics,
+        )
+
+        assert session.phase == SessionPhase.COMPLETE
+        assert session.outcome == SessionOutcome.SUCCESS
+        assert session.assessment_text == assessment_text
+        assert session.assessment_metrics == assessment_metrics
+        assert session.assessment_metrics["training"]["accuracy"] == 0.52
+
+    @pytest.mark.asyncio
+    async def test_get_session_with_assessment(self, mock_pool):
+        """Test getting a session with assessment data (Task 2.7)."""
+        pool, conn = mock_pool
+        now = datetime.now(timezone.utc)
+        assessment_text = "Full cycle completed successfully."
+        assessment_metrics = {"training": {"accuracy": 0.55}}
+        conn.fetchrow.return_value = {
+            "id": 1,
+            "phase": "complete",
+            "created_at": now,
+            "updated_at": now,
+            "strategy_name": "test_strategy",
+            "operation_id": None,
+            "outcome": "success",
+            "assessment_text": assessment_text,
+            "assessment_metrics": assessment_metrics,
+        }
+
+        db = AgentDatabase(pool)
+        session = await db.get_session(1)
+
+        assert session is not None
+        assert session.assessment_text == assessment_text
+        assert session.assessment_metrics == assessment_metrics
 
     @pytest.mark.asyncio
     async def test_log_action(self, mock_pool):

@@ -55,6 +55,8 @@ class AgentSession:
         strategy_name: Name of the strategy being designed (if set).
         operation_id: ID of the current KTRDR operation (training/backtest).
         outcome: Final outcome when session completes.
+        assessment_text: Agent's written analysis of results (Task 2.7).
+        assessment_metrics: Structured metrics summary as JSONB (Task 2.7).
     """
 
     id: int
@@ -64,6 +66,8 @@ class AgentSession:
     strategy_name: str | None = None
     operation_id: str | None = None
     outcome: SessionOutcome | None = None
+    assessment_text: str | None = None
+    assessment_metrics: dict[str, Any] | None = None
 
     @property
     def is_active(self) -> bool:
@@ -109,7 +113,9 @@ CREATE TABLE IF NOT EXISTS agent_sessions (
     updated_at TIMESTAMPTZ,
     strategy_name VARCHAR(255),
     operation_id VARCHAR(255),
-    outcome VARCHAR(50)
+    outcome VARCHAR(50),
+    assessment_text TEXT,
+    assessment_metrics JSONB
 );
 
 -- Index for finding active sessions quickly
@@ -132,4 +138,25 @@ CREATE TABLE IF NOT EXISTS agent_actions (
 -- Index for finding actions by session
 CREATE INDEX IF NOT EXISTS idx_agent_actions_session_id
 ON agent_actions(session_id);
+
+-- Task 2.7: Migration for assessment columns on existing tables
+-- Using DO block with exception handling for idempotent migrations
+DO $$
+BEGIN
+    -- Add assessment_text column if it doesn't exist
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'agent_sessions' AND column_name = 'assessment_text'
+    ) THEN
+        ALTER TABLE agent_sessions ADD COLUMN assessment_text TEXT;
+    END IF;
+
+    -- Add assessment_metrics column if it doesn't exist
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'agent_sessions' AND column_name = 'assessment_metrics'
+    ) THEN
+        ALTER TABLE agent_sessions ADD COLUMN assessment_metrics JSONB;
+    END IF;
+END $$;
 """

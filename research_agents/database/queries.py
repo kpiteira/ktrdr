@@ -101,7 +101,8 @@ class AgentDatabase:
         query = """
             INSERT INTO agent_sessions (phase, created_at)
             VALUES ($1, $2)
-            RETURNING id, phase, created_at, updated_at, strategy_name, operation_id, outcome
+            RETURNING id, phase, created_at, updated_at, strategy_name, operation_id, outcome,
+                      assessment_text, assessment_metrics
         """
         now = datetime.now(timezone.utc)
 
@@ -120,7 +121,8 @@ class AgentDatabase:
             The session if found, None otherwise.
         """
         query = """
-            SELECT id, phase, created_at, updated_at, strategy_name, operation_id, outcome
+            SELECT id, phase, created_at, updated_at, strategy_name, operation_id, outcome,
+                   assessment_text, assessment_metrics
             FROM agent_sessions
             WHERE id = $1
         """
@@ -142,7 +144,8 @@ class AgentDatabase:
             The active session if found, None otherwise.
         """
         query = """
-            SELECT id, phase, created_at, updated_at, strategy_name, operation_id, outcome
+            SELECT id, phase, created_at, updated_at, strategy_name, operation_id, outcome,
+                   assessment_text, assessment_metrics
             FROM agent_sessions
             WHERE phase NOT IN ($1, $2)
             ORDER BY created_at DESC
@@ -206,7 +209,8 @@ class AgentDatabase:
             UPDATE agent_sessions
             SET {", ".join(updates)}
             WHERE id = ${param_idx}
-            RETURNING id, phase, created_at, updated_at, strategy_name, operation_id, outcome
+            RETURNING id, phase, created_at, updated_at, strategy_name, operation_id, outcome,
+                      assessment_text, assessment_metrics
         """
 
         async with self.pool.acquire() as conn:
@@ -221,12 +225,16 @@ class AgentDatabase:
         self,
         session_id: int,
         outcome: SessionOutcome,
+        assessment_text: str | None = None,
+        assessment_metrics: dict[str, Any] | None = None,
     ) -> AgentSession:
         """Complete a session with the given outcome.
 
         Args:
             session_id: The session to complete.
             outcome: The final outcome.
+            assessment_text: Agent's written analysis of results (Task 2.7).
+            assessment_metrics: Structured metrics summary (Task 2.7).
 
         Returns:
             The completed session.
@@ -236,10 +244,15 @@ class AgentDatabase:
         """
         query = """
             UPDATE agent_sessions
-            SET phase = $1, outcome = $2, updated_at = $3, operation_id = NULL
-            WHERE id = $4
-            RETURNING id, phase, created_at, updated_at, strategy_name, operation_id, outcome
+            SET phase = $1, outcome = $2, updated_at = $3, operation_id = NULL,
+                assessment_text = $4, assessment_metrics = $5
+            WHERE id = $6
+            RETURNING id, phase, created_at, updated_at, strategy_name, operation_id, outcome,
+                      assessment_text, assessment_metrics
         """
+
+        # Convert assessment_metrics dict to JSON string for storage
+        metrics_json = json.dumps(assessment_metrics) if assessment_metrics else None
 
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
@@ -247,6 +260,8 @@ class AgentDatabase:
                 SessionPhase.COMPLETE.value,
                 outcome.value,
                 datetime.now(timezone.utc),
+                assessment_text,
+                metrics_json,
                 session_id,
             )
 
@@ -374,7 +389,8 @@ class AgentDatabase:
         # Build parameterized query with multiple phases
         placeholders = ", ".join(f"${i+1}" for i in range(len(phases)))
         query = f"""
-            SELECT id, phase, created_at, updated_at, strategy_name, operation_id, outcome
+            SELECT id, phase, created_at, updated_at, strategy_name, operation_id, outcome,
+                   assessment_text, assessment_metrics
             FROM agent_sessions
             WHERE phase IN ({placeholders})
             ORDER BY created_at DESC
@@ -389,6 +405,11 @@ class AgentDatabase:
 
     def _row_to_session(self, row: asyncpg.Record) -> AgentSession:
         """Convert a database row to an AgentSession."""
+        # Handle assessment_metrics - may be string or dict from JSONB
+        assessment_metrics = row.get("assessment_metrics")
+        if isinstance(assessment_metrics, str):
+            assessment_metrics = json.loads(assessment_metrics)
+
         return AgentSession(
             id=row["id"],
             phase=SessionPhase(row["phase"]),
@@ -397,6 +418,8 @@ class AgentDatabase:
             strategy_name=row["strategy_name"],
             operation_id=row["operation_id"],
             outcome=SessionOutcome(row["outcome"]) if row["outcome"] else None,
+            assessment_text=row.get("assessment_text"),
+            assessment_metrics=assessment_metrics,
         )
 
     def _row_to_action(self, row: asyncpg.Record) -> AgentAction:
