@@ -110,7 +110,7 @@ async def start_training_via_api(
 
     # Get API URL from environment
     base_url = os.getenv("KTRDR_API_URL", "http://localhost:8000")
-    api_url = f"{base_url}/api/v1/training/start"
+    api_url = f"{base_url}/api/v1/trainings/start"  # Note: /trainings (plural)
 
     # Build request payload - only include non-None values
     payload: dict[str, Any] = {"strategy_name": strategy_name}

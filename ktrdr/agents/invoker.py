@@ -37,6 +37,10 @@ class AgentResult:
         input_tokens: Total input tokens used across all API calls
         output_tokens: Total output tokens used across all API calls
         error: Error message if invocation failed
+        tool_outputs: Important tool results captured during execution.
+            Currently captures:
+            - strategy_name: Name of strategy saved via save_strategy_config
+            - strategy_path: Path to saved strategy file
     """
 
     success: bool
@@ -44,6 +48,7 @@ class AgentResult:
     input_tokens: int
     output_tokens: int
     error: str | None
+    tool_outputs: dict[str, Any] | None = None
 
 
 @dataclass
