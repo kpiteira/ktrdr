@@ -804,3 +804,129 @@ class TestCancelSessionCLICommand:
             call_args = mock_client._make_request.call_args
             assert call_args[0][0] == "DELETE"  # HTTP method
             assert "cancel" in call_args[0][1]  # URL contains cancel
+
+
+# ============================================================================
+# Auto-Start Feature Flag Tests
+# Tests for: AGENT_AUTO_START_NEW_SESSIONS feature flag
+# ============================================================================
+
+
+class TestAutoStartFeatureFlag:
+    """Test auto_start_new_sessions feature flag in TriggerConfig.
+
+    When False (default):
+    - Background loop still runs every 5 minutes
+    - Existing sessions progress through phases
+    - New sessions NOT auto-started from IDLE
+    - Manual triggers via CLI still work
+    """
+
+    @pytest.mark.asyncio
+    async def test_auto_start_disabled_prevents_new_sessions(self):
+        """When auto_start_new_sessions=False, no new sessions are started."""
+        from research_agents.services.trigger import TriggerConfig, TriggerService
+
+        db = AsyncMock()
+        db.get_active_session = AsyncMock(return_value=None)  # No active session
+
+        config = TriggerConfig(enabled=True, auto_start_new_sessions=False)
+        mock_invoker = MagicMock()
+        mock_invoker.run = AsyncMock()
+
+        service = TriggerService(config=config, db=db, invoker=mock_invoker)
+
+        result = await service.check_and_trigger()
+
+        assert result["triggered"] is False
+        assert result["reason"] == "auto_start_disabled"
+        # Invoker should NOT have been called
+        mock_invoker.run.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_auto_start_enabled_does_not_return_auto_start_disabled(self):
+        """When auto_start_new_sessions=True, should NOT return auto_start_disabled reason."""
+        from research_agents.services.trigger import TriggerConfig, TriggerService
+
+        db = AsyncMock()
+        db.get_active_session = AsyncMock(return_value=None)  # No active session
+        # Mock for Phase 0 fallback (no context_provider)
+        db.create_session = AsyncMock(return_value=1)
+        db.complete_session = AsyncMock()
+
+        config = TriggerConfig(enabled=True, auto_start_new_sessions=True)
+        mock_invoker = MagicMock()
+
+        # Phase 0 uses invoker.invoke() not invoker.run()
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.exit_code = 0
+        mock_result.error = None
+        mock_result.output = {"session_id": 1}
+        mock_invoker.invoke = AsyncMock(return_value=mock_result)
+
+        service = TriggerService(
+            config=config, db=db, invoker=mock_invoker, context_provider=None
+        )
+
+        result = await service.check_and_trigger()
+
+        # Key assertion: when auto_start=True, reason should NOT be "auto_start_disabled"
+        assert result.get("reason") != "auto_start_disabled"
+        # It should attempt to trigger (Phase 0 path)
+        assert result["triggered"] is True
+
+    @pytest.mark.asyncio
+    async def test_auto_start_flag_does_not_affect_existing_sessions(self):
+        """auto_start_new_sessions=False should not affect progress of existing sessions."""
+        from research_agents.services.trigger import TriggerConfig, TriggerService
+
+        db = AsyncMock()
+        # Active session exists in DESIGNED phase
+        active_session = MagicMock()
+        active_session.id = 100
+        active_session.phase = MagicMock(value="designed")
+        active_session.operation_id = None
+        active_session.strategy_name = "test_strategy"
+
+        db.get_active_session = AsyncMock(return_value=active_session)
+
+        config = TriggerConfig(enabled=True, auto_start_new_sessions=False)
+        mock_invoker = MagicMock()
+
+        service = TriggerService(config=config, db=db, invoker=mock_invoker)
+
+        result = await service.check_and_trigger()
+
+        # Should still attempt to progress the session (even with auto_start=False)
+        # Result depends on handler, but should NOT be "auto_start_disabled"
+        assert result.get("reason") != "auto_start_disabled"
+
+    def test_config_from_env_reads_auto_start_flag(self):
+        """TriggerConfig.from_env() should read AGENT_AUTO_START_NEW_SESSIONS."""
+        import os
+        from unittest.mock import patch
+
+        from research_agents.services.trigger import TriggerConfig
+
+        # Default is False
+        with patch.dict(os.environ, {}, clear=True):
+            config = TriggerConfig.from_env()
+            assert config.auto_start_new_sessions is False
+
+        # Set to true
+        with patch.dict(os.environ, {"AGENT_AUTO_START_NEW_SESSIONS": "true"}):
+            config = TriggerConfig.from_env()
+            assert config.auto_start_new_sessions is True
+
+        # Set to false explicitly
+        with patch.dict(os.environ, {"AGENT_AUTO_START_NEW_SESSIONS": "false"}):
+            config = TriggerConfig.from_env()
+            assert config.auto_start_new_sessions is False
+
+    def test_default_interval_is_five_minutes(self):
+        """Default interval should be 300 seconds (5 minutes)."""
+        from research_agents.services.trigger import TriggerConfig
+
+        config = TriggerConfig()
+        assert config.interval_seconds == 300

@@ -66,10 +66,14 @@ class TriggerConfig:
     Attributes:
         interval_seconds: How often to check for triggering (default: 5 minutes)
         enabled: Whether the trigger service is enabled
+        auto_start_new_sessions: Whether to automatically start new sessions from IDLE
+                                 When False, only manual triggers via CLI will start sessions,
+                                 but the background loop still runs to progress existing sessions.
     """
 
     interval_seconds: int = 300  # 5 minutes
     enabled: bool = True
+    auto_start_new_sessions: bool = False  # Default to manual triggering
 
     @classmethod
     def from_env(cls) -> TriggerConfig:
@@ -78,13 +82,21 @@ class TriggerConfig:
         Environment variables:
             AGENT_TRIGGER_INTERVAL_SECONDS: Interval between checks (default: 300)
             AGENT_ENABLED: Whether agent is enabled (default: true)
+            AGENT_AUTO_START_NEW_SESSIONS: Whether to auto-start sessions (default: false)
 
         Returns:
             TriggerConfig instance with values from environment.
         """
         interval = int(os.getenv("AGENT_TRIGGER_INTERVAL_SECONDS", "300"))
         enabled = os.getenv("AGENT_ENABLED", "true").lower() in ("true", "1", "yes")
-        return cls(interval_seconds=interval, enabled=enabled)
+        auto_start = os.getenv("AGENT_AUTO_START_NEW_SESSIONS", "false").lower() in (
+            "true",
+            "1",
+            "yes",
+        )
+        return cls(
+            interval_seconds=interval, enabled=enabled, auto_start_new_sessions=auto_start
+        )
 
 
 class AgentInvoker(Protocol):
@@ -274,12 +286,15 @@ class TriggerService:
         # Detect if invoker is modern (has run() method)
         self._is_modern_invoker = hasattr(invoker, "run") and callable(invoker.run)
 
-    async def check_and_trigger(self, operation_id: str | None = None) -> dict:
+    async def check_and_trigger(
+        self, operation_id: str | None = None, force: bool = False
+    ) -> dict:
         """Check conditions and potentially trigger an agent cycle.
 
         Args:
             operation_id: Optional operation ID to link with session for tracking.
                          This enables operation recovery after backend restart.
+            force: If True, bypass auto_start_new_sessions check (for manual triggers).
 
         Returns:
             Dict with:
@@ -298,7 +313,14 @@ class TriggerService:
             # Route to phase-specific handler (Phase 2: full state machine)
             return await self._handle_active_session(active_session)
 
-        # No active session - start a new cycle
+        # No active session - check if auto-start is enabled (unless forced)
+        if not force and not self.config.auto_start_new_sessions:
+            logger.debug(
+                "No active session and auto_start_new_sessions=False, skipping"
+            )
+            return {"triggered": False, "reason": "auto_start_disabled"}
+
+        # Start a new cycle (auto-start enabled or forced)
         logger.info("No active session, triggering new research cycle")
 
         # Use Phase 1 behavior if context_provider is available
@@ -607,13 +629,18 @@ class TriggerService:
     async def _handle_designed_session(self, session: Any) -> dict:
         """Handle session in DESIGNED phase - start training.
 
+        Loads the strategy config to extract symbols/timeframes for training.
+
         Args:
             session: Session in DESIGNED phase.
 
         Returns:
             Dict with handling result.
         """
+        from pathlib import Path
+
         from ktrdr.agents.executor import start_training_via_api
+        from ktrdr.config.strategy_loader import strategy_loader
         from research_agents.database.schema import SessionOutcome, SessionPhase
 
         logger.info(
@@ -623,9 +650,106 @@ class TriggerService:
         )
 
         try:
-            # Start training via API
+            # Load strategy config to get symbols/timeframes
+            strategy_path = Path("strategies") / f"{session.strategy_name}.yaml"
+            if not strategy_path.exists():
+                logger.error(
+                    "Strategy config file not found",
+                    session_id=session.id,
+                    strategy_name=session.strategy_name,
+                    path=str(strategy_path),
+                )
+                await self.db.complete_session(
+                    session_id=session.id,
+                    outcome=SessionOutcome.FAILED_TRAINING,
+                )
+                return {
+                    "triggered": False,
+                    "reason": "strategy_config_not_found",
+                    "session_id": session.id,
+                    "error": f"Strategy config not found: {strategy_path}",
+                }
+
+            # Load and parse the strategy config
+            config, is_v2 = strategy_loader.load_strategy_config(str(strategy_path))
+
+            # Extract symbols and timeframes from config
+            symbols: list[str] = []
+            timeframes: list[str] = []
+
+            if is_v2:
+                # V2 config has training_data.symbols and training_data.timeframes
+                training_data = config.training_data
+                symbol_config = training_data.symbols
+                timeframe_config = training_data.timeframes
+
+                # Handle symbol configuration based on mode
+                if symbol_config.symbols:
+                    symbols = symbol_config.symbols
+                elif symbol_config.symbol:
+                    symbols = [symbol_config.symbol]
+
+                # Handle timeframe configuration based on mode
+                if timeframe_config.timeframes:
+                    timeframes = timeframe_config.timeframes
+                elif timeframe_config.timeframe:
+                    timeframes = [timeframe_config.timeframe]
+            else:
+                # Legacy v1 config - look in 'data' section
+                config_dict = config.model_dump()
+                data_section = config_dict.get("data", {})
+                if data_section.get("symbol"):
+                    symbols = [data_section["symbol"]]
+                if data_section.get("timeframe"):
+                    timeframes = [data_section["timeframe"]]
+
+            if not symbols:
+                logger.error(
+                    "No symbols found in strategy config",
+                    session_id=session.id,
+                    strategy_name=session.strategy_name,
+                )
+                await self.db.complete_session(
+                    session_id=session.id,
+                    outcome=SessionOutcome.FAILED_TRAINING,
+                )
+                return {
+                    "triggered": False,
+                    "reason": "no_symbols_in_config",
+                    "session_id": session.id,
+                    "error": "Strategy config has no symbols defined",
+                }
+
+            if not timeframes:
+                logger.error(
+                    "No timeframes found in strategy config",
+                    session_id=session.id,
+                    strategy_name=session.strategy_name,
+                )
+                await self.db.complete_session(
+                    session_id=session.id,
+                    outcome=SessionOutcome.FAILED_TRAINING,
+                )
+                return {
+                    "triggered": False,
+                    "reason": "no_timeframes_in_config",
+                    "session_id": session.id,
+                    "error": "Strategy config has no timeframes defined",
+                }
+
+            logger.info(
+                "Starting training with config",
+                session_id=session.id,
+                strategy_name=session.strategy_name,
+                symbols=symbols,
+                timeframes=timeframes,
+            )
+
+            # Start training via API with symbols and timeframes
             result = await start_training_via_api(
                 strategy_name=session.strategy_name,
+                symbols=symbols,
+                timeframes=timeframes,
             )
 
             if not result.get("success"):

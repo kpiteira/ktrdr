@@ -358,7 +358,10 @@ class AgentService:
 
                 # Execute trigger (this does the actual work)
                 # Pass operation_id so it's saved to session for restart recovery
-                result = await service.check_and_trigger(operation_id=operation_id)
+                # Pass force=True to bypass auto_start_new_sessions check (this is a manual trigger)
+                result = await service.check_and_trigger(
+                    operation_id=operation_id, force=True
+                )
 
                 session_id = result.get("session_id")
                 if session_id:

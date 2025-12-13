@@ -1,0 +1,165 @@
+name: volatility_momentum_fusion_20251213_013903
+description: Multi-dimensional strategy combining volatility expansion, momentum convergence,
+  and trend strength for entry signals
+version: '1.0'
+hypothesis: Markets provide best trading opportunities when volatility expands, momentum
+  builds, and trend strength is confirmed simultaneously
+scope: universal
+training_data:
+  symbols:
+    mode: multi_symbol
+    list:
+    - EURUSD
+    - GBPUSD
+    - USDJPY
+  timeframes:
+    mode: single
+    list:
+    - 1h
+    base_timeframe: 1h
+  history_required: 300
+deployment:
+  target_symbols:
+    mode: universal
+  target_timeframes:
+    mode: single
+    supported:
+    - 1h
+indicators:
+- name: BollingerBands
+  feature_id: bb_20
+  period: 20
+  source: close
+- name: MACD
+  feature_id: macd_12_26
+  period: 12
+  source: close
+- name: ADX
+  feature_id: adx_14
+  period: 14
+  source: close
+- name: BollingerBandWidth
+  feature_id: bb_width_20
+  period: 20
+  source: close
+fuzzy_sets:
+  bb_20:
+    oversold:
+      type: trapezoidal
+      parameters:
+      - -2.5
+      - -2.0
+      - -1.0
+      - -0.5
+    neutral:
+      type: triangular
+      parameters:
+      - -0.8
+      - 0.0
+      - 0.8
+    overbought:
+      type: trapezoidal
+      parameters:
+      - 0.5
+      - 1.0
+      - 2.0
+      - 2.5
+  macd_12_26:
+    bearish_momentum:
+      type: trapezoidal
+      parameters:
+      - -0.02
+      - -0.01
+      - -0.003
+      - -0.001
+    neutral_momentum:
+      type: triangular
+      parameters:
+      - -0.005
+      - 0.0
+      - 0.005
+    bullish_momentum:
+      type: trapezoidal
+      parameters:
+      - 0.001
+      - 0.003
+      - 0.01
+      - 0.02
+  adx_14:
+    weak_trend:
+      type: trapezoidal
+      parameters:
+      - 0
+      - 5
+      - 20
+      - 25
+    moderate_trend:
+      type: triangular
+      parameters:
+      - 20
+      - 35
+      - 50
+    strong_trend:
+      type: trapezoidal
+      parameters:
+      - 40
+      - 50
+      - 80
+      - 100
+  bb_width_20:
+    low_volatility:
+      type: triangular
+      parameters:
+      - 0.001
+      - 0.01
+      - 0.02
+    normal_volatility:
+      type: triangular
+      parameters:
+      - 0.015
+      - 0.03
+      - 0.05
+    high_volatility:
+      type: trapezoidal
+      parameters:
+      - 0.04
+      - 0.06
+      - 0.15
+      - 0.25
+model:
+  type: mlp
+  architecture:
+    hidden_layers:
+    - 48
+    - 24
+    - 12
+    activation: relu
+    output_activation: softmax
+    dropout: 0.3
+  features:
+    include_price_context: false
+    lookback_periods: 3
+    scale_features: true
+  training:
+    learning_rate: 0.0008
+    batch_size: 64
+    epochs: 75
+    optimizer: adam
+    early_stopping:
+      enabled: true
+      patience: 15
+      min_delta: 0.001
+decisions:
+  output_format: classification
+  confidence_threshold: 0.65
+  position_awareness: true
+training:
+  method: supervised
+  labels:
+    source: zigzag
+    zigzag_threshold: 0.025
+    label_lookahead: 24
+  data_split:
+    train: 0.7
+    validation: 0.15
+    test: 0.15
