@@ -2,7 +2,8 @@
 
 **Based on**: [design.md](design.md) and [ARCHITECTURE_operations_only.md](../ARCHITECTURE_operations_only.md)
 **Status**: Ready for implementation
-**Date**: 2025-12-12
+**Date**: 2025-12-13
+**Branch**: `feature/agent-mvp`
 
 ---
 
@@ -10,395 +11,161 @@
 
 This plan implements the autonomous research agent using **only OperationsService** for state management. No session database. Each phase builds on the previous one.
 
-**Total estimated tasks**: ~20
-**Approach**: Incremental, testable at each phase
+**Execution Order**:
+
+1. **Cleanup** - Remove session database code, salvage working components
+2. **Phase 0** - State machine with stubs (validate architecture)
+3. **Phase 1** - Replace design stub with real Anthropic integration
+4. **Phase 2** - Replace training stub with real training API
+5. **Phase 3** - Replace backtest stub, add assessment phase
+6. **Phase 4** - Add budget, observability, robustness
+
+**Branch**: `feature/agent-mvp` (surgical cleanup, not restart)
 
 ---
 
-## Phase 1: Foundation (Design-Only Cycle)
+## Step 0: Branch Cleanup
 
-**Goal**: Trigger → Claude designs strategy → Save to disk → Complete
+**Goal**: Remove session database code while preserving working components
 
-This proves the core loop works without training/backtest complexity.
+**Detailed Plan**: [TASK_branch_cleanup.md](TASK_branch_cleanup.md)
 
-### Task 1.1: Add AGENT_RESEARCH operation type
+### Summary of Cleanup
 
-Add new operation type to OperationsService.
+| Action | Files |
+|--------|-------|
+| **KEEP** | `ktrdr/agents/invoker.py`, `tools.py` |
+| **MOVE** | Prompts, gates, strategy utils → `ktrdr/agents/` |
+| **REWRITE** | `agent_service.py`, API endpoints, CLI |
+| **DELETE** | `research_agents/` directory |
 
-**Files**:
-- `ktrdr/api/services/operations_service.py` - Add `OperationType.AGENT_RESEARCH`
-
-**Test**: Can create/query/cancel AGENT_RESEARCH operations
-
----
-
-### Task 1.2: Create minimal AgentService
-
-New service that orchestrates research cycles using OperationsService.
-
-**Files**:
-- `ktrdr/api/services/agent_service.py` - Rewrite from scratch
-
-**Implementation**:
-```python
-class AgentService:
-    def __init__(self, operations_service: OperationsService):
-        self._ops = operations_service
-
-    async def trigger(self) -> dict:
-        """Start a research cycle."""
-        # Check no active cycle
-        # Create AGENT_RESEARCH operation
-        # Start async task
-        # Return operation_id
-
-    async def get_status(self) -> dict:
-        """Get current cycle status."""
-        # Query operations for active AGENT_RESEARCH
-```
-
-**Test**: Can trigger, get status, see operation created
+**Checkpoint**: No imports from `research_agents` remain
 
 ---
 
-### Task 1.3: Implement design phase
+## Phase 0: State Machine (Stubs)
 
-The async task that runs Claude to design a strategy.
+**Goal**: Validate architecture with stub implementations before adding real business logic
 
-**Files**:
-- `ktrdr/api/services/agent_service.py` - Add `_run_design_phase()`
+**Detailed Plan**: [PLAN_phase0_state_machine.md](PLAN_phase0_state_machine.md)
 
-**Implementation**:
-```python
-async def _run_design_phase(self, operation_id: str) -> dict:
-    """Run Claude to design a strategy."""
-    # Update metadata: phase = "designing"
-    # Call AnthropicAgentInvoker
-    # Extract strategy_name from tool_outputs
-    # Return result
-```
+### Tasks
 
-**Dependencies**: Reuse existing `AnthropicAgentInvoker` and `ToolExecutor`
+| Task | Description |
+|------|-------------|
+| 0.1 | Add `AGENT_RESEARCH` operation type |
+| 0.2 | Create AgentService with state machine (stub phases) |
+| 0.3 | Wire up API endpoints (trigger/status) |
+| 0.4 | Wire up CLI commands (trigger/status/cancel) |
+| 0.5 | Add `OperationsService.update_metadata()` if needed |
 
-**Test**: Trigger → Claude runs → strategy saved → operation completes
+**Checkpoint**:
 
----
-
-### Task 1.4: Wire up API endpoints
-
-Minimal endpoints for triggering and status.
-
-**Files**:
-- `ktrdr/api/endpoints/agent.py` - Simplify to just trigger/status
-
-**Endpoints**:
-- `POST /agent/trigger` → Start cycle, return operation_id
-- `GET /agent/status` → Get active cycle info
-
-**Test**: Can trigger via API, query status
+- [ ] Full stub cycle completes (~2 min): designing → training → backtesting → assessing → done
+- [ ] Cancellation works at any phase (100ms granularity)
+- [ ] Progress updates visible in CLI
+- [ ] Gate failures mark cycle as FAILED
 
 ---
 
-### Task 1.5: Wire up CLI commands
+## Phase 1: Design Integration
 
-Minimal CLI for manual testing.
+**Goal**: Replace design stub with real Anthropic/Claude integration
 
-**Files**:
-- `ktrdr/cli/agent_commands.py` - Simplify to trigger/status/cancel
+**Detailed Plan**: [PLAN_phase1_foundation.md](PLAN_phase1_foundation.md)
 
-**Commands**:
-- `ktrdr agent trigger` → Start cycle
-- `ktrdr agent status` → Show current cycle
-- `ktrdr agent cancel <op_id>` → Cancel via operations API
+### Phase 1 Tasks
 
-**Test**: Full CLI workflow works
+| Task | Description |
+|------|-------------|
+| 1.1 | Replace `_run_design_phase()` stub with real AnthropicAgentInvoker |
+| 1.2 | Capture strategy_name from tool_outputs |
+| 1.3 | Update progress tracking for design phase |
 
----
+**Checkpoint**:
 
-### Phase 1 Checkpoint
-
-**Acceptance criteria**:
-- [ ] `ktrdr agent trigger` starts a cycle
-- [ ] Claude designs and saves a strategy
-- [ ] `ktrdr agent status` shows progress
-- [ ] `ktrdr agent cancel` cleanly stops cycle
-- [ ] Operation appears in `ktrdr operations list`
-- [ ] No session database code remains
+- [ ] Real Claude invocation designs strategy
+- [ ] Strategy saved to `strategies/{name}.yaml`
+- [ ] Token usage captured in result
+- [ ] Other phases still use stubs
 
 ---
 
 ## Phase 2: Training Integration
 
-**Goal**: Design → Train → Complete (or fail on gate)
+**Goal**: Replace training stub with real training API polling
 
-### Task 2.1: Add training phase to cycle
+**Detailed Plan**: [PLAN_phase2_training.md](PLAN_phase2_training.md)
 
-After design completes, start training.
+### Phase 2 Tasks
 
-**Files**:
-- `ktrdr/api/services/agent_service.py` - Add `_run_training_phase()`
+| Task | Description |
+|------|-------------|
+| 2.1 | Create strategy loader to extract training params |
+| 2.2 | Replace `_run_training_phase()` stub with real API polling |
+| 2.3 | Use real training gate (moved from research_agents) |
+| 2.4 | Wire training gate into cycle |
 
-**Implementation**:
-```python
-async def _run_training_phase(self, operation_id: str, strategy_name: str) -> dict:
-    """Start training and wait for completion."""
-    # Update metadata: phase = "training"
-    # Extract symbols/timeframes from strategy config
-    # Call training API
-    # Poll for completion
-    # Return training result
-```
+**Checkpoint**:
 
-**Test**: Design → Training starts → Training completes
-
----
-
-### Task 2.2: Implement training gate
-
-Check training metrics before proceeding.
-
-**Files**:
-- `ktrdr/agents/gates.py` - Create new file
-
-**Implementation**:
-```python
-def check_training_gate(metrics: dict) -> tuple[bool, str]:
-    """Check if training passed quality gate.
-
-    Returns (passed, reason)
-    """
-    if metrics.get("accuracy", 0) < 0.45:
-        return False, "accuracy_below_threshold"
-    if metrics.get("final_loss", 1.0) > 0.8:
-        return False, "loss_too_high"
-    return True, "passed"
-```
-
-**Test**: Gate rejects bad metrics, passes good metrics
-
----
-
-### Task 2.3: Handle training failure
-
-If training fails or gate fails, mark cycle failed.
-
-**Files**:
-- `ktrdr/api/services/agent_service.py` - Add failure handling
-
-**Test**: Bad training → cycle marked FAILED with reason
-
----
-
-### Phase 2 Checkpoint
-
-**Acceptance criteria**:
-- [ ] Design phase completes, training starts automatically
-- [ ] Training progress shows in operation metadata
-- [ ] Training gate rejects poor results
-- [ ] Training failure marks cycle as FAILED
-- [ ] Successful training proceeds (ready for Phase 3)
+- [ ] Real training starts after design
+- [ ] Progress updates during training
+- [ ] Gate rejects poor training results
+- [ ] Backtest/assessment phases still use stubs
 
 ---
 
 ## Phase 3: Full Cycle
 
-**Goal**: Design → Train → Backtest → Assess → Complete
+**Goal**: Replace backtest stub and add assessment phase
 
-### Task 3.1: Add backtest phase
+**Detailed Plan**: [PLAN_phase3_full_cycle.md](PLAN_phase3_full_cycle.md)
 
-After training passes gate, run backtest.
+### Phase 3 Tasks
 
-**Files**:
-- `ktrdr/api/services/agent_service.py` - Add `_run_backtest_phase()`
+| Task | Description |
+|------|-------------|
+| 3.1 | Replace `_run_backtest_phase()` stub with real API polling |
+| 3.2 | Wire backtest gate into cycle |
+| 3.3 | Replace `_run_assessment_phase()` stub with real Claude call |
+| 3.4 | Add assessment prompt builder |
+| 3.5 | Save assessment to `strategies/{name}/assessment.json` |
+| 3.6 | Update `get_recent_strategies()` to include assessments |
 
-**Implementation**: Similar to training phase
+**Checkpoint**:
 
-**Test**: Training passes → Backtest starts → Backtest completes
-
----
-
-### Task 3.2: Implement backtest gate
-
-Check backtest metrics before assessment.
-
-**Files**:
-- `ktrdr/agents/gates.py` - Add `check_backtest_gate()`
-
-**Test**: Gate rejects bad backtests, passes good ones
-
----
-
-### Task 3.3: Add assessment phase
-
-Claude evaluates results and records learnings.
-
-**Files**:
-- `ktrdr/api/services/agent_service.py` - Add `_run_assessment_phase()`
-
-**Implementation**:
-```python
-async def _run_assessment_phase(self, operation_id: str, results: dict) -> dict:
-    """Have Claude assess the results."""
-    # Update metadata: phase = "assessing"
-    # Call AnthropicAgentInvoker with results context
-    # Save assessment to strategy folder
-    # Return assessment
-```
-
-**Test**: Backtest passes → Claude assesses → Cycle completes
-
----
-
-### Task 3.4: Store assessment results
-
-Save assessment somewhere persistent.
-
-**Files**:
-- `ktrdr/agents/executor.py` - Add `save_assessment()` tool
-
-**Storage**: `strategies/{name}/assessment.json`
-
-**Test**: Assessment saved, readable for future cycles
-
----
-
-### Phase 3 Checkpoint
-
-**Acceptance criteria**:
-- [ ] Full cycle: design → train → backtest → assess → complete
-- [ ] Each phase updates operation metadata
-- [ ] Gates reject poor results at each stage
+- [ ] Full real cycle: design → train → backtest → assess → complete
+- [ ] All gates functional
 - [ ] Assessment saved to disk
-- [ ] Cycle duration tracked in operation
+- [ ] No stubs remain
 
 ---
 
 ## Phase 4: Polish
 
-**Goal**: Budget, observability, robustness
+**Goal**: Add budget enforcement, observability, robust error handling
 
-### Task 4.1: Budget enforcement
+**Detailed Plan**: [PLAN_phase4_polish.md](PLAN_phase4_polish.md)
 
-Track token usage, enforce daily limit.
+### Phase 4 Tasks
 
-**Files**:
-- `ktrdr/agents/budget.py` - Create new file
-- `ktrdr/api/services/agent_service.py` - Check budget before trigger
+| Task | Description |
+|------|-------------|
+| 4.1 | Implement budget tracking (`ktrdr/agents/budget.py`) |
+| 4.2 | Wire budget check into trigger |
+| 4.3 | Add agent metrics (cycles, phase durations, tokens) |
+| 4.4 | Wire metrics into AgentService |
+| 4.5 | Add OTEL tracing spans |
+| 4.6 | Improve error handling (timeouts, service unavailable) |
+| 4.7 | Improve CLI status display |
+| 4.8 | Add `/agent/budget` endpoint |
 
-**Implementation**:
-- Track tokens per invocation (from AgentResult)
-- Store daily usage in file or operation metadata
-- Reject trigger if over budget
+**Checkpoint**:
 
-**Test**: Budget exceeded → trigger rejected
-
----
-
-### Task 4.2: Recent strategies tool
-
-Let agent see what was tried before.
-
-**Files**:
-- `ktrdr/agents/executor.py` - Update `get_recent_strategies()`
-
-**Implementation**: Scan `strategies/` directory for recent configs
-
-**Test**: Agent can see recent strategy summaries
-
----
-
-### Task 4.3: Observability integration
-
-Add traces and metrics for research cycles.
-
-**Files**:
-- `ktrdr/api/services/agent_service.py` - Add OTEL instrumentation
-
-**Metrics**:
-- `agent_cycles_total` (counter, by outcome)
-- `agent_cycle_duration_seconds` (histogram)
-- `agent_tokens_used` (counter)
-
-**Traces**: Full cycle from trigger to completion
-
-**Test**: Cycles appear in Jaeger, metrics in Grafana
-
----
-
-### Task 4.4: Error handling improvements
-
-Robust handling of edge cases.
-
-**Files**:
-- `ktrdr/api/services/agent_service.py` - Improve error paths
-
-**Cases**:
-- Anthropic API timeout → fail cycle with reason
-- Training service unavailable → fail cycle with reason
-- Cancellation during any phase → clean shutdown
-
-**Test**: Each error case handled gracefully
-
----
-
-### Phase 4 Checkpoint
-
-**Acceptance criteria**:
 - [ ] Budget prevents overspending
-- [ ] Agent sees recent strategies
 - [ ] Cycles visible in Jaeger traces
-- [ ] Grafana dashboard shows metrics
+- [ ] Metrics in Grafana
 - [ ] Error cases handled gracefully
-
----
-
-## Cleanup Tasks
-
-### Task C.1: Delete session database code
-
-Remove all session DB artifacts.
-
-**Delete**:
-- `research_agents/database/` - Entire directory
-- Session-related tests
-- PostgreSQL schema for agent_sessions
-
----
-
-### Task C.2: Update documentation
-
-Ensure docs match implementation.
-
-**Update**:
-- `CLAUDE.md` agent section
-- API documentation
-- CLI help text
-
----
-
-## Testing Strategy
-
-### Unit Tests
-
-Each task should have unit tests:
-- Mock OperationsService for AgentService tests
-- Mock Anthropic API for invoker tests
-- Test gates with various metric inputs
-
-### Integration Tests
-
-After each phase:
-- Full cycle test with mocked LLM
-- Cancellation test
-- Error handling test
-
-### Manual Validation
-
-Before marking phase complete:
-- Run real cycle (costs ~$0.20)
-- Verify CLI shows correct state
-- Check Jaeger traces
-- Confirm strategy saved correctly
 
 ---
 
@@ -417,9 +184,22 @@ The MVP is complete when:
 
 ---
 
-## Notes
+## Salvaged Components
 
-### What we're NOT doing (intentionally deferred)
+These existing components are preserved during cleanup:
+
+| Component | Location | Status |
+|-----------|----------|--------|
+| AnthropicAgentInvoker | `ktrdr/agents/invoker.py` | Keep unchanged |
+| ToolExecutor | `ktrdr/agents/executor.py` | Update imports |
+| AGENT_TOOLS | `ktrdr/agents/tools.py` | Keep unchanged |
+| Prompt builder | → `ktrdr/agents/prompts.py` | Move from research_agents |
+| Quality gates | → `ktrdr/agents/gates.py` | Move from research_agents |
+| Strategy utils | → `ktrdr/agents/strategy_utils.py` | Move from research_agents |
+
+---
+
+## What We're NOT Doing (Deferred)
 
 - Learning across cycles (agent memory)
 - Multiple concurrent cycles
@@ -427,14 +207,11 @@ The MVP is complete when:
 - Auto-retry failed cycles
 - Background triggering (manual only for MVP)
 
-### Salvaged from previous implementation
+---
 
-These existing components are reusable:
-- `ktrdr/agents/invoker.py` - AnthropicAgentInvoker
-- `ktrdr/agents/tools.py` - Tool definitions
-- `ktrdr/agents/executor.py` - Tool execution (with simplification)
-- `ktrdr/agents/prompts.py` - Agent prompts
+## Reference Documents
 
-### Learnings from previous attempt
-
-See `archive/TASK_session_cancellation.md` for what went wrong with session database approach.
+- [design.md](design.md) - High-level design (what/why)
+- [ARCHITECTURE_operations_only.md](../ARCHITECTURE_operations_only.md) - Technical architecture (how)
+- [TASK_branch_cleanup.md](TASK_branch_cleanup.md) - Cleanup surgery plan
+- [archive/TASK_session_cancellation.md](archive/TASK_session_cancellation.md) - What went wrong with session DB

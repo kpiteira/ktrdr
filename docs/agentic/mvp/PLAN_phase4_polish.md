@@ -2,7 +2,8 @@
 
 **Goal**: Production-ready agent with budget enforcement, metrics, and robust error handling
 
-**Prerequisite**: Phase 3 complete
+**Prerequisite**: Phase 3 complete (full real cycle working)
+**Branch**: `feature/agent-mvp`
 
 ---
 

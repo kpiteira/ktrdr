@@ -2,7 +2,8 @@
 
 **Goal**: Validate the full state machine works before adding real business logic
 
-**Prerequisite**: Clean branch from main
+**Prerequisite**: TASK_branch_cleanup.md complete
+**Branch**: `feature/agent-mvp`
 
 ---
 

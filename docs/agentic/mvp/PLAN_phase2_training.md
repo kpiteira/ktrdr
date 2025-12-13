@@ -1,8 +1,9 @@
 # Phase 2: Training Integration
 
-**Goal**: Design → Train → Complete (or fail on gate)
+**Goal**: Replace training stub with real training API polling
 
-**Prerequisite**: Phase 1 complete
+**Prerequisite**: Phase 1 complete (real design phase working)
+**Branch**: `feature/agent-mvp`
 
 ---
 

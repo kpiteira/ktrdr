@@ -1,8 +1,9 @@
 # Phase 3: Full Cycle (Backtest + Assessment)
 
-**Goal**: Design → Train → Backtest → Assess → Complete
+**Goal**: Replace backtest stub with real API, add real assessment phase
 
-**Prerequisite**: Phase 2 complete
+**Prerequisite**: Phase 2 complete (real training phase working)
+**Branch**: `feature/agent-mvp`
 
 ---
 
