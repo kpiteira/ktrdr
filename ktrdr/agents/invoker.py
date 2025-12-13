@@ -227,6 +227,13 @@ class AnthropicAgentInvoker:
                 tool_results = await self._execute_tools(tool_calls, tool_executor)
                 messages.append({"role": "user", "content": tool_results})
 
+        except asyncio.CancelledError:
+            logger.info(
+                "Agent invocation cancelled",
+                total_input_tokens=total_input_tokens,
+                total_output_tokens=total_output_tokens,
+            )
+            raise  # Propagate cancellation
         except Exception as e:
             error_msg = str(e)
             logger.error(

@@ -21,13 +21,13 @@ from typing import Any
 import structlog
 
 # Import service functions for strategy operations
-from research_agents.services.strategy_service import (
+from ktrdr.agents.strategy_utils import (
     get_recent_strategies as _get_recent_strategies,
 )
-from research_agents.services.strategy_service import (
+from ktrdr.agents.strategy_utils import (
     save_strategy_config as _save_strategy_config,
 )
-from research_agents.services.strategy_service import (
+from ktrdr.agents.strategy_utils import (
     validate_strategy_config as _validate_strategy_config,
 )
 

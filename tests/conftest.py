@@ -7,7 +7,7 @@ This module contains test fixtures that can be used across all test modules.
 import sys
 from pathlib import Path
 
-# Ensure project root is in path for imports (needed for research_agents package)
+# Ensure project root is in path for imports
 _project_root = Path(__file__).parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))

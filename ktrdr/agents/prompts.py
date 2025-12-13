@@ -1,15 +1,15 @@
 """
-Strategy Designer prompt builder for the research agent.
+Prompt builders for agent operations.
 
 This module provides the prompt building logic for the Strategy Designer agent.
-It constructs prompts based on trigger reason and session context, injecting
+It constructs prompts based on trigger reason and operation context, injecting
 available indicators, symbols, and recent strategies for context.
 
 Usage:
     builder = StrategyDesignerPromptBuilder()
     ctx = PromptContext(
         trigger_reason=TriggerReason.START_NEW_CYCLE,
-        session_id=1,
+        operation_id="op_agent_design_20251213_143052_abc123",
         phase="idle",
         available_indicators=[...],
         available_symbols=[...],
@@ -38,8 +38,8 @@ class PromptContext:
 
     Attributes:
         trigger_reason: Why the agent is being invoked.
-        session_id: Current session ID.
-        phase: Current session phase.
+        operation_id: Current operation ID.
+        phase: Current operation phase.
         available_indicators: List of available indicators from KTRDR.
         available_symbols: List of available symbols with data.
         recent_strategies: Recent strategies to avoid repetition.
@@ -49,7 +49,7 @@ class PromptContext:
     """
 
     trigger_reason: TriggerReason
-    session_id: int
+    operation_id: str
     phase: str
     available_indicators: list[dict[str, Any]] | None = None
     available_symbols: list[dict[str, Any]] | None = None
@@ -296,7 +296,7 @@ Next: {what happens next}
 class StrategyDesignerPromptBuilder:
     """Builds prompts for the Strategy Designer agent.
 
-    The builder constructs prompts based on trigger reason and session context,
+    The builder constructs prompts based on trigger reason and operation context,
     injecting available indicators, symbols, and recent strategies.
     """
 
@@ -308,7 +308,7 @@ class StrategyDesignerPromptBuilder:
         """Build the prompt for the given context.
 
         Args:
-            context: The prompt context with trigger reason and session data.
+            context: The prompt context with trigger reason and operation data.
 
         Returns:
             Dict with 'system' and 'user' keys containing the respective prompts.
@@ -340,7 +340,7 @@ class StrategyDesignerPromptBuilder:
 
         The user prompt includes:
         - Trigger reason
-        - Session ID and phase
+        - Operation ID and phase
         - Available indicators and symbols
         - Recent strategies (for novelty)
         - Results from training/backtest (if applicable)
@@ -353,7 +353,7 @@ class StrategyDesignerPromptBuilder:
         """
         sections = []
 
-        # Header with trigger reason and session info
+        # Header with trigger reason and operation info
         sections.append(self._format_header(context))
 
         # Context data based on trigger reason
@@ -362,11 +362,11 @@ class StrategyDesignerPromptBuilder:
         return "\n\n".join(sections)
 
     def _format_header(self, context: PromptContext) -> str:
-        """Format the header with trigger reason and session info."""
+        """Format the header with trigger reason and operation info."""
         return f"""## Current Context
 
 You are being invoked because: {context.trigger_reason.value}
-Session ID: {context.session_id}
+Operation ID: {context.operation_id}
 Current Phase: {context.phase}"""
 
     def _format_context_data(self, context: PromptContext) -> str:
@@ -474,7 +474,7 @@ Then update your state with the assessment and mark the cycle as complete."""
         lines = []
         # Add case sensitivity warning at the top
         lines.append(
-            "**⚠️ Indicator names are case-sensitive. You must use the exact name below.**\n"
+            "**Warning: Indicator names are case-sensitive. You must use the exact name below.**\n"
         )
         for ind in indicators:
             name = ind.get("name", "unknown")
@@ -483,8 +483,7 @@ Then update your state with the assessment and mark the cycle as complete."""
             param_str = ", ".join(p.get("name", "") for p in params) if params else ""
             # Use backticks around indicator name for code formatting
             lines.append(
-                f"- `{name}`: {desc}"
-                + (f" (params: {param_str})" if param_str else "")
+                f"- `{name}`: {desc}" + (f" (params: {param_str})" if param_str else "")
             )
         return "\n".join(lines) if lines else "No indicators available"
 
@@ -518,7 +517,7 @@ Then update your state with the assessment and mark the cycle as complete."""
 
 def get_strategy_designer_prompt(
     trigger_reason: TriggerReason | str,
-    session_id: int,
+    operation_id: str,
     phase: str,
     available_indicators: list[dict[str, Any]] | None = None,
     available_symbols: list[dict[str, Any]] | None = None,
@@ -534,8 +533,8 @@ def get_strategy_designer_prompt(
 
     Args:
         trigger_reason: Why the agent is being invoked.
-        session_id: Current session ID.
-        phase: Current session phase.
+        operation_id: Current operation ID.
+        phase: Current operation phase.
         available_indicators: List of available indicators.
         available_symbols: List of available symbols.
         recent_strategies: Recent strategies to avoid.
@@ -552,7 +551,7 @@ def get_strategy_designer_prompt(
 
     context = PromptContext(
         trigger_reason=trigger_reason,
-        session_id=session_id,
+        operation_id=operation_id,
         phase=phase,
         available_indicators=available_indicators,
         available_symbols=available_symbols,

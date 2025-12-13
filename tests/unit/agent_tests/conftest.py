@@ -1,4 +1,4 @@
-"""Pytest configuration for research_agents tests."""
+"""Pytest configuration for agent tests."""
 
 import sys
 from pathlib import Path
