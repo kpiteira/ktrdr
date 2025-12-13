@@ -126,7 +126,7 @@ class AgentService:
         # Start the session operation (it stays RUNNING until session completes/cancels)
         # Create a placeholder task for cancellation tracking
         session_task = asyncio.create_task(
-            self._session_lifecycle_tracker(session_operation_id),
+            self._session_lifecycle_tracker(session_operation_id, db),
             name=f"agent_session_{session_operation_id}",
         )
         await self._operations_service.start_operation(
@@ -178,16 +178,24 @@ class AgentService:
             "message": "Research cycle started - query progress via /operations/{operation_id}",
         }
 
-    async def _session_lifecycle_tracker(self, session_operation_id: str) -> None:
+    async def _session_lifecycle_tracker(
+        self, session_operation_id: str, db: Any
+    ) -> None:
         """Track session lifecycle - keeps session operation alive (Task 1.15).
 
         This async task runs in background, keeping the AGENT_SESSION operation
         in RUNNING state until the session completes or is cancelled.
         The actual work is done by child operations (design, train, backtest).
 
+        When the operation is cancelled, this also cancels the active session
+        in the agent database.
+
         Args:
             session_operation_id: The parent session operation ID
+            db: Agent database instance for session updates
         """
+        from research_agents.database.schema import SessionOutcome
+
         try:
             # Just wait indefinitely - cancellation happens via cancel_operation
             # which will cancel this task
@@ -204,6 +212,20 @@ class AgentService:
             logger.info(
                 f"Session operation {session_operation_id} lifecycle tracker cancelled"
             )
+            # Cancel the active session in the agent database
+            try:
+                active_session = await db.get_active_session()
+                if active_session:
+                    await db.complete_session(
+                        session_id=active_session.id,
+                        outcome=SessionOutcome.CANCELLED,
+                    )
+                    logger.info(
+                        f"Cancelled agent session {active_session.id} "
+                        f"due to operation cancellation"
+                    )
+            except Exception as e:
+                logger.error(f"Failed to cancel session on operation cancel: {e}")
             raise
 
     async def _run_agent_with_tracking(
