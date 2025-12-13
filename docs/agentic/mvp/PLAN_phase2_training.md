@@ -610,36 +610,98 @@ def _check_training_gate(self, train_result: dict[str, Any]) -> tuple[bool, str]
 
 ## Phase 2 Verification
 
-### Manual Test Sequence
+### Integration Test Sequence (MANDATORY)
+
+**Focus**: Verify real training API integration works and gate logic is correct.
 
 ```bash
-# 1. Trigger a cycle (design + training)
-ktrdr agent trigger
-
-# 2. Monitor progress
-ktrdr agent status
-# Expected: Phase progresses from DESIGNING to TRAINING
-
-# 3. Watch training progress
-watch -n 5 "ktrdr agent status"
-# Expected: Progress updates during training
-
-# 4. Check result
-ktrdr operations list --type agent_research
-# Expected: COMPLETED or FAILED (with gate failure reason)
-
-# 5. Test gate failure (create bad strategy manually)
-# Edit strategy to have invalid config, trigger, should fail gate
+# 1. Start services (including training workers)
+docker compose up -d
+docker compose ps  # Verify all healthy
+# Also start GPU host service if available:
+# cd training-host-service && ./start.sh
 ```
+
+```bash
+# 2. Trigger full cycle and monitor
+ktrdr agent trigger
+watch -n 5 "ktrdr agent status"
+# ✅ Expected: Phase progresses: designing → training → (stubs)
+# ✅ Expected: Training takes real time (varies by GPU/CPU, typically 2-15 min)
+# ✅ Expected: Progress updates show epoch/loss info
+```
+
+```bash
+# 3. Verify training actually ran (check model output)
+# After training completes:
+ls models/<strategy_name>/
+# ✅ Expected: model.pt file exists
+# ✅ Expected: metadata.json with training metrics
+```
+
+```bash
+# 4. Test training gate PASS scenario
+# View operation result:
+ktrdr operations status <op_id>
+# ✅ Expected: training_result shows accuracy >= 45%, loss <= 0.8
+# ✅ Expected: Phase continued to "backtesting"
+```
+
+```bash
+# 5. Test training gate FAIL scenario
+# Option A: Train on random/poor data
+# Option B: Temporarily lower gate thresholds and use stub training
+# ✅ Expected: Cycle FAILED with "Training gate failed: <reason>"
+# ✅ Expected: No orphaned operations
+```
+
+```bash
+# 6. Test cancellation during real training
+ktrdr agent trigger
+# Wait for "training" phase
+ktrdr agent status  # Verify phase is "training"
+ktrdr agent cancel <op_id>
+# ✅ Expected: Training operation cancelled on remote worker
+# ✅ Expected: Agent status shows "idle"
+# ✅ Expected: No orphaned remote training operation
+```
+
+```bash
+# 7. Check logs
+docker compose logs backend --since 15m | grep -i error
+# ✅ Expected: No unexpected errors
+```
+
+### State Consistency Checks
+
+- [ ] After training, model files exist at expected path
+- [ ] Training metrics stored in operation metadata
+- [ ] Gate failure produces clear error message
+- [ ] Cancelled training cleans up remote operation
+- [ ] Full cycle still works (design → train → stub backtest → stub assess)
 
 ### Acceptance Criteria
 
-- [ ] After design, training starts automatically
-- [ ] Training progress reflected in agent status
-- [ ] Training gate checks accuracy/loss
-- [ ] Gate failure marks cycle as FAILED with reason
-- [ ] Successful training shows model_path in result
-- [ ] Cancellation during training cancels both operations
+**Unit tests**:
+
+- [ ] All unit tests pass (`make test-unit`)
+- [ ] Strategy loader tests pass
+- [ ] Gate logic tests pass
+
+**Integration tests**:
+
+- [ ] Real training starts after design completes
+- [ ] Training progress updates visible in status
+- [ ] Model files created at correct path
+- [ ] Training metrics captured (accuracy, loss)
+- [ ] Gate PASS allows cycle to continue
+- [ ] Gate FAIL marks cycle FAILED with reason
+- [ ] Cancellation during training works cleanly
+- [ ] Backtest/assessment phases still use stubs
+- [ ] No errors in logs
+- [ ] State consistent throughout
+
+**If ANY checkbox is unchecked**: Fix before proceeding to Phase 3.
 
 ---
 

@@ -319,43 +319,84 @@ async def _run_design_phase(self, operation_id: str) -> dict[str, Any]:
 
 ## Phase 1 Verification
 
-### Manual Test Sequence
+### Integration Test Sequence (MANDATORY)
+
+**Focus**: Verify real Claude integration works without breaking the state machine from Phase 0.
 
 ```bash
-# 1. Ensure system is running with stubs from Phase 0
+# 1. Start services
 docker compose up -d
-
-# 2. Trigger a research cycle
-ktrdr agent trigger
-# Expected: "Research cycle started!" with operation ID
-
-# 3. Check status - should show "DESIGNING" with progress
-ktrdr agent status
-# Expected: Phase "DESIGNING", progress updates
-
-# 4. Wait for completion (Claude invocation takes ~30-60s)
-# Check operations for completion
-ktrdr operations status <operation_id>
-
-# 5. Check strategy was saved
-ls strategies/
-# Expected: New strategy YAML file
-
-# 6. Test cancellation during design
-ktrdr agent trigger
-ktrdr agent cancel <operation_id>  # Cancel while designing
-# Expected: Cancellation handled gracefully
+docker compose ps  # Verify healthy
 ```
+
+```bash
+# 2. Trigger and verify REAL Claude invocation
+ktrdr agent trigger
+# ✅ Expected: "Research cycle started!"
+# Watch the designing phase - should take 30-60 sec (not 30 sec stub)
+watch -n 2 "ktrdr agent status"
+```
+
+```bash
+# 3. Verify strategy file created
+ls strategies/
+# ✅ Expected: New YAML file (e.g., strategies/momentum_v1_20251213.yaml)
+cat strategies/<newest_file>.yaml
+# ✅ Expected: Valid strategy YAML with indicators, fuzzy sets, neural config
+```
+
+```bash
+# 4. Verify state consistency after design completes
+# Wait for training phase to start, then check:
+ktrdr agent status
+# ✅ Expected: Phase shows "training" (not stuck on "designing")
+# ✅ Expected: strategy_name field populated
+```
+
+```bash
+# 5. Test cancellation during Claude invocation
+ktrdr agent trigger
+sleep 10  # Let Claude start
+ktrdr agent cancel <op_id>
+# ✅ Expected: Clean cancellation (Claude stops, no orphaned state)
+ktrdr agent status
+# ✅ Expected: Shows "idle"
+```
+
+```bash
+# 6. Check logs for errors
+docker compose logs backend --since 10m | grep -i error
+# ✅ Expected: No errors (Claude errors should be handled gracefully)
+```
+
+### State Consistency Checks
+
+After Phase 1, verify Phase 0's state machine still works:
+
+- [ ] Full cycle still completes (real design → stub training → stub backtest → stub assess)
+- [ ] Cancellation at each phase still works
+- [ ] State consistency maintained (no orphaned operations)
 
 ### Acceptance Criteria
 
-- [ ] Real Claude is invoked (not stub)
-- [ ] Strategy is saved to `strategies/` folder
-- [ ] `strategy_name` captured from tool output
-- [ ] Token usage tracked in result
-- [ ] Progress updates visible in CLI
-- [ ] Cancellation handled cleanly
-- [ ] Other phases (training, backtest, assess) still use stubs
+**Unit tests**:
+
+- [ ] All unit tests pass (`make test-unit`)
+
+**Integration tests**:
+
+- [ ] Real Claude is invoked (takes 30-60s, not 30s stub)
+- [ ] Strategy file saved to `strategies/` folder
+- [ ] Strategy YAML is valid and contains all sections
+- [ ] `strategy_name` captured from tool output and shown in status
+- [ ] Token usage tracked (check operation metadata)
+- [ ] Progress updates visible during Claude invocation
+- [ ] Cancellation during Claude call works cleanly
+- [ ] Other phases still use stubs (training ~30s, backtest ~30s, assess ~30s)
+- [ ] No errors in logs
+- [ ] State consistent after completion and cancellation
+
+**If ANY checkbox is unchecked**: Fix before proceeding to Phase 2.
 
 ---
 

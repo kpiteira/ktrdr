@@ -663,47 +663,114 @@ async def update_metadata(
 
 ## Phase 0 Verification
 
-### Test Sequence
+**🛑 CRITICAL: Phase 0 is our integration testing foundation.**
+
+The whole point of Phase 0 is to validate the architecture BEFORE adding complexity. If integration tests fail here, we know the architecture is wrong. Fix it before Phase 1.
+
+### Integration Test Sequence (MANDATORY)
+
+Run each test and record the results. **Do NOT proceed to Phase 1 until ALL tests pass.**
 
 ```bash
-# 1. Start services
+# 1. Start services and verify healthy
 docker compose up -d
-
-# 2. Trigger a cycle
-ktrdr agent trigger
-# Expected: "Research cycle started! Operation ID: op_agent_research_..."
-
-# 3. Watch status (separate terminal)
-watch -n 1 "ktrdr agent status"
-# Expected: Phase progresses through designing → training → backtesting → assessing
-# Expected: Progress bar updates every ~5 seconds
-# Expected: Full cycle takes ~2 minutes
-
-# 4. Test cancellation at different phases
-ktrdr agent trigger
-# Wait for "training" phase
-ktrdr agent cancel <op_id>
-# Expected: Clean cancellation
-
-# 5. Verify operation in list
-ktrdr operations list --type agent_research
-# Expected: Shows completed/cancelled operations
-
-# 6. Test gate failure
-# Modify _run_training_phase to return accuracy=0.30
-# Trigger cycle, should fail at training gate
+docker compose ps  # All services should be "healthy"
 ```
+
+```bash
+# 2. Test trigger (happy path)
+ktrdr agent trigger
+# ✅ Expected: "Research cycle started! Operation ID: op_agent_research_..."
+# Record: operation_id = _________________
+```
+
+```bash
+# 3. Test status tracking (watch for ~2 minutes)
+# In a separate terminal:
+watch -n 2 "ktrdr agent status"
+# ✅ Expected: Phase progresses through: designing → training → backtesting → assessing → complete
+# ✅ Expected: Progress bar updates every ~5 seconds
+# ✅ Expected: Full cycle completes in ~2 minutes
+```
+
+```bash
+# 4. Test state consistency (CRITICAL - this is what caught the session-db bug)
+# After cycle completes:
+ktrdr operations list --type agent_research
+# ✅ Expected: Shows operation as COMPLETED (not stuck in RUNNING)
+ktrdr agent status
+# ✅ Expected: Shows "idle" (not showing old operation as active)
+```
+
+```bash
+# 5. Test cancellation at EACH phase (run 4 times)
+# Phase 1: Cancel during designing
+ktrdr agent trigger && sleep 5 && ktrdr agent status  # Get op_id
+ktrdr agent cancel <op_id>
+# ✅ Expected: Clean cancellation, status shows idle
+
+# Phase 2: Cancel during training (wait ~35 sec)
+ktrdr agent trigger && sleep 35 && ktrdr agent status
+ktrdr agent cancel <op_id>
+# ✅ Expected: Clean cancellation
+
+# Phase 3: Cancel during backtesting (wait ~65 sec)
+# Phase 4: Cancel during assessing (wait ~95 sec)
+```
+
+```bash
+# 6. Test gate failure (modify code temporarily)
+# In _run_training_phase, change accuracy to 0.30 (below 45% threshold)
+ktrdr agent trigger
+# Wait for training phase to complete
+# ✅ Expected: Cycle fails with "Training gate failed: accuracy_below_threshold"
+# Revert the accuracy change after test
+```
+
+```bash
+# 7. Check logs for hidden errors
+docker compose logs backend --since 10m | grep -i error
+docker compose logs backend --since 10m | grep -i warning
+# ✅ Expected: No unexpected errors/warnings
+```
+
+### State Consistency Verification Checklist
+
+After EACH test, verify state is consistent:
+
+- [ ] `ktrdr agent status` reflects actual state (idle vs active)
+- [ ] `ktrdr operations list` shows correct operation status
+- [ ] No orphaned operations (RUNNING but not actually running)
+- [ ] No duplicate operations for same cycle
+- [ ] Cancelled operations show as CANCELLED (not RUNNING or FAILED)
 
 ### Acceptance Criteria
 
-- [ ] `ktrdr agent trigger` starts a cycle
-- [ ] `ktrdr agent status` shows phase and progress
-- [ ] Progress bar updates during each phase
-- [ ] Full cycle completes in ~2 minutes (4 phases × 30 sec)
-- [ ] Cancellation works at any phase (100ms granularity)
-- [ ] Gate failures mark cycle as FAILED with reason
-- [ ] Operations appear in `ktrdr operations list`
+**Unit tests**:
+
+- [ ] All unit tests pass (`make test-unit`)
+
+**Integration tests** (from sequence above):
+
+- [ ] Trigger creates operation and returns ID
+- [ ] Status shows phase and progress correctly
+- [ ] Full cycle completes successfully (~2 min)
+- [ ] Cancellation works at designing phase
+- [ ] Cancellation works at training phase
+- [ ] Cancellation works at backtesting phase
+- [ ] Cancellation works at assessing phase
+- [ ] Gate failure produces correct error message
+- [ ] State is consistent after completion
+- [ ] State is consistent after cancellation
+- [ ] No errors/warnings in logs
+
+**Architecture validation**:
+
 - [ ] No session database code used
+- [ ] All state stored in OperationsService
+- [ ] Operations visible in `ktrdr operations list`
+
+**If ANY checkbox is unchecked**: Fix before proceeding to Phase 1.
 
 ---
 

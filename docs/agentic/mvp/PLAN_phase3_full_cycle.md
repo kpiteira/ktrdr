@@ -840,48 +840,116 @@ async def _handle_get_recent_strategies(self, n: int = 5) -> dict[str, Any]:
 
 ## Phase 3 Verification
 
-### Manual Test Sequence
+### Integration Test Sequence (MANDATORY)
+
+**Focus**: Verify COMPLETE cycle works end-to-end with NO stubs remaining.
 
 ```bash
-# 1. Ensure services are running
+# 1. Start all services
 docker compose up -d
-
-# 2. Trigger a full cycle
-ktrdr agent trigger
-
-# 3. Monitor progress through all phases
-watch -n 5 "ktrdr agent status"
-# Expected: designing → training → backtesting → assessing → completed
-
-# 4. Check final result
-ktrdr operations list --type agent_research
-# Expected: COMPLETED with sharpe_ratio, win_rate in result
-
-# 5. Verify assessment saved
-ls strategies/*/assessment.json
-cat strategies/<strategy_name>/assessment.json
-
-# 6. Test gate failure
-# (Create a strategy that will fail backtest gate manually)
-
-# 7. Test cancellation during backtest
-ktrdr agent trigger
-# Wait for backtesting phase
-ktrdr agent cancel <op_id>
-# Expected: Clean cancellation, backtest operation also cancelled
+docker compose ps  # Verify all healthy
+# Start host services if needed:
+# cd training-host-service && ./start.sh
+# cd ib-host-service && ./start.sh (for backtest data)
 ```
+
+```bash
+# 2. Trigger FULL cycle and monitor
+ktrdr agent trigger
+watch -n 5 "ktrdr agent status"
+# ✅ Expected: designing (~30-60s) → training (~2-15min) → backtesting (~5-10min) → assessing (~30-60s) → completed
+# This is the FIRST full real cycle - no stubs!
+```
+
+```bash
+# 3. Verify all artifacts created
+# Strategy:
+ls strategies/<strategy_name>.yaml
+# Model:
+ls models/<strategy_name>/model.pt
+# Assessment:
+cat strategies/<strategy_name>/assessment.json
+# ✅ Expected: All three exist with valid content
+```
+
+```bash
+# 4. Verify assessment quality
+cat strategies/<strategy_name>/assessment.json | jq '.assessment'
+# ✅ Expected: verdict (promising/poor/excellent), strengths, weaknesses, suggestions
+```
+
+```bash
+# 5. Test backtest gate FAIL scenario
+# Train with a strategy that will backtest poorly, or
+# Temporarily lower backtest gate thresholds
+# ✅ Expected: Cycle FAILED with "Backtest gate failed: <reason>"
+```
+
+```bash
+# 6. Test cancellation during EACH remaining phase
+# Backtest phase:
+ktrdr agent trigger
+# Wait for "backtesting" phase
+ktrdr agent cancel <op_id>
+# ✅ Expected: Clean cancellation, remote backtest cancelled
+
+# Assessment phase:
+ktrdr agent trigger
+# Wait for "assessing" phase
+ktrdr agent cancel <op_id>
+# ✅ Expected: Clean cancellation
+```
+
+```bash
+# 7. Verify get_recent_strategies includes assessments
+# Trigger get_recent_strategies tool via CLI or API
+# ✅ Expected: Returns strategies with win_rate, sharpe, verdict
+```
+
+```bash
+# 8. Check all logs
+docker compose logs backend --since 30m | grep -i error
+docker compose logs backtest-worker --since 30m | grep -i error
+# ✅ Expected: No unexpected errors
+```
+
+### End-to-End Success Criteria
+
+This is the **Definition of Done** for the MVP core functionality:
+
+- [ ] Complete cycle runs without human intervention
+- [ ] All phases are REAL (no stubs)
+- [ ] All artifacts saved (strategy.yaml, model.pt, assessment.json)
+- [ ] Assessment provides actionable feedback
+- [ ] Both gates functional (training + backtest)
+- [ ] Cancellation works at any phase
+- [ ] State consistent throughout
+- [ ] No errors in logs
 
 ### Acceptance Criteria
 
-- [ ] After training passes gate, backtest starts automatically
-- [ ] Backtest progress reflected in agent status (70-90% range)
-- [ ] Backtest gate checks win_rate, drawdown, sharpe
-- [ ] Gate failure marks cycle as FAILED with reason
-- [ ] After backtest passes, Claude assessment runs
-- [ ] Assessment saved to `strategies/{name}/assessment.json`
-- [ ] `get_recent_strategies` returns strategies with assessments
-- [ ] Full cycle completes: design → train → backtest → assess → done
-- [ ] Cancellation during any phase works cleanly
+**Unit tests**:
+
+- [ ] All unit tests pass (`make test-unit`)
+
+**Integration tests**:
+
+- [ ] Real backtest starts after training passes gate
+- [ ] Backtest progress updates visible in status
+- [ ] Backtest results captured (win_rate, sharpe, drawdown)
+- [ ] Backtest gate PASS allows cycle to continue
+- [ ] Backtest gate FAIL marks cycle FAILED with reason
+- [ ] Real Claude assessment runs after backtest passes
+- [ ] Assessment saved to correct path
+- [ ] Assessment contains verdict, strengths, weaknesses
+- [ ] `get_recent_strategies` returns strategies with assessment data
+- [ ] Cancellation during backtest phase works cleanly
+- [ ] Cancellation during assessment phase works cleanly
+- [ ] Full cycle: design → train → backtest → assess → complete
+- [ ] No errors in logs
+- [ ] State consistent throughout
+
+**If ANY checkbox is unchecked**: Fix before proceeding to Phase 4.
 
 ---
 
