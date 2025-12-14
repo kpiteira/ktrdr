@@ -141,15 +141,11 @@ async def _trigger_agent_async():
             message = result.get("message", f"Could not start cycle: {reason}")
 
             if reason == "active_cycle_exists":
-                console.print(
-                    "\n[yellow]Cannot trigger:[/yellow] Active cycle exists"
-                )
+                console.print("\n[yellow]Cannot trigger:[/yellow] Active cycle exists")
                 if result.get("operation_id"):
                     console.print(f"  Operation ID: {result['operation_id']}")
                 console.print()
-                console.print(
-                    "Wait for the current cycle to complete, or cancel it:"
-                )
+                console.print("Wait for the current cycle to complete, or cancel it:")
                 console.print(
                     f"  [cyan]ktrdr operations cancel {result.get('operation_id', '<op_id>')}[/cyan]"
                 )

@@ -15,6 +15,7 @@ import os
 from typing import Any, Protocol
 
 from ktrdr import get_logger
+from ktrdr.agents.gates import check_backtest_gate, check_training_gate
 from ktrdr.api.models.operations import (
     OperationMetadata,
     OperationStatus,
@@ -34,6 +35,16 @@ class ChildWorker(Protocol):
 
 class WorkerError(Exception):
     """Exception raised when a child worker fails."""
+
+    pass
+
+
+class GateFailedError(Exception):
+    """Exception raised when a quality gate check fails.
+
+    Quality gates are deterministic checks between phases to filter
+    poor strategies before expensive operations (like training or assessment).
+    """
 
     pass
 
@@ -297,12 +308,20 @@ class AgentResearchWorker:
     ) -> None:
         """Advance to the next phase after current completes.
 
-        Stores result in parent metadata and starts next phase worker.
+        Stores result in parent metadata, checks quality gates, and starts
+        next phase worker.
+
+        Quality gates are checked:
+        - After training: check_training_gate (before backtesting)
+        - After backtesting: check_backtest_gate (before assessment)
 
         Args:
             operation_id: Parent operation ID.
             current_phase: Phase that just completed.
             result: Result from completed phase.
+
+        Raises:
+            GateFailedError: If a quality gate check fails.
         """
         parent_op = await self.ops.get_operation(operation_id)
         if not parent_op:
@@ -317,10 +336,24 @@ class AgentResearchWorker:
         elif current_phase == "training":
             parent_op.metadata.parameters["training_result"] = result
             parent_op.metadata.parameters["model_path"] = result.get("model_path")
+
+            # Check training gate before proceeding to backtest
+            passed, reason = check_training_gate(result)
+            if not passed:
+                logger.warning(f"Training gate failed: {operation_id}, reason={reason}")
+                raise GateFailedError(f"Training gate failed: {reason}")
+
             next_phase = "backtesting"
 
         elif current_phase == "backtesting":
             parent_op.metadata.parameters["backtest_result"] = result
+
+            # Check backtest gate before proceeding to assessment
+            passed, reason = check_backtest_gate(result)
+            if not passed:
+                logger.warning(f"Backtest gate failed: {operation_id}, reason={reason}")
+                raise GateFailedError(f"Backtest gate failed: {reason}")
+
             next_phase = "assessing"
 
         else:

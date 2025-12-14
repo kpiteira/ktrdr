@@ -154,7 +154,9 @@ class TestAgentTriggerViaAPI:
             result = runner.invoke(agent_app, ["trigger"])
 
             assert result.exit_code == 0
-            assert "active" in result.output.lower() or "exists" in result.output.lower()
+            assert (
+                "active" in result.output.lower() or "exists" in result.output.lower()
+            )
 
     def test_trigger_handles_api_error(self):
         """Test that trigger handles API errors gracefully."""

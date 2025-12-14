@@ -526,3 +526,198 @@ class TestPollingLoopPattern:
         assert (
             child_op_id in cancelled_ops
         ), f"Expected child {child_op_id} to be cancelled, cancelled ops: {cancelled_ops}"
+
+
+class TestQualityGateIntegration:
+    """Test quality gate integration per ARCHITECTURE.md Task 1.11.
+
+    Quality gates should be checked between phases:
+    - Training gate: after training completes, before backtesting
+    - Backtest gate: after backtesting completes, before assessment
+    """
+
+    @pytest.mark.asyncio
+    async def test_training_gate_passes_proceeds_to_backtest(
+        self, mock_operations_service, stub_workers
+    ):
+        """When training gate passes, orchestrator proceeds to backtesting."""
+        parent_op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "idle"}),
+        )
+
+        # Stub workers return good metrics that pass gates
+        worker = AgentResearchWorker(
+            operations_service=mock_operations_service,
+            design_worker=stub_workers["design"],
+            training_worker=stub_workers["training"],  # Returns metrics that pass gate
+            backtest_worker=stub_workers["backtest"],
+            assessment_worker=stub_workers["assessment"],
+        )
+
+        result = await worker.run(parent_op.operation_id)
+
+        # Should complete successfully (stubs return good metrics)
+        assert result["success"] is True
+        # Should have reached backtesting and assessing phases
+        parent = await mock_operations_service.get_operation(parent_op.operation_id)
+        assert "backtest_op_id" in parent.metadata.parameters
+        assert "assessment_op_id" in parent.metadata.parameters
+
+    @pytest.mark.asyncio
+    async def test_training_gate_fails_stops_cycle(self, mock_operations_service):
+        """When training gate fails, orchestrator stops and fails the cycle."""
+        from ktrdr.agents.workers.research_worker import GateFailedError
+        from ktrdr.agents.workers.stubs import StubAssessmentWorker, StubDesignWorker
+
+        # Create worker that returns bad training metrics
+        class BadTrainingWorker:
+            async def run(self, operation_id: str, *args, **kwargs):
+                """Return metrics that fail the training gate."""
+                return {
+                    "success": True,
+                    "accuracy": 0.30,  # Below 45% threshold
+                    "final_loss": 0.35,
+                    "initial_loss": 0.85,
+                    "model_path": "/app/models/bad/model.pt",
+                }
+
+        # Good backtest worker (shouldn't be reached)
+        class GoodBacktestWorker:
+            async def run(self, operation_id: str, *args, **kwargs):
+                return {
+                    "success": True,
+                    "sharpe_ratio": 1.2,
+                    "win_rate": 0.55,
+                    "max_drawdown": 0.15,
+                    "total_return": 0.23,
+                }
+
+        parent_op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "idle"}),
+        )
+
+        worker = AgentResearchWorker(
+            operations_service=mock_operations_service,
+            design_worker=StubDesignWorker(),
+            training_worker=BadTrainingWorker(),
+            backtest_worker=GoodBacktestWorker(),
+            assessment_worker=StubAssessmentWorker(),
+        )
+
+        with pytest.raises(GateFailedError) as exc_info:
+            await worker.run(parent_op.operation_id)
+
+        assert "training" in str(exc_info.value).lower()
+        assert "accuracy" in str(exc_info.value).lower()
+
+        # Should NOT have reached backtesting phase
+        parent = await mock_operations_service.get_operation(parent_op.operation_id)
+        assert "backtest_op_id" not in parent.metadata.parameters
+
+    @pytest.mark.asyncio
+    async def test_backtest_gate_fails_stops_cycle(self, mock_operations_service):
+        """When backtest gate fails, orchestrator stops before assessment."""
+        from ktrdr.agents.workers.research_worker import GateFailedError
+        from ktrdr.agents.workers.stubs import (
+            StubAssessmentWorker,
+            StubDesignWorker,
+            StubTrainingWorker,
+        )
+
+        # Create worker that returns bad backtest metrics
+        class BadBacktestWorker:
+            async def run(self, operation_id: str, *args, **kwargs):
+                """Return metrics that fail the backtest gate."""
+                return {
+                    "success": True,
+                    "sharpe_ratio": -1.0,  # Below -0.5 threshold
+                    "win_rate": 0.30,  # Below 45% threshold
+                    "max_drawdown": 0.50,  # Above 40% threshold
+                    "total_return": -0.10,
+                }
+
+        parent_op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "idle"}),
+        )
+
+        worker = AgentResearchWorker(
+            operations_service=mock_operations_service,
+            design_worker=StubDesignWorker(),
+            training_worker=StubTrainingWorker(),
+            backtest_worker=BadBacktestWorker(),
+            assessment_worker=StubAssessmentWorker(),
+        )
+
+        with pytest.raises(GateFailedError) as exc_info:
+            await worker.run(parent_op.operation_id)
+
+        assert "backtest" in str(exc_info.value).lower()
+
+        # Should NOT have reached assessment phase
+        parent = await mock_operations_service.get_operation(parent_op.operation_id)
+        assert "assessment_op_id" not in parent.metadata.parameters
+
+    @pytest.mark.asyncio
+    async def test_gate_failure_includes_reason(self, mock_operations_service):
+        """Gate failure error includes human-readable reason."""
+        from ktrdr.agents.workers.research_worker import GateFailedError
+        from ktrdr.agents.workers.stubs import (
+            StubAssessmentWorker,
+            StubDesignWorker,
+            StubTrainingWorker,
+        )
+
+        class BadBacktestWorker:
+            async def run(self, operation_id: str, *args, **kwargs):
+                return {
+                    "success": True,
+                    "sharpe_ratio": 1.2,
+                    "win_rate": 0.35,  # Below 45% threshold - first failure
+                    "max_drawdown": 0.15,
+                }
+
+        parent_op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "idle"}),
+        )
+
+        worker = AgentResearchWorker(
+            operations_service=mock_operations_service,
+            design_worker=StubDesignWorker(),
+            training_worker=StubTrainingWorker(),
+            backtest_worker=BadBacktestWorker(),
+            assessment_worker=StubAssessmentWorker(),
+        )
+
+        with pytest.raises(GateFailedError) as exc_info:
+            await worker.run(parent_op.operation_id)
+
+        # Should include the specific reason from the gate
+        assert "win_rate" in str(exc_info.value).lower()
+
+    @pytest.mark.asyncio
+    async def test_both_gates_pass_completes_cycle(
+        self, mock_operations_service, stub_workers
+    ):
+        """When both gates pass, cycle completes successfully."""
+        parent_op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "idle"}),
+        )
+
+        # Default stub workers return metrics that pass gates
+        worker = AgentResearchWorker(
+            operations_service=mock_operations_service,
+            design_worker=stub_workers["design"],
+            training_worker=stub_workers["training"],
+            backtest_worker=stub_workers["backtest"],
+            assessment_worker=stub_workers["assessment"],
+        )
+
+        result = await worker.run(parent_op.operation_id)
+
+        assert result["success"] is True
+        assert "verdict" in result  # Reached assessment phase
