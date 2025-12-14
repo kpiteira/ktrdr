@@ -1,108 +1,214 @@
-"""
-Agent API service layer (stub pending MVP implementation).
+"""Agent API service - operations-only, no sessions.
 
-NOTE: This service is temporarily stubbed out while the agent architecture
-is being rebuilt with the worker pattern. See docs/agentic/mvp/ for details.
-
-The new architecture replaces the session database with OperationsService
-for state tracking, using the same patterns as training/backtesting.
+This service manages agent research cycles using the worker pattern.
+All state is tracked through OperationsService, not a separate database.
 """
 
+import asyncio
 from typing import Any
 
 from ktrdr import get_logger
+from ktrdr.agents.workers.research_worker import AgentResearchWorker
+from ktrdr.agents.workers.stubs import (
+    StubAssessmentWorker,
+    StubBacktestWorker,
+    StubDesignWorker,
+    StubTrainingWorker,
+)
+from ktrdr.api.models.operations import (
+    OperationMetadata,
+    OperationStatus,
+    OperationType,
+)
+from ktrdr.api.services.operations_service import (
+    OperationsService,
+    get_operations_service,
+)
 from ktrdr.monitoring.service_telemetry import trace_service_method
 
 logger = get_logger(__name__)
 
-# Message shown when agent features are accessed
-MVP_PENDING_MSG = (
-    "Agent service pending MVP implementation. "
-    "See docs/agentic/mvp/ for new architecture."
-)
-
 
 class AgentService:
-    """Stub service for agent API operations.
+    """Service layer for agent API operations.
 
-    This service is temporarily stubbed while the agent architecture is being
-    rebuilt. The new MVP implementation will use the worker pattern with
-    OperationsService for state tracking.
-
-    See docs/agentic/mvp/ARCHITECTURE.md for the new design.
+    Manages research cycles through OperationsService. Each cycle runs as an
+    AGENT_RESEARCH operation with child operations for each phase.
     """
 
-    def __init__(self, operations_service: Any = None):
+    def __init__(self, operations_service: OperationsService | None = None):
         """Initialize the agent service.
 
         Args:
             operations_service: Optional OperationsService instance (for testing).
         """
-        self._operations_service = operations_service
-        logger.info(MVP_PENDING_MSG)
+        self.ops = operations_service or get_operations_service()
+        self._worker: AgentResearchWorker | None = None
+
+    def _get_worker(self) -> AgentResearchWorker:
+        """Get or create the research worker.
+
+        Returns:
+            The configured AgentResearchWorker with stub workers.
+        """
+        if self._worker is None:
+            self._worker = AgentResearchWorker(
+                operations_service=self.ops,
+                design_worker=StubDesignWorker(),
+                training_worker=StubTrainingWorker(),
+                backtest_worker=StubBacktestWorker(),
+                assessment_worker=StubAssessmentWorker(),
+            )
+        return self._worker
 
     @trace_service_method("agent.trigger")
-    async def trigger(self, dry_run: bool = False) -> dict[str, Any]:
-        """Trigger a research cycle (stub).
+    async def trigger(self) -> dict[str, Any]:
+        """Start a new research cycle.
 
-        Args:
-            dry_run: If True, check conditions but don't actually trigger.
+        Returns immediately with operation_id. Cycle runs in background.
 
         Returns:
-            Dict indicating the feature is pending implementation.
+            Dict with triggered status and operation_id or rejection reason.
         """
+        # Check for active cycle
+        active = await self._get_active_research_op()
+        if active:
+            return {
+                "triggered": False,
+                "reason": "active_cycle_exists",
+                "operation_id": active.operation_id,
+                "message": f"Active cycle exists: {active.operation_id}",
+            }
+
+        # Create operation
+        op = await self.ops.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "idle"}),  # type: ignore[call-arg]
+        )
+
+        # Start worker in background
+        worker = self._get_worker()
+        task = asyncio.create_task(self._run_worker(op.operation_id, worker))
+        await self.ops.start_operation(op.operation_id, task)
+
+        logger.info(f"Research cycle triggered: {op.operation_id}")
+
         return {
-            "success": False,
-            "triggered": False,
-            "reason": "pending_mvp_implementation",
-            "message": MVP_PENDING_MSG,
+            "triggered": True,
+            "operation_id": op.operation_id,
+            "message": "Research cycle started",
         }
+
+    async def _run_worker(self, operation_id: str, worker: AgentResearchWorker) -> None:
+        """Run worker and handle completion/failure.
+
+        Args:
+            operation_id: The operation ID to run.
+            worker: The worker instance to run.
+        """
+        try:
+            result = await worker.run(operation_id)
+            await self.ops.complete_operation(operation_id, result)
+        except asyncio.CancelledError:
+            await self.ops.cancel_operation(operation_id, "Cancelled by user")
+            raise
+        except Exception as e:
+            await self.ops.fail_operation(operation_id, str(e))
+            raise
 
     @trace_service_method("agent.get_status")
-    async def get_status(self, verbose: bool = False) -> dict[str, Any]:
-        """Get current agent status (stub).
-
-        Args:
-            verbose: If True, include additional details.
+    async def get_status(self) -> dict[str, Any]:
+        """Get current agent status.
 
         Returns:
-            Dict indicating the feature is pending implementation.
+            Dict with current status, phase, and last cycle info.
         """
-        return {
-            "has_active_session": False,
-            "agent_enabled": False,
-            "session": None,
-            "message": MVP_PENDING_MSG,
-        }
+        active = await self._get_active_research_op()
 
-    @trace_service_method("agent.list_sessions")
-    async def list_sessions(self, limit: int = 10) -> dict[str, Any]:
-        """List recent sessions (stub).
+        if active:
+            return {
+                "status": "active",
+                "operation_id": active.operation_id,
+                "phase": active.metadata.parameters.get("phase", "unknown"),
+                "progress": active.progress.model_dump() if active.progress else None,
+                "strategy_name": active.metadata.parameters.get("strategy_name"),
+                "started_at": (
+                    active.started_at.isoformat() if active.started_at else None
+                ),
+            }
 
-        Args:
-            limit: Maximum number of sessions to return.
+        # Find last completed/failed
+        last = await self._get_last_research_op()
+        if last:
+            return {
+                "status": "idle",
+                "last_cycle": {
+                    "operation_id": last.operation_id,
+                    "outcome": last.status.value,
+                    "strategy_name": (
+                        last.result_summary.get("strategy_name")
+                        if last.result_summary
+                        else None
+                    ),
+                    "completed_at": (
+                        last.completed_at.isoformat() if last.completed_at else None
+                    ),
+                },
+            }
+
+        return {"status": "idle", "last_cycle": None}
+
+    async def _get_active_research_op(self):
+        """Get active AGENT_RESEARCH operation if any.
 
         Returns:
-            Dict indicating the feature is pending implementation.
+            The active operation or None.
         """
-        return {
-            "sessions": [],
-            "total": 0,
-            "message": MVP_PENDING_MSG,
-        }
+        # Check for RUNNING first
+        ops, _, _ = await self.ops.list_operations(
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RUNNING,
+            limit=1,
+        )
+        if ops:
+            return ops[0]
 
-    @trace_service_method("agent.cancel_session")
-    async def cancel_session(self, session_id: int) -> dict[str, Any]:
-        """Cancel a session (stub).
+        # Also check for PENDING (just created, not yet started)
+        ops, _, _ = await self.ops.list_operations(
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.PENDING,
+            limit=1,
+        )
+        return ops[0] if ops else None
 
-        Args:
-            session_id: The session ID to cancel.
+    async def _get_last_research_op(self):
+        """Get most recent completed/failed AGENT_RESEARCH operation.
 
         Returns:
-            Dict indicating the feature is pending implementation.
+            The last operation or None.
         """
-        return {
-            "success": False,
-            "session_id": session_id,
-            "error": MVP_PENDING_MSG,
-        }
+        for status in [OperationStatus.COMPLETED, OperationStatus.FAILED]:
+            ops, _, _ = await self.ops.list_operations(
+                operation_type=OperationType.AGENT_RESEARCH,
+                status=status,
+                limit=1,
+            )
+            if ops:
+                return ops[0]
+        return None
+
+
+# Singleton
+_agent_service: AgentService | None = None
+
+
+def get_agent_service() -> AgentService:
+    """Get the agent service singleton.
+
+    Returns:
+        AgentService singleton instance.
+    """
+    global _agent_service
+    if _agent_service is None:
+        _agent_service = AgentService()
+    return _agent_service
