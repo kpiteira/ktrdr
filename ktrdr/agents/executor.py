@@ -259,6 +259,10 @@ class ToolExecutor:
 
     def __init__(self) -> None:
         """Initialize the tool executor with handler mappings."""
+        # Track last saved strategy for design worker
+        self.last_saved_strategy_name: str | None = None
+        self.last_saved_strategy_path: str | None = None
+
         self.handlers: dict[str, HandlerFunc] = {
             "validate_strategy_config": self._handle_validate_strategy_config,
             "save_strategy_config": self._handle_save_strategy_config,
@@ -348,6 +352,7 @@ class ToolExecutor:
         """Handle save_strategy_config tool call.
 
         Validates and saves a strategy configuration to disk.
+        Captures the saved strategy name and path for the design worker.
 
         Args:
             name: Strategy name.
@@ -357,11 +362,20 @@ class ToolExecutor:
         Returns:
             Dict with success status, path, errors, etc.
         """
-        return await _save_strategy_config(
+        result = await _save_strategy_config(
             name=name,
             config=config,
             description=description,
         )
+
+        # Capture saved strategy info for design worker
+        if result.get("success"):
+            # Name is from input param, path is from result
+            clean_name = name.replace(".yaml", "").replace(".yml", "")
+            self.last_saved_strategy_name = clean_name
+            self.last_saved_strategy_path = result.get("path")
+
+        return result
 
     async def _handle_get_available_indicators(self) -> list[dict[str, Any]]:
         """Handle get_available_indicators tool call.
