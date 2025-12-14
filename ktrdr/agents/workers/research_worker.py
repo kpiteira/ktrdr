@@ -2,13 +2,24 @@
 
 This worker manages the state machine loop for research cycles, coordinating
 child workers through the design → training → backtest → assessment phases.
+
+Uses a polling loop pattern (per ARCHITECTURE.md) to monitor child operation
+status rather than directly awaiting workers. This supports distributed workers.
+
+Environment Variables:
+    AGENT_POLL_INTERVAL: Seconds between status checks (default: 5 for stubs)
 """
 
 import asyncio
+import os
 from typing import Any, Protocol
 
 from ktrdr import get_logger
-from ktrdr.api.models.operations import OperationMetadata, OperationType
+from ktrdr.api.models.operations import (
+    OperationMetadata,
+    OperationStatus,
+    OperationType,
+)
 
 logger = get_logger(__name__)
 
@@ -21,20 +32,40 @@ class ChildWorker(Protocol):
         ...
 
 
+class WorkerError(Exception):
+    """Exception raised when a child worker fails."""
+
+    pass
+
+
+def _get_poll_interval() -> float:
+    """Get the poll interval from environment.
+
+    Returns:
+        Poll interval in seconds. Default 5.0 for stub workers.
+    """
+    try:
+        return float(os.getenv("AGENT_POLL_INTERVAL", "5"))
+    except ValueError:
+        return 5.0
+
+
 class AgentResearchWorker:
     """Orchestrator for research cycles. Runs as AGENT_RESEARCH operation.
 
-    This worker manages the full research cycle, creating child operations
-    for each phase and tracking their completion. The cycle runs:
+    This worker manages the full research cycle using a polling loop that
+    monitors child operation status. The cycle runs:
     designing → training → backtesting → assessing → complete
+
+    The polling loop allows the orchestrator to work with distributed workers
+    that run as separate processes/containers.
 
     Attributes:
         PHASES: List of phase names in execution order.
-        POLL_INTERVAL: Seconds between status checks (not used in current impl).
+        POLL_INTERVAL: Seconds between status checks (read from env).
     """
 
     PHASES = ["designing", "training", "backtesting", "assessing"]
-    POLL_INTERVAL = 5.0  # seconds between status checks
 
     def __init__(
         self,
@@ -59,11 +90,18 @@ class AgentResearchWorker:
         self.backtest_worker = backtest_worker
         self.assessment_worker = assessment_worker
 
-    async def run(self, operation_id: str) -> dict[str, Any]:
-        """Main orchestrator loop.
+        # Read poll interval from environment
+        self.POLL_INTERVAL = _get_poll_interval()
 
-        Runs through all phases sequentially, creating child operations
-        for each and tracking their results.
+        # Track current child for cancellation propagation
+        self._current_child_op_id: str | None = None
+        self._current_child_task: asyncio.Task | None = None
+
+    async def run(self, operation_id: str) -> dict[str, Any]:
+        """Main orchestrator loop using polling pattern.
+
+        Polls child operation status in a loop rather than directly awaiting
+        workers. This supports distributed workers that run independently.
 
         Args:
             operation_id: The parent AGENT_RESEARCH operation ID.
@@ -73,125 +111,273 @@ class AgentResearchWorker:
 
         Raises:
             asyncio.CancelledError: If the operation is cancelled.
-            Exception: If any child worker fails.
+            WorkerError: If any child worker fails.
         """
         logger.info(f"Starting research cycle: {operation_id}")
 
         try:
-            # Phase 1: Design
-            await self._update_phase(operation_id, "designing")
-            design_result = await self._run_child(
-                operation_id, "design", self.design_worker.run, operation_id
-            )
+            while True:
+                # Get current parent state
+                op = await self.ops.get_operation(operation_id)
+                if op is None:
+                    raise WorkerError(f"Parent operation not found: {operation_id}")
 
-            # Phase 2: Training
-            await self._update_phase(operation_id, "training")
-            training_result = await self._run_child(
-                operation_id,
-                "training",
-                self.training_worker.run,
-                operation_id,
-                design_result["strategy_path"],
-            )
+                phase = op.metadata.parameters.get("phase", "idle")
 
-            # Phase 3: Backtest
-            await self._update_phase(operation_id, "backtesting")
-            backtest_result = await self._run_child(
-                operation_id,
-                "backtest",
-                self.backtest_worker.run,
-                operation_id,
-                training_result["model_path"],
-            )
+                # Get current child operation if any
+                child_op_id = self._get_child_op_id(op, phase)
+                child_op = None
+                if child_op_id:
+                    child_op = await self.ops.get_operation(child_op_id)
 
-            # Phase 4: Assessment
-            await self._update_phase(operation_id, "assessing")
-            assessment_result = await self._run_child(
-                operation_id,
-                "assessment",
-                self.assessment_worker.run,
-                operation_id,
-                {
-                    "training": training_result,
-                    "backtest": backtest_result,
-                },
-            )
+                # State machine logic
+                if phase == "idle" or child_op is None:
+                    # Start the first phase (designing)
+                    await self._start_phase_worker(operation_id, "designing")
 
-            # Complete
-            return {
-                "success": True,
-                "strategy_name": design_result["strategy_name"],
-                "verdict": assessment_result["verdict"],
-            }
+                elif child_op.status == OperationStatus.PENDING:
+                    # Child created but not started yet, wait for it
+                    pass
+
+                elif child_op.status == OperationStatus.RUNNING:
+                    # Child still running, update parent progress
+                    await self._update_parent_progress(operation_id, phase, child_op)
+
+                elif child_op.status == OperationStatus.COMPLETED:
+                    # Child completed, check gate and advance
+                    result = child_op.result_summary or {}
+
+                    if phase == "assessing":
+                        # All phases complete
+                        parent = await self.ops.get_operation(operation_id)
+                        strategy_name = parent.metadata.parameters.get(
+                            "strategy_name", "unknown"
+                        )
+                        return {
+                            "success": True,
+                            "strategy_name": strategy_name,
+                            "verdict": result.get("verdict", "unknown"),
+                        }
+                    else:
+                        # Advance to next phase
+                        await self._advance_to_next_phase(operation_id, phase, result)
+
+                elif child_op.status == OperationStatus.FAILED:
+                    raise WorkerError(
+                        f"Child operation failed: {child_op.error_message}"
+                    )
+
+                elif child_op.status == OperationStatus.CANCELLED:
+                    raise asyncio.CancelledError("Child operation was cancelled")
+
+                # Poll interval
+                await self._cancellable_sleep(self.POLL_INTERVAL)
 
         except asyncio.CancelledError:
             logger.info(f"Research cycle cancelled: {operation_id}")
+            # Propagate cancellation to active child
+            await self._cancel_current_child()
+            raise
+        except WorkerError:
             raise
         except Exception as e:
             logger.error(f"Research cycle failed: {operation_id}, error={e}")
             raise
 
-    async def _update_phase(self, operation_id: str, phase: str) -> None:
-        """Update operation metadata with current phase.
+    def _get_child_op_id(self, op: Any, phase: str) -> str | None:
+        """Get child operation ID for current phase.
 
         Args:
-            operation_id: The operation ID to update.
-            phase: The new phase name.
-        """
-        operation = await self.ops.get_operation(operation_id)
-        if operation:
-            operation.metadata.parameters["phase"] = phase
-        logger.info(f"Phase started: {operation_id}, phase={phase}")
-
-    async def _run_child(
-        self,
-        parent_op_id: str,
-        child_name: str,
-        worker_func: Any,
-        *args: Any,
-        **kwargs: Any,
-    ) -> dict[str, Any]:
-        """Run a child worker and track its operation.
-
-        Creates a child operation, runs the worker, and marks the child
-        complete or failed based on the result.
-
-        Args:
-            parent_op_id: The parent operation ID.
-            child_name: Name of the child phase (design, training, etc).
-            worker_func: The worker function to run.
-            *args: Arguments to pass to the worker.
-            **kwargs: Keyword arguments to pass to the worker.
+            op: Parent operation.
+            phase: Current phase name.
 
         Returns:
-            Result dict from the worker.
-
-        Raises:
-            Exception: If the worker fails.
+            Child operation ID or None.
         """
+        phase_to_key = {
+            "designing": "design_op_id",
+            "training": "training_op_id",
+            "backtesting": "backtest_op_id",
+            "assessing": "assessment_op_id",
+        }
+        key = phase_to_key.get(phase)
+        if key:
+            return op.metadata.parameters.get(key)
+        return None
+
+    async def _start_phase_worker(self, operation_id: str, phase: str) -> None:
+        """Start a worker for the given phase.
+
+        Creates child operation, starts worker as asyncio task, and
+        registers with operations service.
+
+        Args:
+            operation_id: Parent operation ID.
+            phase: Phase to start (designing, training, etc).
+        """
+        # Update parent phase
+        parent_op = await self.ops.get_operation(operation_id)
+        if parent_op:
+            parent_op.metadata.parameters["phase"] = phase
+        logger.info(f"Phase started: {operation_id}, phase={phase}")
+
         # Create child operation
+        child_name = self._phase_to_child_name(phase)
         child_op = await self.ops.create_operation(
             operation_type=self._get_child_op_type(child_name),
             metadata=OperationMetadata(),  # type: ignore[call-arg]
-            parent_operation_id=parent_op_id,
+            parent_operation_id=operation_id,
         )
 
         # Track child in parent metadata
-        parent_op = await self.ops.get_operation(parent_op_id)
+        parent_op = await self.ops.get_operation(operation_id)
         if parent_op:
             parent_op.metadata.parameters[f"{child_name}_op_id"] = child_op.operation_id
 
-        try:
-            # Run child worker
-            result = await worker_func(*args, **kwargs)
+        # Get worker and args for this phase
+        worker, args = await self._get_worker_and_args(operation_id, phase)
 
-            # Mark child complete
-            await self.ops.complete_operation(child_op.operation_id, result)
-            return result
+        # Create task wrapper that completes the child operation
+        async def run_child():
+            try:
+                result = await worker.run(child_op.operation_id, *args)
+                await self.ops.complete_operation(child_op.operation_id, result)
+            except asyncio.CancelledError:
+                # Don't mark as failed on cancellation
+                raise
+            except Exception as e:
+                await self.ops.fail_operation(child_op.operation_id, str(e))
+                raise
 
-        except Exception as e:
-            await self.ops.fail_operation(child_op.operation_id, str(e))
-            raise
+        # Start as asyncio task
+        task = asyncio.create_task(run_child())
+        self._current_child_op_id = child_op.operation_id
+        self._current_child_task = task
+
+        # Register task with operations service
+        await self.ops.start_operation(child_op.operation_id, task)
+
+    async def _get_worker_and_args(
+        self, operation_id: str, phase: str
+    ) -> tuple[ChildWorker, tuple]:
+        """Get worker instance and arguments for a phase.
+
+        Args:
+            operation_id: Parent operation ID.
+            phase: Phase name.
+
+        Returns:
+            Tuple of (worker, args tuple).
+        """
+        parent_op = await self.ops.get_operation(operation_id)
+        params = parent_op.metadata.parameters if parent_op else {}
+
+        if phase == "designing":
+            return self.design_worker, ()
+
+        elif phase == "training":
+            strategy_path = params.get("strategy_path", "/app/strategies/unknown.yaml")
+            return self.training_worker, (strategy_path,)
+
+        elif phase == "backtesting":
+            model_path = params.get("model_path", "/app/models/unknown/model.pt")
+            return self.backtest_worker, (model_path,)
+
+        elif phase == "assessing":
+            training_result = params.get("training_result", {})
+            backtest_result = params.get("backtest_result", {})
+            return self.assessment_worker, (
+                {"training": training_result, "backtest": backtest_result},
+            )
+
+        raise ValueError(f"Unknown phase: {phase}")
+
+    async def _advance_to_next_phase(
+        self, operation_id: str, current_phase: str, result: dict
+    ) -> None:
+        """Advance to the next phase after current completes.
+
+        Stores result in parent metadata and starts next phase worker.
+
+        Args:
+            operation_id: Parent operation ID.
+            current_phase: Phase that just completed.
+            result: Result from completed phase.
+        """
+        parent_op = await self.ops.get_operation(operation_id)
+        if not parent_op:
+            return
+
+        # Store result in parent metadata
+        if current_phase == "designing":
+            parent_op.metadata.parameters["strategy_name"] = result.get("strategy_name")
+            parent_op.metadata.parameters["strategy_path"] = result.get("strategy_path")
+            next_phase = "training"
+
+        elif current_phase == "training":
+            parent_op.metadata.parameters["training_result"] = result
+            parent_op.metadata.parameters["model_path"] = result.get("model_path")
+            next_phase = "backtesting"
+
+        elif current_phase == "backtesting":
+            parent_op.metadata.parameters["backtest_result"] = result
+            next_phase = "assessing"
+
+        else:
+            return  # No next phase
+
+        # Start next phase
+        await self._start_phase_worker(operation_id, next_phase)
+
+    async def _update_parent_progress(
+        self, operation_id: str, phase: str, child_op: Any
+    ) -> None:
+        """Update parent operation progress based on child.
+
+        Args:
+            operation_id: Parent operation ID.
+            phase: Current phase.
+            child_op: Child operation info.
+        """
+        # For now, just log that child is still running
+        # Future: aggregate progress from child to parent
+        pass
+
+    async def _cancel_current_child(self) -> None:
+        """Cancel the currently running child operation.
+
+        Called when parent is cancelled to propagate cancellation.
+        """
+        if self._current_child_op_id:
+            try:
+                await self.ops.cancel_operation(
+                    self._current_child_op_id, "Parent cancelled"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to cancel child operation: {e}")
+
+        if self._current_child_task and not self._current_child_task.done():
+            self._current_child_task.cancel()
+            try:
+                await self._current_child_task
+            except asyncio.CancelledError:
+                pass
+
+    def _phase_to_child_name(self, phase: str) -> str:
+        """Convert phase name to child operation name.
+
+        Args:
+            phase: Phase name (designing, training, etc).
+
+        Returns:
+            Child name (design, training, etc).
+        """
+        return {
+            "designing": "design",
+            "training": "training",
+            "backtesting": "backtest",
+            "assessing": "assessment",
+        }[phase]
 
     def _get_child_op_type(self, child_name: str) -> OperationType:
         """Get operation type for child.
@@ -215,6 +401,13 @@ class AgentResearchWorker:
         Args:
             seconds: Total time to sleep.
         """
-        intervals = int(seconds / 0.1)
-        for _ in range(intervals):
-            await asyncio.sleep(0.1)
+        if seconds <= 0:
+            # Always yield at least once to allow other tasks to run
+            await asyncio.sleep(0)
+            return
+
+        interval = min(0.1, seconds)
+        elapsed = 0.0
+        while elapsed < seconds:
+            await asyncio.sleep(interval)
+            elapsed += interval

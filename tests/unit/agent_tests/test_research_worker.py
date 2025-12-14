@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from ktrdr.agents.workers.research_worker import AgentResearchWorker
+from ktrdr.agents.workers.research_worker import AgentResearchWorker, WorkerError
 from ktrdr.api.models.operations import (
     OperationInfo,
     OperationMetadata,
@@ -58,10 +58,20 @@ def mock_operations_service():
             operations[operation_id].status = OperationStatus.FAILED
             operations[operation_id].error_message = error
 
+    async def async_start_operation(operation_id, task):
+        if operation_id in operations:
+            operations[operation_id].status = OperationStatus.RUNNING
+
+    async def async_cancel_operation(operation_id, reason=None):
+        if operation_id in operations:
+            operations[operation_id].status = OperationStatus.CANCELLED
+
     service.create_operation = async_create_operation
     service.get_operation = async_get_operation
     service.complete_operation = async_complete_operation
     service.fail_operation = async_fail_operation
+    service.start_operation = async_start_operation
+    service.cancel_operation = async_cancel_operation
     service._operations = operations
 
     return service
@@ -291,7 +301,7 @@ class TestAgentResearchWorkerErrors:
             assessment_worker=stub_workers["assessment"],
         )
 
-        with pytest.raises(ValueError, match="Simulated failure"):
+        with pytest.raises(WorkerError, match="Child operation failed"):
             await worker.run(parent_op.operation_id)
 
     @pytest.mark.asyncio
@@ -319,7 +329,7 @@ class TestAgentResearchWorkerErrors:
 
         try:
             await worker.run(parent_op.operation_id)
-        except ValueError:
+        except WorkerError:
             pass
 
         # Check design child is marked failed
@@ -328,3 +338,191 @@ class TestAgentResearchWorkerErrors:
         if design_op_id:
             design_op = await mock_operations_service.get_operation(design_op_id)
             assert design_op.status == OperationStatus.FAILED
+
+
+class TestPollingLoopPattern:
+    """Test the polling loop pattern per ARCHITECTURE.md Task 1.10.
+
+    The orchestrator should poll child operation status rather than
+    awaiting workers directly.
+    """
+
+    @pytest.mark.asyncio
+    async def test_uses_polling_loop(self, mock_operations_service, stub_workers):
+        """Orchestrator polls child operation status in a loop.
+
+        Verifies that child operations are polled for completion rather
+        than being directly awaited.
+        """
+        parent_op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "idle"}),
+        )
+
+        # Track how many times get_operation is called for child ops
+        get_operation_calls = []
+        original_get = mock_operations_service.get_operation
+
+        async def tracking_get(op_id):
+            get_operation_calls.append(op_id)
+            return await original_get(op_id)
+
+        mock_operations_service.get_operation = tracking_get
+
+        worker = AgentResearchWorker(
+            operations_service=mock_operations_service,
+            design_worker=stub_workers["design"],
+            training_worker=stub_workers["training"],
+            backtest_worker=stub_workers["backtest"],
+            assessment_worker=stub_workers["assessment"],
+        )
+
+        await worker.run(parent_op.operation_id)
+
+        # Should have polled child operations multiple times
+        # The parent operation should be fetched at least once per poll cycle
+        parent_fetches = [c for c in get_operation_calls if c == parent_op.operation_id]
+        # With polling, we should fetch parent multiple times per phase
+        assert (
+            len(parent_fetches) >= 4
+        ), f"Expected multiple parent polls (one per phase minimum), got {len(parent_fetches)}"
+
+    @pytest.mark.asyncio
+    async def test_child_workers_started_as_tasks(
+        self, mock_operations_service, stub_workers
+    ):
+        """Child workers are started as separate asyncio tasks.
+
+        The orchestrator should use asyncio.create_task() to start workers
+        so they run independently.
+        """
+        parent_op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "idle"}),
+        )
+
+        # Track start_operation calls which register the task
+        start_operation_calls = []
+
+        async def track_start(operation_id, task):
+            start_operation_calls.append((operation_id, task))
+            # Simulate start by marking running
+            op = await mock_operations_service.get_operation(operation_id)
+            if op:
+                op.status = OperationStatus.RUNNING
+
+        mock_operations_service.start_operation = track_start
+
+        worker = AgentResearchWorker(
+            operations_service=mock_operations_service,
+            design_worker=stub_workers["design"],
+            training_worker=stub_workers["training"],
+            backtest_worker=stub_workers["backtest"],
+            assessment_worker=stub_workers["assessment"],
+        )
+
+        await worker.run(parent_op.operation_id)
+
+        # Should have started 4 child tasks (one per phase)
+        assert (
+            len(start_operation_calls) == 4
+        ), f"Expected 4 start_operation calls for child tasks, got {len(start_operation_calls)}"
+
+        # Each should have been passed an asyncio.Task
+        for op_id, task in start_operation_calls:
+            assert isinstance(
+                task, asyncio.Task
+            ), f"Expected asyncio.Task for {op_id}, got {type(task)}"
+
+    @pytest.mark.asyncio
+    async def test_poll_interval_configurable(
+        self, mock_operations_service, stub_workers, monkeypatch
+    ):
+        """Poll interval can be configured via environment variable.
+
+        AGENT_POLL_INTERVAL sets the seconds between status checks.
+        """
+        # Set a very short poll interval for testing
+        monkeypatch.setenv("AGENT_POLL_INTERVAL", "0.01")
+
+        await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "idle"}),
+        )
+
+        worker = AgentResearchWorker(
+            operations_service=mock_operations_service,
+            design_worker=stub_workers["design"],
+            training_worker=stub_workers["training"],
+            backtest_worker=stub_workers["backtest"],
+            assessment_worker=stub_workers["assessment"],
+        )
+
+        # The worker should respect the poll interval
+        # We verify by checking the POLL_INTERVAL attribute updates
+        assert worker.POLL_INTERVAL == 0.01 or hasattr(
+            worker, "_get_poll_interval"
+        ), "Worker should have configurable poll interval"
+
+    @pytest.mark.asyncio
+    async def test_cancellation_propagates_to_child(
+        self, mock_operations_service, stub_workers
+    ):
+        """Cancelling parent operation cancels active child.
+
+        Per ARCHITECTURE.md, when the parent is cancelled, the active
+        child operation should also be cancelled.
+        """
+        parent_op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "idle"}),
+        )
+
+        # Track cancel_operation calls
+        cancelled_ops = []
+
+        async def track_cancel(operation_id, reason=None):
+            cancelled_ops.append(operation_id)
+            op = await mock_operations_service.get_operation(operation_id)
+            if op:
+                op.status = OperationStatus.CANCELLED
+
+        mock_operations_service.cancel_operation = track_cancel
+
+        # Create slow workers so we have time to cancel
+        class SlowWorker:
+            async def run(self, *args, **kwargs):
+                for _ in range(100):  # 10 seconds
+                    await asyncio.sleep(0.1)
+                return {
+                    "success": True,
+                    "strategy_name": "test",
+                    "strategy_path": "/test",
+                }
+
+        worker = AgentResearchWorker(
+            operations_service=mock_operations_service,
+            design_worker=SlowWorker(),
+            training_worker=stub_workers["training"],
+            backtest_worker=stub_workers["backtest"],
+            assessment_worker=stub_workers["assessment"],
+        )
+
+        # Start the worker
+        task = asyncio.create_task(worker.run(parent_op.operation_id))
+
+        # Wait for design child to be created
+        await asyncio.sleep(0.2)
+
+        # Cancel parent
+        task.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        # The child operation should have been cancelled
+        parent = await mock_operations_service.get_operation(parent_op.operation_id)
+        child_op_id = parent.metadata.parameters.get("design_op_id")
+        assert (
+            child_op_id in cancelled_ops
+        ), f"Expected child {child_op_id} to be cancelled, cancelled ops: {cancelled_ops}"
