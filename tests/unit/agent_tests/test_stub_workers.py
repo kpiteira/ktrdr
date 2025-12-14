@@ -50,8 +50,11 @@ class TestStubDesignWorker:
         assert isinstance(result["output_tokens"], int)
 
     @pytest.mark.asyncio
-    async def test_has_delay(self):
-        """Design worker should have ~500ms delay."""
+    async def test_has_delay(self, monkeypatch):
+        """Design worker should have ~500ms delay when STUB_WORKER_FAST=true."""
+        # Set STUB_WORKER_FAST to get predictable 500ms delay
+        monkeypatch.setenv("STUB_WORKER_FAST", "true")
+
         worker = StubDesignWorker()
         start = time.time()
         await worker.run("op_test_123")
@@ -87,8 +90,10 @@ class TestStubTrainingWorker:
         assert result["model_path"].endswith(".pt")
 
     @pytest.mark.asyncio
-    async def test_has_delay(self):
-        """Training worker should have ~500ms delay."""
+    async def test_has_delay(self, monkeypatch):
+        """Training worker should have ~500ms delay when STUB_WORKER_FAST=true."""
+        monkeypatch.setenv("STUB_WORKER_FAST", "true")
+
         worker = StubTrainingWorker()
         start = time.time()
         await worker.run("op_test_123", "/app/strategies/test.yaml")
@@ -122,8 +127,10 @@ class TestStubBacktestWorker:
         assert 0 <= result["max_drawdown"] <= 1
 
     @pytest.mark.asyncio
-    async def test_has_delay(self):
-        """Backtest worker should have ~500ms delay."""
+    async def test_has_delay(self, monkeypatch):
+        """Backtest worker should have ~500ms delay when STUB_WORKER_FAST=true."""
+        monkeypatch.setenv("STUB_WORKER_FAST", "true")
+
         worker = StubBacktestWorker()
         start = time.time()
         await worker.run("op_test_123", "/app/models/test/model.pt")
@@ -170,8 +177,10 @@ class TestStubAssessmentWorker:
         assert "output_tokens" in result
 
     @pytest.mark.asyncio
-    async def test_has_delay(self):
-        """Assessment worker should have ~500ms delay."""
+    async def test_has_delay(self, monkeypatch):
+        """Assessment worker should have ~500ms delay when STUB_WORKER_FAST=true."""
+        monkeypatch.setenv("STUB_WORKER_FAST", "true")
+
         worker = StubAssessmentWorker()
         start = time.time()
         await worker.run("op_test_123", {})
