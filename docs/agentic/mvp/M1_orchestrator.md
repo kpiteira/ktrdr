@@ -815,6 +815,71 @@ async def test_cycle_phases_progression():
 
 ---
 
+## Task 1.10: Fix Orchestrator Polling Pattern
+
+**File(s)**: `ktrdr/agents/workers/research_worker.py`
+**Type**: CODING (refactor)
+**Priority**: HIGH — Current implementation violates ARCHITECTURE.md
+
+**Problem**: Task 1.3 was implemented with sequential awaits instead of the polling loop specified in ARCHITECTURE.md. This works for in-process stubs but won't work for real distributed workers.
+
+**Current (wrong)**:
+```python
+# Directly awaits each child - blocks until complete
+design_result = await self.design_worker.run(operation_id)
+training_result = await self.training_worker.run(...)
+```
+
+**Required (per ARCHITECTURE.md)**:
+```python
+while True:
+    op = await self.ops.get_operation(operation_id)
+    phase = op.metadata.get("phase", "idle")
+
+    child_op_id = self._get_child_op_id(op, phase)
+    child_op = await self.ops.get_operation(child_op_id)
+
+    if child_op is None:
+        await self._start_phase_worker(operation_id, phase)
+    elif child_op.status == OperationStatus.RUNNING:
+        await self._update_parent_progress(operation_id, child_op)
+    elif child_op.status == OperationStatus.COMPLETED:
+        if not await self._check_gate_and_advance(operation_id, phase, child_op):
+            return {"success": False, "reason": "gate_failed"}
+        if phase == "assessing":
+            return {"success": True, ...}
+    elif child_op.status == OperationStatus.FAILED:
+        raise WorkerError(f"Child failed: {child_op.error_message}")
+
+    await self._cancellable_sleep(POLL_INTERVAL)
+```
+
+**Key Changes**:
+1. Main loop polls OperationsService instead of awaiting workers directly
+2. Child workers started as separate asyncio tasks with their own operations
+3. State machine advances based on child operation status
+4. Poll interval configurable (5s for stubs, 300s for real workers)
+
+**Implementation Notes**:
+- Stub workers still work the same (they run as child operations)
+- The orchestrator just changes HOW it waits for them
+- Use `asyncio.create_task()` to start child workers
+- Track child operation IDs in parent metadata
+
+**Environment Variables**:
+- `AGENT_POLL_INTERVAL`: Seconds between status checks (default: 5 for stubs, 300 for real)
+
+**Acceptance Criteria**:
+- [ ] Orchestrator uses polling loop per ARCHITECTURE.md
+- [ ] Child workers started as separate operations/tasks
+- [ ] Parent tracks child operation IDs in metadata
+- [ ] Poll interval is configurable
+- [ ] Cancellation propagates to active child
+- [ ] All existing tests still pass
+- [ ] E2E test still shows phase progression
+
+---
+
 ## Milestone 1 Verification Script
 
 ```bash
