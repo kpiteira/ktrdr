@@ -754,6 +754,33 @@ class TestMetadataContract:
         assert parent.metadata.parameters["strategy_name"] == "stub_momentum_v1"
 
     @pytest.mark.asyncio
+    async def test_stores_strategy_path_after_design(
+        self, mock_operations_service, stub_workers
+    ):
+        """Parent metadata stores strategy_path after design phase (Task 2.3)."""
+        parent_op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "idle"}),
+        )
+
+        worker = AgentResearchWorker(
+            operations_service=mock_operations_service,
+            design_worker=stub_workers["design"],
+            training_worker=stub_workers["training"],
+            backtest_worker=stub_workers["backtest"],
+            assessment_worker=stub_workers["assessment"],
+        )
+
+        await worker.run(parent_op.operation_id)
+
+        parent = await mock_operations_service.get_operation(parent_op.operation_id)
+        assert "strategy_path" in parent.metadata.parameters
+        assert (
+            parent.metadata.parameters["strategy_path"]
+            == "/app/strategies/stub_momentum_v1.yaml"
+        )
+
+    @pytest.mark.asyncio
     async def test_stores_training_result_after_training(
         self, mock_operations_service, stub_workers
     ):

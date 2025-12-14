@@ -253,6 +253,34 @@ class TestAgentServiceGetStatus:
         assert status["phase"] == "backtesting"
 
     @pytest.mark.asyncio
+    async def test_status_returns_strategy_name_when_active(
+        self, mock_operations_service
+    ):
+        """Status returns strategy_name from metadata when cycle is active (Task 2.3)."""
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        # Create a running operation with strategy_name in metadata
+        op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(
+                parameters={
+                    "phase": "training",
+                    "strategy_name": "momentum_rsi_v2",
+                }
+            ),
+        )
+        mock_operations_service._operations[op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+
+        status = await service.get_status()
+
+        assert status["status"] == "active"
+        assert status["strategy_name"] == "momentum_rsi_v2"
+
+    @pytest.mark.asyncio
     async def test_status_returns_last_cycle_when_idle(self, mock_operations_service):
         """Status returns last cycle info when idle."""
         from ktrdr.api.services.agent_service import AgentService
