@@ -11,6 +11,7 @@ Built the orchestrator shell with stub workers:
 5. **Simplified API** - `POST /trigger` (202/409) and `GET /status` only
 6. **Simplified CLI** - `ktrdr agent trigger` and `ktrdr agent status` only
 7. **Cleaned startup.py** - Removed legacy trigger loop stubs
+8. **Task 1.10: Polling Loop Pattern** - Refactored orchestrator to poll child operation status instead of directly awaiting workers
 
 ## E2E Test Results
 
@@ -42,10 +43,12 @@ OperationsService.complete_operation()
 
 ## Gotchas for M2+
 
-1. **Stubs are fast** - Real workers will take much longer (~30s design, ~5min training, ~1min backtest)
+1. **Stubs default to 30s per phase** - Set `STUB_WORKER_FAST=true` for fast testing (500ms)
 2. **No Claude integration yet** - Design and Assessment workers are stubs
 3. **No real training/backtest** - Workers just return mock results
 4. **Phase metadata** - Use `OperationMetadata.parameters["phase"]` to track current phase
+5. **Poll interval** - Set `AGENT_POLL_INTERVAL` to configure (default 5s, prod 300s)
+6. **WorkerError exception** - Child failures raise `WorkerError`, not the original exception
 
 ## Files Changed
 
