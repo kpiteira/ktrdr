@@ -66,7 +66,44 @@ Tests: `test_get_indicators_calls_api`, `test_get_symbols_calls_api`
 
 ---
 
-## Gotchas for Task 2.5+
+## Task 2.5 Completed
+
+Created integration tests for real Claude design (requires ANTHROPIC_API_KEY).
+
+### Files Created
+
+| File | Description |
+|------|-------------|
+| `tests/integration/agent_tests/__init__.py` | Package init |
+| `tests/integration/agent_tests/test_agent_design_real.py` | 2 integration tests |
+
+### Tests
+
+- `test_real_design_creates_strategy` - Verifies valid YAML strategy file created
+- `test_design_worker_tracks_tokens` - Verifies token usage recorded in operation
+
+Tests automatically skip when ANTHROPIC_API_KEY is not set.
+
+---
+
+## M2 Complete
+
+All 5 tasks completed. Run E2E verification:
+
+```bash
+# Requires ANTHROPIC_API_KEY
+ktrdr agent trigger
+# Wait 30-90 seconds for design
+ktrdr agent status
+# Verify: phase=training, strategy_name populated
+
+ls strategies/
+cat strategies/<strategy_name>.yaml
+```
+
+---
+
+## Gotchas for M3+
 
 1. **ToolExecutor state tracking** - `last_saved_strategy_name` and `last_saved_strategy_path` are set when `save_strategy_config` succeeds.
 
