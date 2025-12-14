@@ -12,7 +12,28 @@ Created `AgentDesignWorker` that uses Claude to design trading strategies.
 | `ktrdr/agents/executor.py` | Added `last_saved_strategy_name/path` state tracking |
 | `tests/unit/agent_tests/test_design_worker.py` | New - 10 unit tests |
 
-### Gotchas for Task 2.2+
+---
+
+## Task 2.2 Completed
+
+Wired real `AgentDesignWorker` into the orchestrator, replacing stub.
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `ktrdr/api/services/agent_service.py` | Replace `StubDesignWorker()` with `AgentDesignWorker(self.ops)` |
+| `tests/unit/agent_tests/test_agent_service_new.py` | Added 5 tests for design worker wiring |
+
+### Verification
+
+- Real design worker is called when phase enters "designing"
+- Strategy name propagates to parent metadata (already in `research_worker.py`)
+- Stub workers remain for training, backtest, assessment
+
+---
+
+## Gotchas for Task 2.3+
 
 1. **ToolExecutor state tracking** - The `ToolExecutor` now tracks `last_saved_strategy_name` and `last_saved_strategy_path`. These are set when `save_strategy_config` succeeds. The design worker reads these after the invoker completes.
 
