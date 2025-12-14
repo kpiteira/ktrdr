@@ -1,31 +1,65 @@
-"""
-Agent API Pydantic models.
+"""Agent API Pydantic models.
 
-Request/response models for the agent research system endpoints.
+Note: These models are kept for backwards compatibility but the API
+now returns plain JSON responses. See ktrdr/api/endpoints/agent.py.
 """
 
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel
 
 
-class TriggerResponse(BaseModel):
+class LastCycleInfo(BaseModel):
+    """Information about the last completed research cycle."""
+
+    operation_id: str
+    outcome: str
+    strategy_name: Optional[str] = None
+    completed_at: Optional[str] = None
+
+
+class AgentStatusResponse(BaseModel):
+    """Response model for GET /agent/status."""
+
+    status: str  # "active" or "idle"
+    operation_id: Optional[str] = None
+    phase: Optional[str] = None
+    progress: Optional[dict[str, Any]] = None
+    strategy_name: Optional[str] = None
+    started_at: Optional[str] = None
+    last_cycle: Optional[LastCycleInfo] = None
+
+
+class AgentTriggerResponse(BaseModel):
     """Response model for POST /agent/trigger."""
 
-    success: bool
     triggered: bool
-    operation_id: Optional[str] = None  # Task 1.13a: Operation ID for tracking
-    session_id: Optional[int] = None
+    operation_id: Optional[str] = None
     reason: Optional[str] = None
-    active_session_id: Optional[int] = None
     message: Optional[str] = None
-    dry_run: Optional[bool] = None
-    would_trigger: Optional[bool] = None
-    status: Optional[str] = None  # Task 1.13a: Operation status
+
+
+# Legacy models - kept for backwards compatibility
+# TODO: Remove these after CLI is updated
+
+
+class TriggerResponse(BaseModel):
+    """Legacy response model for POST /agent/trigger."""
+
+    success: bool = True  # Deprecated field
+    triggered: bool
+    operation_id: Optional[str] = None
+    session_id: Optional[int] = None  # Deprecated field
+    reason: Optional[str] = None
+    active_session_id: Optional[int] = None  # Deprecated field
+    message: Optional[str] = None
+    dry_run: Optional[bool] = None  # Deprecated field
+    would_trigger: Optional[bool] = None  # Deprecated field
+    status: Optional[str] = None  # Deprecated field
 
 
 class SessionInfo(BaseModel):
-    """Detailed session information."""
+    """Legacy detailed session information."""
 
     id: int
     phase: str
@@ -36,16 +70,16 @@ class SessionInfo(BaseModel):
 
 
 class StatusResponse(BaseModel):
-    """Response model for GET /agent/status."""
+    """Legacy response model for GET /agent/status."""
 
     has_active_session: bool
     session: Optional[SessionInfo] = None
-    agent_enabled: bool
+    agent_enabled: bool = True  # Default to True since agent is always enabled
     recent_actions: Optional[list[dict]] = None
 
 
 class SessionSummary(BaseModel):
-    """Summary of a completed session."""
+    """Legacy summary of a completed session."""
 
     id: int
     phase: str
@@ -56,14 +90,14 @@ class SessionSummary(BaseModel):
 
 
 class SessionsListResponse(BaseModel):
-    """Response model for GET /agent/sessions."""
+    """Legacy response model for GET /agent/sessions."""
 
     sessions: list[SessionSummary]
     total: int
 
 
 class CancelSessionResponse(BaseModel):
-    """Response model for DELETE /agent/sessions/{session_id}/cancel."""
+    """Legacy response model for DELETE /agent/sessions/{session_id}/cancel."""
 
     success: bool
     session_id: int

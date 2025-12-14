@@ -1,112 +1,57 @@
-"""
-Agent API endpoints for the KTRDR research system.
+"""Agent API endpoints.
 
-Endpoints:
-- POST /agent/trigger - Trigger a research cycle
-- GET /agent/status - Get current agent status
-- GET /agent/sessions - List recent sessions
+Simplified endpoints for agent research cycle management.
+Cancel functionality uses the operations API: DELETE /operations/{op_id}
 """
 
-from typing import Optional
-
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 
 from ktrdr import get_logger
-from ktrdr.api.models.agent import (
-    CancelSessionResponse,
-    SessionsListResponse,
-    StatusResponse,
-    TriggerResponse,
-)
 from ktrdr.api.services.agent_service import AgentService
+from ktrdr.api.services.agent_service import get_agent_service as _get_agent_service
 
 logger = get_logger(__name__)
 
 # Create router for agent endpoints
-router = APIRouter(prefix="/agent")
-
-
-# Singleton service instance
-_agent_service: Optional[AgentService] = None
+router = APIRouter(prefix="/agent", tags=["agent"])
 
 
 def get_agent_service() -> AgentService:
-    """Get agent service instance (singleton)."""
-    global _agent_service
-    if _agent_service is None:
-        _agent_service = AgentService()
-    return _agent_service
+    """Get agent service instance (for dependency injection)."""
+    return _get_agent_service()
 
 
-@router.post("/trigger", response_model=TriggerResponse)
+@router.post("/trigger")
 async def trigger_agent(
-    dry_run: bool = Query(False, description="Dry run mode - don't actually trigger"),
     service: AgentService = Depends(get_agent_service),
-) -> TriggerResponse:
-    """
-    Trigger a research cycle.
+):
+    """Start a new research cycle.
 
-    Starts a new research cycle if conditions are met (no active session,
-    budget available, agent enabled).
+    Returns 202 if triggered, 409 if cycle already active.
     """
     try:
-        result = await service.trigger(dry_run=dry_run)
-        return TriggerResponse(**result)
+        result = await service.trigger()
+
+        if result["triggered"]:
+            return JSONResponse(result, status_code=202)
+        return JSONResponse(result, status_code=409)
+
     except Exception as e:
         logger.error(f"Failed to trigger agent: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@router.get("/status", response_model=StatusResponse)
+@router.get("/status")
 async def get_agent_status(
-    verbose: bool = Query(False, description="Include detailed information"),
     service: AgentService = Depends(get_agent_service),
-) -> StatusResponse:
-    """
-    Get current agent status.
+):
+    """Get current agent status.
 
-    Returns information about the active session (if any) and agent state.
+    Returns current phase if active, or last cycle info if idle.
     """
     try:
-        result = await service.get_status(verbose=verbose)
-        return StatusResponse(**result)
+        return await service.get_status()
     except Exception as e:
         logger.error(f"Failed to get agent status: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@router.get("/sessions", response_model=SessionsListResponse)
-async def list_sessions(
-    limit: int = Query(10, ge=1, le=100, description="Number of sessions to return"),
-    service: AgentService = Depends(get_agent_service),
-) -> SessionsListResponse:
-    """
-    List recent sessions.
-
-    Returns a list of recent research sessions with their outcomes.
-    """
-    try:
-        result = await service.list_sessions(limit=limit)
-        return SessionsListResponse(**result)
-    except Exception as e:
-        logger.error(f"Failed to list sessions: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@router.delete("/sessions/{session_id}/cancel", response_model=CancelSessionResponse)
-async def cancel_session(
-    session_id: int,
-    service: AgentService = Depends(get_agent_service),
-) -> CancelSessionResponse:
-    """
-    Cancel a session.
-
-    Cancels any session regardless of its current state. If the session
-    has an associated operation, attempts to cancel it (best effort).
-    """
-    try:
-        result = await service.cancel_session(session_id=session_id)
-        return CancelSessionResponse(**result)
-    except Exception as e:
-        logger.error(f"Failed to cancel session {session_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e
