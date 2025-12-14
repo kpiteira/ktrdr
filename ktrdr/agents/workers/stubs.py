@@ -1,12 +1,47 @@
 """Stub workers for testing orchestrator without real operations.
 
-These workers simulate each phase of the research cycle with ~500ms delays
-and mock results. Used for testing the orchestrator state machine before
-integrating real Claude calls, training, and backtesting.
+These workers simulate each phase of the research cycle with configurable delays
+(default ~30s per phase). Sleep in small intervals for responsive cancellation.
+
+Environment Variables:
+    STUB_WORKER_DELAY: Seconds per phase (default: 30)
+    STUB_WORKER_FAST: Set to "true" for fast mode (500ms per phase)
 """
 
 import asyncio
+import os
 from typing import Any
+
+
+def _get_phase_delay() -> float:
+    """Get the delay for each phase in seconds.
+
+    Returns:
+        30s by default, 0.5s if STUB_WORKER_FAST=true, or STUB_WORKER_DELAY value.
+    """
+    if os.getenv("STUB_WORKER_FAST", "").lower() in ("true", "1", "yes"):
+        return 0.5
+
+    try:
+        return float(os.getenv("STUB_WORKER_DELAY", "30"))
+    except ValueError:
+        return 30.0
+
+
+async def _cancellable_sleep(total_seconds: float, interval: float = 0.1) -> None:
+    """Sleep in small intervals to allow responsive cancellation.
+
+    Args:
+        total_seconds: Total time to sleep.
+        interval: Sleep interval (default 100ms for responsive cancellation).
+
+    Raises:
+        asyncio.CancelledError: If cancelled during sleep.
+    """
+    elapsed = 0.0
+    while elapsed < total_seconds:
+        await asyncio.sleep(min(interval, total_seconds - elapsed))
+        elapsed += interval
 
 
 class StubDesignWorker:
@@ -16,7 +51,7 @@ class StubDesignWorker:
     """
 
     async def run(self, operation_id: str) -> dict[str, Any]:
-        """Simulate design phase (~500ms).
+        """Simulate design phase.
 
         Args:
             operation_id: The operation ID for tracking.
@@ -24,7 +59,7 @@ class StubDesignWorker:
         Returns:
             Mock design result with strategy name, path, and token usage.
         """
-        await asyncio.sleep(0.5)
+        await _cancellable_sleep(_get_phase_delay())
         return {
             "success": True,
             "strategy_name": "stub_momentum_v1",
@@ -41,7 +76,7 @@ class StubTrainingWorker:
     """
 
     async def run(self, operation_id: str, strategy_path: str) -> dict[str, Any]:
-        """Simulate training phase (~500ms).
+        """Simulate training phase.
 
         Args:
             operation_id: The operation ID for tracking.
@@ -50,7 +85,7 @@ class StubTrainingWorker:
         Returns:
             Mock training result with accuracy, loss, and model path.
         """
-        await asyncio.sleep(0.5)
+        await _cancellable_sleep(_get_phase_delay())
         return {
             "success": True,
             "accuracy": 0.65,
@@ -67,7 +102,7 @@ class StubBacktestWorker:
     """
 
     async def run(self, operation_id: str, model_path: str) -> dict[str, Any]:
-        """Simulate backtest phase (~500ms).
+        """Simulate backtest phase.
 
         Args:
             operation_id: The operation ID for tracking.
@@ -76,7 +111,7 @@ class StubBacktestWorker:
         Returns:
             Mock backtest result with sharpe, win_rate, drawdown, return.
         """
-        await asyncio.sleep(0.5)
+        await _cancellable_sleep(_get_phase_delay())
         return {
             "success": True,
             "sharpe_ratio": 1.2,
@@ -93,7 +128,7 @@ class StubAssessmentWorker:
     """
 
     async def run(self, operation_id: str, results: dict[str, Any]) -> dict[str, Any]:
-        """Simulate assessment phase (~500ms).
+        """Simulate assessment phase.
 
         Args:
             operation_id: The operation ID for tracking.
@@ -102,7 +137,7 @@ class StubAssessmentWorker:
         Returns:
             Mock assessment with verdict, strengths, weaknesses, suggestions.
         """
-        await asyncio.sleep(0.5)
+        await _cancellable_sleep(_get_phase_delay())
         return {
             "success": True,
             "verdict": "promising",
