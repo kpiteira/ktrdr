@@ -33,7 +33,25 @@ Wired real `AgentDesignWorker` into the orchestrator, replacing stub.
 
 ---
 
-## Gotchas for Task 2.3+
+## Task 2.3 Completed
+
+Strategy tracking in parent metadata was already implemented in M1 (`_advance_to_next_phase`).
+Task 2.3 adds test coverage to verify all acceptance criteria.
+
+### Tests Added
+
+| Test | Verifies |
+|------|----------|
+| `test_stores_strategy_path_after_design` | `strategy_path` stored in parent metadata |
+| `test_status_returns_strategy_name_when_active` | Status endpoint returns `strategy_name` |
+
+### Key Finding
+
+No implementation was needed - functionality existed from M1 Task 1.10 (polling loop pattern).
+
+---
+
+## Gotchas for Task 2.4+
 
 1. **ToolExecutor state tracking** - The `ToolExecutor` now tracks `last_saved_strategy_name` and `last_saved_strategy_path`. These are set when `save_strategy_config` succeeds. The design worker reads these after the invoker completes.
 
