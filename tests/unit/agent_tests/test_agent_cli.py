@@ -1,10 +1,11 @@
-"""
-Unit tests for agent CLI commands.
+"""Unit tests for simplified agent CLI commands.
 
-Note: The main behavior tests for the CLI are now in test_agent_cli_api.py,
-which tests the API-based implementation.
+Tests verify:
+- ktrdr agent trigger - starts research cycle
+- ktrdr agent status - shows current state
+- No cancel command (use operations CLI)
 
-This file contains tests for CLI help output and basic structure.
+Task 1.6 of M1: Simplified CLI matching new API.
 """
 
 from typer.testing import CliRunner
@@ -26,17 +27,22 @@ class TestAgentCommandsHelp:
         assert "trigger" in result.output
 
     def test_status_help(self):
-        """Test that agent status --help shows options."""
+        """Test that agent status --help shows description."""
         result = runner.invoke(agent_app, ["status", "--help"])
 
         assert result.exit_code == 0
-        assert "verbose" in result.output.lower() or "-v" in result.output
+        assert "status" in result.output.lower()
 
     def test_trigger_help(self):
-        """Test that agent trigger --help shows options."""
+        """Test that agent trigger --help shows description."""
         result = runner.invoke(agent_app, ["trigger", "--help"])
 
         assert result.exit_code == 0
-        # Check for either verbose or dry-run options
-        output_lower = result.output.lower()
-        assert "dry" in output_lower or "verbose" in output_lower
+        assert "trigger" in result.output.lower() or "cycle" in result.output.lower()
+
+    def test_no_cancel_command(self):
+        """Test that cancel command is removed."""
+        result = runner.invoke(agent_app, ["cancel", "123"])
+
+        # Should fail - command doesn't exist
+        assert result.exit_code != 0

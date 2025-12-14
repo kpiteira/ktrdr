@@ -1,11 +1,10 @@
-"""
-Unit tests for agent CLI commands using API.
+"""Unit tests for simplified agent CLI commands using API.
 
-These tests verify that the CLI commands call the API endpoints instead
-of directly using the TriggerService and database.
+Tests verify that the CLI commands call the simplified API endpoints:
+- POST /agent/trigger (no params)
+- GET /agent/status (no params)
 
-Task 1.9 requirement: CLI `ktrdr agent trigger` and `ktrdr agent status`
-should call API endpoints, not direct service calls.
+Task 1.6 of M1: Simplified CLI matching new API contract.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -18,50 +17,67 @@ runner = CliRunner()
 
 
 class TestAgentStatusViaAPI:
-    """Tests for ktrdr agent status command using API."""
+    """Tests for ktrdr agent status command using simplified API."""
 
     def test_status_calls_api_endpoint(self):
         """Test that status command calls /agent/status API endpoint."""
         with patch("ktrdr.cli.agent_commands.AsyncCLIClient") as MockClient:
-            # Setup mock client
             mock_instance = MagicMock()
             mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
             mock_instance.__aexit__ = AsyncMock(return_value=None)
             mock_instance._make_request = AsyncMock(
                 return_value={
-                    "has_active_session": False,
-                    "session": None,
-                    "agent_enabled": True,
+                    "status": "idle",
+                    "last_cycle": None,
                 }
             )
             MockClient.return_value = mock_instance
 
             result = runner.invoke(agent_app, ["status"])
 
-            # Verify API was called
-            mock_instance._make_request.assert_called_once_with(
-                "GET", "/agent/status", params={"verbose": False}
-            )
+            # Verify API was called (no params now)
+            mock_instance._make_request.assert_called_once_with("GET", "/agent/status")
             assert result.exit_code == 0
 
-    def test_status_displays_active_session_from_api(self):
-        """Test that status displays active session info from API response."""
+    def test_status_displays_active_cycle(self):
+        """Test that status displays active cycle info from API response."""
         with patch("ktrdr.cli.agent_commands.AsyncCLIClient") as MockClient:
             mock_instance = MagicMock()
             mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
             mock_instance.__aexit__ = AsyncMock(return_value=None)
             mock_instance._make_request = AsyncMock(
                 return_value={
-                    "has_active_session": True,
-                    "session": {
-                        "id": 42,
-                        "phase": "designing",
-                        "strategy_name": None,
-                        "operation_id": None,
-                        "created_at": "2024-12-09T10:00:00Z",
-                        "updated_at": "2024-12-09T10:05:00Z",
+                    "status": "active",
+                    "operation_id": "op_agent_research_12345",
+                    "phase": "training",
+                    "progress": None,
+                    "strategy_name": "momentum_v1",
+                    "started_at": "2024-12-13T10:00:00Z",
+                }
+            )
+            MockClient.return_value = mock_instance
+
+            result = runner.invoke(agent_app, ["status"])
+
+            assert result.exit_code == 0
+            assert "active" in result.output.lower()
+            assert "training" in result.output.lower()
+
+    def test_status_displays_idle_with_last_cycle(self):
+        """Test that status displays last cycle info when idle."""
+        with patch("ktrdr.cli.agent_commands.AsyncCLIClient") as MockClient:
+            mock_instance = MagicMock()
+            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+            mock_instance.__aexit__ = AsyncMock(return_value=None)
+            mock_instance._make_request = AsyncMock(
+                return_value={
+                    "status": "idle",
+                    "last_cycle": {
+                        "operation_id": "op_agent_research_previous",
+                        "outcome": "completed",
+                        "strategy_name": "momentum_v1",
+                        "completed_at": "2024-12-13T12:00:00Z",
                     },
-                    "agent_enabled": True,
                 }
             )
             MockClient.return_value = mock_instance
@@ -69,35 +85,12 @@ class TestAgentStatusViaAPI:
             result = runner.invoke(agent_app, ["status"])
 
             assert result.exit_code == 0
-            assert "42" in result.output
-            assert "designing" in result.output.lower()
-
-    def test_status_verbose_passes_flag_to_api(self):
-        """Test that --verbose flag is passed to API."""
-        with patch("ktrdr.cli.agent_commands.AsyncCLIClient") as MockClient:
-            mock_instance = MagicMock()
-            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
-            mock_instance.__aexit__ = AsyncMock(return_value=None)
-            mock_instance._make_request = AsyncMock(
-                return_value={
-                    "has_active_session": False,
-                    "session": None,
-                    "agent_enabled": True,
-                }
-            )
-            MockClient.return_value = mock_instance
-
-            result = runner.invoke(agent_app, ["status", "--verbose"])
-
-            # Verify verbose flag was passed
-            mock_instance._make_request.assert_called_once_with(
-                "GET", "/agent/status", params={"verbose": True}
-            )
-            assert result.exit_code == 0
+            assert "idle" in result.output.lower()
+            assert "completed" in result.output.lower()
 
 
 class TestAgentTriggerViaAPI:
-    """Tests for ktrdr agent trigger command using API."""
+    """Tests for ktrdr agent trigger command using simplified API."""
 
     def test_trigger_calls_api_endpoint(self):
         """Test that trigger command calls /agent/trigger API endpoint."""
@@ -107,9 +100,8 @@ class TestAgentTriggerViaAPI:
             mock_instance.__aexit__ = AsyncMock(return_value=None)
             mock_instance._make_request = AsyncMock(
                 return_value={
-                    "success": True,
                     "triggered": True,
-                    "session_id": 42,
+                    "operation_id": "op_agent_research_12345",
                     "message": "Research cycle started",
                 }
             )
@@ -117,9 +109,9 @@ class TestAgentTriggerViaAPI:
 
             result = runner.invoke(agent_app, ["trigger"])
 
-            # Verify API was called
+            # Verify API was called (no params now)
             mock_instance._make_request.assert_called_once_with(
-                "POST", "/agent/trigger", params={"dry_run": False}
+                "POST", "/agent/trigger"
             )
             assert result.exit_code == 0
 
@@ -131,9 +123,8 @@ class TestAgentTriggerViaAPI:
             mock_instance.__aexit__ = AsyncMock(return_value=None)
             mock_instance._make_request = AsyncMock(
                 return_value={
-                    "success": True,
                     "triggered": True,
-                    "session_id": 42,
+                    "operation_id": "op_agent_research_12345",
                     "message": "Research cycle started",
                 }
             )
@@ -142,22 +133,20 @@ class TestAgentTriggerViaAPI:
             result = runner.invoke(agent_app, ["trigger"])
 
             assert result.exit_code == 0
-            # Should show success and session ID
-            assert "42" in result.output or "success" in result.output.lower()
+            assert "op_agent_research_12345" in result.output
 
-    def test_trigger_displays_not_triggered_reason(self):
-        """Test that trigger displays reason when not triggered."""
+    def test_trigger_displays_conflict_reason(self):
+        """Test that trigger displays reason when cycle already active."""
         with patch("ktrdr.cli.agent_commands.AsyncCLIClient") as MockClient:
             mock_instance = MagicMock()
             mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
             mock_instance.__aexit__ = AsyncMock(return_value=None)
             mock_instance._make_request = AsyncMock(
                 return_value={
-                    "success": True,
                     "triggered": False,
-                    "reason": "active_session_exists",
-                    "active_session_id": 41,
-                    "message": "Active session already exists",
+                    "reason": "active_cycle_exists",
+                    "operation_id": "op_agent_research_existing",
+                    "message": "Active cycle exists: op_agent_research_existing",
                 }
             )
             MockClient.return_value = mock_instance
@@ -165,34 +154,7 @@ class TestAgentTriggerViaAPI:
             result = runner.invoke(agent_app, ["trigger"])
 
             assert result.exit_code == 0
-            assert (
-                "active" in result.output.lower() or "exists" in result.output.lower()
-            )
-
-    def test_trigger_dry_run_passes_flag_to_api(self):
-        """Test that --dry-run flag is passed to API."""
-        with patch("ktrdr.cli.agent_commands.AsyncCLIClient") as MockClient:
-            mock_instance = MagicMock()
-            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
-            mock_instance.__aexit__ = AsyncMock(return_value=None)
-            mock_instance._make_request = AsyncMock(
-                return_value={
-                    "success": True,
-                    "triggered": False,
-                    "dry_run": True,
-                    "would_trigger": True,
-                    "message": "Dry run - would trigger new cycle",
-                }
-            )
-            MockClient.return_value = mock_instance
-
-            result = runner.invoke(agent_app, ["trigger", "--dry-run"])
-
-            # Verify dry_run flag was passed
-            mock_instance._make_request.assert_called_once_with(
-                "POST", "/agent/trigger", params={"dry_run": True}
-            )
-            assert result.exit_code == 0
+            assert "active" in result.output.lower() or "exists" in result.output.lower()
 
     def test_trigger_handles_api_error(self):
         """Test that trigger handles API errors gracefully."""
