@@ -27,12 +27,12 @@ def operations_service():
 
 
 @pytest.fixture
-def agent_session_metadata():
+def agent_research_metadata():
     """Create sample metadata for agent session operation."""
     return OperationMetadata(
         symbol="N/A",
         timeframe="N/A",
-        mode="agent_session",
+        mode="agent_research",
         parameters={"trigger_reason": "start_new_cycle"},
     )
 
@@ -49,28 +49,28 @@ def agent_design_metadata():
 
 
 class TestOperationTypeAgentSession:
-    """Test AGENT_SESSION operation type exists and works."""
+    """Test AGENT_RESEARCH operation type exists and works."""
 
-    def test_agent_session_type_exists(self):
-        """Test that AGENT_SESSION is a valid OperationType."""
-        # This test will FAIL until we add AGENT_SESSION to OperationType enum
-        assert hasattr(OperationType, "AGENT_SESSION")
-        assert OperationType.AGENT_SESSION.value == "agent_session"
+    def test_agent_research_type_exists(self):
+        """Test that AGENT_RESEARCH is a valid OperationType."""
+        # This test will FAIL until we add AGENT_RESEARCH to OperationType enum
+        assert hasattr(OperationType, "AGENT_RESEARCH")
+        assert OperationType.AGENT_RESEARCH.value == "agent_research"
 
     @pytest.mark.asyncio
-    async def test_create_agent_session_operation(
-        self, operations_service, agent_session_metadata
+    async def test_create_agent_research_operation(
+        self, operations_service, agent_research_metadata
     ):
-        """Test creating an AGENT_SESSION type operation."""
-        # This test will FAIL until AGENT_SESSION type is added
+        """Test creating an AGENT_RESEARCH type operation."""
+        # This test will FAIL until AGENT_RESEARCH type is added
         operation = await operations_service.create_operation(
-            operation_type=OperationType.AGENT_SESSION,
-            metadata=agent_session_metadata,
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=agent_research_metadata,
         )
 
         assert operation is not None
-        assert operation.operation_id.startswith("op_agent_session_")
-        assert operation.operation_type == OperationType.AGENT_SESSION
+        assert operation.operation_id.startswith("op_agent_research_")
+        assert operation.operation_type == OperationType.AGENT_RESEARCH
         assert operation.status == OperationStatus.PENDING
 
 
@@ -94,7 +94,7 @@ class TestParentOperationIdField:
 
     def test_operation_info_with_parent_set(self):
         """Test creating OperationInfo with parent_operation_id set."""
-        parent_id = "op_agent_session_20251211_123456"
+        parent_id = "op_agent_research_20251211_123456"
 
         # This will FAIL until parent_operation_id field is added
         operation = OperationInfo(
@@ -114,13 +114,13 @@ class TestCreateChildOperation:
 
     @pytest.mark.asyncio
     async def test_create_operation_with_parent_id(
-        self, operations_service, agent_session_metadata, agent_design_metadata
+        self, operations_service, agent_research_metadata, agent_design_metadata
     ):
         """Test creating a child operation linked to parent."""
         # First create parent
         parent = await operations_service.create_operation(
-            operation_type=OperationType.AGENT_SESSION,
-            metadata=agent_session_metadata,
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=agent_research_metadata,
         )
 
         # Create child with parent_operation_id
@@ -141,13 +141,13 @@ class TestGetChildrenOperations:
 
     @pytest.mark.asyncio
     async def test_get_children_returns_child_operations(
-        self, operations_service, agent_session_metadata, agent_design_metadata
+        self, operations_service, agent_research_metadata, agent_design_metadata
     ):
         """Test that get_children returns all child operations."""
         # Create parent
         parent = await operations_service.create_operation(
-            operation_type=OperationType.AGENT_SESSION,
-            metadata=agent_session_metadata,
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=agent_research_metadata,
         )
 
         # Create child
@@ -166,12 +166,12 @@ class TestGetChildrenOperations:
 
     @pytest.mark.asyncio
     async def test_get_children_returns_empty_for_no_children(
-        self, operations_service, agent_session_metadata
+        self, operations_service, agent_research_metadata
     ):
         """Test get_children returns empty list when no children."""
         parent = await operations_service.create_operation(
-            operation_type=OperationType.AGENT_SESSION,
-            metadata=agent_session_metadata,
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=agent_research_metadata,
         )
 
         children = await operations_service.get_children(parent.operation_id)
@@ -179,13 +179,13 @@ class TestGetChildrenOperations:
 
     @pytest.mark.asyncio
     async def test_get_children_returns_multiple_children_in_order(
-        self, operations_service, agent_session_metadata
+        self, operations_service, agent_research_metadata
     ):
         """Test get_children returns multiple children in creation order."""
         # Create parent
         parent = await operations_service.create_operation(
-            operation_type=OperationType.AGENT_SESSION,
-            metadata=agent_session_metadata,
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=agent_research_metadata,
         )
 
         # Create multiple children (simulating design → training → backtest)
@@ -220,13 +220,13 @@ class TestCancellationCascade:
 
     @pytest.mark.asyncio
     async def test_cancel_parent_cancels_running_children(
-        self, operations_service, agent_session_metadata, agent_design_metadata
+        self, operations_service, agent_research_metadata, agent_design_metadata
     ):
         """Test that cancelling parent cancels any running children."""
         # Create parent and start it
         parent = await operations_service.create_operation(
-            operation_type=OperationType.AGENT_SESSION,
-            metadata=agent_session_metadata,
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=agent_research_metadata,
         )
         parent_task = MagicMock()
         parent_task.done.return_value = False
@@ -260,13 +260,13 @@ class TestCancellationCascade:
 
     @pytest.mark.asyncio
     async def test_cancel_parent_skips_completed_children(
-        self, operations_service, agent_session_metadata, agent_design_metadata
+        self, operations_service, agent_research_metadata, agent_design_metadata
     ):
         """Test that completed children are not affected by parent cancellation."""
         # Create parent and start it
         parent = await operations_service.create_operation(
-            operation_type=OperationType.AGENT_SESSION,
-            metadata=agent_session_metadata,
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=agent_research_metadata,
         )
         parent_task = MagicMock()
         parent_task.done.return_value = False
@@ -329,13 +329,13 @@ class TestParentProgressAggregation:
 
     @pytest.mark.asyncio
     async def test_get_aggregated_progress_design_phase(
-        self, operations_service, agent_session_metadata
+        self, operations_service, agent_research_metadata
     ):
         """Test aggregated progress during design phase."""
         # Create parent
         parent = await operations_service.create_operation(
-            operation_type=OperationType.AGENT_SESSION,
-            metadata=agent_session_metadata,
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=agent_research_metadata,
         )
         parent_task = MagicMock()
         parent_task.done.return_value = False
@@ -364,13 +364,13 @@ class TestParentProgressAggregation:
 
     @pytest.mark.asyncio
     async def test_get_aggregated_progress_training_phase(
-        self, operations_service, agent_session_metadata
+        self, operations_service, agent_research_metadata
     ):
         """Test aggregated progress during training phase."""
         # Create parent
         parent = await operations_service.create_operation(
-            operation_type=OperationType.AGENT_SESSION,
-            metadata=agent_session_metadata,
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=agent_research_metadata,
         )
         parent_task = MagicMock()
         parent_task.done.return_value = False
@@ -409,13 +409,13 @@ class TestParentProgressAggregation:
 
     @pytest.mark.asyncio
     async def test_get_aggregated_progress_backtest_phase(
-        self, operations_service, agent_session_metadata
+        self, operations_service, agent_research_metadata
     ):
         """Test aggregated progress during backtest phase."""
         # Create parent
         parent = await operations_service.create_operation(
-            operation_type=OperationType.AGENT_SESSION,
-            metadata=agent_session_metadata,
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=agent_research_metadata,
         )
         parent_task = MagicMock()
         parent_task.done.return_value = False
@@ -465,13 +465,13 @@ class TestParentLifecycle:
 
     @pytest.mark.asyncio
     async def test_parent_stays_running_after_child_completes(
-        self, operations_service, agent_session_metadata
+        self, operations_service, agent_research_metadata
     ):
         """Test that parent stays RUNNING after design child completes."""
         # Create and start parent
         parent = await operations_service.create_operation(
-            operation_type=OperationType.AGENT_SESSION,
-            metadata=agent_session_metadata,
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=agent_research_metadata,
         )
         parent_task = MagicMock()
         parent_task.done.return_value = False
@@ -494,13 +494,13 @@ class TestParentLifecycle:
 
     @pytest.mark.asyncio
     async def test_complete_parent_when_all_children_complete(
-        self, operations_service, agent_session_metadata
+        self, operations_service, agent_research_metadata
     ):
         """Test completing parent marks it as completed."""
         # Create parent
         parent = await operations_service.create_operation(
-            operation_type=OperationType.AGENT_SESSION,
-            metadata=agent_session_metadata,
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=agent_research_metadata,
         )
         parent_task = MagicMock()
         parent_task.done.return_value = False
@@ -539,13 +539,13 @@ class TestParentLifecycle:
 
     @pytest.mark.asyncio
     async def test_fail_parent_when_child_fails(
-        self, operations_service, agent_session_metadata
+        self, operations_service, agent_research_metadata
     ):
         """Test that failing a child can optionally fail the parent."""
         # Create parent
         parent = await operations_service.create_operation(
-            operation_type=OperationType.AGENT_SESSION,
-            metadata=agent_session_metadata,
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=agent_research_metadata,
         )
         parent_task = MagicMock()
         parent_task.done.return_value = False

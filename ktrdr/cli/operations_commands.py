@@ -414,9 +414,9 @@ async def _get_operation_status_async(operation_id: str, verbose: bool):
 
             console.print(result_table)
 
-        # Task 1.15: Show children tree for AGENT_SESSION operations
+        # Show children tree for AGENT_RESEARCH operations (orchestrator)
         op_type = operation.get("operation_type", "")
-        if op_type == "agent_session" or op_type == "AGENT_SESSION":
+        if op_type == "agent_research" or op_type == "AGENT_RESEARCH":
             try:
                 children_response = await api_client.get_operation_children(
                     operation_id

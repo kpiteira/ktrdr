@@ -30,9 +30,12 @@ class OperationType(str, Enum):
     BACKTESTING = "backtesting"
     INDICATOR_COMPUTE = "indicator_compute"
     FUZZY_ANALYSIS = "fuzzy_analysis"
-    AGENT_DESIGN = "agent_design"  # Agent strategy design phase operation
-    AGENT_SESSION = "agent_session"  # Parent operation for full agent research cycle
     DUMMY = "dummy"
+
+    # Agent types
+    AGENT_RESEARCH = "agent_research"  # Orchestrator operation for research cycles
+    AGENT_DESIGN = "agent_design"  # Claude design phase operation
+    AGENT_ASSESSMENT = "agent_assessment"  # Claude assessment phase operation
 
 
 class OperationProgress(BaseModel):
