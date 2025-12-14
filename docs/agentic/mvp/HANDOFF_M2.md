@@ -51,38 +51,25 @@ No implementation was needed - functionality existed from M1 Task 1.10 (polling 
 
 ---
 
-## Gotchas for Task 2.4+
+## Task 2.4 Completed
 
-1. **ToolExecutor state tracking** - The `ToolExecutor` now tracks `last_saved_strategy_name` and `last_saved_strategy_path`. These are set when `save_strategy_config` succeeds. The design worker reads these after the invoker completes.
+Indicator/symbol discovery tools were already implemented prior to M2.
 
-2. **Logger style** - Use f-string formatting with `ktrdr.get_logger`, NOT structlog-style keyword args:
-   ```python
-   # Correct
-   logger.info(f"Phase completed: {phase}")
+### Existing Implementation
 
-   # Wrong - will cause TypeError
-   logger.info("Phase completed", phase=phase)
-   ```
+| Handler | Location | Behavior |
+|---------|----------|----------|
+| `_handle_get_available_indicators` | `executor.py:380` | Calls real API via `get_indicators_from_api()` |
+| `_handle_get_available_symbols` | `executor.py:388` | Calls real API via `get_symbols_from_api()` |
 
-3. **OperationMetadata type ignore** - Use `# type: ignore[call-arg]` when creating OperationMetadata with only `parameters`:
-   ```python
-   metadata=OperationMetadata(  # type: ignore[call-arg]
-       parameters={"parent_operation_id": operation_id}
-   )
-   ```
+Tests: `test_get_indicators_calls_api`, `test_get_symbols_calls_api`
 
-### Entry Points for Task 2.2
+---
 
-Wire the design worker into the orchestrator:
+## Gotchas for Task 2.5+
 
-```python
-# In agent_service.py
-from ktrdr.agents.workers.design_worker import AgentDesignWorker
+1. **ToolExecutor state tracking** - `last_saved_strategy_name` and `last_saved_strategy_path` are set when `save_strategy_config` succeeds.
 
-# Replace StubDesignWorker with AgentDesignWorker
-design_worker=AgentDesignWorker(self.ops)
-```
+2. **Logger style** - Use f-string formatting with `ktrdr.get_logger`, NOT structlog-style keyword args.
 
-The `AgentDesignWorker.run()` signature matches the stub:
-- Input: `operation_id: str` (the parent AGENT_RESEARCH operation ID)
-- Output: `dict` with `success`, `strategy_name`, `strategy_path`, `input_tokens`, `output_tokens`
+3. **OperationMetadata type ignore** - Use `# type: ignore[call-arg]` when creating OperationMetadata with only `parameters`.
