@@ -957,11 +957,11 @@ except asyncio.CancelledError:
 - On cancellation, cancel the child operation before re-raising
 - Child operations should also handle CancelledError properly
 
-**Acceptance Criteria**:
-- [ ] Cancelling parent cancels active child
-- [ ] Both parent and child marked CANCELLED
-- [ ] No orphan operations left running
-- [ ] Unit test verifies propagation
+**Acceptance Criteria**: ✅ COMPLETED (implemented in Task 1.10)
+- [x] Cancelling parent cancels active child (via `_cancel_current_child()`)
+- [x] Both parent and child marked CANCELLED
+- [x] No orphan operations left running (task cancelled and awaited)
+- [x] Unit test verifies propagation (`test_cancellation_propagates_to_child`)
 
 ---
 
