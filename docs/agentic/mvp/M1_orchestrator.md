@@ -869,14 +869,14 @@ while True:
 **Environment Variables**:
 - `AGENT_POLL_INTERVAL`: Seconds between status checks (default: 5 for stubs, 300 for real)
 
-**Acceptance Criteria**:
-- [ ] Orchestrator uses polling loop per ARCHITECTURE.md
-- [ ] Child workers started as separate operations/tasks
-- [ ] Parent tracks child operation IDs in metadata
-- [ ] Poll interval is configurable
-- [ ] Cancellation propagates to active child
-- [ ] All existing tests still pass
-- [ ] E2E test still shows phase progression
+**Acceptance Criteria**: ✅ COMPLETED
+- [x] Orchestrator uses polling loop per ARCHITECTURE.md
+- [x] Child workers started as separate operations/tasks
+- [x] Parent tracks child operation IDs in metadata
+- [x] Poll interval is configurable (AGENT_POLL_INTERVAL env var)
+- [x] Cancellation propagates to active child
+- [x] All existing tests still pass (2303 unit tests)
+- [x] E2E test still shows phase progression (designing→training→backtesting→assessing→completed)
 
 ---
 
