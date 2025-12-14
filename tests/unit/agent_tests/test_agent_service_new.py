@@ -372,3 +372,74 @@ class TestAgentServiceNoResearchAgentsImports:
                     assert not node.module.startswith(
                         "research_agents"
                     ), f"Found research_agents import: from {node.module}"
+
+
+class TestAgentServiceDesignWorkerWiring:
+    """Test Task 2.2: Real design worker wiring.
+
+    Verifies that AgentService uses AgentDesignWorker (not stub) and
+    that stub workers are still used for other phases.
+    """
+
+    def test_get_worker_uses_real_design_worker(self):
+        """AgentService._get_worker() returns orchestrator with real AgentDesignWorker."""
+        from ktrdr.agents.workers.design_worker import AgentDesignWorker
+        from ktrdr.api.services.agent_service import AgentService
+
+        mock_ops = AsyncMock()
+        service = AgentService(operations_service=mock_ops)
+
+        worker = service._get_worker()
+
+        # Design worker should be the real implementation
+        assert isinstance(worker.design_worker, AgentDesignWorker)
+
+    def test_get_worker_still_uses_stub_training_worker(self):
+        """AgentService._get_worker() still uses StubTrainingWorker."""
+        from ktrdr.agents.workers.stubs import StubTrainingWorker
+        from ktrdr.api.services.agent_service import AgentService
+
+        mock_ops = AsyncMock()
+        service = AgentService(operations_service=mock_ops)
+
+        worker = service._get_worker()
+
+        assert isinstance(worker.training_worker, StubTrainingWorker)
+
+    def test_get_worker_still_uses_stub_backtest_worker(self):
+        """AgentService._get_worker() still uses StubBacktestWorker."""
+        from ktrdr.agents.workers.stubs import StubBacktestWorker
+        from ktrdr.api.services.agent_service import AgentService
+
+        mock_ops = AsyncMock()
+        service = AgentService(operations_service=mock_ops)
+
+        worker = service._get_worker()
+
+        assert isinstance(worker.backtest_worker, StubBacktestWorker)
+
+    def test_get_worker_still_uses_stub_assessment_worker(self):
+        """AgentService._get_worker() still uses StubAssessmentWorker."""
+        from ktrdr.agents.workers.stubs import StubAssessmentWorker
+        from ktrdr.api.services.agent_service import AgentService
+
+        mock_ops = AsyncMock()
+        service = AgentService(operations_service=mock_ops)
+
+        worker = service._get_worker()
+
+        assert isinstance(worker.assessment_worker, StubAssessmentWorker)
+
+    def test_design_worker_receives_operations_service(self):
+        """AgentDesignWorker is initialized with the operations service."""
+        from ktrdr.agents.workers.design_worker import AgentDesignWorker
+        from ktrdr.api.services.agent_service import AgentService
+
+        mock_ops = AsyncMock()
+        service = AgentService(operations_service=mock_ops)
+
+        worker = service._get_worker()
+
+        # Design worker should have the same ops service
+        assert isinstance(worker.design_worker, AgentDesignWorker)
+        assert worker.design_worker.ops is mock_ops

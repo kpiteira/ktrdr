@@ -8,11 +8,11 @@ import asyncio
 from typing import Any
 
 from ktrdr import get_logger
+from ktrdr.agents.workers.design_worker import AgentDesignWorker
 from ktrdr.agents.workers.research_worker import AgentResearchWorker
 from ktrdr.agents.workers.stubs import (
     StubAssessmentWorker,
     StubBacktestWorker,
-    StubDesignWorker,
     StubTrainingWorker,
 )
 from ktrdr.api.models.operations import (
@@ -54,7 +54,9 @@ class AgentService:
         if self._worker is None:
             self._worker = AgentResearchWorker(
                 operations_service=self.ops,
-                design_worker=StubDesignWorker(),
+                design_worker=AgentDesignWorker(
+                    self.ops
+                ),  # Real Claude worker (Task 2.2)
                 training_worker=StubTrainingWorker(),
                 backtest_worker=StubBacktestWorker(),
                 assessment_worker=StubAssessmentWorker(),
