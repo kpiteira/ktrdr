@@ -880,6 +880,169 @@ while True:
 
 ---
 
+## Task 1.11: Implement Quality Gates
+
+**File(s)**: `ktrdr/agents/workers/research_worker.py`, `ktrdr/agents/gates.py`
+**Type**: CODING
+**Priority**: HIGH — Required by ARCHITECTURE.md
+
+**Problem**: Orchestrator proceeds through all phases regardless of results. ARCHITECTURE.md specifies quality gates between training→backtest and backtest→assessment.
+
+**Spec (ARCHITECTURE.md)**:
+
+Training Gate — Fail cycle if:
+- Accuracy below 45%
+- Final loss above 0.8
+- Loss didn't decrease by at least 20%
+
+Backtest Gate — Fail cycle if:
+- Win rate below 45%
+- Max drawdown above 40%
+- Sharpe ratio below -0.5
+
+**Implementation Notes**:
+
+```python
+# ktrdr/agents/gates.py already exists with check_training_gate() and check_backtest_gate()
+# Just need to call them in the orchestrator
+
+# In research_worker.py after training completes:
+from ktrdr.agents.gates import check_training_gate, check_backtest_gate
+
+passed, reason = check_training_gate(training_result)
+if not passed:
+    raise GateFailedError(f"Training gate failed: {reason}")
+
+# After backtest completes:
+passed, reason = check_backtest_gate(backtest_result)
+if not passed:
+    raise GateFailedError(f"Backtest gate failed: {reason}")
+```
+
+**Acceptance Criteria**:
+- [ ] Training gate checked after training phase
+- [ ] Backtest gate checked after backtest phase
+- [ ] Gate failure marks operation as FAILED with reason
+- [ ] Gate failure stops cycle (doesn't proceed to next phase)
+- [ ] Unit tests for gate integration
+
+---
+
+## Task 1.12: Fix Cancellation Propagation
+
+**File(s)**: `ktrdr/agents/workers/research_worker.py`
+**Type**: CODING
+**Priority**: HIGH — Current impl leaves orphan child operations
+
+**Problem**: When parent operation is cancelled, child operation continues running.
+
+**Spec (ARCHITECTURE.md)**:
+```python
+except asyncio.CancelledError:
+    child_op_id = self._get_current_child_op_id(op)
+    if child_op_id:
+        await self.ops.cancel_operation(child_op_id, "Parent cancelled")
+    raise
+```
+
+**Current Code**:
+```python
+except asyncio.CancelledError:
+    logger.info(f"Research cycle cancelled: {operation_id}")
+    raise  # Child left running!
+```
+
+**Implementation Notes**:
+- Track current child operation ID in instance variable
+- On cancellation, cancel the child operation before re-raising
+- Child operations should also handle CancelledError properly
+
+**Acceptance Criteria**:
+- [ ] Cancelling parent cancels active child
+- [ ] Both parent and child marked CANCELLED
+- [ ] No orphan operations left running
+- [ ] Unit test verifies propagation
+
+---
+
+## Task 1.13: Complete Metadata Contract
+
+**File(s)**:
+- `ktrdr/agents/workers/research_worker.py`
+- `ktrdr/agents/workers/stubs.py`
+- `ktrdr/api/services/agent_service.py`
+
+**Type**: CODING
+**Priority**: MEDIUM — Status response incomplete per ARCHITECTURE.md
+
+**Problem**: Several fields missing from metadata and status response.
+
+**Missing from status response**:
+```python
+# ARCHITECTURE.md shows:
+{
+    "child_operation_id": "op_training_...",  # MISSING
+}
+```
+
+**Missing from parent metadata**:
+```python
+# ARCHITECTURE.md shows these should be stored:
+{
+    "strategy_name": "...",
+    "strategy_path": "...",
+    "training_result": {...},
+    "backtest_result": {...},
+    "assessment_verdict": "...",
+}
+```
+
+**Missing from stub assessment result**:
+```python
+# ARCHITECTURE.md shows:
+{
+    "assessment_path": "/app/strategies/.../assessment.json",  # MISSING
+}
+```
+
+**Implementation Notes**:
+
+1. In `research_worker.py`, store results in parent metadata:
+```python
+parent_op.metadata.parameters["strategy_name"] = design_result["strategy_name"]
+parent_op.metadata.parameters["training_result"] = training_result
+# etc.
+```
+
+2. In `agent_service.py`, add child_operation_id to status:
+```python
+# Find current child from parent metadata
+child_op_id = active.metadata.parameters.get(f"{phase}_op_id")
+return {
+    "child_operation_id": child_op_id,
+    ...
+}
+```
+
+3. In `stubs.py`, add assessment_path:
+```python
+return {
+    "assessment_path": "/app/strategies/stub_momentum_v1/assessment.json",
+    ...
+}
+```
+
+**Acceptance Criteria**:
+- [ ] Status response includes child_operation_id when active
+- [ ] Parent metadata stores strategy_name after design
+- [ ] Parent metadata stores training_result after training
+- [ ] Parent metadata stores backtest_result after backtest
+- [ ] Parent metadata stores assessment_verdict after assessment
+- [ ] Stub assessment returns assessment_path
+- [ ] Unit tests verify metadata contract
+
+---
+
 ## Milestone 1 Verification Script
 
 ```bash
