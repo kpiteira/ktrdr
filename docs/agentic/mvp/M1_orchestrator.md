@@ -1032,14 +1032,14 @@ return {
 }
 ```
 
-**Acceptance Criteria**:
-- [ ] Status response includes child_operation_id when active
-- [ ] Parent metadata stores strategy_name after design
-- [ ] Parent metadata stores training_result after training
-- [ ] Parent metadata stores backtest_result after backtest
-- [ ] Parent metadata stores assessment_verdict after assessment
-- [ ] Stub assessment returns assessment_path
-- [ ] Unit tests verify metadata contract
+**Acceptance Criteria**: ✅ COMPLETED
+- [x] Status response includes child_operation_id when active
+- [x] Parent metadata stores strategy_name after design
+- [x] Parent metadata stores training_result after training
+- [x] Parent metadata stores backtest_result after backtest
+- [x] Parent metadata stores assessment_verdict after assessment
+- [x] Stub assessment returns assessment_path
+- [x] Unit tests verify metadata contract (6 tests in TestMetadataContract + TestAgentServiceMetadataContract)
 
 ---
 

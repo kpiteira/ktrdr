@@ -159,10 +159,14 @@ class AgentResearchWorker:
                     result = child_op.result_summary or {}
 
                     if phase == "assessing":
-                        # All phases complete
+                        # All phases complete - store verdict and return
                         parent = await self.ops.get_operation(operation_id)
                         strategy_name = parent.metadata.parameters.get(
                             "strategy_name", "unknown"
+                        )
+                        # Store assessment verdict in parent metadata
+                        parent.metadata.parameters["assessment_verdict"] = result.get(
+                            "verdict", "unknown"
                         )
                         return {
                             "success": True,

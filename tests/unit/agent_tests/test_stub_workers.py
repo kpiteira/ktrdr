@@ -178,3 +178,12 @@ class TestStubAssessmentWorker:
         elapsed = time.time() - start
 
         assert 0.4 <= elapsed <= 0.7, f"Expected ~500ms delay, got {elapsed*1000:.0f}ms"
+
+    @pytest.mark.asyncio
+    async def test_returns_assessment_path(self):
+        """Assessment worker should return assessment_path per ARCHITECTURE.md."""
+        worker = StubAssessmentWorker()
+        result = await worker.run("op_test_123", {})
+
+        assert "assessment_path" in result
+        assert result["assessment_path"].endswith(".json")

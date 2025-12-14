@@ -721,3 +721,110 @@ class TestQualityGateIntegration:
 
         assert result["success"] is True
         assert "verdict" in result  # Reached assessment phase
+
+
+class TestMetadataContract:
+    """Test metadata contract per ARCHITECTURE.md Task 1.13.
+
+    Parent operation metadata should store results from each phase.
+    """
+
+    @pytest.mark.asyncio
+    async def test_stores_strategy_name_after_design(
+        self, mock_operations_service, stub_workers
+    ):
+        """Parent metadata stores strategy_name after design phase."""
+        parent_op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "idle"}),
+        )
+
+        worker = AgentResearchWorker(
+            operations_service=mock_operations_service,
+            design_worker=stub_workers["design"],
+            training_worker=stub_workers["training"],
+            backtest_worker=stub_workers["backtest"],
+            assessment_worker=stub_workers["assessment"],
+        )
+
+        await worker.run(parent_op.operation_id)
+
+        parent = await mock_operations_service.get_operation(parent_op.operation_id)
+        assert "strategy_name" in parent.metadata.parameters
+        assert parent.metadata.parameters["strategy_name"] == "stub_momentum_v1"
+
+    @pytest.mark.asyncio
+    async def test_stores_training_result_after_training(
+        self, mock_operations_service, stub_workers
+    ):
+        """Parent metadata stores training_result after training phase."""
+        parent_op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "idle"}),
+        )
+
+        worker = AgentResearchWorker(
+            operations_service=mock_operations_service,
+            design_worker=stub_workers["design"],
+            training_worker=stub_workers["training"],
+            backtest_worker=stub_workers["backtest"],
+            assessment_worker=stub_workers["assessment"],
+        )
+
+        await worker.run(parent_op.operation_id)
+
+        parent = await mock_operations_service.get_operation(parent_op.operation_id)
+        assert "training_result" in parent.metadata.parameters
+        training_result = parent.metadata.parameters["training_result"]
+        assert "accuracy" in training_result
+        assert "final_loss" in training_result
+
+    @pytest.mark.asyncio
+    async def test_stores_backtest_result_after_backtest(
+        self, mock_operations_service, stub_workers
+    ):
+        """Parent metadata stores backtest_result after backtest phase."""
+        parent_op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "idle"}),
+        )
+
+        worker = AgentResearchWorker(
+            operations_service=mock_operations_service,
+            design_worker=stub_workers["design"],
+            training_worker=stub_workers["training"],
+            backtest_worker=stub_workers["backtest"],
+            assessment_worker=stub_workers["assessment"],
+        )
+
+        await worker.run(parent_op.operation_id)
+
+        parent = await mock_operations_service.get_operation(parent_op.operation_id)
+        assert "backtest_result" in parent.metadata.parameters
+        backtest_result = parent.metadata.parameters["backtest_result"]
+        assert "sharpe_ratio" in backtest_result
+        assert "win_rate" in backtest_result
+
+    @pytest.mark.asyncio
+    async def test_stores_assessment_verdict_after_assessment(
+        self, mock_operations_service, stub_workers
+    ):
+        """Parent metadata stores assessment_verdict after assessment phase."""
+        parent_op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "idle"}),
+        )
+
+        worker = AgentResearchWorker(
+            operations_service=mock_operations_service,
+            design_worker=stub_workers["design"],
+            training_worker=stub_workers["training"],
+            backtest_worker=stub_workers["backtest"],
+            assessment_worker=stub_workers["assessment"],
+        )
+
+        await worker.run(parent_op.operation_id)
+
+        parent = await mock_operations_service.get_operation(parent_op.operation_id)
+        assert "assessment_verdict" in parent.metadata.parameters
+        assert parent.metadata.parameters["assessment_verdict"] == "promising"

@@ -144,6 +144,7 @@ class StubAssessmentWorker:
             "strengths": ["Good risk management", "Consistent returns"],
             "weaknesses": ["Limited sample size"],
             "suggestions": ["Test with longer timeframe"],
+            "assessment_path": "/app/strategies/stub_momentum_v1/assessment.json",
             "input_tokens": 3000,
             "output_tokens": 1500,
         }

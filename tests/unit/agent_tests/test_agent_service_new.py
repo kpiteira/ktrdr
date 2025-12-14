@@ -283,6 +283,72 @@ class TestAgentServiceGetStatus:
         assert status["last_cycle"]["strategy_name"] == "test_strategy_v1"
 
 
+class TestAgentServiceMetadataContract:
+    """Test metadata contract per ARCHITECTURE.md Task 1.13.
+
+    Status response should include child_operation_id when active.
+    """
+
+    @pytest.mark.asyncio
+    async def test_status_includes_child_operation_id_when_active(
+        self, mock_operations_service
+    ):
+        """Status response includes child_operation_id when cycle is active."""
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        # Create a running operation with child op ID in metadata
+        op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(
+                parameters={
+                    "phase": "training",
+                    "training_op_id": "op_training_123",
+                }
+            ),
+        )
+        mock_operations_service._operations[op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+
+        status = await service.get_status()
+
+        assert status["status"] == "active"
+        assert "child_operation_id" in status
+        assert status["child_operation_id"] == "op_training_123"
+
+    @pytest.mark.asyncio
+    async def test_status_child_operation_id_matches_current_phase(
+        self, mock_operations_service
+    ):
+        """child_operation_id matches the current phase's child operation."""
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        # Create operation in backtesting phase
+        op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(
+                parameters={
+                    "phase": "backtesting",
+                    "design_op_id": "op_agent_design_1",
+                    "training_op_id": "op_training_2",
+                    "backtest_op_id": "op_backtesting_3",
+                }
+            ),
+        )
+        mock_operations_service._operations[op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+
+        status = await service.get_status()
+
+        # Should return the backtest child, not design or training
+        assert status["child_operation_id"] == "op_backtesting_3"
+
+
 class TestAgentServiceNoResearchAgentsImports:
     """Verify no imports from research_agents package."""
 

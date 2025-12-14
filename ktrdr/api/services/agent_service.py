@@ -126,10 +126,15 @@ class AgentService:
         active = await self._get_active_research_op()
 
         if active:
+            # Get child operation ID for current phase
+            phase = active.metadata.parameters.get("phase", "unknown")
+            child_op_id = self._get_child_op_id_for_phase(active, phase)
+
             return {
                 "status": "active",
                 "operation_id": active.operation_id,
-                "phase": active.metadata.parameters.get("phase", "unknown"),
+                "phase": phase,
+                "child_operation_id": child_op_id,
                 "progress": active.progress.model_dump() if active.progress else None,
                 "strategy_name": active.metadata.parameters.get("strategy_name"),
                 "started_at": (
@@ -195,6 +200,27 @@ class AgentService:
             )
             if ops:
                 return ops[0]
+        return None
+
+    def _get_child_op_id_for_phase(self, op: Any, phase: str) -> str | None:
+        """Get child operation ID for the given phase.
+
+        Args:
+            op: Parent operation with metadata.
+            phase: Current phase name.
+
+        Returns:
+            Child operation ID or None if not found.
+        """
+        phase_to_key = {
+            "designing": "design_op_id",
+            "training": "training_op_id",
+            "backtesting": "backtest_op_id",
+            "assessing": "assessment_op_id",
+        }
+        key = phase_to_key.get(phase)
+        if key:
+            return op.metadata.parameters.get(key)
         return None
 
 
