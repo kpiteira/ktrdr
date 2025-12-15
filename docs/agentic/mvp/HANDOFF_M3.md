@@ -21,7 +21,56 @@ Created `TrainingWorkerAdapter` that bridges agent orchestrator to existing Trai
 
 ---
 
-## Gotchas for M3 Tasks 3.2-3.4
+## Task 3.2 (Already Implemented in M1)
+
+Training gate was already implemented in M1 Task 1.11. Located in `research_worker.py::_advance_to_next_phase()`.
+
+---
+
+## Task 3.3 Completed
+
+Wired `TrainingWorkerAdapter` into orchestrator replacing `StubTrainingWorker`.
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `ktrdr/api/services/agent_service.py` | Replace StubTrainingWorker with TrainingWorkerAdapter |
+| `tests/unit/agent_tests/test_agent_service_new.py` | Update test to verify TrainingWorkerAdapter |
+
+---
+
+## Task 3.4 Completed
+
+Added integration tests for training gate evaluation.
+
+### Files Created
+
+| File | Description |
+|------|-------------|
+| `tests/integration/agent_tests/test_agent_training_gate.py` | 5 integration tests |
+
+### Tests
+
+- Gate failure with low accuracy
+- Gate pass with good metrics
+- Gate failure with high loss
+- Gate failure with insufficient improvement
+- Gate reason includes threshold values
+
+---
+
+## M3 Complete
+
+All 4 tasks completed. The agent now:
+1. Designs strategy via Claude (M2)
+2. Trains model via TrainingService (M3)
+3. Evaluates training quality gate (M1/M3)
+4. Continues to backtest if gate passes
+
+---
+
+## Gotchas for M4+
 
 1. **Circular import avoidance** - TrainingService import causes circular dependency. Solution: Use `Protocol` for type hints and lazy import in property getter.
 
@@ -29,12 +78,7 @@ Created `TrainingWorkerAdapter` that bridges agent orchestrator to existing Trai
 
 3. **result_summary can be None** - OperationInfo.result_summary is Optional. Guard with `result_summary = op.result_summary or {}`.
 
-4. **Protocol type: ignore** - mypy needs `# type: ignore[assignment]` and `# type: ignore[return-value]` when working with Protocol-based injection.
-
-5. **Poll interval** - Default is 10 seconds. For tests, set `adapter.POLL_INTERVAL = 0.01` to speed up.
-
----
-
-## Next: Task 3.2 (Training Gate)
-
-Wire `check_training_gate()` from `ktrdr/agents/gates.py` into `research_worker.py` after training completes.
+4. **Gate reason formats**:
+   - `accuracy_below_threshold (35.0% < 45%)`
+   - `loss_too_high (0.900 > 0.8)`
+   - `insufficient_loss_decrease (6.7% < 20%)`
