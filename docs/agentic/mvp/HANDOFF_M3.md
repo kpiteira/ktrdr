@@ -82,3 +82,39 @@ All 4 tasks completed. The agent now:
    - `accuracy_below_threshold (35.0% < 45%)`
    - `loss_too_high (0.900 > 0.8)`
    - `insufficient_loss_decrease (6.7% < 20%)`
+
+---
+
+## Bug Fixes Applied (Post-M3)
+
+### Strategy Validation Fix (commit e9edfbf)
+
+**Issue**: Claude-designed strategies failed TrainingService validation due to case mismatch.
+
+**Root Cause**: API returns PascalCase indicator names (e.g., `Ichimoku`), Claude uses these in strategies, but fuzzy set keys use lowercase `feature_id` (e.g., `ichimoku_9`). The validation compared base names case-sensitively.
+
+**Fix**: Modified `_validate_strategy_config` in `ktrdr/api/endpoints/strategies.py` to extract `feature_id` from indicators and include them in valid targets for fuzzy set validation.
+
+### Circular Import Fix (commit 1b26892)
+
+**Issue**: Training worker failed with `ImportError: cannot import name 'TrainingOperationContext'`.
+
+**Root Cause**: Import chain: `context.py → strategies.py → endpoints/__init__.py → models.py → training_service.py → training/__init__.py → context.py`
+
+**Fix**: Made `_validate_strategy_config` import lazy (inside function) in `context.py`.
+
+---
+
+## Known Issues for Future
+
+### Data Availability for Designed Strategies
+
+**Issue**: Claude may design strategies using symbol/timeframe combinations that aren't available in the training worker's data cache.
+
+**Example**: Strategy designed with `EURUSD 4h` fails because that data isn't pre-loaded.
+
+**Future Fix Options**:
+
+1. Pre-load common symbol/timeframe combinations into training containers
+2. Add `list_available_data` tool to design phase so Claude knows what's available
+3. Add data availability check before training starts with helpful error message
