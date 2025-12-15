@@ -446,15 +446,17 @@ def _validate_strategy_config(
                 )
             )
         else:
-            # Get list of indicator names and expected derived metrics
+            # Get list of indicator names, feature_ids, and expected derived metrics
+            # feature_id is the source of truth for fuzzy set keys
             indicator_names = []
+            indicator_feature_ids = []
             if isinstance(indicator_configs, list):
                 for indicator_config in indicator_configs:
-                    if (
-                        isinstance(indicator_config, dict)
-                        and "name" in indicator_config
-                    ):
-                        indicator_names.append(indicator_config["name"])
+                    if isinstance(indicator_config, dict):
+                        if "name" in indicator_config:
+                            indicator_names.append(indicator_config["name"])
+                        if "feature_id" in indicator_config:
+                            indicator_feature_ids.append(indicator_config["feature_id"])
 
             # Expected derived metrics from complex indicators
             expected_derived = set()
@@ -472,9 +474,15 @@ def _validate_strategy_config(
                         expected_derived.add("squeeze_intensity")
 
             # Build set of all possible valid targets for fuzzy sets
-            # Includes: indicator names, derived metrics, and price data columns
+            # Includes: feature_ids (primary), indicator names, derived metrics, and price data columns
+            # feature_id is the source of truth - fuzzy set keys should match feature_ids directly
             all_possible_targets = (
-                set(indicator_names)
+                set(
+                    indicator_feature_ids
+                )  # Primary: feature_ids are the source of truth
+                | set(
+                    indicator_names
+                )  # Fallback: indicator names for backward compatibility
                 | expected_derived
                 | {
                     "open",
@@ -509,6 +517,7 @@ def _validate_strategy_config(
                         details={
                             "invalid_references": invalid_fuzzy_refs,
                             "valid_targets": sorted(all_possible_targets),
+                            "indicator_feature_ids": indicator_feature_ids,
                             "strategy_indicators": indicator_names,
                             "derived_metrics": sorted(expected_derived),
                         },
