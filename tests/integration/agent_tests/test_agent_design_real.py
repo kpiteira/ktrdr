@@ -24,6 +24,10 @@ pytestmark = [
         not os.getenv("ANTHROPIC_API_KEY"),
         reason="ANTHROPIC_API_KEY not set",
     ),
+    pytest.mark.skipif(
+        not os.getenv("AGENT_E2E_REAL_INVOKE"),
+        reason="Set AGENT_E2E_REAL_INVOKE=true to run real Claude tests",
+    ),
 ]
 
 
