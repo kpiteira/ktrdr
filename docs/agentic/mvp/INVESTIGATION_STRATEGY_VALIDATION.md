@@ -2,7 +2,7 @@
 
 **Date**: 2025-12-15
 **Issue**: Claude-designed strategies fail TrainingService validation
-**Status**: Root cause identified, fix options documented
+**Status**: ✅ FIXED (commit e9edfbf)
 
 ---
 
