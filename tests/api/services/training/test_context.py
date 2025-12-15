@@ -45,8 +45,9 @@ class TestBuildTrainingContext:
     def test_successful_context_build(self, strategy_yaml: Path):
         from ktrdr.api.services.training.context import build_training_context
 
+        # Patch at the source since context.py uses lazy import
         with patch(
-            "ktrdr.api.services.training.context._validate_strategy_config",
+            "ktrdr.api.endpoints.strategies._validate_strategy_config",
             return_value=[],
         ):
             context = build_training_context(
@@ -93,8 +94,9 @@ class TestBuildTrainingContext:
     def test_validation_failure(self, strategy_yaml: Path):
         from ktrdr.api.services.training.context import build_training_context
 
+        # Patch at the source since context.py uses lazy import
         with patch(
-            "ktrdr.api.services.training.context._validate_strategy_config",
+            "ktrdr.api.endpoints.strategies._validate_strategy_config",
             return_value=[make_issue("broken config")],
         ):
             with pytest.raises(ConfigurationError, match="Strategy validation failed"):

@@ -12,7 +12,6 @@ from typing import Any
 
 import yaml
 
-from ktrdr.api.endpoints.strategies import _validate_strategy_config
 from ktrdr.api.models.operations import OperationMetadata
 from ktrdr.errors import ConfigurationError, ValidationError
 
@@ -212,6 +211,11 @@ def _load_strategy_config(strategy_path: Path) -> dict[str, Any]:
 
 def _validate_strategy(strategy_config: dict[str, Any], strategy_name: str) -> None:
     """Run shared strategy validation and raise ConfigurationError on errors."""
+    # Lazy import to avoid circular dependency:
+    # context.py -> strategies.py -> endpoints/__init__.py -> models.py
+    # -> training_service.py -> training/__init__.py -> context.py
+    from ktrdr.api.endpoints.strategies import _validate_strategy_config
+
     issues = _validate_strategy_config(strategy_config, strategy_name)
     error_issues = [
         issue for issue in issues if getattr(issue, "severity", "").lower() == "error"
