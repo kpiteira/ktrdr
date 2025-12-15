@@ -422,9 +422,9 @@ class TestAgentServiceDesignWorkerWiring:
         # Design worker should be the real implementation
         assert isinstance(worker.design_worker, AgentDesignWorker)
 
-    def test_get_worker_still_uses_stub_training_worker(self):
-        """AgentService._get_worker() still uses StubTrainingWorker."""
-        from ktrdr.agents.workers.stubs import StubTrainingWorker
+    def test_get_worker_uses_real_training_adapter(self):
+        """AgentService._get_worker() uses TrainingWorkerAdapter (Task 3.3)."""
+        from ktrdr.agents.workers.training_adapter import TrainingWorkerAdapter
         from ktrdr.api.services.agent_service import AgentService
 
         mock_ops = AsyncMock()
@@ -432,7 +432,7 @@ class TestAgentServiceDesignWorkerWiring:
 
         worker = service._get_worker()
 
-        assert isinstance(worker.training_worker, StubTrainingWorker)
+        assert isinstance(worker.training_worker, TrainingWorkerAdapter)
 
     def test_get_worker_still_uses_stub_backtest_worker(self):
         """AgentService._get_worker() still uses StubBacktestWorker."""

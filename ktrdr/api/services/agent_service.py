@@ -13,8 +13,8 @@ from ktrdr.agents.workers.research_worker import AgentResearchWorker
 from ktrdr.agents.workers.stubs import (
     StubAssessmentWorker,
     StubBacktestWorker,
-    StubTrainingWorker,
 )
+from ktrdr.agents.workers.training_adapter import TrainingWorkerAdapter
 from ktrdr.api.models.operations import (
     OperationMetadata,
     OperationStatus,
@@ -49,7 +49,7 @@ class AgentService:
         """Get or create the research worker.
 
         Returns:
-            The configured AgentResearchWorker with stub workers.
+            The configured AgentResearchWorker with real design and training workers.
         """
         if self._worker is None:
             self._worker = AgentResearchWorker(
@@ -57,7 +57,9 @@ class AgentService:
                 design_worker=AgentDesignWorker(
                     self.ops
                 ),  # Real Claude worker (Task 2.2)
-                training_worker=StubTrainingWorker(),
+                training_worker=TrainingWorkerAdapter(
+                    self.ops
+                ),  # Real training (Task 3.3)
                 backtest_worker=StubBacktestWorker(),
                 assessment_worker=StubAssessmentWorker(),
             )
