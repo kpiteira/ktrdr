@@ -1,87 +1,122 @@
 # M3 Handoff: Training Integration
 
-## Task 3.1 Completed
+## Architecture Change (Revised)
 
-Created `TrainingWorkerAdapter` that bridges agent orchestrator to existing TrainingService.
+**Previous approach** (wrong): `TrainingWorkerAdapter` with nested polling loop.
 
-### Files Created
-
-| File | Description |
-|------|-------------|
-| `ktrdr/agents/workers/training_adapter.py` | TrainingWorkerAdapter class |
-| `tests/unit/agent_tests/test_training_adapter.py` | 8 unit tests |
-
-### Implementation
-
-- Loads strategy YAML to extract `symbols`, `timeframes`, `strategy_name`
-- Calls `TrainingService.start_training()` with extracted config
-- Polls `OperationsService.get_operation()` until COMPLETED/FAILED/CANCELLED
-- Returns metrics dict: `{success, training_op_id, accuracy, final_loss, initial_loss, model_path}`
-- Propagates cancellation to child training operation
+**Correct approach**: Orchestrator directly calls TrainingService and tracks the real training operation ID. No adapter, no nested polling.
 
 ---
 
-## Task 3.2 (Already Implemented in M1)
+## Task 3.1 Completed
 
-Training gate was already implemented in M1 Task 1.11. Located in `research_worker.py::_advance_to_next_phase()`.
+Orchestrator now directly calls TrainingService.
+
+### Implementation
+
+In `research_worker.py`:
+
+- `_start_training()` method calls `TrainingService.start_training()` directly
+- Stores `training_op_id` in parent metadata
+- Sets phase to "training"
+- Main loop polls the real training operation
+
+Key code path:
+
+```python
+async def _start_training(self, operation_id: str) -> None:
+    result = await self.training_service.start_training(
+        symbols=symbols,
+        timeframes=timeframes,
+        strategy_name=strategy_name,
+    )
+    training_op_id = result["operation_id"]
+    parent_op.metadata.parameters["phase"] = "training"
+    parent_op.metadata.parameters["training_op_id"] = training_op_id
+```
+
+---
+
+## Task 3.2 Completed
+
+Deleted `TrainingWorkerAdapter` and related files.
+
+### Files Deleted
+
+| File | Description |
+|------|-------------|
+| `ktrdr/agents/workers/training_adapter.py` | Wrong adapter pattern |
+| `tests/unit/agent_tests/test_training_adapter.py` | Tests for deleted adapter |
+
+### Files Modified (Task 3.2)
+
+| File | Change |
+|------|--------|
+| `ktrdr/agents/workers/stubs.py` | Removed StubTrainingWorker |
+| `ktrdr/agents/workers/__init__.py` | Updated exports |
 
 ---
 
 ## Task 3.3 Completed
 
-Wired `TrainingWorkerAdapter` into orchestrator replacing `StubTrainingWorker`.
+Updated tests to mock services instead of workers.
 
-### Files Modified
+### Files Modified (Task 3.3)
 
 | File | Change |
 |------|--------|
-| `ktrdr/api/services/agent_service.py` | Replace StubTrainingWorker with TrainingWorkerAdapter |
-| `tests/unit/agent_tests/test_agent_service_new.py` | Update test to verify TrainingWorkerAdapter |
+| `tests/unit/agent_tests/test_research_worker.py` | Mock `training_service` instead of `training_worker` |
+| `tests/unit/agent_tests/test_agent_service_new.py` | Updated wiring tests |
+| `tests/unit/agent_tests/test_stub_workers.py` | Removed StubTrainingWorker tests |
 
 ---
 
-## Task 3.4 Completed
+## Task 3.4 (Integration Tests)
 
-Added integration tests for training gate evaluation.
+Integration tests exist from previous implementation (`tests/integration/agent_tests/test_agent_training_gate.py`). These test gate behavior but not full training flow.
 
-### Files Created
+**Note**: Full E2E integration testing of real training requires running the full Docker stack with workers.
 
-| File | Description |
-|------|-------------|
-| `tests/integration/agent_tests/test_agent_training_gate.py` | 5 integration tests |
+---
 
-### Tests
+## Training Gate (Already in M1)
 
-- Gate failure with low accuracy
-- Gate pass with good metrics
-- Gate failure with high loss
-- Gate failure with insufficient improvement
-- Gate reason includes threshold values
+Training gate was implemented in M1 Task 1.11. Located in `research_worker.py::_handle_training_phase()`.
+
+Gate thresholds:
+
+- Accuracy < 45% → FAIL
+- Final loss > 0.8 → FAIL
+- Loss decrease < 20% → FAIL
 
 ---
 
 ## M3 Complete
 
-All 4 tasks completed. The agent now:
+All core tasks completed. The agent now:
+
 1. Designs strategy via Claude (M2)
-2. Trains model via TrainingService (M3)
-3. Evaluates training quality gate (M1/M3)
-4. Continues to backtest if gate passes
+2. Calls TrainingService directly (M3)
+3. Tracks real training operation ID
+4. Evaluates training quality gate
+5. Continues to backtest if gate passes
 
 ---
 
 ## Gotchas for M4+
 
-1. **Circular import avoidance** - TrainingService import causes circular dependency. Solution: Use `Protocol` for type hints and lazy import in property getter.
+1. **Lazy loading** - Services are None at construction, lazy-loaded via property getters.
 
-2. **WorkerRegistry required** - TrainingService requires WorkerRegistry in constructor. Get via `get_worker_registry()` from `ktrdr.api.endpoints.workers`.
+2. **WorkerRegistry required** - Both TrainingService and BacktestingService require WorkerRegistry:
 
-3. **result_summary can be None** - OperationInfo.result_summary is Optional. Guard with `result_summary = op.result_summary or {}`.
+   ```python
+   from ktrdr.api.endpoints.workers import get_worker_registry
+   registry = get_worker_registry()
+   ```
 
-4. **Gate reason formats**:
-   - `accuracy_below_threshold (35.0% < 45%)`
-   - `loss_too_high (0.900 > 0.8)`
-   - `insufficient_loss_decrease (6.7% < 20%)`
+3. **result_summary can be None** - Guard with `result_summary = op.result_summary or {}`.
+
+4. **Circular import avoidance** - Use Protocol for type hints and lazy imports in property getters.
 
 ---
 
@@ -89,32 +124,24 @@ All 4 tasks completed. The agent now:
 
 ### Strategy Validation Fix (commit e9edfbf)
 
-**Issue**: Claude-designed strategies failed TrainingService validation due to case mismatch.
-
-**Root Cause**: API returns PascalCase indicator names (e.g., `Ichimoku`), Claude uses these in strategies, but fuzzy set keys use lowercase `feature_id` (e.g., `ichimoku_9`). The validation compared base names case-sensitively.
-
-**Fix**: Modified `_validate_strategy_config` in `ktrdr/api/endpoints/strategies.py` to extract `feature_id` from indicators and include them in valid targets for fuzzy set validation.
+**Issue**: Claude-designed strategies failed validation due to case mismatch.
+**Fix**: Modified validation to use `feature_id` for fuzzy set matching.
 
 ### Circular Import Fix (commit 1b26892)
 
-**Issue**: Training worker failed with `ImportError: cannot import name 'TrainingOperationContext'`.
-
-**Root Cause**: Import chain: `context.py → strategies.py → endpoints/__init__.py → models.py → training_service.py → training/__init__.py → context.py`
-
-**Fix**: Made `_validate_strategy_config` import lazy (inside function) in `context.py`.
+**Issue**: `ImportError` from circular import chain.
+**Fix**: Made `_validate_strategy_config` import lazy in `context.py`.
 
 ---
 
 ## Known Issues for Future
 
-### Data Availability for Designed Strategies
+### Data Availability
 
-**Issue**: Claude may design strategies using symbol/timeframe combinations that aren't available in the training worker's data cache.
-
-**Example**: Strategy designed with `EURUSD 4h` fails because that data isn't pre-loaded.
+Claude may design strategies using symbol/timeframe combinations not available in training workers.
 
 **Future Fix Options**:
 
-1. Pre-load common symbol/timeframe combinations into training containers
-2. Add `list_available_data` tool to design phase so Claude knows what's available
-3. Add data availability check before training starts with helpful error message
+1. Pre-load common data into training containers
+2. Add `list_available_data` tool to design phase
+3. Add data availability check before training
