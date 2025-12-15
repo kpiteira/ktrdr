@@ -2,9 +2,14 @@
 
 This service manages agent research cycles using the worker pattern.
 All state is tracked through OperationsService, not a separate database.
+
+Environment Variables:
+    USE_STUB_WORKERS: Set to "true" to use stub workers for all phases.
+                      Useful for E2E testing without Claude API or real training.
 """
 
 import asyncio
+import os
 from typing import Any
 
 from ktrdr import get_logger
@@ -13,6 +18,8 @@ from ktrdr.agents.workers.research_worker import AgentResearchWorker
 from ktrdr.agents.workers.stubs import (
     StubAssessmentWorker,
     StubBacktestWorker,
+    StubDesignWorker,
+    StubTrainingWorker,
 )
 from ktrdr.agents.workers.training_adapter import TrainingWorkerAdapter
 from ktrdr.api.models.operations import (
@@ -27,6 +34,11 @@ from ktrdr.api.services.operations_service import (
 from ktrdr.monitoring.service_telemetry import trace_service_method
 
 logger = get_logger(__name__)
+
+
+def _use_stub_workers() -> bool:
+    """Check if stub workers should be used instead of real ones."""
+    return os.getenv("USE_STUB_WORKERS", "").lower() in ("true", "1", "yes")
 
 
 class AgentService:
@@ -49,20 +61,27 @@ class AgentService:
         """Get or create the research worker.
 
         Returns:
-            The configured AgentResearchWorker with real design and training workers.
+            The configured AgentResearchWorker with real or stub workers
+            depending on USE_STUB_WORKERS environment variable.
         """
         if self._worker is None:
-            self._worker = AgentResearchWorker(
-                operations_service=self.ops,
-                design_worker=AgentDesignWorker(
-                    self.ops
-                ),  # Real Claude worker (Task 2.2)
-                training_worker=TrainingWorkerAdapter(
-                    self.ops
-                ),  # Real training (Task 3.3)
-                backtest_worker=StubBacktestWorker(),
-                assessment_worker=StubAssessmentWorker(),
-            )
+            if _use_stub_workers():
+                logger.info("Using stub workers (USE_STUB_WORKERS=true)")
+                self._worker = AgentResearchWorker(
+                    operations_service=self.ops,
+                    design_worker=StubDesignWorker(),
+                    training_worker=StubTrainingWorker(),
+                    backtest_worker=StubBacktestWorker(),
+                    assessment_worker=StubAssessmentWorker(),
+                )
+            else:
+                self._worker = AgentResearchWorker(
+                    operations_service=self.ops,
+                    design_worker=AgentDesignWorker(self.ops),  # Real Claude
+                    training_worker=TrainingWorkerAdapter(self.ops),  # Real training
+                    backtest_worker=StubBacktestWorker(),  # TODO: M4
+                    assessment_worker=StubAssessmentWorker(),  # TODO: M5
+                )
         return self._worker
 
     @trace_service_method("agent.trigger")

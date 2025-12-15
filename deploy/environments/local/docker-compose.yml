@@ -64,6 +64,9 @@ services:
       - ENVIRONMENT=development
       - LOG_LEVEL=INFO
       - PYTHONPATH=/app
+      # Agent E2E testing (comment out for real workers)
+      - USE_STUB_WORKERS=${USE_STUB_WORKERS:-false}
+      - STUB_WORKER_FAST=${STUB_WORKER_FAST:-false}
       # Database
       - DB_HOST=db
       - DB_PORT=5432
