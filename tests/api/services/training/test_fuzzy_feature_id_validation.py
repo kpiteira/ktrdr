@@ -6,8 +6,6 @@ used PascalCase indicator names (from API) but lowercase feature_ids for fuzzy s
 The fix ensures feature_ids are included in valid targets for fuzzy set validation.
 """
 
-import pytest
-
 from ktrdr.api.endpoints.strategies import _validate_strategy_config
 
 
@@ -38,14 +36,23 @@ class TestFuzzySetFeatureIdValidation:
             ],
             "fuzzy_sets": {
                 "ichimoku_9": {  # Matches feature_id, not indicator name
-                    "bearish_cloud": {"type": "trapezoid", "parameters": [-100, -100, -20, 0]},
+                    "bearish_cloud": {
+                        "type": "trapezoid",
+                        "parameters": [-100, -100, -20, 0],
+                    },
                     "neutral": {"type": "triangle", "parameters": [-20, 0, 20]},
-                    "bullish_cloud": {"type": "trapezoid", "parameters": [0, 20, 100, 100]},
+                    "bullish_cloud": {
+                        "type": "trapezoid",
+                        "parameters": [0, 20, 100, 100],
+                    },
                 },
                 "rsi_14": {
                     "oversold": {"type": "trapezoid", "parameters": [0, 0, 20, 30]},
                     "neutral": {"type": "triangle", "parameters": [20, 50, 80]},
-                    "overbought": {"type": "trapezoid", "parameters": [70, 80, 100, 100]},
+                    "overbought": {
+                        "type": "trapezoid",
+                        "parameters": [70, 80, 100, 100],
+                    },
                 },
             },
         }
@@ -129,7 +136,10 @@ class TestFuzzySetFeatureIdValidation:
                 },
                 "bb_20": {
                     "squeeze": {"type": "trapezoid", "parameters": [0, 0, 0.01, 0.02]},
-                    "expansion": {"type": "trapezoid", "parameters": [0.02, 0.05, 1, 1]},
+                    "expansion": {
+                        "type": "trapezoid",
+                        "parameters": [0.02, 0.05, 1, 1],
+                    },
                 },
                 "macd_standard": {
                     "bearish": {"type": "trapezoid", "parameters": [-10, -10, -2, 0]},
