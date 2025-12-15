@@ -406,7 +406,7 @@ class TestAgentServiceDesignWorkerWiring:
     """Test Task 2.2: Real design worker wiring.
 
     Verifies that AgentService uses AgentDesignWorker (not stub) and
-    that stub workers are still used for other phases.
+    that stub workers are still used for assessment.
     """
 
     def test_get_worker_uses_real_design_worker(self):
@@ -422,9 +422,8 @@ class TestAgentServiceDesignWorkerWiring:
         # Design worker should be the real implementation
         assert isinstance(worker.design_worker, AgentDesignWorker)
 
-    def test_get_worker_uses_real_training_adapter(self):
-        """AgentService._get_worker() uses TrainingWorkerAdapter (Task 3.3)."""
-        from ktrdr.agents.workers.training_adapter import TrainingWorkerAdapter
+    def test_get_worker_uses_services_for_training_and_backtest(self):
+        """AgentService._get_worker() passes None services (lazy loaded)."""
         from ktrdr.api.services.agent_service import AgentService
 
         mock_ops = AsyncMock()
@@ -432,19 +431,9 @@ class TestAgentServiceDesignWorkerWiring:
 
         worker = service._get_worker()
 
-        assert isinstance(worker.training_worker, TrainingWorkerAdapter)
-
-    def test_get_worker_still_uses_stub_backtest_worker(self):
-        """AgentService._get_worker() still uses StubBacktestWorker."""
-        from ktrdr.agents.workers.stubs import StubBacktestWorker
-        from ktrdr.api.services.agent_service import AgentService
-
-        mock_ops = AsyncMock()
-        service = AgentService(operations_service=mock_ops)
-
-        worker = service._get_worker()
-
-        assert isinstance(worker.backtest_worker, StubBacktestWorker)
+        # Training and backtest services are lazy-loaded (None at init)
+        assert worker._training_service is None
+        assert worker._backtest_service is None
 
     def test_get_worker_still_uses_stub_assessment_worker(self):
         """AgentService._get_worker() still uses StubAssessmentWorker."""

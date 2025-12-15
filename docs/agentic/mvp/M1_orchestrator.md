@@ -73,12 +73,16 @@ Note: `AGENT_SESSION` may exist — rename to `AGENT_RESEARCH` for clarity.
 
 **Type**: CODING
 
-**Description**: Create stub worker classes that complete instantly with mock results.
+**Description**: Create stub worker classes for Design and Assessment phases. Training and Backtest phases are handled by the orchestrator calling services directly (see M3/M4).
 
 **Implementation Notes**:
 ```python
 # ktrdr/agents/workers/stubs.py
-"""Stub workers for testing orchestrator without real operations."""
+"""Stub workers for testing orchestrator without real operations.
+
+Only Design and Assessment need stubs because they're Claude API calls.
+Training and Backtest are handled by the orchestrator calling services directly.
+"""
 
 import asyncio
 from typing import Any
@@ -99,36 +103,6 @@ class StubDesignWorker:
         }
 
 
-class StubTrainingWorker:
-    """Stub that simulates model training."""
-
-    async def run(self, operation_id: str, strategy_path: str) -> dict[str, Any]:
-        """Simulate training phase (~500ms)."""
-        await asyncio.sleep(0.5)
-        return {
-            "success": True,
-            "accuracy": 0.65,
-            "final_loss": 0.35,
-            "initial_loss": 0.85,
-            "model_path": "/app/models/stub_momentum_v1/model.pt",
-        }
-
-
-class StubBacktestWorker:
-    """Stub that simulates backtesting."""
-
-    async def run(self, operation_id: str, model_path: str) -> dict[str, Any]:
-        """Simulate backtest phase (~500ms)."""
-        await asyncio.sleep(0.5)
-        return {
-            "success": True,
-            "sharpe_ratio": 1.2,
-            "win_rate": 0.55,
-            "max_drawdown": 0.15,
-            "total_return": 0.23,
-        }
-
-
 class StubAssessmentWorker:
     """Stub that simulates Claude assessment."""
 
@@ -141,6 +115,7 @@ class StubAssessmentWorker:
             "strengths": ["Good risk management", "Consistent returns"],
             "weaknesses": ["Limited sample size"],
             "suggestions": ["Test with longer timeframe"],
+            "assessment_path": "/app/strategies/stub_momentum_v1/assessment.json",
             "input_tokens": 3000,
             "output_tokens": 1500,
         }
@@ -148,12 +123,10 @@ class StubAssessmentWorker:
 
 **Unit Tests** (`tests/unit/agent_tests/test_stub_workers.py`):
 - [ ] Test: StubDesignWorker returns strategy_name
-- [ ] Test: StubTrainingWorker returns accuracy and loss
-- [ ] Test: StubBacktestWorker returns sharpe and win_rate
 - [ ] Test: StubAssessmentWorker returns verdict
 
 **Acceptance Criteria**:
-- [ ] Four stub worker classes created
+- [ ] Two stub worker classes created (Design and Assessment only)
 - [ ] Each returns mock successful results
 - [ ] Each has ~500ms delay
 - [ ] Unit tests pass
@@ -165,7 +138,12 @@ class StubAssessmentWorker:
 **File(s)**: `ktrdr/agents/workers/research_worker.py`
 **Type**: CODING
 
-**Description**: Create the orchestrator worker that runs the state machine loop.
+**Description**: Create the orchestrator worker that runs the state machine loop. Uses polling pattern per ARCHITECTURE.md.
+
+**Key Architecture Points**:
+- Design and Assessment: Orchestrator creates child operations and runs workers directly
+- Training and Backtest: Orchestrator calls services directly and tracks real operation IDs
+- Polling loop: Checks child operation status each cycle, doesn't await workers directly
 
 **Implementation Notes**:
 ```python
@@ -177,137 +155,101 @@ from typing import Any, Protocol
 
 from ktrdr import get_logger
 from ktrdr.api.models.operations import OperationStatus, OperationType
-from ktrdr.api.services.operations_service import OperationsService
 
 logger = get_logger(__name__)
 
 
 class ChildWorker(Protocol):
-    """Protocol for child workers."""
-    async def run(self, operation_id: str, **kwargs) -> dict[str, Any]: ...
+    """Protocol for child workers (design and assessment only)."""
+    async def run(self, operation_id: str, *args, **kwargs) -> dict[str, Any]: ...
 
 
 class AgentResearchWorker:
-    """Orchestrator for research cycles. Runs as AGENT_RESEARCH operation."""
+    """Orchestrator for research cycles. Runs as AGENT_RESEARCH operation.
+
+    Design and Assessment use child workers (Claude API calls).
+    Training and Backtest call services directly and track real operation IDs.
+    """
 
     PHASES = ["designing", "training", "backtesting", "assessing"]
-    POLL_INTERVAL = 5.0  # seconds between status checks (short for stubs)
 
     def __init__(
         self,
-        operations_service: OperationsService,
+        operations_service: Any,
         design_worker: ChildWorker,
-        training_worker: ChildWorker,
-        backtest_worker: ChildWorker,
         assessment_worker: ChildWorker,
+        training_service: Any = None,  # TrainingService - lazy loaded if None
+        backtest_service: Any = None,  # BacktestingService - lazy loaded if None
     ):
         self.ops = operations_service
         self.design_worker = design_worker
-        self.training_worker = training_worker
-        self.backtest_worker = backtest_worker
         self.assessment_worker = assessment_worker
+        self._training_service = training_service
+        self._backtest_service = backtest_service
+
+        # Poll interval from environment (default 5s for stubs)
+        self.POLL_INTERVAL = float(os.getenv("AGENT_POLL_INTERVAL", "5"))
+
+    @property
+    def training_service(self):
+        """Lazy load TrainingService."""
+        if self._training_service is None:
+            from ktrdr.api.endpoints.workers import get_worker_registry
+            from ktrdr.api.services.training_service import TrainingService
+            registry = get_worker_registry()
+            self._training_service = TrainingService(worker_registry=registry)
+        return self._training_service
+
+    @property
+    def backtest_service(self):
+        """Lazy load BacktestingService."""
+        if self._backtest_service is None:
+            from ktrdr.api.endpoints.workers import get_worker_registry
+            from ktrdr.backtesting.backtesting_service import BacktestingService
+            registry = get_worker_registry()
+            self._backtest_service = BacktestingService(worker_registry=registry)
+        return self._backtest_service
 
     async def run(self, operation_id: str) -> dict[str, Any]:
-        """Main orchestrator loop."""
-        logger.info("Starting research cycle", operation_id=operation_id)
+        """Main orchestrator loop using polling pattern."""
+        while True:
+            op = await self.ops.get_operation(operation_id)
+            phase = op.metadata.parameters.get("phase", "idle")
+            child_op_id = self._get_child_op_id(op, phase)
+            child_op = await self.ops.get_operation(child_op_id) if child_op_id else None
 
-        try:
-            # Phase 1: Design
-            await self._update_phase(operation_id, "designing")
-            design_result = await self._run_child(
-                operation_id, "design", self.design_worker.run, operation_id
-            )
+            if phase == "idle":
+                await self._start_design(operation_id)
 
-            # Phase 2: Training
-            await self._update_phase(operation_id, "training")
-            training_result = await self._run_child(
-                operation_id, "training", self.training_worker.run,
-                operation_id, design_result["strategy_path"]
-            )
+            elif phase == "designing":
+                # Check design worker status, start training when complete
+                if child_op and child_op.status == OperationStatus.COMPLETED:
+                    await self._start_training(operation_id)
 
-            # Phase 3: Backtest
-            await self._update_phase(operation_id, "backtesting")
-            backtest_result = await self._run_child(
-                operation_id, "backtest", self.backtest_worker.run,
-                operation_id, training_result["model_path"]
-            )
+            elif phase == "training":
+                # Check training operation status, start backtest when complete
+                if child_op and child_op.status == OperationStatus.COMPLETED:
+                    # Apply training gate, then start backtest
+                    await self._start_backtest(operation_id)
 
-            # Phase 4: Assessment
-            await self._update_phase(operation_id, "assessing")
-            assessment_result = await self._run_child(
-                operation_id, "assessment", self.assessment_worker.run,
-                operation_id, {
-                    "training": training_result,
-                    "backtest": backtest_result,
-                }
-            )
+            elif phase == "backtesting":
+                # Check backtest operation status, start assessment when complete
+                if child_op and child_op.status == OperationStatus.COMPLETED:
+                    # Apply backtest gate, then start assessment
+                    await self._start_assessment(operation_id)
 
-            # Complete
-            return {
-                "success": True,
-                "strategy_name": design_result["strategy_name"],
-                "verdict": assessment_result["verdict"],
-            }
+            elif phase == "assessing":
+                # Check assessment worker status, complete when done
+                if child_op and child_op.status == OperationStatus.COMPLETED:
+                    return {"success": True, ...}
 
-        except asyncio.CancelledError:
-            logger.info("Research cycle cancelled", operation_id=operation_id)
-            raise
-        except Exception as e:
-            logger.error("Research cycle failed", operation_id=operation_id, error=str(e))
-            raise
+            await self._cancellable_sleep(self.POLL_INTERVAL)
 
-    async def _update_phase(self, operation_id: str, phase: str):
-        """Update operation metadata with current phase."""
-        await self.ops.update_operation_metadata(
-            operation_id, {"phase": phase}
-        )
-        logger.info("Phase started", operation_id=operation_id, phase=phase)
-
-    async def _run_child(
-        self, parent_op_id: str, child_name: str,
-        worker_func, *args, **kwargs
-    ) -> dict[str, Any]:
-        """Run a child worker and track its operation."""
-        # Create child operation
-        child_op = await self.ops.create_operation(
-            operation_type=self._get_child_op_type(child_name),
-            metadata={"parent_operation_id": parent_op_id},
-        )
-
-        # Track child in parent metadata
-        await self.ops.update_operation_metadata(
-            parent_op_id, {f"{child_name}_op_id": child_op.operation_id}
-        )
-
-        try:
-            # Run child worker
-            result = await worker_func(*args, **kwargs)
-
-            # Mark child complete
-            await self.ops.complete_operation(child_op.operation_id, result)
-            return result
-
-        except Exception as e:
-            await self.ops.fail_operation(child_op.operation_id, str(e))
-            raise
-
-    def _get_child_op_type(self, child_name: str) -> OperationType:
-        """Get operation type for child."""
-        return {
-            "design": OperationType.AGENT_DESIGN,
-            "training": OperationType.TRAINING,
-            "backtest": OperationType.BACKTESTING,
-            "assessment": OperationType.AGENT_ASSESSMENT,
-        }[child_name]
-
-    async def _cancellable_sleep(self, seconds: float):
-        """Sleep in small intervals for cancellation responsiveness."""
-        intervals = int(seconds / 0.1)
-        for _ in range(intervals):
-            await asyncio.sleep(0.1)
+    # See full implementation in ktrdr/agents/workers/research_worker.py
 ```
 
 **Unit Tests** (`tests/unit/agent_tests/test_research_worker.py`):
+
 - [ ] Test: State advances from idle → designing → training → backtesting → assessing → complete
 - [ ] Test: Child operation IDs stored in parent metadata
 - [ ] Test: Cancellation stops worker within 200ms
@@ -315,10 +257,11 @@ class AgentResearchWorker:
 - [ ] Test: Phase updates visible in operation metadata
 
 **Acceptance Criteria**:
+
 - [ ] State machine transitions through all phases
 - [ ] Child operation IDs tracked in parent metadata
 - [ ] Uses 100ms sleep intervals for cancellation
-- [ ] Completes full cycle with stub workers
+- [ ] Uses polling loop (not direct await) per ARCHITECTURE.md
 
 ---
 
@@ -346,8 +289,6 @@ from ktrdr.api.services.operations_service import (
 from ktrdr.agents.workers.research_worker import AgentResearchWorker
 from ktrdr.agents.workers.stubs import (
     StubDesignWorker,
-    StubTrainingWorker,
-    StubBacktestWorker,
     StubAssessmentWorker,
 )
 
@@ -362,14 +303,19 @@ class AgentService:
         self._worker: AgentResearchWorker | None = None
 
     def _get_worker(self) -> AgentResearchWorker:
-        """Get or create the research worker."""
+        """Get or create the research worker.
+
+        Design and Assessment are workers (Claude API calls).
+        Training and Backtest are services (lazy-loaded inside orchestrator).
+        """
         if self._worker is None:
             self._worker = AgentResearchWorker(
                 operations_service=self.ops,
                 design_worker=StubDesignWorker(),
-                training_worker=StubTrainingWorker(),
-                backtest_worker=StubBacktestWorker(),
                 assessment_worker=StubAssessmentWorker(),
+                # Services lazy-loaded inside orchestrator
+                training_service=None,
+                backtest_service=None,
             )
         return self._worker
 

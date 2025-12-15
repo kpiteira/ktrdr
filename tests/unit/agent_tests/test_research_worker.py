@@ -1,6 +1,9 @@
 """Tests for AgentResearchWorker orchestrator.
 
 Task 1.3 of M1: Verify the orchestrator manages phases and tracks child operations.
+
+The orchestrator now uses services directly for training and backtesting
+(not child workers), so we mock services instead of workers for those phases.
 """
 
 import asyncio
@@ -79,27 +82,84 @@ def mock_operations_service():
 
 @pytest.fixture
 def stub_workers():
-    """Create stub workers for testing."""
+    """Create stub workers for testing (design and assessment only)."""
     from ktrdr.agents.workers.stubs import (
         StubAssessmentWorker,
-        StubBacktestWorker,
         StubDesignWorker,
-        StubTrainingWorker,
     )
 
     return {
         "design": StubDesignWorker(),
-        "training": StubTrainingWorker(),
-        "backtest": StubBacktestWorker(),
         "assessment": StubAssessmentWorker(),
     }
+
+
+@pytest.fixture
+def mock_training_service(mock_operations_service):
+    """Mock TrainingService that creates real operations."""
+    service = AsyncMock()
+
+    async def start_training(**kwargs):
+        """Create a real training operation and return its ID."""
+        training_op = await mock_operations_service.create_operation(
+            operation_type=OperationType.TRAINING,
+            metadata=OperationMetadata(parameters=kwargs),
+        )
+        # Immediately complete with good results
+        await mock_operations_service.complete_operation(
+            training_op.operation_id,
+            {
+                "success": True,
+                "accuracy": 0.65,
+                "final_loss": 0.35,
+                "initial_loss": 0.85,
+                "model_path": "/app/models/stub_momentum_v1/model.pt",
+            },
+        )
+        return {"operation_id": training_op.operation_id}
+
+    service.start_training = start_training
+    return service
+
+
+@pytest.fixture
+def mock_backtest_service(mock_operations_service):
+    """Mock BacktestingService that creates real operations."""
+    service = AsyncMock()
+
+    async def run_backtest(**kwargs):
+        """Create a real backtest operation and return its ID."""
+        backtest_op = await mock_operations_service.create_operation(
+            operation_type=OperationType.BACKTESTING,
+            metadata=OperationMetadata(parameters=kwargs),
+        )
+        # Immediately complete with good results (metrics nested)
+        await mock_operations_service.complete_operation(
+            backtest_op.operation_id,
+            {
+                "success": True,
+                "metrics": {
+                    "sharpe_ratio": 1.2,
+                    "win_rate": 0.55,
+                    "max_drawdown_pct": 0.15,
+                    "total_return": 0.23,
+                    "total_trades": 42,
+                },
+            },
+        )
+        return {"operation_id": backtest_op.operation_id}
+
+    service.run_backtest = run_backtest
+    return service
 
 
 class TestAgentResearchWorkerPhases:
     """Test phase transitions through the orchestrator."""
 
     @pytest.mark.asyncio
-    async def test_completes_all_phases(self, mock_operations_service, stub_workers):
+    async def test_completes_all_phases(
+        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
+    ):
         """Worker transitions through all phases and completes."""
         # Create parent operation
         parent_op = await mock_operations_service.create_operation(
@@ -110,9 +170,9 @@ class TestAgentResearchWorkerPhases:
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=stub_workers["design"],
-            training_worker=stub_workers["training"],
-            backtest_worker=stub_workers["backtest"],
             assessment_worker=stub_workers["assessment"],
+            training_service=mock_training_service,
+            backtest_service=mock_backtest_service,
         )
 
         result = await worker.run(parent_op.operation_id)
@@ -123,7 +183,7 @@ class TestAgentResearchWorkerPhases:
 
     @pytest.mark.asyncio
     async def test_phase_updates_in_metadata(
-        self, mock_operations_service, stub_workers
+        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
     ):
         """Phase updates are stored in operation metadata."""
         parent_op = await mock_operations_service.create_operation(
@@ -149,9 +209,9 @@ class TestAgentResearchWorkerPhases:
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=stub_workers["design"],
-            training_worker=stub_workers["training"],
-            backtest_worker=stub_workers["backtest"],
             assessment_worker=stub_workers["assessment"],
+            training_service=mock_training_service,
+            backtest_service=mock_backtest_service,
         )
 
         await worker.run(parent_op.operation_id)
@@ -168,7 +228,7 @@ class TestAgentResearchWorkerChildOperations:
 
     @pytest.mark.asyncio
     async def test_child_operation_ids_stored(
-        self, mock_operations_service, stub_workers
+        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
     ):
         """Child operation IDs are stored in parent metadata."""
         parent_op = await mock_operations_service.create_operation(
@@ -179,9 +239,9 @@ class TestAgentResearchWorkerChildOperations:
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=stub_workers["design"],
-            training_worker=stub_workers["training"],
-            backtest_worker=stub_workers["backtest"],
             assessment_worker=stub_workers["assessment"],
+            training_service=mock_training_service,
+            backtest_service=mock_backtest_service,
         )
 
         await worker.run(parent_op.operation_id)
@@ -197,7 +257,7 @@ class TestAgentResearchWorkerChildOperations:
 
     @pytest.mark.asyncio
     async def test_child_operations_completed(
-        self, mock_operations_service, stub_workers
+        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
     ):
         """Child operations are marked as completed."""
         parent_op = await mock_operations_service.create_operation(
@@ -208,9 +268,9 @@ class TestAgentResearchWorkerChildOperations:
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=stub_workers["design"],
-            training_worker=stub_workers["training"],
-            backtest_worker=stub_workers["backtest"],
             assessment_worker=stub_workers["assessment"],
+            training_service=mock_training_service,
+            backtest_service=mock_backtest_service,
         )
 
         await worker.run(parent_op.operation_id)
@@ -235,6 +295,7 @@ class TestAgentResearchWorkerCancellation:
     @pytest.mark.asyncio
     async def test_cancellation_responsive(self, mock_operations_service):
         """Worker responds to cancellation within 200ms."""
+        from ktrdr.agents.workers.stubs import StubAssessmentWorker
 
         # Create slow worker that checks for cancellation
         class SlowWorker:
@@ -252,9 +313,9 @@ class TestAgentResearchWorkerCancellation:
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=SlowWorker(),
-            training_worker=SlowWorker(),
-            backtest_worker=SlowWorker(),
-            assessment_worker=SlowWorker(),
+            assessment_worker=StubAssessmentWorker(),
+            training_service=AsyncMock(),
+            backtest_service=AsyncMock(),
         )
 
         # Start the worker
@@ -280,7 +341,7 @@ class TestAgentResearchWorkerErrors:
 
     @pytest.mark.asyncio
     async def test_child_failure_propagates(
-        self, mock_operations_service, stub_workers
+        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
     ):
         """Child failure causes parent to fail."""
 
@@ -296,17 +357,17 @@ class TestAgentResearchWorkerErrors:
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=FailingWorker(),  # First phase fails
-            training_worker=stub_workers["training"],
-            backtest_worker=stub_workers["backtest"],
             assessment_worker=stub_workers["assessment"],
+            training_service=mock_training_service,
+            backtest_service=mock_backtest_service,
         )
 
-        with pytest.raises(WorkerError, match="Child operation failed"):
+        with pytest.raises(WorkerError, match="Design failed"):
             await worker.run(parent_op.operation_id)
 
     @pytest.mark.asyncio
     async def test_failed_child_marked_failed(
-        self, mock_operations_service, stub_workers
+        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
     ):
         """When child fails, it's marked as failed in operations."""
 
@@ -322,9 +383,9 @@ class TestAgentResearchWorkerErrors:
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=FailingWorker(),
-            training_worker=stub_workers["training"],
-            backtest_worker=stub_workers["backtest"],
             assessment_worker=stub_workers["assessment"],
+            training_service=mock_training_service,
+            backtest_service=mock_backtest_service,
         )
 
         try:
@@ -348,7 +409,9 @@ class TestPollingLoopPattern:
     """
 
     @pytest.mark.asyncio
-    async def test_uses_polling_loop(self, mock_operations_service, stub_workers):
+    async def test_uses_polling_loop(
+        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
+    ):
         """Orchestrator polls child operation status in a loop.
 
         Verifies that child operations are polled for completion rather
@@ -372,9 +435,9 @@ class TestPollingLoopPattern:
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=stub_workers["design"],
-            training_worker=stub_workers["training"],
-            backtest_worker=stub_workers["backtest"],
             assessment_worker=stub_workers["assessment"],
+            training_service=mock_training_service,
+            backtest_service=mock_backtest_service,
         )
 
         await worker.run(parent_op.operation_id)
@@ -389,12 +452,15 @@ class TestPollingLoopPattern:
 
     @pytest.mark.asyncio
     async def test_child_workers_started_as_tasks(
-        self, mock_operations_service, stub_workers
+        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
     ):
         """Child workers are started as separate asyncio tasks.
 
         The orchestrator should use asyncio.create_task() to start workers
         so they run independently.
+
+        Note: Training and Backtest use services (not tasks), so we expect
+        2 tasks for design and assessment only.
         """
         parent_op = await mock_operations_service.create_operation(
             operation_type=OperationType.AGENT_RESEARCH,
@@ -416,17 +482,18 @@ class TestPollingLoopPattern:
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=stub_workers["design"],
-            training_worker=stub_workers["training"],
-            backtest_worker=stub_workers["backtest"],
             assessment_worker=stub_workers["assessment"],
+            training_service=mock_training_service,
+            backtest_service=mock_backtest_service,
         )
 
         await worker.run(parent_op.operation_id)
 
-        # Should have started 4 child tasks (one per phase)
+        # Should have started 2 child tasks (design and assessment)
+        # Training and Backtest use services directly, no tasks
         assert (
-            len(start_operation_calls) == 4
-        ), f"Expected 4 start_operation calls for child tasks, got {len(start_operation_calls)}"
+            len(start_operation_calls) == 2
+        ), f"Expected 2 start_operation calls for child tasks, got {len(start_operation_calls)}"
 
         # Each should have been passed an asyncio.Task
         for op_id, task in start_operation_calls:
@@ -436,7 +503,7 @@ class TestPollingLoopPattern:
 
     @pytest.mark.asyncio
     async def test_poll_interval_configurable(
-        self, mock_operations_service, stub_workers, monkeypatch
+        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service, monkeypatch
     ):
         """Poll interval can be configured via environment variable.
 
@@ -453,9 +520,9 @@ class TestPollingLoopPattern:
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=stub_workers["design"],
-            training_worker=stub_workers["training"],
-            backtest_worker=stub_workers["backtest"],
             assessment_worker=stub_workers["assessment"],
+            training_service=mock_training_service,
+            backtest_service=mock_backtest_service,
         )
 
         # The worker should respect the poll interval
@@ -466,7 +533,7 @@ class TestPollingLoopPattern:
 
     @pytest.mark.asyncio
     async def test_cancellation_propagates_to_child(
-        self, mock_operations_service, stub_workers
+        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
     ):
         """Cancelling parent operation cancels active child.
 
@@ -503,9 +570,9 @@ class TestPollingLoopPattern:
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=SlowWorker(),
-            training_worker=stub_workers["training"],
-            backtest_worker=stub_workers["backtest"],
             assessment_worker=stub_workers["assessment"],
+            training_service=mock_training_service,
+            backtest_service=mock_backtest_service,
         )
 
         # Start the worker
@@ -538,7 +605,7 @@ class TestQualityGateIntegration:
 
     @pytest.mark.asyncio
     async def test_training_gate_passes_proceeds_to_backtest(
-        self, mock_operations_service, stub_workers
+        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
     ):
         """When training gate passes, orchestrator proceeds to backtesting."""
         parent_op = await mock_operations_service.create_operation(
@@ -546,18 +613,18 @@ class TestQualityGateIntegration:
             metadata=OperationMetadata(parameters={"phase": "idle"}),
         )
 
-        # Stub workers return good metrics that pass gates
+        # Mock services return good metrics that pass gates
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=stub_workers["design"],
-            training_worker=stub_workers["training"],  # Returns metrics that pass gate
-            backtest_worker=stub_workers["backtest"],
             assessment_worker=stub_workers["assessment"],
+            training_service=mock_training_service,
+            backtest_service=mock_backtest_service,
         )
 
         result = await worker.run(parent_op.operation_id)
 
-        # Should complete successfully (stubs return good metrics)
+        # Should complete successfully (mocks return good metrics)
         assert result["success"] is True
         # Should have reached backtesting and assessing phases
         parent = await mock_operations_service.get_operation(parent_op.operation_id)
@@ -570,28 +637,33 @@ class TestQualityGateIntegration:
         from ktrdr.agents.workers.research_worker import GateFailedError
         from ktrdr.agents.workers.stubs import StubAssessmentWorker, StubDesignWorker
 
-        # Create worker that returns bad training metrics
-        class BadTrainingWorker:
-            async def run(self, operation_id: str, *args, **kwargs):
-                """Return metrics that fail the training gate."""
-                return {
+        # Create service that returns bad training metrics
+        bad_training_service = AsyncMock()
+
+        async def bad_training(**kwargs):
+            training_op = await mock_operations_service.create_operation(
+                operation_type=OperationType.TRAINING,
+                metadata=OperationMetadata(parameters=kwargs),
+            )
+            await mock_operations_service.complete_operation(
+                training_op.operation_id,
+                {
                     "success": True,
                     "accuracy": 0.30,  # Below 45% threshold
                     "final_loss": 0.35,
                     "initial_loss": 0.85,
                     "model_path": "/app/models/bad/model.pt",
-                }
+                },
+            )
+            return {"operation_id": training_op.operation_id}
 
-        # Good backtest worker (shouldn't be reached)
-        class GoodBacktestWorker:
-            async def run(self, operation_id: str, *args, **kwargs):
-                return {
-                    "success": True,
-                    "sharpe_ratio": 1.2,
-                    "win_rate": 0.55,
-                    "max_drawdown": 0.15,
-                    "total_return": 0.23,
-                }
+        bad_training_service.start_training = bad_training
+
+        # Good backtest service (shouldn't be reached)
+        good_backtest_service = AsyncMock()
+        good_backtest_service.run_backtest = AsyncMock(
+            return_value={"operation_id": "should_not_be_called"}
+        )
 
         parent_op = await mock_operations_service.create_operation(
             operation_type=OperationType.AGENT_RESEARCH,
@@ -601,9 +673,9 @@ class TestQualityGateIntegration:
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=StubDesignWorker(),
-            training_worker=BadTrainingWorker(),
-            backtest_worker=GoodBacktestWorker(),
             assessment_worker=StubAssessmentWorker(),
+            training_service=bad_training_service,
+            backtest_service=good_backtest_service,
         )
 
         with pytest.raises(GateFailedError) as exc_info:
@@ -623,20 +695,53 @@ class TestQualityGateIntegration:
         from ktrdr.agents.workers.stubs import (
             StubAssessmentWorker,
             StubDesignWorker,
-            StubTrainingWorker,
         )
 
-        # Create worker that returns bad backtest metrics
-        class BadBacktestWorker:
-            async def run(self, operation_id: str, *args, **kwargs):
-                """Return metrics that fail the backtest gate."""
-                return {
+        # Good training service
+        good_training_service = AsyncMock()
+
+        async def good_training(**kwargs):
+            training_op = await mock_operations_service.create_operation(
+                operation_type=OperationType.TRAINING,
+                metadata=OperationMetadata(parameters=kwargs),
+            )
+            await mock_operations_service.complete_operation(
+                training_op.operation_id,
+                {
                     "success": True,
-                    "sharpe_ratio": -1.0,  # Below -0.5 threshold
-                    "win_rate": 0.30,  # Below 45% threshold
-                    "max_drawdown": 0.50,  # Above 40% threshold
-                    "total_return": -0.10,
-                }
+                    "accuracy": 0.65,
+                    "final_loss": 0.35,
+                    "initial_loss": 0.85,
+                    "model_path": "/app/models/stub/model.pt",
+                },
+            )
+            return {"operation_id": training_op.operation_id}
+
+        good_training_service.start_training = good_training
+
+        # Bad backtest service
+        bad_backtest_service = AsyncMock()
+
+        async def bad_backtest(**kwargs):
+            backtest_op = await mock_operations_service.create_operation(
+                operation_type=OperationType.BACKTESTING,
+                metadata=OperationMetadata(parameters=kwargs),
+            )
+            await mock_operations_service.complete_operation(
+                backtest_op.operation_id,
+                {
+                    "success": True,
+                    "metrics": {
+                        "sharpe_ratio": -1.0,  # Below -0.5 threshold
+                        "win_rate": 0.30,  # Below 45% threshold
+                        "max_drawdown_pct": 0.50,  # Above 40% threshold
+                        "total_return": -0.10,
+                    },
+                },
+            )
+            return {"operation_id": backtest_op.operation_id}
+
+        bad_backtest_service.run_backtest = bad_backtest
 
         parent_op = await mock_operations_service.create_operation(
             operation_type=OperationType.AGENT_RESEARCH,
@@ -646,9 +751,9 @@ class TestQualityGateIntegration:
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=StubDesignWorker(),
-            training_worker=StubTrainingWorker(),
-            backtest_worker=BadBacktestWorker(),
             assessment_worker=StubAssessmentWorker(),
+            training_service=good_training_service,
+            backtest_service=bad_backtest_service,
         )
 
         with pytest.raises(GateFailedError) as exc_info:
@@ -667,17 +772,52 @@ class TestQualityGateIntegration:
         from ktrdr.agents.workers.stubs import (
             StubAssessmentWorker,
             StubDesignWorker,
-            StubTrainingWorker,
         )
 
-        class BadBacktestWorker:
-            async def run(self, operation_id: str, *args, **kwargs):
-                return {
+        # Good training service
+        good_training_service = AsyncMock()
+
+        async def good_training(**kwargs):
+            training_op = await mock_operations_service.create_operation(
+                operation_type=OperationType.TRAINING,
+                metadata=OperationMetadata(parameters=kwargs),
+            )
+            await mock_operations_service.complete_operation(
+                training_op.operation_id,
+                {
                     "success": True,
-                    "sharpe_ratio": 1.2,
-                    "win_rate": 0.35,  # Below 45% threshold - first failure
-                    "max_drawdown": 0.15,
-                }
+                    "accuracy": 0.65,
+                    "final_loss": 0.35,
+                    "initial_loss": 0.85,
+                    "model_path": "/app/models/stub/model.pt",
+                },
+            )
+            return {"operation_id": training_op.operation_id}
+
+        good_training_service.start_training = good_training
+
+        # Bad backtest (win_rate failure)
+        bad_backtest_service = AsyncMock()
+
+        async def bad_backtest(**kwargs):
+            backtest_op = await mock_operations_service.create_operation(
+                operation_type=OperationType.BACKTESTING,
+                metadata=OperationMetadata(parameters=kwargs),
+            )
+            await mock_operations_service.complete_operation(
+                backtest_op.operation_id,
+                {
+                    "success": True,
+                    "metrics": {
+                        "sharpe_ratio": 1.2,
+                        "win_rate": 0.35,  # Below 45% threshold - first failure
+                        "max_drawdown_pct": 0.15,
+                    },
+                },
+            )
+            return {"operation_id": backtest_op.operation_id}
+
+        bad_backtest_service.run_backtest = bad_backtest
 
         parent_op = await mock_operations_service.create_operation(
             operation_type=OperationType.AGENT_RESEARCH,
@@ -687,9 +827,9 @@ class TestQualityGateIntegration:
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=StubDesignWorker(),
-            training_worker=StubTrainingWorker(),
-            backtest_worker=BadBacktestWorker(),
             assessment_worker=StubAssessmentWorker(),
+            training_service=good_training_service,
+            backtest_service=bad_backtest_service,
         )
 
         with pytest.raises(GateFailedError) as exc_info:
@@ -700,7 +840,7 @@ class TestQualityGateIntegration:
 
     @pytest.mark.asyncio
     async def test_both_gates_pass_completes_cycle(
-        self, mock_operations_service, stub_workers
+        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
     ):
         """When both gates pass, cycle completes successfully."""
         parent_op = await mock_operations_service.create_operation(
@@ -708,13 +848,13 @@ class TestQualityGateIntegration:
             metadata=OperationMetadata(parameters={"phase": "idle"}),
         )
 
-        # Default stub workers return metrics that pass gates
+        # Mock services return metrics that pass gates
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=stub_workers["design"],
-            training_worker=stub_workers["training"],
-            backtest_worker=stub_workers["backtest"],
             assessment_worker=stub_workers["assessment"],
+            training_service=mock_training_service,
+            backtest_service=mock_backtest_service,
         )
 
         result = await worker.run(parent_op.operation_id)
@@ -731,7 +871,7 @@ class TestMetadataContract:
 
     @pytest.mark.asyncio
     async def test_stores_strategy_name_after_design(
-        self, mock_operations_service, stub_workers
+        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
     ):
         """Parent metadata stores strategy_name after design phase."""
         parent_op = await mock_operations_service.create_operation(
@@ -742,9 +882,9 @@ class TestMetadataContract:
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=stub_workers["design"],
-            training_worker=stub_workers["training"],
-            backtest_worker=stub_workers["backtest"],
             assessment_worker=stub_workers["assessment"],
+            training_service=mock_training_service,
+            backtest_service=mock_backtest_service,
         )
 
         await worker.run(parent_op.operation_id)
@@ -755,7 +895,7 @@ class TestMetadataContract:
 
     @pytest.mark.asyncio
     async def test_stores_strategy_path_after_design(
-        self, mock_operations_service, stub_workers
+        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
     ):
         """Parent metadata stores strategy_path after design phase (Task 2.3)."""
         parent_op = await mock_operations_service.create_operation(
@@ -766,9 +906,9 @@ class TestMetadataContract:
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=stub_workers["design"],
-            training_worker=stub_workers["training"],
-            backtest_worker=stub_workers["backtest"],
             assessment_worker=stub_workers["assessment"],
+            training_service=mock_training_service,
+            backtest_service=mock_backtest_service,
         )
 
         await worker.run(parent_op.operation_id)
@@ -782,7 +922,7 @@ class TestMetadataContract:
 
     @pytest.mark.asyncio
     async def test_stores_training_result_after_training(
-        self, mock_operations_service, stub_workers
+        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
     ):
         """Parent metadata stores training_result after training phase."""
         parent_op = await mock_operations_service.create_operation(
@@ -793,9 +933,9 @@ class TestMetadataContract:
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=stub_workers["design"],
-            training_worker=stub_workers["training"],
-            backtest_worker=stub_workers["backtest"],
             assessment_worker=stub_workers["assessment"],
+            training_service=mock_training_service,
+            backtest_service=mock_backtest_service,
         )
 
         await worker.run(parent_op.operation_id)
@@ -808,7 +948,7 @@ class TestMetadataContract:
 
     @pytest.mark.asyncio
     async def test_stores_backtest_result_after_backtest(
-        self, mock_operations_service, stub_workers
+        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
     ):
         """Parent metadata stores backtest_result after backtest phase."""
         parent_op = await mock_operations_service.create_operation(
@@ -819,9 +959,9 @@ class TestMetadataContract:
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=stub_workers["design"],
-            training_worker=stub_workers["training"],
-            backtest_worker=stub_workers["backtest"],
             assessment_worker=stub_workers["assessment"],
+            training_service=mock_training_service,
+            backtest_service=mock_backtest_service,
         )
 
         await worker.run(parent_op.operation_id)
@@ -834,7 +974,7 @@ class TestMetadataContract:
 
     @pytest.mark.asyncio
     async def test_stores_assessment_verdict_after_assessment(
-        self, mock_operations_service, stub_workers
+        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
     ):
         """Parent metadata stores assessment_verdict after assessment phase."""
         parent_op = await mock_operations_service.create_operation(
@@ -845,9 +985,9 @@ class TestMetadataContract:
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=stub_workers["design"],
-            training_worker=stub_workers["training"],
-            backtest_worker=stub_workers["backtest"],
             assessment_worker=stub_workers["assessment"],
+            training_service=mock_training_service,
+            backtest_service=mock_backtest_service,
         )
 
         await worker.run(parent_op.operation_id)

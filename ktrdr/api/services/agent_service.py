@@ -17,11 +17,8 @@ from ktrdr.agents.workers.design_worker import AgentDesignWorker
 from ktrdr.agents.workers.research_worker import AgentResearchWorker
 from ktrdr.agents.workers.stubs import (
     StubAssessmentWorker,
-    StubBacktestWorker,
     StubDesignWorker,
-    StubTrainingWorker,
 )
-from ktrdr.agents.workers.training_adapter import TrainingWorkerAdapter
 from ktrdr.api.models.operations import (
     OperationMetadata,
     OperationStatus,
@@ -63,6 +60,10 @@ class AgentService:
         Returns:
             The configured AgentResearchWorker with real or stub workers
             depending on USE_STUB_WORKERS environment variable.
+
+        Note:
+            Design and Assessment are workers (Claude API calls).
+            Training and Backtest are services (lazy-loaded inside orchestrator).
         """
         if self._worker is None:
             if _use_stub_workers():
@@ -70,17 +71,19 @@ class AgentService:
                 self._worker = AgentResearchWorker(
                     operations_service=self.ops,
                     design_worker=StubDesignWorker(),
-                    training_worker=StubTrainingWorker(),
-                    backtest_worker=StubBacktestWorker(),
                     assessment_worker=StubAssessmentWorker(),
+                    # Services will be stubbed via mock injection in tests
+                    training_service=None,
+                    backtest_service=None,
                 )
             else:
                 self._worker = AgentResearchWorker(
                     operations_service=self.ops,
                     design_worker=AgentDesignWorker(self.ops),  # Real Claude
-                    training_worker=TrainingWorkerAdapter(self.ops),  # Real training
-                    backtest_worker=StubBacktestWorker(),  # TODO: M4
                     assessment_worker=StubAssessmentWorker(),  # TODO: M5
+                    # Services lazy-loaded inside orchestrator
+                    training_service=None,
+                    backtest_service=None,
                 )
         return self._worker
 

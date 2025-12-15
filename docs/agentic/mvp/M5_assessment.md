@@ -410,8 +410,6 @@ class AgentAssessmentWorker:
 **Implementation Notes**:
 ```python
 from ktrdr.agents.workers.design_worker import AgentDesignWorker
-from ktrdr.agents.workers.training_adapter import TrainingWorkerAdapter
-from ktrdr.agents.workers.backtest_adapter import BacktestWorkerAdapter
 from ktrdr.agents.workers.assessment_worker import AgentAssessmentWorker
 
 class AgentService:
@@ -419,47 +417,19 @@ class AgentService:
         if self._worker is None:
             self._worker = AgentResearchWorker(
                 operations_service=self.ops,
-                design_worker=AgentDesignWorker(self.ops),
-                training_worker=TrainingWorkerAdapter(self.ops),
-                backtest_worker=BacktestWorkerAdapter(self.ops),
-                assessment_worker=AgentAssessmentWorker(self.ops),  # Real assessment
+                design_worker=AgentDesignWorker(self.ops),      # Real Claude design
+                assessment_worker=AgentAssessmentWorker(self.ops),  # Real Claude assessment
+                # Training and Backtest use services (lazy-loaded inside orchestrator)
+                training_service=None,
+                backtest_service=None,
             )
         return self._worker
 ```
 
-Also update research_worker.py to store assessment result:
-```python
-# Phase 4: Assessment
-await self._update_phase(operation_id, "assessing")
-assessment_result = await self._run_child(
-    operation_id, "assessment", self.assessment_worker.run,
-    operation_id, {
-        "training": training_result,
-        "backtest": backtest_result,
-    }
-)
-
-# Store assessment result
-await self.ops.update_operation_metadata(operation_id, {
-    "assessment_verdict": assessment_result["verdict"],
-    "assessment_path": assessment_result["assessment_path"],
-})
-
-# Return final result
-return {
-    "success": True,
-    "strategy_name": design_result["strategy_name"],
-    "verdict": assessment_result["verdict"],
-    "total_tokens": (
-        design_result.get("input_tokens", 0) +
-        design_result.get("output_tokens", 0) +
-        assessment_result.get("input_tokens", 0) +
-        assessment_result.get("output_tokens", 0)
-    ),
-}
-```
+The orchestrator's `_handle_assessing_phase()` stores assessment result in parent metadata and returns the final result when assessment completes.
 
 **Acceptance Criteria**:
+
 - [ ] Real assessment runs after backtest gate passes
 - [ ] Assessment completion → cycle completes
 - [ ] Assessment verdict in parent metadata

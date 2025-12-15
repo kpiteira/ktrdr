@@ -1,7 +1,10 @@
 """Stub workers for testing orchestrator without real operations.
 
-These workers simulate each phase of the research cycle with configurable delays
-(default ~30s per phase). Sleep in small intervals for responsive cancellation.
+Only Design and Assessment need stubs because they make Claude API calls.
+Training and Backtest are handled by the orchestrator calling services directly.
+
+These workers simulate each phase with configurable delays (default ~30s per phase).
+Sleep in small intervals for responsive cancellation.
 
 Environment Variables:
     STUB_WORKER_DELAY: Seconds per phase (default: 30)
@@ -66,58 +69,6 @@ class StubDesignWorker:
             "strategy_path": "/app/strategies/stub_momentum_v1.yaml",
             "input_tokens": 2500,
             "output_tokens": 1800,
-        }
-
-
-class StubTrainingWorker:
-    """Stub that simulates model training.
-
-    Returns mock training metrics as if a model had been trained.
-    """
-
-    async def run(self, operation_id: str, strategy_path: str) -> dict[str, Any]:
-        """Simulate training phase.
-
-        Args:
-            operation_id: The operation ID for tracking.
-            strategy_path: Path to the strategy configuration.
-
-        Returns:
-            Mock training result with accuracy, loss, and model path.
-        """
-        await _cancellable_sleep(_get_phase_delay())
-        return {
-            "success": True,
-            "accuracy": 0.65,
-            "final_loss": 0.35,
-            "initial_loss": 0.85,
-            "model_path": "/app/models/stub_momentum_v1/model.pt",
-        }
-
-
-class StubBacktestWorker:
-    """Stub that simulates backtesting.
-
-    Returns mock backtest metrics as if a backtest had been run.
-    """
-
-    async def run(self, operation_id: str, model_path: str) -> dict[str, Any]:
-        """Simulate backtest phase.
-
-        Args:
-            operation_id: The operation ID for tracking.
-            model_path: Path to the trained model.
-
-        Returns:
-            Mock backtest result with sharpe, win_rate, drawdown, return.
-        """
-        await _cancellable_sleep(_get_phase_delay())
-        return {
-            "success": True,
-            "sharpe_ratio": 1.2,
-            "win_rate": 0.55,
-            "max_drawdown": 0.15,
-            "total_return": 0.23,
         }
 
 

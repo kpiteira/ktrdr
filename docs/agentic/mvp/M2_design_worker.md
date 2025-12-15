@@ -228,29 +228,27 @@ Always validate your configuration before saving it."""
 In `agent_service.py`:
 ```python
 from ktrdr.agents.workers.design_worker import AgentDesignWorker
-from ktrdr.agents.workers.stubs import (
-    StubTrainingWorker,
-    StubBacktestWorker,
-    StubAssessmentWorker,
-)
+from ktrdr.agents.workers.stubs import StubAssessmentWorker
 
 class AgentService:
     def _get_worker(self) -> AgentResearchWorker:
         if self._worker is None:
             self._worker = AgentResearchWorker(
                 operations_service=self.ops,
-                design_worker=AgentDesignWorker(self.ops),  # Real worker
-                training_worker=StubTrainingWorker(),       # Still stub
-                backtest_worker=StubBacktestWorker(),       # Still stub
-                assessment_worker=StubAssessmentWorker(),   # Still stub
+                design_worker=AgentDesignWorker(self.ops),  # Real Claude design
+                assessment_worker=StubAssessmentWorker(),   # Still stub until M5
+                # Training and Backtest use services (lazy-loaded inside orchestrator)
+                training_service=None,
+                backtest_service=None,
             )
         return self._worker
 ```
 
 **Acceptance Criteria**:
+
 - [ ] Real design worker called when phase enters "designing"
 - [ ] Strategy name propagated to parent metadata
-- [ ] Stub workers still used for other phases
+- [ ] Stub assessment worker still used until M5
 
 ---
 

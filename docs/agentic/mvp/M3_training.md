@@ -1,4 +1,4 @@
-# Milestone 3: Training Integration
+# Milestone 3: Training Integration (Revised)
 
 **Branch**: `feature/agent-mvp`
 **Builds On**: M2 (Design Worker)
@@ -6,9 +6,28 @@
 
 ---
 
-## Why This Milestone
+## Architecture Alignment
 
-Connects the orchestrator to the existing training infrastructure. After design creates a strategy, real training runs. The training gate evaluates results and fails the cycle if quality is poor.
+**Pattern**: The orchestrator directly calls TrainingService and tracks the real training operation. NO adapter, NO nested polling.
+
+```
+Orchestrator wakes up (phase = designing, child COMPLETED)
+  → calls TrainingService.start_training()
+  → stores training_op_id in metadata
+  → sets phase = "training"
+  → goes to sleep
+
+Orchestrator wakes up (phase = training)
+  → checks training_op_id status
+  → if RUNNING: sleep
+  → if COMPLETED: check gate, start backtest
+  → if FAILED: fail parent
+```
+
+**What we will NOT do:**
+- ❌ TrainingWorkerAdapter with nested polling
+- ❌ Wrapper operations around real training operations
+- ❌ Any polling inside child workers
 
 ---
 
@@ -19,484 +38,273 @@ ktrdr agent trigger
 # Wait for training to complete (~5-10 minutes)
 
 ktrdr agent status
-# Expected: Phase = backtesting (if gate passed) or status = idle with failed (if gate failed)
+# Expected: Phase = backtesting (if gate passed) or status = failed (if gate failed)
 
 ktrdr operations list --type training
 # Expected: Training operation with COMPLETED status
-
-# If gate failed:
-ktrdr operations status <op_id>
-# Expected: Error shows "Training gate failed: <reason>"
 ```
 
 ---
 
-## Task 3.1: Create Training Worker Adapter
-
-**File(s)**: `ktrdr/agents/workers/training_adapter.py`
-**Type**: CODING
-
-**Description**: Create adapter that starts training via TrainingService and polls for completion.
-
-**Implementation Notes**:
-```python
-# ktrdr/agents/workers/training_adapter.py
-"""Training worker adapter for agent orchestrator."""
-
-import asyncio
-from typing import Any
-
-import yaml
-
-from ktrdr import get_logger
-from ktrdr.api.models.operations import OperationStatus
-from ktrdr.api.services.operations_service import OperationsService
-from ktrdr.api.services.training_service import TrainingService
-
-logger = get_logger(__name__)
-
-
-class WorkerError(Exception):
-    """Error during worker execution."""
-    pass
-
-
-class TrainingWorkerAdapter:
-    """Adapts TrainingService for orchestrator use.
-
-    This adapter:
-    1. Starts training via TrainingService
-    2. Polls the training operation until complete
-    3. Returns training metrics for gate evaluation
-    """
-
-    POLL_INTERVAL = 10.0  # seconds between status checks
-
-    def __init__(
-        self,
-        operations_service: OperationsService,
-        training_service: TrainingService | None = None,
-    ):
-        self.ops = operations_service
-        self.training = training_service or TrainingService()
-
-    async def run(
-        self,
-        parent_operation_id: str,
-        strategy_path: str,
-    ) -> dict[str, Any]:
-        """Run training phase.
-
-        Args:
-            parent_operation_id: Parent AGENT_RESEARCH operation ID.
-            strategy_path: Path to strategy YAML file.
-
-        Returns:
-            Training metrics including accuracy, loss, model_path.
-        """
-        logger.info(
-            "Starting training phase",
-            parent_operation_id=parent_operation_id,
-            strategy_path=strategy_path,
-        )
-
-        # Load strategy config
-        config = self._load_strategy_config(strategy_path)
-
-        # Start training
-        training_result = await self.training.start_training(
-            strategy_name=config["name"],
-            symbol=config.get("symbol", "EURUSD"),
-            timeframe=config.get("timeframe", "1h"),
-            # Additional params from strategy config
-            epochs=config.get("training", {}).get("epochs", 50),
-            batch_size=config.get("training", {}).get("batch_size", 32),
-        )
-
-        training_op_id = training_result["operation_id"]
-        logger.info("Training started", training_op_id=training_op_id)
-
-        # Poll until complete
-        try:
-            result = await self._poll_until_complete(training_op_id)
-            return result
-        except asyncio.CancelledError:
-            # Cancel the training operation too
-            await self.ops.cancel_operation(training_op_id, "Parent cancelled")
-            raise
-
-    async def _poll_until_complete(self, training_op_id: str) -> dict[str, Any]:
-        """Poll training operation until it completes."""
-        while True:
-            op = await self.ops.get_operation(training_op_id)
-
-            if op.status == OperationStatus.COMPLETED:
-                logger.info(
-                    "Training completed",
-                    training_op_id=training_op_id,
-                    accuracy=op.result_summary.get("accuracy"),
-                )
-                return {
-                    "success": True,
-                    "training_op_id": training_op_id,
-                    "accuracy": op.result_summary.get("accuracy", 0),
-                    "final_loss": op.result_summary.get("final_loss", 1.0),
-                    "initial_loss": op.result_summary.get("initial_loss", 1.0),
-                    "model_path": op.result_summary.get("model_path"),
-                }
-
-            if op.status == OperationStatus.FAILED:
-                error = op.error_message or "Unknown error"
-                logger.error(
-                    "Training failed",
-                    training_op_id=training_op_id,
-                    error=error,
-                )
-                raise WorkerError(f"Training failed: {error}")
-
-            if op.status == OperationStatus.CANCELLED:
-                raise asyncio.CancelledError("Training was cancelled")
-
-            # Log progress
-            if op.progress:
-                logger.debug(
-                    "Training progress",
-                    training_op_id=training_op_id,
-                    percentage=op.progress.percentage,
-                    step=op.progress.current_step,
-                )
-
-            await asyncio.sleep(self.POLL_INTERVAL)
-
-    def _load_strategy_config(self, strategy_path: str) -> dict[str, Any]:
-        """Load strategy configuration from YAML file."""
-        with open(strategy_path) as f:
-            return yaml.safe_load(f)
-```
-
-**Unit Tests** (`tests/unit/agent_tests/test_training_adapter.py`):
-- [ ] Test: Polls until COMPLETED status returns metrics
-- [ ] Test: Raises WorkerError on FAILED status
-- [ ] Test: Raises CancelledError on CANCELLED status
-- [ ] Test: Passes strategy config to TrainingService
-- [ ] Test: Cancels child on parent cancellation
-- [ ] Test: Returns training_op_id in result
-
-**Acceptance Criteria**:
-- [ ] Starts real training via TrainingService
-- [ ] Polls training operation until complete
-- [ ] Returns training metrics (accuracy, loss, model_path)
-- [ ] Cancels training if parent cancelled
-
----
-
-## Task 3.2: Implement Training Gate
+## Task 3.1: Add Training Service Integration to Orchestrator
 
 **File(s)**: `ktrdr/agents/workers/research_worker.py`
 **Type**: CODING
 
-**Description**: Add training gate evaluation after training completes.
+**Description**: Modify orchestrator to directly call TrainingService when transitioning to training phase. The orchestrator tracks the real training operation ID.
 
 **Implementation Notes**:
+
 ```python
-from ktrdr.agents.gates import check_training_gate
+# In research_worker.py
 
 class AgentResearchWorker:
+    def __init__(
+        self,
+        operations_service: Any,
+        design_worker: ChildWorker,
+        # NO training_worker - we call the service directly
+        assessment_worker: ChildWorker,
+        training_service: Any = None,  # TrainingService
+        backtest_service: Any = None,  # BacktestingService
+    ):
+        self.ops = operations_service
+        self.design_worker = design_worker
+        self.assessment_worker = assessment_worker
+        self._training_service = training_service
+        self._backtest_service = backtest_service
 
-    async def run(self, operation_id: str) -> dict[str, Any]:
-        # ... design phase ...
+    @property
+    def training_service(self):
+        """Lazy load TrainingService."""
+        if self._training_service is None:
+            from ktrdr.api.endpoints.workers import get_worker_registry
+            from ktrdr.api.services.training_service import TrainingService
+            registry = get_worker_registry()
+            self._training_service = TrainingService(worker_registry=registry)
+        return self._training_service
 
-        # Phase 2: Training
-        await self._update_phase(operation_id, "training")
-        training_result = await self._run_child(
-            operation_id, "training", self.training_worker.run,
-            operation_id, design_result["strategy_path"]
+    async def _start_training(self, operation_id: str) -> None:
+        """Start training by calling TrainingService directly.
+
+        Stores the real training operation ID in parent metadata.
+        """
+        parent_op = await self.ops.get_operation(operation_id)
+        strategy_path = parent_op.metadata.parameters.get("strategy_path")
+
+        # Load strategy config to get training params
+        config = self._load_strategy_config(strategy_path)
+        symbols = config.get("training_data", {}).get("symbols", {}).get("list", ["EURUSD"])
+        timeframes = config.get("training_data", {}).get("timeframes", {}).get("list", ["1h"])
+        strategy_name = config.get("name", "unknown")
+
+        # Call service directly - this returns immediately with operation_id
+        result = await self.training_service.start_training(
+            symbols=symbols,
+            timeframes=timeframes,
+            strategy_name=strategy_name,
         )
 
-        # Store training results
-        await self.ops.update_operation_metadata(operation_id, {
-            "training_result": {
-                "accuracy": training_result["accuracy"],
-                "final_loss": training_result["final_loss"],
-            },
-            "model_path": training_result["model_path"],
-        })
+        training_op_id = result["operation_id"]
 
-        # Check training gate
-        passed, reason = check_training_gate(training_result)
-        if not passed:
-            raise GateFailedError(f"Training gate failed: {reason}")
+        # Store in parent metadata and update phase
+        parent_op.metadata.parameters["phase"] = "training"
+        parent_op.metadata.parameters["training_op_id"] = training_op_id
 
-        logger.info("Training gate passed", reason=reason)
-
-        # Continue to backtest...
-
-
-class GateFailedError(Exception):
-    """Quality gate failed."""
-    pass
+        logger.info(f"Training started: {training_op_id}")
 ```
 
-**Unit Tests**:
-- [ ] Test: Gate failure raises GateFailedError with reason
-- [ ] Test: Gate pass allows progression to backtesting
-- [ ] Test: Gate reason includes threshold values (e.g., "42% < 45%")
-- [ ] Test: Training result stored in parent metadata
+**Changes to main loop**:
+
+```python
+async def run(self, operation_id: str) -> dict[str, Any]:
+    while True:
+        op = await self.ops.get_operation(operation_id)
+        phase = op.metadata.parameters.get("phase", "idle")
+
+        if phase == "idle":
+            await self._start_phase_worker(operation_id, "designing")
+
+        elif phase == "designing":
+            child_op_id = op.metadata.parameters.get("design_op_id")
+            child_op = await self.ops.get_operation(child_op_id)
+
+            if child_op.status == OperationStatus.COMPLETED:
+                # Store design results, start training
+                result = child_op.result_summary or {}
+                op.metadata.parameters["strategy_name"] = result.get("strategy_name")
+                op.metadata.parameters["strategy_path"] = result.get("strategy_path")
+                await self._start_training(operation_id)
+            elif child_op.status == OperationStatus.FAILED:
+                raise WorkerError(f"Design failed: {child_op.error_message}")
+
+        elif phase == "training":
+            # Check REAL training operation directly
+            training_op_id = op.metadata.parameters.get("training_op_id")
+            training_op = await self.ops.get_operation(training_op_id)
+
+            if training_op.status == OperationStatus.COMPLETED:
+                result = training_op.result_summary or {}
+                op.metadata.parameters["training_result"] = result
+                op.metadata.parameters["model_path"] = result.get("model_path")
+
+                # Check gate
+                passed, reason = check_training_gate(result)
+                if not passed:
+                    raise GateFailedError(f"Training gate failed: {reason}")
+
+                await self._start_backtest(operation_id)
+            elif training_op.status == OperationStatus.FAILED:
+                raise WorkerError(f"Training failed: {training_op.error_message}")
+
+        # ... backtesting and assessing phases ...
+
+        await self._cancellable_sleep(self.POLL_INTERVAL)
+```
+
+**Unit Tests** (`tests/unit/agent_tests/test_research_worker_training.py`):
+- [ ] Test: Training service called with correct params from strategy config
+- [ ] Test: training_op_id stored in parent metadata
+- [ ] Test: Phase transitions to "training" after design completes
+- [ ] Test: Training gate checked when training completes
+- [ ] Test: GateFailedError raised on gate failure
+- [ ] Test: Phase transitions to "backtesting" on gate pass
 
 **Acceptance Criteria**:
-- [ ] Gate evaluated after training completes
-- [ ] Failed gate raises clear exception
-- [ ] Passed gate advances to backtesting
-- [ ] Training metrics stored in parent metadata
+- [ ] Orchestrator calls TrainingService.start_training() directly
+- [ ] Real training operation ID stored in parent metadata
+- [ ] Orchestrator polls real training operation (no adapter)
+- [ ] Training gate applied after training completes
 
 ---
 
-## Task 3.3: Wire Real Training into Orchestrator
+## Task 3.2: Remove TrainingWorkerAdapter and Stubs
 
-**File(s)**: `ktrdr/api/services/agent_service.py`
+**File(s)**:
+- `ktrdr/agents/workers/training_adapter.py` (DELETE)
+- `tests/unit/agent_tests/test_training_adapter.py` (DELETE)
+- `ktrdr/agents/workers/stubs.py` (MODIFY - remove StubTrainingWorker)
+- `ktrdr/api/services/agent_service.py` (MODIFY)
+
 **Type**: CODING
 
-**Description**: Replace stub training worker with real adapter.
+**Description**: Remove the incorrect adapter and update AgentService to not pass training_worker.
 
 **Implementation Notes**:
-```python
-from ktrdr.agents.workers.design_worker import AgentDesignWorker
-from ktrdr.agents.workers.training_adapter import TrainingWorkerAdapter
-from ktrdr.agents.workers.stubs import StubBacktestWorker, StubAssessmentWorker
 
+```python
+# agent_service.py - updated
 class AgentService:
     def _get_worker(self) -> AgentResearchWorker:
         if self._worker is None:
             self._worker = AgentResearchWorker(
                 operations_service=self.ops,
                 design_worker=AgentDesignWorker(self.ops),
-                training_worker=TrainingWorkerAdapter(self.ops),  # Real training
-                backtest_worker=StubBacktestWorker(),             # Still stub
-                assessment_worker=StubAssessmentWorker(),         # Still stub
+                # NO training_worker - orchestrator calls service directly
+                assessment_worker=StubAssessmentWorker(),
+                # Services injected for testing, lazy-loaded in production
+                training_service=None,
+                backtest_service=None,
             )
         return self._worker
 ```
 
 **Acceptance Criteria**:
-- [ ] Real training runs after design
-- [ ] Training operation visible in operations list
-- [ ] Parent metadata includes training_op_id and training_result
+- [ ] TrainingWorkerAdapter deleted
+- [ ] No reference to training_worker in orchestrator constructor
+- [ ] StubTrainingWorker removed from stubs.py
+- [ ] Tests updated to not use training adapter
+
+---
+
+## Task 3.3: Update Tests for New Pattern
+
+**File(s)**: `tests/unit/agent_tests/test_research_worker.py`
+**Type**: CODING
+
+**Description**: Update existing tests to mock TrainingService instead of training worker.
+
+**Implementation Notes**:
+
+```python
+@pytest.fixture
+def mock_training_service():
+    """Mock TrainingService that returns operation IDs."""
+    service = AsyncMock()
+    service.start_training.return_value = {
+        "operation_id": "op_training_test_123",
+        "success": True,
+    }
+    return service
+
+@pytest.fixture
+def orchestrator(mock_operations_service, mock_training_service):
+    return AgentResearchWorker(
+        operations_service=mock_operations_service,
+        design_worker=StubDesignWorker(),
+        assessment_worker=StubAssessmentWorker(),
+        training_service=mock_training_service,
+        backtest_service=mock_backtest_service,
+    )
+```
+
+**Acceptance Criteria**:
+- [ ] Tests mock services instead of workers for training/backtest
+- [ ] Tests verify service called with correct params
+- [ ] Tests verify real operation IDs tracked in metadata
 
 ---
 
 ## Task 3.4: Integration Test
 
-**File(s)**: `tests/integration/agent_tests/test_agent_training_gate.py`
+**File(s)**: `tests/integration/agent_tests/test_agent_training_real.py`
 **Type**: CODING
 
-**Description**: Test training integration and gate evaluation.
-
-**Implementation Notes**:
-```python
-# tests/integration/agent_tests/test_agent_training_gate.py
-"""Integration test for training with gate."""
-
-import os
-import pytest
-import asyncio
-
-from ktrdr.api.services.agent_service import AgentService
-from ktrdr.api.services.operations_service import OperationsService
-from ktrdr.api.models.operations import OperationStatus
-
-
-@pytest.mark.integration
-@pytest.mark.slow  # Training takes time
-@pytest.mark.skipif(
-    not os.getenv("ANTHROPIC_API_KEY"),
-    reason="ANTHROPIC_API_KEY not set"
-)
-async def test_training_runs_after_design():
-    """Training phase runs after successful design."""
-    ops = OperationsService()
-    service = AgentService(operations_service=ops)
-
-    result = await service.trigger()
-    op_id = result["operation_id"]
-
-    # Wait for training or beyond
-    phases_seen = set()
-    for _ in range(300):  # Up to 5 minutes
-        status = await service.get_status()
-        phase = status.get("phase", "")
-        phases_seen.add(phase)
-
-        if phase in ["backtesting", "assessing"] or status.get("status") == "idle":
-            break
-        await asyncio.sleep(2)
-
-    # Verify training phase was hit
-    assert "training" in phases_seen, f"Training phase not seen. Phases: {phases_seen}"
-
-    # Verify training operation exists
-    op = await ops.get_operation(op_id)
-    training_op_id = op.metadata.get("training_op_id")
-    assert training_op_id is not None, "No training_op_id in metadata"
-
-
-@pytest.mark.integration
-async def test_training_gate_failure_stops_cycle():
-    """Training gate failure fails the entire cycle."""
-    # This test requires a strategy that produces poor training results
-    # We'll mock the training result for testing
-
-    from ktrdr.agents.gates import check_training_gate
-
-    # Simulate poor training results
-    poor_results = {
-        "accuracy": 0.35,  # Below 45% threshold
-        "final_loss": 0.9,
-        "initial_loss": 0.95,
-    }
-
-    passed, reason = check_training_gate(poor_results)
-    assert passed is False
-    assert "accuracy_below_threshold" in reason
-    assert "35%" in reason
-    assert "45%" in reason
-
-
-@pytest.mark.integration
-async def test_training_gate_pass_continues():
-    """Training gate pass allows continuation."""
-    from ktrdr.agents.gates import check_training_gate
-
-    good_results = {
-        "accuracy": 0.65,  # Above 45%
-        "final_loss": 0.35,  # Below 0.8
-        "initial_loss": 0.85,  # >20% decrease
-    }
-
-    passed, reason = check_training_gate(good_results)
-    assert passed is True
-    assert reason == "passed"
-```
+**Description**: Integration test that verifies real training runs.
 
 **Acceptance Criteria**:
-- [ ] Gate pass/fail correctly evaluated
-- [ ] Clear error message on gate failure includes values
-- [ ] Training metrics visible in operation metadata
+- [ ] Real training operation created
 - [ ] Training operation visible in operations list
+- [ ] Training result stored in parent metadata
+- [ ] Gate evaluated correctly
 
 ---
 
-## Milestone 3 Verification Script
+## Milestone 3 Verification
 
 ```bash
-#!/bin/bash
-set -e
+# 1. Trigger cycle
+curl -s -X POST http://localhost:8000/api/v1/agent/trigger | jq
 
-echo "=== M3: Training Integration Verification ==="
+# 2. Wait for training phase, check that training_op_id is a REAL training operation
+curl -s http://localhost:8000/api/v1/agent/status | jq '.training_op_id'
 
-# Check API key
-if [ -z "$ANTHROPIC_API_KEY" ]; then
-    echo "ERROR: ANTHROPIC_API_KEY not set"
-    exit 1
-fi
+# 3. Verify training operation exists
+TRAINING_OP_ID=$(curl -s http://localhost:8000/api/v1/agent/status | jq -r '.child_operation_id')
+curl -s "http://localhost:8000/api/v1/operations/$TRAINING_OP_ID" | jq '.data.operation_type'
+# Expected: "training" (NOT "agent_design" or wrapper)
 
-# Trigger cycle
-echo "1. Triggering cycle..."
-RESULT=$(curl -s -X POST http://localhost:8000/api/v1/agent/trigger)
-OP_ID=$(echo $RESULT | jq -r '.operation_id')
-echo "   Operation: $OP_ID"
-
-# Wait for training phase
-echo ""
-echo "2. Waiting for training phase..."
-for i in {1..60}; do
-    STATUS=$(curl -s http://localhost:8000/api/v1/agent/status)
-    PHASE=$(echo $STATUS | jq -r '.phase')
-
-    if [ "$PHASE" == "training" ]; then
-        echo "   Entered training phase"
-        break
-    fi
-    echo "   [$i] Phase: $PHASE"
-    sleep 2
-done
-
-# Wait for training to complete
-echo ""
-echo "3. Waiting for training to complete..."
-for i in {1..180}; do
-    STATUS=$(curl -s http://localhost:8000/api/v1/agent/status)
-    PHASE=$(echo $STATUS | jq -r '.phase // .status')
-
-    if [ "$PHASE" == "backtesting" ] || [ "$PHASE" == "assessing" ]; then
-        echo "   Training complete! Gate PASSED. Now in phase: $PHASE"
-        break
-    fi
-
-    if [ "$PHASE" == "idle" ]; then
-        # Check if failed
-        OP_STATUS=$(curl -s http://localhost:8000/api/v1/operations/$OP_ID | jq -r '.data.status')
-        if [ "$OP_STATUS" == "failed" ]; then
-            ERROR=$(curl -s http://localhost:8000/api/v1/operations/$OP_ID | jq -r '.data.error_message')
-            if [[ "$ERROR" == *"gate"* ]]; then
-                echo "   Training gate FAILED (expected if poor results): $ERROR"
-            else
-                echo "   Cycle failed: $ERROR"
-            fi
-        fi
-        break
-    fi
-
-    echo "   [$i] Phase: $PHASE"
-    sleep 3
-done
-
-# Check training operation
-echo ""
-echo "4. Checking training operation..."
-OP_DATA=$(curl -s http://localhost:8000/api/v1/operations/$OP_ID)
-TRAINING_OP_ID=$(echo $OP_DATA | jq -r '.data.metadata.training_op_id')
-
-if [ "$TRAINING_OP_ID" != "null" ] && [ -n "$TRAINING_OP_ID" ]; then
-    echo "   Training operation: $TRAINING_OP_ID"
-    TRAINING_OP=$(curl -s http://localhost:8000/api/v1/operations/$TRAINING_OP_ID)
-    TRAINING_STATUS=$(echo $TRAINING_OP | jq -r '.data.status')
-    echo "   Training status: $TRAINING_STATUS"
-
-    if [ "$TRAINING_STATUS" == "completed" ]; then
-        ACCURACY=$(echo $TRAINING_OP | jq -r '.data.result_summary.accuracy')
-        LOSS=$(echo $TRAINING_OP | jq -r '.data.result_summary.final_loss')
-        echo "   Accuracy: $ACCURACY"
-        echo "   Final loss: $LOSS"
-    fi
-else
-    echo "   No training operation found (may have failed before training)"
-fi
-
-# List training operations
-echo ""
-echo "5. Training operations list:"
-curl -s "http://localhost:8000/api/v1/operations?type=training&limit=3" | jq '.data[] | {id: .operation_id, status: .status}'
-
-echo ""
-echo "=== M3 Complete ==="
+# 4. Check training metrics after completion
+curl -s "http://localhost:8000/api/v1/operations/$TRAINING_OP_ID" | jq '.data.result_summary'
 ```
 
 ---
 
-## Files Created/Modified in M3
+## Files Changed in M3
 
-**New files**:
-```
-ktrdr/agents/workers/training_adapter.py
-tests/unit/agent_tests/test_training_adapter.py
-tests/integration/agent_tests/test_agent_training_gate.py
-```
+**Deleted**:
+- `ktrdr/agents/workers/training_adapter.py`
+- `tests/unit/agent_tests/test_training_adapter.py`
 
-**Modified files**:
-```
-ktrdr/agents/workers/research_worker.py  # Add gate check, store training result
-ktrdr/api/services/agent_service.py      # Use real training adapter
-```
+**Modified**:
+- `ktrdr/agents/workers/research_worker.py` - Add _start_training(), update main loop
+- `ktrdr/agents/workers/stubs.py` - Remove StubTrainingWorker
+- `ktrdr/api/services/agent_service.py` - Update worker creation
+- `tests/unit/agent_tests/test_research_worker.py` - Mock services instead of workers
+
+**New**:
+- `tests/unit/agent_tests/test_research_worker_training.py`
+- `tests/integration/agent_tests/test_agent_training_real.py`
 
 ---
 

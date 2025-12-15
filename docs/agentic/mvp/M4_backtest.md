@@ -1,4 +1,4 @@
-# Milestone 4: Backtest Integration
+# Milestone 4: Backtest Integration (Revised)
 
 **Branch**: `feature/agent-mvp`
 **Builds On**: M3 (Training Integration)
@@ -6,9 +6,28 @@
 
 ---
 
-## Why This Milestone
+## Architecture Alignment
 
-Connects the orchestrator to the existing backtesting infrastructure. After training passes the gate, real backtesting runs on held-out data. The backtest gate evaluates results before assessment.
+**Pattern**: The orchestrator directly calls BacktestingService and tracks the real backtest operation. NO adapter, NO nested polling.
+
+```
+Orchestrator wakes up (phase = training, training op COMPLETED, gate PASS)
+  → calls BacktestingService.run_backtest()
+  → stores backtest_op_id in metadata
+  → sets phase = "backtesting"
+  → goes to sleep
+
+Orchestrator wakes up (phase = backtesting)
+  → checks backtest_op_id status
+  → if RUNNING: sleep
+  → if COMPLETED: check gate, start assessment
+  → if FAILED: fail parent
+```
+
+**What we will NOT do:**
+- ❌ BacktestWorkerAdapter with nested polling
+- ❌ Wrapper operations around real backtest operations
+- ❌ Any polling inside child workers
 
 ---
 
@@ -27,463 +46,332 @@ ktrdr operations list --type backtesting
 
 ---
 
-## Task 4.1: Create Backtest Worker Adapter
-
-**File(s)**: `ktrdr/agents/workers/backtest_adapter.py`
-**Type**: CODING
-
-**Description**: Create adapter that starts backtest via BacktestService and polls for completion.
-
-**Implementation Notes**:
-```python
-# ktrdr/agents/workers/backtest_adapter.py
-"""Backtest worker adapter for agent orchestrator."""
-
-import asyncio
-from typing import Any
-
-from ktrdr import get_logger
-from ktrdr.api.models.operations import OperationStatus
-from ktrdr.api.services.operations_service import OperationsService
-from ktrdr.api.services.backtest_service import BacktestService
-
-logger = get_logger(__name__)
-
-
-class WorkerError(Exception):
-    """Error during worker execution."""
-    pass
-
-
-class BacktestWorkerAdapter:
-    """Adapts BacktestService for orchestrator use.
-
-    This adapter:
-    1. Starts backtest via BacktestService
-    2. Polls the backtest operation until complete
-    3. Returns backtest metrics for gate evaluation
-    """
-
-    POLL_INTERVAL = 10.0  # seconds between status checks
-
-    def __init__(
-        self,
-        operations_service: OperationsService,
-        backtest_service: BacktestService | None = None,
-    ):
-        self.ops = operations_service
-        self.backtest = backtest_service or BacktestService()
-
-    async def run(
-        self,
-        parent_operation_id: str,
-        model_path: str,
-    ) -> dict[str, Any]:
-        """Run backtest phase.
-
-        Args:
-            parent_operation_id: Parent AGENT_RESEARCH operation ID.
-            model_path: Path to trained model.
-
-        Returns:
-            Backtest metrics including sharpe_ratio, win_rate, max_drawdown.
-        """
-        logger.info(
-            "Starting backtest phase",
-            parent_operation_id=parent_operation_id,
-            model_path=model_path,
-        )
-
-        # Get parent operation for strategy info
-        parent_op = await self.ops.get_operation(parent_operation_id)
-        strategy_name = parent_op.metadata.get("strategy_name")
-        symbol = parent_op.metadata.get("symbol", "EURUSD")
-        timeframe = parent_op.metadata.get("timeframe", "1h")
-
-        # Start backtest
-        backtest_result = await self.backtest.start_backtest(
-            model_path=model_path,
-            strategy_name=strategy_name,
-            symbol=symbol,
-            timeframe=timeframe,
-            # Use held-out period (different from training)
-            start_date="2024-01-01",
-            end_date="2024-12-31",
-        )
-
-        backtest_op_id = backtest_result["operation_id"]
-        logger.info("Backtest started", backtest_op_id=backtest_op_id)
-
-        # Poll until complete
-        try:
-            result = await self._poll_until_complete(backtest_op_id)
-            return result
-        except asyncio.CancelledError:
-            # Cancel the backtest operation too
-            await self.ops.cancel_operation(backtest_op_id, "Parent cancelled")
-            raise
-
-    async def _poll_until_complete(self, backtest_op_id: str) -> dict[str, Any]:
-        """Poll backtest operation until it completes."""
-        while True:
-            op = await self.ops.get_operation(backtest_op_id)
-
-            if op.status == OperationStatus.COMPLETED:
-                logger.info(
-                    "Backtest completed",
-                    backtest_op_id=backtest_op_id,
-                    sharpe_ratio=op.result_summary.get("sharpe_ratio"),
-                    win_rate=op.result_summary.get("win_rate"),
-                )
-                return {
-                    "success": True,
-                    "backtest_op_id": backtest_op_id,
-                    "sharpe_ratio": op.result_summary.get("sharpe_ratio", 0),
-                    "win_rate": op.result_summary.get("win_rate", 0),
-                    "max_drawdown": op.result_summary.get("max_drawdown", 1.0),
-                    "total_return": op.result_summary.get("total_return", 0),
-                    "total_trades": op.result_summary.get("total_trades", 0),
-                }
-
-            if op.status == OperationStatus.FAILED:
-                error = op.error_message or "Unknown error"
-                logger.error(
-                    "Backtest failed",
-                    backtest_op_id=backtest_op_id,
-                    error=error,
-                )
-                raise WorkerError(f"Backtest failed: {error}")
-
-            if op.status == OperationStatus.CANCELLED:
-                raise asyncio.CancelledError("Backtest was cancelled")
-
-            # Log progress
-            if op.progress:
-                logger.debug(
-                    "Backtest progress",
-                    backtest_op_id=backtest_op_id,
-                    percentage=op.progress.percentage,
-                    step=op.progress.current_step,
-                )
-
-            await asyncio.sleep(self.POLL_INTERVAL)
-```
-
-**Unit Tests** (`tests/unit/agent_tests/test_backtest_adapter.py`):
-- [ ] Test: Polls until COMPLETED status returns metrics
-- [ ] Test: Raises WorkerError on FAILED status
-- [ ] Test: Raises CancelledError on CANCELLED status
-- [ ] Test: Passes model_path to BacktestService
-- [ ] Test: Cancels child on parent cancellation
-- [ ] Test: Returns all expected metrics (sharpe, win_rate, drawdown)
-
-**Acceptance Criteria**:
-- [ ] Starts real backtest via BacktestService
-- [ ] Polls backtest operation until complete
-- [ ] Returns backtest metrics (sharpe_ratio, win_rate, max_drawdown)
-- [ ] Cancels backtest if parent cancelled
-
----
-
-## Task 4.2: Implement Backtest Gate
+## Task 4.1: Add Backtest Service Integration to Orchestrator
 
 **File(s)**: `ktrdr/agents/workers/research_worker.py`
 **Type**: CODING
 
-**Description**: Add backtest gate evaluation after backtest completes.
+**Description**: Add method to start backtest via BacktestingService and update main loop to handle backtesting phase.
 
 **Implementation Notes**:
+
 ```python
-from ktrdr.agents.gates import check_training_gate, check_backtest_gate
+# In research_worker.py
 
 class AgentResearchWorker:
 
-    async def run(self, operation_id: str) -> dict[str, Any]:
-        # ... design and training phases ...
+    @property
+    def backtest_service(self):
+        """Lazy load BacktestingService."""
+        if self._backtest_service is None:
+            from ktrdr.api.endpoints.workers import get_worker_registry
+            from ktrdr.backtesting.backtesting_service import BacktestingService
+            registry = get_worker_registry()
+            self._backtest_service = BacktestingService(worker_registry=registry)
+        return self._backtest_service
 
-        # Phase 3: Backtest
-        await self._update_phase(operation_id, "backtesting")
-        backtest_result = await self._run_child(
-            operation_id, "backtest", self.backtest_worker.run,
-            operation_id, training_result["model_path"]
+    async def _start_backtest(self, operation_id: str) -> None:
+        """Start backtest by calling BacktestingService directly.
+
+        Stores the real backtest operation ID in parent metadata.
+        """
+        from datetime import datetime
+
+        parent_op = await self.ops.get_operation(operation_id)
+        params = parent_op.metadata.parameters
+
+        strategy_path = params.get("strategy_path")
+        model_path = params.get("model_path")
+
+        # Load strategy config for symbol/timeframe
+        config = self._load_strategy_config(strategy_path)
+        symbol = config.get("training_data", {}).get("symbols", {}).get("list", ["EURUSD"])[0]
+        timeframe = config.get("training_data", {}).get("timeframes", {}).get("list", ["1h"])[0]
+
+        # Call service directly - returns immediately with operation_id
+        result = await self.backtest_service.run_backtest(
+            symbol=symbol,
+            timeframe=timeframe,
+            strategy_config_path=strategy_path,
+            model_path=model_path,
+            start_date=datetime(2024, 1, 1),  # Held-out period
+            end_date=datetime(2024, 12, 31),
         )
 
-        # Store backtest results
-        await self.ops.update_operation_metadata(operation_id, {
-            "backtest_result": {
-                "sharpe_ratio": backtest_result["sharpe_ratio"],
-                "win_rate": backtest_result["win_rate"],
-                "max_drawdown": backtest_result["max_drawdown"],
-                "total_return": backtest_result["total_return"],
-            },
-        })
+        backtest_op_id = result["operation_id"]
 
-        # Check backtest gate
+        # Store in parent metadata and update phase
+        params["phase"] = "backtesting"
+        params["backtest_op_id"] = backtest_op_id
+
+        logger.info(f"Backtest started: {backtest_op_id}")
+```
+
+**Main loop addition** (backtesting phase):
+
+```python
+elif phase == "backtesting":
+    # Check REAL backtest operation directly
+    backtest_op_id = op.metadata.parameters.get("backtest_op_id")
+    backtest_op = await self.ops.get_operation(backtest_op_id)
+
+    if backtest_op.status == OperationStatus.COMPLETED:
+        # Extract metrics from result_summary.metrics (nested structure)
+        result_summary = backtest_op.result_summary or {}
+        metrics = result_summary.get("metrics", {})
+
+        backtest_result = {
+            "sharpe_ratio": metrics.get("sharpe_ratio", 0),
+            "win_rate": metrics.get("win_rate", 0),
+            "max_drawdown": metrics.get("max_drawdown_pct", 1.0),
+            "total_return": metrics.get("total_return", 0),
+            "total_trades": metrics.get("total_trades", 0),
+        }
+
+        op.metadata.parameters["backtest_result"] = backtest_result
+
+        # Check gate
         passed, reason = check_backtest_gate(backtest_result)
         if not passed:
             raise GateFailedError(f"Backtest gate failed: {reason}")
 
-        logger.info("Backtest gate passed", reason=reason)
+        await self._start_phase_worker(operation_id, "assessing")
 
-        # Continue to assessment...
+    elif backtest_op.status == OperationStatus.FAILED:
+        raise WorkerError(f"Backtest failed: {backtest_op.error_message}")
 ```
 
-**Unit Tests**:
-- [ ] Test: Gate failure raises GateFailedError with reason
-- [ ] Test: Gate pass allows progression to assessing
-- [ ] Test: Gate reason includes threshold values
-- [ ] Test: Backtest result stored in parent metadata
+**Unit Tests** (`tests/unit/agent_tests/test_research_worker_backtest.py`):
+- [ ] Test: Backtest service called with correct params
+- [ ] Test: backtest_op_id stored in parent metadata
+- [ ] Test: Phase transitions to "backtesting" after training gate passes
+- [ ] Test: Backtest metrics extracted from result_summary.metrics
+- [ ] Test: Backtest gate checked when backtest completes
+- [ ] Test: GateFailedError raised on gate failure
+- [ ] Test: Phase transitions to "assessing" on gate pass
 
 **Acceptance Criteria**:
-- [ ] Gate evaluated after backtest completes
-- [ ] Failed gate raises clear exception
-- [ ] Passed gate advances to assessing
-- [ ] Backtest metrics stored in parent metadata
+- [ ] Orchestrator calls BacktestingService.run_backtest() directly
+- [ ] Real backtest operation ID stored in parent metadata
+- [ ] Orchestrator polls real backtest operation (no adapter)
+- [ ] Backtest gate applied after backtest completes
+- [ ] Metrics correctly extracted from nested result_summary.metrics
 
 ---
 
-## Task 4.3: Wire Real Backtest into Orchestrator
+## Task 4.2: Delete BacktestWorkerAdapter
+
+**File(s)**:
+- `ktrdr/agents/workers/backtest_adapter.py` (DELETE)
+- `tests/unit/agent_tests/test_backtest_adapter.py` (DELETE)
+- `ktrdr/agents/workers/stubs.py` (MODIFY - remove StubBacktestWorker)
+
+**Type**: CODING
+
+**Description**: Remove the incorrect adapter that was created.
+
+**Implementation Notes**:
+
+```bash
+# Delete files
+rm ktrdr/agents/workers/backtest_adapter.py
+rm tests/unit/agent_tests/test_backtest_adapter.py
+
+# Revert commit if needed
+git revert ca20a1b  # The backtest adapter commit
+```
+
+**Acceptance Criteria**:
+- [ ] BacktestWorkerAdapter deleted
+- [ ] No reference to backtest_worker in orchestrator constructor
+- [ ] StubBacktestWorker removed from stubs.py
+
+---
+
+## Task 4.3: Update Stub Workers
+
+**File(s)**: `ktrdr/agents/workers/stubs.py`
+**Type**: CODING
+
+**Description**: Update stubs to only include workers that are needed (Design and Assessment only, since those are Claude calls).
+
+**Implementation Notes**:
+
+```python
+# stubs.py - simplified
+"""Stub workers for testing.
+
+Only Design and Assessment need stubs because they're Claude calls.
+Training and Backtest are handled by the orchestrator calling services directly.
+"""
+
+class StubDesignWorker:
+    """Stub design worker for testing."""
+
+    async def run(self, parent_operation_id: str) -> dict[str, Any]:
+        return {
+            "success": True,
+            "strategy_name": "stub_strategy_v1",
+            "strategy_path": "/app/strategies/stub_strategy_v1.yaml",
+            "input_tokens": 100,
+            "output_tokens": 50,
+        }
+
+
+class StubAssessmentWorker:
+    """Stub assessment worker for testing."""
+
+    async def run(
+        self, parent_operation_id: str, results: dict[str, Any]
+    ) -> dict[str, Any]:
+        return {
+            "success": True,
+            "verdict": "promising",
+            "strengths": ["Good test coverage"],
+            "weaknesses": ["Stub data"],
+            "suggestions": ["Use real data"],
+            "input_tokens": 100,
+            "output_tokens": 50,
+        }
+```
+
+**Acceptance Criteria**:
+- [ ] Only StubDesignWorker and StubAssessmentWorker remain
+- [ ] No StubTrainingWorker or StubBacktestWorker
+
+---
+
+## Task 4.4: Update AgentService
 
 **File(s)**: `ktrdr/api/services/agent_service.py`
 **Type**: CODING
 
-**Description**: Replace stub backtest worker with real adapter.
+**Description**: Update AgentService to pass services instead of workers for training/backtest.
 
 **Implementation Notes**:
-```python
-from ktrdr.agents.workers.design_worker import AgentDesignWorker
-from ktrdr.agents.workers.training_adapter import TrainingWorkerAdapter
-from ktrdr.agents.workers.backtest_adapter import BacktestWorkerAdapter
-from ktrdr.agents.workers.stubs import StubAssessmentWorker
 
+```python
 class AgentService:
     def _get_worker(self) -> AgentResearchWorker:
         if self._worker is None:
             self._worker = AgentResearchWorker(
                 operations_service=self.ops,
                 design_worker=AgentDesignWorker(self.ops),
-                training_worker=TrainingWorkerAdapter(self.ops),
-                backtest_worker=BacktestWorkerAdapter(self.ops),  # Real backtest
-                assessment_worker=StubAssessmentWorker(),         # Still stub
+                assessment_worker=StubAssessmentWorker(),  # Still stub until M5
+                # Services lazy-loaded inside orchestrator
+                training_service=None,
+                backtest_service=None,
             )
         return self._worker
 ```
 
 **Acceptance Criteria**:
-- [ ] Real backtest runs after training gate passes
-- [ ] Backtest operation visible in operations list
-- [ ] Parent metadata includes backtest_op_id and backtest_result
+- [ ] AgentService creates orchestrator with correct params
+- [ ] No training_worker or backtest_worker parameters
 
 ---
 
-## Task 4.4: Integration Test
+## Task 4.5: Integration Test
 
-**File(s)**: `tests/integration/agent_tests/test_agent_backtest_gate.py`
+**File(s)**: `tests/integration/agent_tests/test_agent_backtest_real.py`
 **Type**: CODING
 
-**Description**: Test backtest integration and gate evaluation.
+**Description**: Integration test that verifies real backtest runs after training.
 
 **Implementation Notes**:
+
 ```python
-# tests/integration/agent_tests/test_agent_backtest_gate.py
-"""Integration test for backtest with gate."""
-
-import os
-import pytest
-import asyncio
-
-from ktrdr.api.services.agent_service import AgentService
-from ktrdr.api.services.operations_service import OperationsService
-from ktrdr.api.models.operations import OperationStatus
-from ktrdr.agents.gates import check_backtest_gate
-
-
 @pytest.mark.integration
 @pytest.mark.slow
-@pytest.mark.skipif(
-    not os.getenv("ANTHROPIC_API_KEY"),
-    reason="ANTHROPIC_API_KEY not set"
-)
 async def test_backtest_runs_after_training():
     """Backtest phase runs after training gate passes."""
-    ops = OperationsService()
-    service = AgentService(operations_service=ops)
-
-    result = await service.trigger()
-    op_id = result["operation_id"]
-
-    # Wait for backtest or beyond
-    phases_seen = set()
-    for _ in range(600):  # Up to 10 minutes
-        status = await service.get_status()
-        phase = status.get("phase", "")
-        phases_seen.add(phase)
-
-        if phase == "assessing" or status.get("status") == "idle":
-            break
-        await asyncio.sleep(2)
-
-    # Verify backtest phase was hit (if training passed)
-    op = await ops.get_operation(op_id)
-    if op.status == OperationStatus.COMPLETED or "assessing" in phases_seen:
-        assert "backtesting" in phases_seen, f"Backtest phase not seen. Phases: {phases_seen}"
-
-
-@pytest.mark.integration
-async def test_backtest_gate_failure():
-    """Backtest gate failure correctly identifies poor results."""
-    poor_results = {
-        "sharpe_ratio": -1.0,  # Below -0.5 threshold
-        "win_rate": 0.35,      # Below 45% threshold
-        "max_drawdown": 0.55,  # Above 40% threshold
-    }
-
-    passed, reason = check_backtest_gate(poor_results)
-    assert passed is False
-    # Should fail on one of the thresholds
-    assert any(x in reason for x in ["win_rate", "sharpe", "drawdown"])
-
-
-@pytest.mark.integration
-async def test_backtest_gate_pass():
-    """Backtest gate pass with good results."""
-    good_results = {
-        "sharpe_ratio": 1.2,
-        "win_rate": 0.55,
-        "max_drawdown": 0.15,
-    }
-
-    passed, reason = check_backtest_gate(good_results)
-    assert passed is True
-    assert reason == "passed"
+    # This test requires full system running
+    # Verify:
+    # 1. backtest_op_id in parent metadata is a REAL backtesting operation
+    # 2. Backtest operation has metrics in result_summary.metrics
+    # 3. Gate evaluated correctly
 ```
 
 **Acceptance Criteria**:
-- [ ] Gate pass/fail correctly evaluated
-- [ ] Clear error message on gate failure includes values
-- [ ] Backtest metrics visible in operation metadata
+- [ ] Real backtest operation created
 - [ ] Backtest operation visible in operations list
+- [ ] Backtest metrics stored in parent metadata
+- [ ] Gate evaluated correctly
 
 ---
 
-## Milestone 4 Verification Script
+## Milestone 4 Verification
 
 ```bash
-#!/bin/bash
-set -e
+# 1. Trigger cycle
+curl -s -X POST http://localhost:8000/api/v1/agent/trigger | jq
 
-echo "=== M4: Backtest Integration Verification ==="
+# 2. Wait for backtesting phase
+# Check that backtest_op_id is a REAL backtest operation
+curl -s http://localhost:8000/api/v1/agent/status | jq
 
-# Check API key
-if [ -z "$ANTHROPIC_API_KEY" ]; then
-    echo "ERROR: ANTHROPIC_API_KEY not set"
-    exit 1
-fi
+# 3. Verify backtest operation exists and is type "backtesting"
+BACKTEST_OP_ID=$(curl -s http://localhost:8000/api/v1/agent/status | jq -r '.child_operation_id')
+curl -s "http://localhost:8000/api/v1/operations/$BACKTEST_OP_ID" | jq '.data.operation_type'
+# Expected: "backtesting"
 
-# Trigger cycle
-echo "1. Triggering cycle..."
-RESULT=$(curl -s -X POST http://localhost:8000/api/v1/agent/trigger)
-OP_ID=$(echo $RESULT | jq -r '.operation_id')
-echo "   Operation: $OP_ID"
-
-# Wait for backtest phase
-echo ""
-echo "2. Waiting for backtest phase..."
-for i in {1..300}; do
-    STATUS=$(curl -s http://localhost:8000/api/v1/agent/status)
-    PHASE=$(echo $STATUS | jq -r '.phase // .status')
-
-    if [ "$PHASE" == "backtesting" ]; then
-        echo "   Entered backtest phase"
-        break
-    fi
-
-    if [ "$PHASE" == "assessing" ] || [ "$PHASE" == "idle" ]; then
-        echo "   Already past backtesting (phase: $PHASE)"
-        break
-    fi
-
-    echo "   [$i] Phase: $PHASE"
-    sleep 3
-done
-
-# Wait for backtest to complete
-echo ""
-echo "3. Waiting for backtest to complete..."
-for i in {1..120}; do
-    STATUS=$(curl -s http://localhost:8000/api/v1/agent/status)
-    PHASE=$(echo $STATUS | jq -r '.phase // .status')
-
-    if [ "$PHASE" == "assessing" ]; then
-        echo "   Backtest complete! Gate PASSED. Now in phase: assessing"
-        break
-    fi
-
-    if [ "$PHASE" == "idle" ]; then
-        OP_STATUS=$(curl -s http://localhost:8000/api/v1/operations/$OP_ID | jq -r '.data.status')
-        if [ "$OP_STATUS" == "failed" ]; then
-            ERROR=$(curl -s http://localhost:8000/api/v1/operations/$OP_ID | jq -r '.data.error_message')
-            echo "   Cycle failed: $ERROR"
-        elif [ "$OP_STATUS" == "completed" ]; then
-            echo "   Cycle completed!"
-        fi
-        break
-    fi
-
-    echo "   [$i] Phase: $PHASE"
-    sleep 3
-done
-
-# Check backtest operation
-echo ""
-echo "4. Checking backtest operation..."
-OP_DATA=$(curl -s http://localhost:8000/api/v1/operations/$OP_ID)
-BACKTEST_OP_ID=$(echo $OP_DATA | jq -r '.data.metadata.backtest_op_id')
-
-if [ "$BACKTEST_OP_ID" != "null" ] && [ -n "$BACKTEST_OP_ID" ]; then
-    echo "   Backtest operation: $BACKTEST_OP_ID"
-    BACKTEST_OP=$(curl -s http://localhost:8000/api/v1/operations/$BACKTEST_OP_ID)
-    BACKTEST_STATUS=$(echo $BACKTEST_OP | jq -r '.data.status')
-    echo "   Backtest status: $BACKTEST_STATUS"
-
-    if [ "$BACKTEST_STATUS" == "completed" ]; then
-        SHARPE=$(echo $BACKTEST_OP | jq -r '.data.result_summary.sharpe_ratio')
-        WIN_RATE=$(echo $BACKTEST_OP | jq -r '.data.result_summary.win_rate')
-        DRAWDOWN=$(echo $BACKTEST_OP | jq -r '.data.result_summary.max_drawdown')
-        echo "   Sharpe ratio: $SHARPE"
-        echo "   Win rate: $WIN_RATE"
-        echo "   Max drawdown: $DRAWDOWN"
-    fi
-else
-    echo "   No backtest operation found"
-fi
-
-# List backtest operations
-echo ""
-echo "5. Backtest operations list:"
-curl -s "http://localhost:8000/api/v1/operations?type=backtesting&limit=3" | jq '.data[] | {id: .operation_id, status: .status}'
-
-echo ""
-echo "=== M4 Complete ==="
+# 4. Check backtest metrics after completion (note: nested in .metrics)
+curl -s "http://localhost:8000/api/v1/operations/$BACKTEST_OP_ID" | jq '.data.result_summary.metrics'
 ```
 
 ---
 
-## Files Created/Modified in M4
+## Files Changed in M4
 
-**New files**:
-```
-ktrdr/agents/workers/backtest_adapter.py
-tests/unit/agent_tests/test_backtest_adapter.py
-tests/integration/agent_tests/test_agent_backtest_gate.py
+**Deleted**:
+- `ktrdr/agents/workers/backtest_adapter.py`
+- `tests/unit/agent_tests/test_backtest_adapter.py`
+
+**Modified**:
+- `ktrdr/agents/workers/research_worker.py` - Add _start_backtest(), update main loop
+- `ktrdr/agents/workers/stubs.py` - Remove StubBacktestWorker, StubTrainingWorker
+- `ktrdr/api/services/agent_service.py` - Update worker creation
+- `tests/unit/agent_tests/test_research_worker.py` - Mock services
+
+**New**:
+- `tests/unit/agent_tests/test_research_worker_backtest.py`
+- `tests/integration/agent_tests/test_agent_backtest_real.py`
+
+---
+
+## Key Implementation Notes
+
+### Backtest Metrics Structure
+
+The BacktestingService returns metrics nested under `result_summary.metrics`:
+
+```python
+{
+    "result_summary": {
+        "metrics": {
+            "sharpe_ratio": 1.2,
+            "win_rate": 0.55,
+            "max_drawdown": 15000.0,      # Absolute value in $
+            "max_drawdown_pct": 0.15,     # Percentage (use this for gate)
+            "total_return": 25000.0,
+            "total_trades": 42,
+        }
+    }
+}
 ```
 
-**Modified files**:
-```
-ktrdr/agents/workers/research_worker.py  # Add backtest gate check
-ktrdr/api/services/agent_service.py      # Use real backtest adapter
+Use `max_drawdown_pct` for the backtest gate evaluation.
+
+### Service Dependencies
+
+Both TrainingService and BacktestingService require WorkerRegistry:
+
+```python
+from ktrdr.api.endpoints.workers import get_worker_registry
+registry = get_worker_registry()
+service = BacktestingService(worker_registry=registry)
 ```
 
 ---
 
-*Estimated effort: ~3 hours*
+*Estimated effort: ~2-3 hours*
