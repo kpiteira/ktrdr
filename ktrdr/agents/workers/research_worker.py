@@ -311,6 +311,11 @@ class AgentResearchWorker:
 
         Stores the real training operation ID in parent metadata.
 
+        Date range is determined by (in priority order):
+        1. Strategy config: training_data.date_range.start/end
+        2. Environment variables: AGENT_TRAINING_START_DATE/END_DATE
+        3. Defaults: None (training service will use its defaults)
+
         Args:
             operation_id: Parent operation ID.
         """
@@ -327,11 +332,18 @@ class AgentResearchWorker:
         )
         strategy_name = config.get("name", "unknown")
 
+        # Get date range from config or environment
+        date_range = config.get("training_data", {}).get("date_range", {})
+        start_date = date_range.get("start") or os.getenv("AGENT_TRAINING_START_DATE")
+        end_date = date_range.get("end") or os.getenv("AGENT_TRAINING_END_DATE")
+
         # Call service directly - returns immediately with operation_id
         result = await self.training_service.start_training(
             symbols=symbols,
             timeframes=timeframes,
             strategy_name=strategy_name,
+            start_date=start_date,
+            end_date=end_date,
         )
 
         training_op_id = result["operation_id"]
@@ -392,6 +404,11 @@ class AgentResearchWorker:
 
         Stores the real backtest operation ID in parent metadata.
 
+        Date range is determined by (in priority order):
+        1. Strategy config: backtest.date_range.start/end
+        2. Environment variables: AGENT_BACKTEST_START_DATE/END_DATE
+        3. Defaults: 2024-01-01 to 2024-06-30 (6 months held-out)
+
         Args:
             operation_id: Parent operation ID.
         """
@@ -412,14 +429,31 @@ class AgentResearchWorker:
             config.get("training_data", {}).get("timeframes", {}).get("list", ["1h"])
         )[0]
 
+        # Get date range from config or environment or defaults
+        backtest_config = config.get("backtest", {}).get("date_range", {})
+        start_date_str = (
+            backtest_config.get("start")
+            or os.getenv("AGENT_BACKTEST_START_DATE")
+            or "2024-01-01"
+        )
+        end_date_str = (
+            backtest_config.get("end")
+            or os.getenv("AGENT_BACKTEST_END_DATE")
+            or "2024-06-30"
+        )
+
+        # Parse dates
+        start_date = datetime.fromisoformat(start_date_str)
+        end_date = datetime.fromisoformat(end_date_str)
+
         # Call service directly - returns immediately with operation_id
         result = await self.backtest_service.run_backtest(
             symbol=symbol,
             timeframe=timeframe,
             strategy_config_path=strategy_path,
             model_path=model_path,
-            start_date=datetime(2024, 1, 1),  # Held-out period
-            end_date=datetime(2024, 12, 31),
+            start_date=start_date,
+            end_date=end_date,
         )
 
         backtest_op_id = result["operation_id"]
