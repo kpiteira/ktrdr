@@ -8,12 +8,15 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, Any
 
+from collections import defaultdict
+
 from ktrdr import get_logger
 from ktrdr.agents.executor import ToolExecutor
 from ktrdr.agents.invoker import AnthropicAgentInvoker
 from ktrdr.agents.prompts import TriggerReason, get_strategy_designer_prompt
 from ktrdr.agents.tools import AGENT_TOOLS
 from ktrdr.api.models.operations import OperationMetadata, OperationType
+from ktrdr.data.repository.data_repository import DataRepository
 
 if TYPE_CHECKING:
     from ktrdr.api.services.operations_service import OperationsService
@@ -71,6 +74,36 @@ Always validate your configuration before saving it."""
         self.ops = operations_service
         self.invoker = invoker or AnthropicAgentInvoker()
         self.tool_executor = ToolExecutor()
+        self.repository = DataRepository()
+
+    def _get_available_symbols(self) -> list[dict[str, Any]]:
+        """Get available symbols with their timeframes from cached data.
+
+        Returns:
+            List of symbol dicts with symbol name and available timeframes.
+        """
+        try:
+            # Get (symbol, timeframe) tuples from repository
+            data_files = self.repository.get_available_data_files()
+
+            # Group by symbol
+            symbol_timeframes: dict[str, list[str]] = defaultdict(list)
+            for symbol, timeframe in data_files:
+                symbol_timeframes[symbol].append(timeframe)
+
+            # Format for prompt
+            result = []
+            for symbol, timeframes in sorted(symbol_timeframes.items()):
+                result.append({
+                    "symbol": symbol,
+                    "timeframes": sorted(timeframes),
+                    "date_range": {"start": "cached", "end": "cached"},
+                })
+
+            return result
+        except Exception as e:
+            logger.warning(f"Failed to get available symbols: {e}")
+            return []
 
     async def run(self, parent_operation_id: str) -> dict[str, Any]:
         """Run design phase using Claude.
@@ -99,11 +132,16 @@ Always validate your configuration before saving it."""
         )
 
         try:
-            # Build prompt
+            # Get available data for context
+            available_symbols = self._get_available_symbols()
+            logger.info(f"Found {len(available_symbols)} symbols with cached data")
+
+            # Build prompt with available data context
             prompt_data = get_strategy_designer_prompt(
                 trigger_reason=TriggerReason.START_NEW_CYCLE,
                 operation_id=op.operation_id,
                 phase="designing",
+                available_symbols=available_symbols,
             )
 
             # Run Claude

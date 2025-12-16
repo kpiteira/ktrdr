@@ -40,7 +40,8 @@ class MultiTimeframeCoordinator:
         Initialize the MultiTimeframeCoordinator.
 
         Args:
-            data_manager: DataManager instance to use for single-timeframe operations
+            data_manager: DataRepository instance with load_from_cache() method.
+                          Training uses cached data only - user must run `ktrdr data load` first.
         """
         self.data_manager = data_manager
         logger.debug("Initialized MultiTimeframeCoordinator")
@@ -71,11 +72,14 @@ class MultiTimeframeCoordinator:
             start_date: Optional start date for filtering data
             end_date: Optional end date for filtering data
             base_timeframe: Reference timeframe for alignment (default: '1h')
-            mode: Loading mode - 'local', 'tail', 'backfill', 'full'
-            validate: Whether to validate data integrity
-            repair: Whether to repair any detected issues
-            cancellation_token: Optional cancellation token for early termination
+            mode: DEPRECATED - ignored, always loads from cache
+            validate: DEPRECATED - ignored, cache validation happens on load
+            repair: DEPRECATED - ignored
+            cancellation_token: DEPRECATED - ignored
             progress_callback: Optional callback for progress updates
+
+        Note:
+            This method loads from cache only. User must run `ktrdr data load` first.
 
         Returns:
             Dictionary mapping timeframes to aligned DataFrames
@@ -136,16 +140,13 @@ class MultiTimeframeCoordinator:
 
                 logger.debug(f"Loading {symbol} data for timeframe: {timeframe}")
 
-                # Load data for this timeframe using DataManager's primitive
-                tf_data = self.data_manager.load_data(
+                # Load data for this timeframe from cache
+                # Training uses pre-downloaded data only (user must run `ktrdr data load` first)
+                tf_data = self.data_manager.load_from_cache(
                     symbol=symbol,
                     timeframe=timeframe,
                     start_date=start_date,
                     end_date=end_date,
-                    mode=mode,
-                    validate=validate,
-                    repair=repair,
-                    cancellation_token=cancellation_token,
                 )
 
                 if tf_data is not None and not tf_data.empty:

@@ -231,11 +231,11 @@ You MUST use ONLY these exact values. Using any other value will cause validatio
 - `"single"` - Deploy to single timeframe
 - `"multi_timeframe"` - Deploy to multiple timeframes
 
-### fuzzy_sets type (with required parameter counts)
+### fuzzy_sets type (ONLY these 3 types are supported)
 - `"triangular"` - Requires exactly 3 parameters: [left, center, right]
 - `"trapezoidal"` - Requires exactly 4 parameters: [left_bottom, left_top, right_top, right_bottom]
 - `"gaussian"` - Requires exactly 2 parameters: [mean, sigma]
-- `"sigmoid"` - Requires exactly 2 parameters: [center, slope]
+**IMPORTANT**: Do NOT use any other membership types (e.g., sigmoid). Only triangular, trapezoidal, and gaussian are supported.
 
 ### model.type
 - `"mlp"` - Multi-layer perceptron (currently the only supported type)
