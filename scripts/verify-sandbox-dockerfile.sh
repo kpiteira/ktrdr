@@ -9,6 +9,11 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 DOCKERFILE="$PROJECT_ROOT/deploy/docker/sandbox/Dockerfile"
 IMAGE_NAME="ktrdr-sandbox-test"
 
+# Helper to run commands without entrypoint (for clean version output)
+run_cmd() {
+    docker run --rm --entrypoint "" "$IMAGE_NAME" "$@"
+}
+
 echo "=== Task 1.1: Sandbox Dockerfile Verification ==="
 echo ""
 
@@ -33,7 +38,7 @@ echo "  PASS: Docker build succeeded"
 # Check 3: Container has Python 3.11+
 echo ""
 echo "Check 3: Python 3.11+ installed..."
-PYTHON_VERSION=$(docker run --rm "$IMAGE_NAME" python3 --version 2>&1 | grep -oE '[0-9]+\.[0-9]+')
+PYTHON_VERSION=$(run_cmd python3 --version 2>&1 | grep -oE '[0-9]+\.[0-9]+')
 PYTHON_MAJOR=$(echo "$PYTHON_VERSION" | cut -d. -f1)
 PYTHON_MINOR=$(echo "$PYTHON_VERSION" | cut -d. -f2)
 if [ "$PYTHON_MAJOR" -lt 3 ] || ([ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 11 ]); then
@@ -45,58 +50,58 @@ echo "  PASS: Python $PYTHON_VERSION installed"
 # Check 4: Node.js installed
 echo ""
 echo "Check 4: Node.js installed..."
-if ! docker run --rm "$IMAGE_NAME" node --version > /dev/null 2>&1; then
+if ! run_cmd node --version > /dev/null 2>&1; then
     echo "  FAIL: Node.js not installed"
     exit 1
 fi
-NODE_VERSION=$(docker run --rm "$IMAGE_NAME" node --version)
+NODE_VERSION=$(run_cmd node --version)
 echo "  PASS: Node.js $NODE_VERSION installed"
 
 # Check 5: Git installed
 echo ""
 echo "Check 5: Git installed..."
-if ! docker run --rm "$IMAGE_NAME" git --version > /dev/null 2>&1; then
+if ! run_cmd git --version > /dev/null 2>&1; then
     echo "  FAIL: Git not installed"
     exit 1
 fi
-GIT_VERSION=$(docker run --rm "$IMAGE_NAME" git --version)
+GIT_VERSION=$(run_cmd git --version)
 echo "  PASS: $GIT_VERSION"
 
 # Check 6: Docker CLI installed
 echo ""
 echo "Check 6: Docker CLI installed..."
-if ! docker run --rm "$IMAGE_NAME" docker --version > /dev/null 2>&1; then
+if ! run_cmd docker --version > /dev/null 2>&1; then
     echo "  FAIL: Docker CLI not installed"
     exit 1
 fi
-DOCKER_VERSION=$(docker run --rm "$IMAGE_NAME" docker --version)
+DOCKER_VERSION=$(run_cmd docker --version)
 echo "  PASS: $DOCKER_VERSION"
 
 # Check 7: Claude Code CLI installed and in PATH
 echo ""
 echo "Check 7: Claude Code CLI installed..."
-if ! docker run --rm "$IMAGE_NAME" which claude > /dev/null 2>&1; then
+if ! run_cmd which claude > /dev/null 2>&1; then
     echo "  FAIL: Claude Code CLI not in PATH"
     exit 1
 fi
-CLAUDE_PATH=$(docker run --rm "$IMAGE_NAME" which claude)
+CLAUDE_PATH=$(run_cmd which claude)
 echo "  PASS: Claude Code CLI at $CLAUDE_PATH"
 
 # Check 8: uv installed
 echo ""
 echo "Check 8: uv installed..."
-if ! docker run --rm "$IMAGE_NAME" uv --version > /dev/null 2>&1; then
+if ! run_cmd uv --version > /dev/null 2>&1; then
     echo "  FAIL: uv not installed"
     exit 1
 fi
-UV_VERSION=$(docker run --rm "$IMAGE_NAME" uv --version)
+UV_VERSION=$(run_cmd uv --version)
 echo "  PASS: $UV_VERSION"
 
 # Check 9: Additional tools (curl, jq, make)
 echo ""
 echo "Check 9: Additional tools (curl, jq, make)..."
 for tool in curl jq make; do
-    if ! docker run --rm "$IMAGE_NAME" which "$tool" > /dev/null 2>&1; then
+    if ! run_cmd which "$tool" > /dev/null 2>&1; then
         echo "  FAIL: $tool not installed"
         exit 1
     fi
@@ -106,7 +111,7 @@ echo "  PASS: curl, jq, make installed"
 # Check 10: Working directory is /workspace
 echo ""
 echo "Check 10: Working directory is /workspace..."
-WORKDIR=$(docker run --rm "$IMAGE_NAME" pwd)
+WORKDIR=$(run_cmd pwd)
 if [ "$WORKDIR" != "/workspace" ]; then
     echo "  FAIL: Working directory is $WORKDIR, expected /workspace"
     exit 1

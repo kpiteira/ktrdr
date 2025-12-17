@@ -60,8 +60,12 @@ RUN npm install -g @anthropic-ai/claude-code
 # Create workspace directory
 RUN mkdir -p /workspace /env/models /env/strategies /env/logs /shared/data
 
+# Copy and setup entrypoint
+COPY deploy/docker/sandbox/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # Set working directory
 WORKDIR /workspace
 
-# Default command keeps container running for exec commands
-CMD ["sleep", "infinity"]
+# Use entrypoint script for initialization
+ENTRYPOINT ["/entrypoint.sh"]
