@@ -1,0 +1,273 @@
+# Task Implementation Command
+
+Implements tasks from a vertical implementation plan using TDD methodology.
+
+This command embodies our partnership values from CLAUDE.md — craftsmanship over completion, honesty over confidence, decisions made together.
+
+---
+
+## Command Usage
+
+```
+/ktask impl: <plan.md> task: <task-id> [validation: <validation.md>]
+```
+
+**Required:**
+- `impl:` — Implementation plan (from `/kdesign-impl-plan`)
+- `task:` — Task ID, milestone, or range (e.g., "M1", "2.3", "Phase 2")
+
+**Optional:**
+- `validation:` — Validation output with decisions to reference
+- Additional reference docs as needed
+
+---
+
+## Workflow Overview
+
+```
+1. Setup       → Retrieve task, verify branch, classify type
+2. Research    → Read docs, check handoffs, summarize approach
+3. Implement   → TDD cycle (coding tasks only)
+4. Verify      → Integration test, acceptance criteria, quality gates
+5. Complete    → Memory reflection, handoff update, PR workflow
+```
+
+---
+
+## 1. Setup
+
+### Retrieve Task
+
+Extract the task from the implementation plan. Display:
+- Task title and description
+- Acceptance criteria  
+- Files to create/modify
+- E2E test scenario (if this completes a milestone)
+
+If validation output is provided, review key decisions to ensure consistency with resolved gaps.
+
+### Verify Branch
+
+Check task description for branch instructions:
+- "Create new branch: [name]"
+- "Work on branch: [name]"
+- "Branch strategy: [description]"
+
+If no branch strategy is specified, ask before proceeding.
+
+### Classify Task Type
+
+State the classification explicitly:
+
+- **CODING** — Implementation work. TDD is required.
+- **RESEARCH** — Investigation, analysis, documentation. No TDD.
+- **MIXED** — Research first, then TDD for implementation portion.
+
+### Check Handoffs
+
+Look for `HANDOFF_*.md` in the implementation plan directory. If present, read and note:
+- Critical gotchas from previous tasks
+- Emergent patterns to follow
+- Workarounds for known issues
+
+---
+
+## 2. Research Phase (All Tasks)
+
+Before writing any code:
+
+1. **Read context documents** — Design doc, architecture doc, relevant sections of implementation plan
+2. **Identify existing patterns** — Find similar code in the codebase to follow
+3. **Locate dependencies** — Files, classes, functions that will be involved
+4. **Note integration points** — How this task connects to other components
+
+**Output:** Brief summary (2-4 sentences) covering:
+- Design intent
+- Architecture approach  
+- Implementation approach
+
+Do not write implementation code during this phase.
+
+---
+
+## 3. Implementation (Coding Tasks Only)
+
+Follow the TDD cycle: **RED → GREEN → REFACTOR**
+
+### RED: Write Failing Tests
+
+Before any implementation:
+
+1. Create test file(s) following project conventions
+2. Write tests covering:
+   - Happy path (normal operation)
+   - Error cases (failures, exceptions)
+   - Edge cases (boundaries, null values)
+3. Run tests: `make test-unit`
+4. Verify tests fail meaningfully (not import errors)
+
+Show output: "✅ Tests written and failing as expected"
+
+If you catch yourself writing implementation before tests, stop, delete the implementation code, and return to this phase.
+
+### GREEN: Minimal Implementation
+
+1. Write just enough code to make tests pass
+2. Follow existing patterns in the codebase
+3. Run tests frequently during implementation
+4. Don't over-engineer or add untested features
+
+Show output: "✅ All tests passing"
+
+### REFACTOR: Improve Quality
+
+1. Improve code clarity and maintainability
+2. Extract common patterns
+3. Add documentation and type hints
+4. Run tests after each refactoring: `make test-unit`
+5. Run quality checks: `make quality`
+
+Show output: "✅ Tests and quality checks passing"
+
+---
+
+## 4. Verification
+
+### Integration Smoke Test
+
+Unit tests verify components in isolation. Integration tests verify they work together. Passing unit tests ≠ working system.
+
+For detailed patterns and API references, use the **integration-testing skill**.
+
+After unit tests pass (for changes affecting system behavior):
+
+1. **Start system**: `docker compose up -d`
+2. **Execute modified flow**: Use CLI commands or curl/API calls
+3. **Verify end-to-end**: Does the operation complete? Is state consistent?
+4. **Check logs**: `docker compose logs backend --since 5m | grep -i error`
+5. **Report**: "✅ Integration test passed" or "❌ Issue found: [description]"
+
+**Skip integration testing for:**
+- Pure refactoring with no behavior change
+- Documentation-only changes
+- Test-only changes
+
+If integration test fails, investigate and fix before proceeding. The issue is likely architectural, not just code.
+
+### Milestone E2E Test
+
+If this task completes a milestone, run the milestone's E2E test scenario from the implementation plan. This is more comprehensive than the smoke test — it validates the full user journey for that milestone.
+
+### Acceptance Criteria Validation
+
+Go back to the task description. For each acceptance criterion:
+
+1. Identify the type (feature, unit test, integration test, performance, documentation)
+2. Validate it appropriately
+3. Check it off with status
+
+```markdown
+- [x] Acceptance criterion 1 — ✅ VALIDATED
+- [x] Acceptance criterion 2 — ✅ VALIDATED  
+- [ ] Acceptance criterion 3 — ❌ NOT MET (needs: ...)
+```
+
+If any criterion is not met, continue working before proceeding.
+
+### Quality Gates
+
+All must pass before completion:
+
+- [ ] All unit tests pass: `make test-unit`
+- [ ] Quality checks pass: `make quality`
+- [ ] Code is documented (docstrings explaining "why")
+- [ ] All work is committed with clear messages
+- [ ] No security vulnerabilities introduced
+
+---
+
+## 5. Completion
+
+### Memory Reflection
+
+Use the **memory-reflection skill** to capture learnings:
+- Context gaps encountered during the task
+- Patterns re-discovered
+- Recommendations for memory updates
+
+The skill appends to `.claude/context_reflections.md`.
+
+### Handoff Document
+
+Update or create `HANDOFF_<phase/feature>.md` in the implementation plan directory.
+
+**Include** (only if it saves time for next implementer):
+- Gotchas: Problem + symptom + solution
+- Workarounds: Non-obvious solutions to constraints
+- Emergent patterns: Architectural decisions made during implementation
+
+**Exclude** (wastes tokens):
+- Task completion status (already in plan)
+- Process steps (already in this command)
+- Test counts or coverage numbers (observable)
+- File listings (observable from codebase)
+
+Target size: Under 100 lines.
+
+### PR Workflow
+
+Provide a brief summary of what was implemented and any deviations from requirements.
+
+Ask: "Task completed! Would you like me to create a Pull Request?"
+
+If yes:
+- Create PR: `gh pr create --draft`
+- Include summary of changes, testing approach, and any breaking changes
+- Provide PR URL
+
+If no:
+- Work remains on branch
+
+---
+
+## Error Handling
+
+If you encounter blockers:
+
+- Do not mark task as complete
+- Keep task in "doing" status
+- Document the blocker
+- Ask for guidance on how to proceed
+
+---
+
+## Task Instructions Override
+
+If task-specific instructions contradict this command, follow the task instructions. Tasks may have context that requires different approaches.
+
+---
+
+## Multiple Tasks
+
+When given multiple tasks (a milestone or phase):
+
+1. Implement in the order specified in the plan
+2. Each task follows the full workflow above
+3. Commit after each task (not just at the end)
+4. Run the milestone's E2E test after all tasks complete
+
+---
+
+## Quick Reference
+
+| Phase | Key Actions | Output |
+|-------|-------------|--------|
+| Setup | Retrieve, branch, classify, handoffs | Task details displayed |
+| Research | Read docs, find patterns | 2-4 sentence summary |
+| RED | Write tests, run, verify fail | "✅ Tests failing as expected" |
+| GREEN | Implement, run tests | "✅ All tests passing" |
+| REFACTOR | Clean up, quality checks | "✅ Tests and quality passing" |
+| Integration | Start system, execute flow, check logs | "✅ Integration passed" |
+| Acceptance | Validate each criterion | Checklist with status |
+| Quality | Tests, quality, commits | All gates passed |
+| Complete | Reflection, handoff, PR | Summary and PR link |

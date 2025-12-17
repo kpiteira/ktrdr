@@ -76,7 +76,7 @@ frontend/.turbo
 data/**
 config/*.secret.yaml
 logs/
-.DS_Store
+**/.DS_Store
 *.log
 ktrdr-patch.tar.gz
 
@@ -107,16 +107,19 @@ dev-shared/
 auth_tokens.json
 config/*_secure.yaml
 
-**/.claude/settings.local.json
 data/symbol_discovery_cache.json
 ib-host-service/data/symbol_discovery_cache.json
 
 # Tools
 .bmad*/
-.claude/
 .serena/
 .specify/scripts/
 .specify/templates/
 *.iws
 .agent-os/
 .obsidian/
+
+# Claude Code - track commands/skills/agents, ignore user-specific files
+.claude/settings.local.json
+.claude/context_reflections.md
+.claude/archive/
