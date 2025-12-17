@@ -158,7 +158,11 @@ class TestAgentResearchWorkerPhases:
 
     @pytest.mark.asyncio
     async def test_completes_all_phases(
-        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
+        self,
+        mock_operations_service,
+        stub_workers,
+        mock_training_service,
+        mock_backtest_service,
     ):
         """Worker transitions through all phases and completes."""
         # Create parent operation
@@ -183,7 +187,11 @@ class TestAgentResearchWorkerPhases:
 
     @pytest.mark.asyncio
     async def test_phase_updates_in_metadata(
-        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
+        self,
+        mock_operations_service,
+        stub_workers,
+        mock_training_service,
+        mock_backtest_service,
     ):
         """Phase updates are stored in operation metadata."""
         parent_op = await mock_operations_service.create_operation(
@@ -228,7 +236,11 @@ class TestAgentResearchWorkerChildOperations:
 
     @pytest.mark.asyncio
     async def test_child_operation_ids_stored(
-        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
+        self,
+        mock_operations_service,
+        stub_workers,
+        mock_training_service,
+        mock_backtest_service,
     ):
         """Child operation IDs are stored in parent metadata."""
         parent_op = await mock_operations_service.create_operation(
@@ -257,7 +269,11 @@ class TestAgentResearchWorkerChildOperations:
 
     @pytest.mark.asyncio
     async def test_child_operations_completed(
-        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
+        self,
+        mock_operations_service,
+        stub_workers,
+        mock_training_service,
+        mock_backtest_service,
     ):
         """Child operations are marked as completed."""
         parent_op = await mock_operations_service.create_operation(
@@ -341,7 +357,11 @@ class TestAgentResearchWorkerErrors:
 
     @pytest.mark.asyncio
     async def test_child_failure_propagates(
-        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
+        self,
+        mock_operations_service,
+        stub_workers,
+        mock_training_service,
+        mock_backtest_service,
     ):
         """Child failure causes parent to fail."""
 
@@ -367,7 +387,11 @@ class TestAgentResearchWorkerErrors:
 
     @pytest.mark.asyncio
     async def test_failed_child_marked_failed(
-        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
+        self,
+        mock_operations_service,
+        stub_workers,
+        mock_training_service,
+        mock_backtest_service,
     ):
         """When child fails, it's marked as failed in operations."""
 
@@ -410,7 +434,11 @@ class TestPollingLoopPattern:
 
     @pytest.mark.asyncio
     async def test_uses_polling_loop(
-        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
+        self,
+        mock_operations_service,
+        stub_workers,
+        mock_training_service,
+        mock_backtest_service,
     ):
         """Orchestrator polls child operation status in a loop.
 
@@ -452,7 +480,11 @@ class TestPollingLoopPattern:
 
     @pytest.mark.asyncio
     async def test_child_workers_started_as_tasks(
-        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
+        self,
+        mock_operations_service,
+        stub_workers,
+        mock_training_service,
+        mock_backtest_service,
     ):
         """Child workers are started as separate asyncio tasks.
 
@@ -503,7 +535,12 @@ class TestPollingLoopPattern:
 
     @pytest.mark.asyncio
     async def test_poll_interval_configurable(
-        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service, monkeypatch
+        self,
+        mock_operations_service,
+        stub_workers,
+        mock_training_service,
+        mock_backtest_service,
+        monkeypatch,
     ):
         """Poll interval can be configured via environment variable.
 
@@ -533,7 +570,11 @@ class TestPollingLoopPattern:
 
     @pytest.mark.asyncio
     async def test_cancellation_propagates_to_child(
-        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
+        self,
+        mock_operations_service,
+        stub_workers,
+        mock_training_service,
+        mock_backtest_service,
     ):
         """Cancelling parent operation cancels active child.
 
@@ -605,7 +646,11 @@ class TestQualityGateIntegration:
 
     @pytest.mark.asyncio
     async def test_training_gate_passes_proceeds_to_backtest(
-        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
+        self,
+        mock_operations_service,
+        stub_workers,
+        mock_training_service,
+        mock_backtest_service,
     ):
         """When training gate passes, orchestrator proceeds to backtesting."""
         parent_op = await mock_operations_service.create_operation(
@@ -840,7 +885,11 @@ class TestQualityGateIntegration:
 
     @pytest.mark.asyncio
     async def test_both_gates_pass_completes_cycle(
-        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
+        self,
+        mock_operations_service,
+        stub_workers,
+        mock_training_service,
+        mock_backtest_service,
     ):
         """When both gates pass, cycle completes successfully."""
         parent_op = await mock_operations_service.create_operation(
@@ -871,7 +920,11 @@ class TestMetadataContract:
 
     @pytest.mark.asyncio
     async def test_stores_strategy_name_after_design(
-        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
+        self,
+        mock_operations_service,
+        stub_workers,
+        mock_training_service,
+        mock_backtest_service,
     ):
         """Parent metadata stores strategy_name after design phase."""
         parent_op = await mock_operations_service.create_operation(
@@ -895,7 +948,11 @@ class TestMetadataContract:
 
     @pytest.mark.asyncio
     async def test_stores_strategy_path_after_design(
-        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
+        self,
+        mock_operations_service,
+        stub_workers,
+        mock_training_service,
+        mock_backtest_service,
     ):
         """Parent metadata stores strategy_path after design phase (Task 2.3)."""
         parent_op = await mock_operations_service.create_operation(
@@ -922,7 +979,11 @@ class TestMetadataContract:
 
     @pytest.mark.asyncio
     async def test_stores_training_result_after_training(
-        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
+        self,
+        mock_operations_service,
+        stub_workers,
+        mock_training_service,
+        mock_backtest_service,
     ):
         """Parent metadata stores training_result after training phase."""
         parent_op = await mock_operations_service.create_operation(
@@ -948,7 +1009,11 @@ class TestMetadataContract:
 
     @pytest.mark.asyncio
     async def test_stores_backtest_result_after_backtest(
-        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
+        self,
+        mock_operations_service,
+        stub_workers,
+        mock_training_service,
+        mock_backtest_service,
     ):
         """Parent metadata stores backtest_result after backtest phase."""
         parent_op = await mock_operations_service.create_operation(
@@ -974,7 +1039,11 @@ class TestMetadataContract:
 
     @pytest.mark.asyncio
     async def test_stores_assessment_verdict_after_assessment(
-        self, mock_operations_service, stub_workers, mock_training_service, mock_backtest_service
+        self,
+        mock_operations_service,
+        stub_workers,
+        mock_training_service,
+        mock_backtest_service,
     ):
         """Parent metadata stores assessment_verdict after assessment phase."""
         parent_op = await mock_operations_service.create_operation(

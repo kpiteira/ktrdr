@@ -15,7 +15,6 @@ Environment Variables:
 
 import asyncio
 import os
-from pathlib import Path
 from typing import Any, Protocol
 
 import yaml
@@ -152,7 +151,9 @@ class AgentResearchWorker:
             with open(strategy_path) as f:
                 return yaml.safe_load(f) or {}
         except Exception as e:
-            logger.warning(f"Failed to load strategy config: {strategy_path}, error={e}")
+            logger.warning(
+                f"Failed to load strategy config: {strategy_path}, error={e}"
+            )
             return {}
 
     async def run(self, operation_id: str) -> dict[str, Any]:
@@ -267,9 +268,7 @@ class AgentResearchWorker:
         # Register task with operations service
         await self.ops.start_operation(child_op.operation_id, task)
 
-    async def _handle_designing_phase(
-        self, operation_id: str, child_op: Any
-    ) -> None:
+    async def _handle_designing_phase(self, operation_id: str, child_op: Any) -> None:
         """Handle designing phase state transitions.
 
         Args:
@@ -355,9 +354,7 @@ class AgentResearchWorker:
 
         logger.info(f"Training started: {training_op_id}")
 
-    async def _handle_training_phase(
-        self, operation_id: str, child_op: Any
-    ) -> None:
+    async def _handle_training_phase(self, operation_id: str, child_op: Any) -> None:
         """Handle training phase state transitions.
 
         Checks real training operation status directly.
@@ -385,9 +382,7 @@ class AgentResearchWorker:
             # Check training gate
             passed, reason = check_training_gate(result)
             if not passed:
-                logger.warning(
-                    f"Training gate failed: {operation_id}, reason={reason}"
-                )
+                logger.warning(f"Training gate failed: {operation_id}, reason={reason}")
                 raise GateFailedError(f"Training gate failed: {reason}")
 
             # Start backtest via service
@@ -465,9 +460,7 @@ class AgentResearchWorker:
 
         logger.info(f"Backtest started: {backtest_op_id}")
 
-    async def _handle_backtesting_phase(
-        self, operation_id: str, child_op: Any
-    ) -> None:
+    async def _handle_backtesting_phase(self, operation_id: str, child_op: Any) -> None:
         """Handle backtesting phase state transitions.
 
         Checks real backtest operation status directly.
@@ -504,9 +497,7 @@ class AgentResearchWorker:
             # Check backtest gate
             passed, reason = check_backtest_gate(backtest_result)
             if not passed:
-                logger.warning(
-                    f"Backtest gate failed: {operation_id}, reason={reason}"
-                )
+                logger.warning(f"Backtest gate failed: {operation_id}, reason={reason}")
                 raise GateFailedError(f"Backtest gate failed: {reason}")
 
             # Start assessment with child worker
@@ -550,7 +541,9 @@ class AgentResearchWorker:
         # Create task wrapper that completes the child operation
         async def run_child():
             try:
-                result = await self.assessment_worker.run(child_op.operation_id, results)
+                result = await self.assessment_worker.run(
+                    child_op.operation_id, results
+                )
                 await self.ops.complete_operation(child_op.operation_id, result)
             except asyncio.CancelledError:
                 raise
@@ -591,7 +584,9 @@ class AgentResearchWorker:
             # All phases complete
             result = child_op.result_summary or {}
             parent_op = await self.ops.get_operation(operation_id)
-            strategy_name = parent_op.metadata.parameters.get("strategy_name", "unknown")
+            strategy_name = parent_op.metadata.parameters.get(
+                "strategy_name", "unknown"
+            )
 
             # Store assessment verdict in parent metadata
             parent_op.metadata.parameters["assessment_verdict"] = result.get(

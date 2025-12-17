@@ -175,7 +175,9 @@ class FeatureCache:
                 col: f"{timeframe}_{col}" for col in self.fuzzy_df.columns
             }
             self.fuzzy_df = self.fuzzy_df.rename(columns=prefixed_columns)
-            logger.debug(f"Added timeframe prefix '{timeframe}_' to {len(prefixed_columns)} fuzzy columns")
+            logger.debug(
+                f"Added timeframe prefix '{timeframe}_' to {len(prefixed_columns)} fuzzy columns"
+            )
 
         # Step 4: PRE-COMPUTE TEMPORAL FEATURES (lag features) to fix backtesting NaN issue
         logger.debug("⏰ Pre-computing temporal fuzzy features...")

@@ -281,11 +281,14 @@ class DecisionOrchestrator:
         # This prevents shape mismatch errors when strategy config has more features than model expects
         filtered_fuzzy = context.fuzzy_memberships
         if self.model_metadata and "features" in self.model_metadata:
-            expected_features = self.model_metadata["features"].get("fuzzy_features", [])
+            expected_features = self.model_metadata["features"].get(
+                "fuzzy_features", []
+            )
             if expected_features:
                 # Filter to only include expected features
                 filtered_fuzzy = {
-                    k: v for k, v in context.fuzzy_memberships.items()
+                    k: v
+                    for k, v in context.fuzzy_memberships.items()
                     if k in expected_features
                 }
                 # Pad missing features with 0.0 (neutral value for fuzzy memberships)
@@ -544,7 +547,8 @@ class DecisionOrchestrator:
         # Pass a placeholder that ModelStorage will ignore
         return self.model_loader.load_model(
             strategy_name=self.strategy_name,
-            symbol=symbol or "UNIVERSAL",  # Placeholder, ModelStorage tries universal paths first
+            symbol=symbol
+            or "UNIVERSAL",  # Placeholder, ModelStorage tries universal paths first
             timeframe=timeframe,
             version=version,
         )

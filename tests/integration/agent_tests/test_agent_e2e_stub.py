@@ -104,9 +104,7 @@ class MockTrainingService:
             operation_type=OperationType.TRAINING,
             metadata=OperationMetadata(parameters=kwargs),
         )
-        await self.ops.complete_operation(
-            training_op.operation_id, self.return_metrics
-        )
+        await self.ops.complete_operation(training_op.operation_id, self.return_metrics)
         return {"operation_id": training_op.operation_id}
 
 
@@ -134,9 +132,7 @@ class MockBacktestService:
             operation_type=OperationType.BACKTESTING,
             metadata=OperationMetadata(parameters=kwargs),
         )
-        await self.ops.complete_operation(
-            backtest_op.operation_id, self.return_metrics
-        )
+        await self.ops.complete_operation(backtest_op.operation_id, self.return_metrics)
         return {"operation_id": backtest_op.operation_id}
 
 
@@ -250,6 +246,7 @@ class TestCancellationE2E:
     @pytest.mark.asyncio
     async def test_cancellation_during_design_phase(self, ops_service):
         """Cancellation during design phase stops the cycle."""
+
         # Slow design worker to allow cancellation
         class SlowDesignWorker:
             async def run(self, *args, **kwargs):
@@ -326,7 +323,9 @@ class TestCancellationE2E:
             await task
 
         elapsed = time.time() - start
-        assert elapsed < 0.2, f"Cancellation took {elapsed*1000:.0f}ms, expected < 200ms"
+        assert (
+            elapsed < 0.2
+        ), f"Cancellation took {elapsed*1000:.0f}ms, expected < 200ms"
 
 
 class TestGateFailuresE2E:

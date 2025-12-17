@@ -6,9 +6,8 @@ Task 2.1: Real design worker using AnthropicAgentInvoker.
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any
-
 from collections import defaultdict
+from typing import TYPE_CHECKING, Any
 
 from ktrdr import get_logger
 from ktrdr.agents.executor import ToolExecutor
@@ -94,11 +93,13 @@ Always validate your configuration before saving it."""
             # Format for prompt
             result = []
             for symbol, timeframes in sorted(symbol_timeframes.items()):
-                result.append({
-                    "symbol": symbol,
-                    "timeframes": sorted(timeframes),
-                    "date_range": {"start": "cached", "end": "cached"},
-                })
+                result.append(
+                    {
+                        "symbol": symbol,
+                        "timeframes": sorted(timeframes),
+                        "date_range": {"start": "cached", "end": "cached"},
+                    }
+                )
 
             return result
         except Exception as e:
