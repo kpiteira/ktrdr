@@ -59,10 +59,27 @@ class ModelLoader:
             if model_type == "mlp":
                 # Build modern MLPTradingModel
                 mlp_model = MLPTradingModel(config["model"])
+
+                # Get input_size from metadata or features.json
                 input_size = metadata.get("input_size")
+                if input_size is None:
+                    # For pure_fuzzy models, get from features.json
+                    features = model_data.get("features", {})
+                    input_size = features.get("feature_count")
 
                 if input_size is None:
-                    raise ValueError(f"Model metadata missing input_size: {metadata}")
+                    # Last resort: infer from first layer weights
+                    first_layer_key = next(
+                        (k for k in model.keys() if k.endswith(".weight")), None
+                    )
+                    if first_layer_key:
+                        input_size = model[first_layer_key].shape[1]
+
+                if input_size is None:
+                    raise ValueError(
+                        f"Cannot determine input_size: metadata={metadata.get('input_size')}, "
+                        f"features={model_data.get('features', {}).get('feature_count')}"
+                    )
 
                 mlp_model.model = mlp_model.build_model(input_size)
                 mlp_model.model.load_state_dict(model)
