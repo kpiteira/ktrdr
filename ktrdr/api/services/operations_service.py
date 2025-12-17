@@ -631,17 +631,28 @@ class OperationsService:
                 # Refresh from bridge (synchronous, fast, cache-aware)
                 self._refresh_from_bridge(operation_id)
 
-            # TASK 2.5: Pull from remote proxy if registered and operation still running
-            if operation.status == OperationStatus.RUNNING and self._get_remote_proxy(
-                operation_id
+            # TASK 2.5: Pull from remote proxy if registered and:
+            # - Operation still running (to get progress updates), OR
+            # - Operation completed but result_summary is missing (to sync final result)
+            needs_result_sync = (
+                operation.status == OperationStatus.COMPLETED
+                and operation.result_summary is None
+            )
+            if self._get_remote_proxy(operation_id) and (
+                operation.status == OperationStatus.RUNNING or needs_result_sync
             ):
                 # Force refresh bypasses cache
-                if force_refresh:
-                    # Invalidate cache to force refresh
+                if force_refresh or needs_result_sync:
+                    # Invalidate cache to force refresh (always refresh for result sync)
                     self._last_refresh[operation_id] = 0
-                    logger.debug(
-                        f"Force refresh requested for remote operation {operation_id}"
-                    )
+                    if needs_result_sync:
+                        logger.info(
+                            f"Syncing result_summary for completed remote operation {operation_id}"
+                        )
+                    else:
+                        logger.debug(
+                            f"Force refresh requested for remote operation {operation_id}"
+                        )
 
                 # Refresh from remote host service (async, cache-aware)
                 await self._refresh_from_remote_proxy(operation_id)
@@ -1139,6 +1150,29 @@ class OperationsService:
 
             # Update status
             operation.status = OperationStatus(host_data["status"])
+
+            # Sync result_summary when operation completes (critical for training gate!)
+            if "result_summary" in host_data and host_data["result_summary"]:
+                operation.result_summary = host_data["result_summary"]
+                logger.debug(
+                    f"Synced result_summary for {operation_id}: "
+                    f"{list(host_data['result_summary'].keys())}"
+                )
+
+            # Sync completion timestamp
+            if "completed_at" in host_data and host_data["completed_at"]:
+                from datetime import datetime
+
+                if isinstance(host_data["completed_at"], str):
+                    operation.completed_at = datetime.fromisoformat(
+                        host_data["completed_at"].replace("Z", "+00:00")
+                    )
+                else:
+                    operation.completed_at = host_data["completed_at"]
+
+            # Sync error_message for failed operations
+            if "error_message" in host_data and host_data["error_message"]:
+                operation.error_message = host_data["error_message"]
 
             # Update progress from host data
             if "progress" in host_data:

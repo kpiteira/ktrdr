@@ -88,11 +88,12 @@ services:
       - AGENT_ENABLED=${AGENT_ENABLED:-false}
       - AGENT_TRIGGER_INTERVAL_SECONDS=${AGENT_TRIGGER_INTERVAL_SECONDS:-300}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      # Agent training/backtest date ranges (for fast E2E testing)
-      - AGENT_TRAINING_START_DATE=${AGENT_TRAINING_START_DATE:-}
-      - AGENT_TRAINING_END_DATE=${AGENT_TRAINING_END_DATE:-}
-      - AGENT_BACKTEST_START_DATE=${AGENT_BACKTEST_START_DATE:-}
-      - AGENT_BACKTEST_END_DATE=${AGENT_BACKTEST_END_DATE:-}
+      # Agent E2E testing date ranges (1d timeframe for fast testing)
+      # For production: remove these or set to full ranges (2005-2020 train, 2020-today backtest)
+      - AGENT_TRAINING_START_DATE=${AGENT_TRAINING_START_DATE:-2015-01-01}
+      - AGENT_TRAINING_END_DATE=${AGENT_TRAINING_END_DATE:-2019-12-31}
+      - AGENT_BACKTEST_START_DATE=${AGENT_BACKTEST_START_DATE:-2020-01-01}
+      - AGENT_BACKTEST_END_DATE=${AGENT_BACKTEST_END_DATE:-2021-12-31}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

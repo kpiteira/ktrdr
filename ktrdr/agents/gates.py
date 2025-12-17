@@ -59,10 +59,15 @@ def check_training_gate(
     ensuring zero token cost for filtering poor strategies.
 
     Args:
-        metrics: Training results containing:
-            - accuracy: Model accuracy (0.0 to 1.0)
-            - final_loss: Final training loss
-            - initial_loss: Initial training loss
+        metrics: Training results from result_summary, supporting two formats:
+            Flat format (legacy):
+                - accuracy: Model accuracy (0.0 to 1.0)
+                - final_loss: Final training loss
+                - initial_loss: Initial training loss
+            Nested format (from TrainingPipeline):
+                - test_metrics.test_accuracy: Test accuracy
+                - test_metrics.test_loss: Test loss
+                - training_metrics.history.train_loss[0]: Initial loss
         config: Configuration thresholds (defaults from environment)
 
     Returns:
@@ -73,26 +78,47 @@ def check_training_gate(
     if config is None:
         config = TrainingGateConfig.from_env()
 
-    accuracy = metrics.get("accuracy", 0)
+    # Extract accuracy - support nested structure from training pipeline
+    test_metrics = metrics.get("test_metrics", {})
+    accuracy = test_metrics.get("test_accuracy", metrics.get("accuracy", 0))
     if accuracy < config.min_accuracy:
         return (
             False,
             f"accuracy_below_threshold ({accuracy:.1%} < {config.min_accuracy:.0%})",
         )
 
-    final_loss = metrics.get("final_loss", 1.0)
-    if final_loss > config.max_loss:
-        return False, f"loss_too_high ({final_loss:.3f} > {config.max_loss})"
+    # Extract test loss for max_loss check
+    test_loss = test_metrics.get("test_loss", metrics.get("final_loss", 1.0))
+    if test_loss > config.max_loss:
+        return False, f"loss_too_high ({test_loss:.3f} > {config.max_loss})"
 
-    initial = metrics.get("initial_loss", 0)
-    final = final_loss
-    if initial > 0:
-        decrease = (initial - final) / initial
-        if decrease < config.min_loss_decrease:
-            return (
-                False,
-                f"insufficient_loss_decrease ({decrease:.1%} < {config.min_loss_decrease:.0%})",
-            )
+    # Check training loss decrease (compare training losses, not train vs test)
+    training_metrics = metrics.get("training_metrics", {})
+    history = training_metrics.get("history", {})
+    train_loss_history = history.get("train_loss", [])
+    if train_loss_history and len(train_loss_history) >= 2:
+        initial_train_loss = train_loss_history[0]
+        final_train_loss = training_metrics.get(
+            "final_train_loss", train_loss_history[-1]
+        )
+        if initial_train_loss > 0:
+            decrease = (initial_train_loss - final_train_loss) / initial_train_loss
+            if decrease < config.min_loss_decrease:
+                return (
+                    False,
+                    f"insufficient_loss_decrease ({decrease:.1%} < {config.min_loss_decrease:.0%})",
+                )
+    elif "initial_loss" in metrics and "final_loss" in metrics:
+        # Legacy flat format
+        initial = metrics.get("initial_loss", 0)
+        final = metrics.get("final_loss", 1.0)
+        if initial > 0:
+            decrease = (initial - final) / initial
+            if decrease < config.min_loss_decrease:
+                return (
+                    False,
+                    f"insufficient_loss_decrease ({decrease:.1%} < {config.min_loss_decrease:.0%})",
+                )
 
     return True, "passed"
 
