@@ -1,0 +1,68 @@
+# KTRDR Sandbox Environment
+# Isolated container for Claude Code autonomous task execution
+#
+# Usage:
+#   ./scripts/sandbox-init.sh      # First-time setup (clones repo)
+#   docker compose up -d           # Start sandbox
+#   ./scripts/sandbox-reset.sh     # Reset workspace to clean state
+#   ./scripts/sandbox-shell.sh     # Interactive shell
+#   ./scripts/sandbox-claude.sh    # Run Claude Code command
+#
+# Requires:
+#   - ANTHROPIC_API_KEY environment variable
+#   - ~/Documents/ktrdr-shared/data/ directory with market data
+
+services:
+  sandbox:
+    build:
+      context: ../../../
+      dockerfile: deploy/docker/sandbox/Dockerfile
+    image: ktrdr-sandbox:latest
+    container_name: ktrdr-sandbox
+    restart: unless-stopped
+
+    # Pass API key from host environment
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - TERM=xterm-256color
+
+    volumes:
+      # Docker socket for running ktrdr services from inside sandbox
+      - /var/run/docker.sock:/var/run/docker.sock
+
+      # Shared market data (read-only)
+      - ~/Documents/ktrdr-shared/data:/shared/data:ro
+
+      # Named volumes for persistent storage
+      - sandbox-workspace:/workspace
+      - sandbox-models:/env/models
+      - sandbox-strategies:/env/strategies
+      - sandbox-logs:/env/logs
+
+    # Enable host access for communicating with host services
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    # Join ktrdr network for service communication
+    networks:
+      - ktrdr-network
+
+    # Keep container running for exec commands
+    stdin_open: true
+    tty: true
+
+networks:
+  ktrdr-network:
+    # Use existing network if available, create if not
+    name: ktrdr-network
+    external: false
+
+volumes:
+  sandbox-workspace:
+    name: ktrdr-sandbox-workspace
+  sandbox-models:
+    name: ktrdr-sandbox-models
+  sandbox-strategies:
+    name: ktrdr-sandbox-strategies
+  sandbox-logs:
+    name: ktrdr-sandbox-logs
