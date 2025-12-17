@@ -241,6 +241,40 @@ AGENT_TOOLS: list[dict[str, Any]] = [
             "required": ["strategy_name", "model_path"],
         },
     },
+    {
+        "name": "save_assessment",
+        "description": (
+            "Save your assessment of the strategy to disk. Call this after analyzing "
+            "the training and backtest results. The assessment will be saved as JSON "
+            "in the strategy's directory."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "verdict": {
+                    "type": "string",
+                    "enum": ["promising", "mediocre", "poor"],
+                    "description": "Overall verdict on the strategy's potential.",
+                },
+                "strengths": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of strategy strengths (2-4 items).",
+                },
+                "weaknesses": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of strategy weaknesses (2-4 items).",
+                },
+                "suggestions": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of improvement suggestions (2-4 items).",
+                },
+            },
+            "required": ["verdict", "strengths", "weaknesses", "suggestions"],
+        },
+    },
 ]
 
 

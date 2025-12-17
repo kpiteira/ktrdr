@@ -14,8 +14,10 @@ The executor then routes to the appropriate handler and returns a dict result.
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Callable, Coroutine
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -263,6 +265,13 @@ class ToolExecutor:
         self.last_saved_strategy_name: str | None = None
         self.last_saved_strategy_path: str | None = None
 
+        # Track last saved assessment for assessment worker
+        self.last_saved_assessment: dict[str, Any] | None = None
+        self.last_saved_assessment_path: str | None = None
+
+        # Current strategy name for assessment tool (set by assessment worker)
+        self._current_strategy_name: str | None = None
+
         self.handlers: dict[str, HandlerFunc] = {
             "validate_strategy_config": self._handle_validate_strategy_config,
             "save_strategy_config": self._handle_save_strategy_config,
@@ -271,6 +280,7 @@ class ToolExecutor:
             "get_recent_strategies": self._handle_get_recent_strategies,
             "start_training": self._handle_start_training,
             "start_backtest": self._handle_start_backtest,
+            "save_assessment": self._handle_save_assessment,
         }
 
     async def execute(
@@ -474,6 +484,66 @@ class ToolExecutor:
             end_date=end_date,
             initial_capital=initial_capital,
         )
+
+    async def _handle_save_assessment(
+        self,
+        verdict: str,
+        strengths: list[str],
+        weaknesses: list[str],
+        suggestions: list[str],
+    ) -> dict[str, Any]:
+        """Handle save_assessment tool call.
+
+        Saves assessment to strategy directory as JSON.
+
+        Args:
+            verdict: Overall verdict (promising/mediocre/poor).
+            strengths: List of strategy strengths.
+            weaknesses: List of strategy weaknesses.
+            suggestions: List of improvement suggestions.
+
+        Returns:
+            Dict with success status, path, and message.
+        """
+        strategy_name = self._current_strategy_name
+
+        if not strategy_name:
+            return {"success": False, "error": "No strategy name set"}
+
+        # Create assessment directory
+        assessment_dir = f"strategies/{strategy_name}"
+        os.makedirs(assessment_dir, exist_ok=True)
+
+        # Build assessment data
+        assessment = {
+            "verdict": verdict,
+            "strengths": strengths,
+            "weaknesses": weaknesses,
+            "suggestions": suggestions,
+            "assessed_at": datetime.now(UTC).isoformat(),
+        }
+
+        # Save to file
+        assessment_path = f"{assessment_dir}/assessment.json"
+        with open(assessment_path, "w") as f:
+            json.dump(assessment, f, indent=2)
+
+        # Track for result
+        self.last_saved_assessment = assessment
+        self.last_saved_assessment_path = assessment_path
+
+        logger.info(
+            "Assessment saved",
+            strategy_name=strategy_name,
+            verdict=verdict,
+            path=assessment_path,
+        )
+
+        return {
+            "success": True,
+            "path": assessment_path,
+            "message": f"Assessment saved to {assessment_path}",
+        }
 
 
 # Convenience function for creating executor

@@ -9,6 +9,7 @@ Training and Backtest phases are handled by the orchestrator calling
 TrainingService and BacktestingService directly.
 """
 
+from ktrdr.agents.workers.assessment_worker import AgentAssessmentWorker
 from ktrdr.agents.workers.research_worker import AgentResearchWorker
 from ktrdr.agents.workers.stubs import (
     StubAssessmentWorker,
@@ -17,6 +18,7 @@ from ktrdr.agents.workers.stubs import (
 
 __all__ = [
     "AgentResearchWorker",
+    "AgentAssessmentWorker",
     "StubDesignWorker",
     "StubAssessmentWorker",
 ]

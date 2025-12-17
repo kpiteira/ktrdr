@@ -563,3 +563,100 @@ def get_strategy_designer_prompt(
 
     builder = StrategyDesignerPromptBuilder()
     return builder.build(context)
+
+
+# ==============================================================================
+# Assessment Prompt (M5: Assessment Worker)
+# ==============================================================================
+
+
+@dataclass
+class AssessmentContext:
+    """Context for building the assessment prompt.
+
+    Attributes:
+        operation_id: Current assessment operation ID.
+        strategy_name: Name of the strategy being assessed.
+        strategy_path: Path to the strategy configuration file.
+        training_metrics: Results from training phase.
+        backtest_metrics: Results from backtest phase.
+    """
+
+    operation_id: str
+    strategy_name: str
+    strategy_path: str
+    training_metrics: dict[str, Any]
+    backtest_metrics: dict[str, Any]
+
+
+ASSESSMENT_SYSTEM_PROMPT = """You are an expert trading strategy evaluator. Your role is to:
+
+1. Analyze the training and backtest results objectively
+2. Identify strengths and weaknesses of the strategy
+3. Provide actionable suggestions for improvement
+4. Give an overall verdict on the strategy's potential
+
+Be honest and specific. Reference actual numbers from the results.
+Use the save_assessment tool to record your evaluation."""
+
+
+def _calc_loss_improvement(metrics: dict[str, Any]) -> float:
+    """Calculate loss improvement percentage.
+
+    Args:
+        metrics: Training metrics dict with initial_loss and final_loss.
+
+    Returns:
+        Improvement as a decimal (0.5 = 50% improvement).
+    """
+    initial = metrics.get("initial_loss", 0)
+    final = metrics.get("final_loss", 0)
+    if initial > 0:
+        return (initial - final) / initial
+    return 0.0
+
+
+def get_assessment_prompt(context: AssessmentContext) -> str:
+    """Build prompt for Claude to assess strategy results.
+
+    Args:
+        context: Assessment context with metrics.
+
+    Returns:
+        Formatted prompt string.
+    """
+    training = context.training_metrics
+    backtest = context.backtest_metrics
+    loss_improvement = _calc_loss_improvement(training)
+
+    return f"""# Strategy Assessment Request
+
+## Strategy Information
+- **Name**: {context.strategy_name}
+- **Operation ID**: {context.operation_id}
+- **Configuration**: {context.strategy_path}
+
+## Training Results
+- **Accuracy**: {training.get('accuracy', 0):.1%}
+- **Final Loss**: {training.get('final_loss', 0):.4f}
+- **Initial Loss**: {training.get('initial_loss', 0):.4f}
+- **Loss Improvement**: {loss_improvement:.1%}
+
+## Backtest Results
+- **Sharpe Ratio**: {backtest.get('sharpe_ratio', 0):.2f}
+- **Win Rate**: {backtest.get('win_rate', 0):.1%}
+- **Max Drawdown**: {backtest.get('max_drawdown', 0):.1%}
+- **Total Return**: {backtest.get('total_return', 0):.1%}
+- **Total Trades**: {backtest.get('total_trades', 0)}
+
+## Your Task
+
+Analyze these results and provide your assessment:
+
+1. **Verdict**: Is this strategy "promising", "mediocre", or "poor"?
+2. **Strengths**: What aspects performed well? (list 2-4 points)
+3. **Weaknesses**: What aspects need improvement? (list 2-4 points)
+4. **Suggestions**: How could the strategy be improved? (list 2-4 points)
+
+Use the `save_assessment` tool to record your evaluation.
+"""

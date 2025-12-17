@@ -13,6 +13,7 @@ import os
 from typing import Any
 
 from ktrdr import get_logger
+from ktrdr.agents.workers.assessment_worker import AgentAssessmentWorker
 from ktrdr.agents.workers.design_worker import AgentDesignWorker
 from ktrdr.agents.workers.research_worker import AgentResearchWorker
 from ktrdr.agents.workers.stubs import (
@@ -80,7 +81,7 @@ class AgentService:
                 self._worker = AgentResearchWorker(
                     operations_service=self.ops,
                     design_worker=AgentDesignWorker(self.ops),  # Real Claude
-                    assessment_worker=StubAssessmentWorker(),  # TODO: M5
+                    assessment_worker=AgentAssessmentWorker(self.ops),  # Real Claude
                     # Services lazy-loaded inside orchestrator
                     training_service=None,
                     backtest_service=None,

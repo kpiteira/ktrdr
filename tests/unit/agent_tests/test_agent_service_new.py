@@ -435,9 +435,9 @@ class TestAgentServiceDesignWorkerWiring:
         assert worker._training_service is None
         assert worker._backtest_service is None
 
-    def test_get_worker_still_uses_stub_assessment_worker(self):
-        """AgentService._get_worker() still uses StubAssessmentWorker."""
-        from ktrdr.agents.workers.stubs import StubAssessmentWorker
+    def test_get_worker_uses_real_assessment_worker(self):
+        """AgentService._get_worker() uses AgentAssessmentWorker."""
+        from ktrdr.agents.workers.assessment_worker import AgentAssessmentWorker
         from ktrdr.api.services.agent_service import AgentService
 
         mock_ops = AsyncMock()
@@ -445,7 +445,7 @@ class TestAgentServiceDesignWorkerWiring:
 
         worker = service._get_worker()
 
-        assert isinstance(worker.assessment_worker, StubAssessmentWorker)
+        assert isinstance(worker.assessment_worker, AgentAssessmentWorker)
 
     def test_design_worker_receives_operations_service(self):
         """AgentDesignWorker is initialized with the operations service."""
