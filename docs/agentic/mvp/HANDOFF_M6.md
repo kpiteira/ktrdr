@@ -2,7 +2,7 @@
 
 ## Summary
 
-M6 adds cancellation support for agent research cycles at API, worker, and CLI levels.
+M6 adds cancellation support and improved error handling for agent research cycles.
 
 ## Completed Tasks
 
@@ -18,18 +18,28 @@ The research worker already had cancellation propagation implemented. Task 6.2 a
 
 Added `ktrdr agent cancel` CLI command for cancelling active cycles.
 
+### Task 6.4: Improved Error Messages ✅
+
+Added structured error classes with context for better error handling:
+
+- `CycleError`: Base class for all cycle-related errors
+- `WorkerError`: Inherits from CycleError
+- `GateError`: Includes `gate` name and `metrics` dict attributes
+
 ## Implementation
 
 ### Files Created
 
 - `tests/unit/agent_tests/test_agent_endpoint.py` - Endpoint tests for cancel
 - `tests/unit/agent_tests/test_cancellation.py` - Comprehensive worker cancellation tests
+- `tests/unit/agent_tests/test_error_messages.py` - Error class and message tests
 
 ### Files Modified
 
 - `ktrdr/api/endpoints/agent.py` - Added DELETE /cancel endpoint
 - `ktrdr/api/services/agent_service.py` - Added cancel() method
 - `ktrdr/cli/agent_commands.py` - Added cancel command
+- `ktrdr/agents/workers/research_worker.py` - Added CycleError, GateError classes
 - `tests/unit/agent_tests/test_agent_service_new.py` - Added TestAgentServiceCancel tests
 - `tests/unit/agent_tests/test_agent_cli.py` - Updated for cancel command
 - `tests/unit/agent_tests/test_agent_cli_api.py` - Added TestAgentCancelViaAPI tests
@@ -74,6 +84,38 @@ ktrdr agent cancel
 # Use ktrdr agent trigger to start a new research cycle.
 ```
 
+## Error Handling
+
+### Error Class Hierarchy
+
+```python
+CycleError (base)
+├── WorkerError   # Child worker failures
+└── GateError     # Quality gate failures
+    ├── gate: str        # "training" or "backtest"
+    └── metrics: dict    # Actual metric values
+```
+
+### GateError Usage
+
+```python
+try:
+    # ... run training ...
+except GateError as e:
+    print(f"Gate: {e.gate}")           # "training"
+    print(f"Metrics: {e.metrics}")      # {"accuracy": 0.42, ...}
+    print(f"Message: {e}")              # "Training gate failed: accuracy_below_threshold (42.0% < 45%)"
+```
+
+### Error Message Format
+
+Gate failures include actual vs threshold values:
+
+```text
+Training gate failed: accuracy_below_threshold (42.3% < 45%)
+Backtest gate failed: drawdown_too_high (45.2% > 40%)
+```
+
 ## Key Patterns
 
 ### Child Operation ID Mapping
@@ -99,5 +141,4 @@ The API returns 404 when no active cycle exists. The CLI catches `AsyncCLIClient
 
 ## Next Tasks
 
-- **6.4**: Improve error messages with context
 - **6.5**: Integration tests for cancellation flow
