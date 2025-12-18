@@ -8,7 +8,7 @@ The orchestrator now uses services directly for training and backtesting
 
 import asyncio
 import time
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -19,6 +19,21 @@ from ktrdr.api.models.operations import (
     OperationStatus,
     OperationType,
 )
+
+
+@pytest.fixture(autouse=True)
+def mock_budget_tracker():
+    """Mock budget tracker for all tests to prevent writes to real budget file."""
+    mock_tracker = MagicMock()
+    mock_tracker.record_spend = MagicMock()
+    mock_tracker.can_spend.return_value = (True, "ok")
+    mock_tracker.get_remaining.return_value = 5.0
+
+    with patch(
+        "ktrdr.agents.workers.research_worker.get_budget_tracker",
+        return_value=mock_tracker,
+    ):
+        yield mock_tracker
 
 
 @pytest.fixture
