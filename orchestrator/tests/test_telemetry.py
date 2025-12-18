@@ -3,6 +3,7 @@
 These tests verify OpenTelemetry setup for traces and metrics.
 """
 
+import os
 from unittest.mock import MagicMock, patch
 
 from orchestrator.config import OrchestratorConfig
@@ -17,9 +18,8 @@ class TestSetupTelemetry:
 
         config = OrchestratorConfig()
 
-        with patch("orchestrator.telemetry.OTLPSpanExporter"):
-            with patch("orchestrator.telemetry.OTLPMetricExporter"):
-                tracer, meter = setup_telemetry(config)
+        # With OTLP disabled (default), no-op providers are used
+        tracer, meter = setup_telemetry(config)
 
         assert tracer is not None
         assert meter is not None
@@ -30,24 +30,26 @@ class TestSetupTelemetry:
 
         config = OrchestratorConfig(service_name="test-orchestrator")
 
-        with patch("orchestrator.telemetry.OTLPSpanExporter"):
-            with patch("orchestrator.telemetry.OTLPMetricExporter"):
-                tracer, _ = setup_telemetry(config)
+        tracer, _ = setup_telemetry(config)
 
         # The tracer should be associated with our service name
         assert tracer is not None
 
     def test_uses_otlp_endpoint_from_config(self):
-        """Should use OTLP endpoint from config."""
+        """Should use OTLP endpoint from config when enabled."""
         from orchestrator.telemetry import setup_telemetry
 
         config = OrchestratorConfig(otlp_endpoint="http://custom:4317")
 
-        with patch("orchestrator.telemetry.OTLPSpanExporter") as mock_span_exporter:
+        # Enable OTLP and patch the exporters at their source
+        with patch.dict(os.environ, {"OTLP_ENABLED": "true"}):
             with patch(
-                "orchestrator.telemetry.OTLPMetricExporter"
-            ) as mock_metric_exporter:
-                setup_telemetry(config)
+                "opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter"
+            ) as mock_span_exporter:
+                with patch(
+                    "opentelemetry.exporter.otlp.proto.grpc.metric_exporter.OTLPMetricExporter"
+                ) as mock_metric_exporter:
+                    setup_telemetry(config)
 
         mock_span_exporter.assert_called_with(endpoint="http://custom:4317")
         mock_metric_exporter.assert_called_with(endpoint="http://custom:4317")
@@ -60,9 +62,7 @@ class TestSetupTelemetry:
 
         config = OrchestratorConfig()
 
-        with patch("orchestrator.telemetry.OTLPSpanExporter"):
-            with patch("orchestrator.telemetry.OTLPMetricExporter"):
-                setup_telemetry(config)
+        setup_telemetry(config)
 
         # After setup, we should be able to get a tracer
         tracer = trace.get_tracer("test")
@@ -76,12 +76,24 @@ class TestSetupTelemetry:
 
         config = OrchestratorConfig()
 
-        with patch("orchestrator.telemetry.OTLPSpanExporter"):
-            with patch("orchestrator.telemetry.OTLPMetricExporter"):
-                setup_telemetry(config)
+        setup_telemetry(config)
 
         # After setup, we should be able to get a meter
         meter = metrics.get_meter("test")
+        assert meter is not None
+
+    def test_noop_when_otlp_disabled(self):
+        """Should use no-op providers when OTLP is disabled."""
+        from orchestrator.telemetry import setup_telemetry
+
+        config = OrchestratorConfig(otlp_endpoint="http://localhost:4317")
+
+        # With OTLP_ENABLED=false (default), should not try to export
+        with patch.dict(os.environ, {"OTLP_ENABLED": "false"}):
+            tracer, meter = setup_telemetry(config)
+
+        # Should still return valid tracer/meter (no-op versions)
+        assert tracer is not None
         assert meter is not None
 
 
