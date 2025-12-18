@@ -67,11 +67,21 @@ async def run_task(
 
 def _build_prompt(task: Task, human_guidance: str | None = None) -> str:
     """Build the prompt for Claude Code execution."""
-    prompt = f"""/ktask impl: {task.plan_file} task: {task.id}
+    criteria = "\n".join(f"- {c}" for c in task.acceptance_criteria)
 
-{f"Additional guidance: {human_guidance}" if human_guidance else ""}
+    prompt = f"""# Task {task.id}: {task.title}
 
-When complete, include in your final message:
+**File:** {task.file_path or "N/A"}
+
+**Description:**
+{task.description}
+
+**Acceptance Criteria:**
+{criteria}
+
+{f"**Additional Guidance:** {human_guidance}" if human_guidance else ""}
+
+Please implement this task. When complete, include in your final message:
 - STATUS: completed | needs_human | failed
 - If needs_human: QUESTION: <question> OPTIONS: <options> RECOMMENDATION: <rec>
 - If failed: ERROR: <what went wrong>

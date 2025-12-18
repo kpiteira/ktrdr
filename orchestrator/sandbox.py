@@ -81,6 +81,8 @@ class SandboxManager:
         cmd = [
             "docker",
             "exec",
+            "-u",
+            "ubuntu",  # Run as non-root to allow --dangerously-skip-permissions
             "-w",
             self.workspace_path,
             self.container_name,
@@ -89,8 +91,7 @@ class SandboxManager:
             prompt,
             "--output-format",
             "json",
-            "--permission-mode",
-            "acceptEdits",
+            "--dangerously-skip-permissions",
             "--max-turns",
             str(max_turns),
             "--allowedTools",

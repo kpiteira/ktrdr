@@ -46,8 +46,8 @@ class TestRunTaskPromptConstruction:
     """Test that run_task constructs proper prompts."""
 
     @pytest.mark.asyncio
-    async def test_prompt_includes_ktask_command(self):
-        """Prompt should include /ktask command with plan and task ID."""
+    async def test_prompt_includes_task_details(self):
+        """Prompt should include task ID, title, and details."""
         from orchestrator.task_runner import run_task
 
         task = make_task()
@@ -61,9 +61,9 @@ class TestRunTaskPromptConstruction:
 
         call_args = sandbox.invoke_claude.call_args
         prompt = call_args[1]["prompt"]
-        assert "/ktask" in prompt
-        assert task.plan_file in prompt
         assert task.id in prompt
+        assert task.title in prompt
+        assert task.description in prompt
 
     @pytest.mark.asyncio
     async def test_prompt_includes_human_guidance_when_provided(self):
