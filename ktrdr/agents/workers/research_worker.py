@@ -38,20 +38,51 @@ class ChildWorker(Protocol):
         ...
 
 
-class WorkerError(Exception):
-    """Exception raised when a child worker fails."""
+class CycleError(Exception):
+    """Base exception for research cycle errors.
+
+    All errors during a research cycle inherit from this class,
+    allowing consistent handling at the orchestrator level.
+    """
 
     pass
 
 
-class GateFailedError(Exception):
+class WorkerError(CycleError):
+    """Exception raised when a child worker fails.
+
+    Inherits from CycleError for consistent error handling.
+    """
+
+    pass
+
+
+class GateError(CycleError):
     """Exception raised when a quality gate check fails.
 
     Quality gates are deterministic checks between phases to filter
     poor strategies before expensive operations (like training or assessment).
+
+    Attributes:
+        gate: Name of the gate that failed ("training" or "backtest")
+        metrics: Dict containing the actual metric values that caused failure
     """
 
-    pass
+    def __init__(self, message: str, gate: str, metrics: dict[str, Any]):
+        """Initialize GateError with context.
+
+        Args:
+            message: Human-readable error message with actual vs threshold values
+            gate: Name of the gate ("training" or "backtest")
+            metrics: Dict of actual metric values
+        """
+        super().__init__(message)
+        self.gate = gate
+        self.metrics = metrics
+
+
+# Backwards compatibility alias
+GateFailedError = GateError
 
 
 def _get_poll_interval() -> float:
@@ -383,7 +414,11 @@ class AgentResearchWorker:
             passed, reason = check_training_gate(result)
             if not passed:
                 logger.warning(f"Training gate failed: {operation_id}, reason={reason}")
-                raise GateFailedError(f"Training gate failed: {reason}")
+                raise GateError(
+                    message=f"Training gate failed: {reason}",
+                    gate="training",
+                    metrics=result,
+                )
 
             # Start backtest via service
             await self._start_backtest(operation_id)
@@ -498,7 +533,11 @@ class AgentResearchWorker:
             passed, reason = check_backtest_gate(backtest_result)
             if not passed:
                 logger.warning(f"Backtest gate failed: {operation_id}, reason={reason}")
-                raise GateFailedError(f"Backtest gate failed: {reason}")
+                raise GateError(
+                    message=f"Backtest gate failed: {reason}",
+                    gate="backtest",
+                    metrics=backtest_result,
+                )
 
             # Start assessment with child worker
             await self._start_assessment(operation_id)
