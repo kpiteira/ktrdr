@@ -65,11 +65,12 @@ log_header() {
 check_backend() {
     log_info "Checking backend health..."
     HEALTH=$(curl -s "${API_URL}/health" 2>/dev/null || echo '{"status":"error"}')
-    if echo "$HEALTH" | jq -e '.status == "healthy"' > /dev/null 2>&1; then
-        log_success "Backend is healthy"
+    STATUS=$(echo "$HEALTH" | jq -r '.status // "error"')
+    if [ "$STATUS" == "ok" ] || [ "$STATUS" == "healthy" ]; then
+        log_success "Backend is healthy (status: $STATUS)"
         return 0
     else
-        log_error "Backend is not healthy. Run: docker compose up -d"
+        log_error "Backend is not healthy (status: $STATUS). Run: docker compose up -d"
         exit 1
     fi
 }
