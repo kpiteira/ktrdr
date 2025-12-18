@@ -3,8 +3,7 @@
 Simplified commands:
 - status: Show current agent state
 - trigger: Start a new research cycle
-
-Cancel uses operations CLI: ktrdr operations cancel <op_id>
+- cancel: Cancel active research cycle (M6 Task 6.3)
 """
 
 import asyncio
@@ -157,4 +156,64 @@ async def _trigger_agent_async():
         raise
     except Exception as e:
         logger.error(f"Failed to trigger agent: {e}")
+        raise
+
+
+@agent_app.command("cancel")
+@trace_cli_command("agent_cancel")
+def cancel_agent():
+    """Cancel the active research cycle.
+
+    Cancels the currently running research cycle if one exists.
+    Both the parent operation and any active child operation
+    will be cancelled.
+
+    Examples:
+        ktrdr agent cancel
+    """
+    try:
+        asyncio.run(_cancel_agent_async())
+    except Exception as e:
+        error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        sys.exit(1)
+
+
+async def _cancel_agent_async():
+    """Async implementation of cancel command using API."""
+    try:
+        async with AsyncCLIClient() as client:
+            result = await client._make_request("DELETE", "/agent/cancel")
+
+        if result.get("success"):
+            console.print("\n[green]Research cycle cancelled![/green]")
+            console.print(f"  Operation: {result['operation_id']}")
+            if result.get("child_cancelled"):
+                console.print(f"  Child operation: {result['child_cancelled']}")
+            console.print()
+        else:
+            reason = result.get("reason", "unknown")
+            message = result.get("message", f"Could not cancel: {reason}")
+
+            if reason == "no_active_cycle":
+                console.print("\n[dim]No active research cycle to cancel.[/dim]")
+                console.print()
+                console.print(
+                    "Use [cyan]ktrdr agent trigger[/cyan] to start a new research cycle."
+                )
+            else:
+                console.print(f"\n[yellow]Could not cancel:[/yellow] {message}")
+
+    except AsyncCLIClientError as e:
+        # Handle 404 "no active cycle" gracefully
+        if "no_active_cycle" in str(e).lower() or "no active" in str(e).lower():
+            console.print("\n[dim]No active research cycle to cancel.[/dim]")
+            console.print()
+            console.print(
+                "Use [cyan]ktrdr agent trigger[/cyan] to start a new research cycle."
+            )
+        else:
+            logger.error(f"API error: {e}")
+            raise
+    except Exception as e:
+        logger.error(f"Failed to cancel agent: {e}")
         raise

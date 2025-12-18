@@ -3,8 +3,10 @@
 Tests verify that the CLI commands call the simplified API endpoints:
 - POST /agent/trigger (no params)
 - GET /agent/status (no params)
+- DELETE /agent/cancel (no params) - M6 Task 6.3
 
 Task 1.6 of M1: Simplified CLI matching new API contract.
+Task 6.3 of M6: Add cancel command.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -170,6 +172,119 @@ class TestAgentTriggerViaAPI:
             MockClient.return_value = mock_instance
 
             result = runner.invoke(agent_app, ["trigger"])
+
+            # Should handle error gracefully
+            assert result.exit_code == 1
+            assert "error" in result.output.lower()
+
+
+class TestAgentCancelViaAPI:
+    """Tests for ktrdr agent cancel command using simplified API - M6 Task 6.3."""
+
+    def test_cancel_calls_api_endpoint(self):
+        """Test that cancel command calls /agent/cancel API endpoint."""
+        with patch("ktrdr.cli.agent_commands.AsyncCLIClient") as MockClient:
+            mock_instance = MagicMock()
+            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+            mock_instance.__aexit__ = AsyncMock(return_value=None)
+            mock_instance._make_request = AsyncMock(
+                return_value={
+                    "success": True,
+                    "operation_id": "op_agent_research_12345",
+                    "child_cancelled": "op_training_67890",
+                    "message": "Research cycle cancelled",
+                }
+            )
+            MockClient.return_value = mock_instance
+
+            result = runner.invoke(agent_app, ["cancel"])
+
+            # Verify API was called with DELETE method
+            mock_instance._make_request.assert_called_once_with(
+                "DELETE", "/agent/cancel"
+            )
+            assert result.exit_code == 0
+
+    def test_cancel_displays_success_message(self):
+        """Test that cancel displays success message with operation IDs."""
+        with patch("ktrdr.cli.agent_commands.AsyncCLIClient") as MockClient:
+            mock_instance = MagicMock()
+            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+            mock_instance.__aexit__ = AsyncMock(return_value=None)
+            mock_instance._make_request = AsyncMock(
+                return_value={
+                    "success": True,
+                    "operation_id": "op_agent_research_12345",
+                    "child_cancelled": "op_training_67890",
+                    "message": "Research cycle cancelled",
+                }
+            )
+            MockClient.return_value = mock_instance
+
+            result = runner.invoke(agent_app, ["cancel"])
+
+            assert result.exit_code == 0
+            assert "cancelled" in result.output.lower()
+            assert "op_agent_research_12345" in result.output
+
+    def test_cancel_displays_child_operation_id(self):
+        """Test that cancel shows child operation ID when present."""
+        with patch("ktrdr.cli.agent_commands.AsyncCLIClient") as MockClient:
+            mock_instance = MagicMock()
+            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+            mock_instance.__aexit__ = AsyncMock(return_value=None)
+            mock_instance._make_request = AsyncMock(
+                return_value={
+                    "success": True,
+                    "operation_id": "op_agent_research_12345",
+                    "child_cancelled": "op_training_67890",
+                    "message": "Research cycle cancelled",
+                }
+            )
+            MockClient.return_value = mock_instance
+
+            result = runner.invoke(agent_app, ["cancel"])
+
+            assert result.exit_code == 0
+            assert "op_training_67890" in result.output
+
+    def test_cancel_displays_no_active_cycle_message(self):
+        """Test that cancel displays clear message when no active cycle.
+
+        The API returns 404 for no active cycle, which raises AsyncCLIClientError.
+        The CLI should handle this gracefully and display a friendly message.
+        """
+        from ktrdr.cli.async_cli_client import AsyncCLIClientError
+
+        with patch("ktrdr.cli.agent_commands.AsyncCLIClient") as MockClient:
+            mock_instance = MagicMock()
+            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+            mock_instance.__aexit__ = AsyncMock(return_value=None)
+            # API returns 404 which raises exception
+            mock_instance._make_request = AsyncMock(
+                side_effect=AsyncCLIClientError(
+                    "API request failed: No active research cycle to cancel"
+                )
+            )
+            MockClient.return_value = mock_instance
+
+            result = runner.invoke(agent_app, ["cancel"])
+
+            assert result.exit_code == 0
+            assert "no active" in result.output.lower()
+
+    def test_cancel_handles_api_error(self):
+        """Test that cancel handles API errors gracefully."""
+        with patch("ktrdr.cli.agent_commands.AsyncCLIClient") as MockClient:
+            mock_instance = MagicMock()
+            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+            mock_instance.__aexit__ = AsyncMock(return_value=None)
+            mock_instance._make_request = AsyncMock(
+                side_effect=Exception("API connection failed")
+            )
+            MockClient.return_value = mock_instance
+
+            result = runner.invoke(agent_app, ["cancel"])
 
             # Should handle error gracefully
             assert result.exit_code == 1
