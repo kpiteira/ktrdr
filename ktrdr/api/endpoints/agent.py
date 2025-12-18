@@ -1,7 +1,6 @@
 """Agent API endpoints.
 
 Simplified endpoints for agent research cycle management.
-Cancel functionality uses the operations API: DELETE /operations/{op_id}
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -54,4 +53,25 @@ async def get_agent_status(
         return await service.get_status()
     except Exception as e:
         logger.error(f"Failed to get agent status: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.delete("/cancel")
+async def cancel_agent(
+    service: AgentService = Depends(get_agent_service),
+):
+    """Cancel the active research cycle.
+
+    Returns 200 with cancellation details if cancelled.
+    Returns 404 if no active cycle.
+    """
+    try:
+        result = await service.cancel()
+
+        if result["success"]:
+            return result
+        return JSONResponse(result, status_code=404)
+
+    except Exception as e:
+        logger.error(f"Failed to cancel agent: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e

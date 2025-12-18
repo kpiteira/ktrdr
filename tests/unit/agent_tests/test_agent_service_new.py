@@ -460,3 +460,150 @@ class TestAgentServiceDesignWorkerWiring:
         # Design worker should have the same ops service
         assert isinstance(worker.design_worker, AgentDesignWorker)
         assert worker.design_worker.ops is mock_ops
+
+
+class TestAgentServiceCancel:
+    """Test cancel() method - Task 6.1."""
+
+    @pytest.mark.asyncio
+    async def test_cancel_returns_success_when_cycle_active(
+        self, mock_operations_service
+    ):
+        """Cancel returns success=True when an active cycle exists."""
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        # Create and start a running operation
+        op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "training"}),
+        )
+        mock_operations_service._operations[op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+
+        result = await service.cancel()
+
+        assert result["success"] is True
+        assert result["operation_id"] == op.operation_id
+        assert result["message"] == "Research cycle cancelled"
+
+    @pytest.mark.asyncio
+    async def test_cancel_returns_child_operation_id(self, mock_operations_service):
+        """Cancel returns the child operation ID that was cancelled."""
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        # Create operation with a child op ID in metadata
+        op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(
+                parameters={
+                    "phase": "training",
+                    "training_op_id": "op_training_123",
+                }
+            ),
+        )
+        mock_operations_service._operations[op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+
+        result = await service.cancel()
+
+        assert result["success"] is True
+        assert result["child_cancelled"] == "op_training_123"
+
+    @pytest.mark.asyncio
+    async def test_cancel_returns_none_child_when_no_child_op(
+        self, mock_operations_service
+    ):
+        """Cancel returns None for child_cancelled when no child op exists."""
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        # Create operation without child op
+        op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "idle"}),
+        )
+        mock_operations_service._operations[op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+
+        result = await service.cancel()
+
+        assert result["success"] is True
+        assert result["child_cancelled"] is None
+
+    @pytest.mark.asyncio
+    async def test_cancel_returns_failure_when_no_active_cycle(
+        self, mock_operations_service
+    ):
+        """Cancel returns success=False with reason when no active cycle."""
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        result = await service.cancel()
+
+        assert result["success"] is False
+        assert result["reason"] == "no_active_cycle"
+        assert result["message"] == "No active research cycle to cancel"
+
+    @pytest.mark.asyncio
+    async def test_cancel_calls_operations_service_cancel(
+        self, mock_operations_service
+    ):
+        """Cancel calls ops.cancel_operation() on the active operation."""
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        # Create a running operation
+        op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "designing"}),
+        )
+        mock_operations_service._operations[op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+
+        await service.cancel()
+
+        # Check that operation was cancelled
+        cancelled_op = await mock_operations_service.get_operation(op.operation_id)
+        assert cancelled_op.status == OperationStatus.CANCELLED
+
+    @pytest.mark.asyncio
+    async def test_cancel_gets_child_id_for_each_phase(self, mock_operations_service):
+        """Cancel correctly maps each phase to its child operation ID."""
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        # Test each phase mapping
+        phase_to_child = {
+            "designing": ("design_op_id", "op_design_1"),
+            "training": ("training_op_id", "op_training_2"),
+            "backtesting": ("backtest_op_id", "op_backtest_3"),
+            "assessing": ("assessment_op_id", "op_assessment_4"),
+        }
+
+        for phase, (key, child_id) in phase_to_child.items():
+            # Reset operations
+            mock_operations_service._operations.clear()
+
+            op = await mock_operations_service.create_operation(
+                operation_type=OperationType.AGENT_RESEARCH,
+                metadata=OperationMetadata(parameters={"phase": phase, key: child_id}),
+            )
+            mock_operations_service._operations[op.operation_id].status = (
+                OperationStatus.RUNNING
+            )
+
+            result = await service.cancel()
+
+            assert result["child_cancelled"] == child_id, f"Failed for phase {phase}"

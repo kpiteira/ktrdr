@@ -190,6 +190,41 @@ class AgentService:
 
         return {"status": "idle", "last_cycle": None}
 
+    @trace_service_method("agent.cancel")
+    async def cancel(self) -> dict[str, Any]:
+        """Cancel the active research cycle.
+
+        Returns:
+            Dict with cancellation result including operation IDs cancelled.
+        """
+        active = await self._get_active_research_op()
+
+        if not active:
+            return {
+                "success": False,
+                "reason": "no_active_cycle",
+                "message": "No active research cycle to cancel",
+            }
+
+        # Get current child operation ID based on phase
+        child_op_id = self._get_child_op_id_for_phase(
+            active, active.metadata.parameters.get("phase", "")
+        )
+
+        # Cancel the parent operation
+        await self.ops.cancel_operation(active.operation_id, "Cancelled by user")
+
+        logger.info(
+            f"Research cycle cancelled: {active.operation_id}, child: {child_op_id}"
+        )
+
+        return {
+            "success": True,
+            "operation_id": active.operation_id,
+            "child_cancelled": child_op_id,
+            "message": "Research cycle cancelled",
+        }
+
     async def _get_active_research_op(self):
         """Get active AGENT_RESEARCH operation if any.
 
