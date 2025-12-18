@@ -4,12 +4,15 @@ Provides command-line interface for autonomous task execution.
 """
 
 import asyncio
+from pathlib import Path
 
 import click
 from rich.console import Console
 
 from orchestrator import telemetry
 from orchestrator.config import OrchestratorConfig
+from orchestrator.lock import MilestoneLock
+from orchestrator.milestone_runner import MilestoneResult, run_milestone
 from orchestrator.plan_parser import parse_plan
 from orchestrator.sandbox import SandboxManager
 from orchestrator.task_runner import run_task
@@ -96,6 +99,93 @@ async def _run_task(plan_file: str, task_id: str, guidance: str | None) -> None:
                 )
         elif result.status == "failed" and result.error:
             console.print(f"\n[red]Error:[/red] {result.error}")
+
+
+@cli.command()
+@click.argument("plan_file", type=click.Path(exists=True))
+@click.option("--notify/--no-notify", default=False, help="Send macOS notifications")
+def run(plan_file: str, notify: bool) -> None:
+    """Run all tasks in a milestone."""
+    asyncio.run(_run_milestone(plan_file, notify=notify))
+
+
+async def _run_milestone(plan_file: str, notify: bool = False) -> None:
+    """Internal async implementation of milestone execution."""
+    config = OrchestratorConfig.from_env()
+    tracer, meter = setup_telemetry(config)
+    create_metrics(meter)
+
+    milestone_id = Path(plan_file).stem
+
+    # Acquire lock to prevent concurrent runs
+    lock = MilestoneLock(config.state_dir, milestone_id)
+
+    try:
+        with lock:
+            console.print(f"[bold]Starting milestone:[/bold] {milestone_id}")
+
+            result = await run_milestone(
+                plan_path=plan_file,
+                state_dir=config.state_dir,
+                resume=False,
+                config=config,
+                tracer=tracer,
+            )
+
+            # Output summary
+            _print_milestone_summary(result)
+
+            # Send notification if requested
+            if notify:
+                _send_notification(result)
+
+    except RuntimeError as e:
+        # Lock held by another process
+        console.print(f"[red]Error:[/red] {e}")
+
+
+def _print_milestone_summary(result: MilestoneResult) -> None:
+    """Print milestone completion summary."""
+    status_color = {
+        "completed": "green",
+        "failed": "red",
+        "needs_human": "yellow",
+    }
+    color = status_color[result.status]
+
+    console.print(
+        f"\n[bold {color}]Milestone {result.status.upper()}[/bold {color}]"
+    )
+    console.print(f"  Tasks: {result.completed_tasks}/{result.total_tasks} completed")
+    console.print(f"  Duration: {_format_duration(result.total_duration_seconds)}")
+    console.print(f"  Tokens: {result.total_tokens / 1000:.1f}k")
+    console.print(f"  Cost: ${result.total_cost_usd:.2f}")
+
+    if result.failed_tasks > 0:
+        console.print(f"  [red]Failed: {result.failed_tasks}[/red]")
+
+
+def _format_duration(seconds: float) -> str:
+    """Format duration in human-readable form."""
+    if seconds < 60:
+        return f"{seconds:.0f}s"
+    minutes = int(seconds // 60)
+    secs = int(seconds % 60)
+    return f"{minutes}m {secs}s"
+
+
+def _send_notification(result: MilestoneResult) -> None:
+    """Send macOS notification for milestone completion."""
+    try:
+        from orchestrator.notifications import send_notification
+
+        send_notification(
+            title=f"Milestone {result.status}",
+            message=f"{result.completed_tasks}/{result.total_tasks} tasks completed",
+        )
+    except ImportError:
+        # notifications module not implemented yet (Task 3.7)
+        pass
 
 
 def main() -> None:

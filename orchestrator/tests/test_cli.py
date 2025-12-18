@@ -307,3 +307,269 @@ class TestTaskCommandTelemetry:
         attribute_names = [call[0] for call in set_attribute_calls]
         assert "task.id" in attribute_names
         assert "task.status" in attribute_names
+
+
+class TestRunCommand:
+    """Test the run CLI command."""
+
+    def test_run_command_exists(self):
+        """The run command should exist in the CLI."""
+        from orchestrator.cli import cli
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["run", "--help"])
+
+        assert result.exit_code == 0
+        assert "Run all tasks" in result.output or "milestone" in result.output.lower()
+
+    def test_run_command_requires_plan_file(self):
+        """run command should require a plan file argument."""
+        from orchestrator.cli import cli
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["run"])
+
+        # Should fail due to missing argument
+        assert result.exit_code != 0
+
+    def test_run_command_has_notify_option(self):
+        """run command should have --notify option."""
+        from orchestrator.cli import cli
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["run", "--help"])
+
+        assert "--notify" in result.output
+
+
+class TestRunCommandExecution:
+    """Test run command execution with mocked dependencies."""
+
+    def test_run_calls_run_milestone(self):
+        """run command should call run_milestone."""
+        from datetime import datetime
+
+        from orchestrator.cli import cli
+        from orchestrator.milestone_runner import MilestoneResult
+        from orchestrator.state import OrchestratorState
+
+        runner = CliRunner()
+
+        content = textwrap.dedent("""
+            # Milestone 2: Test
+
+            ## Task 2.1: Test Task
+
+            **Description:** Test task
+
+            **Acceptance Criteria:**
+            - [ ] Works
+        """)
+
+        mock_state = OrchestratorState(
+            milestone_id="test",
+            plan_path="test.md",
+            started_at=datetime.now(),
+            completed_tasks=["2.1"],
+        )
+
+        mock_result = MilestoneResult(
+            status="completed",
+            state=mock_state,
+            total_tasks=1,
+            completed_tasks=1,
+            failed_tasks=0,
+            total_cost_usd=0.05,
+            total_tokens=5000,
+            total_duration_seconds=60.0,
+        )
+
+        with NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+            f.write(content)
+            f.flush()
+
+            with patch("orchestrator.cli.setup_telemetry") as mock_telemetry:
+                mock_telemetry.return_value = (MagicMock(), MagicMock())
+
+                with patch("orchestrator.cli.create_metrics"):
+                    with patch(
+                        "orchestrator.cli.run_milestone",
+                        new_callable=AsyncMock,
+                    ) as mock_run:
+                        mock_run.return_value = mock_result
+
+                        with patch("orchestrator.cli.MilestoneLock") as mock_lock:
+                            mock_lock.return_value.__enter__ = MagicMock(
+                                return_value=mock_lock
+                            )
+                            mock_lock.return_value.__exit__ = MagicMock(
+                                return_value=None
+                            )
+                            result = runner.invoke(cli, ["run", f.name])
+
+        mock_run.assert_called_once()
+        assert "complete" in result.output.lower() or result.exit_code == 0
+
+    def test_run_uses_lock(self):
+        """run command should use MilestoneLock."""
+        from datetime import datetime
+
+        from orchestrator.cli import cli
+        from orchestrator.milestone_runner import MilestoneResult
+        from orchestrator.state import OrchestratorState
+
+        runner = CliRunner()
+
+        content = textwrap.dedent("""
+            # Milestone 2: Test
+
+            ## Task 2.1: Test Task
+
+            **Description:** Test task
+
+            **Acceptance Criteria:**
+            - [ ] Works
+        """)
+
+        mock_state = OrchestratorState(
+            milestone_id="test",
+            plan_path="test.md",
+            started_at=datetime.now(),
+        )
+
+        mock_result = MilestoneResult(
+            status="completed",
+            state=mock_state,
+            total_tasks=1,
+            completed_tasks=1,
+            failed_tasks=0,
+            total_cost_usd=0.05,
+            total_tokens=5000,
+            total_duration_seconds=60.0,
+        )
+
+        with NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+            f.write(content)
+            f.flush()
+
+            with patch("orchestrator.cli.setup_telemetry") as mock_telemetry:
+                mock_telemetry.return_value = (MagicMock(), MagicMock())
+
+                with patch("orchestrator.cli.create_metrics"):
+                    with patch(
+                        "orchestrator.cli.run_milestone",
+                        new_callable=AsyncMock,
+                    ) as mock_run:
+                        mock_run.return_value = mock_result
+
+                        with patch("orchestrator.cli.MilestoneLock") as mock_lock:
+                            mock_lock.return_value.__enter__ = MagicMock(
+                                return_value=mock_lock
+                            )
+                            mock_lock.return_value.__exit__ = MagicMock(
+                                return_value=None
+                            )
+                            runner.invoke(cli, ["run", f.name])
+
+        # Lock should have been instantiated
+        mock_lock.assert_called_once()
+
+    def test_run_shows_error_when_lock_held(self):
+        """run command should show error when lock is held."""
+        from orchestrator.cli import cli
+
+        runner = CliRunner()
+
+        content = textwrap.dedent("""
+            # Milestone 2: Test
+
+            ## Task 2.1: Test Task
+
+            **Description:** Test task
+
+            **Acceptance Criteria:**
+            - [ ] Works
+        """)
+
+        with NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+            f.write(content)
+            f.flush()
+
+            with patch("orchestrator.cli.setup_telemetry") as mock_telemetry:
+                mock_telemetry.return_value = (MagicMock(), MagicMock())
+
+                with patch("orchestrator.cli.create_metrics"):
+                    with patch("orchestrator.cli.MilestoneLock") as mock_lock:
+                        mock_lock.return_value.__enter__ = MagicMock(
+                            side_effect=RuntimeError("Milestone already running (PID: 12345)")
+                        )
+                        result = runner.invoke(cli, ["run", f.name])
+
+        assert "already running" in result.output.lower() or result.exit_code != 0
+
+    def test_run_outputs_summary(self):
+        """run command should output summary on completion."""
+        from datetime import datetime
+
+        from orchestrator.cli import cli
+        from orchestrator.milestone_runner import MilestoneResult
+        from orchestrator.state import OrchestratorState
+
+        runner = CliRunner()
+
+        content = textwrap.dedent("""
+            # Milestone 2: Test
+
+            ## Task 2.1: Test Task
+
+            **Description:** Test task
+
+            **Acceptance Criteria:**
+            - [ ] Works
+        """)
+
+        mock_state = OrchestratorState(
+            milestone_id="test",
+            plan_path="test.md",
+            started_at=datetime.now(),
+            completed_tasks=["2.1"],
+        )
+
+        mock_result = MilestoneResult(
+            status="completed",
+            state=mock_state,
+            total_tasks=1,
+            completed_tasks=1,
+            failed_tasks=0,
+            total_cost_usd=0.05,
+            total_tokens=5000,
+            total_duration_seconds=60.0,
+        )
+
+        with NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+            f.write(content)
+            f.flush()
+
+            with patch("orchestrator.cli.setup_telemetry") as mock_telemetry:
+                mock_telemetry.return_value = (MagicMock(), MagicMock())
+
+                with patch("orchestrator.cli.create_metrics"):
+                    with patch(
+                        "orchestrator.cli.run_milestone",
+                        new_callable=AsyncMock,
+                    ) as mock_run:
+                        mock_run.return_value = mock_result
+
+                        with patch("orchestrator.cli.MilestoneLock") as mock_lock:
+                            mock_lock.return_value.__enter__ = MagicMock(
+                                return_value=mock_lock
+                            )
+                            mock_lock.return_value.__exit__ = MagicMock(
+                                return_value=None
+                            )
+                            result = runner.invoke(cli, ["run", f.name])
+
+        output = result.output.lower()
+        # Should contain summary information
+        assert "1" in result.output  # Number of tasks
+        assert "$" in result.output or "cost" in output  # Cost
