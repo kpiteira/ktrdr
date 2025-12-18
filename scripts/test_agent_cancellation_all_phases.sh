@@ -40,25 +40,25 @@ BACKTEST_WAIT_MAX=180    # Max seconds to wait for backtest to complete
 POLL_INTERVAL=2          # Seconds between status checks
 
 log_info() {
-    echo -e "${CYAN}[INFO]${NC} $1"
+    echo -e "${CYAN}[INFO]${NC} $1" >&2
 }
 
 log_success() {
-    echo -e "${GREEN}[PASS]${NC} $1"
+    echo -e "${GREEN}[PASS]${NC} $1" >&2
 }
 
 log_error() {
-    echo -e "${RED}[FAIL]${NC} $1"
+    echo -e "${RED}[FAIL]${NC} $1" >&2
 }
 
 log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
+    echo -e "${YELLOW}[WARN]${NC} $1" >&2
 }
 
 log_header() {
-    echo ""
-    echo -e "${BOLD}=== $1 ===${NC}"
-    echo ""
+    echo "" >&2
+    echo -e "${BOLD}=== $1 ===${NC}" >&2
+    echo "" >&2
 }
 
 # Check if backend is healthy
@@ -139,13 +139,13 @@ wait_for_phase() {
         fi
 
         # Show progress
-        printf "\r  Current: %-15s Elapsed: %3ds / %3ds" "$CURRENT_PHASE" "$ELAPSED" "$MAX_WAIT"
+        printf "\r  Current: %-15s Elapsed: %3ds / %3ds" "$CURRENT_PHASE" "$ELAPSED" "$MAX_WAIT" >&2
 
         sleep $POLL_INTERVAL
         ELAPSED=$((ELAPSED + POLL_INTERVAL))
     done
 
-    echo ""
+    echo "" >&2
     log_error "Timeout waiting for phase: $TARGET_PHASE"
     return 3
 }
