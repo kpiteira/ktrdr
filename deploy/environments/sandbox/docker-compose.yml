@@ -24,6 +24,9 @@ services:
     # Terminal settings
     environment:
       - TERM=xterm-256color
+      # Prefix all containers created by sandbox with "sandbox-" to avoid
+      # conflicts with host development containers
+      - COMPOSE_PROJECT_NAME=sandbox
 
     volumes:
       # Docker socket for running ktrdr services from inside sandbox
