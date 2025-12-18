@@ -15,6 +15,7 @@ from orchestrator.lock import MilestoneLock
 from orchestrator.milestone_runner import MilestoneResult, run_milestone
 from orchestrator.plan_parser import parse_plan
 from orchestrator.sandbox import SandboxManager
+from orchestrator.state import OrchestratorState
 from orchestrator.task_runner import run_task
 from orchestrator.telemetry import create_metrics, setup_telemetry
 
@@ -106,10 +107,38 @@ async def _run_task(plan_file: str, task_id: str, guidance: str | None) -> None:
 @click.option("--notify/--no-notify", default=False, help="Send macOS notifications")
 def run(plan_file: str, notify: bool) -> None:
     """Run all tasks in a milestone."""
-    asyncio.run(_run_milestone(plan_file, notify=notify))
+    asyncio.run(_run_milestone(plan_file, resume=False, notify=notify))
 
 
-async def _run_milestone(plan_file: str, notify: bool = False) -> None:
+@cli.command()
+@click.argument("plan_file", type=click.Path(exists=True))
+@click.option("--notify/--no-notify", default=False, help="Send macOS notifications")
+def resume(plan_file: str, notify: bool) -> None:
+    """Resume a previously interrupted milestone."""
+    config = OrchestratorConfig.from_env()
+    milestone_id = Path(plan_file).stem
+
+    # Check that state exists
+    state = OrchestratorState.load(config.state_dir, milestone_id)
+    if state is None:
+        console.print(f"[red]No saved state for {milestone_id}[/red]")
+        console.print("Use 'orchestrator run' to start a new run.")
+        return
+
+    if len(state.completed_tasks) == 0:
+        console.print(
+            "[yellow]No tasks completed yet. Use 'orchestrator run' instead.[/yellow]"
+        )
+        return
+
+    console.print(f"Found state: {len(state.completed_tasks)} task(s) completed")
+
+    asyncio.run(_run_milestone(plan_file, resume=True, notify=notify))
+
+
+async def _run_milestone(
+    plan_file: str, resume: bool = False, notify: bool = False
+) -> None:
     """Internal async implementation of milestone execution."""
     config = OrchestratorConfig.from_env()
     tracer, meter = setup_telemetry(config)
@@ -122,12 +151,15 @@ async def _run_milestone(plan_file: str, notify: bool = False) -> None:
 
     try:
         with lock:
-            console.print(f"[bold]Starting milestone:[/bold] {milestone_id}")
+            if not resume:
+                console.print(f"[bold]Starting milestone:[/bold] {milestone_id}")
+            else:
+                console.print(f"[bold]Resuming milestone:[/bold] {milestone_id}")
 
             result = await run_milestone(
                 plan_path=plan_file,
                 state_dir=config.state_dir,
-                resume=False,
+                resume=resume,
                 config=config,
                 tracer=tracer,
             )
