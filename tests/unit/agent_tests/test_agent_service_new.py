@@ -725,10 +725,10 @@ class TestAgentServiceBudget:
         assert result["reason"] == "budget_exhausted"
 
     @pytest.mark.asyncio
-    async def test_spend_recorded_after_successful_completion(
+    async def test_service_delegates_spend_recording_to_worker(
         self, mock_operations_service, mock_budget_tracker
     ):
-        """Spend is recorded after a cycle completes successfully."""
+        """AgentService does NOT record spend - worker records per-phase."""
         from unittest.mock import patch
 
         from ktrdr.agents.workers.research_worker import AgentResearchWorker
@@ -756,10 +756,8 @@ class TestAgentServiceBudget:
 
             await service._run_worker(op.operation_id, mock_worker)
 
-        # Spend should have been recorded
-        mock_budget_tracker.record_spend.assert_called_once()
-        call_args = mock_budget_tracker.record_spend.call_args
-        assert call_args[0][1] == op.operation_id  # operation_id
+        # Service should NOT record spend - worker records per-phase
+        mock_budget_tracker.record_spend.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_spend_not_recorded_on_failure(
@@ -823,38 +821,24 @@ class TestAgentServiceBudget:
         # Spend should NOT have been recorded
         mock_budget_tracker.record_spend.assert_not_called()
 
-    @pytest.mark.asyncio
-    async def test_cost_estimation_from_tokens(
-        self, mock_operations_service, mock_budget_tracker
-    ):
-        """Cost is estimated from token count."""
-        from unittest.mock import patch
-
+    def test_worker_cost_estimation_from_tokens(self):
+        """Worker's cost estimation is reasonable for given token counts."""
         from ktrdr.agents.workers.research_worker import AgentResearchWorker
-        from ktrdr.api.services.agent_service import AgentService
 
-        mock_worker = AsyncMock(spec=AgentResearchWorker)
-        mock_worker.run.return_value = {
-            "success": True,
-            "total_tokens": 10000,  # 10k tokens
-        }
+        # Create worker with minimal deps (just testing _estimate_cost)
+        worker = AgentResearchWorker.__new__(AgentResearchWorker)
 
-        with patch(
-            "ktrdr.api.services.agent_service.get_budget_tracker",
-            return_value=mock_budget_tracker,
-        ):
-            service = AgentService(operations_service=mock_operations_service)
-
-            op = await mock_operations_service.create_operation(
-                operation_type=OperationType.AGENT_RESEARCH,
-                metadata=OperationMetadata(parameters={"phase": "idle"}),
-            )
-
-            await service._run_worker(op.operation_id, mock_worker)
-
-        # Check that some cost was recorded (not zero)
-        call_args = mock_budget_tracker.record_spend.call_args
-        estimated_cost = call_args[0][0]
+        # Test with 10k tokens
+        # Claude Opus pricing: ~60% input @ $15/1M + 40% output @ $75/1M
+        # = (0.6 * 15 + 0.4 * 75) / 1M = 39 / 1M = $0.000039 per token
+        # 10k tokens = $0.39
+        estimated_cost = worker._estimate_cost(10000)
         assert estimated_cost > 0
-        # With 10k tokens at ~$0.039/1k, should be around $0.39
-        assert 0.1 < estimated_cost < 1.0
+        assert 0.1 < estimated_cost < 1.0  # ~$0.39 expected
+
+        # Test with 0 tokens
+        assert worker._estimate_cost(0) == 0
+
+        # Test with typical design phase tokens (4300 = 2500 input + 1800 output)
+        design_cost = worker._estimate_cost(4300)
+        assert 0.1 < design_cost < 0.3  # ~$0.17 expected

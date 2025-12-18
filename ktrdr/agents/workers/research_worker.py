@@ -22,8 +22,10 @@ import yaml
 from opentelemetry import trace
 
 from ktrdr import get_logger
+from ktrdr.agents.budget import get_budget_tracker
 from ktrdr.agents.gates import check_backtest_gate, check_training_gate
 from ktrdr.agents.metrics import (
+    record_budget_spend,
     record_cycle_duration,
     record_cycle_outcome,
     record_gate_result,
@@ -398,6 +400,13 @@ class AgentResearchWorker:
                 # Record token usage from design
                 if input_tokens or output_tokens:
                     record_tokens("design", input_tokens + output_tokens)
+
+                    # Record budget spend immediately after design phase
+                    total_tokens = input_tokens + output_tokens
+                    estimated_cost = self._estimate_cost(total_tokens)
+                    budget = get_budget_tracker()
+                    budget.record_spend(estimated_cost, operation_id)
+                    record_budget_spend(estimated_cost)
 
             # Start training via service
             await self._start_training(operation_id)
@@ -779,6 +788,13 @@ class AgentResearchWorker:
             if input_tokens or output_tokens:
                 record_tokens("assessment", input_tokens + output_tokens)
 
+                # Record budget spend immediately after assessment phase
+                total_tokens = input_tokens + output_tokens
+                estimated_cost = self._estimate_cost(total_tokens)
+                budget = get_budget_tracker()
+                budget.record_spend(estimated_cost, operation_id)
+                record_budget_spend(estimated_cost)
+
             return {
                 "success": True,
                 "strategy_name": strategy_name,
@@ -792,6 +808,23 @@ class AgentResearchWorker:
             raise asyncio.CancelledError("Assessment was cancelled")
 
         return None
+
+    def _estimate_cost(self, total_tokens: int) -> float:
+        """Estimate cost in dollars from token count.
+
+        Claude Opus pricing (approximate):
+        - Input: $15 / 1M tokens
+        - Output: $75 / 1M tokens
+        - Assuming 60% input, 40% output
+
+        Args:
+            total_tokens: Total tokens used.
+
+        Returns:
+            Estimated cost in dollars.
+        """
+        avg_price_per_token = (0.6 * 15 + 0.4 * 75) / 1_000_000
+        return total_tokens * avg_price_per_token
 
     def _get_child_op_id(self, op: Any, phase: str) -> str | None:
         """Get child operation ID for current phase.
