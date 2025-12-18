@@ -26,6 +26,18 @@ Added structured error classes with context for better error handling:
 - `WorkerError`: Inherits from CycleError
 - `GateError`: Includes `gate` name and `metrics` dict attributes
 
+### Task 6.5: Integration Tests ✅
+
+Added comprehensive integration tests for cancellation flow at the AgentService level:
+
+- `test_cancel_during_designing_phase` — Cancel during design phase
+- `test_cancel_during_training_phase` — Cancel during training phase
+- `test_cancel_no_active_cycle_returns_error` — Error when no active cycle
+- `test_trigger_after_cancel_succeeds` — New cycle starts after cancel
+- `test_cancellation_completes_within_500ms` — Performance requirement
+- `test_child_design_op_cancelled` — Child cleanup verification
+- `test_cancel_returns_child_op_id` — Response includes child ID
+
 ## Implementation
 
 ### Files Created
@@ -33,6 +45,7 @@ Added structured error classes with context for better error handling:
 - `tests/unit/agent_tests/test_agent_endpoint.py` - Endpoint tests for cancel
 - `tests/unit/agent_tests/test_cancellation.py` - Comprehensive worker cancellation tests
 - `tests/unit/agent_tests/test_error_messages.py` - Error class and message tests
+- `tests/integration/agent_tests/test_agent_cancellation.py` - Integration tests for cancellation flow
 
 ### Files Modified
 
@@ -139,6 +152,6 @@ The `_get_child_op_id_for_phase()` method maps phases to their child operation m
 
 The API returns 404 when no active cycle exists. The CLI catches `AsyncCLIClientError` and checks for "no active" in the message to display a friendly message instead of an error.
 
-## Next Tasks
+## Milestone Status
 
-- **6.5**: Integration tests for cancellation flow
+**M6 Complete** — All tasks (6.1-6.5) implemented and tested.
