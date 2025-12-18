@@ -55,7 +55,7 @@ echo "  PASS: Entrypoint runs without error"
 echo ""
 echo "Check 3: Logs warning if workspace empty..."
 LOGS=$(docker logs "$CONTAINER_NAME" 2>&1)
-if ! echo "$LOGS" | grep -qi "warning.*workspace\|workspace.*empty\|no.*git"; then
+if ! echo "$LOGS" | grep -qiE "warning.*workspace|workspace.*empty|no.*git"; then
     echo "  FAIL: No warning about empty workspace in logs"
     echo "  Logs: $LOGS"
     exit 1
@@ -70,7 +70,7 @@ docker run -d --name "$CONTAINER_NAME" "$IMAGE_NAME" > /dev/null 2>&1
 sleep 2
 
 LOGS_NO_KEY=$(docker logs "$CONTAINER_NAME" 2>&1)
-if ! echo "$LOGS_NO_KEY" | grep -qi "warning.*api.*key\|anthropic.*key.*missing\|api.*key.*not.*set"; then
+if ! echo "$LOGS_NO_KEY" | grep -qiE "warning.*api.*key|anthropic.*key.*missing|api.*key.*not.*set"; then
     echo "  FAIL: No warning about missing API key in logs"
     echo "  Logs: $LOGS_NO_KEY"
     exit 1

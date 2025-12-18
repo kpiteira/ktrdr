@@ -22,16 +22,20 @@ services:
     restart: unless-stopped
 
     # Pass API key from host environment
+    # SECURITY: Do not hard-code API keys. Use environment variables or
+    # secure secret management. Never commit actual keys to version control.
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - TERM=xterm-256color
 
     volumes:
       # Docker socket for running ktrdr services from inside sandbox
+      # SECURITY: This grants full Docker daemon access. Only run in trusted
+      # development environments, never with untrusted code or in production.
       - /var/run/docker.sock:/var/run/docker.sock
 
       # Shared market data (read-only)
-      - ~/Documents/ktrdr-shared/data:/shared/data:ro
+      - ${HOME}/Documents/ktrdr-shared/data:/shared/data:ro
 
       # Named volumes for persistent storage
       - sandbox-workspace:/workspace

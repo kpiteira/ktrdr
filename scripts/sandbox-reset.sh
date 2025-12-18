@@ -44,7 +44,13 @@ docker exec "$CONTAINER_NAME" bash -c '
     echo "  - Restoring modified files..."
     git checkout .
     echo "  - Pulling latest changes..."
-    git pull --ff-only 2>/dev/null || echo "  - (already up to date or detached HEAD)"
+    if git pull --ff-only 2>/dev/null; then
+        :
+    elif git symbolic-ref --quiet HEAD >/dev/null 2>&1; then
+        echo "  - WARNING: git pull failed (check network or auth)"
+    else
+        echo "  - (skipped: detached HEAD)"
+    fi
 '
 echo "  Done."
 

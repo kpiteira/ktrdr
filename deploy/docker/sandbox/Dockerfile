@@ -2,7 +2,7 @@
 # Isolated environment for Claude Code to run with full permissions
 #
 # This container provides:
-# - Python 3.11+ with uv for dependency management
+# - Python 3.12 (from Ubuntu 24.04) with uv for dependency management
 # - Node.js for Claude Code CLI
 # - Docker CLI (daemon runs on host via socket mount)
 # - Git for workspace management
@@ -51,10 +51,12 @@ RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /
 
 # Install uv for Python dependency management
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && test -x /root/.local/bin/uv \
     && mv /root/.local/bin/uv /usr/local/bin/uv \
     && mv /root/.local/bin/uvx /usr/local/bin/uvx
 
 # Install Claude Code CLI globally
+# Note: Intentionally unpinned to get latest features in dev environment
 RUN npm install -g @anthropic-ai/claude-code
 
 # Create workspace directory
