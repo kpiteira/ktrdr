@@ -15,7 +15,7 @@
 |-----------|------------|--------------|------------|------------|
 | **M1** | Sandbox works | Dockerfile, compose, scripts | 7 | Manual E2E |
 | **M2** | Single task + telemetry | Orchestrator CLI, task runner, OTel | 9 | Hand-crafted task |
-| **M3** | Task loop + resume | State persistence, run/resume | 7 | Hand-crafted 3-task milestone |
+| **M3** | Task loop + resume + PR | State persistence, run/resume, branch/PR | 8 | Hand-crafted 3-task milestone |
 | **GATE** | Design real feature | /kdesign "Orchestrator Enhancements" | — | — |
 | **M4** | Escalation + loops | Human input, loop detection | 8 | Real feature M1 |
 | **M5** | E2E + dashboard | E2E runner, Grafana dashboard | 9 | Real feature + E2E |

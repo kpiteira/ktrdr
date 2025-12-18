@@ -9,8 +9,9 @@
 #   ./scripts/sandbox-claude.sh    # Run Claude Code command
 #
 # Requires:
-#   - ANTHROPIC_API_KEY environment variable
+#   - GH_TOKEN environment variable (for GitHub CLI PR creation)
 #   - ~/Documents/ktrdr-shared/data/ directory with market data
+#   - Claude Code login (run `claude login` in sandbox first time)
 
 services:
   sandbox:
@@ -21,9 +22,10 @@ services:
     container_name: ktrdr-sandbox
     restart: unless-stopped
 
-    # Terminal settings
     environment:
       - TERM=xterm-256color
+      # GitHub token for PR creation (passed from host environment)
+      - GH_TOKEN=${GH_TOKEN}
       # Prefix all containers created by sandbox with "sandbox-" to avoid
       # conflicts with host development containers
       - COMPOSE_PROJECT_NAME=sandbox
