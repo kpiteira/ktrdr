@@ -26,6 +26,7 @@ dependencies = [
     "python-dotenv>=1.1.0",
     "tomli>=2.2.1",
     "rich>=14.0.0",
+    "click>=8.0.0",
     "fastapi>=0.115.12",
     "uvicorn>=0.34.3",
     "watchfiles>=1.0.0",  # For efficient uvicorn --reload (avoids CPU-heavy polling)
@@ -69,6 +70,7 @@ dev = [
 
 [project.scripts]
 ktrdr = "ktrdr.cli:app"
+orchestrator = "orchestrator.cli:main"
 
 [dependency-groups]
 dev = [
