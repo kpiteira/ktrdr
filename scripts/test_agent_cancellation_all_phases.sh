@@ -207,56 +207,37 @@ cancel_and_verify() {
 }
 
 # Test cancellation during a specific phase
-# Retries up to MAX_RETRIES times if cycle fails before reaching phase (e.g., gate rejection)
 test_cancel_during_phase() {
     local PHASE=$1
     local WAIT_TIME=$2
-    local MAX_RETRIES=3
-    local ATTEMPT=1
 
     log_header "Test: Cancel During $PHASE Phase"
 
-    while [ $ATTEMPT -le $MAX_RETRIES ]; do
-        if [ $ATTEMPT -gt 1 ]; then
-            log_info "Retry $ATTEMPT/$MAX_RETRIES (previous cycle failed before reaching $PHASE)"
-        fi
+    ensure_idle
 
-        ensure_idle
+    OP_ID=$(trigger_cycle)
 
-        OP_ID=$(trigger_cycle)
+    if wait_for_phase "$PHASE" $WAIT_TIME; then
+        # Give the phase a moment to establish
+        sleep 1
 
-        if wait_for_phase "$PHASE" $WAIT_TIME; then
-            # Give the phase a moment to establish
-            sleep 1
-
-            if cancel_and_verify "$OP_ID" "$PHASE"; then
-                log_success "Cancel during $PHASE: PASSED"
-                return 0
-            else
-                log_error "Cancel during $PHASE: FAILED (cancel/verify failed)"
-                return 1
-            fi
+        if cancel_and_verify "$OP_ID" "$PHASE"; then
+            log_success "Cancel during $PHASE: PASSED"
+            return 0
         else
-            EXIT_CODE=$?
-            if [ $EXIT_CODE -eq 1 ]; then
-                log_warn "Skipping $PHASE test - cycle completed too fast"
-                return 0
-            elif [ $EXIT_CODE -eq 2 ]; then
-                # Cycle failed (e.g., gate rejection) - retry
-                ATTEMPT=$((ATTEMPT + 1))
-                if [ $ATTEMPT -le $MAX_RETRIES ]; then
-                    log_warn "Cycle failed (likely gate rejection), retrying..."
-                    sleep 2
-                    continue
-                fi
-            fi
-            log_error "Cancel during $PHASE: FAILED after $MAX_RETRIES attempts (could not reach phase)"
+            log_error "Cancel during $PHASE: FAILED (cancel/verify failed)"
             return 1
         fi
-    done
-
-    log_error "Cancel during $PHASE: FAILED after $MAX_RETRIES attempts"
-    return 1
+    else
+        EXIT_CODE=$?
+        if [ $EXIT_CODE -eq 1 ]; then
+            log_warn "Skipping $PHASE test - cycle completed too fast"
+            return 0
+        else
+            log_error "Cancel during $PHASE: FAILED (could not reach phase)"
+            return 1
+        fi
+    fi
 }
 
 # Verify new cycle can start after cancel
