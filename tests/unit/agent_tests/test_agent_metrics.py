@@ -11,8 +11,6 @@ Tests cover:
 - Helper function behavior
 """
 
-import pytest
-
 
 class TestAgentMetricsDefinitions:
     """Tests for agent metrics definitions."""
@@ -78,7 +76,9 @@ class TestAgentMetricsRecording:
 
         initial = agent_cycles_total.labels(outcome="completed")._value.get()
         record_cycle_outcome("completed")
-        assert agent_cycles_total.labels(outcome="completed")._value.get() == initial + 1
+        assert (
+            agent_cycles_total.labels(outcome="completed")._value.get() == initial + 1
+        )
 
     def test_record_cycle_outcome_failed(self):
         """Test recording failed cycle outcome."""
@@ -94,11 +94,16 @@ class TestAgentMetricsRecording:
 
         initial = agent_cycles_total.labels(outcome="cancelled")._value.get()
         record_cycle_outcome("cancelled")
-        assert agent_cycles_total.labels(outcome="cancelled")._value.get() == initial + 1
+        assert (
+            agent_cycles_total.labels(outcome="cancelled")._value.get() == initial + 1
+        )
 
     def test_record_cycle_duration(self):
         """Test recording cycle duration."""
-        from ktrdr.agents.metrics import agent_cycle_duration_seconds, record_cycle_duration
+        from ktrdr.agents.metrics import (
+            agent_cycle_duration_seconds,
+            record_cycle_duration,
+        )
 
         initial_sum = agent_cycle_duration_seconds._sum.get()
         record_cycle_duration(120.5)
@@ -136,7 +141,9 @@ class TestAgentMetricsRecording:
         """Test recording gate pass result."""
         from ktrdr.agents.metrics import agent_gate_results_total, record_gate_result
 
-        initial = agent_gate_results_total.labels(gate="training", result="pass")._value.get()
+        initial = agent_gate_results_total.labels(
+            gate="training", result="pass"
+        )._value.get()
         record_gate_result("training", passed=True)
         assert (
             agent_gate_results_total.labels(gate="training", result="pass")._value.get()
@@ -147,7 +154,9 @@ class TestAgentMetricsRecording:
         """Test recording gate fail result."""
         from ktrdr.agents.metrics import agent_gate_results_total, record_gate_result
 
-        initial = agent_gate_results_total.labels(gate="backtest", result="fail")._value.get()
+        initial = agent_gate_results_total.labels(
+            gate="backtest", result="fail"
+        )._value.get()
         record_gate_result("backtest", passed=False)
         assert (
             agent_gate_results_total.labels(gate="backtest", result="fail")._value.get()
@@ -168,7 +177,9 @@ class TestAgentMetricsRecording:
 
         initial = agent_tokens_total.labels(phase="assessment")._value.get()
         record_tokens("assessment", 4500)
-        assert agent_tokens_total.labels(phase="assessment")._value.get() == initial + 4500
+        assert (
+            agent_tokens_total.labels(phase="assessment")._value.get() == initial + 4500
+        )
 
     def test_record_budget_spend(self):
         """Test recording budget spend."""
@@ -235,7 +246,10 @@ class TestAgentMetricsIntegration:
         assert "agent_cycles" in metric_names or "agent_cycles_total" in metric_names
         assert "agent_cycle_duration_seconds" in metric_names
         assert "agent_phase_duration_seconds" in metric_names
-        assert "agent_gate_results" in metric_names or "agent_gate_results_total" in metric_names
+        assert (
+            "agent_gate_results" in metric_names
+            or "agent_gate_results_total" in metric_names
+        )
         assert "agent_tokens" in metric_names or "agent_tokens_total" in metric_names
         assert (
             "agent_budget_spend" in metric_names

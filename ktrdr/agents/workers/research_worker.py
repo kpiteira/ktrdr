@@ -19,6 +19,7 @@ import time
 from typing import Any, Protocol
 
 import yaml
+from opentelemetry import trace
 
 from ktrdr import get_logger
 from ktrdr.agents.gates import check_backtest_gate, check_training_gate
@@ -36,6 +37,7 @@ from ktrdr.api.models.operations import (
 )
 
 logger = get_logger(__name__)
+tracer = trace.get_tracer(__name__)
 
 
 class ChildWorker(Protocol):
@@ -218,69 +220,83 @@ class AgentResearchWorker:
         logger.info(f"Starting research cycle: {operation_id}")
         cycle_start_time = time.time()
 
-        try:
-            while True:
-                # Get current parent state
-                op = await self.ops.get_operation(operation_id)
-                if op is None:
-                    raise WorkerError(f"Parent operation not found: {operation_id}")
+        with tracer.start_as_current_span("agent.research_cycle") as span:
+            span.set_attribute("operation.id", operation_id)
+            span.set_attribute("operation.type", "agent_research")
 
-                phase = op.metadata.parameters.get("phase", "idle")
+            try:
+                while True:
+                    # Get current parent state
+                    op = await self.ops.get_operation(operation_id)
+                    if op is None:
+                        raise WorkerError(f"Parent operation not found: {operation_id}")
 
-                # Get current child operation if any
-                child_op_id = self._get_child_op_id(op, phase)
-                child_op = None
-                if child_op_id:
-                    child_op = await self.ops.get_operation(child_op_id)
+                    phase = op.metadata.parameters.get("phase", "idle")
 
-                # State machine logic
-                if phase == "idle":
-                    # Start the first phase (designing)
-                    await self._start_design(operation_id)
+                    # Get current child operation if any
+                    child_op_id = self._get_child_op_id(op, phase)
+                    child_op = None
+                    if child_op_id:
+                        child_op = await self.ops.get_operation(child_op_id)
 
-                elif phase == "designing":
-                    await self._handle_designing_phase(operation_id, child_op)
+                    # State machine logic
+                    if phase == "idle":
+                        # Start the first phase (designing)
+                        await self._start_design(operation_id)
 
-                elif phase == "training":
-                    await self._handle_training_phase(operation_id, child_op)
+                    elif phase == "designing":
+                        await self._handle_designing_phase(operation_id, child_op)
 
-                elif phase == "backtesting":
-                    await self._handle_backtesting_phase(operation_id, child_op)
+                    elif phase == "training":
+                        await self._handle_training_phase(operation_id, child_op)
 
-                elif phase == "assessing":
-                    result = await self._handle_assessing_phase(operation_id, child_op)
-                    if result is not None:
-                        # Record successful cycle metrics
-                        cycle_duration = time.time() - cycle_start_time
-                        record_cycle_duration(cycle_duration)
-                        record_cycle_outcome("completed")
-                        return result
+                    elif phase == "backtesting":
+                        await self._handle_backtesting_phase(operation_id, child_op)
 
-                # Poll interval
-                await self._cancellable_sleep(self.POLL_INTERVAL)
+                    elif phase == "assessing":
+                        result = await self._handle_assessing_phase(
+                            operation_id, child_op
+                        )
+                        if result is not None:
+                            # Record successful cycle metrics
+                            cycle_duration = time.time() - cycle_start_time
+                            record_cycle_duration(cycle_duration)
+                            record_cycle_outcome("completed")
+                            span.set_attribute("outcome", "completed")
+                            return result
 
-        except asyncio.CancelledError:
-            logger.info(f"Research cycle cancelled: {operation_id}")
-            # Record cancelled cycle metrics
-            cycle_duration = time.time() - cycle_start_time
-            record_cycle_duration(cycle_duration)
-            record_cycle_outcome("cancelled")
-            # Propagate cancellation to active child
-            await self._cancel_current_child()
-            raise
-        except (WorkerError, GateFailedError):
-            # Record failed cycle metrics
-            cycle_duration = time.time() - cycle_start_time
-            record_cycle_duration(cycle_duration)
-            record_cycle_outcome("failed")
-            raise
-        except Exception as e:
-            # Record failed cycle metrics
-            cycle_duration = time.time() - cycle_start_time
-            record_cycle_duration(cycle_duration)
-            record_cycle_outcome("failed")
-            logger.error(f"Research cycle failed: {operation_id}, error={e}")
-            raise
+                    # Poll interval
+                    await self._cancellable_sleep(self.POLL_INTERVAL)
+
+            except asyncio.CancelledError:
+                logger.info(f"Research cycle cancelled: {operation_id}")
+                # Record cancelled cycle metrics
+                cycle_duration = time.time() - cycle_start_time
+                record_cycle_duration(cycle_duration)
+                record_cycle_outcome("cancelled")
+                span.set_attribute("outcome", "cancelled")
+                # Propagate cancellation to active child
+                await self._cancel_current_child()
+                raise
+            except (WorkerError, GateFailedError) as e:
+                # Record failed cycle metrics
+                cycle_duration = time.time() - cycle_start_time
+                record_cycle_duration(cycle_duration)
+                record_cycle_outcome("failed")
+                span.set_attribute("outcome", "failed")
+                span.set_attribute("error", str(e))
+                span.record_exception(e)
+                raise
+            except Exception as e:
+                # Record failed cycle metrics
+                cycle_duration = time.time() - cycle_start_time
+                record_cycle_duration(cycle_duration)
+                record_cycle_outcome("failed")
+                span.set_attribute("outcome", "failed")
+                span.set_attribute("error", str(e))
+                span.record_exception(e)
+                logger.error(f"Research cycle failed: {operation_id}, error={e}")
+                raise
 
     async def _start_design(self, operation_id: str) -> None:
         """Start the design phase with design worker.
@@ -350,6 +366,22 @@ class AgentResearchWorker:
                 else {}
             )
             parent_op = await self.ops.get_operation(operation_id)
+
+            # Create span for design phase completion
+            with tracer.start_as_current_span("agent.phase.design") as phase_span:
+                phase_span.set_attribute("operation.id", operation_id)
+                phase_span.set_attribute("phase", "designing")
+                phase_span.set_attribute(
+                    "strategy_name", result.get("strategy_name", "unknown")
+                )
+
+                # Record token usage in span
+                input_tokens = result.get("input_tokens", 0) or 0
+                output_tokens = result.get("output_tokens", 0) or 0
+                phase_span.set_attribute("tokens.input", input_tokens)
+                phase_span.set_attribute("tokens.output", output_tokens)
+                phase_span.set_attribute("tokens.total", input_tokens + output_tokens)
+
             if parent_op:
                 parent_op.metadata.parameters["strategy_name"] = result.get(
                     "strategy_name"
@@ -364,8 +396,6 @@ class AgentResearchWorker:
                     record_phase_duration("designing", time.time() - phase_start)
 
                 # Record token usage from design
-                input_tokens = result.get("input_tokens", 0) or 0
-                output_tokens = result.get("output_tokens", 0) or 0
                 if input_tokens or output_tokens:
                     record_tokens("design", input_tokens + output_tokens)
 
@@ -449,6 +479,22 @@ class AgentResearchWorker:
         if child_op.status == OperationStatus.COMPLETED:
             result = child_op.result_summary or {}
             parent_op = await self.ops.get_operation(operation_id)
+
+            # Check training gate
+            passed, reason = check_training_gate(result)
+
+            # Create span for training phase completion
+            with tracer.start_as_current_span("agent.phase.training") as phase_span:
+                phase_span.set_attribute("operation.id", operation_id)
+                phase_span.set_attribute("phase", "training")
+                phase_span.set_attribute("gate.name", "training")
+                phase_span.set_attribute("gate.passed", passed)
+                phase_span.set_attribute("gate.reason", reason)
+
+                # Record training metrics in span
+                phase_span.set_attribute("accuracy", result.get("accuracy", 0))
+                phase_span.set_attribute("final_loss", result.get("final_loss", 0))
+
             if parent_op:
                 parent_op.metadata.parameters["training_result"] = result
                 parent_op.metadata.parameters["model_path"] = result.get("model_path")
@@ -458,8 +504,6 @@ class AgentResearchWorker:
                 if phase_start:
                     record_phase_duration("training", time.time() - phase_start)
 
-            # Check training gate
-            passed, reason = check_training_gate(result)
             record_gate_result("training", passed)
             if not passed:
                 logger.warning(f"Training gate failed: {operation_id}, reason={reason}")
@@ -575,6 +619,26 @@ class AgentResearchWorker:
                 "total_trades": metrics.get("total_trades", 0),
             }
 
+            # Check backtest gate
+            passed, reason = check_backtest_gate(backtest_result)
+
+            # Create span for backtesting phase completion
+            with tracer.start_as_current_span("agent.phase.backtest") as phase_span:
+                phase_span.set_attribute("operation.id", operation_id)
+                phase_span.set_attribute("phase", "backtesting")
+                phase_span.set_attribute("gate.name", "backtest")
+                phase_span.set_attribute("gate.passed", passed)
+                phase_span.set_attribute("gate.reason", reason)
+
+                # Record backtest metrics in span
+                phase_span.set_attribute(
+                    "sharpe_ratio", backtest_result.get("sharpe_ratio", 0)
+                )
+                phase_span.set_attribute("win_rate", backtest_result.get("win_rate", 0))
+                phase_span.set_attribute(
+                    "max_drawdown", backtest_result.get("max_drawdown", 0)
+                )
+
             parent_op = await self.ops.get_operation(operation_id)
             if parent_op:
                 parent_op.metadata.parameters["backtest_result"] = backtest_result
@@ -584,8 +648,6 @@ class AgentResearchWorker:
                 if phase_start:
                     record_phase_duration("backtesting", time.time() - phase_start)
 
-            # Check backtest gate
-            passed, reason = check_backtest_gate(backtest_result)
             record_gate_result("backtest", passed)
             if not passed:
                 logger.warning(f"Backtest gate failed: {operation_id}, reason={reason}")
@@ -689,6 +751,20 @@ class AgentResearchWorker:
                 "strategy_name", "unknown"
             )
 
+            # Create span for assessment phase completion
+            with tracer.start_as_current_span("agent.phase.assessment") as phase_span:
+                phase_span.set_attribute("operation.id", operation_id)
+                phase_span.set_attribute("phase", "assessing")
+                phase_span.set_attribute("verdict", result.get("verdict", "unknown"))
+                phase_span.set_attribute("strategy_name", strategy_name)
+
+                # Record token usage in span
+                input_tokens = result.get("input_tokens", 0) or 0
+                output_tokens = result.get("output_tokens", 0) or 0
+                phase_span.set_attribute("tokens.input", input_tokens)
+                phase_span.set_attribute("tokens.output", output_tokens)
+                phase_span.set_attribute("tokens.total", input_tokens + output_tokens)
+
             # Store assessment verdict in parent metadata
             parent_op.metadata.parameters["assessment_verdict"] = result.get(
                 "verdict", "unknown"
@@ -700,8 +776,6 @@ class AgentResearchWorker:
                 record_phase_duration("assessing", time.time() - phase_start)
 
             # Record token usage from assessment
-            input_tokens = result.get("input_tokens", 0) or 0
-            output_tokens = result.get("output_tokens", 0) or 0
             if input_tokens or output_tokens:
                 record_tokens("assessment", input_tokens + output_tokens)
 
