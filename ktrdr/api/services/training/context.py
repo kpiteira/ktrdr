@@ -27,10 +27,12 @@ def _get_default_strategy_paths() -> tuple[Path, ...]:
         paths.append(Path(strategies_dir))
 
     # Add standard paths
-    paths.extend([
-        Path("/app/strategies"),
-        Path("strategies"),
-    ])
+    paths.extend(
+        [
+            Path("/app/strategies"),
+            Path("strategies"),
+        ]
+    )
 
     return tuple(paths)
 

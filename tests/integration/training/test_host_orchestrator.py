@@ -370,9 +370,8 @@ class TestHostTrainingOrchestratorExecution:
     @pytest.mark.asyncio
     async def test_run_respects_cancellation(self, training_session, model_storage):
         """Test that training stops when session.stop_requested is set."""
-        from orchestrator import HostTrainingOrchestrator
-
         from ktrdr.async_infrastructure.cancellation import CancellationError
+        from orchestrator import HostTrainingOrchestrator
 
         orchestrator = HostTrainingOrchestrator(
             session=training_session,

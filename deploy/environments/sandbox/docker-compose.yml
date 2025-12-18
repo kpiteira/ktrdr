@@ -21,12 +21,12 @@ services:
     container_name: ktrdr-sandbox
     restart: unless-stopped
 
-    # Pass API key from host environment
-    # SECURITY: Do not hard-code API keys. Use environment variables or
-    # secure secret management. Never commit actual keys to version control.
+    # Terminal settings
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - TERM=xterm-256color
+      # Prefix all containers created by sandbox with "sandbox-" to avoid
+      # conflicts with host development containers
+      - COMPOSE_PROJECT_NAME=sandbox
 
     volumes:
       # Docker socket for running ktrdr services from inside sandbox
@@ -39,6 +39,7 @@ services:
 
       # Named volumes for persistent storage
       - sandbox-workspace:/workspace
+      - sandbox-claude-credentials:/home/ubuntu/.claude
       - sandbox-models:/env/models
       - sandbox-strategies:/env/strategies
       - sandbox-logs:/env/logs
@@ -64,6 +65,8 @@ networks:
 volumes:
   sandbox-workspace:
     name: ktrdr-sandbox-workspace
+  sandbox-claude-credentials:
+    name: ktrdr-sandbox-claude-credentials
   sandbox-models:
     name: ktrdr-sandbox-models
   sandbox-strategies:
