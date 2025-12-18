@@ -100,3 +100,83 @@ class TestCancelEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["child_cancelled"] is None
+
+
+class TestBudgetEndpoint:
+    """Test GET /agent/budget endpoint - M7 Task 7.3."""
+
+    def test_budget_returns_200_with_status(self, client):
+        """Budget endpoint returns 200 with budget status."""
+        from unittest.mock import MagicMock
+
+        mock_tracker = MagicMock()
+        mock_tracker.get_status.return_value = {
+            "date": "2025-12-17",
+            "daily_limit": 5.0,
+            "today_spend": 0.75,
+            "remaining": 4.25,
+            "cycles_affordable": 28,
+            "spend_events": 2,
+        }
+
+        with patch(
+            "ktrdr.api.endpoints.agent.get_budget_tracker",
+            return_value=mock_tracker,
+        ):
+            response = client.get("/agent/budget")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["daily_limit"] == 5.0
+        assert data["today_spend"] == 0.75
+        assert data["remaining"] == 4.25
+        assert data["cycles_affordable"] == 28
+
+    def test_budget_includes_date(self, client):
+        """Budget endpoint includes date in response."""
+        from unittest.mock import MagicMock
+
+        mock_tracker = MagicMock()
+        mock_tracker.get_status.return_value = {
+            "date": "2025-12-17",
+            "daily_limit": 5.0,
+            "today_spend": 0.0,
+            "remaining": 5.0,
+            "cycles_affordable": 33,
+            "spend_events": 0,
+        }
+
+        with patch(
+            "ktrdr.api.endpoints.agent.get_budget_tracker",
+            return_value=mock_tracker,
+        ):
+            response = client.get("/agent/budget")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "date" in data
+        assert data["date"] == "2025-12-17"
+
+    def test_budget_includes_cycles_affordable(self, client):
+        """Budget endpoint includes cycles_affordable estimate."""
+        from unittest.mock import MagicMock
+
+        mock_tracker = MagicMock()
+        mock_tracker.get_status.return_value = {
+            "date": "2025-12-17",
+            "daily_limit": 5.0,
+            "today_spend": 4.55,
+            "remaining": 0.45,
+            "cycles_affordable": 3,
+            "spend_events": 10,
+        }
+
+        with patch(
+            "ktrdr.api.endpoints.agent.get_budget_tracker",
+            return_value=mock_tracker,
+        ):
+            response = client.get("/agent/budget")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["cycles_affordable"] == 3

@@ -48,3 +48,17 @@ class TestAgentCommandsHelp:
 
         assert result.exit_code == 0
         assert "cancel" in result.output.lower()
+
+    def test_budget_help(self):
+        """Test that agent budget --help shows description."""
+        result = runner.invoke(agent_app, ["budget", "--help"])
+
+        assert result.exit_code == 0
+        assert "budget" in result.output.lower()
+
+    def test_agent_help_includes_budget(self):
+        """Test that agent --help shows budget command."""
+        result = runner.invoke(agent_app, ["--help"])
+
+        assert result.exit_code == 0
+        assert "budget" in result.output

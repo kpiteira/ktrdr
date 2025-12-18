@@ -217,3 +217,68 @@ async def _cancel_agent_async():
     except Exception as e:
         logger.error(f"Failed to cancel agent: {e}")
         raise
+
+
+@agent_app.command("budget")
+@trace_cli_command("agent_budget")
+def show_budget():
+    """Show current agent budget status.
+
+    Displays daily limit, today's spend, remaining budget,
+    and estimated number of cycles affordable.
+
+    Examples:
+        ktrdr agent budget
+    """
+    try:
+        asyncio.run(_show_budget_async())
+    except Exception as e:
+        error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        sys.exit(1)
+
+
+async def _show_budget_async():
+    """Async implementation of budget command using API."""
+    try:
+        async with AsyncCLIClient() as client:
+            result = await client._make_request("GET", "/agent/budget")
+
+        console.print("\n[bold]Agent Budget Status[/bold]")
+        console.print()
+
+        # Create info table
+        table = Table(show_header=False, box=None)
+        table.add_column("Property", style="cyan")
+        table.add_column("Value", style="white")
+
+        table.add_row("Date", result.get("date", "unknown"))
+        table.add_row("Daily Limit", f"${result.get('daily_limit', 0):.2f}")
+        table.add_row("Today's Spend", f"${result.get('today_spend', 0):.2f}")
+
+        remaining = result.get("remaining", 0)
+        if remaining < 0.50:
+            remaining_str = f"[red]${remaining:.2f}[/red]"
+        elif remaining < 1.50:
+            remaining_str = f"[yellow]${remaining:.2f}[/yellow]"
+        else:
+            remaining_str = f"[green]${remaining:.2f}[/green]"
+        table.add_row("Remaining", remaining_str)
+
+        cycles = result.get("cycles_affordable", 0)
+        if cycles == 0:
+            cycles_str = "[red]0 cycles[/red]"
+        elif cycles < 5:
+            cycles_str = f"[yellow]~{cycles} cycles[/yellow]"
+        else:
+            cycles_str = f"[green]~{cycles} cycles[/green]"
+        table.add_row("Affordable", cycles_str)
+
+        console.print(table)
+        console.print()
+
+    except AsyncCLIClientError as e:
+        logger.error(f"API error: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get budget status: {e}")
+        raise

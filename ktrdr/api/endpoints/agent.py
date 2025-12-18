@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 
 from ktrdr import get_logger
+from ktrdr.agents.budget import get_budget_tracker
 from ktrdr.api.services.agent_service import AgentService
 from ktrdr.api.services.agent_service import get_agent_service as _get_agent_service
 
@@ -74,4 +75,19 @@ async def cancel_agent(
 
     except Exception as e:
         logger.error(f"Failed to cancel agent: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get("/budget")
+async def get_budget_status():
+    """Get current budget status.
+
+    Returns daily limit, today's spend, remaining budget,
+    and estimated number of cycles affordable.
+    """
+    try:
+        tracker = get_budget_tracker()
+        return tracker.get_status()
+    except Exception as e:
+        logger.error(f"Failed to get budget status: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e
