@@ -15,12 +15,20 @@ Environment Variables:
 
 import asyncio
 import os
+import time
 from typing import Any, Protocol
 
 import yaml
 
 from ktrdr import get_logger
 from ktrdr.agents.gates import check_backtest_gate, check_training_gate
+from ktrdr.agents.metrics import (
+    record_cycle_duration,
+    record_cycle_outcome,
+    record_gate_result,
+    record_phase_duration,
+    record_tokens,
+)
 from ktrdr.api.models.operations import (
     OperationMetadata,
     OperationStatus,
@@ -208,6 +216,7 @@ class AgentResearchWorker:
             GateFailedError: If a quality gate check fails.
         """
         logger.info(f"Starting research cycle: {operation_id}")
+        cycle_start_time = time.time()
 
         try:
             while True:
@@ -241,6 +250,10 @@ class AgentResearchWorker:
                 elif phase == "assessing":
                     result = await self._handle_assessing_phase(operation_id, child_op)
                     if result is not None:
+                        # Record successful cycle metrics
+                        cycle_duration = time.time() - cycle_start_time
+                        record_cycle_duration(cycle_duration)
+                        record_cycle_outcome("completed")
                         return result
 
                 # Poll interval
@@ -248,12 +261,24 @@ class AgentResearchWorker:
 
         except asyncio.CancelledError:
             logger.info(f"Research cycle cancelled: {operation_id}")
+            # Record cancelled cycle metrics
+            cycle_duration = time.time() - cycle_start_time
+            record_cycle_duration(cycle_duration)
+            record_cycle_outcome("cancelled")
             # Propagate cancellation to active child
             await self._cancel_current_child()
             raise
         except (WorkerError, GateFailedError):
+            # Record failed cycle metrics
+            cycle_duration = time.time() - cycle_start_time
+            record_cycle_duration(cycle_duration)
+            record_cycle_outcome("failed")
             raise
         except Exception as e:
+            # Record failed cycle metrics
+            cycle_duration = time.time() - cycle_start_time
+            record_cycle_duration(cycle_duration)
+            record_cycle_outcome("failed")
             logger.error(f"Research cycle failed: {operation_id}, error={e}")
             raise
 
@@ -266,6 +291,7 @@ class AgentResearchWorker:
         parent_op = await self.ops.get_operation(operation_id)
         if parent_op:
             parent_op.metadata.parameters["phase"] = "designing"
+            parent_op.metadata.parameters["phase_start_time"] = time.time()
         logger.info(f"Phase started: {operation_id}, phase=designing")
 
         # Create child operation for design
@@ -317,7 +343,12 @@ class AgentResearchWorker:
 
         if child_op.status == OperationStatus.COMPLETED:
             # Design complete, store results and start training
-            result = child_op.result_summary or {}
+            # Guard against non-dict result_summary (e.g., from mocks)
+            result = (
+                child_op.result_summary
+                if isinstance(child_op.result_summary, dict)
+                else {}
+            )
             parent_op = await self.ops.get_operation(operation_id)
             if parent_op:
                 parent_op.metadata.parameters["strategy_name"] = result.get(
@@ -326,6 +357,17 @@ class AgentResearchWorker:
                 parent_op.metadata.parameters["strategy_path"] = result.get(
                     "strategy_path"
                 )
+
+                # Record design phase metrics
+                phase_start = parent_op.metadata.parameters.get("phase_start_time")
+                if phase_start:
+                    record_phase_duration("designing", time.time() - phase_start)
+
+                # Record token usage from design
+                input_tokens = result.get("input_tokens", 0) or 0
+                output_tokens = result.get("output_tokens", 0) or 0
+                if input_tokens or output_tokens:
+                    record_tokens("design", input_tokens + output_tokens)
 
             # Start training via service
             await self._start_training(operation_id)
@@ -381,6 +423,7 @@ class AgentResearchWorker:
         # Store in parent metadata and update phase
         parent_op.metadata.parameters["phase"] = "training"
         parent_op.metadata.parameters["training_op_id"] = training_op_id
+        parent_op.metadata.parameters["phase_start_time"] = time.time()
         self._current_child_op_id = training_op_id
 
         logger.info(f"Training started: {training_op_id}")
@@ -410,8 +453,14 @@ class AgentResearchWorker:
                 parent_op.metadata.parameters["training_result"] = result
                 parent_op.metadata.parameters["model_path"] = result.get("model_path")
 
+                # Record training phase duration
+                phase_start = parent_op.metadata.parameters.get("phase_start_time")
+                if phase_start:
+                    record_phase_duration("training", time.time() - phase_start)
+
             # Check training gate
             passed, reason = check_training_gate(result)
+            record_gate_result("training", passed)
             if not passed:
                 logger.warning(f"Training gate failed: {operation_id}, reason={reason}")
                 raise GateError(
@@ -491,6 +540,7 @@ class AgentResearchWorker:
         # Store in parent metadata and update phase
         params["phase"] = "backtesting"
         params["backtest_op_id"] = backtest_op_id
+        params["phase_start_time"] = time.time()
         self._current_child_op_id = backtest_op_id
 
         logger.info(f"Backtest started: {backtest_op_id}")
@@ -529,8 +579,14 @@ class AgentResearchWorker:
             if parent_op:
                 parent_op.metadata.parameters["backtest_result"] = backtest_result
 
+                # Record backtesting phase duration
+                phase_start = parent_op.metadata.parameters.get("phase_start_time")
+                if phase_start:
+                    record_phase_duration("backtesting", time.time() - phase_start)
+
             # Check backtest gate
             passed, reason = check_backtest_gate(backtest_result)
+            record_gate_result("backtest", passed)
             if not passed:
                 logger.warning(f"Backtest gate failed: {operation_id}, reason={reason}")
                 raise GateError(
@@ -557,6 +613,7 @@ class AgentResearchWorker:
         parent_op = await self.ops.get_operation(operation_id)
         if parent_op:
             parent_op.metadata.parameters["phase"] = "assessing"
+            parent_op.metadata.parameters["phase_start_time"] = time.time()
         logger.info(f"Phase started: {operation_id}, phase=assessing")
 
         # Create child operation for assessment
@@ -621,7 +678,12 @@ class AgentResearchWorker:
 
         if child_op.status == OperationStatus.COMPLETED:
             # All phases complete
-            result = child_op.result_summary or {}
+            # Guard against non-dict result_summary (e.g., from mocks)
+            result = (
+                child_op.result_summary
+                if isinstance(child_op.result_summary, dict)
+                else {}
+            )
             parent_op = await self.ops.get_operation(operation_id)
             strategy_name = parent_op.metadata.parameters.get(
                 "strategy_name", "unknown"
@@ -631,6 +693,17 @@ class AgentResearchWorker:
             parent_op.metadata.parameters["assessment_verdict"] = result.get(
                 "verdict", "unknown"
             )
+
+            # Record assessing phase duration
+            phase_start = parent_op.metadata.parameters.get("phase_start_time")
+            if phase_start:
+                record_phase_duration("assessing", time.time() - phase_start)
+
+            # Record token usage from assessment
+            input_tokens = result.get("input_tokens", 0) or 0
+            output_tokens = result.get("output_tokens", 0) or 0
+            if input_tokens or output_tokens:
+                record_tokens("assessment", input_tokens + output_tokens)
 
             return {
                 "success": True,
