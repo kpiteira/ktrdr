@@ -7,10 +7,23 @@ set -e
 echo "=== KTRDR Sandbox Starting ==="
 echo ""
 
-# Check for ANTHROPIC_API_KEY
-if [ -z "$ANTHROPIC_API_KEY" ]; then
-    echo "WARNING: ANTHROPIC_API_KEY is not set. Claude Code will not work without it."
-    echo "         Set it via: docker run -e ANTHROPIC_API_KEY=your-key ..."
+# Ensure workspace is owned by ubuntu user (required for Claude Code yolo mode)
+# Claude Code with --dangerously-skip-permissions must run as non-root
+if [ -d "/workspace" ]; then
+    chown -R ubuntu:ubuntu /workspace
+fi
+
+# Ensure ubuntu user owns their home directory (for Claude credentials)
+if [ -d "/home/ubuntu" ]; then
+    chown -R ubuntu:ubuntu /home/ubuntu
+fi
+
+# Check Claude authentication status
+if su - ubuntu -c "claude auth status" 2>/dev/null | grep -q "Logged in"; then
+    echo "Claude: Authenticated"
+else
+    echo "WARNING: Claude Code is not authenticated."
+    echo "         Run: docker exec -it ktrdr-sandbox su - ubuntu -c 'claude login'"
     echo ""
 fi
 
