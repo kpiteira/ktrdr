@@ -46,6 +46,7 @@ Added comprehensive integration tests for cancellation flow at the AgentService 
 - `tests/unit/agent_tests/test_cancellation.py` - Comprehensive worker cancellation tests
 - `tests/unit/agent_tests/test_error_messages.py` - Error class and message tests
 - `tests/integration/agent_tests/test_agent_cancellation.py` - Integration tests for cancellation flow
+- `tests/e2e/agent/test_agent_cancellation_e2e.py` - E2E tests via HTTP API
 
 ### Files Modified
 
