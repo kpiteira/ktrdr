@@ -7,8 +7,8 @@ Tests the full cancellation flow through the HTTP API:
 - Trigger new cycle after cancel
 - Cancellation speed
 
-Run with: pytest tests/e2e/agent/test_agent_cancellation_e2e.py -v
-Requires: Backend running with USE_STUB_WORKERS=true
+Run with: pytest tests/e2e/agent/test_agent_cancellation_e2e.py -v -m "e2e" --no-cov
+Requires: Backend running (docker compose up)
 """
 
 import asyncio
