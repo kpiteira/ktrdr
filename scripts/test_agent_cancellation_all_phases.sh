@@ -37,7 +37,7 @@ NC='\033[0m' # No Color
 DESIGN_WAIT_MAX=120      # Max seconds to wait for design to complete
 TRAINING_WAIT_MAX=300    # Max seconds to wait for training to complete
 BACKTEST_WAIT_MAX=180    # Max seconds to wait for backtest to complete
-POLL_INTERVAL=2          # Seconds between status checks
+POLL_INTERVAL=1          # Seconds between status checks (1s for responsive feedback)
 
 log_info() {
     echo -e "${CYAN}[INFO]${NC} $1" >&2
