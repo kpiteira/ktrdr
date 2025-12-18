@@ -607,3 +607,254 @@ class TestAgentServiceCancel:
             result = await service.cancel()
 
             assert result["child_cancelled"] == child_id, f"Failed for phase {phase}"
+
+
+class TestAgentServiceBudget:
+    """Test budget integration - M7 Task 7.2.
+
+    Tests that:
+    - trigger() checks budget before starting cycle
+    - 429-style response when budget exhausted
+    - Spend is recorded after successful completion
+    """
+
+    @pytest.fixture
+    def mock_budget_tracker(self):
+        """Create a mock budget tracker."""
+        from unittest.mock import MagicMock
+
+        tracker = MagicMock()
+        tracker.can_spend.return_value = (True, "ok")
+        tracker.record_spend = MagicMock()
+        tracker.get_remaining.return_value = 5.0
+        return tracker
+
+    @pytest.mark.asyncio
+    async def test_trigger_checks_budget_before_starting(
+        self, mock_operations_service, mock_budget_tracker
+    ):
+        """Trigger checks budget before starting a cycle."""
+        from unittest.mock import patch
+
+        from ktrdr.api.services.agent_service import AgentService
+
+        with patch(
+            "ktrdr.api.services.agent_service.get_budget_tracker",
+            return_value=mock_budget_tracker,
+        ):
+            service = AgentService(operations_service=mock_operations_service)
+            await service.trigger()
+
+        mock_budget_tracker.can_spend.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_trigger_rejected_when_budget_exhausted(
+        self, mock_operations_service, mock_budget_tracker
+    ):
+        """Trigger returns budget_exhausted when budget is exhausted."""
+        from unittest.mock import patch
+
+        from ktrdr.api.services.agent_service import AgentService
+
+        mock_budget_tracker.can_spend.return_value = (
+            False,
+            "budget_exhausted ($0.10 remaining, need $0.15)",
+        )
+
+        with patch(
+            "ktrdr.api.services.agent_service.get_budget_tracker",
+            return_value=mock_budget_tracker,
+        ):
+            service = AgentService(operations_service=mock_operations_service)
+            result = await service.trigger()
+
+        assert result["triggered"] is False
+        assert result["reason"] == "budget_exhausted"
+        assert "budget" in result["message"].lower()
+
+    @pytest.mark.asyncio
+    async def test_trigger_does_not_create_operation_when_budget_exhausted(
+        self, mock_operations_service, mock_budget_tracker
+    ):
+        """No operation is created when budget is exhausted."""
+        from unittest.mock import patch
+
+        from ktrdr.api.services.agent_service import AgentService
+
+        mock_budget_tracker.can_spend.return_value = (False, "budget_exhausted")
+
+        with patch(
+            "ktrdr.api.services.agent_service.get_budget_tracker",
+            return_value=mock_budget_tracker,
+        ):
+            service = AgentService(operations_service=mock_operations_service)
+            await service.trigger()
+
+        # No operations should have been created
+        assert len(mock_operations_service._operations) == 0
+
+    @pytest.mark.asyncio
+    async def test_budget_check_before_active_cycle_check(
+        self, mock_operations_service, mock_budget_tracker
+    ):
+        """Budget is checked before checking for active cycle."""
+        from unittest.mock import patch
+
+        from ktrdr.api.services.agent_service import AgentService
+
+        # Set up an active cycle
+        op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "training"}),
+        )
+        mock_operations_service._operations[op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+
+        # Budget exhausted
+        mock_budget_tracker.can_spend.return_value = (False, "budget_exhausted")
+
+        with patch(
+            "ktrdr.api.services.agent_service.get_budget_tracker",
+            return_value=mock_budget_tracker,
+        ):
+            service = AgentService(operations_service=mock_operations_service)
+            result = await service.trigger()
+
+        # Should return budget_exhausted, not active_cycle_exists
+        assert result["reason"] == "budget_exhausted"
+
+    @pytest.mark.asyncio
+    async def test_spend_recorded_after_successful_completion(
+        self, mock_operations_service, mock_budget_tracker
+    ):
+        """Spend is recorded after a cycle completes successfully."""
+        from unittest.mock import patch
+
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+        from ktrdr.api.services.agent_service import AgentService
+
+        # Create a mock worker that returns immediately with token info
+        mock_worker = AsyncMock(spec=AgentResearchWorker)
+        mock_worker.run.return_value = {
+            "success": True,
+            "total_tokens": 5000,
+            "strategy_name": "test_strategy",
+        }
+
+        with patch(
+            "ktrdr.api.services.agent_service.get_budget_tracker",
+            return_value=mock_budget_tracker,
+        ):
+            service = AgentService(operations_service=mock_operations_service)
+
+            # Manually call _run_worker to test spend recording
+            op = await mock_operations_service.create_operation(
+                operation_type=OperationType.AGENT_RESEARCH,
+                metadata=OperationMetadata(parameters={"phase": "idle"}),
+            )
+
+            await service._run_worker(op.operation_id, mock_worker)
+
+        # Spend should have been recorded
+        mock_budget_tracker.record_spend.assert_called_once()
+        call_args = mock_budget_tracker.record_spend.call_args
+        assert call_args[0][1] == op.operation_id  # operation_id
+
+    @pytest.mark.asyncio
+    async def test_spend_not_recorded_on_failure(
+        self, mock_operations_service, mock_budget_tracker
+    ):
+        """Spend is NOT recorded when a cycle fails."""
+        from unittest.mock import patch
+
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+        from ktrdr.api.services.agent_service import AgentService
+
+        # Create a mock worker that raises an exception
+        mock_worker = AsyncMock(spec=AgentResearchWorker)
+        mock_worker.run.side_effect = Exception("Worker failed")
+
+        with patch(
+            "ktrdr.api.services.agent_service.get_budget_tracker",
+            return_value=mock_budget_tracker,
+        ):
+            service = AgentService(operations_service=mock_operations_service)
+
+            op = await mock_operations_service.create_operation(
+                operation_type=OperationType.AGENT_RESEARCH,
+                metadata=OperationMetadata(parameters={"phase": "idle"}),
+            )
+
+            with pytest.raises(Exception, match="Worker failed"):
+                await service._run_worker(op.operation_id, mock_worker)
+
+        # Spend should NOT have been recorded
+        mock_budget_tracker.record_spend.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_spend_not_recorded_on_cancellation(
+        self, mock_operations_service, mock_budget_tracker
+    ):
+        """Spend is NOT recorded when a cycle is cancelled."""
+        from unittest.mock import patch
+
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+        from ktrdr.api.services.agent_service import AgentService
+
+        # Create a mock worker that raises CancelledError
+        mock_worker = AsyncMock(spec=AgentResearchWorker)
+        mock_worker.run.side_effect = asyncio.CancelledError()
+
+        with patch(
+            "ktrdr.api.services.agent_service.get_budget_tracker",
+            return_value=mock_budget_tracker,
+        ):
+            service = AgentService(operations_service=mock_operations_service)
+
+            op = await mock_operations_service.create_operation(
+                operation_type=OperationType.AGENT_RESEARCH,
+                metadata=OperationMetadata(parameters={"phase": "idle"}),
+            )
+
+            with pytest.raises(asyncio.CancelledError):
+                await service._run_worker(op.operation_id, mock_worker)
+
+        # Spend should NOT have been recorded
+        mock_budget_tracker.record_spend.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_cost_estimation_from_tokens(
+        self, mock_operations_service, mock_budget_tracker
+    ):
+        """Cost is estimated from token count."""
+        from unittest.mock import patch
+
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+        from ktrdr.api.services.agent_service import AgentService
+
+        mock_worker = AsyncMock(spec=AgentResearchWorker)
+        mock_worker.run.return_value = {
+            "success": True,
+            "total_tokens": 10000,  # 10k tokens
+        }
+
+        with patch(
+            "ktrdr.api.services.agent_service.get_budget_tracker",
+            return_value=mock_budget_tracker,
+        ):
+            service = AgentService(operations_service=mock_operations_service)
+
+            op = await mock_operations_service.create_operation(
+                operation_type=OperationType.AGENT_RESEARCH,
+                metadata=OperationMetadata(parameters={"phase": "idle"}),
+            )
+
+            await service._run_worker(op.operation_id, mock_worker)
+
+        # Check that some cost was recorded (not zero)
+        call_args = mock_budget_tracker.record_spend.call_args
+        estimated_cost = call_args[0][0]
+        assert estimated_cost > 0
+        # With 10k tokens at ~$0.039/1k, should be around $0.39
+        assert 0.1 < estimated_cost < 1.0

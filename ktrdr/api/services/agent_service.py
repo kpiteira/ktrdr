@@ -13,6 +13,7 @@ import os
 from typing import Any
 
 from ktrdr import get_logger
+from ktrdr.agents.budget import get_budget_tracker
 from ktrdr.agents.workers.assessment_worker import AgentAssessmentWorker
 from ktrdr.agents.workers.design_worker import AgentDesignWorker
 from ktrdr.agents.workers.research_worker import AgentResearchWorker
@@ -97,6 +98,17 @@ class AgentService:
         Returns:
             Dict with triggered status and operation_id or rejection reason.
         """
+        # Check budget first
+        budget = get_budget_tracker()
+        can_spend, reason = budget.can_spend()
+        if not can_spend:
+            logger.warning(f"Budget exhausted: {reason}")
+            return {
+                "triggered": False,
+                "reason": "budget_exhausted",
+                "message": f"Daily budget exhausted: {reason}",
+            }
+
         # Check for active cycle
         active = await self._get_active_research_op()
         if active:
@@ -136,12 +148,36 @@ class AgentService:
         try:
             result = await worker.run(operation_id)
             await self.ops.complete_operation(operation_id, result)
+
+            # Record budget spend on success
+            total_tokens = result.get("total_tokens", 0)
+            estimated_cost = self._estimate_cost(total_tokens)
+            budget = get_budget_tracker()
+            budget.record_spend(estimated_cost, operation_id)
+
         except asyncio.CancelledError:
             await self.ops.cancel_operation(operation_id, "Cancelled by user")
             raise
         except Exception as e:
             await self.ops.fail_operation(operation_id, str(e))
             raise
+
+    def _estimate_cost(self, total_tokens: int) -> float:
+        """Estimate cost in dollars from token count.
+
+        Claude Opus pricing (approximate):
+        - Input: $15 / 1M tokens
+        - Output: $75 / 1M tokens
+        - Assuming 60% input, 40% output
+
+        Args:
+            total_tokens: Total tokens used.
+
+        Returns:
+            Estimated cost in dollars.
+        """
+        avg_price_per_token = (0.6 * 15 + 0.4 * 75) / 1_000_000
+        return total_tokens * avg_price_per_token
 
     @trace_service_method("agent.get_status")
     async def get_status(self) -> dict[str, Any]:
