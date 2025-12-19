@@ -1,3 +1,8 @@
+---
+design: docs/architecture/autonomous-coding/DESIGN.md
+architecture: docs/architecture/autonomous-coding/ARCHITECTURE.md
+---
+
 # Milestone 5: E2E Integration + Dashboard
 
 **Branch:** `feature/orchestrator-m5-e2e`
@@ -108,6 +113,7 @@ open http://localhost:3000/d/orchestrator
 Execute E2E tests via Claude Code and parse results.
 
 **Implementation Notes:**
+
 ```python
 from dataclasses import dataclass
 from typing import Literal
@@ -194,6 +200,7 @@ def _parse_e2e_status(output: str) -> Literal["passed", "failed", "unclear"]:
 ```
 
 **Acceptance Criteria:**
+
 - [ ] Executes E2E scenario via Claude
 - [ ] Parses passed/failed status
 - [ ] Extracts diagnosis for failures
@@ -212,6 +219,7 @@ def _parse_e2e_status(output: str) -> Literal["passed", "failed", "unclear"]:
 Apply fixes suggested by Claude and re-run E2E.
 
 **Implementation Notes:**
+
 ```python
 async def apply_e2e_fix(
     fix_plan: str,
@@ -250,6 +258,7 @@ Report when complete:
 ```
 
 **Acceptance Criteria:**
+
 - [ ] Applies fix via Claude
 - [ ] Reports success/failure
 - [ ] Records fix attempt in trace
@@ -266,6 +275,7 @@ Report when complete:
 Extract E2E test scenarios from milestone markdown.
 
 **Implementation Notes:**
+
 ```python
 def parse_e2e_scenario(plan_content: str) -> str | None:
     """Extract E2E test scenario from plan."""
@@ -298,6 +308,7 @@ def parse_e2e_scenario(plan_content: str) -> str | None:
 ```
 
 **Acceptance Criteria:**
+
 - [ ] Extracts E2E from code blocks
 - [ ] Extracts E2E from plain text
 - [ ] Returns None if no E2E section
@@ -314,6 +325,7 @@ def parse_e2e_scenario(plan_content: str) -> str | None:
 Run E2E after tasks complete, handle fix cycle.
 
 **Implementation Notes:**
+
 ```python
 async def run_milestone(plan_path: str, ...) -> MilestoneResult:
     # ... existing task loop ...
@@ -392,6 +404,7 @@ async def run_milestone(plan_path: str, ...) -> MilestoneResult:
 ```
 
 **Acceptance Criteria:**
+
 - [ ] Runs E2E after tasks complete
 - [ ] Handles passed/failed/unclear
 - [ ] Fix cycle with user confirmation
@@ -410,6 +423,7 @@ async def run_milestone(plan_path: str, ...) -> MilestoneResult:
 Add metrics for E2E tests and fixes.
 
 **Implementation Notes:**
+
 ```python
 e2e_tests_counter: metrics.Counter
 e2e_fix_counter: metrics.Counter
@@ -430,6 +444,7 @@ def create_metrics(meter: metrics.Meter):
 ```
 
 **Acceptance Criteria:**
+
 - [ ] E2E test counter with status label
 - [ ] Fix attempt counter with success label
 - [ ] Queryable in Prometheus
@@ -439,6 +454,7 @@ def create_metrics(meter: metrics.Meter):
 ### Task 5.6: Create E2E Test Plans
 
 **Files:**
+
 - `orchestrator/test_plans/e2e_will_pass.md`
 - `orchestrator/test_plans/e2e_will_fail_fixable.md`
 
@@ -448,6 +464,7 @@ def create_metrics(meter: metrics.Meter):
 Test plans with E2E scenarios for validation.
 
 **e2e_will_pass.md:**
+
 ```markdown
 # Test Milestone: E2E Will Pass
 
@@ -486,6 +503,7 @@ python -m pytest test_calculator.py -v
 
 # Expected: All tests pass
 ```
+
 ```
 
 **e2e_will_fail_fixable.md:**
@@ -521,6 +539,7 @@ python -c "from greeting import greet; assert greet('World') == 'Hello, World!'"
 # Expected: Should fail initially due to missing comma
 # Claude should diagnose and fix
 ```
+
 ```
 
 **Acceptance Criteria:**
@@ -613,6 +632,7 @@ def history(milestone: str | None, limit: int):
 ```
 
 **Acceptance Criteria:**
+
 - [ ] `orchestrator history` shows past runs
 - [ ] --milestone filters by milestone
 - [ ] --limit controls number shown
@@ -629,6 +649,7 @@ def history(milestone: str | None, limit: int):
 Add `orchestrator costs` command to show cost summary.
 
 **Implementation Notes:**
+
 ```python
 @cli.command()
 @click.option("--since", help="Show costs since date (YYYY-MM-DD)")
@@ -665,6 +686,7 @@ def costs(since: str | None, by_milestone: bool):
 ```
 
 **Acceptance Criteria:**
+
 - [ ] `orchestrator costs` shows total cost
 - [ ] --since filters by date
 - [ ] --by-milestone breaks down by milestone
@@ -675,6 +697,7 @@ def costs(since: str | None, by_milestone: bool):
 ## Milestone Verification
 
 **Test with e2e_will_pass.md:**
+
 ```bash
 ./scripts/sandbox-reset.sh
 uv run orchestrator run orchestrator/test_plans/e2e_will_pass.md
@@ -683,6 +706,7 @@ uv run orchestrator run orchestrator/test_plans/e2e_will_pass.md
 ```
 
 **Test with e2e_will_fail_fixable.md:**
+
 ```bash
 ./scripts/sandbox-reset.sh
 uv run orchestrator run orchestrator/test_plans/e2e_will_fail_fixable.md
@@ -697,6 +721,7 @@ uv run orchestrator run orchestrator/test_plans/e2e_will_fail_fixable.md
 ```
 
 **Test with real feature:**
+
 ```bash
 # Run Orchestrator Enhancements feature with E2E
 uv run orchestrator run docs/milestones/orchestrator_enhancements_m1.md
@@ -705,6 +730,7 @@ uv run orchestrator run docs/milestones/orchestrator_enhancements_m1.md
 ```
 
 **Verify Grafana dashboard:**
+
 ```bash
 open http://localhost:3000/d/orchestrator
 
@@ -712,6 +738,7 @@ open http://localhost:3000/d/orchestrator
 ```
 
 **Checklist:**
+
 - [ ] All tasks complete
 - [ ] Unit tests pass
 - [ ] E2E pass flow works
