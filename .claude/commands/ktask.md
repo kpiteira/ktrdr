@@ -9,7 +9,7 @@ This command embodies our partnership values from CLAUDE.md — craftsmanship ov
 ## Command Usage
 
 ```
-/ktask impl: <plan.md> task: <task-id> [validation: <validation.md>]
+/ktask impl: <plan.md> task: <task-id> [design: <design.md>] [arch: <architecture.md>]
 ```
 
 **Required:**
@@ -17,8 +17,27 @@ This command embodies our partnership values from CLAUDE.md — craftsmanship ov
 - `task:` — Task ID, milestone, or range (e.g., "M1", "2.3", "Phase 2")
 
 **Optional:**
-- `validation:` — Validation output with decisions to reference
+- `design:` — Design document (overrides frontmatter)
+- `arch:` — Architecture document (overrides frontmatter)
 - Additional reference docs as needed
+
+### Context Document Resolution
+
+The command automatically discovers design/architecture docs:
+
+1. **Parse frontmatter** from the implementation plan file
+2. **If frontmatter has refs** → use them automatically
+3. **If CLI params provided** → they override frontmatter
+4. **If neither** → fail with: "No design/architecture docs found. Add frontmatter to plan or pass design:/arch: params"
+
+**Frontmatter example** (in milestone file):
+
+```markdown
+---
+design: docs/designs/feature-name/DESIGN.md
+architecture: docs/designs/feature-name/ARCHITECTURE.md
+---
+```
 
 ---
 
@@ -76,7 +95,7 @@ Look for `HANDOFF_*.md` in the implementation plan directory. If present, read a
 
 Before writing any code:
 
-1. **Read context documents** — Design doc, architecture doc, relevant sections of implementation plan
+1. **Read context documents** — Design doc and architecture doc (from frontmatter or params), relevant sections of implementation plan
 2. **Identify existing patterns** — Find similar code in the codebase to follow
 3. **Locate dependencies** — Files, classes, functions that will be involved
 4. **Note integration points** — How this task connects to other components
