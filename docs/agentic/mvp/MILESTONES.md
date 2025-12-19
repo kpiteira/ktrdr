@@ -220,6 +220,8 @@ ktrdr agent trigger
 
 **Builds On**: M6 (now adding production readiness)
 
+**Status**: COMPLETE - See [M7_observability.md](M7_observability.md)
+
 **E2E Test**:
 
 ```bash
@@ -257,6 +259,42 @@ ktrdr agent budget
 
 ---
 
+## Milestone 8: Cost Optimization
+
+**Capability**: Reduce token costs by 60%+ through prompt optimization and model configuration
+
+**Builds On**: M7 (addressing cost issues discovered during M7 verification)
+
+**Status**: PLANNED - See [M8_cost_optimization.md](M8_cost_optimization.md)
+
+**E2E Test**:
+
+```bash
+# Set test model
+export AGENT_MODEL=claude-haiku-4-5-20250514
+
+# Run cycle and verify reduced cost
+ktrdr agent trigger
+# Wait for design phase
+
+ktrdr agent budget
+# Expected: Spend ~$0.05-0.10 for design (vs $1.40 before)
+
+# Check token usage
+ktrdr operations status <design_op_id>
+# Expected: input_tokens < 15000 (vs 33000 before)
+```
+
+**What's Built**:
+
+- Pre-populated context in design prompt (no discovery tool calls)
+- Compact token-efficient formatting for indicators/symbols
+- Configurable model via AGENT_MODEL env var
+- Model-specific cost estimation
+- Token budget limits (circuit breaker)
+
+---
+
 ## Milestone Summary
 
 | # | Milestone | Capability | Key Deliverable |
@@ -268,6 +306,7 @@ ktrdr agent budget
 | 5 | Assessment Worker | Real Claude assessment | Assessment file on disk |
 | 6 | Cancellation & Errors | Cancel, error handling | Robust error paths |
 | 7 | Budget & Observability | Cost control, metrics | Production readiness |
+| 8 | Cost Optimization | 60% token reduction | Configurable model, optimized prompts |
 
 ---
 
@@ -280,6 +319,7 @@ ktrdr agent budget
 - **M5**: Requires M4 + existing `AnthropicAgentInvoker`
 - **M6**: Requires M5
 - **M7**: Requires M6 + existing observability infrastructure
+- **M8**: Requires M7 (addresses cost issues found in M7 verification)
 
 ---
 
