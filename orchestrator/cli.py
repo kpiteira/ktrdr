@@ -19,7 +19,7 @@ from orchestrator.milestone_runner import (
 )
 from orchestrator.models import Task, TaskResult
 from orchestrator.plan_parser import parse_plan
-from orchestrator.sandbox import SandboxManager
+from orchestrator.sandbox import SandboxManager, format_tool_call
 from orchestrator.state import OrchestratorState
 from orchestrator.task_runner import run_task
 from orchestrator.telemetry import create_metrics, setup_telemetry
@@ -154,6 +154,12 @@ async def _run_milestone(
     # Acquire lock to prevent concurrent runs
     lock = MilestoneLock(config.state_dir, milestone_id)
 
+    # Define callback for real-time streaming progress
+    def on_tool_use(tool_name: str, tool_input: dict) -> None:
+        """Display tool calls in real-time during task execution."""
+        msg = format_tool_call(tool_name, tool_input)
+        console.print(f"           {msg}")
+
     # Define callback for task completion display
     def on_task_complete(task: Task, task_result: TaskResult) -> None:
         """Display task summary after completion."""
@@ -190,6 +196,7 @@ async def _run_milestone(
                 config=config,
                 tracer=tracer,
                 on_task_complete=on_task_complete,
+                on_tool_use=on_tool_use,
             )
 
             # Output summary

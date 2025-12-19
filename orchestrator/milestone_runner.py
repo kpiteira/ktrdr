@@ -44,6 +44,7 @@ async def run_milestone(
     config: OrchestratorConfig | None = None,
     tracer: trace.Tracer | None = None,
     on_task_complete: Callable[[Task, TaskResult], None] | None = None,
+    on_tool_use: Callable[[str, dict], None] | None = None,
 ) -> MilestoneResult:
     """Run all tasks in a milestone sequentially.
 
@@ -58,6 +59,9 @@ async def run_milestone(
         tracer: OpenTelemetry tracer (uses no-op if None)
         on_task_complete: Optional callback invoked after each completed task,
             receives the Task and TaskResult for displaying summaries
+        on_tool_use: Optional callback for real-time streaming of tool calls.
+            Receives (tool_name, tool_input) for each Claude tool invocation.
+            Use with format_tool_call() for human-readable progress display.
 
     Returns:
         MilestoneResult with final status and aggregated metrics
@@ -111,8 +115,8 @@ async def run_milestone(
                 task_span.set_attribute("task.id", task.id)
                 task_span.set_attribute("task.title", task.title)
 
-                # Run the task
-                result = await run_task(task, sandbox, config)
+                # Run the task (with streaming progress if callback provided)
+                result = await run_task(task, sandbox, config, on_tool_use=on_tool_use)
 
                 # Record telemetry
                 task_span.set_attribute("task.status", result.status)
