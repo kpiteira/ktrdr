@@ -207,6 +207,7 @@ class SandboxManager:
             prompt,
             "--output-format",
             "stream-json",
+            "--verbose",  # Required for stream-json with -p
             "--dangerously-skip-permissions",
             "--max-turns",
             str(max_turns),
