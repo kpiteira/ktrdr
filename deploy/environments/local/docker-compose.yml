@@ -63,6 +63,9 @@ services:
     environment:
       - ENVIRONMENT=development
       - LOG_LEVEL=INFO
+      # Agent model configuration (Task 8.3)
+      # Valid: claude-opus-4-5-20250514, claude-sonnet-4-20250514, claude-haiku-4-5-20250514
+      - AGENT_MODEL=${AGENT_MODEL:-claude-opus-4-5-20250514}
       - PYTHONPATH=/app
       # Agent E2E testing (comment out for real workers)
       - USE_STUB_WORKERS=${USE_STUB_WORKERS:-false}

@@ -70,19 +70,23 @@ class TestAnthropicInvokerConfig:
     """Tests for AnthropicInvokerConfig."""
 
     def test_default_config(self):
-        """Test default configuration values."""
-        from ktrdr.agents.invoker import AnthropicInvokerConfig
+        """Test default configuration values.
+
+        Note: Default changed from Sonnet to Opus in Task 8.3 for production quality.
+        """
+        from ktrdr.agents.invoker import DEFAULT_MODEL, AnthropicInvokerConfig
 
         config = AnthropicInvokerConfig()
-        assert config.model == "claude-sonnet-4-20250514"
+        assert config.model == DEFAULT_MODEL
+        assert config.model == "claude-opus-4-5-20250514"
         assert config.max_tokens == 4096
 
     def test_config_with_opus_model(self):
         """Test configuration with Opus model."""
         from ktrdr.agents.invoker import AnthropicInvokerConfig
 
-        config = AnthropicInvokerConfig(model="claude-opus-4-20250514")
-        assert config.model == "claude-opus-4-20250514"
+        config = AnthropicInvokerConfig(model="claude-opus-4-5-20250514")
+        assert config.model == "claude-opus-4-5-20250514"
 
     def test_config_from_env(self):
         """Test loading configuration from environment variables."""
@@ -91,17 +95,20 @@ class TestAnthropicInvokerConfig:
         with patch.dict(
             "os.environ",
             {
-                "AGENT_MODEL": "claude-opus-4-20250514",
+                "AGENT_MODEL": "claude-opus-4-5-20250514",
                 "AGENT_MAX_TOKENS": "8192",
             },
         ):
             config = AnthropicInvokerConfig.from_env()
-            assert config.model == "claude-opus-4-20250514"
+            assert config.model == "claude-opus-4-5-20250514"
             assert config.max_tokens == 8192
 
     def test_config_from_env_defaults(self):
-        """Test that missing env vars use defaults."""
-        from ktrdr.agents.invoker import AnthropicInvokerConfig
+        """Test that missing env vars use defaults.
+
+        Note: Default changed from Sonnet to Opus in Task 8.3.
+        """
+        from ktrdr.agents.invoker import DEFAULT_MODEL, AnthropicInvokerConfig
 
         with patch.dict("os.environ", {}, clear=False):
             # Remove specific keys if they exist
@@ -111,7 +118,7 @@ class TestAnthropicInvokerConfig:
                 os.environ.pop(key, None)
 
             config = AnthropicInvokerConfig.from_env()
-            assert config.model == "claude-sonnet-4-20250514"
+            assert config.model == DEFAULT_MODEL
             assert config.max_tokens == 4096
 
 

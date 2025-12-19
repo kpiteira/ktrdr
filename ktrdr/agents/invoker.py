@@ -27,6 +27,20 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(__name__)
 
 
+# Valid Claude models with tier and cost metadata (Task 8.3)
+VALID_MODELS: dict[str, dict[str, str]] = {
+    # Production (high quality, best reasoning)
+    "claude-opus-4-5-20250514": {"tier": "opus", "cost": "high"},
+    # Development (balanced quality and cost)
+    "claude-sonnet-4-20250514": {"tier": "sonnet", "cost": "medium"},
+    # Testing (fast, cheap)
+    "claude-haiku-4-5-20250514": {"tier": "haiku", "cost": "low"},
+}
+
+# Default to Opus for production quality (Task 8.3)
+DEFAULT_MODEL = "claude-opus-4-5-20250514"
+
+
 @dataclass
 class AgentResult:
     """Result of an Anthropic agent invocation.
@@ -56,28 +70,48 @@ class AnthropicInvokerConfig:
     """Configuration for the Anthropic agent invoker.
 
     Attributes:
-        model: The Claude model to use (e.g., claude-sonnet-4-20250514)
+        model: The Claude model to use (validated against VALID_MODELS)
         max_tokens: Maximum tokens for response generation
         timeout_seconds: Timeout for API calls in seconds (default: 300 = 5 minutes)
     """
 
-    model: str = "claude-sonnet-4-20250514"
+    model: str = DEFAULT_MODEL
     max_tokens: int = 4096
     timeout_seconds: int = 300  # 5 minutes default (Task 1.13b)
+
+    def __post_init__(self):
+        """Validate model and log selection (Task 8.3)."""
+        if self.model not in VALID_MODELS:
+            logger.warning(
+                "Unknown model, using default",
+                requested_model=self.model,
+                default_model=DEFAULT_MODEL,
+                valid_models=list(VALID_MODELS.keys()),
+            )
+            self.model = DEFAULT_MODEL
+
+        tier = VALID_MODELS[self.model]["tier"]
+        cost = VALID_MODELS[self.model]["cost"]
+        logger.info(
+            "Agent model configured",
+            model=self.model,
+            tier=tier,
+            cost=cost,
+        )
 
     @classmethod
     def from_env(cls) -> AnthropicInvokerConfig:
         """Load configuration from environment variables.
 
         Environment variables:
-            AGENT_MODEL: Claude model to use (default: claude-sonnet-4-20250514)
+            AGENT_MODEL: Claude model to use (default: claude-opus-4-5-20250514)
             AGENT_MAX_TOKENS: Maximum tokens for response (default: 4096)
             AGENT_TIMEOUT_SECONDS: Timeout for API calls (default: 300)
 
         Returns:
             AnthropicInvokerConfig instance with values from environment.
         """
-        model = os.getenv("AGENT_MODEL", "claude-sonnet-4-20250514")
+        model = os.getenv("AGENT_MODEL", DEFAULT_MODEL)
         max_tokens = int(os.getenv("AGENT_MAX_TOKENS", "4096"))
         timeout_seconds = int(os.getenv("AGENT_TIMEOUT_SECONDS", "300"))
         return cls(model=model, max_tokens=max_tokens, timeout_seconds=timeout_seconds)
