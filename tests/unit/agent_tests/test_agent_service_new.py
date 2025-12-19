@@ -821,24 +821,97 @@ class TestAgentServiceBudget:
         # Spend should NOT have been recorded
         mock_budget_tracker.record_spend.assert_not_called()
 
-    def test_worker_cost_estimation_from_tokens(self):
-        """Worker's cost estimation is reasonable for given token counts."""
+    def test_cost_estimation_opus_model(self):
+        """Cost estimation uses Opus 4.5 pricing when AGENT_MODEL=opus."""
+        import os
+        from unittest.mock import patch
+
         from ktrdr.agents.workers.research_worker import AgentResearchWorker
 
-        # Create worker with minimal deps (just testing _estimate_cost)
         worker = AgentResearchWorker.__new__(AgentResearchWorker)
 
-        # Test with 10k tokens
-        # Claude Opus pricing: ~60% input @ $15/1M + 40% output @ $75/1M
-        # = (0.6 * 15 + 0.4 * 75) / 1M = 39 / 1M = $0.000039 per token
-        # 10k tokens = $0.39
-        estimated_cost = worker._estimate_cost(10000)
-        assert estimated_cost > 0
-        assert 0.1 < estimated_cost < 1.0  # ~$0.39 expected
+        # Opus 4.5: $5 input, $25 output per 1M tokens
+        # 10k input + 5k output = (10000 * 5 + 5000 * 25) / 1_000_000 = $0.175
+        with patch.dict(os.environ, {"AGENT_MODEL": "claude-opus-4-5-20250514"}):
+            cost = worker._estimate_cost(input_tokens=10000, output_tokens=5000)
+            expected = (10000 * 5 + 5000 * 25) / 1_000_000  # $0.175
+            assert abs(cost - expected) < 0.001, f"Expected {expected}, got {cost}"
 
-        # Test with 0 tokens
-        assert worker._estimate_cost(0) == 0
+    def test_cost_estimation_sonnet_model(self):
+        """Cost estimation uses Sonnet 4 pricing when AGENT_MODEL=sonnet."""
+        import os
+        from unittest.mock import patch
 
-        # Test with typical design phase tokens (4300 = 2500 input + 1800 output)
-        design_cost = worker._estimate_cost(4300)
-        assert 0.1 < design_cost < 0.3  # ~$0.17 expected
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
+        worker = AgentResearchWorker.__new__(AgentResearchWorker)
+
+        # Sonnet 4: $3 input, $15 output per 1M tokens
+        # 10k input + 5k output = (10000 * 3 + 5000 * 15) / 1_000_000 = $0.105
+        with patch.dict(os.environ, {"AGENT_MODEL": "claude-sonnet-4-20250514"}):
+            cost = worker._estimate_cost(input_tokens=10000, output_tokens=5000)
+            expected = (10000 * 3 + 5000 * 15) / 1_000_000  # $0.105
+            assert abs(cost - expected) < 0.001, f"Expected {expected}, got {cost}"
+
+    def test_cost_estimation_haiku_model(self):
+        """Cost estimation uses Haiku 4.5 pricing when AGENT_MODEL=haiku."""
+        import os
+        from unittest.mock import patch
+
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
+        worker = AgentResearchWorker.__new__(AgentResearchWorker)
+
+        # Haiku 4.5: $1 input, $5 output per 1M tokens
+        # 10k input + 5k output = (10000 * 1 + 5000 * 5) / 1_000_000 = $0.035
+        with patch.dict(os.environ, {"AGENT_MODEL": "claude-haiku-4-5-20250514"}):
+            cost = worker._estimate_cost(input_tokens=10000, output_tokens=5000)
+            expected = (10000 * 1 + 5000 * 5) / 1_000_000  # $0.035
+            assert abs(cost - expected) < 0.001, f"Expected {expected}, got {cost}"
+
+    def test_cost_estimation_default_model(self):
+        """Cost estimation defaults to Opus pricing when AGENT_MODEL not set."""
+        import os
+        from unittest.mock import patch
+
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
+        worker = AgentResearchWorker.__new__(AgentResearchWorker)
+
+        # Remove AGENT_MODEL if set, should default to Opus pricing
+        env = {k: v for k, v in os.environ.items() if k != "AGENT_MODEL"}
+        with patch.dict(os.environ, env, clear=True):
+            cost = worker._estimate_cost(input_tokens=10000, output_tokens=5000)
+            expected = (10000 * 5 + 5000 * 25) / 1_000_000  # Opus: $0.175
+            assert abs(cost - expected) < 0.001, f"Expected {expected}, got {cost}"
+
+    def test_cost_estimation_zero_tokens(self):
+        """Cost estimation returns zero for zero tokens."""
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
+        worker = AgentResearchWorker.__new__(AgentResearchWorker)
+        assert worker._estimate_cost(input_tokens=0, output_tokens=0) == 0.0
+
+    def test_cost_estimation_typical_design_phase(self):
+        """Cost estimation is accurate for typical design phase token counts."""
+        import os
+        from unittest.mock import patch
+
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
+        worker = AgentResearchWorker.__new__(AgentResearchWorker)
+
+        # After M8 optimization: ~12k input tokens, ~2k output tokens
+        # With Opus: (12000 * 5 + 2000 * 25) / 1_000_000 = $0.11
+        with patch.dict(os.environ, {"AGENT_MODEL": "claude-opus-4-5-20250514"}):
+            cost = worker._estimate_cost(input_tokens=12000, output_tokens=2000)
+            assert (
+                0.05 < cost < 0.15
+            ), f"Design phase cost should be ~$0.11, got ${cost}"
+
+        # With Haiku: (12000 * 1 + 2000 * 5) / 1_000_000 = $0.022
+        with patch.dict(os.environ, {"AGENT_MODEL": "claude-haiku-4-5-20250514"}):
+            cost = worker._estimate_cost(input_tokens=12000, output_tokens=2000)
+            assert (
+                0.01 < cost < 0.05
+            ), f"Haiku design cost should be ~$0.02, got ${cost}"

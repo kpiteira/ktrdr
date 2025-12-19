@@ -41,6 +41,17 @@ from ktrdr.api.models.operations import (
 logger = get_logger(__name__)
 tracer = trace.get_tracer(__name__)
 
+# Per-model pricing (per 1M tokens) - Updated Dec 2024
+# Source: https://www.anthropic.com/pricing
+MODEL_PRICING: dict[str, dict[str, float]] = {
+    "claude-opus-4-5-20250514": {"input": 5.0, "output": 25.0},
+    "claude-sonnet-4-20250514": {"input": 3.0, "output": 15.0},
+    "claude-haiku-4-5-20250514": {"input": 1.0, "output": 5.0},
+}
+
+# Default model for pricing when AGENT_MODEL is not set
+DEFAULT_PRICING_MODEL = "claude-opus-4-5-20250514"
+
 
 class ChildWorker(Protocol):
     """Protocol for child workers."""
@@ -408,8 +419,7 @@ class AgentResearchWorker:
                     record_tokens("design", input_tokens + output_tokens)
 
                     # Record budget spend immediately after design phase
-                    total_tokens = input_tokens + output_tokens
-                    estimated_cost = self._estimate_cost(total_tokens)
+                    estimated_cost = self._estimate_cost(input_tokens, output_tokens)
                     budget = get_budget_tracker()
                     budget.record_spend(estimated_cost, operation_id)
                     record_budget_spend(estimated_cost)
@@ -799,8 +809,7 @@ class AgentResearchWorker:
                 record_tokens("assessment", input_tokens + output_tokens)
 
                 # Record budget spend immediately after assessment phase
-                total_tokens = input_tokens + output_tokens
-                estimated_cost = self._estimate_cost(total_tokens)
+                estimated_cost = self._estimate_cost(input_tokens, output_tokens)
                 budget = get_budget_tracker()
                 budget.record_spend(estimated_cost, operation_id)
                 record_budget_spend(estimated_cost)
@@ -819,22 +828,31 @@ class AgentResearchWorker:
 
         return None
 
-    def _estimate_cost(self, total_tokens: int) -> float:
-        """Estimate cost in dollars from token count.
+    def _estimate_cost(self, input_tokens: int, output_tokens: int) -> float:
+        """Estimate cost in dollars based on actual model pricing.
 
-        Claude Opus pricing (approximate):
-        - Input: $15 / 1M tokens
-        - Output: $75 / 1M tokens
-        - Assuming 60% input, 40% output
+        Uses MODEL_PRICING for the configured AGENT_MODEL to calculate costs.
+        Defaults to Opus 4.5 pricing if model is unknown.
+
+        Pricing (per 1M tokens):
+        - Opus 4.5: $5 input, $25 output
+        - Sonnet 4: $3 input, $15 output
+        - Haiku 4.5: $1 input, $5 output
 
         Args:
-            total_tokens: Total tokens used.
+            input_tokens: Number of input tokens used.
+            output_tokens: Number of output tokens used.
 
         Returns:
             Estimated cost in dollars.
         """
-        avg_price_per_token = (0.6 * 15 + 0.4 * 75) / 1_000_000
-        return total_tokens * avg_price_per_token
+        model = os.getenv("AGENT_MODEL", DEFAULT_PRICING_MODEL)
+        pricing = MODEL_PRICING.get(model, MODEL_PRICING[DEFAULT_PRICING_MODEL])
+
+        input_cost = (input_tokens / 1_000_000) * pricing["input"]
+        output_cost = (output_tokens / 1_000_000) * pricing["output"]
+
+        return input_cost + output_cost
 
     def _get_child_op_id(self, op: Any, phase: str) -> str | None:
         """Get child operation ID for current phase.
