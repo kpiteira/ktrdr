@@ -153,3 +153,39 @@ class TestModelTierInfo:
     def test_haiku_cost_is_low(self):
         """Haiku model has cost 'low'."""
         assert VALID_MODELS["claude-haiku-4-5-20250514"]["cost"] == "low"
+
+
+class TestTokenBudgetLimits:
+    """Tests for token budget limits configuration (Task 8.5)."""
+
+    def test_default_max_iterations(self):
+        """Config has default max_iterations of 10."""
+        config = AnthropicInvokerConfig()
+        assert config.max_iterations == 10
+
+    def test_default_max_input_tokens(self):
+        """Config has default max_input_tokens of 50000."""
+        config = AnthropicInvokerConfig()
+        assert config.max_input_tokens == 50000
+
+    def test_max_iterations_from_env(self):
+        """Config reads max_iterations from AGENT_MAX_ITERATIONS env var."""
+        with patch.dict(os.environ, {"AGENT_MAX_ITERATIONS": "5"}):
+            config = AnthropicInvokerConfig.from_env()
+            assert config.max_iterations == 5
+
+    def test_max_input_tokens_from_env(self):
+        """Config reads max_input_tokens from AGENT_MAX_INPUT_TOKENS env var."""
+        with patch.dict(os.environ, {"AGENT_MAX_INPUT_TOKENS": "25000"}):
+            config = AnthropicInvokerConfig.from_env()
+            assert config.max_input_tokens == 25000
+
+    def test_custom_max_iterations(self):
+        """Config accepts custom max_iterations value."""
+        config = AnthropicInvokerConfig(max_iterations=3)
+        assert config.max_iterations == 3
+
+    def test_custom_max_input_tokens(self):
+        """Config accepts custom max_input_tokens value."""
+        config = AnthropicInvokerConfig(max_input_tokens=100000)
+        assert config.max_input_tokens == 100000

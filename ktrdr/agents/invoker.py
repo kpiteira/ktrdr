@@ -115,11 +115,15 @@ class AnthropicInvokerConfig:
         model: The Claude model to use (validated against VALID_MODELS)
         max_tokens: Maximum tokens for response generation
         timeout_seconds: Timeout for API calls in seconds (default: 300 = 5 minutes)
+        max_iterations: Maximum tool call iterations to prevent infinite loops (Task 8.5)
+        max_input_tokens: Circuit breaker for input token growth (Task 8.5)
     """
 
     model: str = DEFAULT_MODEL
     max_tokens: int = 4096
     timeout_seconds: int = 300  # 5 minutes default (Task 1.13b)
+    max_iterations: int = 10  # Prevent infinite tool loops (Task 8.5)
+    max_input_tokens: int = 50000  # Circuit breaker for large contexts (Task 8.5)
 
     def __post_init__(self):
         """Validate model and log selection (Task 8.3)."""
@@ -149,6 +153,8 @@ class AnthropicInvokerConfig:
             AGENT_MODEL: Claude model to use (default: claude-opus-4-5-20250514)
             AGENT_MAX_TOKENS: Maximum tokens for response (default: 4096)
             AGENT_TIMEOUT_SECONDS: Timeout for API calls (default: 300)
+            AGENT_MAX_ITERATIONS: Max tool call loops (default: 10) (Task 8.5)
+            AGENT_MAX_INPUT_TOKENS: Input token circuit breaker (default: 50000) (Task 8.5)
 
         Returns:
             AnthropicInvokerConfig instance with values from environment.
@@ -156,7 +162,15 @@ class AnthropicInvokerConfig:
         model = os.getenv("AGENT_MODEL", DEFAULT_MODEL)
         max_tokens = int(os.getenv("AGENT_MAX_TOKENS", "4096"))
         timeout_seconds = int(os.getenv("AGENT_TIMEOUT_SECONDS", "300"))
-        return cls(model=model, max_tokens=max_tokens, timeout_seconds=timeout_seconds)
+        max_iterations = int(os.getenv("AGENT_MAX_ITERATIONS", "10"))
+        max_input_tokens = int(os.getenv("AGENT_MAX_INPUT_TOKENS", "50000"))
+        return cls(
+            model=model,
+            max_tokens=max_tokens,
+            timeout_seconds=timeout_seconds,
+            max_iterations=max_iterations,
+            max_input_tokens=max_input_tokens,
+        )
 
 
 # Type alias for tool executor function
@@ -248,16 +262,41 @@ class AnthropicAgentInvoker:
         messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
         total_input_tokens = 0
         total_output_tokens = 0
+        iteration = 0  # Track iterations to prevent infinite loops (Task 8.5)
 
         logger.info(
             "Starting agent invocation",
             model=self.config.model,
             has_tools=len(tools) > 0,
             has_tool_executor=tool_executor is not None,
+            max_iterations=self.config.max_iterations,
+            max_input_tokens=self.config.max_input_tokens,
         )
 
         try:
             while True:
+                # Check iteration limit (Task 8.5)
+                iteration += 1
+                if iteration > self.config.max_iterations:
+                    error_msg = (
+                        f"Tool call loop exceeded {self.config.max_iterations} iterations. "
+                        "This may indicate an infinite loop or overly complex task."
+                    )
+                    logger.error(
+                        "Iteration limit exceeded",
+                        iteration=iteration,
+                        max_iterations=self.config.max_iterations,
+                        total_input_tokens=total_input_tokens,
+                        total_output_tokens=total_output_tokens,
+                    )
+                    return AgentResult(
+                        success=False,
+                        output=None,
+                        input_tokens=total_input_tokens,
+                        output_tokens=total_output_tokens,
+                        error=error_msg,
+                    )
+
                 # Make API call in a thread to avoid blocking
                 response = await asyncio.to_thread(
                     self._create_message,
@@ -270,11 +309,32 @@ class AnthropicAgentInvoker:
                 total_input_tokens += response.usage.input_tokens
                 total_output_tokens += response.usage.output_tokens
 
+                # Check input token limit after each call (Task 8.5)
+                if total_input_tokens > self.config.max_input_tokens:
+                    error_msg = (
+                        f"Input tokens ({total_input_tokens}) exceeded limit "
+                        f"({self.config.max_input_tokens}). Context has grown too large."
+                    )
+                    logger.error(
+                        "Input token limit exceeded",
+                        total_input_tokens=total_input_tokens,
+                        max_input_tokens=self.config.max_input_tokens,
+                        iteration=iteration,
+                    )
+                    return AgentResult(
+                        success=False,
+                        output=None,
+                        input_tokens=total_input_tokens,
+                        output_tokens=total_output_tokens,
+                        error=error_msg,
+                    )
+
                 logger.debug(
                     "Received API response",
                     input_tokens=response.usage.input_tokens,
                     output_tokens=response.usage.output_tokens,
                     stop_reason=response.stop_reason,
+                    iteration=iteration,
                 )
 
                 # Check for tool calls

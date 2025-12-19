@@ -497,6 +497,184 @@ class TestAnthropicAgentInvoker:
         assert "Second part" in result.output
 
 
+class TestTokenBudgetLimitsEnforcement:
+    """Tests for token budget limits enforcement in run() (Task 8.5)."""
+
+    @pytest.fixture
+    def mock_anthropic_client(self):
+        """Create a mock Anthropic client."""
+        mock_client = MagicMock()
+        return mock_client
+
+    @pytest.fixture
+    def invoker_with_low_limits(self, mock_anthropic_client):
+        """Create invoker with low limits for testing."""
+        from ktrdr.agents.invoker import AnthropicAgentInvoker, AnthropicInvokerConfig
+
+        config = AnthropicInvokerConfig(
+            model="claude-sonnet-4-20250514",
+            max_tokens=4096,
+            max_iterations=3,  # Low limit for testing
+            max_input_tokens=1000,  # Low limit for testing
+        )
+        invoker = AnthropicAgentInvoker(config=config)
+        invoker.client = mock_anthropic_client
+        return invoker
+
+    def _create_mock_response(
+        self,
+        content: list[dict],
+        input_tokens: int = 100,
+        output_tokens: int = 50,
+        stop_reason: str = "end_turn",
+    ):
+        """Helper to create a mock Anthropic API response."""
+        mock_response = MagicMock()
+        mock_response.usage = MagicMock()
+        mock_response.usage.input_tokens = input_tokens
+        mock_response.usage.output_tokens = output_tokens
+        mock_response.stop_reason = stop_reason
+
+        mock_blocks = []
+        for item in content:
+            block = MagicMock()
+            block.type = item.get("type", "text")
+            if block.type == "text":
+                block.text = item.get("text", "")
+            elif block.type == "tool_use":
+                block.id = item.get("id", "tool_123")
+                block.name = item.get("name", "test_tool")
+                block.input = item.get("input", {})
+            mock_blocks.append(block)
+
+        mock_response.content = mock_blocks
+        return mock_response
+
+    @pytest.mark.asyncio
+    async def test_max_iterations_prevents_infinite_loop(self, invoker_with_low_limits):
+        """Max iterations prevents infinite tool call loops."""
+        invoker = invoker_with_low_limits
+
+        # Create a response that always requests a tool (infinite loop)
+        tool_response = self._create_mock_response(
+            content=[
+                {
+                    "type": "tool_use",
+                    "id": "tool_1",
+                    "name": "infinite_tool",
+                    "input": {},
+                }
+            ],
+            input_tokens=100,
+            output_tokens=50,
+            stop_reason="tool_use",
+        )
+
+        # Always return tool call (would be infinite without limit)
+        invoker.client.messages.create = MagicMock(return_value=tool_response)
+
+        async def mock_execute(tool_name: str, tool_input: dict) -> dict:
+            return {"result": "ok"}
+
+        result = await invoker.run(
+            prompt="Do something",
+            tools=[
+                {"name": "infinite_tool", "description": "Test", "input_schema": {}}
+            ],
+            system_prompt="Test.",
+            tool_executor=mock_execute,
+        )
+
+        # Should fail with clear error message about iteration limit
+        assert result.success is False
+        assert "iteration" in result.error.lower() or "loop" in result.error.lower()
+        assert "3" in result.error  # Should mention the limit
+
+    @pytest.mark.asyncio
+    async def test_max_input_tokens_circuit_breaker(self, invoker_with_low_limits):
+        """Max input tokens prevents expensive API calls."""
+        invoker = invoker_with_low_limits
+
+        # Create a response that reports high input tokens on second call
+        first_response = self._create_mock_response(
+            content=[
+                {
+                    "type": "tool_use",
+                    "id": "tool_1",
+                    "name": "growing_tool",
+                    "input": {},
+                }
+            ],
+            input_tokens=500,  # Under limit
+            output_tokens=50,
+            stop_reason="tool_use",
+        )
+
+        second_response = self._create_mock_response(
+            content=[
+                {
+                    "type": "tool_use",
+                    "id": "tool_2",
+                    "name": "growing_tool",
+                    "input": {},
+                }
+            ],
+            input_tokens=2000,  # Over the 1000 limit
+            output_tokens=100,
+            stop_reason="tool_use",
+        )
+
+        responses = [first_response, second_response]
+        idx = 0
+
+        def mock_create(*args, **kwargs):
+            nonlocal idx
+            r = responses[idx]
+            idx += 1
+            return r
+
+        invoker.client.messages.create = mock_create
+
+        async def mock_execute(tool_name: str, tool_input: dict) -> dict:
+            return {"result": "large data " * 100}  # Returns lots of data
+
+        result = await invoker.run(
+            prompt="Do something",
+            tools=[{"name": "growing_tool", "description": "Test", "input_schema": {}}],
+            system_prompt="Test.",
+            tool_executor=mock_execute,
+        )
+
+        # Should fail with clear error about input tokens
+        assert result.success is False
+        assert "token" in result.error.lower() or "input" in result.error.lower()
+
+    @pytest.mark.asyncio
+    async def test_iteration_error_message_is_clear(self, invoker_with_low_limits):
+        """Iteration limit error message is clear and actionable."""
+        invoker = invoker_with_low_limits
+
+        tool_response = self._create_mock_response(
+            content=[{"type": "tool_use", "id": "t1", "name": "tool", "input": {}}],
+            stop_reason="tool_use",
+        )
+        invoker.client.messages.create = MagicMock(return_value=tool_response)
+
+        async def mock_execute(tool_name: str, tool_input: dict) -> dict:
+            return {"result": "ok"}
+
+        result = await invoker.run(
+            prompt="Do",
+            tools=[{"name": "tool", "description": "Test", "input_schema": {}}],
+            system_prompt="Test.",
+            tool_executor=mock_execute,
+        )
+
+        assert result.success is False
+        # Error should mention iterations and the limit
+        assert "iteration" in result.error.lower() or "exceeded" in result.error.lower()
+
+
 class TestAnthropicAgentInvokerProtocol:
     """Test that AnthropicAgentInvoker implements the AgentInvoker protocol."""
 
