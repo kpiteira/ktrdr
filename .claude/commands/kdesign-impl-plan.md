@@ -617,10 +617,25 @@ M1 → M2 → M3
 
 Each `M[N]_[name].md` file contains:
 
-1. **Milestone goal** — One sentence
-2. **E2E test scenario** — Full test script/commands
-3. **Tasks** — Detailed task specs
-4. **Completion checklist** — All gates that must pass
+1. **Frontmatter** — References to design/architecture docs (from command params)
+2. **Milestone goal** — One sentence
+3. **E2E test scenario** — Full test script/commands
+4. **Tasks** — Detailed task specs
+5. **Completion checklist** — All gates that must pass
+
+**Frontmatter format:**
+
+```markdown
+---
+design: <path from design: param>
+architecture: <path from arch: param>
+---
+
+# Milestone 1: [Name]
+...
+```
+
+The frontmatter embeds the same paths provided to this command, enabling `/ktask` to automatically discover context documents. This makes milestone files self-contained.
 
 This structure means `/ktask` only loads the milestone file it needs.
 
