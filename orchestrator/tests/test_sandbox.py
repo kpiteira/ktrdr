@@ -305,9 +305,9 @@ class TestInvokeClaudeStreaming:
 
         manager = SandboxManager()
 
-        # Stream events: tool_use and result
+        # Stream events: assistant with tool_use content, then result
         stream_output = (
-            '{"type": "tool_use", "name": "Read", "input": {"file_path": "test.py"}}\n'
+            '{"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Read", "input": {"file_path": "test.py"}}]}}\n'
             '{"type": "result", "is_error": false, "result": "Done", "total_cost_usd": 0.05, "duration_ms": 1000, "num_turns": 2, "session_id": "test123"}\n'
         )
 
@@ -337,9 +337,9 @@ class TestInvokeClaudeStreaming:
         manager = SandboxManager()
 
         stream_output = (
-            '{"type": "tool_use", "name": "Read", "input": {"file_path": "config.py"}}\n'
-            '{"type": "tool_use", "name": "Write", "input": {"file_path": "output.py"}}\n'
-            '{"type": "tool_use", "name": "Bash", "input": {"command": "pytest tests/"}}\n'
+            '{"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Read", "input": {"file_path": "config.py"}}]}}\n'
+            '{"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Write", "input": {"file_path": "output.py"}}]}}\n'
+            '{"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash", "input": {"command": "pytest tests/"}}]}}\n'
             '{"type": "result", "is_error": false, "result": "Done", "total_cost_usd": 0.1, "duration_ms": 5000, "num_turns": 5, "session_id": "test456"}\n'
         )
 
@@ -372,7 +372,7 @@ class TestInvokeClaudeStreaming:
         manager = SandboxManager()
 
         stream_output = (
-            '{"type": "tool_use", "name": "Read", "input": {"file_path": "test.py"}}\n'
+            '{"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Read", "input": {"file_path": "test.py"}}]}}\n'
             '{"type": "result", "is_error": false, "result": "Task completed", "total_cost_usd": 0.08, "duration_ms": 12000, "num_turns": 7, "session_id": "session789"}\n'
         )
 
@@ -429,7 +429,7 @@ class TestInvokeClaudeStreaming:
 
         stream_output = (
             "not valid json\n"
-            '{"type": "tool_use", "name": "Read", "input": {"file_path": "test.py"}}\n'
+            '{"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Read", "input": {"file_path": "test.py"}}]}}\n'
             '{"broken json\n'
             '{"type": "result", "is_error": false, "result": "Done", "total_cost_usd": 0.05, "duration_ms": 2000, "num_turns": 2, "session_id": "test"}\n'
         )
@@ -499,7 +499,7 @@ class TestInvokeClaudeStreaming:
 
         # No result event, just tool uses
         stream_output = (
-            '{"type": "tool_use", "name": "Read", "input": {"file_path": "test.py"}}\n'
+            '{"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Read", "input": {"file_path": "test.py"}}]}}\n'
             "\n"
         )
 

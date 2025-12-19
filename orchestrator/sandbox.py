@@ -250,10 +250,15 @@ class SandboxManager:
 
                 event_type = event.get("type")
 
-                if event_type == "tool_use":
-                    tool_name = event.get("name", "")
-                    tool_input = event.get("input", {})
-                    on_tool_use(tool_name, tool_input)
+                if event_type == "assistant":
+                    # Tool uses are nested in assistant message content
+                    message = event.get("message", {})
+                    content = message.get("content", [])
+                    for item in content:
+                        if item.get("type") == "tool_use":
+                            tool_name = item.get("name", "")
+                            tool_input = item.get("input", {})
+                            on_tool_use(tool_name, tool_input)
 
                 elif event_type == "result":
                     result_data = event
