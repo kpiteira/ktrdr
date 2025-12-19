@@ -323,3 +323,193 @@ class TestMilestoneResult:
         assert result.status == "completed"
         assert result.total_tasks == 5
         assert result.total_cost_usd == 0.50
+
+
+class TestTaskCompleteCallback:
+    """Tests for on_task_complete callback functionality."""
+
+    @pytest.mark.asyncio
+    async def test_callback_called_for_each_completed_task(
+        self, tmp_path: Path, sample_tasks: list[Task]
+    ) -> None:
+        """on_task_complete callback is called after each completed task."""
+        callback_calls: list[tuple[Task, TaskResult]] = []
+
+        def on_complete(task: Task, result: TaskResult) -> None:
+            callback_calls.append((task, result))
+
+        async def mock_task(
+            task: Task, sandbox: MagicMock, config: MagicMock
+        ) -> TaskResult:
+            return TaskResult(
+                task_id=task.id,
+                status="completed",
+                duration_seconds=10.0,
+                tokens_used=1000,
+                cost_usd=0.01,
+                output=f"Summary for {task.id}",
+                session_id="test",
+            )
+
+        with (
+            patch("orchestrator.milestone_runner.parse_plan", return_value=sample_tasks),
+            patch(
+                "orchestrator.milestone_runner.run_task",
+                AsyncMock(side_effect=mock_task),
+            ),
+            patch("orchestrator.milestone_runner.SandboxManager"),
+        ):
+            await run_milestone(
+                plan_path="test_plan.md",
+                state_dir=tmp_path,
+                on_task_complete=on_complete,
+            )
+
+        # Callback should be called 3 times
+        assert len(callback_calls) == 3
+
+        # Verify callback received correct data
+        assert callback_calls[0][0].id == "1.1"
+        assert callback_calls[0][1].output == "Summary for 1.1"
+        assert callback_calls[1][0].id == "1.2"
+        assert callback_calls[2][0].id == "1.3"
+
+    @pytest.mark.asyncio
+    async def test_callback_not_called_for_failed_task(
+        self, tmp_path: Path, sample_tasks: list[Task]
+    ) -> None:
+        """on_task_complete callback is NOT called for failed tasks."""
+        callback_calls: list[tuple[Task, TaskResult]] = []
+
+        def on_complete(task: Task, result: TaskResult) -> None:
+            callback_calls.append((task, result))
+
+        async def mock_task(
+            task: Task, sandbox: MagicMock, config: MagicMock
+        ) -> TaskResult:
+            if task.id == "1.2":
+                return TaskResult(
+                    task_id=task.id,
+                    status="failed",
+                    duration_seconds=5.0,
+                    tokens_used=500,
+                    cost_usd=0.005,
+                    output="Failed",
+                    session_id="test",
+                    error="Something broke",
+                )
+            return TaskResult(
+                task_id=task.id,
+                status="completed",
+                duration_seconds=10.0,
+                tokens_used=1000,
+                cost_usd=0.01,
+                output=f"Summary for {task.id}",
+                session_id="test",
+            )
+
+        with (
+            patch("orchestrator.milestone_runner.parse_plan", return_value=sample_tasks),
+            patch(
+                "orchestrator.milestone_runner.run_task",
+                AsyncMock(side_effect=mock_task),
+            ),
+            patch("orchestrator.milestone_runner.SandboxManager"),
+        ):
+            await run_milestone(
+                plan_path="test_plan.md",
+                state_dir=tmp_path,
+                on_task_complete=on_complete,
+            )
+
+        # Only task 1.1 completed, so only 1 callback
+        assert len(callback_calls) == 1
+        assert callback_calls[0][0].id == "1.1"
+
+    @pytest.mark.asyncio
+    async def test_callback_optional(
+        self, tmp_path: Path, sample_tasks: list[Task], mock_run_task: AsyncMock
+    ) -> None:
+        """Milestone runs without callback (backward compatibility)."""
+        with (
+            patch("orchestrator.milestone_runner.parse_plan", return_value=sample_tasks),
+            patch("orchestrator.milestone_runner.run_task", mock_run_task),
+            patch("orchestrator.milestone_runner.SandboxManager"),
+        ):
+            # Should not raise - callback is optional
+            result = await run_milestone(
+                plan_path="test_plan.md",
+                state_dir=tmp_path,
+            )
+
+        assert result.status == "completed"
+
+
+class TestCreateMilestonePR:
+    """Tests for create_milestone_pr function."""
+
+    @pytest.mark.asyncio
+    async def test_creates_pr_via_claude(self, tmp_path: Path) -> None:
+        """create_milestone_pr invokes Claude with correct prompt."""
+        from orchestrator.milestone_runner import create_milestone_pr
+        from orchestrator.models import ClaudeResult
+
+        mock_sandbox = MagicMock()
+        mock_sandbox.invoke_claude = AsyncMock(
+            return_value=ClaudeResult(
+                is_error=False,
+                result="PR created: https://github.com/user/repo/pull/123",
+                total_cost_usd=0.02,
+                duration_ms=5000,
+                num_turns=3,
+                session_id="pr-session",
+            )
+        )
+
+        result = await create_milestone_pr(
+            sandbox=mock_sandbox,
+            milestone_id="health_check",
+            completed_tasks=["1.1", "1.2", "1.3"],
+            total_cost_usd=0.15,
+        )
+
+        # Verify Claude was invoked
+        mock_sandbox.invoke_claude.assert_called_once()
+        call_args = mock_sandbox.invoke_claude.call_args
+
+        # Verify prompt contains key information
+        prompt = call_args.kwargs.get("prompt") or call_args.args[0]
+        assert "health_check" in prompt
+        assert "1.1" in prompt
+        assert "1.2" in prompt
+        assert "1.3" in prompt
+
+        # Verify result
+        assert "https://github.com" in result.result
+
+    @pytest.mark.asyncio
+    async def test_handles_claude_error(self, tmp_path: Path) -> None:
+        """create_milestone_pr handles Claude errors gracefully."""
+        from orchestrator.milestone_runner import create_milestone_pr
+        from orchestrator.models import ClaudeResult
+
+        mock_sandbox = MagicMock()
+        mock_sandbox.invoke_claude = AsyncMock(
+            return_value=ClaudeResult(
+                is_error=True,
+                result="Error: Failed to create PR",
+                total_cost_usd=0.01,
+                duration_ms=2000,
+                num_turns=1,
+                session_id="error-session",
+            )
+        )
+
+        result = await create_milestone_pr(
+            sandbox=mock_sandbox,
+            milestone_id="test",
+            completed_tasks=["1.1"],
+            total_cost_usd=0.05,
+        )
+
+        assert result.is_error is True

@@ -906,3 +906,292 @@ class TestResumeCommandExecution:
 
         # Lock should have been used
         mock_lock.assert_called_once()
+
+
+class TestPRPromptAfterMilestone:
+    """Test PR prompt functionality after milestone completion."""
+
+    def test_prompts_for_pr_on_completed_milestone(self):
+        """Should prompt user to create PR when milestone completes."""
+        from datetime import datetime
+
+        from orchestrator.cli import cli
+        from orchestrator.milestone_runner import MilestoneResult
+        from orchestrator.state import OrchestratorState
+
+        runner = CliRunner()
+
+        content = textwrap.dedent("""
+            # Milestone 2: Test
+
+            ## Task 2.1: Test Task
+
+            **Description:** Test task
+
+            **Acceptance Criteria:**
+            - [ ] Works
+        """)
+
+        mock_state = OrchestratorState(
+            milestone_id="test",
+            plan_path="test.md",
+            started_at=datetime.now(),
+            completed_tasks=["2.1"],
+        )
+
+        mock_result = MilestoneResult(
+            status="completed",
+            state=mock_state,
+            total_tasks=1,
+            completed_tasks=1,
+            failed_tasks=0,
+            total_cost_usd=0.05,
+            total_tokens=5000,
+            total_duration_seconds=60.0,
+        )
+
+        with NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+            f.write(content)
+            f.flush()
+
+            with patch("orchestrator.cli.setup_telemetry") as mock_telemetry:
+                mock_telemetry.return_value = (MagicMock(), MagicMock())
+
+                with patch("orchestrator.cli.create_metrics"):
+                    with patch(
+                        "orchestrator.cli.run_milestone",
+                        new_callable=AsyncMock,
+                    ) as mock_run:
+                        mock_run.return_value = mock_result
+
+                        with patch("orchestrator.cli.MilestoneLock") as mock_lock:
+                            mock_lock.return_value.__enter__ = MagicMock(
+                                return_value=mock_lock
+                            )
+                            mock_lock.return_value.__exit__ = MagicMock(
+                                return_value=None
+                            )
+                            # Simulate user typing 'n' to decline PR creation
+                            result = runner.invoke(cli, ["run", f.name], input="n\n")
+
+        # Should see PR prompt in output
+        assert "pr" in result.output.lower() or "pull request" in result.output.lower()
+
+    def test_creates_pr_when_user_confirms(self):
+        """Should invoke Claude to create PR when user confirms."""
+        from datetime import datetime
+
+        from orchestrator.cli import cli
+        from orchestrator.milestone_runner import MilestoneResult
+        from orchestrator.models import ClaudeResult
+        from orchestrator.state import OrchestratorState
+
+        runner = CliRunner()
+
+        content = textwrap.dedent("""
+            # Milestone 2: Test
+
+            ## Task 2.1: Test Task
+
+            **Description:** Test task
+
+            **Acceptance Criteria:**
+            - [ ] Works
+        """)
+
+        mock_state = OrchestratorState(
+            milestone_id="test",
+            plan_path="test.md",
+            started_at=datetime.now(),
+            completed_tasks=["2.1"],
+        )
+
+        mock_result = MilestoneResult(
+            status="completed",
+            state=mock_state,
+            total_tasks=1,
+            completed_tasks=1,
+            failed_tasks=0,
+            total_cost_usd=0.05,
+            total_tokens=5000,
+            total_duration_seconds=60.0,
+        )
+
+        mock_pr_result = ClaudeResult(
+            is_error=False,
+            result="PR created: https://github.com/user/repo/pull/123",
+            total_cost_usd=0.02,
+            duration_ms=5000,
+            num_turns=3,
+            session_id="pr-session",
+        )
+
+        with NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+            f.write(content)
+            f.flush()
+
+            with patch("orchestrator.cli.setup_telemetry") as mock_telemetry:
+                mock_telemetry.return_value = (MagicMock(), MagicMock())
+
+                with patch("orchestrator.cli.create_metrics"):
+                    with patch(
+                        "orchestrator.cli.run_milestone",
+                        new_callable=AsyncMock,
+                    ) as mock_run:
+                        mock_run.return_value = mock_result
+
+                        with patch("orchestrator.cli.MilestoneLock") as mock_lock:
+                            mock_lock.return_value.__enter__ = MagicMock(
+                                return_value=mock_lock
+                            )
+                            mock_lock.return_value.__exit__ = MagicMock(
+                                return_value=None
+                            )
+                            with patch(
+                                "orchestrator.cli.create_milestone_pr",
+                                new_callable=AsyncMock,
+                            ) as mock_pr:
+                                mock_pr.return_value = mock_pr_result
+                                # Simulate user typing 'y' to confirm PR creation
+                                runner.invoke(cli, ["run", f.name], input="y\n")
+
+        # create_milestone_pr should have been called
+        mock_pr.assert_called_once()
+
+    def test_no_pr_prompt_on_failed_milestone(self):
+        """Should not prompt for PR when milestone fails."""
+        from datetime import datetime
+
+        from orchestrator.cli import cli
+        from orchestrator.milestone_runner import MilestoneResult
+        from orchestrator.state import OrchestratorState
+
+        runner = CliRunner()
+
+        content = textwrap.dedent("""
+            # Milestone 2: Test
+
+            ## Task 2.1: Test Task
+
+            **Description:** Test task
+
+            **Acceptance Criteria:**
+            - [ ] Works
+        """)
+
+        mock_state = OrchestratorState(
+            milestone_id="test",
+            plan_path="test.md",
+            started_at=datetime.now(),
+            completed_tasks=[],
+            failed_tasks=["2.1"],
+        )
+
+        mock_result = MilestoneResult(
+            status="failed",  # Failed milestone
+            state=mock_state,
+            total_tasks=1,
+            completed_tasks=0,
+            failed_tasks=1,
+            total_cost_usd=0.05,
+            total_tokens=5000,
+            total_duration_seconds=60.0,
+        )
+
+        with NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+            f.write(content)
+            f.flush()
+
+            with patch("orchestrator.cli.setup_telemetry") as mock_telemetry:
+                mock_telemetry.return_value = (MagicMock(), MagicMock())
+
+                with patch("orchestrator.cli.create_metrics"):
+                    with patch(
+                        "orchestrator.cli.run_milestone",
+                        new_callable=AsyncMock,
+                    ) as mock_run:
+                        mock_run.return_value = mock_result
+
+                        with patch("orchestrator.cli.MilestoneLock") as mock_lock:
+                            mock_lock.return_value.__enter__ = MagicMock(
+                                return_value=mock_lock
+                            )
+                            mock_lock.return_value.__exit__ = MagicMock(
+                                return_value=None
+                            )
+                            with patch(
+                                "orchestrator.cli.create_milestone_pr",
+                                new_callable=AsyncMock,
+                            ) as mock_pr:
+                                runner.invoke(cli, ["run", f.name])
+
+        # Should NOT have prompted for PR (no input needed means no prompt)
+        mock_pr.assert_not_called()
+
+    def test_displays_task_summaries(self):
+        """Should display task summaries via on_task_complete callback."""
+        from datetime import datetime
+
+        from orchestrator.cli import cli
+        from orchestrator.milestone_runner import MilestoneResult
+        from orchestrator.state import OrchestratorState
+
+        runner = CliRunner()
+
+        content = textwrap.dedent("""
+            # Milestone 2: Test
+
+            ## Task 2.1: Test Task
+
+            **Description:** Test task
+
+            **Acceptance Criteria:**
+            - [ ] Works
+        """)
+
+        mock_state = OrchestratorState(
+            milestone_id="test",
+            plan_path="test.md",
+            started_at=datetime.now(),
+            completed_tasks=["2.1"],
+        )
+
+        mock_result = MilestoneResult(
+            status="completed",
+            state=mock_state,
+            total_tasks=1,
+            completed_tasks=1,
+            failed_tasks=0,
+            total_cost_usd=0.05,
+            total_tokens=5000,
+            total_duration_seconds=60.0,
+        )
+
+        with NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+            f.write(content)
+            f.flush()
+
+            with patch("orchestrator.cli.setup_telemetry") as mock_telemetry:
+                mock_telemetry.return_value = (MagicMock(), MagicMock())
+
+                with patch("orchestrator.cli.create_metrics"):
+                    with patch(
+                        "orchestrator.cli.run_milestone",
+                        new_callable=AsyncMock,
+                    ) as mock_run:
+                        mock_run.return_value = mock_result
+
+                        with patch("orchestrator.cli.MilestoneLock") as mock_lock:
+                            mock_lock.return_value.__enter__ = MagicMock(
+                                return_value=mock_lock
+                            )
+                            mock_lock.return_value.__exit__ = MagicMock(
+                                return_value=None
+                            )
+                            runner.invoke(cli, ["run", f.name], input="n\n")
+
+        # run_milestone should have been called with on_task_complete callback
+        mock_run.assert_called_once()
+        call_kwargs = mock_run.call_args.kwargs
+        assert "on_task_complete" in call_kwargs
+        assert call_kwargs["on_task_complete"] is not None

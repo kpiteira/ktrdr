@@ -7,12 +7,13 @@ each task for resumability, and reporting progress.
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import Callable, Literal
 
 from opentelemetry import trace
 
 from orchestrator import telemetry
 from orchestrator.config import OrchestratorConfig
+from orchestrator.models import ClaudeResult, Task, TaskResult
 from orchestrator.plan_parser import parse_plan
 from orchestrator.sandbox import SandboxManager
 from orchestrator.state import OrchestratorState
@@ -42,6 +43,7 @@ async def run_milestone(
     resume: bool = False,
     config: OrchestratorConfig | None = None,
     tracer: trace.Tracer | None = None,
+    on_task_complete: Callable[[Task, TaskResult], None] | None = None,
 ) -> MilestoneResult:
     """Run all tasks in a milestone sequentially.
 
@@ -54,6 +56,8 @@ async def run_milestone(
         resume: If True, continue from last completed task
         config: Orchestrator configuration (uses defaults if None)
         tracer: OpenTelemetry tracer (uses no-op if None)
+        on_task_complete: Optional callback invoked after each completed task,
+            receives the Task and TaskResult for displaying summaries
 
     Returns:
         MilestoneResult with final status and aggregated metrics
@@ -129,6 +133,10 @@ async def run_milestone(
                     state.mark_task_completed(task.id, asdict(result))
                     state.save(state_dir)
 
+                    # Invoke callback for task summary display
+                    if on_task_complete is not None:
+                        on_task_complete(task, result)
+
                 elif result.status == "needs_human":
                     state.save(state_dir)
                     final_status = "needs_human"
@@ -176,3 +184,39 @@ def _record_metrics(
     except (AttributeError, NameError):
         # Counters not initialized - telemetry disabled
         pass
+
+
+async def create_milestone_pr(
+    sandbox: SandboxManager,
+    milestone_id: str,
+    completed_tasks: list[str],
+    total_cost_usd: float,
+) -> ClaudeResult:
+    """Create a PR for the milestone via Claude.
+
+    Invokes Claude Code to create a pull request summarizing all changes
+    made across the completed tasks.
+
+    Args:
+        sandbox: SandboxManager for invoking Claude
+        milestone_id: The milestone identifier
+        completed_tasks: List of completed task IDs
+        total_cost_usd: Total cost of the milestone
+
+    Returns:
+        ClaudeResult from the PR creation invocation
+    """
+    prompt = f"""Create a PR for milestone {milestone_id}.
+
+Completed tasks: {', '.join(completed_tasks)}
+Total cost: ${total_cost_usd:.2f}
+
+Use `gh pr create` with a summary of all changes made across the tasks.
+Include:
+- A descriptive title for the milestone
+- A summary of what was implemented
+- Any key decisions or changes made
+
+The PR should summarize the entire milestone's work, not individual tasks."""
+
+    return await sandbox.invoke_claude(prompt=prompt, max_turns=10)
