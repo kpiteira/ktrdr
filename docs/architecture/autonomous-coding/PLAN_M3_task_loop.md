@@ -2,13 +2,15 @@
 
 **Branch:** `feature/orchestrator-m3-task-loop`
 **Builds on:** M2 (single task works)
-**Estimated Tasks:** 8
+**Estimated Tasks:** 7
 
 ---
 
 ## Capability
 
-Orchestrator runs all tasks in a milestone sequentially, persists state after each task, creates a PR with the changes, and can resume from where it left off after interruption.
+Orchestrator runs all tasks in a milestone sequentially, persists state after each task, displays Claude's task summary for visibility, and can resume from where it left off after interruption.
+
+**Note:** Git operations (branch, commit, PR) are handled by Claude via `/ktask`, not by the orchestrator. The orchestrator prompts for PR creation at milestone end, then tells Claude to create it.
 
 ---
 
@@ -20,28 +22,40 @@ uv run orchestrator run orchestrator/test_plans/health_check.md
 
 # Expected output:
 # [14:23:01] Starting milestone: Orchestrator Health Check
-# [14:23:01] Creating branch: orchestrator/health_check-20250118-142301
 # [14:23:01] Task 1.1: Create health module
 #            Invoking Claude Code...
 # [14:23:45] Task 1.1: COMPLETED (44s, 4.2k tokens, $0.03)
-#            Committed: feat(orchestrator): Create health module
+#
+#            ## Task Complete: 1.1
+#            **What was implemented:**
+#            - Created health.py module with system health checks
+#            **Files changed:**
+#            - orchestrator/health.py (created)
+#            - orchestrator/tests/test_health.py (created)
+#            **Key decisions made:**
+#            - Used psutil for system metrics
+#            **Issues encountered:**
+#            - None
+#
 # [14:23:46] Task 1.2: Add health CLI command
 #            Invoking Claude Code...
 # [14:24:18] Task 1.2: COMPLETED (32s, 3.1k tokens, $0.02)
-#            Committed: feat(orchestrator): Add health CLI command
+#            [Task summary displayed...]
 # [14:24:19] Task 1.3: Add health telemetry
 #            Invoking Claude Code...
 # [14:24:51] Task 1.3: COMPLETED (32s, 2.9k tokens, $0.02)
-#            Committed: feat(orchestrator): Add health telemetry
-# [14:24:52] Pushing branch and creating PR...
-# [14:24:55] PR created: https://github.com/user/ktrdr/pull/123
+#            [Task summary displayed...]
 #
+# All tasks complete!
 # Summary:
 #   Tasks: 3/3 completed
 #   Duration: 1m 54s
 #   Tokens: 10.2k
 #   Cost: $0.07
-#   PR: https://github.com/user/ktrdr/pull/123
+#
+# Create PR for this milestone? [Y/n]: y
+# [Invoking Claude to create PR...]
+# PR created: https://github.com/user/ktrdr/pull/123
 
 # 2. Verify state file
 cat state/health_check_state.json | jq '{completed: .completed_tasks, status: .e2e_status}'
@@ -61,10 +75,10 @@ uv run orchestrator run orchestrator/test_plans/health_check.md
 cat state/health_check_state.json | jq '.completed_tasks'
 # Expect: ["1.1"]
 
-# Resume (continues on same branch)
+# Resume
 uv run orchestrator resume orchestrator/test_plans/health_check.md
 # Expect: "Resuming from Task 1.2..."
-# Should complete tasks 1.2 and 1.3, then create/update PR
+# Should complete tasks 1.2 and 1.3, then prompt for PR
 
 # 5. Verify trace hierarchy in Jaeger
 open http://localhost:16686
@@ -485,120 +499,65 @@ def send_notification(title: str, message: str, sound: bool = True) -> None:
 
 ---
 
-### Task 3.8: Add Git Branch & PR Workflow
+### Task 3.8: Display Task Summary + Milestone PR Prompt
 
-**File:** `orchestrator/git_workflow.py`
+**File:** `orchestrator/milestone_runner.py`
 **Type:** CODING
 
 **Description:**
-Orchestrator creates a feature branch at milestone start, commits after each task, and creates a PR at milestone end. All sandbox work happens on a branch, never on main. This enables the full validation loop: run milestone → review PR → test branch → merge.
+After each task completes, display Claude's task summary to the human for visibility into what happened in the sandbox. At milestone end, prompt the human to create a PR and relay the answer to Claude.
 
 **Implementation Notes:**
-```python
-import subprocess
-from pathlib import Path
-from datetime import datetime
-
-class GitWorkflow:
-    def __init__(self, workspace: Path, milestone_id: str):
-        self.workspace = workspace
-        self.milestone_id = milestone_id
-        self.branch_name = f"orchestrator/{milestone_id}-{datetime.now():%Y%m%d-%H%M%S}"
-
-    def setup_branch(self) -> None:
-        """Create and checkout feature branch at milestone start."""
-        self._run("git fetch origin main")
-        self._run("git checkout", "-b", self.branch_name, "origin/main")
-
-    def commit_task(self, task_id: str, task_title: str) -> bool:
-        """Commit changes after a task completes. Returns True if changes committed."""
-        # Check if there are changes
-        result = self._run("git status --porcelain")
-        if not result.stdout.strip():
-            return False  # Nothing to commit
-
-        self._run("git add -A")
-        message = f"""feat(orchestrator): {task_title}
-
-Task: {task_id}
-Milestone: {self.milestone_id}
-
-🤖 Generated by Orchestrator"""
-        self._run("git commit", "-m", message)
-        return True
-
-    def push_and_create_pr(self, completed_tasks: list[str], total_cost: float) -> str:
-        """Push branch and create PR. Returns PR URL."""
-        self._run("git push", "-u", "origin", self.branch_name)
-
-        pr_body = f"""## Summary
-Automated implementation of milestone `{self.milestone_id}`.
-
-## Tasks Completed
-{chr(10).join(f'- [x] {t}' for t in completed_tasks)}
-
-## Stats
-- **Cost:** ${total_cost:.2f}
-- **Tasks:** {len(completed_tasks)}
-
----
-🤖 Generated by Orchestrator
-"""
-        result = self._run(
-            "gh", "pr", "create",
-            "--title", f"feat(orchestrator): {self.milestone_id}",
-            "--body", pr_body,
-            "--base", "main"
-        )
-        # Extract PR URL from output
-        return result.stdout.strip().split('\n')[-1]
-
-    def _run(self, *args) -> subprocess.CompletedProcess:
-        """Run command in workspace."""
-        return subprocess.run(
-            args,
-            cwd=self.workspace,
-            capture_output=True, text=True, check=True
-        )
-```
-
-**Integration with MilestoneRunner:**
 ```python
 # In milestone_runner.py
 
 async def run_milestone(...) -> MilestoneResult:
-    # ... existing setup ...
-
-    # Setup git branch (unless resuming onto existing branch)
-    git = GitWorkflow(sandbox.workspace, milestone_id)
-    if not resume:
-        git.setup_branch()
+    # ... existing task loop ...
 
     for task in tasks[start_index:]:
         result = await run_task(task, sandbox, config)
 
         if result.status == "completed":
-            # Commit after each successful task
-            git.commit_task(task.id, task.title)
             state.mark_task_completed(task.id, result)
             state.save(config.state_dir)
 
-    # All tasks done - push and create PR
-    pr_url = git.push_and_create_pr(state.completed_tasks, total_cost)
-    console.print(f"\n[bold green]PR created:[/bold] {pr_url}")
+            # Display task status
+            console.print(
+                f"Task {task.id}: [bold green]COMPLETED[/bold] "
+                f"({result.duration_seconds:.0f}s, {result.tokens_used/1000:.1f}k tokens, ${result.cost_usd:.2f})"
+            )
 
-    return MilestoneResult(status="completed", state=state, pr_url=pr_url)
+            # Display Claude's task summary for visibility
+            console.print(f"\n{result.output}\n")  # Claude's final message includes task summary
+
+    # All tasks complete - prompt for PR
+    console.print(f"\n[bold green]All tasks complete![/bold]")
+    console.print(f"  Tasks: {len(state.completed_tasks)}/{len(tasks)}")
+    console.print(f"  Cost: ${total_cost:.2f}")
+
+    if click.confirm("Create PR for this milestone?", default=True):
+        # Tell Claude to create the PR for the whole milestone
+        pr_prompt = f"""Create a PR for milestone {milestone_id}.
+
+Completed tasks: {', '.join(state.completed_tasks)}
+Total cost: ${total_cost:.2f}
+
+Use `gh pr create` with a summary of all changes made across the tasks."""
+
+        pr_result = await sandbox.invoke_claude(pr_prompt, max_turns=10)
+        # Extract PR URL from output (Claude will output it)
+        console.print(pr_result.output)
+
+    return MilestoneResult(status="completed", state=state)
 ```
 
 **Acceptance Criteria:**
 
-- [ ] Branch created at milestone start with pattern `orchestrator/{milestone}-{timestamp}`
-- [ ] Changes committed after each successful task
-- [ ] PR created at milestone end with summary
-- [ ] PR body includes task list and cost
-- [ ] Resume continues on existing branch (doesn't create new one)
-- [ ] Works via `docker exec` into sandbox
-- [ ] `gh` CLI available in sandbox (may need to add to Dockerfile)
+- [ ] Claude's task summary displayed after each task completes
+- [ ] Human can see what files changed, decisions made, issues encountered
+- [ ] At milestone end, prompts "Create PR for this milestone?"
+- [ ] If yes, invokes Claude to create the PR
+- [ ] Claude creates PR with summary of all tasks
 
 ---
 
@@ -613,13 +572,16 @@ async def run_milestone(...) -> MilestoneResult:
 # Run full milestone
 uv run orchestrator run orchestrator/test_plans/health_check.md --notify
 
+# Verify task summaries were displayed after each task
+# (visual verification during run)
+
 # Verify all 3 tasks completed
 cat state/health_check_state.json | jq '.completed_tasks'
 # Expect: ["1.1", "1.2", "1.3"]
 
-# Verify PR was created
-gh pr list --author @me --state open
-# Expect: PR titled "feat(orchestrator): health_check"
+# Verify PR prompt appeared and PR was created (if answered yes)
+gh pr list --state open
+# Expect: PR with summary of health_check milestone
 
 # Checkout and test the branch locally
 gh pr checkout <pr-number>
@@ -639,9 +601,9 @@ rm state/health_check_state.json  # Clear state
 timeout 60 uv run orchestrator run orchestrator/test_plans/health_check.md || true
 # Should complete ~1 task
 
-# Resume (continues on existing branch)
+# Resume
 uv run orchestrator resume orchestrator/test_plans/health_check.md
-# Should complete remaining tasks and create/update PR
+# Should complete remaining tasks, then prompt for PR
 ```
 
 **Checklist:**
@@ -649,9 +611,10 @@ uv run orchestrator resume orchestrator/test_plans/health_check.md
 - [ ] All tasks complete
 - [ ] Unit tests pass: `uv run pytest orchestrator/tests/`
 - [ ] E2E test passes: health_check.md runs to completion
-- [ ] PR created with task list and cost summary
-- [ ] Branch can be checked out and tested locally
-- [ ] Resume works after interruption (continues on same branch)
+- [ ] Task summaries displayed after each task (files changed, decisions, issues)
+- [ ] PR prompt appears at milestone end
+- [ ] PR created via Claude when confirmed
+- [ ] Resume works after interruption
 - [ ] Lock prevents concurrent runs
 - [ ] Trace hierarchy visible in Jaeger
 - [ ] Quality gates pass: `make quality`
