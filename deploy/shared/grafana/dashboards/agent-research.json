@@ -189,7 +189,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(sum(agent_cycles_total{outcome=\"completed\"}) / sum(agent_cycles_total) * 100) or vector(100)",
+          "expr": "(sum(agent_cycles_total{outcome=\"completed\"}) or vector(0)) / clamp_min(sum(agent_cycles_total), 1) * 100",
           "refId": "A"
         }
       ],
@@ -484,7 +484,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(sum(agent_gate_results_total{gate=\"training\",result=\"pass\"}) / sum(agent_gate_results_total{gate=\"training\"}) * 100) or vector(100)",
+          "expr": "(sum(agent_gate_results_total{gate=\"training\",result=\"pass\"}) or vector(0)) / clamp_min(sum(agent_gate_results_total{gate=\"training\"}), 1) * 100",
           "refId": "A"
         }
       ],
@@ -537,7 +537,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(sum(agent_gate_results_total{gate=\"backtest\",result=\"pass\"}) / sum(agent_gate_results_total{gate=\"backtest\"}) * 100) or vector(100)",
+          "expr": "(sum(agent_gate_results_total{gate=\"backtest\",result=\"pass\"}) or vector(0)) / clamp_min(sum(agent_gate_results_total{gate=\"backtest\"}), 1) * 100",
           "refId": "A"
         }
       ],
