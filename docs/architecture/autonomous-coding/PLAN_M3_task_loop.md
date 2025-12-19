@@ -8,7 +8,9 @@
 
 ## Capability
 
-Orchestrator runs all tasks in a milestone sequentially, persists state after each task, and can resume from where it left off after interruption.
+Orchestrator runs all tasks in a milestone sequentially, persists state after each task, displays Claude's task summary for visibility, and can resume from where it left off after interruption.
+
+**Note:** Git operations (branch, commit, PR) are handled by Claude via `/ktask`, not by the orchestrator. The orchestrator prompts for PR creation at milestone end, then tells Claude to create it.
 
 ---
 
@@ -23,25 +25,48 @@ uv run orchestrator run orchestrator/test_plans/health_check.md
 # [14:23:01] Task 1.1: Create health module
 #            Invoking Claude Code...
 # [14:23:45] Task 1.1: COMPLETED (44s, 4.2k tokens, $0.03)
+#
+#            ## Task Complete: 1.1
+#            **What was implemented:**
+#            - Created health.py module with system health checks
+#            **Files changed:**
+#            - orchestrator/health.py (created)
+#            - orchestrator/tests/test_health.py (created)
+#            **Key decisions made:**
+#            - Used psutil for system metrics
+#            **Issues encountered:**
+#            - None
+#
 # [14:23:46] Task 1.2: Add health CLI command
 #            Invoking Claude Code...
 # [14:24:18] Task 1.2: COMPLETED (32s, 3.1k tokens, $0.02)
+#            [Task summary displayed...]
 # [14:24:19] Task 1.3: Add health telemetry
 #            Invoking Claude Code...
 # [14:24:51] Task 1.3: COMPLETED (32s, 2.9k tokens, $0.02)
-# [14:24:52] Milestone complete: 3/3 tasks
+#            [Task summary displayed...]
 #
+# All tasks complete!
 # Summary:
 #   Tasks: 3/3 completed
-#   Duration: 1m 51s
+#   Duration: 1m 54s
 #   Tokens: 10.2k
 #   Cost: $0.07
+#
+# Create PR for this milestone? [Y/n]: y
+# [Invoking Claude to create PR...]
+# PR created: https://github.com/user/ktrdr/pull/123
 
 # 2. Verify state file
 cat state/health_check_state.json | jq '{completed: .completed_tasks, status: .e2e_status}'
 # Expect: {"completed": ["1.1", "1.2", "1.3"], "status": null}
 
-# 3. Test resume (simulate interruption)
+# 3. Review and test the PR
+gh pr checkout 123
+uv run pytest orchestrator/tests/
+# Verify the health module works, then merge or request changes
+
+# 4. Test resume (simulate interruption)
 # Start milestone, Ctrl+C after task 1
 uv run orchestrator run orchestrator/test_plans/health_check.md
 # ^C during task 1.2
@@ -53,14 +78,14 @@ cat state/health_check_state.json | jq '.completed_tasks'
 # Resume
 uv run orchestrator resume orchestrator/test_plans/health_check.md
 # Expect: "Resuming from Task 1.2..."
-# Should complete tasks 1.2 and 1.3
+# Should complete tasks 1.2 and 1.3, then prompt for PR
 
-# 4. Verify trace hierarchy in Jaeger
+# 5. Verify trace hierarchy in Jaeger
 open http://localhost:16686
 # Search service=orchestrator
 # Expect: orchestrator.milestone span containing 3 orchestrator.task child spans
 
-# 5. Verify concurrent run protection
+# 6. Verify concurrent run protection
 # Terminal 1:
 uv run orchestrator run orchestrator/test_plans/health_check.md &
 # Terminal 2 (immediately):
@@ -474,9 +499,72 @@ def send_notification(title: str, message: str, sound: bool = True) -> None:
 
 ---
 
+### Task 3.8: Display Task Summary + Milestone PR Prompt
+
+**File:** `orchestrator/milestone_runner.py`
+**Type:** CODING
+
+**Description:**
+After each task completes, display Claude's task summary to the human for visibility into what happened in the sandbox. At milestone end, prompt the human to create a PR and relay the answer to Claude.
+
+**Implementation Notes:**
+```python
+# In milestone_runner.py
+
+async def run_milestone(...) -> MilestoneResult:
+    # ... existing task loop ...
+
+    for task in tasks[start_index:]:
+        result = await run_task(task, sandbox, config)
+
+        if result.status == "completed":
+            state.mark_task_completed(task.id, result)
+            state.save(config.state_dir)
+
+            # Display task status
+            console.print(
+                f"Task {task.id}: [bold green]COMPLETED[/bold] "
+                f"({result.duration_seconds:.0f}s, {result.tokens_used/1000:.1f}k tokens, ${result.cost_usd:.2f})"
+            )
+
+            # Display Claude's task summary for visibility
+            console.print(f"\n{result.output}\n")  # Claude's final message includes task summary
+
+    # All tasks complete - prompt for PR
+    console.print(f"\n[bold green]All tasks complete![/bold]")
+    console.print(f"  Tasks: {len(state.completed_tasks)}/{len(tasks)}")
+    console.print(f"  Cost: ${total_cost:.2f}")
+
+    if click.confirm("Create PR for this milestone?", default=True):
+        # Tell Claude to create the PR for the whole milestone
+        pr_prompt = f"""Create a PR for milestone {milestone_id}.
+
+Completed tasks: {', '.join(state.completed_tasks)}
+Total cost: ${total_cost:.2f}
+
+Use `gh pr create` with a summary of all changes made across the tasks."""
+
+        pr_result = await sandbox.invoke_claude(pr_prompt, max_turns=10)
+        # Extract PR URL from output (Claude will output it)
+        console.print(pr_result.output)
+
+    return MilestoneResult(status="completed", state=state)
+```
+
+**Acceptance Criteria:**
+
+- [ ] Claude's task summary displayed after each task completes
+- [ ] Human can see what files changed, decisions made, issues encountered
+- [ ] At milestone end, prompts "Create PR for this milestone?"
+- [ ] If yes, invokes Claude to create the PR
+- [ ] Claude creates PR with summary of all tasks
+
+---
+
 ## Milestone Verification
 
 **Full E2E with health_check milestone:**
+
 ```bash
 # Reset sandbox
 ./scripts/sandbox-reset.sh
@@ -484,16 +572,28 @@ def send_notification(title: str, message: str, sound: bool = True) -> None:
 # Run full milestone
 uv run orchestrator run orchestrator/test_plans/health_check.md --notify
 
+# Verify task summaries were displayed after each task
+# (visual verification during run)
+
 # Verify all 3 tasks completed
 cat state/health_check_state.json | jq '.completed_tasks'
 # Expect: ["1.1", "1.2", "1.3"]
+
+# Verify PR prompt appeared and PR was created (if answered yes)
+gh pr list --state open
+# Expect: PR with summary of health_check milestone
+
+# Checkout and test the branch locally
+gh pr checkout <pr-number>
+uv run pytest orchestrator/tests/
+# Verify the health module works as expected
 
 # Verify trace hierarchy
 open http://localhost:16686
 # Search service=orchestrator
 # Expect: orchestrator.milestone span with 3 child task spans
 
-# Test resume
+# Test resume flow
 ./scripts/sandbox-reset.sh  # Reset workspace
 rm state/health_check_state.json  # Clear state
 
@@ -503,13 +603,17 @@ timeout 60 uv run orchestrator run orchestrator/test_plans/health_check.md || tr
 
 # Resume
 uv run orchestrator resume orchestrator/test_plans/health_check.md
-# Should complete remaining tasks
+# Should complete remaining tasks, then prompt for PR
 ```
 
 **Checklist:**
+
 - [ ] All tasks complete
 - [ ] Unit tests pass: `uv run pytest orchestrator/tests/`
 - [ ] E2E test passes: health_check.md runs to completion
+- [ ] Task summaries displayed after each task (files changed, decisions, issues)
+- [ ] PR prompt appears at milestone end
+- [ ] PR created via Claude when confirmed
 - [ ] Resume works after interruption
 - [ ] Lock prevents concurrent runs
 - [ ] Trace hierarchy visible in Jaeger

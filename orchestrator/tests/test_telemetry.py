@@ -205,3 +205,86 @@ class TestMetricCounters:
 
         telemetry.cost_counter.add(0.05)
         counter_mock.add.assert_called()
+
+
+class TestTaskDurationHistogram:
+    """Test the task_duration histogram metric."""
+
+    def test_creates_task_duration_histogram(self):
+        """Should create orchestrator_task_duration_seconds histogram."""
+        from orchestrator.telemetry import create_metrics
+
+        meter = MagicMock()
+        counter_mock = MagicMock()
+        histogram_mock = MagicMock()
+        meter.create_counter.return_value = counter_mock
+        meter.create_histogram.return_value = histogram_mock
+
+        create_metrics(meter)
+
+        # Verify histogram was created with correct name
+        meter.create_histogram.assert_called_once()
+        call_args = meter.create_histogram.call_args
+        assert call_args[0][0] == "orchestrator_task_duration_seconds"
+
+    def test_histogram_has_description(self):
+        """Histogram should have a description."""
+        from orchestrator.telemetry import create_metrics
+
+        meter = MagicMock()
+        counter_mock = MagicMock()
+        histogram_mock = MagicMock()
+        meter.create_counter.return_value = counter_mock
+        meter.create_histogram.return_value = histogram_mock
+
+        create_metrics(meter)
+
+        call_args = meter.create_histogram.call_args
+        assert "description" in call_args[1]
+
+    def test_histogram_has_unit_seconds(self):
+        """Histogram should have unit of seconds."""
+        from orchestrator.telemetry import create_metrics
+
+        meter = MagicMock()
+        counter_mock = MagicMock()
+        histogram_mock = MagicMock()
+        meter.create_counter.return_value = counter_mock
+        meter.create_histogram.return_value = histogram_mock
+
+        create_metrics(meter)
+
+        call_args = meter.create_histogram.call_args
+        assert call_args[1].get("unit") == "s"
+
+    def test_histogram_is_accessible_after_creation(self):
+        """task_duration histogram should be accessible as module-level variable."""
+        from orchestrator import telemetry
+        from orchestrator.telemetry import create_metrics
+
+        meter = MagicMock()
+        counter_mock = MagicMock()
+        histogram_mock = MagicMock()
+        meter.create_counter.return_value = counter_mock
+        meter.create_histogram.return_value = histogram_mock
+
+        create_metrics(meter)
+
+        assert telemetry.task_duration is not None
+
+    def test_histogram_can_record(self):
+        """task_duration histogram should support record() method."""
+        from orchestrator import telemetry
+        from orchestrator.telemetry import create_metrics
+
+        meter = MagicMock()
+        counter_mock = MagicMock()
+        histogram_mock = MagicMock()
+        meter.create_counter.return_value = counter_mock
+        meter.create_histogram.return_value = histogram_mock
+
+        create_metrics(meter)
+
+        # Should be able to record a duration
+        telemetry.task_duration.record(45.5, {"milestone": "M3"})
+        histogram_mock.record.assert_called_with(45.5, {"milestone": "M3"})

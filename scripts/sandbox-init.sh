@@ -29,6 +29,26 @@ if ! docker info &> /dev/null; then
     exit 1
 fi
 
+# Check for GH_TOKEN
+if [ -z "$GH_TOKEN" ]; then
+    echo "WARNING: GH_TOKEN environment variable is not set"
+    echo "  GitHub CLI (gh) will not be able to create PRs without it."
+    echo ""
+    echo "  To fix:"
+    echo "    1. Create a token at: https://github.com/settings/tokens"
+    echo "    2. Select 'repo' scope (for private repos) or 'public_repo' (for public)"
+    echo "    3. Add to your shell profile: export GH_TOKEN=\"ghp_xxxx\""
+    echo "    4. Run: source ~/.zshrc (or ~/.bashrc)"
+    echo ""
+    read -p "Continue without GH_TOKEN? [y/N] " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        exit 1
+    fi
+else
+    echo "GH_TOKEN: set"
+fi
+
 # Create shared data directory if it doesn't exist
 SHARED_DATA_DIR="$HOME/Documents/ktrdr-shared/data"
 if [ ! -d "$SHARED_DATA_DIR" ]; then
@@ -106,6 +126,46 @@ fi
 
 echo ""
 echo "=== Sandbox Initialization Complete ==="
+echo ""
+
+# Step 6: Check Claude Code authentication
+echo "Step 6: Checking Claude Code authentication..."
+if docker exec "$CONTAINER_NAME" test -f /home/ubuntu/.claude/credentials.json 2>/dev/null || \
+   docker exec "$CONTAINER_NAME" test -f /root/.claude/credentials.json 2>/dev/null; then
+    echo "  Claude Code: logged in"
+else
+    echo "  Claude Code: NOT logged in"
+    echo ""
+    echo "  You need to authenticate Claude Code in the sandbox."
+    read -p "  Run 'claude login' now? [Y/n] " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        echo ""
+        echo "  Opening interactive shell for Claude login..."
+        echo "  Run 'claude login' and follow the browser auth flow."
+        echo "  Type 'exit' when done."
+        echo ""
+        docker exec -it "$CONTAINER_NAME" bash -c "claude login && echo 'Login successful!'"
+    fi
+fi
+
+# Step 7: Check GitHub CLI authentication
+echo ""
+echo "Step 7: Checking GitHub CLI authentication..."
+if docker exec "$CONTAINER_NAME" gh auth status &>/dev/null; then
+    GH_USER=$(docker exec "$CONTAINER_NAME" gh api user --jq '.login' 2>/dev/null || echo "unknown")
+    echo "  GitHub CLI: authenticated as $GH_USER"
+else
+    if [ -n "$GH_TOKEN" ]; then
+        echo "  GitHub CLI: GH_TOKEN set but not yet verified"
+        echo "  (Will authenticate on first use)"
+    else
+        echo "  GitHub CLI: NOT authenticated (GH_TOKEN not set)"
+    fi
+fi
+
+echo ""
+echo "=== Setup Summary ==="
 echo ""
 echo "Next steps:"
 echo "  ./scripts/sandbox-shell.sh     # Interactive shell"

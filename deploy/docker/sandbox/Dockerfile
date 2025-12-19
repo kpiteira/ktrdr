@@ -5,8 +5,15 @@
 # - Python 3.12 (from Ubuntu 24.04) with uv for dependency management
 # - Node.js for Claude Code CLI
 # - Docker CLI (daemon runs on host via socket mount)
+# - GitHub CLI (gh) for PR creation
 # - Git for workspace management
 # - Claude Code CLI for autonomous task execution
+#
+# Required environment variables:
+# - GH_TOKEN: For GitHub CLI (PR creation)
+#
+# Claude Code authentication:
+# - Uses `claude login` with MAX plan (credentials stored in mounted volume)
 
 FROM ubuntu:24.04
 
@@ -47,6 +54,14 @@ RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list \
     && apt-get update \
     && apt-get install -y --no-install-recommends docker-ce-cli \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install GitHub CLI (for PR creation)
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for Python dependency management

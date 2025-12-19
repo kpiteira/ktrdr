@@ -29,7 +29,7 @@ This command embodies our partnership values from CLAUDE.md — craftsmanship ov
 2. Research    → Read docs, check handoffs, summarize approach
 3. Implement   → TDD cycle (coding tasks only)
 4. Verify      → Integration test, acceptance criteria, quality gates
-5. Complete    → Memory reflection, handoff update, PR workflow
+5. Complete    → Memory reflection, handoff update, task summary
 ```
 
 ---
@@ -214,19 +214,29 @@ Update or create `HANDOFF_<phase/feature>.md` in the implementation plan directo
 
 Target size: Under 100 lines.
 
-### PR Workflow
+### Task Summary
 
-Provide a brief summary of what was implemented and any deviations from requirements.
+Provide a summary of what was accomplished:
 
-Ask: "Task completed! Would you like me to create a Pull Request?"
+```markdown
+## Task Complete: [Task ID]
 
-If yes:
-- Create PR: `gh pr create --draft`
-- Include summary of changes, testing approach, and any breaking changes
-- Provide PR URL
+**What was implemented:**
+- [Brief description of the change]
 
-If no:
-- Work remains on branch
+**Files changed:**
+- [List of files created/modified/deleted]
+
+**Key decisions made:**
+- [Any non-obvious choices and why]
+
+**Issues encountered:**
+- [Problems hit and how they were resolved, or "None"]
+```
+
+This summary is displayed to the human (or orchestrator) and provides visibility into what happened during the task.
+
+**Note:** PR creation is handled at milestone level, not per-task. Commits should be made after each task, but PRs are created when the full milestone is complete.
 
 ---
 
@@ -270,4 +280,4 @@ When given multiple tasks (a milestone or phase):
 | Integration | Start system, execute flow, check logs | "✅ Integration passed" |
 | Acceptance | Validate each criterion | Checklist with status |
 | Quality | Tests, quality, commits | All gates passed |
-| Complete | Reflection, handoff, PR | Summary and PR link |
+| Complete | Reflection, handoff, summary | Task summary with changes/decisions |

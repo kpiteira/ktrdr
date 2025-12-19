@@ -18,10 +18,11 @@ from orchestrator.config import OrchestratorConfig
 # Suppress gRPC warnings when collector is unavailable
 logging.getLogger("opentelemetry.exporter.otlp.proto.grpc").setLevel(logging.ERROR)
 
-# Module-level metric counters (set by create_metrics)
+# Module-level metric instruments (set by create_metrics)
 tasks_counter: metrics.Counter
 tokens_counter: metrics.Counter
 cost_counter: metrics.Counter
+task_duration: metrics.Histogram
 
 
 def setup_telemetry(config: OrchestratorConfig) -> tuple[trace.Tracer, metrics.Meter]:
@@ -83,10 +84,13 @@ def create_metrics(meter: metrics.Meter) -> None:
     - Tokens used
     - Cost in USD
 
+    And histograms for:
+    - Task duration distribution (for P50/P95/P99 percentiles)
+
     Args:
         meter: OpenTelemetry meter for creating instruments
     """
-    global tasks_counter, tokens_counter, cost_counter
+    global tasks_counter, tokens_counter, cost_counter, task_duration
 
     tasks_counter = meter.create_counter(
         "orchestrator_tasks_total",
@@ -101,4 +105,10 @@ def create_metrics(meter: metrics.Meter) -> None:
     cost_counter = meter.create_counter(
         "orchestrator_cost_usd_total",
         description="Total cost in USD",
+    )
+
+    task_duration = meter.create_histogram(
+        "orchestrator_task_duration_seconds",
+        description="Task execution duration",
+        unit="s",
     )
