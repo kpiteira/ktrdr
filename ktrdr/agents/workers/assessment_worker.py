@@ -10,7 +10,11 @@ from typing import TYPE_CHECKING, Any
 
 from ktrdr import get_logger
 from ktrdr.agents.executor import ToolExecutor
-from ktrdr.agents.invoker import AnthropicAgentInvoker
+from ktrdr.agents.invoker import (
+    AnthropicAgentInvoker,
+    AnthropicInvokerConfig,
+    resolve_model,
+)
 from ktrdr.agents.prompts import (
     ASSESSMENT_SYSTEM_PROMPT,
     AssessmentContext,
@@ -56,9 +60,14 @@ class AgentAssessmentWorker:
 
         Args:
             operations_service: Service for tracking operations.
-            invoker: Optional invoker instance. Created if not provided.
+            invoker: Optional invoker instance for testing. If provided, this
+                     invoker will be used in run() instead of creating a new one
+                     with the resolved model config.
         """
         self.ops = operations_service
+        # Store injected invoker (for testing) - if provided, run() will use it
+        self._injected_invoker = invoker
+        # Also keep self.invoker for backward compatibility with init tests
         self.invoker = invoker or AnthropicAgentInvoker()
         self.tool_executor = ToolExecutor()
 
@@ -66,12 +75,15 @@ class AgentAssessmentWorker:
         self,
         parent_operation_id: str,
         results: dict[str, Any],
+        model: str | None = None,
     ) -> dict[str, Any]:
         """Run assessment phase using Claude.
 
         Args:
             parent_operation_id: Parent AGENT_RESEARCH operation ID.
             results: Dict with 'training' and 'backtest' result dicts.
+            model: Model to use ('opus', 'sonnet', 'haiku' or full ID).
+                   If None, uses AGENT_MODEL env var or default.
 
         Returns:
             Dict with verdict, assessment_path, and token counts.
@@ -80,7 +92,11 @@ class AgentAssessmentWorker:
             WorkerError: If assessment fails or Claude doesn't save assessment.
             asyncio.CancelledError: If cancelled.
         """
-        logger.info(f"Starting assessment phase: {parent_operation_id}")
+        # Resolve model (allows runtime switching via API/CLI)
+        resolved_model = resolve_model(model)
+        logger.info(
+            f"Starting assessment phase: {parent_operation_id}, model={resolved_model}"
+        )
 
         # Get parent operation for strategy info
         parent_op = await self.ops.get_operation(parent_operation_id)
@@ -111,8 +127,16 @@ class AgentAssessmentWorker:
             )
             prompt = get_assessment_prompt(context)
 
+            # Use injected invoker (for testing) or create new with resolved model
+            if self._injected_invoker is not None:
+                invoker = self._injected_invoker
+            else:
+                # Create invoker with resolved model config (Task 8.3 runtime selection)
+                config = AnthropicInvokerConfig(model=resolved_model)
+                invoker = AnthropicAgentInvoker(config=config)
+
             # Run Claude
-            result = await self.invoker.run(
+            result = await invoker.run(
                 prompt=prompt,
                 tools=AGENT_TOOLS,
                 system_prompt=ASSESSMENT_SYSTEM_PROMPT,

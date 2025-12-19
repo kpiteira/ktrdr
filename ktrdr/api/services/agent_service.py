@@ -14,6 +14,7 @@ from typing import Any
 
 from ktrdr import get_logger
 from ktrdr.agents.budget import get_budget_tracker
+from ktrdr.agents.invoker import resolve_model
 from ktrdr.agents.workers.assessment_worker import AgentAssessmentWorker
 from ktrdr.agents.workers.design_worker import AgentDesignWorker
 from ktrdr.agents.workers.research_worker import AgentResearchWorker
@@ -90,14 +91,22 @@ class AgentService:
         return self._worker
 
     @trace_service_method("agent.trigger")
-    async def trigger(self) -> dict[str, Any]:
+    async def trigger(self, model: str | None = None) -> dict[str, Any]:
         """Start a new research cycle.
 
-        Returns immediately with operation_id. Cycle runs in background.
+        Args:
+            model: Model to use ('opus', 'sonnet', 'haiku' or full ID).
+                   If None, uses AGENT_MODEL env var or default (opus).
 
         Returns:
-            Dict with triggered status and operation_id or rejection reason.
+            Dict with triggered status, operation_id, model, or rejection reason.
+
+        Raises:
+            ValueError: If model is invalid.
         """
+        # Resolve model (validates and converts alias to full ID)
+        resolved_model = resolve_model(model)
+
         # Check budget first
         budget = get_budget_tracker()
         can_spend, reason = budget.can_spend()
@@ -119,10 +128,12 @@ class AgentService:
                 "message": f"Active cycle exists: {active.operation_id}",
             }
 
-        # Create operation
+        # Create operation with model in metadata
         op = await self.ops.create_operation(
             operation_type=OperationType.AGENT_RESEARCH,
-            metadata=OperationMetadata(parameters={"phase": "idle"}),  # type: ignore[call-arg]
+            metadata=OperationMetadata(
+                parameters={"phase": "idle", "model": resolved_model}
+            ),  # type: ignore[call-arg]
         )
 
         # Start worker in background
@@ -130,11 +141,14 @@ class AgentService:
         task = asyncio.create_task(self._run_worker(op.operation_id, worker))
         await self.ops.start_operation(op.operation_id, task)
 
-        logger.info(f"Research cycle triggered: {op.operation_id}")
+        logger.info(
+            f"Research cycle triggered: {op.operation_id}, model: {resolved_model}"
+        )
 
         return {
             "triggered": True,
             "operation_id": op.operation_id,
+            "model": resolved_model,
             "message": "Research cycle started",
         }
 

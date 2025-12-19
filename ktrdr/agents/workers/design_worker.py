@@ -11,7 +11,11 @@ from typing import TYPE_CHECKING, Any
 
 from ktrdr import get_logger
 from ktrdr.agents.executor import ToolExecutor, get_indicators_from_api
-from ktrdr.agents.invoker import AnthropicAgentInvoker
+from ktrdr.agents.invoker import (
+    AnthropicAgentInvoker,
+    AnthropicInvokerConfig,
+    resolve_model,
+)
 from ktrdr.agents.prompts import TriggerReason, get_strategy_designer_prompt
 from ktrdr.agents.strategy_utils import get_recent_strategies
 from ktrdr.agents.tools import DESIGN_PHASE_TOOLS
@@ -69,9 +73,14 @@ Always validate your configuration before saving it."""
 
         Args:
             operations_service: Service for tracking operations.
-            invoker: Optional invoker instance. Created if not provided.
+            invoker: Optional invoker instance for testing. If provided, this
+                     invoker will be used in run() instead of creating a new one
+                     with the resolved model config.
         """
         self.ops = operations_service
+        # Store injected invoker (for testing) - if provided, run() will use it
+        self._injected_invoker = invoker
+        # Also keep self.invoker for backward compatibility with init tests
         self.invoker = invoker or AnthropicAgentInvoker()
         self.tool_executor = ToolExecutor()
         self.repository = DataRepository()
@@ -144,7 +153,9 @@ Always validate your configuration before saving it."""
             logger.warning(f"Failed to get recent strategies: {e}")
             return []
 
-    async def run(self, parent_operation_id: str) -> dict[str, Any]:
+    async def run(
+        self, parent_operation_id: str, model: str | None = None
+    ) -> dict[str, Any]:
         """Run design phase using Claude.
 
         Creates a child AGENT_DESIGN operation, calls Claude with the design
@@ -152,6 +163,8 @@ Always validate your configuration before saving it."""
 
         Args:
             parent_operation_id: The parent AGENT_RESEARCH operation ID.
+            model: Model to use ('opus', 'sonnet', 'haiku' or full ID).
+                   If None, uses AGENT_MODEL env var or default.
 
         Returns:
             Dict with strategy_name, strategy_path, and token counts.
@@ -160,7 +173,11 @@ Always validate your configuration before saving it."""
             WorkerError: If design fails or no strategy is saved.
             asyncio.CancelledError: If cancelled.
         """
-        logger.info(f"Starting design phase: {parent_operation_id}")
+        # Resolve model (allows runtime switching via API/CLI)
+        resolved_model = resolve_model(model)
+        logger.info(
+            f"Starting design phase: {parent_operation_id}, model: {resolved_model}"
+        )
 
         # Create child operation for tracking
         op = await self.ops.create_operation(
@@ -193,9 +210,17 @@ Always validate your configuration before saving it."""
                 recent_strategies=recent_strategies,
             )
 
+            # Use injected invoker (for testing) or create new with resolved model
+            if self._injected_invoker is not None:
+                invoker = self._injected_invoker
+            else:
+                # Create invoker with resolved model config (Task 8.3 runtime selection)
+                config = AnthropicInvokerConfig(model=resolved_model)
+                invoker = AnthropicAgentInvoker(config=config)
+
             # Run Claude with reduced tool set (Task 8.2)
             # Discovery tools removed - context already embedded in prompt
-            result = await self.invoker.run(
+            result = await invoker.run(
                 prompt=prompt_data["user"],
                 tools=DESIGN_PHASE_TOOLS,
                 system_prompt=prompt_data["system"],

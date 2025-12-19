@@ -307,10 +307,13 @@ class AgentResearchWorker:
             operation_id: Parent operation ID.
         """
         parent_op = await self.ops.get_operation(operation_id)
+        # Get model from parent metadata (Task 8.3 runtime selection)
+        model = None
         if parent_op:
+            model = parent_op.metadata.parameters.get("model")
             parent_op.metadata.parameters["phase"] = "designing"
             parent_op.metadata.parameters["phase_start_time"] = time.time()
-        logger.info(f"Phase started: {operation_id}, phase=designing")
+        logger.info(f"Phase started: {operation_id}, phase=designing, model={model}")
 
         # Create child operation for design
         child_op = await self.ops.create_operation(
@@ -327,7 +330,10 @@ class AgentResearchWorker:
         # Create task wrapper that completes the child operation
         async def run_child():
             try:
-                result = await self.design_worker.run(child_op.operation_id)
+                # Pass model to design worker (Task 8.3 runtime selection)
+                result = await self.design_worker.run(
+                    child_op.operation_id, model=model
+                )
                 await self.ops.complete_operation(child_op.operation_id, result)
             except asyncio.CancelledError:
                 raise
@@ -682,10 +688,13 @@ class AgentResearchWorker:
             operation_id: Parent operation ID.
         """
         parent_op = await self.ops.get_operation(operation_id)
+        # Get model from parent metadata (Task 8.3 runtime selection)
+        model = None
         if parent_op:
+            model = parent_op.metadata.parameters.get("model")
             parent_op.metadata.parameters["phase"] = "assessing"
             parent_op.metadata.parameters["phase_start_time"] = time.time()
-        logger.info(f"Phase started: {operation_id}, phase=assessing")
+        logger.info(f"Phase started: {operation_id}, phase=assessing, model={model}")
 
         # Create child operation for assessment
         child_op = await self.ops.create_operation(
@@ -708,8 +717,9 @@ class AgentResearchWorker:
         # Create task wrapper that completes the child operation
         async def run_child():
             try:
+                # Pass model to assessment worker (Task 8.3 runtime selection)
                 result = await self.assessment_worker.run(
-                    child_op.operation_id, results
+                    child_op.operation_id, results, model=model
                 )
                 await self.ops.complete_operation(child_op.operation_id, result)
             except asyncio.CancelledError:

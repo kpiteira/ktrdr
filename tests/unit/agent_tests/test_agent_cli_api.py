@@ -111,9 +111,9 @@ class TestAgentTriggerViaAPI:
 
             result = runner.invoke(agent_app, ["trigger"])
 
-            # Verify API was called (no params now)
+            # Verify API was called (json_data=None when no model specified)
             mock_instance._make_request.assert_called_once_with(
-                "POST", "/agent/trigger"
+                "POST", "/agent/trigger", json_data=None
             )
             assert result.exit_code == 0
 
@@ -176,6 +176,75 @@ class TestAgentTriggerViaAPI:
             # Should handle error gracefully
             assert result.exit_code == 1
             assert "error" in result.output.lower()
+
+    def test_trigger_with_model_option(self):
+        """Test that trigger command passes model option to API."""
+        with patch("ktrdr.cli.agent_commands.AsyncCLIClient") as MockClient:
+            mock_instance = MagicMock()
+            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+            mock_instance.__aexit__ = AsyncMock(return_value=None)
+            mock_instance._make_request = AsyncMock(
+                return_value={
+                    "triggered": True,
+                    "operation_id": "op_agent_research_12345",
+                    "model": "claude-haiku-4-5-20250514",
+                    "message": "Research cycle started",
+                }
+            )
+            MockClient.return_value = mock_instance
+
+            result = runner.invoke(agent_app, ["trigger", "--model", "haiku"])
+
+            # Verify API was called with model in json_data
+            mock_instance._make_request.assert_called_once_with(
+                "POST", "/agent/trigger", json_data={"model": "haiku"}
+            )
+            assert result.exit_code == 0
+
+    def test_trigger_with_model_short_option(self):
+        """Test that trigger command accepts -m short option for model."""
+        with patch("ktrdr.cli.agent_commands.AsyncCLIClient") as MockClient:
+            mock_instance = MagicMock()
+            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+            mock_instance.__aexit__ = AsyncMock(return_value=None)
+            mock_instance._make_request = AsyncMock(
+                return_value={
+                    "triggered": True,
+                    "operation_id": "op_agent_research_12345",
+                    "model": "claude-sonnet-4-20250514",
+                    "message": "Research cycle started",
+                }
+            )
+            MockClient.return_value = mock_instance
+
+            result = runner.invoke(agent_app, ["trigger", "-m", "sonnet"])
+
+            # Verify API was called with model in json_data
+            mock_instance._make_request.assert_called_once_with(
+                "POST", "/agent/trigger", json_data={"model": "sonnet"}
+            )
+            assert result.exit_code == 0
+
+    def test_trigger_displays_model_in_output(self):
+        """Test that trigger displays model in success output."""
+        with patch("ktrdr.cli.agent_commands.AsyncCLIClient") as MockClient:
+            mock_instance = MagicMock()
+            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+            mock_instance.__aexit__ = AsyncMock(return_value=None)
+            mock_instance._make_request = AsyncMock(
+                return_value={
+                    "triggered": True,
+                    "operation_id": "op_agent_research_12345",
+                    "model": "claude-haiku-4-5-20250514",
+                    "message": "Research cycle started",
+                }
+            )
+            MockClient.return_value = mock_instance
+
+            result = runner.invoke(agent_app, ["trigger", "--model", "haiku"])
+
+            assert result.exit_code == 0
+            assert "claude-haiku-4-5-20250514" in result.output
 
 
 class TestAgentCancelViaAPI:

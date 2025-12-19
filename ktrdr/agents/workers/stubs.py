@@ -53,11 +53,12 @@ class StubDesignWorker:
     Returns mock strategy configuration as if Claude had designed it.
     """
 
-    async def run(self, operation_id: str) -> dict[str, Any]:
+    async def run(self, operation_id: str, model: str | None = None) -> dict[str, Any]:
         """Simulate design phase.
 
         Args:
             operation_id: The operation ID for tracking.
+            model: Model to use (ignored in stub, for interface compatibility).
 
         Returns:
             Mock design result with strategy name, path, and token usage.
@@ -78,12 +79,15 @@ class StubAssessmentWorker:
     Returns mock assessment as if Claude had evaluated the results.
     """
 
-    async def run(self, operation_id: str, results: dict[str, Any]) -> dict[str, Any]:
+    async def run(
+        self, operation_id: str, results: dict[str, Any], model: str | None = None
+    ) -> dict[str, Any]:
         """Simulate assessment phase.
 
         Args:
             operation_id: The operation ID for tracking.
             results: Combined training and backtest results.
+            model: Model to use (ignored in stub, for interface compatibility).
 
         Returns:
             Mock assessment with verdict, strengths, weaknesses, suggestions.

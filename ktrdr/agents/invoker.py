@@ -37,8 +37,50 @@ VALID_MODELS: dict[str, dict[str, str]] = {
     "claude-haiku-4-5-20250514": {"tier": "haiku", "cost": "low"},
 }
 
+# Short aliases for convenience (CLI: --model haiku, API: {"model": "haiku"})
+MODEL_ALIASES: dict[str, str] = {
+    "opus": "claude-opus-4-5-20250514",
+    "sonnet": "claude-sonnet-4-20250514",
+    "haiku": "claude-haiku-4-5-20250514",
+}
+
 # Default to Opus for production quality (Task 8.3)
 DEFAULT_MODEL = "claude-opus-4-5-20250514"
+
+
+def resolve_model(model: str | None) -> str:
+    """Resolve model name or alias to full model ID.
+
+    Accepts:
+    - Full model ID: "claude-opus-4-5-20250514"
+    - Short alias: "opus", "sonnet", "haiku"
+    - None: returns default from AGENT_MODEL env var or DEFAULT_MODEL
+
+    Args:
+        model: Model name, alias, or None for default.
+
+    Returns:
+        Full model ID string.
+
+    Raises:
+        ValueError: If model is not a valid ID or alias.
+    """
+    if model is None:
+        return os.getenv("AGENT_MODEL", DEFAULT_MODEL)
+
+    # Check if it's a short alias
+    if model.lower() in MODEL_ALIASES:
+        return MODEL_ALIASES[model.lower()]
+
+    # Check if it's a full model ID
+    if model in VALID_MODELS:
+        return model
+
+    # Invalid model
+    valid_options = list(MODEL_ALIASES.keys()) + list(VALID_MODELS.keys())
+    raise ValueError(
+        f"Invalid model '{model}'. Valid options: {', '.join(sorted(set(valid_options)))}"
+    )
 
 
 @dataclass

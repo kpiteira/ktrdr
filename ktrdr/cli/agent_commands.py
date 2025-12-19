@@ -108,31 +108,52 @@ async def _show_status_async():
 
 @agent_app.command("trigger")
 @trace_cli_command("agent_trigger")
-def trigger_agent():
+def trigger_agent(
+    model: str = typer.Option(
+        None,
+        "--model",
+        "-m",
+        help="Model to use: 'opus', 'sonnet', 'haiku', or full model ID",
+    ),
+):
     """Start a new research cycle.
 
     Triggers the agent to begin a new research cycle. If a cycle
     is already running, the command will fail with a conflict message.
 
+    Optionally specify a model to use for this cycle:
+    - opus: Claude Opus (default, highest quality)
+    - sonnet: Claude Sonnet (balanced)
+    - haiku: Claude Haiku (fastest, cheapest)
+
     Examples:
         ktrdr agent trigger
+        ktrdr agent trigger --model haiku
+        ktrdr agent trigger -m sonnet
     """
     try:
-        asyncio.run(_trigger_agent_async())
+        asyncio.run(_trigger_agent_async(model=model))
     except Exception as e:
         error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
         sys.exit(1)
 
 
-async def _trigger_agent_async():
+async def _trigger_agent_async(model: str | None = None):
     """Async implementation of trigger command using API."""
     try:
+        # Build request body with optional model
+        json_data = {"model": model} if model else None
+
         async with AsyncCLIClient() as client:
-            result = await client._make_request("POST", "/agent/trigger")
+            result = await client._make_request(
+                "POST", "/agent/trigger", json_data=json_data
+            )
 
         if result.get("triggered"):
             console.print("\n[green]Research cycle started![/green]")
             console.print(f"  Operation ID: {result['operation_id']}")
+            if result.get("model"):
+                console.print(f"  Model: {result['model']}")
             console.print()
             console.print("Use [cyan]ktrdr agent status[/cyan] to monitor progress.")
         else:
