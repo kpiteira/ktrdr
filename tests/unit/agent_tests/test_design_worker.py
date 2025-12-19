@@ -313,3 +313,164 @@ class TestAgentDesignWorkerRun:
         # (it's built from context that includes operation_id)
         assert isinstance(prompt, str)
         assert len(prompt) > 0
+
+
+class TestDesignWorkerContextGathering:
+    """Task 8.1: Tests for upfront context gathering."""
+
+    @pytest.fixture
+    def mock_ops(self):
+        """Create mock OperationsService."""
+        ops = MagicMock()
+        mock_op = MagicMock()
+        mock_op.operation_id = "op_agent_design_test_123"
+        ops.create_operation = AsyncMock(return_value=mock_op)
+        ops.complete_operation = AsyncMock()
+        ops.fail_operation = AsyncMock()
+        return ops
+
+    @pytest.fixture
+    def mock_invoker(self):
+        """Create mock AnthropicAgentInvoker."""
+        invoker = MagicMock()
+        invoker.run = AsyncMock()
+        return invoker
+
+    @pytest.fixture
+    def mock_tool_executor(self):
+        """Create mock ToolExecutor with strategy info."""
+        executor = MagicMock()
+        executor.last_saved_strategy_name = "test_strategy_v1"
+        executor.last_saved_strategy_path = "/app/strategies/test_strategy_v1.yaml"
+        return executor
+
+    @pytest.mark.asyncio
+    async def test_gathers_indicators_before_prompt(
+        self, mock_ops, mock_invoker, mock_tool_executor
+    ):
+        """Design worker gathers indicators upfront before calling Claude."""
+        from ktrdr.agents.workers.design_worker import AgentDesignWorker
+
+        mock_invoker.run.return_value = AgentResult(
+            success=True,
+            output="Done",
+            input_tokens=1000,
+            output_tokens=500,
+            error=None,
+        )
+
+        worker = AgentDesignWorker(
+            operations_service=mock_ops,
+            invoker=mock_invoker,
+        )
+        worker.tool_executor = mock_tool_executor
+
+        # Mock the internal methods that fetch context
+        worker._get_available_indicators = AsyncMock(
+            return_value=[{"name": "RSI", "type": "momentum", "parameters": []}]
+        )
+        worker._get_available_symbols = MagicMock(
+            return_value=[
+                {
+                    "symbol": "AAPL",
+                    "timeframes": ["1d"],
+                    "date_range": {"start": "2020-01-01", "end": "2024-12-01"},
+                }
+            ]
+        )
+        worker._get_recent_strategies = AsyncMock(
+            return_value=[
+                {"name": "prev_strategy", "type": "test", "outcome": "completed"}
+            ]
+        )
+
+        await worker.run("op_parent_123")
+
+        # Verify context gathering was called
+        worker._get_available_indicators.assert_called_once()
+        worker._get_recent_strategies.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_prompt_includes_indicators_from_context(
+        self, mock_ops, mock_invoker, mock_tool_executor
+    ):
+        """Prompt includes indicators gathered upfront."""
+        from ktrdr.agents.workers.design_worker import AgentDesignWorker
+
+        mock_invoker.run.return_value = AgentResult(
+            success=True,
+            output="Done",
+            input_tokens=1000,
+            output_tokens=500,
+            error=None,
+        )
+
+        worker = AgentDesignWorker(
+            operations_service=mock_ops,
+            invoker=mock_invoker,
+        )
+        worker.tool_executor = mock_tool_executor
+
+        # Mock the internal methods that fetch context
+        worker._get_available_indicators = AsyncMock(
+            return_value=[
+                {
+                    "name": "RSI",
+                    "type": "momentum",
+                    "parameters": [{"name": "period", "default": 14}],
+                }
+            ]
+        )
+        worker._get_available_symbols = MagicMock(return_value=[])
+        worker._get_recent_strategies = AsyncMock(return_value=[])
+
+        await worker.run("op_parent_123")
+
+        # Check the prompt contains indicator info
+        call_kwargs = mock_invoker.run.call_args.kwargs
+        prompt = call_kwargs["prompt"]
+
+        assert "RSI" in prompt
+
+    @pytest.mark.asyncio
+    async def test_prompt_includes_recent_strategies_from_context(
+        self, mock_ops, mock_invoker, mock_tool_executor
+    ):
+        """Prompt includes recent strategies gathered upfront."""
+        from ktrdr.agents.workers.design_worker import AgentDesignWorker
+
+        mock_invoker.run.return_value = AgentResult(
+            success=True,
+            output="Done",
+            input_tokens=1000,
+            output_tokens=500,
+            error=None,
+        )
+
+        worker = AgentDesignWorker(
+            operations_service=mock_ops,
+            invoker=mock_invoker,
+        )
+        worker.tool_executor = mock_tool_executor
+
+        # Mock the internal methods
+        worker._get_available_indicators = AsyncMock(return_value=[])
+        worker._get_available_symbols = MagicMock(return_value=[])
+        worker._get_recent_strategies = AsyncMock(
+            return_value=[
+                {
+                    "name": "previous_momentum_v1",
+                    "type": "momentum",
+                    "outcome": "promising",
+                    "sharpe": 1.2,
+                }
+            ]
+        )
+
+        await worker.run("op_parent_123")
+
+        # Check the prompt contains recent strategy info
+        call_kwargs = mock_invoker.run.call_args.kwargs
+        prompt = call_kwargs["prompt"]
+
+        assert "previous_momentum_v1" in prompt

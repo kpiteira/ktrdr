@@ -10,9 +10,10 @@ from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
 from ktrdr import get_logger
-from ktrdr.agents.executor import ToolExecutor
+from ktrdr.agents.executor import ToolExecutor, get_indicators_from_api
 from ktrdr.agents.invoker import AnthropicAgentInvoker
 from ktrdr.agents.prompts import TriggerReason, get_strategy_designer_prompt
+from ktrdr.agents.strategy_utils import get_recent_strategies
 from ktrdr.agents.tools import AGENT_TOOLS
 from ktrdr.api.models.operations import OperationMetadata, OperationType
 from ktrdr.data.repository.data_repository import DataRepository
@@ -106,6 +107,43 @@ Always validate your configuration before saving it."""
             logger.warning(f"Failed to get available symbols: {e}")
             return []
 
+    async def _get_available_indicators(self) -> list[dict[str, Any]]:
+        """Get available indicators from the KTRDR API.
+
+        Task 8.1: Gather indicators upfront to embed in prompt, avoiding
+        tool call round trips that compound token usage.
+
+        Returns:
+            List of indicator dicts with name, type, and parameters.
+        """
+        try:
+            indicators = await get_indicators_from_api()
+            logger.info(f"Gathered {len(indicators)} available indicators")
+            return indicators
+        except Exception as e:
+            logger.warning(f"Failed to get available indicators: {e}")
+            return []
+
+    async def _get_recent_strategies(self, limit: int = 5) -> list[dict[str, Any]]:
+        """Get recent strategies to avoid repetition.
+
+        Task 8.1: Gather recent strategies upfront to embed in prompt, avoiding
+        tool call round trips that compound token usage.
+
+        Args:
+            limit: Maximum number of recent strategies to return.
+
+        Returns:
+            List of recent strategy summaries.
+        """
+        try:
+            strategies = await get_recent_strategies(n=limit)
+            logger.info(f"Gathered {len(strategies)} recent strategies")
+            return strategies
+        except Exception as e:
+            logger.warning(f"Failed to get recent strategies: {e}")
+            return []
+
     async def run(self, parent_operation_id: str) -> dict[str, Any]:
         """Run design phase using Claude.
 
@@ -133,16 +171,26 @@ Always validate your configuration before saving it."""
         )
 
         try:
-            # Get available data for context
+            # Task 8.1: Gather ALL context upfront to embed in prompt
+            # This avoids discovery tool calls that compound token usage
             available_symbols = self._get_available_symbols()
-            logger.info(f"Found {len(available_symbols)} symbols with cached data")
+            available_indicators = await self._get_available_indicators()
+            recent_strategies = await self._get_recent_strategies(limit=5)
 
-            # Build prompt with available data context
+            logger.info(
+                f"Context gathered: {len(available_symbols)} symbols, "
+                f"{len(available_indicators)} indicators, "
+                f"{len(recent_strategies)} recent strategies"
+            )
+
+            # Build prompt with ALL context embedded
             prompt_data = get_strategy_designer_prompt(
                 trigger_reason=TriggerReason.START_NEW_CYCLE,
                 operation_id=op.operation_id,
                 phase="designing",
                 available_symbols=available_symbols,
+                available_indicators=available_indicators,
+                recent_strategies=recent_strategies,
             )
 
             # Run Claude

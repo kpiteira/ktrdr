@@ -24,6 +24,90 @@ from enum import Enum
 from typing import Any
 
 
+def format_indicators_compact(indicators: list[dict[str, Any]]) -> str:
+    """Format indicators in token-efficient compact format.
+
+    Produces output like:
+        RSI(period:14,source:close) - momentum
+        MACD(fast:12,slow:26,signal:9) - trend
+
+    This format is ~50% shorter than full JSON while remaining human-readable.
+
+    Args:
+        indicators: List of indicator dicts with name, type, and parameters.
+
+    Returns:
+        Compact string representation of indicators.
+    """
+    if not indicators:
+        return "No indicators available"
+
+    lines = []
+    for ind in indicators:
+        name = ind.get("name", "unknown")
+        ind_type = ind.get("type", "other")
+        params = ind.get("parameters", [])
+
+        # Format parameters as name:default pairs
+        param_parts = []
+        for p in params:
+            p_name = p.get("name", "?")
+            p_default = p.get("default", "?")
+            param_parts.append(f"{p_name}:{p_default}")
+
+        param_str = ",".join(param_parts)
+
+        # Build compact line: NAME(params) - type
+        if param_str:
+            lines.append(f"{name}({param_str}) - {ind_type}")
+        else:
+            lines.append(f"{name} - {ind_type}")
+
+    return "\n".join(lines)
+
+
+def format_symbols_compact(symbols: list[dict[str, Any]]) -> str:
+    """Format symbols in token-efficient compact format.
+
+    Produces output like:
+        AAPL: 1m,5m,15m,1h,4h,1d (2020-01-01 to 2024-12-01)
+        EURUSD: 1h,4h,1d (2015-01-01 to 2024-12-01)
+
+    This format is concise while showing all available data.
+
+    Args:
+        symbols: List of symbol dicts with symbol, timeframes, and date range.
+
+    Returns:
+        Compact string representation of symbols.
+    """
+    if not symbols:
+        return "No symbols available"
+
+    lines = []
+    for sym in symbols:
+        symbol = sym.get("symbol", "unknown")
+        timeframes = sym.get("timeframes", [])
+
+        # Get date range from either flat fields or nested dict
+        date_range = sym.get("date_range", {})
+        start = date_range.get("start") if date_range else None
+        end = date_range.get("end") if date_range else None
+
+        # Fall back to flat fields if nested dict is empty
+        if not start:
+            start = sym.get("start_date", "?")
+        if not end:
+            end = sym.get("end_date", "?")
+
+        # Format timeframes as comma-separated list
+        tf_str = ",".join(timeframes) if timeframes else "unknown"
+
+        lines.append(f"{symbol}: {tf_str} ({start} to {end})")
+
+    return "\n".join(lines)
+
+
 class TriggerReason(str, Enum):
     """Reasons why the agent is being invoked."""
 
@@ -466,41 +550,70 @@ Then update your state with the assessment and mark the cycle as complete."""
         return "\n\n".join(sections)
 
     def _format_indicators(self, indicators: list[dict[str, Any]]) -> str:
-        """Format indicators list for display.
+        """Format indicators list in compact token-efficient format.
 
-        Uses backticks around indicator names to emphasize exact case and
-        adds a case-sensitivity warning.
+        Uses backticks around indicator names to emphasize exact case.
+        Format: `NAME`(param:default,...) - type
+
+        This compact format saves ~50% tokens compared to verbose JSON.
         """
+        if not indicators:
+            return "No indicators available"
+
         lines = []
         # Add case sensitivity warning at the top
         lines.append(
-            "**Warning: Indicator names are case-sensitive. You must use the exact name below.**\n"
+            "**Warning: Indicator names are case-sensitive. Use exact names below.**\n"
         )
+
         for ind in indicators:
             name = ind.get("name", "unknown")
-            desc = ind.get("description", "")
+            ind_type = ind.get("type", "other")
             params = ind.get("parameters", [])
-            param_str = ", ".join(p.get("name", "") for p in params) if params else ""
-            # Use backticks around indicator name for code formatting
-            lines.append(
-                f"- `{name}`: {desc}" + (f" (params: {param_str})" if param_str else "")
-            )
-        return "\n".join(lines) if lines else "No indicators available"
+
+            # Format parameters as name:default pairs
+            param_parts = []
+            for p in params:
+                p_name = p.get("name", "?")
+                p_default = p.get("default", "?")
+                param_parts.append(f"{p_name}:{p_default}")
+
+            param_str = ",".join(param_parts)
+
+            # Build compact line with backticks for code formatting
+            if param_str:
+                lines.append(f"- `{name}`({param_str}) - {ind_type}")
+            else:
+                lines.append(f"- `{name}` - {ind_type}")
+
+        return "\n".join(lines)
 
     def _format_symbols(self, symbols: list[dict[str, Any]]) -> str:
-        """Format symbols list for display."""
+        """Format symbols list in compact token-efficient format.
+
+        Format: SYMBOL: tf1,tf2,tf3 (start to end)
+
+        This compact format is concise while showing all available data.
+        """
+        if not symbols:
+            return "No symbols available"
+
         lines = []
         for sym in symbols:
             symbol = sym.get("symbol", "unknown")
             timeframes = sym.get("timeframes", [])
             date_range = sym.get("date_range", {})
-            tf_str = ", ".join(timeframes) if timeframes else "unknown"
-            start = date_range.get("start", "?")
-            end = date_range.get("end", "?")
-            lines.append(
-                f"- **{symbol}**: timeframes [{tf_str}], data range {start} to {end}"
-            )
-        return "\n".join(lines) if lines else "No symbols available"
+
+            # Get date range
+            start = date_range.get("start", "?") if date_range else "?"
+            end = date_range.get("end", "?") if date_range else "?"
+
+            # Format timeframes as comma-separated list (no spaces for compactness)
+            tf_str = ",".join(timeframes) if timeframes else "unknown"
+
+            lines.append(f"- **{symbol}**: {tf_str} ({start} to {end})")
+
+        return "\n".join(lines)
 
     def _format_recent_strategies(self, strategies: list[dict[str, Any]]) -> str:
         """Format recent strategies for display."""
@@ -637,17 +750,17 @@ def get_assessment_prompt(context: AssessmentContext) -> str:
 - **Configuration**: {context.strategy_path}
 
 ## Training Results
-- **Accuracy**: {training.get('accuracy', 0):.1%}
-- **Final Loss**: {training.get('final_loss', 0):.4f}
-- **Initial Loss**: {training.get('initial_loss', 0):.4f}
+- **Accuracy**: {training.get("accuracy", 0):.1%}
+- **Final Loss**: {training.get("final_loss", 0):.4f}
+- **Initial Loss**: {training.get("initial_loss", 0):.4f}
 - **Loss Improvement**: {loss_improvement:.1%}
 
 ## Backtest Results
-- **Sharpe Ratio**: {backtest.get('sharpe_ratio', 0):.2f}
-- **Win Rate**: {backtest.get('win_rate', 0):.1%}
-- **Max Drawdown**: {backtest.get('max_drawdown', 0):.1%}
-- **Total Return**: {backtest.get('total_return', 0):.1%}
-- **Total Trades**: {backtest.get('total_trades', 0)}
+- **Sharpe Ratio**: {backtest.get("sharpe_ratio", 0):.2f}
+- **Win Rate**: {backtest.get("win_rate", 0):.1%}
+- **Max Drawdown**: {backtest.get("max_drawdown", 0):.1%}
+- **Total Return**: {backtest.get("total_return", 0):.1%}
+- **Total Trades**: {backtest.get("total_trades", 0)}
 
 ## Your Task
 
