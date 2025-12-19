@@ -293,3 +293,301 @@ class TestSandboxError:
 
         error = SandboxError("Test error message")
         assert "Test error message" in str(error)
+
+
+class TestInvokeClaudeStreaming:
+    """Tests for invoke_claude_streaming() method."""
+
+    @pytest.mark.asyncio
+    async def test_uses_stream_json_output_format(self):
+        """invoke_claude_streaming() should use --output-format stream-json."""
+        from orchestrator.sandbox import SandboxManager
+
+        manager = SandboxManager()
+
+        # Stream events: tool_use and result
+        stream_output = (
+            '{"type": "tool_use", "name": "Read", "input": {"file_path": "test.py"}}\n'
+            '{"type": "result", "is_error": false, "result": "Done", "total_cost_usd": 0.05, "duration_ms": 1000, "num_turns": 2, "session_id": "test123"}\n'
+        )
+
+        with patch("subprocess.Popen") as mock_popen:
+            mock_process = MagicMock()
+            mock_process.stdout.__iter__ = MagicMock(
+                return_value=iter(stream_output.split("\n"))
+            )
+            mock_process.wait.return_value = 0
+            mock_popen.return_value = mock_process
+
+            await manager.invoke_claude_streaming(
+                "Do something", on_tool_use=lambda n, i: None
+            )
+
+            # Verify stream-json format is used
+            call_args = mock_popen.call_args[0][0]
+            assert "--output-format" in call_args
+            format_idx = call_args.index("--output-format")
+            assert call_args[format_idx + 1] == "stream-json"
+
+    @pytest.mark.asyncio
+    async def test_calls_callback_for_tool_use_events(self):
+        """invoke_claude_streaming() should call callback for each tool_use event."""
+        from orchestrator.sandbox import SandboxManager
+
+        manager = SandboxManager()
+
+        stream_output = (
+            '{"type": "tool_use", "name": "Read", "input": {"file_path": "config.py"}}\n'
+            '{"type": "tool_use", "name": "Write", "input": {"file_path": "output.py"}}\n'
+            '{"type": "tool_use", "name": "Bash", "input": {"command": "pytest tests/"}}\n'
+            '{"type": "result", "is_error": false, "result": "Done", "total_cost_usd": 0.1, "duration_ms": 5000, "num_turns": 5, "session_id": "test456"}\n'
+        )
+
+        tool_calls: list[tuple[str, dict]] = []
+
+        def on_tool(name: str, input_data: dict) -> None:
+            tool_calls.append((name, input_data))
+
+        with patch("subprocess.Popen") as mock_popen:
+            mock_process = MagicMock()
+            mock_process.stdout.__iter__ = MagicMock(
+                return_value=iter(stream_output.split("\n"))
+            )
+            mock_process.wait.return_value = 0
+            mock_popen.return_value = mock_process
+
+            await manager.invoke_claude_streaming("Do something", on_tool_use=on_tool)
+
+        assert len(tool_calls) == 3
+        assert tool_calls[0] == ("Read", {"file_path": "config.py"})
+        assert tool_calls[1] == ("Write", {"file_path": "output.py"})
+        assert tool_calls[2] == ("Bash", {"command": "pytest tests/"})
+
+    @pytest.mark.asyncio
+    async def test_returns_claude_result_from_result_event(self):
+        """invoke_claude_streaming() should return ClaudeResult from result event."""
+        from orchestrator.models import ClaudeResult
+        from orchestrator.sandbox import SandboxManager
+
+        manager = SandboxManager()
+
+        stream_output = (
+            '{"type": "tool_use", "name": "Read", "input": {"file_path": "test.py"}}\n'
+            '{"type": "result", "is_error": false, "result": "Task completed", "total_cost_usd": 0.08, "duration_ms": 12000, "num_turns": 7, "session_id": "session789"}\n'
+        )
+
+        with patch("subprocess.Popen") as mock_popen:
+            mock_process = MagicMock()
+            mock_process.stdout.__iter__ = MagicMock(
+                return_value=iter(stream_output.split("\n"))
+            )
+            mock_process.wait.return_value = 0
+            mock_popen.return_value = mock_process
+
+            result = await manager.invoke_claude_streaming(
+                "Do something", on_tool_use=lambda n, i: None
+            )
+
+        assert isinstance(result, ClaudeResult)
+        assert result.is_error is False
+        assert result.result == "Task completed"
+        assert result.total_cost_usd == 0.08
+        assert result.duration_ms == 12000
+        assert result.num_turns == 7
+        assert result.session_id == "session789"
+
+    @pytest.mark.asyncio
+    async def test_handles_error_result(self):
+        """invoke_claude_streaming() should handle error results."""
+        from orchestrator.sandbox import SandboxManager
+
+        manager = SandboxManager()
+
+        stream_output = '{"type": "result", "is_error": true, "result": "Something failed", "total_cost_usd": 0.01, "duration_ms": 1000, "num_turns": 1, "session_id": "err123"}\n'
+
+        with patch("subprocess.Popen") as mock_popen:
+            mock_process = MagicMock()
+            mock_process.stdout.__iter__ = MagicMock(
+                return_value=iter(stream_output.split("\n"))
+            )
+            mock_process.wait.return_value = 0
+            mock_popen.return_value = mock_process
+
+            result = await manager.invoke_claude_streaming(
+                "Do something", on_tool_use=lambda n, i: None
+            )
+
+        assert result.is_error is True
+        assert "failed" in result.result
+
+    @pytest.mark.asyncio
+    async def test_handles_malformed_json_gracefully(self):
+        """invoke_claude_streaming() should skip malformed JSON lines."""
+        from orchestrator.sandbox import SandboxManager
+
+        manager = SandboxManager()
+
+        stream_output = (
+            "not valid json\n"
+            '{"type": "tool_use", "name": "Read", "input": {"file_path": "test.py"}}\n'
+            '{"broken json\n'
+            '{"type": "result", "is_error": false, "result": "Done", "total_cost_usd": 0.05, "duration_ms": 2000, "num_turns": 2, "session_id": "test"}\n'
+        )
+
+        tool_calls: list[tuple[str, dict]] = []
+
+        with patch("subprocess.Popen") as mock_popen:
+            mock_process = MagicMock()
+            mock_process.stdout.__iter__ = MagicMock(
+                return_value=iter(stream_output.split("\n"))
+            )
+            mock_process.wait.return_value = 0
+            mock_popen.return_value = mock_process
+
+            result = await manager.invoke_claude_streaming(
+                "Do something",
+                on_tool_use=lambda n, i: tool_calls.append((n, i)),
+            )
+
+        # Should still work - skipped bad lines
+        assert len(tool_calls) == 1
+        assert result.result == "Done"
+
+    @pytest.mark.asyncio
+    async def test_passes_parameters_correctly(self):
+        """invoke_claude_streaming() should pass max_turns and tools."""
+        from orchestrator.sandbox import SandboxManager
+
+        manager = SandboxManager()
+
+        stream_output = '{"type": "result", "is_error": false, "result": "Done", "total_cost_usd": 0.01, "duration_ms": 1000, "num_turns": 1, "session_id": "test"}\n'
+
+        with patch("subprocess.Popen") as mock_popen:
+            mock_process = MagicMock()
+            mock_process.stdout.__iter__ = MagicMock(
+                return_value=iter(stream_output.split("\n"))
+            )
+            mock_process.wait.return_value = 0
+            mock_popen.return_value = mock_process
+
+            await manager.invoke_claude_streaming(
+                "Do something",
+                on_tool_use=lambda n, i: None,
+                max_turns=100,
+                allowed_tools=["Bash", "Read"],
+            )
+
+            call_args = mock_popen.call_args[0][0]
+
+            # Verify max-turns
+            assert "--max-turns" in call_args
+            idx = call_args.index("--max-turns")
+            assert call_args[idx + 1] == "100"
+
+            # Verify allowed tools
+            assert "--allowedTools" in call_args
+            idx = call_args.index("--allowedTools")
+            assert "Bash" in call_args[idx + 1]
+            assert "Read" in call_args[idx + 1]
+
+    @pytest.mark.asyncio
+    async def test_default_result_when_no_result_event(self):
+        """invoke_claude_streaming() should return default result if no result event."""
+        from orchestrator.sandbox import SandboxManager
+
+        manager = SandboxManager()
+
+        # No result event, just tool uses
+        stream_output = (
+            '{"type": "tool_use", "name": "Read", "input": {"file_path": "test.py"}}\n'
+            "\n"
+        )
+
+        with patch("subprocess.Popen") as mock_popen:
+            mock_process = MagicMock()
+            mock_process.stdout.__iter__ = MagicMock(
+                return_value=iter(stream_output.split("\n"))
+            )
+            mock_process.wait.return_value = 0
+            mock_popen.return_value = mock_process
+
+            result = await manager.invoke_claude_streaming(
+                "Do something", on_tool_use=lambda n, i: None
+            )
+
+        # Should return a default result
+        assert result.is_error is True
+        assert "No result" in result.result or result.result == ""
+
+
+class TestFormatToolCall:
+    """Tests for format_tool_call helper function."""
+
+    def test_format_read_shows_filename(self):
+        """format_tool_call should show filename for Read."""
+        from orchestrator.sandbox import format_tool_call
+
+        result = format_tool_call("Read", {"file_path": "/path/to/config.py"})
+        assert "config.py" in result
+        assert "Reading" in result
+
+    def test_format_write_shows_filename(self):
+        """format_tool_call should show filename for Write."""
+        from orchestrator.sandbox import format_tool_call
+
+        result = format_tool_call("Write", {"file_path": "/path/to/output.py"})
+        assert "output.py" in result
+        assert "Writing" in result
+
+    def test_format_edit_shows_filename(self):
+        """format_tool_call should show filename for Edit."""
+        from orchestrator.sandbox import format_tool_call
+
+        result = format_tool_call("Edit", {"file_path": "/path/to/module.py"})
+        assert "module.py" in result
+        assert "Editing" in result
+
+    def test_format_bash_shows_truncated_command(self):
+        """format_tool_call should show first 50 chars of Bash command."""
+        from orchestrator.sandbox import format_tool_call
+
+        long_command = (
+            "pytest tests/unit/ tests/integration/ -v --tb=short --cov=orchestrator"
+        )
+        result = format_tool_call("Bash", {"command": long_command})
+
+        assert "Running:" in result
+        # Should be truncated
+        assert len(result) < len(long_command) + 30  # "→ Running: " + cmd + "..."
+        assert "..." in result or len(long_command) <= 50
+
+    def test_format_bash_short_command_not_truncated(self):
+        """format_tool_call should not truncate short commands."""
+        from orchestrator.sandbox import format_tool_call
+
+        result = format_tool_call("Bash", {"command": "ls -la"})
+        assert "ls -la" in result
+        assert "..." not in result
+
+    def test_format_grep_shows_pattern(self):
+        """format_tool_call should show pattern for Grep."""
+        from orchestrator.sandbox import format_tool_call
+
+        result = format_tool_call("Grep", {"pattern": "def test_"})
+        assert "def test_" in result
+        assert "Searching" in result
+
+    def test_format_glob_shows_pattern(self):
+        """format_tool_call should show pattern for Glob."""
+        from orchestrator.sandbox import format_tool_call
+
+        result = format_tool_call("Glob", {"pattern": "**/*.py"})
+        assert "**/*.py" in result
+
+    def test_format_unknown_tool(self):
+        """format_tool_call should handle unknown tools."""
+        from orchestrator.sandbox import format_tool_call
+
+        result = format_tool_call("UnknownTool", {"some": "param"})
+        assert "UnknownTool" in result
+        assert "→" in result

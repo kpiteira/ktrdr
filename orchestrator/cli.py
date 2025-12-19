@@ -217,9 +217,7 @@ def _print_milestone_summary(result: MilestoneResult) -> None:
     }
     color = status_color[result.status]
 
-    console.print(
-        f"\n[bold {color}]Milestone {result.status.upper()}[/bold {color}]"
-    )
+    console.print(f"\n[bold {color}]Milestone {result.status.upper()}[/bold {color}]")
     console.print(f"  Tasks: {result.completed_tasks}/{result.total_tasks} completed")
     console.print(f"  Duration: {_format_duration(result.total_duration_seconds)}")
     console.print(f"  Tokens: {result.total_tokens / 1000:.1f}k")

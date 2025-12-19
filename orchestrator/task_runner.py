@@ -6,7 +6,7 @@ in the sandbox, and parsing structured output.
 
 import re
 import time
-from typing import Literal
+from typing import Callable, Literal
 
 from orchestrator.config import OrchestratorConfig
 from orchestrator.models import Task, TaskResult
@@ -18,6 +18,7 @@ async def run_task(
     sandbox: SandboxManager,
     config: OrchestratorConfig,
     human_guidance: str | None = None,
+    on_tool_use: Callable[[str, dict], None] | None = None,
 ) -> TaskResult:
     """Execute a task via Claude Code in the sandbox.
 
@@ -26,6 +27,8 @@ async def run_task(
         sandbox: Sandbox manager for Claude invocation
         config: Orchestrator configuration
         human_guidance: Optional guidance from human (for retry after escalation)
+        on_tool_use: Optional callback for streaming tool use events.
+            If provided, uses streaming mode for real-time progress visibility.
 
     Returns:
         TaskResult with execution outcome
@@ -33,13 +36,25 @@ async def run_task(
     # Construct prompt with /ktask command
     prompt = _build_prompt(task, human_guidance)
 
-    # Invoke Claude Code
+    # Invoke Claude Code (streaming if callback provided)
     start_time = time.time()
-    claude_result = await sandbox.invoke_claude(
-        prompt=prompt,
-        max_turns=config.max_turns,
-        timeout=config.task_timeout_seconds,
-    )
+
+    if on_tool_use is not None:
+        # Use streaming mode for real-time progress
+        claude_result = await sandbox.invoke_claude_streaming(
+            prompt=prompt,
+            on_tool_use=on_tool_use,
+            max_turns=config.max_turns,
+            timeout=config.task_timeout_seconds,
+        )
+    else:
+        # Use standard mode (no streaming)
+        claude_result = await sandbox.invoke_claude(
+            prompt=prompt,
+            max_turns=config.max_turns,
+            timeout=config.task_timeout_seconds,
+        )
+
     duration = time.time() - start_time
 
     # Parse status and metadata from output

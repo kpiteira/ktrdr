@@ -72,7 +72,9 @@ class TestOrchestratorStateSave:
         assert data["current_task_index"] == 2
         assert data["completed_tasks"] == ["1.1", "1.2"]
         assert data["failed_tasks"] == ["1.3"]
-        assert data["task_results"] == {"1.1": {"status": "completed", "cost_usd": 0.05}}
+        assert data["task_results"] == {
+            "1.1": {"status": "completed", "cost_usd": 0.05}
+        }
         assert data["e2e_status"] == "pending"
 
 

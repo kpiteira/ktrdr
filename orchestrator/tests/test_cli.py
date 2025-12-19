@@ -502,7 +502,9 @@ class TestRunCommandExecution:
                 with patch("orchestrator.cli.create_metrics"):
                     with patch("orchestrator.cli.MilestoneLock") as mock_lock:
                         mock_lock.return_value.__enter__ = MagicMock(
-                            side_effect=RuntimeError("Milestone already running (PID: 12345)")
+                            side_effect=RuntimeError(
+                                "Milestone already running (PID: 12345)"
+                            )
                         )
                         result = runner.invoke(cli, ["run", f.name])
 
@@ -640,7 +642,10 @@ class TestResumeCommandExecution:
                     mock_load.return_value = None  # No state exists
                     result = runner.invoke(cli, ["resume", f.name])
 
-        assert "no saved state" in result.output.lower() or "no state" in result.output.lower()
+        assert (
+            "no saved state" in result.output.lower()
+            or "no state" in result.output.lower()
+        )
 
     def test_resume_suggests_run_when_no_tasks_completed(self):
         """resume command should suggest 'run' when no tasks are completed."""
@@ -751,7 +756,9 @@ class TestResumeCommandExecution:
                             ) as mock_run:
                                 mock_run.return_value = mock_result
 
-                                with patch("orchestrator.cli.MilestoneLock") as mock_lock:
+                                with patch(
+                                    "orchestrator.cli.MilestoneLock"
+                                ) as mock_lock:
                                     mock_lock.return_value.__enter__ = MagicMock(
                                         return_value=mock_lock
                                     )
@@ -822,7 +829,9 @@ class TestResumeCommandExecution:
                             ) as mock_run:
                                 mock_run.return_value = mock_result
 
-                                with patch("orchestrator.cli.MilestoneLock") as mock_lock:
+                                with patch(
+                                    "orchestrator.cli.MilestoneLock"
+                                ) as mock_lock:
                                     mock_lock.return_value.__enter__ = MagicMock(
                                         return_value=mock_lock
                                     )
@@ -895,7 +904,9 @@ class TestResumeCommandExecution:
                             ) as mock_run:
                                 mock_run.return_value = mock_result
 
-                                with patch("orchestrator.cli.MilestoneLock") as mock_lock:
+                                with patch(
+                                    "orchestrator.cli.MilestoneLock"
+                                ) as mock_lock:
                                     mock_lock.return_value.__enter__ = MagicMock(
                                         return_value=mock_lock
                                     )

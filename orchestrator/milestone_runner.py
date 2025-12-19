@@ -118,10 +118,14 @@ async def run_milestone(
                 task_span.set_attribute("task.status", result.status)
                 task_span.set_attribute("claude.tokens", result.tokens_used)
                 task_span.set_attribute("claude.cost_usd", result.cost_usd)
-                task_span.set_attribute("task.duration_seconds", result.duration_seconds)
+                task_span.set_attribute(
+                    "task.duration_seconds", result.duration_seconds
+                )
 
                 # Update metrics (if initialized)
-                _record_metrics(milestone_id, result.status, result.tokens_used, result.cost_usd)
+                _record_metrics(
+                    milestone_id, result.status, result.tokens_used, result.cost_usd
+                )
 
                 # Accumulate totals
                 total_cost += result.cost_usd
@@ -152,7 +156,9 @@ async def run_milestone(
         milestone_span.set_attribute("milestone.status", final_status)
         milestone_span.set_attribute("milestone.total_cost_usd", total_cost)
         milestone_span.set_attribute("milestone.total_tokens", total_tokens)
-        milestone_span.set_attribute("milestone.completed_tasks", len(state.completed_tasks))
+        milestone_span.set_attribute(
+            "milestone.completed_tasks", len(state.completed_tasks)
+        )
         milestone_span.set_attribute("milestone.failed_tasks", len(state.failed_tasks))
 
     return MilestoneResult(
@@ -208,7 +214,7 @@ async def create_milestone_pr(
     """
     prompt = f"""Create a PR for milestone {milestone_id}.
 
-Completed tasks: {', '.join(completed_tasks)}
+Completed tasks: {", ".join(completed_tasks)}
 Total cost: ${total_cost_usd:.2f}
 
 Use `gh pr create` with a summary of all changes made across the tasks.

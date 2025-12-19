@@ -49,7 +49,9 @@ def sample_tasks() -> list[Task]:
 def mock_run_task() -> AsyncMock:
     """Mock for run_task that returns completed status."""
 
-    async def _run_task(task: Task, sandbox: MagicMock, config: MagicMock) -> TaskResult:
+    async def _run_task(
+        task: Task, sandbox: MagicMock, config: MagicMock
+    ) -> TaskResult:
         return TaskResult(
             task_id=task.id,
             status="completed",
@@ -72,7 +74,9 @@ class TestRunMilestoneBasic:
     ) -> None:
         """All tasks are executed in order."""
         with (
-            patch("orchestrator.milestone_runner.parse_plan", return_value=sample_tasks),
+            patch(
+                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
+            ),
             patch("orchestrator.milestone_runner.run_task", mock_run_task),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
@@ -94,7 +98,9 @@ class TestRunMilestoneBasic:
     ) -> None:
         """State is saved after each task completion."""
         with (
-            patch("orchestrator.milestone_runner.parse_plan", return_value=sample_tasks),
+            patch(
+                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
+            ),
             patch("orchestrator.milestone_runner.run_task", mock_run_task),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
@@ -115,7 +121,9 @@ class TestRunMilestoneBasic:
     ) -> None:
         """MilestoneResult contains aggregated totals."""
         with (
-            patch("orchestrator.milestone_runner.parse_plan", return_value=sample_tasks),
+            patch(
+                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
+            ),
             patch("orchestrator.milestone_runner.run_task", mock_run_task),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
@@ -158,7 +166,9 @@ class TestRunMilestoneResume:
         existing_state.save(tmp_path)
 
         with (
-            patch("orchestrator.milestone_runner.parse_plan", return_value=sample_tasks),
+            patch(
+                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
+            ),
             patch("orchestrator.milestone_runner.run_task", mock_run_task),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
@@ -188,7 +198,9 @@ class TestRunMilestoneResume:
         existing_state.save(tmp_path)
 
         with (
-            patch("orchestrator.milestone_runner.parse_plan", return_value=sample_tasks),
+            patch(
+                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
+            ),
             patch("orchestrator.milestone_runner.run_task", mock_run_task),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
@@ -212,7 +224,9 @@ class TestRunMilestoneStatusHandling:
         """Stops execution when task needs human input."""
         call_count = 0
 
-        async def mock_task(task: Task, sandbox: MagicMock, config: MagicMock) -> TaskResult:
+        async def mock_task(
+            task: Task, sandbox: MagicMock, config: MagicMock
+        ) -> TaskResult:
             nonlocal call_count
             call_count += 1
             if task.id == "1.2":
@@ -239,8 +253,13 @@ class TestRunMilestoneStatusHandling:
             )
 
         with (
-            patch("orchestrator.milestone_runner.parse_plan", return_value=sample_tasks),
-            patch("orchestrator.milestone_runner.run_task", AsyncMock(side_effect=mock_task)),
+            patch(
+                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
+            ),
+            patch(
+                "orchestrator.milestone_runner.run_task",
+                AsyncMock(side_effect=mock_task),
+            ),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
             result = await run_milestone(
@@ -259,7 +278,9 @@ class TestRunMilestoneStatusHandling:
         """Stops execution when task fails."""
         call_count = 0
 
-        async def mock_task(task: Task, sandbox: MagicMock, config: MagicMock) -> TaskResult:
+        async def mock_task(
+            task: Task, sandbox: MagicMock, config: MagicMock
+        ) -> TaskResult:
             nonlocal call_count
             call_count += 1
             if task.id == "1.2":
@@ -284,8 +305,13 @@ class TestRunMilestoneStatusHandling:
             )
 
         with (
-            patch("orchestrator.milestone_runner.parse_plan", return_value=sample_tasks),
-            patch("orchestrator.milestone_runner.run_task", AsyncMock(side_effect=mock_task)),
+            patch(
+                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
+            ),
+            patch(
+                "orchestrator.milestone_runner.run_task",
+                AsyncMock(side_effect=mock_task),
+            ),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
             result = await run_milestone(
@@ -352,7 +378,9 @@ class TestTaskCompleteCallback:
             )
 
         with (
-            patch("orchestrator.milestone_runner.parse_plan", return_value=sample_tasks),
+            patch(
+                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
+            ),
             patch(
                 "orchestrator.milestone_runner.run_task",
                 AsyncMock(side_effect=mock_task),
@@ -409,7 +437,9 @@ class TestTaskCompleteCallback:
             )
 
         with (
-            patch("orchestrator.milestone_runner.parse_plan", return_value=sample_tasks),
+            patch(
+                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
+            ),
             patch(
                 "orchestrator.milestone_runner.run_task",
                 AsyncMock(side_effect=mock_task),
@@ -432,7 +462,9 @@ class TestTaskCompleteCallback:
     ) -> None:
         """Milestone runs without callback (backward compatibility)."""
         with (
-            patch("orchestrator.milestone_runner.parse_plan", return_value=sample_tasks),
+            patch(
+                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
+            ),
             patch("orchestrator.milestone_runner.run_task", mock_run_task),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
