@@ -278,6 +278,16 @@ AGENT_TOOLS: list[dict[str, Any]] = [
 ]
 
 
+# Design phase tools - reduced subset for cost optimization (Task 8.2)
+# Discovery tools (get_available_indicators, get_available_symbols, get_recent_strategies)
+# are excluded because context is now pre-populated in the prompt (Task 8.1)
+DESIGN_PHASE_TOOLS: list[dict[str, Any]] = [
+    tool
+    for tool in AGENT_TOOLS
+    if tool["name"] in ["validate_strategy_config", "save_strategy_config"]
+]
+
+
 def get_tool_by_name(name: str) -> dict[str, Any] | None:
     """Get a tool definition by name.
 

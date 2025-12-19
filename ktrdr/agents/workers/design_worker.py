@@ -14,7 +14,7 @@ from ktrdr.agents.executor import ToolExecutor, get_indicators_from_api
 from ktrdr.agents.invoker import AnthropicAgentInvoker
 from ktrdr.agents.prompts import TriggerReason, get_strategy_designer_prompt
 from ktrdr.agents.strategy_utils import get_recent_strategies
-from ktrdr.agents.tools import AGENT_TOOLS
+from ktrdr.agents.tools import DESIGN_PHASE_TOOLS
 from ktrdr.api.models.operations import OperationMetadata, OperationType
 from ktrdr.data.repository.data_repository import DataRepository
 
@@ -193,10 +193,11 @@ Always validate your configuration before saving it."""
                 recent_strategies=recent_strategies,
             )
 
-            # Run Claude
+            # Run Claude with reduced tool set (Task 8.2)
+            # Discovery tools removed - context already embedded in prompt
             result = await self.invoker.run(
                 prompt=prompt_data["user"],
-                tools=AGENT_TOOLS,
+                tools=DESIGN_PHASE_TOOLS,
                 system_prompt=prompt_data["system"],
                 tool_executor=self.tool_executor,
             )
