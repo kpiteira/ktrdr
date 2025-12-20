@@ -4,6 +4,8 @@ Provides command-line interface for autonomous task execution.
 """
 
 import asyncio
+import json
+import sys
 from pathlib import Path
 
 import click
@@ -11,6 +13,7 @@ from rich.console import Console
 
 from orchestrator import telemetry
 from orchestrator.config import OrchestratorConfig
+from orchestrator.health import CHECK_ORDER, get_health
 from orchestrator.lock import MilestoneLock
 from orchestrator.milestone_runner import (
     MilestoneResult,
@@ -32,6 +35,24 @@ console = Console()
 def cli() -> None:
     """Orchestrator - Autonomous task execution for KTRDR."""
     pass
+
+
+@cli.command()
+@click.option(
+    "--check",
+    type=click.Choice(CHECK_ORDER),
+    help="Run single check (sandbox, claude_auth, github_token, orchestrator)",
+)
+def health(check: str | None) -> None:
+    """Check orchestrator health status.
+
+    Runs health checks and outputs JSON with status and check results.
+    Exit code 0 if healthy, 1 if unhealthy.
+    """
+    checks = [check] if check else None
+    report = get_health(checks=checks)
+    click.echo(json.dumps(report.to_dict(), indent=2))
+    sys.exit(0 if report.status == "healthy" else 1)
 
 
 @cli.command()

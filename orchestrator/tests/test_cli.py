@@ -1206,3 +1206,326 @@ class TestPRPromptAfterMilestone:
         call_kwargs = mock_run.call_args.kwargs
         assert "on_task_complete" in call_kwargs
         assert call_kwargs["on_task_complete"] is not None
+
+
+class TestHealthCommand:
+    """Test the health CLI command."""
+
+    def test_health_command_exists(self):
+        """The health command should exist in the CLI."""
+        from orchestrator.cli import cli
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["health", "--help"])
+
+        assert result.exit_code == 0
+        assert "Check orchestrator health status" in result.output
+
+    def test_health_command_appears_in_main_help(self):
+        """health command should appear in orchestrator --help."""
+        from orchestrator.cli import cli
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["--help"])
+
+        assert result.exit_code == 0
+        assert "health" in result.output
+
+    def test_health_command_has_check_option(self):
+        """health command should have --check option."""
+        from orchestrator.cli import cli
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["health", "--help"])
+
+        assert "--check" in result.output
+        assert "sandbox" in result.output
+        assert "claude_auth" in result.output
+        assert "github_token" in result.output
+        assert "orchestrator" in result.output
+
+
+class TestHealthCommandExecution:
+    """Test health command execution with mocked dependencies."""
+
+    def test_health_returns_json_output(self):
+        """health command should output valid JSON."""
+        import json
+
+        from orchestrator.cli import cli
+        from orchestrator.health import CheckResult, HealthReport
+
+        runner = CliRunner()
+
+        with patch("orchestrator.cli.get_health") as mock_health:
+            from datetime import datetime
+
+            mock_health.return_value = HealthReport(
+                status="healthy",
+                timestamp=datetime(2024, 12, 18, 10, 30, 0),
+                checks={
+                    "sandbox": CheckResult(
+                        status="ok", message="Container running", check_name="sandbox"
+                    ),
+                    "orchestrator": CheckResult(
+                        status="ok", message="Configured", check_name="orchestrator"
+                    ),
+                },
+            )
+
+            result = runner.invoke(cli, ["health"])
+
+        # Should be valid JSON
+        output = json.loads(result.output)
+        assert output["status"] == "healthy"
+        assert "checks" in output
+        assert "timestamp" in output
+
+    def test_health_exit_code_0_when_healthy(self):
+        """health command should exit with code 0 when healthy."""
+        from orchestrator.cli import cli
+        from orchestrator.health import CheckResult, HealthReport
+
+        runner = CliRunner()
+
+        with patch("orchestrator.cli.get_health") as mock_health:
+            from datetime import datetime
+
+            mock_health.return_value = HealthReport(
+                status="healthy",
+                timestamp=datetime.utcnow(),
+                checks={
+                    "sandbox": CheckResult(
+                        status="ok", message="Container running", check_name="sandbox"
+                    ),
+                },
+            )
+
+            result = runner.invoke(cli, ["health"])
+
+        assert result.exit_code == 0
+
+    def test_health_exit_code_1_when_unhealthy(self):
+        """health command should exit with code 1 when unhealthy."""
+        from orchestrator.cli import cli
+        from orchestrator.health import CheckResult, HealthReport
+
+        runner = CliRunner()
+
+        with patch("orchestrator.cli.get_health") as mock_health:
+            from datetime import datetime
+
+            mock_health.return_value = HealthReport(
+                status="unhealthy",
+                timestamp=datetime.utcnow(),
+                checks={
+                    "sandbox": CheckResult(
+                        status="failed",
+                        message="Container not running",
+                        check_name="sandbox",
+                    ),
+                },
+            )
+
+            result = runner.invoke(cli, ["health"])
+
+        assert result.exit_code == 1
+
+    def test_health_single_check_runs_only_that_check(self):
+        """health --check sandbox should only run sandbox check."""
+        from orchestrator.cli import cli
+        from orchestrator.health import CheckResult, HealthReport
+
+        runner = CliRunner()
+
+        with patch("orchestrator.cli.get_health") as mock_health:
+            from datetime import datetime
+
+            mock_health.return_value = HealthReport(
+                status="healthy",
+                timestamp=datetime.utcnow(),
+                checks={
+                    "sandbox": CheckResult(
+                        status="ok", message="Container running", check_name="sandbox"
+                    ),
+                },
+            )
+
+            result = runner.invoke(cli, ["health", "--check", "sandbox"])
+
+        # Should have called get_health with checks=["sandbox"]
+        mock_health.assert_called_once_with(checks=["sandbox"])
+        assert result.exit_code == 0
+
+    def test_health_all_checks_when_no_option(self):
+        """health without --check should run all checks."""
+        from orchestrator.cli import cli
+        from orchestrator.health import CheckResult, HealthReport
+
+        runner = CliRunner()
+
+        with patch("orchestrator.cli.get_health") as mock_health:
+            from datetime import datetime
+
+            mock_health.return_value = HealthReport(
+                status="healthy",
+                timestamp=datetime.utcnow(),
+                checks={
+                    "sandbox": CheckResult(
+                        status="ok", message="Container running", check_name="sandbox"
+                    ),
+                    "claude_auth": CheckResult(
+                        status="ok", message="Authenticated", check_name="claude_auth"
+                    ),
+                    "github_token": CheckResult(
+                        status="ok", message="Token set", check_name="github_token"
+                    ),
+                    "orchestrator": CheckResult(
+                        status="ok", message="Configured", check_name="orchestrator"
+                    ),
+                },
+            )
+
+            result = runner.invoke(cli, ["health"])
+
+        # Should have called get_health with checks=None
+        mock_health.assert_called_once_with(checks=None)
+        assert result.exit_code == 0
+
+    def test_health_json_matches_design_spec(self):
+        """health output should match the design specification format."""
+        import json
+
+        from orchestrator.cli import cli
+        from orchestrator.health import CheckResult, HealthReport
+
+        runner = CliRunner()
+
+        with patch("orchestrator.cli.get_health") as mock_health:
+            from datetime import datetime
+
+            mock_health.return_value = HealthReport(
+                status="healthy",
+                timestamp=datetime(2024, 12, 18, 10, 30, 0),
+                checks={
+                    "sandbox": CheckResult(
+                        status="ok", message="container running", check_name="sandbox"
+                    ),
+                    "claude_auth": CheckResult(
+                        status="ok", message="authenticated", check_name="claude_auth"
+                    ),
+                    "github_token": CheckResult(
+                        status="ok", message="present", check_name="github_token"
+                    ),
+                    "orchestrator": CheckResult(
+                        status="ok", message="idle", check_name="orchestrator"
+                    ),
+                },
+            )
+
+            result = runner.invoke(cli, ["health"])
+
+        output = json.loads(result.output)
+
+        # Check structure matches design spec
+        assert "status" in output
+        assert "timestamp" in output
+        assert "checks" in output
+
+        # Each check should have status and message, but NOT check_name
+        for _check_name, check_data in output["checks"].items():
+            assert "status" in check_data
+            assert "message" in check_data
+            assert "check_name" not in check_data
+
+    def test_health_invalid_check_option_rejected(self):
+        """health --check with invalid value should be rejected."""
+        from orchestrator.cli import cli
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["health", "--check", "invalid_check"])
+
+        # Click should reject invalid choice
+        assert result.exit_code != 0
+        assert "invalid" in result.output.lower() or "choice" in result.output.lower()
+
+
+class TestHealthCommandGetHealthIntegration:
+    """Test health command integration with get_health function."""
+
+    @patch("orchestrator.health.check_orchestrator")
+    @patch("orchestrator.health.check_github_token")
+    @patch("orchestrator.health.check_claude_auth")
+    @patch("orchestrator.health.check_sandbox")
+    def test_health_runs_all_checks(
+        self, mock_sandbox, mock_claude, mock_github, mock_orchestrator
+    ):
+        """health command should trigger all four checks."""
+        import json
+
+        from orchestrator.cli import cli
+        from orchestrator.health import CheckResult
+
+        runner = CliRunner()
+
+        mock_sandbox.return_value = CheckResult(
+            status="ok", message="Container running", check_name="sandbox"
+        )
+        mock_claude.return_value = CheckResult(
+            status="ok", message="Authenticated", check_name="claude_auth"
+        )
+        mock_github.return_value = CheckResult(
+            status="ok", message="Token set", check_name="github_token"
+        )
+        mock_orchestrator.return_value = CheckResult(
+            status="ok", message="Configured", check_name="orchestrator"
+        )
+
+        result = runner.invoke(cli, ["health"])
+
+        # All checks should have been called
+        mock_sandbox.assert_called_once()
+        mock_claude.assert_called_once()
+        mock_github.assert_called_once()
+        mock_orchestrator.assert_called_once()
+
+        # Output should contain all four checks
+        output = json.loads(result.output)
+        assert len(output["checks"]) == 4
+        assert result.exit_code == 0
+
+    @patch("orchestrator.health.check_orchestrator")
+    @patch("orchestrator.health.check_github_token")
+    @patch("orchestrator.health.check_claude_auth")
+    @patch("orchestrator.health.check_sandbox")
+    def test_health_single_check_only_runs_that_check(
+        self, mock_sandbox, mock_claude, mock_github, mock_orchestrator
+    ):
+        """health --check sandbox should only run sandbox check."""
+        import json
+
+        from orchestrator.cli import cli
+        from orchestrator.health import CheckResult
+
+        runner = CliRunner()
+
+        mock_sandbox.return_value = CheckResult(
+            status="ok", message="Container running", check_name="sandbox"
+        )
+        mock_orchestrator.return_value = CheckResult(
+            status="ok", message="Configured", check_name="orchestrator"
+        )
+
+        result = runner.invoke(cli, ["health", "--check", "sandbox"])
+
+        # Only sandbox should be called
+        mock_sandbox.assert_called_once()
+        mock_claude.assert_not_called()
+        mock_github.assert_not_called()
+        mock_orchestrator.assert_not_called()
+
+        # Output should contain only sandbox check
+        output = json.loads(result.output)
+        assert len(output["checks"]) == 1
+        assert "sandbox" in output["checks"]
+        assert result.exit_code == 0
