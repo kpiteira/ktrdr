@@ -376,7 +376,7 @@ class TestEscalateAndWait:
                 raw_output="output",
             )
 
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 escalate_and_wait(info, mock_tracer, notify=False)
             )
             assert result == "Use option A"
@@ -411,7 +411,7 @@ class TestEscalateAndWait:
                 raw_output="output",
             )
 
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 escalate_and_wait(info, mock_tracer, notify=False)
             )
             assert result == "Use A because it's simpler"
@@ -446,7 +446,7 @@ class TestEscalateAndWait:
                 raw_output="output",
             )
 
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 escalate_and_wait(info, mock_tracer, notify=True)
             )
 
@@ -486,7 +486,7 @@ class TestEscalateAndWait:
                 raw_output="output",
             )
 
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 escalate_and_wait(info, mock_tracer, notify=False)
             )
 
@@ -522,7 +522,7 @@ class TestEscalateAndWait:
                 raw_output="output",
             )
 
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 escalate_and_wait(info, mock_tracer, notify=False)
             )
 
@@ -561,7 +561,7 @@ class TestEscalateAndWait:
                 raw_output="output",
             )
 
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 escalate_and_wait(info, mock_tracer, notify=False)
             )
 
@@ -603,7 +603,7 @@ class TestEscalateAndWait:
                 raw_output="output",
             )
 
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 escalate_and_wait(info, mock_tracer, notify=False)
             )
 
