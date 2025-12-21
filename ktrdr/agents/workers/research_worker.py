@@ -34,6 +34,7 @@ from ktrdr.agents.metrics import (
 )
 from ktrdr.api.models.operations import (
     OperationMetadata,
+    OperationProgress,
     OperationStatus,
     OperationType,
 )
@@ -326,6 +327,12 @@ class AgentResearchWorker:
             parent_op.metadata.parameters["phase_start_time"] = time.time()
         logger.info(f"Phase started: {operation_id}, phase=designing, model={model}")
 
+        # Update progress for CLI monitoring (M9)
+        await self.ops.update_progress(
+            operation_id,
+            OperationProgress(percentage=5.0, current_step="Designing strategy..."),  # type: ignore[call-arg]
+        )
+
         # Create child operation for design
         child_op = await self.ops.create_operation(
             operation_type=OperationType.AGENT_DESIGN,
@@ -483,6 +490,12 @@ class AgentResearchWorker:
 
         logger.info(f"Training started: {training_op_id}")
 
+        # Update progress for CLI monitoring (M9)
+        await self.ops.update_progress(
+            operation_id,
+            OperationProgress(percentage=20.0, current_step="Training model..."),  # type: ignore[call-arg]
+        )
+
     async def _handle_training_phase(self, operation_id: str, child_op: Any) -> None:
         """Handle training phase state transitions.
 
@@ -614,6 +627,12 @@ class AgentResearchWorker:
 
         logger.info(f"Backtest started: {backtest_op_id}")
 
+        # Update progress for CLI monitoring (M9)
+        await self.ops.update_progress(
+            operation_id,
+            OperationProgress(percentage=65.0, current_step="Running backtest..."),  # type: ignore[call-arg]
+        )
+
     async def _handle_backtesting_phase(self, operation_id: str, child_op: Any) -> None:
         """Handle backtesting phase state transitions.
 
@@ -705,6 +724,12 @@ class AgentResearchWorker:
             parent_op.metadata.parameters["phase"] = "assessing"
             parent_op.metadata.parameters["phase_start_time"] = time.time()
         logger.info(f"Phase started: {operation_id}, phase=assessing, model={model}")
+
+        # Update progress for CLI monitoring (M9)
+        await self.ops.update_progress(
+            operation_id,
+            OperationProgress(percentage=90.0, current_step="Assessing results..."),  # type: ignore[call-arg]
+        )
 
         # Create child operation for assessment
         child_op = await self.ops.create_operation(
@@ -813,6 +838,12 @@ class AgentResearchWorker:
                 budget = get_budget_tracker()
                 budget.record_spend(estimated_cost, operation_id)
                 record_budget_spend(estimated_cost)
+
+            # Update progress to 100% on completion (M9)
+            await self.ops.update_progress(
+                operation_id,
+                OperationProgress(percentage=100.0, current_step="Complete"),  # type: ignore[call-arg]
+            )
 
             return {
                 "success": True,
