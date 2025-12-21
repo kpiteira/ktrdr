@@ -434,7 +434,8 @@ class TestPhaseSpans:
             mock_op.operation_id = op_id
             mock_op.metadata = Mock()
 
-            if call_count[0] <= 2:
+            if call_count[0] <= 3:
+                # Allow 3 calls: poll, child check, and bypass_gates check
                 mock_op.metadata.parameters = {
                     "phase": "backtesting",
                     "backtest_op_id": "op_backtest_test",

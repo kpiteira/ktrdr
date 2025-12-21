@@ -6,6 +6,7 @@ Task 5.3: Real assessment worker using AnthropicAgentInvoker.
 from __future__ import annotations
 
 import asyncio
+import re
 from typing import TYPE_CHECKING, Any
 
 from ktrdr import get_logger
@@ -33,6 +34,82 @@ class WorkerError(Exception):
     """Error during worker execution."""
 
     pass
+
+
+def _parse_assessment_from_text(text: str) -> dict[str, Any] | None:
+    """Parse assessment from Claude's text response when tool wasn't called.
+
+    This is a fallback for when smaller models like Haiku respond with text
+    instead of calling the save_assessment tool.
+
+    Args:
+        text: Claude's text response.
+
+    Returns:
+        Assessment dict with verdict, strengths, weaknesses, suggestions, or None if parsing fails.
+    """
+    if not text:
+        return None
+
+    # Try to extract verdict
+    verdict_match = re.search(
+        r'\b(verdict|overall)[:\s]*["\']?(promising|mediocre|poor)["\']?',
+        text,
+        re.IGNORECASE,
+    )
+    if not verdict_match:
+        # Also check for verdict in bold or headers
+        verdict_match = re.search(
+            r"\*\*(promising|mediocre|poor)\*\*", text, re.IGNORECASE
+        )
+    if not verdict_match:
+        return None
+
+    verdict = (
+        verdict_match.group(2)
+        if verdict_match.lastindex == 2
+        else verdict_match.group(1)
+    )
+    verdict = verdict.lower()
+
+    # Extract lists (strengths, weaknesses, suggestions)
+    def extract_list(section_name: str) -> list[str]:
+        # Look for section header followed by bullet points
+        pattern = rf"{section_name}[:\s]*\n((?:[-•*]\s*.+\n?)+)"
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            items = re.findall(r"[-•*]\s*(.+)", match.group(1))
+            return [item.strip() for item in items if item.strip()][:4]
+        # Fallback: look for numbered lists
+        pattern = rf"{section_name}[:\s]*\n((?:\d+[.)]\s*.+\n?)+)"
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            items = re.findall(r"\d+[.)]\s*(.+)", match.group(1))
+            return [item.strip() for item in items if item.strip()][:4]
+        return []
+
+    strengths = extract_list("strengths")
+    weaknesses = extract_list("weaknesses")
+    suggestions = extract_list("suggestions") or extract_list("improvements")
+
+    # Require at least some content
+    if not strengths and not weaknesses:
+        return None
+
+    # Provide defaults if some sections are empty
+    if not strengths:
+        strengths = ["Unable to extract strengths from response"]
+    if not weaknesses:
+        weaknesses = ["Unable to extract weaknesses from response"]
+    if not suggestions:
+        suggestions = ["Review and refine strategy parameters"]
+
+    return {
+        "verdict": verdict,
+        "strengths": strengths,
+        "weaknesses": weaknesses,
+        "suggestions": suggestions,
+    }
 
 
 class AgentAssessmentWorker:
@@ -149,6 +226,34 @@ class AgentAssessmentWorker:
             # Get assessment from tool executor
             assessment = self.tool_executor.last_saved_assessment
             assessment_path = self.tool_executor.last_saved_assessment_path
+
+            # Fallback: parse from text if tool wasn't called (common with Haiku)
+            if not assessment and result.output and isinstance(result.output, str):
+                logger.warning(
+                    "Claude did not call save_assessment tool, attempting to parse from text"
+                )
+                assessment = _parse_assessment_from_text(result.output)
+                if assessment:
+                    # Save the parsed assessment to disk
+                    try:
+                        from ktrdr.agents.executor import ToolExecutor
+
+                        temp_executor = ToolExecutor()
+                        temp_executor._current_strategy_name = strategy_name
+                        save_result = await temp_executor._handle_save_assessment(
+                            verdict=assessment["verdict"],
+                            strengths=assessment["strengths"],
+                            weaknesses=assessment["weaknesses"],
+                            suggestions=assessment["suggestions"],
+                        )
+                        if save_result.get("success"):
+                            assessment_path = save_result.get("path")
+                            logger.info(
+                                f"Parsed assessment from text and saved: {assessment_path}"
+                            )
+                    except Exception as e:
+                        logger.warning(f"Failed to save parsed assessment: {e}")
+                        assessment_path = None
 
             if not assessment:
                 raise WorkerError("Claude did not save an assessment")

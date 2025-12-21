@@ -518,8 +518,17 @@ class AgentResearchWorker:
             result = child_op.result_summary or {}
             parent_op = await self.ops.get_operation(operation_id)
 
-            # Check training gate
-            passed, reason = check_training_gate(result)
+            # Check training gate (skip if bypass_gates is True)
+            bypass_gates = (
+                parent_op.metadata.parameters.get("bypass_gates", False)
+                if parent_op
+                else False
+            )
+            if bypass_gates:
+                passed, reason = True, "bypassed"
+                logger.info(f"Training gate bypassed: {operation_id}")
+            else:
+                passed, reason = check_training_gate(result)
 
             # Create span for training phase completion
             with tracer.start_as_current_span("agent.phase.training") as phase_span:
@@ -663,8 +672,20 @@ class AgentResearchWorker:
                 "total_trades": metrics.get("total_trades", 0),
             }
 
-            # Check backtest gate
-            passed, reason = check_backtest_gate(backtest_result)
+            # Get parent operation for gate check and metadata update
+            parent_op = await self.ops.get_operation(operation_id)
+
+            # Check backtest gate (skip if bypass_gates is True)
+            bypass_gates = (
+                parent_op.metadata.parameters.get("bypass_gates", False)
+                if parent_op
+                else False
+            )
+            if bypass_gates:
+                passed, reason = True, "bypassed"
+                logger.info(f"Backtest gate bypassed: {operation_id}")
+            else:
+                passed, reason = check_backtest_gate(backtest_result)
 
             # Create span for backtesting phase completion
             with tracer.start_as_current_span("agent.phase.backtest") as phase_span:
@@ -682,8 +703,6 @@ class AgentResearchWorker:
                 phase_span.set_attribute(
                     "max_drawdown", backtest_result.get("max_drawdown", 0)
                 )
-
-            parent_op = await self.ops.get_operation(operation_id)
             if parent_op:
                 parent_op.metadata.parameters["backtest_result"] = backtest_result
 

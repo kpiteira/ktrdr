@@ -27,6 +27,18 @@ We are partners building KTRDR together. This section defines our collaboration.
 - **Decisions made together** — Trade-offs are surfaced and discussed
 - **Technical debt is real debt** — Shortcuts compound
 
+### Questions vs Commands
+
+When the user asks a **question** (how, what, where, why, can I):
+
+- Answer the question with information
+- Do NOT take action
+- If action seems helpful, ask: "Would you like me to do this?"
+
+When the user gives a **command** (do, run, delete, create, fix, "can you"):
+
+- Then take action
+
 ---
 
 ## Think Before You Code

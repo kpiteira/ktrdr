@@ -20,6 +20,9 @@ class AgentTriggerRequest(BaseModel):
     """Model to use: 'opus', 'sonnet', 'haiku', or full model ID.
     If None, uses AGENT_MODEL env var or defaults to opus."""
 
+    bypass_gates: bool = False
+    """If True, skip quality gates between phases (for testing)."""
+
     @field_validator("model")
     @classmethod
     def validate_model(cls, v: Optional[str]) -> Optional[str]:

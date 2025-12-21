@@ -35,10 +35,15 @@ async def trigger_agent(
     - {"model": "opus"} - Use Opus for production quality
     - {} or no body - Use AGENT_MODEL env var or default (opus)
 
+    Use bypass_gates to skip quality gates (for testing):
+    - {"bypass_gates": true} - Skip training and backtest gates
+
     Returns 202 if triggered, 409 if cycle already active, 422 if invalid model.
     """
     try:
-        result = await service.trigger(model=request.model)
+        result = await service.trigger(
+            model=request.model, bypass_gates=request.bypass_gates
+        )
 
         if result["triggered"]:
             return JSONResponse(result, status_code=202)

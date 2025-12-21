@@ -123,6 +123,12 @@ def trigger_agent(
         "-f",
         help="Monitor progress with real-time display until completion",
     ),
+    bypass_gates: bool = typer.Option(
+        False,
+        "--bypass",
+        "-b",
+        help="Bypass quality gates (for testing)",
+    ),
 ):
     """Start a new research cycle.
 
@@ -138,24 +144,40 @@ def trigger_agent(
         ktrdr agent trigger --monitor
         ktrdr agent trigger -m haiku -f
 
+    Use --bypass to skip quality gates (for testing):
+        ktrdr agent trigger -m haiku -f -b
+
     Examples:
         ktrdr agent trigger
         ktrdr agent trigger --model haiku
         ktrdr agent trigger -m sonnet
         ktrdr agent trigger --monitor
+        ktrdr agent trigger -m haiku -f -b
     """
     try:
-        asyncio.run(_trigger_agent_async(model=model, monitor=monitor))
+        asyncio.run(
+            _trigger_agent_async(
+                model=model, monitor=monitor, bypass_gates=bypass_gates
+            )
+        )
     except Exception as e:
         error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
         sys.exit(1)
 
 
-async def _trigger_agent_async(model: str | None = None, monitor: bool = False):
+async def _trigger_agent_async(
+    model: str | None = None, monitor: bool = False, bypass_gates: bool = False
+):
     """Async implementation of trigger command using API."""
     try:
-        # Build request body with optional model
-        json_data = {"model": model} if model else None
+        # Build request body with optional parameters
+        json_data: dict | None = None
+        if model or bypass_gates:
+            json_data = {}
+            if model:
+                json_data["model"] = model
+            if bypass_gates:
+                json_data["bypass_gates"] = True
 
         async with AsyncCLIClient() as client:
             result = await client._make_request(
@@ -171,6 +193,8 @@ async def _trigger_agent_async(model: str | None = None, monitor: bool = False):
                 console.print(f"  Operation ID: {operation_id}")
                 if result.get("model"):
                     console.print(f"  Model: {result['model']}")
+                if bypass_gates:
+                    console.print("  [yellow]Gates: BYPASSED[/yellow]")
                 console.print()
                 await _monitor_agent_cycle(operation_id)
             else:
@@ -179,6 +203,8 @@ async def _trigger_agent_async(model: str | None = None, monitor: bool = False):
                 console.print(f"  Operation ID: {operation_id}")
                 if result.get("model"):
                     console.print(f"  Model: {result['model']}")
+                if bypass_gates:
+                    console.print("  [yellow]Gates: BYPASSED[/yellow]")
                 console.print()
                 console.print(
                     "Use [cyan]ktrdr agent status[/cyan] to monitor progress."
@@ -216,6 +242,8 @@ async def _monitor_agent_cycle(operation_id: str) -> dict:
     Includes retry logic with exponential backoff for connection errors.
     Returns final operation data.
     """
+    import logging
+
     from rich.progress import (
         BarColumn,
         Progress,
@@ -224,6 +252,11 @@ async def _monitor_agent_cycle(operation_id: str) -> dict:
         TextColumn,
         TimeElapsedColumn,
     )
+
+    # Suppress httpx logs during monitoring to avoid breaking Rich progress bar
+    httpx_logger = logging.getLogger("httpx")
+    original_httpx_level = httpx_logger.level
+    httpx_logger.setLevel(logging.WARNING)
 
     cancelled = False
     loop = asyncio.get_running_loop()
@@ -282,11 +315,16 @@ async def _monitor_agent_cycle(operation_id: str) -> dict:
                             description=f"[bold blue]Research Cycle[/] {step}",
                         )
 
-                        # Check for child operation (training or backtest)
+                        # Check for child operation based on current phase
                         params = op_data.get("metadata", {}).get("parameters", {})
-                        child_op_id = params.get("training_op_id") or params.get(
-                            "backtest_op_id"
-                        )
+                        phase = params.get("phase", "")
+                        # Only show child progress for phases with active child operations
+                        if phase == "training":
+                            child_op_id = params.get("training_op_id")
+                        elif phase == "backtesting":
+                            child_op_id = params.get("backtest_op_id")
+                        else:
+                            child_op_id = None  # No child for design/assessment phases
 
                         # Handle child task lifecycle
                         if child_op_id and child_op_id != current_child_op_id:
@@ -379,6 +417,9 @@ async def _monitor_agent_cycle(operation_id: str) -> dict:
             return op_data
 
     finally:
+        # Restore httpx log level
+        httpx_logger.setLevel(original_httpx_level)
+
         # Always cleanup signal handler
         if signal_handler_registered:
             try:
