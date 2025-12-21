@@ -139,6 +139,52 @@ class TestDetectNeedsHuman:
         output = "SHOULD I proceed with the refactoring?"
         assert detect_needs_human(output) is True
 
+    def test_detects_markdown_options(self):
+        """Should detect **Options:** with markdown bold formatting."""
+        from orchestrator.escalation import detect_needs_human
+
+        output = """
+        The file doesn't exist.
+
+        **Options:**
+
+        1. Did you mean one of these existing files?
+        2. Should I create it?
+        """
+        assert detect_needs_human(output) is True
+
+    def test_detects_lowercase_options(self):
+        """Should detect options: in lowercase."""
+        from orchestrator.escalation import detect_needs_human
+
+        output = """
+        options:
+        - Use Redis
+        - Use Memcached
+        """
+        assert detect_needs_human(output) is True
+
+    def test_detects_please_clarify(self):
+        """Should detect 'please clarify' pattern."""
+        from orchestrator.escalation import detect_needs_human
+
+        output = "Please clarify which implementation plan you'd like me to work with."
+        assert detect_needs_human(output) is True
+
+    def test_detects_did_you_mean(self):
+        """Should detect 'did you mean' pattern."""
+        from orchestrator.escalation import detect_needs_human
+
+        output = "Did you mean one of these existing files?"
+        assert detect_needs_human(output) is True
+
+    def test_detects_which_would_you(self):
+        """Should detect 'which X would you' pattern."""
+        from orchestrator.escalation import detect_needs_human
+
+        output = "Which approach would you like me to take?"
+        assert detect_needs_human(output) is True
+
 
 class TestExtractEscalationInfo:
     """Test the extract_escalation_info function."""

@@ -53,7 +53,9 @@ def detect_needs_human(output: str) -> bool:
         return True
     if "NEEDS_HUMAN:" in output:
         return True
-    if "OPTIONS:" in output:
+
+    # Check for OPTIONS marker (case-insensitive, allowing markdown formatting)
+    if re.search(r"\*{0,2}options\*{0,2}\s*:", output, re.IGNORECASE):
         return True
 
     # Question patterns indicating uncertainty
@@ -67,6 +69,9 @@ def detect_needs_human(output: str) -> bool:
         r"could go either way",
         r"what would you like",
         r"do you want me to",
+        r"please clarify",
+        r"which .+ would you",
+        r"did you mean",
     ]
 
     for pattern in question_patterns:
