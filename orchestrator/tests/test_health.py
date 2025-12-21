@@ -649,3 +649,231 @@ class TestHealthCLICommand:
         result = runner.invoke(cli, ["--help"])
 
         assert "health" in result.output.lower()
+
+
+class TestHealthTelemetry:
+    """Tests for health check telemetry (traces and metrics).
+
+    These tests verify that health checks are properly instrumented with
+    OpenTelemetry traces and metrics. Due to the global nature of OTel
+    providers, we use mocking of the internal tracer and metrics.
+    """
+
+    def test_trace_span_created_for_each_check(self) -> None:
+        """A trace span is created for each health check."""
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+            InMemorySpanExporter,
+        )
+
+        from orchestrator import health
+
+        # Set up in-memory trace exporter
+        exporter = InMemorySpanExporter()
+        provider = TracerProvider()
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+
+        # Replace the module-level tracer with one from our test provider
+        health._tracer = provider.get_tracer("orchestrator.health")
+
+        with (
+            patch("orchestrator.health.check_sandbox") as mock_sandbox,
+            patch("orchestrator.health.check_claude_auth") as mock_claude,
+            patch("orchestrator.health.check_github_token") as mock_github,
+            patch("orchestrator.health.check_orchestrator") as mock_orch,
+        ):
+            mock_sandbox.return_value = CheckResult("ok", "container running", "sandbox")
+            mock_claude.return_value = CheckResult("ok", "authenticated", "claude_auth")
+            mock_github.return_value = CheckResult("ok", "present", "github_token")
+            mock_orch.return_value = CheckResult("ok", "idle", "orchestrator")
+
+            get_health()
+
+        # Verify spans were created
+        spans = exporter.get_finished_spans()
+        span_names = [span.name for span in spans]
+
+        # Should have child spans for each check
+        assert "orchestrator.health.sandbox" in span_names
+        assert "orchestrator.health.claude_auth" in span_names
+        assert "orchestrator.health.github_token" in span_names
+        assert "orchestrator.health.orchestrator" in span_names
+
+    def test_span_attributes_set_correctly(self) -> None:
+        """Span attributes include check status and message."""
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+            InMemorySpanExporter,
+        )
+
+        from orchestrator import health
+
+        # Set up in-memory trace exporter
+        exporter = InMemorySpanExporter()
+        provider = TracerProvider()
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+
+        # Replace the module-level tracer with one from our test provider
+        health._tracer = provider.get_tracer("orchestrator.health")
+
+        with (
+            patch("orchestrator.health.check_sandbox") as mock_sandbox,
+            patch("orchestrator.health.check_claude_auth") as mock_claude,
+            patch("orchestrator.health.check_github_token") as mock_github,
+            patch("orchestrator.health.check_orchestrator") as mock_orch,
+        ):
+            mock_sandbox.return_value = CheckResult("ok", "container running", "sandbox")
+            mock_claude.return_value = CheckResult(
+                "failed", "not logged in", "claude_auth"
+            )
+            mock_github.return_value = CheckResult("ok", "present", "github_token")
+            mock_orch.return_value = CheckResult("ok", "idle", "orchestrator")
+
+            get_health()
+
+        # Verify span attributes
+        spans = exporter.get_finished_spans()
+        sandbox_span = next(s for s in spans if s.name == "orchestrator.health.sandbox")
+        claude_span = next(
+            s for s in spans if s.name == "orchestrator.health.claude_auth"
+        )
+
+        assert sandbox_span.attributes["check.status"] == "ok"
+        assert sandbox_span.attributes["check.message"] == "container running"
+        assert claude_span.attributes["check.status"] == "failed"
+        assert claude_span.attributes["check.message"] == "not logged in"
+
+    def test_counter_incremented_on_each_check(self) -> None:
+        """Counter is incremented for each health check."""
+        from opentelemetry.sdk.metrics import MeterProvider
+        from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+
+        from orchestrator import health
+
+        # Set up in-memory metric reader
+        reader = InMemoryMetricReader()
+        provider = MeterProvider(metric_readers=[reader])
+
+        # Create meter and instruments from our test provider
+        meter = provider.get_meter("orchestrator.health")
+        health._health_checks_counter = meter.create_counter(
+            "orchestrator_health_checks_total",
+            description="Total health checks performed",
+        )
+        health._health_check_status_gauge = meter.create_up_down_counter(
+            "orchestrator_health_check_status",
+            description="Health check status (1=ok, 0=failed)",
+        )
+
+        with (
+            patch("orchestrator.health.check_sandbox") as mock_sandbox,
+            patch("orchestrator.health.check_claude_auth") as mock_claude,
+            patch("orchestrator.health.check_github_token") as mock_github,
+            patch("orchestrator.health.check_orchestrator") as mock_orch,
+        ):
+            mock_sandbox.return_value = CheckResult("ok", "container running", "sandbox")
+            mock_claude.return_value = CheckResult("ok", "authenticated", "claude_auth")
+            mock_github.return_value = CheckResult("ok", "present", "github_token")
+            mock_orch.return_value = CheckResult("ok", "idle", "orchestrator")
+
+            get_health()
+
+        # Read metrics
+        metrics_data = reader.get_metrics_data()
+
+        # Find the counter metric
+        counter_found = False
+        for resource_metric in metrics_data.resource_metrics:
+            for scope_metric in resource_metric.scope_metrics:
+                for metric in scope_metric.metrics:
+                    if metric.name == "orchestrator_health_checks_total":
+                        counter_found = True
+                        # Should have data points for each check
+                        data_points = list(metric.data.data_points)
+                        assert len(data_points) >= 4
+
+        assert counter_found, "Counter metric 'orchestrator_health_checks_total' not found"
+
+    def test_gauge_reflects_current_status(self) -> None:
+        """Gauge shows 1 for ok status, 0 for failed/skipped."""
+        from opentelemetry.sdk.metrics import MeterProvider
+        from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+
+        from orchestrator import health
+
+        # Set up in-memory metric reader
+        reader = InMemoryMetricReader()
+        provider = MeterProvider(metric_readers=[reader])
+
+        # Create meter and instruments from our test provider
+        meter = provider.get_meter("orchestrator.health")
+        health._health_checks_counter = meter.create_counter(
+            "orchestrator_health_checks_total",
+            description="Total health checks performed",
+        )
+        health._health_check_status_gauge = meter.create_up_down_counter(
+            "orchestrator_health_check_status",
+            description="Health check status (1=ok, 0=failed)",
+        )
+
+        with (
+            patch("orchestrator.health.check_sandbox") as mock_sandbox,
+            patch("orchestrator.health.check_claude_auth") as mock_claude,
+            patch("orchestrator.health.check_github_token") as mock_github,
+            patch("orchestrator.health.check_orchestrator") as mock_orch,
+        ):
+            mock_sandbox.return_value = CheckResult("ok", "container running", "sandbox")
+            mock_claude.return_value = CheckResult(
+                "failed", "not logged in", "claude_auth"
+            )
+            mock_github.return_value = CheckResult("ok", "present", "github_token")
+            mock_orch.return_value = CheckResult("ok", "idle", "orchestrator")
+
+            get_health()
+
+        # Read metrics
+        metrics_data = reader.get_metrics_data()
+
+        # Find the gauge metric
+        gauge_found = False
+        gauge_values = {}
+        for resource_metric in metrics_data.resource_metrics:
+            for scope_metric in resource_metric.scope_metrics:
+                for metric in scope_metric.metrics:
+                    if metric.name == "orchestrator_health_check_status":
+                        gauge_found = True
+                        for data_point in metric.data.data_points:
+                            check_name = data_point.attributes.get("check")
+                            gauge_values[check_name] = data_point.value
+
+        assert gauge_found, "Gauge metric 'orchestrator_health_check_status' not found"
+        assert gauge_values.get("sandbox") == 1  # ok = 1
+        assert gauge_values.get("claude_auth") == 0  # failed = 0
+        assert gauge_values.get("github_token") == 1  # ok = 1
+        assert gauge_values.get("orchestrator") == 1  # ok = 1
+
+    def test_no_errors_when_otlp_disabled(self) -> None:
+        """Health checks work without errors when OTLP is disabled."""
+        from orchestrator import health
+
+        # Force re-initialization with default no-op providers
+        health._init_telemetry()
+
+        with (
+            patch("orchestrator.health.check_sandbox") as mock_sandbox,
+            patch("orchestrator.health.check_claude_auth") as mock_claude,
+            patch("orchestrator.health.check_github_token") as mock_github,
+            patch("orchestrator.health.check_orchestrator") as mock_orch,
+        ):
+            mock_sandbox.return_value = CheckResult("ok", "container running", "sandbox")
+            mock_claude.return_value = CheckResult("ok", "authenticated", "claude_auth")
+            mock_github.return_value = CheckResult("ok", "present", "github_token")
+            mock_orch.return_value = CheckResult("ok", "idle", "orchestrator")
+
+            # Should not raise any errors
+            report = get_health()
+
+            assert report.status == "healthy"
+            assert len(report.checks) == 4

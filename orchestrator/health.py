@@ -3,14 +3,49 @@
 Provides health checks for sandbox container, Claude authentication,
 GitHub token, and orchestrator state. Each check returns a CheckResult
 with status and actionable message.
+
+Includes OpenTelemetry instrumentation for traces and metrics.
 """
 
 import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Callable, Literal
+
+from opentelemetry import metrics, trace
 
 from orchestrator.config import OrchestratorConfig
+
+# Module-level telemetry instruments
+_tracer: trace.Tracer | None = None
+_health_checks_counter: metrics.Counter | None = None
+_health_check_status_gauge: metrics.UpDownCounter | None = None
+
+
+def _init_telemetry() -> None:
+    """Initialize telemetry instruments for health checks.
+
+    Creates tracer and metric instruments using the global providers.
+    Should be called before running health checks if telemetry is needed.
+    Safe to call multiple times - will re-create instruments with current providers.
+    """
+    global _tracer, _health_checks_counter, _health_check_status_gauge
+
+    _tracer = trace.get_tracer("orchestrator.health")
+    meter = metrics.get_meter("orchestrator.health")
+
+    _health_checks_counter = meter.create_counter(
+        "orchestrator_health_checks_total",
+        description="Total health checks performed",
+    )
+
+    # Use UpDownCounter as a gauge-like metric
+    # OpenTelemetry SDK doesn't have a direct Gauge, so we use UpDownCounter
+    # which allows setting absolute values
+    _health_check_status_gauge = meter.create_up_down_counter(
+        "orchestrator_health_check_status",
+        description="Health check status (1=ok, 0=failed)",
+    )
 
 
 @dataclass
@@ -235,6 +270,47 @@ def check_github_token(timeout: float = DEFAULT_TIMEOUT) -> CheckResult:
         )
 
 
+def _run_check_with_telemetry(
+    check_name: str,
+    check_fn: Callable[[], CheckResult],
+) -> CheckResult:
+    """Run a health check with telemetry instrumentation.
+
+    Wraps the check function with trace span and metrics recording.
+
+    Args:
+        check_name: Name of the check (for span name and metric labels)
+        check_fn: The check function to execute
+
+    Returns:
+        CheckResult from the check function
+    """
+    global _tracer, _health_checks_counter, _health_check_status_gauge
+
+    # Ensure telemetry is initialized
+    if _tracer is None:
+        _init_telemetry()
+
+    # Create span for this check
+    with _tracer.start_as_current_span(f"orchestrator.health.{check_name}") as span:
+        result = check_fn()
+
+        # Set span attributes
+        span.set_attribute("check.status", result.status)
+        span.set_attribute("check.message", result.message)
+
+        # Record metrics
+        if _health_checks_counter is not None:
+            _health_checks_counter.add(1, {"check": check_name})
+
+        if _health_check_status_gauge is not None:
+            # Gauge value: 1 for ok, 0 for failed/skipped
+            status_value = 1 if result.status == "ok" else 0
+            _health_check_status_gauge.add(status_value, {"check": check_name})
+
+        return result
+
+
 def get_health(
     checks: list[str] | None = None,
     timeout: float = DEFAULT_TIMEOUT,
@@ -269,16 +345,22 @@ def get_health(
             )
             continue
 
-        # Run the check
+        # Run the check with telemetry
         # check_orchestrator doesn't take a timeout parameter
         if check_name == "sandbox":
-            result = check_sandbox(timeout)
+            result = _run_check_with_telemetry(
+                check_name, lambda: check_sandbox(timeout)
+            )
         elif check_name == "claude_auth":
-            result = check_claude_auth(timeout)
+            result = _run_check_with_telemetry(
+                check_name, lambda: check_claude_auth(timeout)
+            )
         elif check_name == "github_token":
-            result = check_github_token(timeout)
+            result = _run_check_with_telemetry(
+                check_name, lambda: check_github_token(timeout)
+            )
         elif check_name == "orchestrator":
-            result = check_orchestrator()
+            result = _run_check_with_telemetry(check_name, check_orchestrator)
         else:
             raise ValueError(f"Unknown check: {check_name}")
 
