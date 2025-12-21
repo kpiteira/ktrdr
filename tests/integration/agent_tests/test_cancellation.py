@@ -468,21 +468,32 @@ class TestCancellationDuringEachPhase:
 
         # Create a slow assessment worker
         class SlowAssessmentWorker:
-            async def run(self, op_id, results=None):
+            async def run(self, op_id, results=None, model=None):
                 for _ in range(100):
                     await asyncio.sleep(0.1)
                 return {"success": True, "verdict": "promising"}
 
+        # Start parent already in assessing phase (like other cancellation tests)
         parent_op = await mock_operations_service.create_operation(
             operation_type=OperationType.AGENT_RESEARCH,
             metadata=OperationMetadata(
                 parameters={
-                    "phase": "idle",  # Start from idle, let it reach assessing
+                    "phase": "assessing",
+                    "strategy_name": "test_strategy",
+                    "training_result": {
+                        "accuracy": 0.6,
+                        "final_loss": 0.3,
+                        "initial_loss": 0.8,
+                    },
+                    "backtest_result": {
+                        "win_rate": 0.55,
+                        "max_drawdown_pct": 0.2,
+                        "sharpe_ratio": 1.0,
+                    },
                 }
             ),
         )
 
-        # Use instant design worker and mock services that complete immediately
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=instant_worker,
@@ -491,37 +502,12 @@ class TestCancellationDuringEachPhase:
             backtest_service=mock_backtest_service,
         )
 
-        # Mock training and backtest to complete with good results
-        async def mock_get_op(op_id):
-            op = mock_operations_service._operations.get(op_id)
-            if op and op.operation_type == OperationType.TRAINING:
-                op.status = OperationStatus.COMPLETED
-                op.result = {"accuracy": 0.6, "final_loss": 0.3, "initial_loss": 0.8}
-            elif op and op.operation_type == OperationType.BACKTESTING:
-                op.status = OperationStatus.COMPLETED
-                op.result = {"win_rate": 0.55, "max_drawdown": 0.2, "sharpe_ratio": 1.0}
-            return op
-
-        original_get = mock_operations_service.get_operation
-        mock_operations_service.get_operation = mock_get_op
-
         task = asyncio.create_task(worker.run(parent_op.operation_id))
-
-        # Wait for assessment phase to start
-        for _ in range(50):  # Max 5 seconds
-            await asyncio.sleep(0.1)
-            parent = mock_operations_service._operations.get(parent_op.operation_id)
-            if parent and parent.metadata.parameters.get("phase") == "assessing":
-                break
-
-        await asyncio.sleep(0.1)  # Let assessment worker start
+        await asyncio.sleep(0.15)  # Let assessment worker start
 
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
-
-        # Restore original
-        mock_operations_service.get_operation = original_get
 
         # Assessment child should be cancelled
         parent = mock_operations_service._operations.get(parent_op.operation_id)

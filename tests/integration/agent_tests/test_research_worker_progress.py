@@ -5,7 +5,6 @@ percentages and messages when transitioning between phases.
 """
 
 import asyncio
-import os
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -173,9 +172,7 @@ class TestProgressUpdatesOnPhaseTransitions:
         mock_backtest_service,
     ):
         """update_progress() called with 5% when entering designing phase."""
-        # Set fast mode
-        os.environ["STUB_WORKER_FAST"] = "true"
-        os.environ["AGENT_POLL_INTERVAL"] = "0.01"
+        # conftest.py already sets STUB_WORKER_DELAY=0.001 and AGENT_POLL_INTERVAL=0.01
 
         # Create parent operation
         parent_op = await mock_operations_service.create_operation(
@@ -218,9 +215,6 @@ class TestProgressUpdatesOnPhaseTransitions:
         mock_backtest_service,
     ):
         """update_progress() called with 20% when entering training phase."""
-        os.environ["STUB_WORKER_FAST"] = "true"
-        os.environ["AGENT_POLL_INTERVAL"] = "0.01"
-
         parent_op = await mock_operations_service.create_operation(
             operation_type=OperationType.AGENT_RESEARCH,
             metadata=OperationMetadata(parameters={"phase": "idle"}),
@@ -259,8 +253,6 @@ class TestProgressUpdatesOnPhaseTransitions:
         mock_backtest_service,
     ):
         """update_progress() called with 65% when entering backtesting phase."""
-        os.environ["STUB_WORKER_FAST"] = "true"
-        os.environ["AGENT_POLL_INTERVAL"] = "0.01"
 
         parent_op = await mock_operations_service.create_operation(
             operation_type=OperationType.AGENT_RESEARCH,
@@ -300,8 +292,6 @@ class TestProgressUpdatesOnPhaseTransitions:
         mock_backtest_service,
     ):
         """update_progress() called with 90% when entering assessing phase."""
-        os.environ["STUB_WORKER_FAST"] = "true"
-        os.environ["AGENT_POLL_INTERVAL"] = "0.01"
 
         parent_op = await mock_operations_service.create_operation(
             operation_type=OperationType.AGENT_RESEARCH,
@@ -341,8 +331,6 @@ class TestProgressUpdatesOnPhaseTransitions:
         mock_backtest_service,
     ):
         """update_progress() called with 100% on successful completion."""
-        os.environ["STUB_WORKER_FAST"] = "true"
-        os.environ["AGENT_POLL_INTERVAL"] = "0.01"
 
         parent_op = await mock_operations_service.create_operation(
             operation_type=OperationType.AGENT_RESEARCH,
@@ -386,8 +374,6 @@ class TestProgressUpdateSequence:
         mock_backtest_service,
     ):
         """Progress percentages should increase monotonically through the cycle."""
-        os.environ["STUB_WORKER_FAST"] = "true"
-        os.environ["AGENT_POLL_INTERVAL"] = "0.01"
 
         parent_op = await mock_operations_service.create_operation(
             operation_type=OperationType.AGENT_RESEARCH,
