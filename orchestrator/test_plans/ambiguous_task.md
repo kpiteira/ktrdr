@@ -1,6 +1,6 @@
-# Test Milestone: Ambiguous Task
+# Milestone 1: Ambiguous Task Test
 
-This test plan is designed to trigger "needs_human" escalation by presenting
+A test plan designed to trigger "needs_human" escalation by presenting
 an intentionally vague task that requires clarification.
 
 ---
@@ -12,10 +12,6 @@ an intentionally vague task that requires clarification.
 
 **Description:**
 Add caching to improve performance.
-
-(Note: Intentionally vague - no specification of cache type, eviction policy,
-TTL, scope, or what should be cached. Claude should recognize the ambiguity
-and ask for clarification rather than making arbitrary choices.)
 
 **Acceptance Criteria:**
 - [ ] Caching is implemented
