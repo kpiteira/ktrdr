@@ -675,7 +675,8 @@ class LLMInterpreter:
                 "claude",
                 "--model", self.model,
                 "--print",  # Output only, no interactive
-                "--no-config",  # Fresh session, no MCP, no context
+                "--no-session-persistence",  # Don't save session
+                "--tools", "",  # No tools, just LLM response
                 "-p", prompt,
             ],
             capture_output=True,
@@ -712,7 +713,7 @@ class LLMInterpreter:
 **Acceptance Criteria:**
 
 - [ ] Uses Claude Code CLI with `claude-haiku-4.5-20251001`
-- [ ] Uses `--no-config` for clean session (no MCP, no hooks)
+- [ ] Uses `--no-session-persistence` and `--tools ""` for minimal footprint
 - [ ] Returns structured InterpretationResult
 - [ ] Handles output truncation for large outputs
 - [ ] Handles JSON parsing errors gracefully
@@ -956,7 +957,7 @@ class TestLLMInterpreterIntegration:
 **Acceptance Criteria:**
 
 - [ ] LLMInterpreter tests mock subprocess.run
-- [ ] Tests verify correct CLI args (model, --no-config, etc.)
+- [ ] Tests verify correct CLI args (model, --no-session-persistence, --tools)
 - [ ] Tests cover CLI failure fallback
 - [ ] Tests for `ORCHESTRATOR_LLM_ONLY` flag
 - [ ] Integration test with real CLI (skipped in CI)
