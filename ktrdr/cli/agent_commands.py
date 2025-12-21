@@ -209,9 +209,10 @@ async def _trigger_agent_async(model: str | None = None, monitor: bool = False):
 
 async def _monitor_agent_cycle(operation_id: str) -> dict:
     """
-    Poll agent operation with progress display until completion.
+    Poll agent operation with nested child progress display until completion.
 
     Handles Ctrl+C by sending DELETE /operations/{id}.
+    Shows nested progress bar for training/backtest child operations.
     Returns final operation data.
     """
     from rich.progress import (
@@ -247,7 +248,9 @@ async def _monitor_agent_cycle(operation_id: str) -> dict:
                 TimeElapsedColumn(),
                 console=console,
             ) as progress:
-                task = progress.add_task("[bold blue]Research Cycle", total=100)
+                parent_task = progress.add_task("[bold blue]Research Cycle", total=100)
+                child_task = None
+                current_child_op_id = None
 
                 while not cancelled:
                     # Poll parent operation
@@ -257,15 +260,53 @@ async def _monitor_agent_cycle(operation_id: str) -> dict:
                     op_data = result.get("data", {})
                     status = op_data.get("status")
 
-                    # Update progress display
+                    # Update parent progress display
                     prog = op_data.get("progress", {})
                     pct = prog.get("percentage", 0)
                     step = prog.get("current_step", "Working...")
                     progress.update(
-                        task,
+                        parent_task,
                         completed=pct,
                         description=f"[bold blue]Research Cycle[/] {step}",
                     )
+
+                    # Check for child operation (training or backtest)
+                    params = op_data.get("metadata", {}).get("parameters", {})
+                    child_op_id = params.get("training_op_id") or params.get(
+                        "backtest_op_id"
+                    )
+
+                    # Handle child task lifecycle
+                    if child_op_id and child_op_id != current_child_op_id:
+                        # New child operation - add/replace task
+                        if child_task is not None:
+                            progress.remove_task(child_task)
+                        child_task = progress.add_task("   └─ Child", total=100)
+                        current_child_op_id = child_op_id
+                    elif not child_op_id and child_task is not None:
+                        # No more child - remove task
+                        progress.remove_task(child_task)
+                        child_task = None
+                        current_child_op_id = None
+
+                    # Poll child operation if exists
+                    if child_op_id and child_task is not None:
+                        try:
+                            child_result = await client._make_request(
+                                "GET", f"/operations/{child_op_id}"
+                            )
+                            child_data = child_result.get("data", {})
+                            child_prog = child_data.get("progress", {})
+                            child_pct = child_prog.get("percentage", 0)
+                            child_step = child_prog.get("current_step", "Working...")
+                            progress.update(
+                                child_task,
+                                completed=child_pct,
+                                description=f"   └─ {child_step}",
+                            )
+                        except Exception:
+                            # Child may not exist yet or may have finished
+                            pass
 
                     # Check for terminal state
                     if status in ("completed", "failed", "cancelled"):
