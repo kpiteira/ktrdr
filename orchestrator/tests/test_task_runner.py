@@ -500,3 +500,273 @@ class TestRunTaskStreaming:
         call_kwargs = sandbox.invoke_claude_streaming.call_args[1]
         assert call_kwargs["max_turns"] == 75
         assert call_kwargs["timeout"] == 900
+
+
+class TestRunTaskWithEscalation:
+    """Test run_task_with_escalation for loop detection and escalation."""
+
+    @pytest.mark.asyncio
+    async def test_returns_completed_result_immediately(self):
+        """Should return immediately when task completes successfully."""
+        from datetime import datetime
+        from unittest.mock import patch
+
+        from orchestrator.loop_detector import LoopDetector, LoopDetectorConfig
+        from orchestrator.state import OrchestratorState
+        from orchestrator.task_runner import run_task_with_escalation
+
+        task = make_task()
+        config = OrchestratorConfig()
+        sandbox = MagicMock()
+        sandbox.invoke_claude = AsyncMock(
+            return_value=make_claude_result("STATUS: completed")
+        )
+
+        state = OrchestratorState(
+            milestone_id="M4", plan_path="test.md", started_at=datetime.now()
+        )
+        loop_detector = LoopDetector(LoopDetectorConfig(), state)
+
+        # Mock tracer
+        mock_tracer = MagicMock()
+
+        with patch("orchestrator.task_runner.console"):
+            result = await run_task_with_escalation(
+                task, sandbox, config, task.plan_file, loop_detector, mock_tracer
+            )
+
+        assert result.status == "completed"
+
+    @pytest.mark.asyncio
+    async def test_triggers_escalation_on_needs_human(self):
+        """Should trigger escalation when task returns needs_human."""
+        from datetime import datetime
+        from unittest.mock import patch
+
+        from orchestrator.loop_detector import LoopDetector, LoopDetectorConfig
+        from orchestrator.state import OrchestratorState
+        from orchestrator.task_runner import run_task_with_escalation
+
+        task = make_task()
+        config = OrchestratorConfig()
+        sandbox = MagicMock()
+
+        # First call returns needs_human, second returns completed
+        sandbox.invoke_claude = AsyncMock(
+            side_effect=[
+                make_claude_result(
+                    "STATUS: needs_human\nQUESTION: Which approach?\nRECOMMENDATION: Use A"
+                ),
+                make_claude_result("STATUS: completed"),
+            ]
+        )
+
+        state = OrchestratorState(
+            milestone_id="M4", plan_path="test.md", started_at=datetime.now()
+        )
+        loop_detector = LoopDetector(LoopDetectorConfig(), state)
+
+        mock_tracer = MagicMock()
+        mock_span = MagicMock()
+        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=mock_span
+        )
+        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        with (
+            patch("orchestrator.task_runner.console"),
+            patch("orchestrator.task_runner.escalate_and_wait") as mock_escalate,
+        ):
+            mock_escalate.return_value = "Use option A"
+
+            result = await run_task_with_escalation(
+                task, sandbox, config, task.plan_file, loop_detector, mock_tracer
+            )
+
+        # Should have called escalate_and_wait
+        mock_escalate.assert_called_once()
+        # Final result should be completed
+        assert result.status == "completed"
+
+    @pytest.mark.asyncio
+    async def test_retries_with_guidance_after_escalation(self):
+        """Should retry task with human guidance after escalation."""
+        from datetime import datetime
+        from unittest.mock import patch
+
+        from orchestrator.loop_detector import LoopDetector, LoopDetectorConfig
+        from orchestrator.state import OrchestratorState
+        from orchestrator.task_runner import run_task_with_escalation
+
+        task = make_task()
+        config = OrchestratorConfig()
+        sandbox = MagicMock()
+
+        # Track calls to verify guidance is passed
+        calls = []
+
+        async def mock_invoke(**kwargs):
+            calls.append(kwargs)
+            if len(calls) == 1:
+                return make_claude_result("STATUS: needs_human\nQUESTION: Which?")
+            return make_claude_result("STATUS: completed")
+
+        sandbox.invoke_claude = mock_invoke
+
+        state = OrchestratorState(
+            milestone_id="M4", plan_path="test.md", started_at=datetime.now()
+        )
+        loop_detector = LoopDetector(LoopDetectorConfig(), state)
+
+        mock_tracer = MagicMock()
+        mock_span = MagicMock()
+        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=mock_span
+        )
+        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        with (
+            patch("orchestrator.task_runner.console"),
+            patch("orchestrator.task_runner.escalate_and_wait") as mock_escalate,
+        ):
+            mock_escalate.return_value = "Use option B"
+
+            await run_task_with_escalation(
+                task, sandbox, config, task.plan_file, loop_detector, mock_tracer
+            )
+
+        # Second call should have guidance in prompt
+        assert len(calls) == 2
+        assert "Use option B" in calls[1]["prompt"]
+
+    @pytest.mark.asyncio
+    async def test_records_failure_in_loop_detector(self):
+        """Should record task failure in loop detector."""
+        from datetime import datetime
+        from unittest.mock import patch
+
+        from orchestrator.loop_detector import LoopDetector, LoopDetectorConfig
+        from orchestrator.state import OrchestratorState
+        from orchestrator.task_runner import run_task_with_escalation
+
+        task = make_task(task_id="4.1")
+        config = OrchestratorConfig()
+        sandbox = MagicMock()
+
+        # Fail 3 times to trigger loop detection
+        sandbox.invoke_claude = AsyncMock(
+            return_value=make_claude_result("STATUS: failed\nERROR: Module not found")
+        )
+
+        state = OrchestratorState(
+            milestone_id="M4", plan_path="test.md", started_at=datetime.now()
+        )
+        loop_detector = LoopDetector(LoopDetectorConfig(max_task_attempts=3), state)
+
+        mock_tracer = MagicMock()
+        mock_span = MagicMock()
+        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=mock_span
+        )
+        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        with patch("orchestrator.task_runner.console"):
+            result = await run_task_with_escalation(
+                task, sandbox, config, task.plan_file, loop_detector, mock_tracer
+            )
+
+        # Should have recorded failures
+        assert state.task_attempt_counts.get("4.1", 0) == 3
+        # Result should indicate loop detected
+        assert result.status == "failed"
+
+    @pytest.mark.asyncio
+    async def test_stops_at_loop_detection(self):
+        """Should stop retrying when loop detected."""
+        from datetime import datetime
+        from unittest.mock import patch
+
+        from orchestrator.loop_detector import LoopDetector, LoopDetectorConfig
+        from orchestrator.state import OrchestratorState
+        from orchestrator.task_runner import run_task_with_escalation
+
+        task = make_task(task_id="4.1")
+        config = OrchestratorConfig()
+        sandbox = MagicMock()
+
+        call_count = 0
+
+        async def mock_invoke(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            return make_claude_result("STATUS: failed\nERROR: Module not found")
+
+        sandbox.invoke_claude = mock_invoke
+
+        state = OrchestratorState(
+            milestone_id="M4", plan_path="test.md", started_at=datetime.now()
+        )
+        loop_detector = LoopDetector(LoopDetectorConfig(max_task_attempts=3), state)
+
+        mock_tracer = MagicMock()
+        mock_span = MagicMock()
+        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=mock_span
+        )
+        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        with patch("orchestrator.task_runner.console"):
+            await run_task_with_escalation(
+                task, sandbox, config, task.plan_file, loop_detector, mock_tracer
+            )
+
+        # Should have stopped at exactly 3 attempts
+        assert call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_loop_detection_includes_reason_in_error(self):
+        """Loop detection should include reason in result error."""
+        from datetime import datetime
+        from unittest.mock import patch
+
+        from orchestrator.loop_detector import LoopDetector, LoopDetectorConfig
+        from orchestrator.state import OrchestratorState
+        from orchestrator.task_runner import run_task_with_escalation
+
+        task = make_task(task_id="4.1")
+        config = OrchestratorConfig()
+        sandbox = MagicMock()
+        sandbox.invoke_claude = AsyncMock(
+            return_value=make_claude_result("STATUS: failed\nERROR: Same error")
+        )
+
+        state = OrchestratorState(
+            milestone_id="M4", plan_path="test.md", started_at=datetime.now()
+        )
+        loop_detector = LoopDetector(LoopDetectorConfig(max_task_attempts=3), state)
+
+        mock_tracer = MagicMock()
+        mock_span = MagicMock()
+        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=mock_span
+        )
+        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        with patch("orchestrator.task_runner.console"):
+            result = await run_task_with_escalation(
+                task, sandbox, config, task.plan_file, loop_detector, mock_tracer
+            )
+
+        # Error should mention loop detection
+        assert result.error is not None
+        assert "3 times" in result.error or "loop" in result.error.lower()
