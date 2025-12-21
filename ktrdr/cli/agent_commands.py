@@ -7,6 +7,7 @@ Simplified commands:
 """
 
 import asyncio
+import signal
 import sys
 
 import typer
@@ -115,6 +116,13 @@ def trigger_agent(
         "-m",
         help="Model to use: 'opus', 'sonnet', 'haiku', or full model ID",
     ),
+    monitor: bool = typer.Option(
+        False,
+        "--monitor",
+        "--follow",
+        "-f",
+        help="Monitor progress with real-time display until completion",
+    ),
 ):
     """Start a new research cycle.
 
@@ -126,19 +134,24 @@ def trigger_agent(
     - sonnet: Claude Sonnet (balanced)
     - haiku: Claude Haiku (fastest, cheapest)
 
+    Use --monitor to wait and show progress:
+        ktrdr agent trigger --monitor
+        ktrdr agent trigger -m haiku -f
+
     Examples:
         ktrdr agent trigger
         ktrdr agent trigger --model haiku
         ktrdr agent trigger -m sonnet
+        ktrdr agent trigger --monitor
     """
     try:
-        asyncio.run(_trigger_agent_async(model=model))
+        asyncio.run(_trigger_agent_async(model=model, monitor=monitor))
     except Exception as e:
         error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
         sys.exit(1)
 
 
-async def _trigger_agent_async(model: str | None = None):
+async def _trigger_agent_async(model: str | None = None, monitor: bool = False):
     """Async implementation of trigger command using API."""
     try:
         # Build request body with optional model
@@ -150,12 +163,26 @@ async def _trigger_agent_async(model: str | None = None):
             )
 
         if result.get("triggered"):
-            console.print("\n[green]Research cycle started![/green]")
-            console.print(f"  Operation ID: {result['operation_id']}")
-            if result.get("model"):
-                console.print(f"  Model: {result['model']}")
-            console.print()
-            console.print("Use [cyan]ktrdr agent status[/cyan] to monitor progress.")
+            operation_id = result["operation_id"]
+
+            if monitor:
+                # Enter monitoring mode
+                console.print("\n[green]Research cycle started![/green]")
+                console.print(f"  Operation ID: {operation_id}")
+                if result.get("model"):
+                    console.print(f"  Model: {result['model']}")
+                console.print()
+                await _monitor_agent_cycle(operation_id)
+            else:
+                # Fire-and-forget mode
+                console.print("\n[green]Research cycle started![/green]")
+                console.print(f"  Operation ID: {operation_id}")
+                if result.get("model"):
+                    console.print(f"  Model: {result['model']}")
+                console.print()
+                console.print(
+                    "Use [cyan]ktrdr agent status[/cyan] to monitor progress."
+                )
         else:
             reason = result.get("reason", "unknown")
             message = result.get("message", f"Could not start cycle: {reason}")
@@ -178,6 +205,132 @@ async def _trigger_agent_async(model: str | None = None):
     except Exception as e:
         logger.error(f"Failed to trigger agent: {e}")
         raise
+
+
+async def _monitor_agent_cycle(operation_id: str) -> dict:
+    """
+    Poll agent operation with progress display until completion.
+
+    Handles Ctrl+C by sending DELETE /operations/{id}.
+    Returns final operation data.
+    """
+    from rich.progress import (
+        BarColumn,
+        Progress,
+        SpinnerColumn,
+        TaskProgressColumn,
+        TextColumn,
+        TimeElapsedColumn,
+    )
+
+    cancelled = False
+    loop = asyncio.get_running_loop()
+
+    def signal_handler():
+        nonlocal cancelled
+        cancelled = True
+
+    # Setup signal handler for Ctrl+C
+    try:
+        loop.add_signal_handler(signal.SIGINT, signal_handler)
+        signal_handler_registered = True
+    except Exception:
+        signal_handler_registered = False
+
+    try:
+        async with AsyncCLIClient() as client:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                TimeElapsedColumn(),
+                console=console,
+            ) as progress:
+                task = progress.add_task("[bold blue]Research Cycle", total=100)
+
+                while not cancelled:
+                    # Poll parent operation
+                    result = await client._make_request(
+                        "GET", f"/operations/{operation_id}"
+                    )
+                    op_data = result.get("data", {})
+                    status = op_data.get("status")
+
+                    # Update progress display
+                    prog = op_data.get("progress", {})
+                    pct = prog.get("percentage", 0)
+                    step = prog.get("current_step", "Working...")
+                    progress.update(
+                        task,
+                        completed=pct,
+                        description=f"[bold blue]Research Cycle[/] {step}",
+                    )
+
+                    # Check for terminal state
+                    if status in ("completed", "failed", "cancelled"):
+                        break
+
+                    await asyncio.sleep(0.5)
+
+                if cancelled:
+                    # Send cancellation request
+                    console.print("\n[yellow]Cancelling research cycle...[/yellow]")
+                    try:
+                        await client._make_request(
+                            "DELETE", f"/operations/{operation_id}"
+                        )
+                    except Exception:
+                        pass  # Continue even if cancel fails
+                    # Wait briefly for cancellation to process
+                    await asyncio.sleep(1)
+                    result = await client._make_request(
+                        "GET", f"/operations/{operation_id}"
+                    )
+                    op_data = result.get("data", {})
+
+            # Show final status (outside Progress context)
+            _show_completion_summary(op_data)
+            return op_data
+
+    finally:
+        # Always cleanup signal handler
+        if signal_handler_registered:
+            try:
+                loop.remove_signal_handler(signal.SIGINT)
+            except Exception:
+                pass
+
+
+def _show_completion_summary(op_data: dict) -> None:
+    """Display completion or cancellation summary."""
+    status = op_data.get("status")
+    result = op_data.get("result", {})
+
+    if status == "completed":
+        console.print("\n[green]✓ Research cycle complete![/green]")
+        if result.get("strategy_name"):
+            console.print(f"   Strategy: {result['strategy_name']}")
+        if result.get("verdict"):
+            console.print(f"   Verdict: {result['verdict']}")
+        metrics = result.get("metrics", {})
+        if metrics:
+            sharpe = metrics.get("sharpe_ratio", "N/A")
+            win_rate = metrics.get("win_rate", "N/A")
+            max_dd = metrics.get("max_drawdown", "N/A")
+            console.print(
+                f"   Sharpe: {sharpe} | Win Rate: {win_rate} | Max DD: {max_dd}"
+            )
+    elif status == "cancelled":
+        console.print("\n[yellow]⚠ Research cycle cancelled[/yellow]")
+        phase = (
+            op_data.get("metadata", {}).get("parameters", {}).get("phase", "unknown")
+        )
+        console.print(f"   Phase: {phase}")
+    elif status == "failed":
+        console.print("\n[red]✗ Research cycle failed[/red]")
+        error = op_data.get("error", op_data.get("error_message", "Unknown error"))
+        console.print(f"   Error: {error}")
 
 
 @agent_app.command("cancel")
