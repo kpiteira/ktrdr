@@ -7,7 +7,7 @@ with status and actionable message.
 
 import subprocess
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 
 from orchestrator.config import OrchestratorConfig
@@ -233,6 +233,71 @@ def check_github_token(timeout: float = DEFAULT_TIMEOUT) -> CheckResult:
             message="docker not available",
             check_name="github_token",
         )
+
+
+def get_health(
+    checks: list[str] | None = None,
+    timeout: float = DEFAULT_TIMEOUT,
+) -> HealthReport:
+    """Run health checks and return aggregated report.
+
+    Runs checks in dependency order. If a check fails, dependent checks
+    are skipped (marked as 'skipped' status).
+
+    Args:
+        checks: List of check names to run. If None, run all checks.
+        timeout: Maximum seconds to wait for each check.
+
+    Returns:
+        HealthReport with overall status and individual check results.
+    """
+    checks_to_run = checks if checks is not None else CHECK_ORDER
+    results: dict[str, CheckResult] = {}
+    failed_checks: set[str] = set()
+
+    for check_name in CHECK_ORDER:
+        if check_name not in checks_to_run:
+            continue
+
+        # Check dependencies - skip if any dependency failed
+        deps = CHECK_DEPENDENCIES.get(check_name, [])
+        if any(dep in failed_checks for dep in deps):
+            results[check_name] = CheckResult(
+                status="skipped",
+                message="sandbox not running",
+                check_name=check_name,
+            )
+            continue
+
+        # Run the check
+        # check_orchestrator doesn't take a timeout parameter
+        if check_name == "sandbox":
+            result = check_sandbox(timeout)
+        elif check_name == "claude_auth":
+            result = check_claude_auth(timeout)
+        elif check_name == "github_token":
+            result = check_github_token(timeout)
+        elif check_name == "orchestrator":
+            result = check_orchestrator()
+        else:
+            raise ValueError(f"Unknown check: {check_name}")
+
+        results[check_name] = result
+        if result.status == "failed":
+            failed_checks.add(check_name)
+
+    # Overall status: unhealthy if any check failed (skipped doesn't count)
+    overall: Literal["healthy", "unhealthy"] = (
+        "unhealthy"
+        if any(r.status == "failed" for r in results.values())
+        else "healthy"
+    )
+
+    return HealthReport(
+        status=overall,
+        timestamp=datetime.now(timezone.utc),
+        checks=results,
+    )
 
 
 def check_orchestrator() -> CheckResult:
