@@ -119,6 +119,20 @@ def mock_operations_service():
 class TestAgentServiceTrigger:
     """Test trigger() method."""
 
+    @pytest.fixture(autouse=True)
+    def mock_budget(self):
+        """Mock budget tracker to allow triggers in tests."""
+        from unittest.mock import MagicMock, patch
+
+        mock_tracker = MagicMock()
+        mock_tracker.can_spend.return_value = (True, None)
+
+        with patch(
+            "ktrdr.api.services.agent_service.get_budget_tracker",
+            return_value=mock_tracker,
+        ):
+            yield mock_tracker
+
     @pytest.mark.asyncio
     async def test_trigger_creates_agent_research_operation(
         self, mock_operations_service

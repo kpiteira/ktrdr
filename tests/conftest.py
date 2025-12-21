@@ -4,6 +4,7 @@ Global test fixtures for the KTRDR project.
 This module contains test fixtures that can be used across all test modules.
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -11,6 +12,11 @@ from pathlib import Path
 _project_root = Path(__file__).parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
+
+# Force all tests to use Haiku (cheapest model) to avoid burning API budget
+# This applies to both unit tests (which should be mocked) and integration tests
+# that make real Claude API calls.
+os.environ.setdefault("AGENT_MODEL", "haiku")
 
 from datetime import datetime, timedelta  # noqa: E402
 from unittest.mock import patch  # noqa: E402
