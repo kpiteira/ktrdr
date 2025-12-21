@@ -1,4 +1,11 @@
+---
+design: docs/architecture/autonomous-coding/DESIGN.md
+architecture: docs/architecture/autonomous-coding/ARCHITECTURE.md
+---
+
 # Milestone: Orchestrator Health Check
+
+**Branch:** `feature/orchestrator-health-check`
 
 A simple 3-task milestone for validating the orchestrator.
 

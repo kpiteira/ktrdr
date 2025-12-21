@@ -1,4 +1,11 @@
+---
+design: docs/architecture/autonomous-coding/DESIGN.md
+architecture: docs/architecture/autonomous-coding/ARCHITECTURE.md
+---
+
 # Milestone 1: Doomed to Fail Test
+
+**Branch:** `feature/orchestrator-test-doomed`
 
 A test plan designed to trigger loop detection by presenting an impossible
 task that will fail repeatedly with similar errors.
