@@ -12,7 +12,6 @@ to allow proper unit testing.
 
 from typing import Any
 
-from mcp.server.fastmcp import FastMCP
 from research_agents.services.agent_state import (
     create_agent_session as _create_session,
 )
@@ -22,6 +21,8 @@ from research_agents.services.agent_state import (
 from research_agents.services.agent_state import (
     update_agent_state as _update_state,
 )
+
+from mcp.server.fastmcp import FastMCP
 
 from ..telemetry import trace_mcp_tool
 
