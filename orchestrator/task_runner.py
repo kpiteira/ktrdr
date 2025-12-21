@@ -13,7 +13,11 @@ from rich.console import Console
 
 from orchestrator import telemetry
 from orchestrator.config import OrchestratorConfig
-from orchestrator.escalation import EscalationInfo, escalate_and_wait
+from orchestrator.escalation import (
+    EscalationInfo,
+    detect_needs_human,
+    escalate_and_wait,
+)
 from orchestrator.loop_detector import LoopDetector
 from orchestrator.models import Task, TaskResult
 from orchestrator.sandbox import SandboxManager
@@ -128,7 +132,9 @@ def parse_task_output(
 ]:
     """Parse structured output from Claude Code.
 
-    Extracts STATUS and related fields from Claude's output.
+    Uses a hybrid approach:
+    1. First checks for explicit STATUS markers (fast path)
+    2. If no marker found, uses LLM interpretation for semantic understanding
 
     Args:
         output: Raw output text from Claude Code
@@ -143,10 +149,15 @@ def parse_task_output(
     recommendation: str | None = None
     error: str | None = None
 
-    # Parse STATUS
+    # Parse explicit STATUS marker (fast path)
     status_match = re.search(r"STATUS:\s*(completed|failed|needs_human)", output)
     if status_match:
         status = status_match.group(1)  # type: ignore[assignment]
+    else:
+        # No explicit marker - use LLM interpretation for semantic understanding
+        if detect_needs_human(output):
+            status = "needs_human"
+        # else: default to "completed" (LLM said no human needed)
 
     # Parse ERROR for failed status
     error_match = re.search(r"ERROR:\s*(.+?)(?:\n|$)", output)
