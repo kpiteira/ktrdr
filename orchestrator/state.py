@@ -22,6 +22,7 @@ class OrchestratorState:
         milestone_id: Identifier for the milestone being executed
         plan_path: Path to the milestone plan file
         started_at: When milestone execution started
+        starting_branch: Git branch when milestone started (for PR base)
         current_task_index: Index of next task to execute
         completed_tasks: List of completed task IDs
         failed_tasks: List of failed task IDs
@@ -36,6 +37,7 @@ class OrchestratorState:
     milestone_id: str
     plan_path: str
     started_at: datetime
+    starting_branch: str = "main"
     current_task_index: int = 0
     completed_tasks: list[str] = field(default_factory=list)
     failed_tasks: list[str] = field(default_factory=list)

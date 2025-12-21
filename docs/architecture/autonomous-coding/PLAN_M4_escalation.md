@@ -1,3 +1,8 @@
+---
+design: docs/architecture/autonomous-coding/DESIGN.md
+architecture: docs/architecture/autonomous-coding/ARCHITECTURE.md
+---
+
 # Milestone 4: Escalation + Loop Detection
 
 **Branch:** `feature/orchestrator-m4-escalation`
@@ -108,6 +113,7 @@ curl -s "http://localhost:9090/api/v1/query?query=orchestrator_loops_detected_to
 Detect "needs human" in Claude output, extract question/options, present to user.
 
 **Implementation Notes:**
+
 ```python
 import re
 from dataclasses import dataclass
@@ -201,6 +207,7 @@ def _parse_options(options_text: str) -> list[str]:
 ```
 
 **Acceptance Criteria:**
+
 - [ ] Detects explicit STATUS: needs_human
 - [ ] Detects question patterns in natural language
 - [ ] Extracts structured QUESTION/OPTIONS/RECOMMENDATION
@@ -218,6 +225,7 @@ def _parse_options(options_text: str) -> list[str]:
 Present escalation to user and wait for input.
 
 **Implementation Notes:**
+
 ```python
 from rich.console import Console
 from rich.panel import Panel
@@ -282,6 +290,7 @@ async def escalate_and_wait(
 ```
 
 **Acceptance Criteria:**
+
 - [ ] Displays formatted question with Rich
 - [ ] Shows options if present
 - [ ] Shows recommendation if present
@@ -300,6 +309,7 @@ async def escalate_and_wait(
 Track failures and detect loops via attempt counting and error similarity.
 
 **Implementation Notes:**
+
 ```python
 from dataclasses import dataclass
 from difflib import SequenceMatcher
@@ -388,6 +398,7 @@ class LoopDetector:
 ```
 
 **Acceptance Criteria:**
+
 - [ ] Counts task attempts per task
 - [ ] Detects repeated failures
 - [ ] Computes error similarity
@@ -406,6 +417,7 @@ class LoopDetector:
 Update task runner to detect needs_human and trigger escalation.
 
 **Implementation Notes:**
+
 ```python
 async def run_task_with_escalation(
     task: Task,
@@ -463,6 +475,7 @@ async def run_task_with_escalation(
 ```
 
 **Acceptance Criteria:**
+
 - [ ] Detects needs_human and triggers escalation
 - [ ] Retries task with human guidance
 - [ ] Respects loop detection limits
@@ -479,12 +492,14 @@ async def run_task_with_escalation(
 Update milestone runner to use loop detector.
 
 **Implementation Notes:**
+
 - Create LoopDetector at milestone start
 - Pass to task runner
 - Check should_stop_task before each attempt
 - Save loop state to OrchestratorState
 
 **Acceptance Criteria:**
+
 - [ ] Loop detector initialized per milestone
 - [ ] State persisted for resume
 - [ ] Milestone stops on loop detection
@@ -500,6 +515,7 @@ Update milestone runner to use loop detector.
 Add metrics for escalations and loop detection.
 
 **Implementation Notes:**
+
 ```python
 escalations_counter: metrics.Counter
 loops_counter: metrics.Counter
@@ -520,6 +536,7 @@ def create_metrics(meter: metrics.Meter):
 ```
 
 **Acceptance Criteria:**
+
 - [ ] Escalation counter increments
 - [ ] Loop counter increments with type label
 - [ ] Queryable in Prometheus
@@ -535,6 +552,7 @@ def create_metrics(meter: metrics.Meter):
 Test plan designed to trigger "needs human" escalation.
 
 **Content:**
+
 ```markdown
 # Test Milestone: Ambiguous Task
 
@@ -555,6 +573,7 @@ eviction policy, or scope. Should trigger uncertainty.)
 ```
 
 **Acceptance Criteria:**
+
 - [ ] Task is genuinely ambiguous
 - [ ] Running it triggers needs_human
 - [ ] Claude provides reasonable options
@@ -570,6 +589,7 @@ eviction policy, or scope. Should trigger uncertainty.)
 Test plan designed to fail repeatedly for loop detection testing.
 
 **Content:**
+
 ```markdown
 # Test Milestone: Doomed to Fail
 
@@ -593,6 +613,7 @@ Create a file that simultaneously:
 ```
 
 **Acceptance Criteria:**
+
 - [ ] Task is genuinely impossible
 - [ ] Fails consistently with similar errors
 - [ ] Triggers loop detection after 3 attempts
@@ -602,6 +623,7 @@ Create a file that simultaneously:
 ## Milestone Verification
 
 **Test with ambiguous_task.md:**
+
 ```bash
 ./scripts/sandbox-reset.sh
 uv run orchestrator run orchestrator/test_plans/ambiguous_task.md
@@ -612,6 +634,7 @@ uv run orchestrator run orchestrator/test_plans/ambiguous_task.md
 ```
 
 **Test with doomed_to_fail.md:**
+
 ```bash
 ./scripts/sandbox-reset.sh
 uv run orchestrator run orchestrator/test_plans/doomed_to_fail.md
@@ -620,6 +643,7 @@ uv run orchestrator run orchestrator/test_plans/doomed_to_fail.md
 ```
 
 **Test with real feature (from GATE):**
+
 ```bash
 # Run first milestone of "Orchestrator Enhancements"
 uv run orchestrator run docs/milestones/orchestrator_enhancements_m1.md
@@ -629,6 +653,7 @@ uv run orchestrator run docs/milestones/orchestrator_enhancements_m1.md
 ```
 
 **Checklist:**
+
 - [ ] All tasks complete
 - [ ] Unit tests pass
 - [ ] Escalation flow works end-to-end

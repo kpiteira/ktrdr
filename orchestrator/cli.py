@@ -4,6 +4,8 @@ Provides command-line interface for autonomous task execution.
 """
 
 import asyncio
+import json
+import sys
 from pathlib import Path
 
 import click
@@ -11,10 +13,16 @@ from rich.console import Console
 
 from orchestrator import telemetry
 from orchestrator.config import OrchestratorConfig
+from orchestrator.health import CHECK_ORDER, get_health
 from orchestrator.lock import MilestoneLock
-from orchestrator.milestone_runner import MilestoneResult, run_milestone
+from orchestrator.milestone_runner import (
+    MilestoneResult,
+    create_milestone_pr,
+    run_milestone,
+)
+from orchestrator.models import Task, TaskResult
 from orchestrator.plan_parser import parse_plan
-from orchestrator.sandbox import SandboxManager
+from orchestrator.sandbox import SandboxManager, format_tool_call
 from orchestrator.state import OrchestratorState
 from orchestrator.task_runner import run_task
 from orchestrator.telemetry import create_metrics, setup_telemetry
@@ -27,6 +35,16 @@ console = Console()
 def cli() -> None:
     """Orchestrator - Autonomous task execution for KTRDR."""
     pass
+
+
+@cli.command()
+@click.option("--check", type=click.Choice(CHECK_ORDER), help="Run single check")
+def health(check: str | None) -> None:
+    """Check orchestrator health status."""
+    checks = [check] if check else None
+    report = get_health(checks=checks)
+    click.echo(json.dumps(report.to_dict(), indent=2))
+    sys.exit(0 if report.status == "healthy" else 1)
 
 
 @cli.command()
@@ -61,7 +79,9 @@ async def _run_task(plan_file: str, task_id: str, guidance: str | None) -> None:
         console.print(f"[bold]Task {task_id}:[/bold] {target_task.title}")
         console.print("Invoking Claude Code...")
 
-        result = await run_task(target_task, sandbox, config, guidance)
+        result = await run_task(
+            target_task, sandbox, config, plan_file, human_guidance=guidance
+        )
 
         # Record telemetry on span
         span.set_attribute("task.status", result.status)
@@ -149,6 +169,34 @@ async def _run_milestone(
     # Acquire lock to prevent concurrent runs
     lock = MilestoneLock(config.state_dir, milestone_id)
 
+    # Define callback for real-time streaming progress
+    def on_tool_use(tool_name: str, tool_input: dict) -> None:
+        """Display tool calls in real-time during task execution."""
+        msg = format_tool_call(tool_name, tool_input)
+        console.print(f"           {msg}")
+
+    # Define callback for task completion display
+    def on_task_complete(task: Task, task_result: TaskResult) -> None:
+        """Display task summary after completion."""
+        status_color = {
+            "completed": "green",
+            "failed": "red",
+            "needs_human": "yellow",
+        }
+        color = status_color.get(task_result.status, "white")
+
+        console.print(
+            f"Task {task.id}: "
+            f"[bold {color}]{task_result.status.upper()}[/bold {color}] "
+            f"({task_result.duration_seconds:.0f}s, "
+            f"{task_result.tokens_used / 1000:.1f}k tokens, "
+            f"${task_result.cost_usd:.2f})"
+        )
+
+        # Display Claude's task summary (output field contains the summary)
+        if task_result.output:
+            console.print(f"\n{task_result.output}\n")
+
     try:
         with lock:
             if not resume:
@@ -162,10 +210,16 @@ async def _run_milestone(
                 resume=resume,
                 config=config,
                 tracer=tracer,
+                on_task_complete=on_task_complete,
+                on_tool_use=on_tool_use,
             )
 
             # Output summary
             _print_milestone_summary(result)
+
+            # Prompt for PR creation if milestone completed successfully
+            if result.status == "completed":
+                await _prompt_for_pr(result, config)
 
             # Send notification if requested
             if notify:
@@ -185,9 +239,7 @@ def _print_milestone_summary(result: MilestoneResult) -> None:
     }
     color = status_color[result.status]
 
-    console.print(
-        f"\n[bold {color}]Milestone {result.status.upper()}[/bold {color}]"
-    )
+    console.print(f"\n[bold {color}]Milestone {result.status.upper()}[/bold {color}]")
     console.print(f"  Tasks: {result.completed_tasks}/{result.total_tasks} completed")
     console.print(f"  Duration: {_format_duration(result.total_duration_seconds)}")
     console.print(f"  Tokens: {result.total_tokens / 1000:.1f}k")
@@ -218,6 +270,31 @@ def _send_notification(result: MilestoneResult) -> None:
     except ImportError:
         # notifications module not implemented yet (Task 3.7)
         pass
+
+
+async def _prompt_for_pr(result: MilestoneResult, config: OrchestratorConfig) -> None:
+    """Prompt user to create PR and invoke Claude if confirmed."""
+    if click.confirm("\nCreate PR for this milestone?", default=True):
+        console.print("[bold]Invoking Claude to create PR...[/bold]")
+
+        # Create sandbox for PR creation
+        sandbox = SandboxManager(
+            container_name=config.sandbox_container,
+            workspace_path=config.workspace_path,
+        )
+
+        pr_result = await create_milestone_pr(
+            sandbox=sandbox,
+            milestone_id=result.state.milestone_id,
+            completed_tasks=result.state.completed_tasks,
+            total_cost_usd=result.total_cost_usd,
+            base_branch=result.state.starting_branch,
+        )
+
+        if pr_result.is_error:
+            console.print(f"[red]PR creation failed:[/red] {pr_result.result}")
+        else:
+            console.print(pr_result.result)
 
 
 def main() -> None:

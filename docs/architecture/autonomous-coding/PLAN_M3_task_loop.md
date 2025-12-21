@@ -1,8 +1,13 @@
+---
+design: docs/architecture/autonomous-coding/DESIGN.md
+architecture: docs/architecture/autonomous-coding/ARCHITECTURE.md
+---
+
 # Milestone 3: Task Loop + State + Resume
 
 **Branch:** `feature/orchestrator-m3-task-loop`
 **Builds on:** M2 (single task works)
-**Estimated Tasks:** 7
+**Estimated Tasks:** 9
 
 ---
 
@@ -24,6 +29,10 @@ uv run orchestrator run orchestrator/test_plans/health_check.md
 # [14:23:01] Starting milestone: Orchestrator Health Check
 # [14:23:01] Task 1.1: Create health module
 #            Invoking Claude Code...
+#            → Reading orchestrator/config.py...
+#            → Writing orchestrator/health.py...
+#            → Writing orchestrator/tests/test_health.py...
+#            → Running tests...
 # [14:23:45] Task 1.1: COMPLETED (44s, 4.2k tokens, $0.03)
 #
 #            ## Task Complete: 1.1
@@ -106,6 +115,7 @@ uv run orchestrator run orchestrator/test_plans/health_check.md
 Persist orchestrator state for resumability.
 
 **Implementation Notes:**
+
 ```python
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
@@ -165,6 +175,7 @@ class OrchestratorState:
 ```
 
 **Acceptance Criteria:**
+
 - [ ] State saves to JSON file
 - [ ] State loads from JSON file
 - [ ] Handles datetime serialization
@@ -182,6 +193,7 @@ class OrchestratorState:
 Simple PID-based lock to prevent concurrent runs on same milestone.
 
 **Implementation Notes:**
+
 ```python
 from pathlib import Path
 import os
@@ -221,6 +233,7 @@ class MilestoneLock:
 ```
 
 **Acceptance Criteria:**
+
 - [ ] Lock acquired with PID
 - [ ] Lock detected when process running
 - [ ] Stale lock (dead PID) can be acquired
@@ -238,6 +251,7 @@ class MilestoneLock:
 Run all tasks in a milestone sequentially with state persistence.
 
 **Implementation Notes:**
+
 ```python
 from opentelemetry import trace
 
@@ -336,6 +350,7 @@ async def run_milestone(
 ```
 
 **Acceptance Criteria:**
+
 - [ ] Runs all tasks sequentially
 - [ ] Saves state after each task
 - [ ] Supports resume from last completed
@@ -354,6 +369,7 @@ async def run_milestone(
 Add `orchestrator run` command for full milestone execution.
 
 **Implementation Notes:**
+
 ```python
 @cli.command()
 @click.argument("plan_file", type=click.Path(exists=True))
@@ -385,6 +401,7 @@ async def _run_milestone(plan_file: str, resume: bool, notify: bool):
 ```
 
 **Acceptance Criteria:**
+
 - [ ] `orchestrator run <plan>` executes milestone
 - [ ] Lock prevents concurrent runs
 - [ ] --notify flag triggers macOS notification
@@ -401,6 +418,7 @@ async def _run_milestone(plan_file: str, resume: bool, notify: bool):
 Add `orchestrator resume` command to continue from saved state.
 
 **Implementation Notes:**
+
 ```python
 @cli.command()
 @click.argument("plan_file", type=click.Path(exists=True))
@@ -427,6 +445,7 @@ def resume(plan_file: str, notify: bool):
 ```
 
 **Acceptance Criteria:**
+
 - [ ] `orchestrator resume <plan>` works
 - [ ] Errors if no state exists
 - [ ] Continues from last completed task
@@ -443,6 +462,7 @@ def resume(plan_file: str, notify: bool):
 Add histogram metric for task duration distribution.
 
 **Implementation Notes:**
+
 ```python
 task_duration: metrics.Histogram
 
@@ -459,6 +479,7 @@ def create_metrics(meter: metrics.Meter):
 ```
 
 **Acceptance Criteria:**
+
 - [ ] Histogram records task durations
 - [ ] Queryable in Prometheus
 - [ ] Can compute P50/P95/P99
@@ -474,6 +495,7 @@ def create_metrics(meter: metrics.Meter):
 Send macOS notifications for milestone events.
 
 **Implementation Notes:**
+
 ```python
 import subprocess
 import platform
@@ -493,6 +515,7 @@ def send_notification(title: str, message: str, sound: bool = True) -> None:
 ```
 
 **Acceptance Criteria:**
+
 - [ ] Notification appears on macOS
 - [ ] Gracefully no-ops on other platforms
 - [ ] Sound is optional
@@ -508,6 +531,7 @@ def send_notification(title: str, message: str, sound: bool = True) -> None:
 After each task completes, display Claude's task summary to the human for visibility into what happened in the sandbox. At milestone end, prompt the human to create a PR and relay the answer to Claude.
 
 **Implementation Notes:**
+
 ```python
 # In milestone_runner.py
 
@@ -561,6 +585,84 @@ Use `gh pr create` with a summary of all changes made across the tasks."""
 
 ---
 
+### Task 3.9: Stream Claude's Progress During Execution
+
+**File:** `orchestrator/sandbox.py`, `orchestrator/milestone_runner.py`
+**Type:** CODING
+
+**Description:**
+Stream Claude's tool calls in real-time so the user can see what's happening during execution. Without this, long-running tasks show no output for minutes, making it impossible to know if progress is being made.
+
+**Implementation Notes:**
+
+```python
+# In sandbox.py - parse streaming output from claude CLI
+
+async def invoke_claude_streaming(
+    prompt: str,
+    config: OrchestratorConfig,
+    on_tool_call: Callable[[str], None],
+) -> TaskResult:
+    """Invoke Claude with streaming progress output.
+
+    Args:
+        on_tool_call: Callback for each tool call (e.g., "Reading file.py", "Writing test.py")
+    """
+    # Use --output-format stream-json for claude CLI
+    # Parse tool_use events from the stream
+    # Call on_tool_call for each tool invocation
+
+    # Example stream events to parse:
+    # {"type": "tool_use", "name": "Read", "input": {"file_path": "..."}}
+    # {"type": "tool_use", "name": "Write", "input": {"file_path": "..."}}
+    # {"type": "tool_use", "name": "Bash", "input": {"command": "pytest ..."}}
+
+
+# In milestone_runner.py - display progress
+
+def _format_tool_call(tool_name: str, tool_input: dict) -> str:
+    """Format tool call for display."""
+    if tool_name == "Read":
+        return f"→ Reading {Path(tool_input['file_path']).name}..."
+    elif tool_name == "Write":
+        return f"→ Writing {Path(tool_input['file_path']).name}..."
+    elif tool_name == "Edit":
+        return f"→ Editing {Path(tool_input['file_path']).name}..."
+    elif tool_name == "Bash":
+        cmd = tool_input.get("command", "")[:50]
+        return f"→ Running: {cmd}..."
+    elif tool_name == "Grep":
+        return f"→ Searching for {tool_input.get('pattern', '')}..."
+    else:
+        return f"→ {tool_name}..."
+
+async def run_milestone(...):
+    for task in tasks:
+        console.print(f"[bold]Task {task.id}:[/bold] {task.title}")
+        console.print("Invoking Claude Code...")
+
+        def on_progress(tool_name: str, tool_input: dict):
+            msg = _format_tool_call(tool_name, tool_input)
+            console.print(f"           {msg}")
+
+        result = await sandbox.invoke_claude_streaming(
+            prompt=task.prompt,
+            config=config,
+            on_tool_call=on_progress,
+        )
+```
+
+**Acceptance Criteria:**
+
+- [ ] User sees tool calls in real-time during task execution
+- [ ] File reads/writes show the filename
+- [ ] Bash commands show first 50 chars of command
+- [ ] Progress updates don't spam (one line per tool call)
+- [ ] Works with --output-format stream-json from Claude CLI
+- [ ] Falls back gracefully if streaming not available
+
+---
+
 ## Milestone Verification
 
 **Full E2E with health_check milestone:**
@@ -611,6 +713,7 @@ uv run orchestrator resume orchestrator/test_plans/health_check.md
 - [ ] All tasks complete
 - [ ] Unit tests pass: `uv run pytest orchestrator/tests/`
 - [ ] E2E test passes: health_check.md runs to completion
+- [ ] **Live progress shown during execution** (tool calls streamed)
 - [ ] Task summaries displayed after each task (files changed, decisions, issues)
 - [ ] PR prompt appears at milestone end
 - [ ] PR created via Claude when confirmed

@@ -57,13 +57,13 @@ class TestRunTaskPromptConstruction:
             return_value=make_claude_result("STATUS: completed")
         )
 
-        await run_task(task, sandbox, config)
+        await run_task(task, sandbox, config, task.plan_file)
 
         call_args = sandbox.invoke_claude.call_args
         prompt = call_args[1]["prompt"]
+        # /ktask invocation: /ktask impl: <plan_path> task: <task_id>
         assert task.id in prompt
-        assert task.title in prompt
-        assert task.description in prompt
+        assert task.plan_file in prompt
 
     @pytest.mark.asyncio
     async def test_prompt_includes_human_guidance_when_provided(self):
@@ -77,7 +77,9 @@ class TestRunTaskPromptConstruction:
             return_value=make_claude_result("STATUS: completed")
         )
 
-        await run_task(task, sandbox, config, human_guidance="Use option A")
+        await run_task(
+            task, sandbox, config, task.plan_file, human_guidance="Use option A"
+        )
 
         call_args = sandbox.invoke_claude.call_args
         prompt = call_args[1]["prompt"]
@@ -95,7 +97,7 @@ class TestRunTaskPromptConstruction:
             return_value=make_claude_result("STATUS: completed")
         )
 
-        await run_task(task, sandbox, config)
+        await run_task(task, sandbox, config, task.plan_file)
 
         call_kwargs = sandbox.invoke_claude.call_args[1]
         assert call_kwargs["max_turns"] == 100
@@ -112,7 +114,7 @@ class TestRunTaskPromptConstruction:
             return_value=make_claude_result("STATUS: completed")
         )
 
-        await run_task(task, sandbox, config)
+        await run_task(task, sandbox, config, task.plan_file)
 
         call_kwargs = sandbox.invoke_claude.call_args[1]
         assert call_kwargs["timeout"] == 1200
@@ -135,7 +137,7 @@ class TestRunTaskStatusParsing:
             )
         )
 
-        result = await run_task(task, sandbox, config)
+        result = await run_task(task, sandbox, config, task.plan_file)
 
         assert result.status == "completed"
 
@@ -153,7 +155,7 @@ class TestRunTaskStatusParsing:
             )
         )
 
-        result = await run_task(task, sandbox, config)
+        result = await run_task(task, sandbox, config, task.plan_file)
 
         assert result.status == "failed"
 
@@ -172,7 +174,7 @@ class TestRunTaskStatusParsing:
             )
         )
 
-        result = await run_task(task, sandbox, config)
+        result = await run_task(task, sandbox, config, task.plan_file)
 
         assert result.status == "needs_human"
 
@@ -194,7 +196,7 @@ class TestRunTaskErrorExtraction:
             )
         )
 
-        result = await run_task(task, sandbox, config)
+        result = await run_task(task, sandbox, config, task.plan_file)
 
         assert result.error is not None
         assert "Import error" in result.error
@@ -217,7 +219,7 @@ class TestRunTaskNeedsHumanExtraction:
             )
         )
 
-        result = await run_task(task, sandbox, config)
+        result = await run_task(task, sandbox, config, task.plan_file)
 
         assert result.question is not None
         assert "Redis" in result.question
@@ -236,7 +238,7 @@ class TestRunTaskNeedsHumanExtraction:
             )
         )
 
-        result = await run_task(task, sandbox, config)
+        result = await run_task(task, sandbox, config, task.plan_file)
 
         assert result.options is not None
         assert "A" in result.options
@@ -257,7 +259,7 @@ class TestRunTaskNeedsHumanExtraction:
             )
         )
 
-        result = await run_task(task, sandbox, config)
+        result = await run_task(task, sandbox, config, task.plan_file)
 
         assert result.recommendation is not None
         assert "Option A" in result.recommendation
@@ -278,7 +280,7 @@ class TestRunTaskResultFields:
             return_value=make_claude_result("STATUS: completed")
         )
 
-        result = await run_task(task, sandbox, config)
+        result = await run_task(task, sandbox, config, task.plan_file)
 
         assert result.task_id == "3.5"
 
@@ -294,7 +296,7 @@ class TestRunTaskResultFields:
             return_value=make_claude_result("STATUS: completed", cost=0.12)
         )
 
-        result = await run_task(task, sandbox, config)
+        result = await run_task(task, sandbox, config, task.plan_file)
 
         assert result.cost_usd == 0.12
 
@@ -310,7 +312,7 @@ class TestRunTaskResultFields:
             return_value=make_claude_result("STATUS: completed")
         )
 
-        result = await run_task(task, sandbox, config)
+        result = await run_task(task, sandbox, config, task.plan_file)
 
         assert result.session_id == "test-session-123"
 
@@ -325,7 +327,7 @@ class TestRunTaskResultFields:
         output_text = "Detailed task output here.\n\nSTATUS: completed"
         sandbox.invoke_claude = AsyncMock(return_value=make_claude_result(output_text))
 
-        result = await run_task(task, sandbox, config)
+        result = await run_task(task, sandbox, config, task.plan_file)
 
         assert "Detailed task output" in result.output
 
@@ -341,7 +343,7 @@ class TestRunTaskResultFields:
             return_value=make_claude_result("STATUS: completed")
         )
 
-        result = await run_task(task, sandbox, config)
+        result = await run_task(task, sandbox, config, task.plan_file)
 
         assert result.duration_seconds >= 0
 
@@ -399,3 +401,102 @@ class TestParseTaskOutput:
         )
 
         assert status == "completed"
+
+
+class TestRunTaskStreaming:
+    """Test streaming support in run_task."""
+
+    @pytest.mark.asyncio
+    async def test_uses_streaming_when_callback_provided(self):
+        """Should use invoke_claude_streaming when on_tool_use is provided."""
+        from orchestrator.task_runner import run_task
+
+        task = make_task()
+        config = OrchestratorConfig()
+        sandbox = MagicMock()
+
+        # Setup streaming method
+        sandbox.invoke_claude_streaming = AsyncMock(
+            return_value=make_claude_result("STATUS: completed")
+        )
+        # Also setup non-streaming for comparison
+        sandbox.invoke_claude = AsyncMock(
+            return_value=make_claude_result("STATUS: completed")
+        )
+
+        tool_calls: list[tuple[str, dict]] = []
+
+        def on_tool(name: str, input_data: dict) -> None:
+            tool_calls.append((name, input_data))
+
+        await run_task(task, sandbox, config, task.plan_file, on_tool_use=on_tool)
+
+        # Should have used streaming method
+        sandbox.invoke_claude_streaming.assert_called_once()
+        # Should NOT have used non-streaming method
+        sandbox.invoke_claude.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_uses_non_streaming_when_no_callback(self):
+        """Should use invoke_claude when no on_tool_use callback."""
+        from orchestrator.task_runner import run_task
+
+        task = make_task()
+        config = OrchestratorConfig()
+        sandbox = MagicMock()
+
+        sandbox.invoke_claude_streaming = AsyncMock(
+            return_value=make_claude_result("STATUS: completed")
+        )
+        sandbox.invoke_claude = AsyncMock(
+            return_value=make_claude_result("STATUS: completed")
+        )
+
+        await run_task(task, sandbox, config, task.plan_file)  # No on_tool_use callback
+
+        # Should have used non-streaming method
+        sandbox.invoke_claude.assert_called_once()
+        # Should NOT have used streaming method
+        sandbox.invoke_claude_streaming.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_streaming_passes_callback_to_sandbox(self):
+        """Callback should be passed through to sandbox streaming method."""
+        from orchestrator.task_runner import run_task
+
+        task = make_task()
+        config = OrchestratorConfig()
+        sandbox = MagicMock()
+
+        sandbox.invoke_claude_streaming = AsyncMock(
+            return_value=make_claude_result("STATUS: completed")
+        )
+
+        def my_callback(name: str, data: dict) -> None:
+            pass
+
+        await run_task(task, sandbox, config, task.plan_file, on_tool_use=my_callback)
+
+        # Verify callback was passed
+        call_kwargs = sandbox.invoke_claude_streaming.call_args[1]
+        assert "on_tool_use" in call_kwargs
+        assert call_kwargs["on_tool_use"] == my_callback
+
+    @pytest.mark.asyncio
+    async def test_streaming_passes_config_params(self):
+        """Should pass max_turns and timeout to streaming method."""
+        from orchestrator.task_runner import run_task
+
+        task = make_task()
+        config = OrchestratorConfig(max_turns=75, task_timeout_seconds=900)
+        sandbox = MagicMock()
+
+        sandbox.invoke_claude_streaming = AsyncMock(
+            return_value=make_claude_result("STATUS: completed")
+        )
+
+        await run_task(task, sandbox, config, task.plan_file, on_tool_use=lambda n, i: None)
+
+        call_kwargs = sandbox.invoke_claude_streaming.call_args[1]
+        assert call_kwargs["max_turns"] == 75
+        assert call_kwargs["timeout"] == 900

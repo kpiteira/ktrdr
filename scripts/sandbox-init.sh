@@ -89,6 +89,12 @@ else
     echo "  Done."
 fi
 
+# Step 3b: Fix workspace ownership (Claude runs as ubuntu, not root)
+echo ""
+echo "Step 3b: Setting workspace ownership..."
+docker exec "$CONTAINER_NAME" chown -R ubuntu:ubuntu /workspace
+echo "  Done."
+
 # Step 4: Create env directories (idempotent)
 echo ""
 echo "Step 4: Creating environment directories..."

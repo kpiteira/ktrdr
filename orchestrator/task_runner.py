@@ -6,7 +6,7 @@ in the sandbox, and parsing structured output.
 
 import re
 import time
-from typing import Literal
+from typing import Callable, Literal
 
 from orchestrator.config import OrchestratorConfig
 from orchestrator.models import Task, TaskResult
@@ -17,7 +17,9 @@ async def run_task(
     task: Task,
     sandbox: SandboxManager,
     config: OrchestratorConfig,
+    plan_path: str,
     human_guidance: str | None = None,
+    on_tool_use: Callable[[str, dict], None] | None = None,
 ) -> TaskResult:
     """Execute a task via Claude Code in the sandbox.
 
@@ -25,21 +27,36 @@ async def run_task(
         task: The task to execute
         sandbox: Sandbox manager for Claude invocation
         config: Orchestrator configuration
+        plan_path: Path to the milestone plan file (for /ktask invocation)
         human_guidance: Optional guidance from human (for retry after escalation)
+        on_tool_use: Optional callback for streaming tool use events.
+            If provided, uses streaming mode for real-time progress visibility.
 
     Returns:
         TaskResult with execution outcome
     """
     # Construct prompt with /ktask command
-    prompt = _build_prompt(task, human_guidance)
+    prompt = _build_prompt(task, plan_path, human_guidance)
 
-    # Invoke Claude Code
+    # Invoke Claude Code (streaming if callback provided)
     start_time = time.time()
-    claude_result = await sandbox.invoke_claude(
-        prompt=prompt,
-        max_turns=config.max_turns,
-        timeout=config.task_timeout_seconds,
-    )
+
+    if on_tool_use is not None:
+        # Use streaming mode for real-time progress
+        claude_result = await sandbox.invoke_claude_streaming(
+            prompt=prompt,
+            on_tool_use=on_tool_use,
+            max_turns=config.max_turns,
+            timeout=config.task_timeout_seconds,
+        )
+    else:
+        # Use standard mode (no streaming)
+        claude_result = await sandbox.invoke_claude(
+            prompt=prompt,
+            max_turns=config.max_turns,
+            timeout=config.task_timeout_seconds,
+        )
+
     duration = time.time() - start_time
 
     # Parse status and metadata from output
@@ -65,28 +82,23 @@ async def run_task(
     )
 
 
-def _build_prompt(task: Task, human_guidance: str | None = None) -> str:
-    """Build the prompt for Claude Code execution."""
-    criteria = "\n".join(f"- {c}" for c in task.acceptance_criteria)
+def _build_prompt(
+    task: Task, plan_path: str, human_guidance: str | None = None
+) -> str:
+    """Build the prompt for Claude Code execution using /ktask skill.
 
-    prompt = f"""# Task {task.id}: {task.title}
+    Invokes the /ktask skill which handles:
+    - TDD workflow (RED → GREEN → REFACTOR)
+    - Git workflow (branch, commits)
+    - Memory reflection
+    - Handoff documents
+    """
+    prompt = f"/ktask impl: {plan_path} task: {task.id}"
 
-**File:** {task.file_path or "N/A"}
+    if human_guidance:
+        prompt += f"\n\nAdditional guidance: {human_guidance}"
 
-**Description:**
-{task.description}
-
-**Acceptance Criteria:**
-{criteria}
-
-{f"**Additional Guidance:** {human_guidance}" if human_guidance else ""}
-
-Please implement this task. When complete, include in your final message:
-- STATUS: completed | needs_human | failed
-- If needs_human: QUESTION: <question> OPTIONS: <options> RECOMMENDATION: <rec>
-- If failed: ERROR: <what went wrong>
-"""
-    return prompt.strip()
+    return prompt
 
 
 def _estimate_tokens(cost_usd: float) -> int:

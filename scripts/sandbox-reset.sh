@@ -54,15 +54,21 @@ docker exec "$CONTAINER_NAME" bash -c '
 '
 echo "  Done."
 
-# Step 2: Clear logs
+# Step 2: Fix workspace ownership (in case new files were created as root)
 echo ""
-echo "Step 2: Clearing logs..."
+echo "Step 2: Fixing workspace ownership..."
+docker exec "$CONTAINER_NAME" chown -R ubuntu:ubuntu /workspace
+echo "  Done."
+
+# Step 3: Clear logs
+echo ""
+echo "Step 3: Clearing logs..."
 docker exec "$CONTAINER_NAME" bash -c 'rm -rf /env/logs/* 2>/dev/null || true'
 echo "  Done."
 
-# Step 3: Verify state
+# Step 4: Verify state
 echo ""
-echo "Step 3: Verifying reset..."
+echo "Step 4: Verifying reset..."
 docker exec "$CONTAINER_NAME" bash -c '
     cd /workspace
     echo "  Workspace status:"
