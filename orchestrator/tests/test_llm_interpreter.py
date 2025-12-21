@@ -467,3 +467,84 @@ class TestInterpretationPrompt:
             prompt_idx = call_args.index("-p") + 1
             prompt = call_args[prompt_idx]
             assert "JSON" in prompt or "json" in prompt
+
+
+class TestLLMInterpreterIntegration:
+    """Integration tests that require Claude CLI.
+
+    These tests call the real Claude CLI and are skipped in CI environments
+    or when Claude CLI isn't available. Run locally with Claude CLI installed
+    to validate end-to-end LLM interpretation.
+    """
+
+    import os
+    import shutil
+
+    import pytest
+
+    # Check if Claude CLI is available
+    _claude_available = shutil.which("claude") is not None
+    _skip_reason = (
+        "Skip in CI - requires Claude CLI"
+        if os.getenv("CI") == "true"
+        else "Claude CLI not found in PATH"
+    )
+
+    @pytest.mark.skipif(
+        os.getenv("CI") == "true" or not _claude_available,
+        reason=_skip_reason,
+    )
+    def test_real_haiku_interpretation_needs_human(self):
+        """Test real CLI call for output that needs human input."""
+        from orchestrator.llm_interpreter import LLMInterpreter
+
+        interpreter = LLMInterpreter()
+        result = interpreter.interpret(
+            "The task says to add caching but doesn't specify the type. "
+            "Options: A) Redis B) In-memory. I recommend B for simplicity. "
+            "What would you prefer?"
+        )
+
+        # LLM should recognize this as needing human input
+        assert result.needs_human is True
+        # Should extract options or at least recognize they exist
+        assert result.options is not None or result.question is not None
+
+    @pytest.mark.skipif(
+        os.getenv("CI") == "true" or not _claude_available,
+        reason=_skip_reason,
+    )
+    def test_real_haiku_interpretation_completed(self):
+        """Test real CLI call for output that indicates task completion."""
+        from orchestrator.llm_interpreter import LLMInterpreter
+
+        interpreter = LLMInterpreter()
+        result = interpreter.interpret(
+            "Task completed successfully. "
+            "I created the file and all 15 tests pass. "
+            "The implementation follows existing patterns."
+        )
+
+        # LLM should recognize this as completed, no human needed
+        assert result.needs_human is False
+        assert result.task_completed is True
+        assert result.task_failed is False
+
+    @pytest.mark.skipif(
+        os.getenv("CI") == "true" or not _claude_available,
+        reason=_skip_reason,
+    )
+    def test_real_haiku_interpretation_failed(self):
+        """Test real CLI call for output that indicates task failure."""
+        from orchestrator.llm_interpreter import LLMInterpreter
+
+        interpreter = LLMInterpreter()
+        result = interpreter.interpret(
+            "Task failed. "
+            "Error: ModuleNotFoundError - No module named 'nonexistent'. "
+            "The import on line 5 references a module that doesn't exist."
+        )
+
+        # LLM should recognize this as failed
+        assert result.task_failed is True
+        assert result.needs_human is False
