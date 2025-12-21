@@ -78,15 +78,15 @@ class TestAnthropicInvokerConfig:
 
         config = AnthropicInvokerConfig()
         assert config.model == DEFAULT_MODEL
-        assert config.model == "claude-opus-4-5-20250514"
+        assert config.model == "claude-opus-4-5-20251101"
         assert config.max_tokens == 4096
 
     def test_config_with_opus_model(self):
         """Test configuration with Opus model."""
         from ktrdr.agents.invoker import AnthropicInvokerConfig
 
-        config = AnthropicInvokerConfig(model="claude-opus-4-5-20250514")
-        assert config.model == "claude-opus-4-5-20250514"
+        config = AnthropicInvokerConfig(model="claude-opus-4-5-20251101")
+        assert config.model == "claude-opus-4-5-20251101"
 
     def test_config_from_env(self):
         """Test loading configuration from environment variables."""
@@ -95,12 +95,12 @@ class TestAnthropicInvokerConfig:
         with patch.dict(
             "os.environ",
             {
-                "AGENT_MODEL": "claude-opus-4-5-20250514",
+                "AGENT_MODEL": "claude-opus-4-5-20251101",
                 "AGENT_MAX_TOKENS": "8192",
             },
         ):
             config = AnthropicInvokerConfig.from_env()
-            assert config.model == "claude-opus-4-5-20250514"
+            assert config.model == "claude-opus-4-5-20251101"
             assert config.max_tokens == 8192
 
     def test_config_from_env_defaults(self):
@@ -137,7 +137,7 @@ class TestAnthropicAgentInvoker:
         from ktrdr.agents.invoker import AnthropicAgentInvoker, AnthropicInvokerConfig
 
         config = AnthropicInvokerConfig(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-5-20250929",
             max_tokens=4096,
         )
         invoker = AnthropicAgentInvoker(config=config)
@@ -512,7 +512,7 @@ class TestTokenBudgetLimitsEnforcement:
         from ktrdr.agents.invoker import AnthropicAgentInvoker, AnthropicInvokerConfig
 
         config = AnthropicInvokerConfig(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-5-20250929",
             max_tokens=4096,
             max_iterations=3,  # Low limit for testing
             max_input_tokens=1000,  # Low limit for testing

@@ -4,7 +4,7 @@ Task 8.3: Verify model selection via AGENT_MODEL environment variable.
 
 Tests cover:
 - VALID_MODELS constant exists with expected models
-- DEFAULT_MODEL is claude-opus-4-5-20250514
+- DEFAULT_MODEL is claude-opus-4-5-20251101
 - AGENT_MODEL env var controls model selection
 - Invalid model falls back to default with warning
 - Model tier info available for each model
@@ -29,15 +29,15 @@ class TestValidModels:
 
     def test_valid_models_has_opus(self):
         """VALID_MODELS includes Opus 4.5 model."""
-        assert "claude-opus-4-5-20250514" in VALID_MODELS
+        assert "claude-opus-4-5-20251101" in VALID_MODELS
 
     def test_valid_models_has_sonnet(self):
         """VALID_MODELS includes Sonnet 4 model."""
-        assert "claude-sonnet-4-20250514" in VALID_MODELS
+        assert "claude-sonnet-4-5-20250929" in VALID_MODELS
 
     def test_valid_models_has_haiku(self):
         """VALID_MODELS includes Haiku 4.5 model."""
-        assert "claude-haiku-4-5-20250514" in VALID_MODELS
+        assert "claude-haiku-4-5-20251001" in VALID_MODELS
 
     def test_each_model_has_tier(self):
         """Each model has tier metadata."""
@@ -54,8 +54,8 @@ class TestDefaultModel:
     """Tests for DEFAULT_MODEL constant."""
 
     def test_default_model_is_opus(self):
-        """DEFAULT_MODEL is claude-opus-4-5-20250514 for production quality."""
-        assert DEFAULT_MODEL == "claude-opus-4-5-20250514"
+        """DEFAULT_MODEL is claude-opus-4-5-20251101 for production quality."""
+        assert DEFAULT_MODEL == "claude-opus-4-5-20251101"
 
     def test_default_model_is_valid(self):
         """DEFAULT_MODEL is in VALID_MODELS."""
@@ -75,9 +75,9 @@ class TestAnthropicInvokerConfigModel:
 
     def test_model_from_env_var(self):
         """Config reads model from AGENT_MODEL env var."""
-        with patch.dict(os.environ, {"AGENT_MODEL": "claude-haiku-4-5-20250514"}):
+        with patch.dict(os.environ, {"AGENT_MODEL": "claude-haiku-4-5-20251001"}):
             config = AnthropicInvokerConfig.from_env()
-            assert config.model == "claude-haiku-4-5-20250514"
+            assert config.model == "claude-haiku-4-5-20251001"
 
     def test_invalid_model_falls_back_to_default(self):
         """Config falls back to DEFAULT_MODEL for invalid model."""
@@ -98,21 +98,21 @@ class TestAnthropicInvokerConfigModel:
 
     def test_valid_opus_model_accepted(self):
         """Opus model is accepted without fallback."""
-        with patch.dict(os.environ, {"AGENT_MODEL": "claude-opus-4-5-20250514"}):
+        with patch.dict(os.environ, {"AGENT_MODEL": "claude-opus-4-5-20251101"}):
             config = AnthropicInvokerConfig.from_env()
-            assert config.model == "claude-opus-4-5-20250514"
+            assert config.model == "claude-opus-4-5-20251101"
 
     def test_valid_sonnet_model_accepted(self):
         """Sonnet model is accepted without fallback."""
-        with patch.dict(os.environ, {"AGENT_MODEL": "claude-sonnet-4-20250514"}):
+        with patch.dict(os.environ, {"AGENT_MODEL": "claude-sonnet-4-5-20250929"}):
             config = AnthropicInvokerConfig.from_env()
-            assert config.model == "claude-sonnet-4-20250514"
+            assert config.model == "claude-sonnet-4-5-20250929"
 
     def test_valid_haiku_model_accepted(self):
         """Haiku model is accepted without fallback."""
-        with patch.dict(os.environ, {"AGENT_MODEL": "claude-haiku-4-5-20250514"}):
+        with patch.dict(os.environ, {"AGENT_MODEL": "claude-haiku-4-5-20251001"}):
             config = AnthropicInvokerConfig.from_env()
-            assert config.model == "claude-haiku-4-5-20250514"
+            assert config.model == "claude-haiku-4-5-20251001"
 
     def test_model_logged_at_config_creation(self):
         """Model selection is logged when config is created.
@@ -120,11 +120,11 @@ class TestAnthropicInvokerConfigModel:
         We verify this by checking that __post_init__ runs successfully
         (it logs the model). The logging uses structlog not stdlib logging.
         """
-        with patch.dict(os.environ, {"AGENT_MODEL": "claude-opus-4-5-20250514"}):
+        with patch.dict(os.environ, {"AGENT_MODEL": "claude-opus-4-5-20251101"}):
             config = AnthropicInvokerConfig.from_env()
             # Verify config was created successfully with expected model
             # __post_init__ logs the model during creation
-            assert config.model == "claude-opus-4-5-20250514"
+            assert config.model == "claude-opus-4-5-20251101"
 
 
 class TestModelTierInfo:
@@ -132,27 +132,27 @@ class TestModelTierInfo:
 
     def test_opus_tier_is_opus(self):
         """Opus model has tier 'opus'."""
-        assert VALID_MODELS["claude-opus-4-5-20250514"]["tier"] == "opus"
+        assert VALID_MODELS["claude-opus-4-5-20251101"]["tier"] == "opus"
 
     def test_sonnet_tier_is_sonnet(self):
         """Sonnet model has tier 'sonnet'."""
-        assert VALID_MODELS["claude-sonnet-4-20250514"]["tier"] == "sonnet"
+        assert VALID_MODELS["claude-sonnet-4-5-20250929"]["tier"] == "sonnet"
 
     def test_haiku_tier_is_haiku(self):
         """Haiku model has tier 'haiku'."""
-        assert VALID_MODELS["claude-haiku-4-5-20250514"]["tier"] == "haiku"
+        assert VALID_MODELS["claude-haiku-4-5-20251001"]["tier"] == "haiku"
 
     def test_opus_cost_is_high(self):
         """Opus model has cost 'high'."""
-        assert VALID_MODELS["claude-opus-4-5-20250514"]["cost"] == "high"
+        assert VALID_MODELS["claude-opus-4-5-20251101"]["cost"] == "high"
 
     def test_sonnet_cost_is_medium(self):
         """Sonnet model has cost 'medium'."""
-        assert VALID_MODELS["claude-sonnet-4-20250514"]["cost"] == "medium"
+        assert VALID_MODELS["claude-sonnet-4-5-20250929"]["cost"] == "medium"
 
     def test_haiku_cost_is_low(self):
         """Haiku model has cost 'low'."""
-        assert VALID_MODELS["claude-haiku-4-5-20250514"]["cost"] == "low"
+        assert VALID_MODELS["claude-haiku-4-5-20251001"]["cost"] == "low"
 
 
 class TestTokenBudgetLimits:

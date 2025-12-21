@@ -242,11 +242,12 @@ backend:
 **Implementation Notes**:
 
 ```python
-# Per-model pricing (as of Dec 2024)
+# Per-model pricing (as of Dec 2024, per 1M tokens)
+# Source: https://www.anthropic.com/pricing
 MODEL_PRICING = {
-    "claude-opus-4-5-20250514": {"input": 15.0, "output": 75.0},  # per 1M tokens
+    "claude-opus-4-5-20250514": {"input": 5.0, "output": 25.0},
     "claude-sonnet-4-20250514": {"input": 3.0, "output": 15.0},
-    "claude-haiku-4-5-20250514": {"input": 0.80, "output": 4.0},
+    "claude-haiku-4-5-20250514": {"input": 1.0, "output": 5.0},
 }
 
 def _estimate_cost(self, input_tokens: int, output_tokens: int) -> float:
@@ -263,8 +264,8 @@ def _estimate_cost(self, input_tokens: int, output_tokens: int) -> float:
 **Acceptance Criteria**:
 - [ ] Cost estimation uses model-specific pricing
 - [ ] Budget tracking reflects actual costs
-- [ ] Haiku cycles cost ~$0.01-0.05
-- [ ] Opus cycles cost ~$0.10-0.20 (after optimization)
+- [ ] Haiku cycles cost ~$0.01-0.02 per phase
+- [ ] Opus cycles cost ~$0.05-0.10 per phase (after optimization)
 
 ---
 
@@ -412,9 +413,17 @@ docker-compose.yml                   # AGENT_MODEL env var
 |--------|--------|-------|-------------|
 | Design input tokens | ~33,000 | ~12,000 | 64% reduction |
 | Design API calls | 4+ | 2 | 50% reduction |
-| Design cost (Opus) | ~$1.40 | ~$0.50 | 64% reduction |
-| Design cost (Haiku) | N/A | ~$0.02 | 98% vs Sonnet |
-| Full cycle cost (Opus) | ~$1.50 | ~$0.60 | 60% reduction |
+| Design cost (Opus 4.5) | ~$0.22 | ~$0.08 | 64% reduction |
+| Design cost (Haiku 4.5) | N/A | ~$0.02 | 75% vs Opus |
+| Full cycle cost (Opus 4.5) | ~$0.30 | ~$0.12 | 60% reduction |
+
+**Pricing Reference** (per 1M tokens):
+
+| Model | Input | Output |
+|-------|-------|--------|
+| Opus 4.5 | $5 | $25 |
+| Sonnet 4 | $3 | $15 |
+| Haiku 4.5 | $1 | $5 |
 
 ---
 

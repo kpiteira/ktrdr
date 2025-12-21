@@ -832,7 +832,7 @@ class TestAgentServiceBudget:
 
         # Opus 4.5: $5 input, $25 output per 1M tokens
         # 10k input + 5k output = (10000 * 5 + 5000 * 25) / 1_000_000 = $0.175
-        with patch.dict(os.environ, {"AGENT_MODEL": "claude-opus-4-5-20250514"}):
+        with patch.dict(os.environ, {"AGENT_MODEL": "claude-opus-4-5-20251101"}):
             cost = worker._estimate_cost(input_tokens=10000, output_tokens=5000)
             expected = (10000 * 5 + 5000 * 25) / 1_000_000  # $0.175
             assert abs(cost - expected) < 0.001, f"Expected {expected}, got {cost}"
@@ -848,7 +848,7 @@ class TestAgentServiceBudget:
 
         # Sonnet 4: $3 input, $15 output per 1M tokens
         # 10k input + 5k output = (10000 * 3 + 5000 * 15) / 1_000_000 = $0.105
-        with patch.dict(os.environ, {"AGENT_MODEL": "claude-sonnet-4-20250514"}):
+        with patch.dict(os.environ, {"AGENT_MODEL": "claude-sonnet-4-5-20250929"}):
             cost = worker._estimate_cost(input_tokens=10000, output_tokens=5000)
             expected = (10000 * 3 + 5000 * 15) / 1_000_000  # $0.105
             assert abs(cost - expected) < 0.001, f"Expected {expected}, got {cost}"
@@ -864,7 +864,7 @@ class TestAgentServiceBudget:
 
         # Haiku 4.5: $1 input, $5 output per 1M tokens
         # 10k input + 5k output = (10000 * 1 + 5000 * 5) / 1_000_000 = $0.035
-        with patch.dict(os.environ, {"AGENT_MODEL": "claude-haiku-4-5-20250514"}):
+        with patch.dict(os.environ, {"AGENT_MODEL": "claude-haiku-4-5-20251001"}):
             cost = worker._estimate_cost(input_tokens=10000, output_tokens=5000)
             expected = (10000 * 1 + 5000 * 5) / 1_000_000  # $0.035
             assert abs(cost - expected) < 0.001, f"Expected {expected}, got {cost}"
@@ -903,14 +903,14 @@ class TestAgentServiceBudget:
 
         # After M8 optimization: ~12k input tokens, ~2k output tokens
         # With Opus: (12000 * 5 + 2000 * 25) / 1_000_000 = $0.11
-        with patch.dict(os.environ, {"AGENT_MODEL": "claude-opus-4-5-20250514"}):
+        with patch.dict(os.environ, {"AGENT_MODEL": "claude-opus-4-5-20251101"}):
             cost = worker._estimate_cost(input_tokens=12000, output_tokens=2000)
             assert (
                 0.05 < cost < 0.15
             ), f"Design phase cost should be ~$0.11, got ${cost}"
 
         # With Haiku: (12000 * 1 + 2000 * 5) / 1_000_000 = $0.022
-        with patch.dict(os.environ, {"AGENT_MODEL": "claude-haiku-4-5-20250514"}):
+        with patch.dict(os.environ, {"AGENT_MODEL": "claude-haiku-4-5-20251001"}):
             cost = worker._estimate_cost(input_tokens=12000, output_tokens=2000)
             assert (
                 0.01 < cost < 0.05

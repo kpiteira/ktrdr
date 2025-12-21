@@ -187,7 +187,7 @@ class TestAgentTriggerViaAPI:
                 return_value={
                     "triggered": True,
                     "operation_id": "op_agent_research_12345",
-                    "model": "claude-haiku-4-5-20250514",
+                    "model": "claude-haiku-4-5-20251001",
                     "message": "Research cycle started",
                 }
             )
@@ -211,7 +211,7 @@ class TestAgentTriggerViaAPI:
                 return_value={
                     "triggered": True,
                     "operation_id": "op_agent_research_12345",
-                    "model": "claude-sonnet-4-20250514",
+                    "model": "claude-sonnet-4-5-20250929",
                     "message": "Research cycle started",
                 }
             )
@@ -235,7 +235,7 @@ class TestAgentTriggerViaAPI:
                 return_value={
                     "triggered": True,
                     "operation_id": "op_agent_research_12345",
-                    "model": "claude-haiku-4-5-20250514",
+                    "model": "claude-haiku-4-5-20251001",
                     "message": "Research cycle started",
                 }
             )
@@ -244,7 +244,7 @@ class TestAgentTriggerViaAPI:
             result = runner.invoke(agent_app, ["trigger", "--model", "haiku"])
 
             assert result.exit_code == 0
-            assert "claude-haiku-4-5-20250514" in result.output
+            assert "claude-haiku-4-5-20251001" in result.output
 
 
 class TestAgentCancelViaAPI:

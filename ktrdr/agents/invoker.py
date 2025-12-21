@@ -30,29 +30,29 @@ logger = structlog.get_logger(__name__)
 # Valid Claude models with tier and cost metadata (Task 8.3)
 VALID_MODELS: dict[str, dict[str, str]] = {
     # Production (high quality, best reasoning)
-    "claude-opus-4-5-20250514": {"tier": "opus", "cost": "high"},
+    "claude-opus-4-5-20251101": {"tier": "opus", "cost": "high"},
     # Development (balanced quality and cost)
-    "claude-sonnet-4-20250514": {"tier": "sonnet", "cost": "medium"},
+    "claude-sonnet-4-5-20250929": {"tier": "sonnet", "cost": "medium"},
     # Testing (fast, cheap)
-    "claude-haiku-4-5-20250514": {"tier": "haiku", "cost": "low"},
+    "claude-haiku-4-5-20251001": {"tier": "haiku", "cost": "low"},
 }
 
 # Short aliases for convenience (CLI: --model haiku, API: {"model": "haiku"})
 MODEL_ALIASES: dict[str, str] = {
-    "opus": "claude-opus-4-5-20250514",
-    "sonnet": "claude-sonnet-4-20250514",
-    "haiku": "claude-haiku-4-5-20250514",
+    "opus": "claude-opus-4-5-20251101",
+    "sonnet": "claude-sonnet-4-5-20250929",
+    "haiku": "claude-haiku-4-5-20251001",
 }
 
 # Default to Opus for production quality (Task 8.3)
-DEFAULT_MODEL = "claude-opus-4-5-20250514"
+DEFAULT_MODEL = "claude-opus-4-5-20251101"
 
 
 def resolve_model(model: str | None) -> str:
     """Resolve model name or alias to full model ID.
 
     Accepts:
-    - Full model ID: "claude-opus-4-5-20250514"
+    - Full model ID: "claude-opus-4-5-20251101"
     - Short alias: "opus", "sonnet", "haiku"
     - None: returns default from AGENT_MODEL env var or DEFAULT_MODEL
 
@@ -150,7 +150,7 @@ class AnthropicInvokerConfig:
         """Load configuration from environment variables.
 
         Environment variables:
-            AGENT_MODEL: Claude model to use (default: claude-opus-4-5-20250514)
+            AGENT_MODEL: Claude model to use (default: claude-opus-4-5-20251101)
             AGENT_MAX_TOKENS: Maximum tokens for response (default: 4096)
             AGENT_TIMEOUT_SECONDS: Timeout for API calls (default: 300)
             AGENT_MAX_ITERATIONS: Max tool call loops (default: 10) (Task 8.5)
