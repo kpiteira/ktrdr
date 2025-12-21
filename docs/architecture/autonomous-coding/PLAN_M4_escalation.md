@@ -7,7 +7,7 @@ architecture: docs/architecture/autonomous-coding/ARCHITECTURE.md
 
 **Branch:** `feature/orchestrator-m4-escalation`
 **Builds on:** M3 (task loop works)
-**Estimated Tasks:** 8
+**Estimated Tasks:** 11
 
 ---
 
@@ -617,6 +617,259 @@ Create a file that simultaneously:
 - [ ] Task is genuinely impossible
 - [ ] Fails consistently with similar errors
 - [ ] Triggers loop detection after 3 attempts
+
+---
+
+### Task 4.9: Create LLM Output Interpreter
+
+**File:** `orchestrator/llm_interpreter.py`
+**Type:** CODING
+
+**Description:**
+Create a module that uses Haiku to interpret Claude Code's output, replacing fragile regex-based detection with semantic understanding.
+
+**Implementation Notes:**
+
+```python
+import anthropic
+from dataclasses import dataclass
+
+@dataclass
+class InterpretationResult:
+    """Result of LLM interpretation of task output."""
+    needs_human: bool
+    question: str | None
+    options: list[str] | None
+    recommendation: str | None
+    task_completed: bool
+    task_failed: bool
+    error_message: str | None
+
+INTERPRETATION_PROMPT = """Analyze this Claude Code output and return JSON:
+
+{
+  "needs_human": true/false,  // Does Claude need human input to proceed?
+  "question": "...",          // The question being asked (if needs_human)
+  "options": ["A", "B"],      // Available choices (if any)
+  "recommendation": "...",    // Claude's recommendation (if any)
+  "task_completed": true/false,
+  "task_failed": true/false,
+  "error_message": "..."      // Error details (if failed)
+}
+
+Output to analyze:
+{output}
+"""
+
+class LLMInterpreter:
+    def __init__(self, model: str = "claude-3-5-haiku-latest"):
+        self.client = anthropic.Anthropic()
+        self.model = model
+
+    def interpret(self, output: str) -> InterpretationResult:
+        """Interpret task output using Haiku."""
+        response = self.client.messages.create(
+            model=self.model,
+            max_tokens=1024,
+            messages=[{
+                "role": "user",
+                "content": INTERPRETATION_PROMPT.format(output=output[:8000])
+            }]
+        )
+
+        # Parse JSON response
+        result = json.loads(response.content[0].text)
+        return InterpretationResult(**result)
+```
+
+**Acceptance Criteria:**
+
+- [ ] Uses Anthropic SDK with Haiku model
+- [ ] Returns structured InterpretationResult
+- [ ] Handles output truncation for large outputs
+- [ ] Handles JSON parsing errors gracefully
+- [ ] Unit tests with mocked API responses
+
+---
+
+### Task 4.10: Integrate LLM Interpreter into Escalation
+
+**File:** `orchestrator/escalation.py`
+**Type:** CODING
+
+**Description:**
+Replace regex-based `detect_needs_human()` and `extract_escalation_info()` with LLM interpreter, keeping regex as fast-path for explicit markers.
+
+**Implementation Notes:**
+
+```python
+from orchestrator.llm_interpreter import LLMInterpreter, InterpretationResult
+
+# Module-level interpreter (lazy init)
+_interpreter: LLMInterpreter | None = None
+
+def get_interpreter() -> LLMInterpreter:
+    global _interpreter
+    if _interpreter is None:
+        _interpreter = LLMInterpreter()
+    return _interpreter
+
+def detect_needs_human(output: str) -> bool:
+    """Detect if Claude needs human input.
+
+    Uses fast-path regex for explicit markers, falls back to LLM.
+    """
+    # Fast path: explicit markers (no API call needed)
+    if "STATUS: needs_human" in output:
+        return True
+    if "NEEDS_HUMAN:" in output:
+        return True
+
+    # Semantic understanding via LLM
+    result = get_interpreter().interpret(output)
+    return result.needs_human
+
+def extract_escalation_info(task_id: str, output: str) -> EscalationInfo:
+    """Extract escalation details using LLM interpretation."""
+    result = get_interpreter().interpret(output)
+
+    return EscalationInfo(
+        task_id=task_id,
+        question=result.question or "Claude needs guidance. Please review the output.",
+        options=result.options,
+        recommendation=result.recommendation,
+        raw_output=output,
+    )
+
+def interpret_task_output(output: str) -> InterpretationResult:
+    """Full interpretation of task output.
+
+    Returns complete analysis including completion status, errors, etc.
+    Used by task_runner to determine next action.
+    """
+    # Fast path for explicit markers
+    if "STATUS: needs_human" in output or "NEEDS_HUMAN:" in output:
+        return InterpretationResult(
+            needs_human=True,
+            question=None,  # Will be extracted separately
+            options=None,
+            recommendation=None,
+            task_completed=False,
+            task_failed=False,
+            error_message=None,
+        )
+
+    return get_interpreter().interpret(output)
+```
+
+**Acceptance Criteria:**
+
+- [ ] Explicit markers still use fast-path (no API call)
+- [ ] LLM fallback for semantic detection
+- [ ] Existing tests still pass
+- [ ] New tests for LLM integration (mocked)
+- [ ] Graceful degradation if API fails
+
+---
+
+### Task 4.11: Update Escalation Tests for LLM Interpreter
+
+**File:** `orchestrator/tests/test_escalation.py`
+**Type:** CODING
+
+**Description:**
+Update tests to mock LLM interpreter and add integration tests.
+
+**Implementation Notes:**
+
+```python
+from unittest.mock import patch, MagicMock
+from orchestrator.llm_interpreter import InterpretationResult
+
+class TestDetectNeedsHumanWithLLM:
+    """Test LLM-based detection."""
+
+    def test_explicit_marker_no_api_call(self):
+        """Explicit markers should not call LLM API."""
+        with patch("orchestrator.escalation.get_interpreter") as mock:
+            output = "STATUS: needs_human\nI need clarification."
+            result = detect_needs_human(output)
+
+            assert result is True
+            mock.assert_not_called()  # Fast path, no LLM
+
+    def test_semantic_detection_uses_llm(self):
+        """Ambiguous output should use LLM for detection."""
+        mock_result = InterpretationResult(
+            needs_human=True,
+            question="Which approach?",
+            options=["A", "B"],
+            recommendation="A",
+            task_completed=False,
+            task_failed=False,
+            error_message=None,
+        )
+
+        with patch("orchestrator.escalation.get_interpreter") as mock:
+            mock.return_value.interpret.return_value = mock_result
+
+            output = "I'm thinking about two approaches here..."
+            result = detect_needs_human(output)
+
+            assert result is True
+            mock.return_value.interpret.assert_called_once()
+
+    def test_completed_task_no_escalation(self):
+        """Completed tasks should not trigger escalation."""
+        mock_result = InterpretationResult(
+            needs_human=False,
+            question=None,
+            options=None,
+            recommendation=None,
+            task_completed=True,
+            task_failed=False,
+            error_message=None,
+        )
+
+        with patch("orchestrator.escalation.get_interpreter") as mock:
+            mock.return_value.interpret.return_value = mock_result
+
+            output = "Task completed successfully. All tests pass."
+            result = detect_needs_human(output)
+
+            assert result is False
+
+
+class TestLLMInterpreterIntegration:
+    """Integration tests (require API key, skip in CI)."""
+
+    @pytest.mark.skipif(
+        os.getenv("ANTHROPIC_API_KEY") is None,
+        reason="No API key"
+    )
+    def test_real_ambiguous_output(self):
+        """Test with real Haiku call."""
+        from orchestrator.llm_interpreter import LLMInterpreter
+
+        interpreter = LLMInterpreter()
+        result = interpreter.interpret(
+            "The task says to add caching but doesn't specify the type. "
+            "Options: A) Redis B) In-memory. I recommend B for simplicity. "
+            "What would you prefer?"
+        )
+
+        assert result.needs_human is True
+        assert result.options is not None
+        assert len(result.options) >= 2
+```
+
+**Acceptance Criteria:**
+
+- [ ] Existing regex tests still pass (fast-path)
+- [ ] New tests mock LLM interpreter
+- [ ] Integration test with real API (skipped in CI)
+- [ ] Tests cover error handling
+- [ ] All tests pass: `make test-unit`
 
 ---
 
