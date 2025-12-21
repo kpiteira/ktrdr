@@ -75,23 +75,27 @@ async def run_milestone(
     # Parse plan to get tasks
     tasks = parse_plan(plan_path)
 
+    # Initialize sandbox
+    sandbox = SandboxManager(
+        container_name=config.sandbox_container,
+        workspace_path=config.workspace_path,
+    )
+
     # Load or create state
     state = None
     if resume:
         state = OrchestratorState.load(state_dir, milestone_id)
 
     if state is None:
+        # Get current branch for PR base (before /ktask creates a new branch)
+        starting_branch = _get_current_branch(sandbox)
+
         state = OrchestratorState(
             milestone_id=milestone_id,
             plan_path=plan_path,
             started_at=datetime.now(),
+            starting_branch=starting_branch,
         )
-
-    # Initialize sandbox
-    sandbox = SandboxManager(
-        container_name=config.sandbox_container,
-        workspace_path=config.workspace_path,
-    )
 
     # Determine starting point
     start_index = state.get_next_task_index() if resume else 0
@@ -198,11 +202,44 @@ def _record_metrics(
         pass
 
 
+def _get_current_branch(sandbox: SandboxManager) -> str:
+    """Get the current git branch from the sandbox.
+
+    Returns:
+        Branch name, or "main" if detection fails.
+    """
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            [
+                "docker",
+                "exec",
+                sandbox.container_name,
+                "git",
+                "-C",
+                sandbox.workspace_path,
+                "branch",
+                "--show-current",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            branch = result.stdout.strip()
+            return branch if branch else "main"
+    except Exception:
+        pass
+    return "main"
+
+
 async def create_milestone_pr(
     sandbox: SandboxManager,
     milestone_id: str,
     completed_tasks: list[str],
     total_cost_usd: float,
+    base_branch: str = "main",
 ) -> ClaudeResult:
     """Create a PR for the milestone via Claude.
 
@@ -214,6 +251,7 @@ async def create_milestone_pr(
         milestone_id: The milestone identifier
         completed_tasks: List of completed task IDs
         total_cost_usd: Total cost of the milestone
+        base_branch: Target branch for the PR (default: main)
 
     Returns:
         ClaudeResult from the PR creation invocation
@@ -223,7 +261,7 @@ async def create_milestone_pr(
 Completed tasks: {", ".join(completed_tasks)}
 Total cost: ${total_cost_usd:.2f}
 
-Use `gh pr create` with a summary of all changes made across the tasks.
+Use `gh pr create --base {base_branch}` with a summary of all changes made across the tasks.
 Include:
 - A descriptive title for the milestone
 - A summary of what was implemented

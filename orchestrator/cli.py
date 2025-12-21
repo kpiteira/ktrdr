@@ -275,6 +275,7 @@ async def _prompt_for_pr(result: MilestoneResult, config: OrchestratorConfig) ->
             milestone_id=result.state.milestone_id,
             completed_tasks=result.state.completed_tasks,
             total_cost_usd=result.total_cost_usd,
+            base_branch=result.state.starting_branch,
         )
 
         if pr_result.is_error:
