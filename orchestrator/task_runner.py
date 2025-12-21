@@ -15,8 +15,8 @@ from orchestrator import telemetry
 from orchestrator.config import OrchestratorConfig
 from orchestrator.escalation import (
     EscalationInfo,
-    detect_needs_human,
     escalate_and_wait,
+    get_interpreter,
 )
 from orchestrator.loop_detector import LoopDetector
 from orchestrator.models import Task, TaskResult
@@ -135,6 +135,7 @@ def parse_task_output(
     Uses a hybrid approach:
     1. First checks for explicit STATUS markers (fast path)
     2. If no marker found, uses LLM interpretation for semantic understanding
+       The LLM interpreter extracts question/options/recommendation semantically.
 
     Args:
         output: Raw output text from Claude Code
@@ -155,27 +156,35 @@ def parse_task_output(
         status = status_match.group(1)  # type: ignore[assignment]
     else:
         # No explicit marker - use LLM interpretation for semantic understanding
-        if detect_needs_human(output):
+        interpreter_result = get_interpreter().interpret(output)
+        if interpreter_result.needs_human:
             status = "needs_human"
-        # else: default to "completed" (LLM said no human needed)
+            # Use question/options/recommendation from LLM interpretation
+            question = interpreter_result.question
+            options = interpreter_result.options
+            recommendation = interpreter_result.recommendation
+        elif interpreter_result.task_failed:
+            status = "failed"
+            error = interpreter_result.error_message
+        # else: default to "completed" (LLM said task completed)
 
-    # Parse ERROR for failed status
+    # Parse ERROR for failed status (explicit marker overrides LLM)
     error_match = re.search(r"ERROR:\s*(.+?)(?:\n|$)", output)
     if error_match:
         error = error_match.group(1).strip()
 
-    # Parse QUESTION for needs_human status
+    # Parse QUESTION for needs_human status (explicit marker overrides LLM)
     question_match = re.search(r"QUESTION:\s*(.+?)(?:\n|$)", output)
     if question_match:
         question = question_match.group(1).strip()
 
-    # Parse OPTIONS for needs_human status
+    # Parse OPTIONS for needs_human status (explicit marker overrides LLM)
     options_match = re.search(r"OPTIONS:\s*(.+?)(?:\n|$)", output)
     if options_match:
         options_str = options_match.group(1).strip()
         options = [opt.strip() for opt in options_str.split(",")]
 
-    # Parse RECOMMENDATION for needs_human status
+    # Parse RECOMMENDATION for needs_human status (explicit marker overrides LLM)
     rec_match = re.search(r"RECOMMENDATION:\s*(.+?)(?:\n|$)", output)
     if rec_match:
         recommendation = rec_match.group(1).strip()
