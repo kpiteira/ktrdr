@@ -50,7 +50,11 @@ def mock_run_task() -> AsyncMock:
     """Mock for run_task that returns completed status."""
 
     async def _run_task(
-        task: Task, sandbox: MagicMock, config: MagicMock, on_tool_use=None
+        task: Task,
+        sandbox: MagicMock,
+        config: MagicMock,
+        plan_path: str,
+        on_tool_use=None,
     ) -> TaskResult:
         return TaskResult(
             task_id=task.id,
@@ -225,7 +229,7 @@ class TestRunMilestoneStatusHandling:
         call_count = 0
 
         async def mock_task(
-            task: Task, sandbox: MagicMock, config: MagicMock, on_tool_use=None
+            task: Task, sandbox: MagicMock, config: MagicMock, plan_path: str, on_tool_use=None
         ) -> TaskResult:
             nonlocal call_count
             call_count += 1
@@ -279,7 +283,7 @@ class TestRunMilestoneStatusHandling:
         call_count = 0
 
         async def mock_task(
-            task: Task, sandbox: MagicMock, config: MagicMock, on_tool_use=None
+            task: Task, sandbox: MagicMock, config: MagicMock, plan_path: str, on_tool_use=None
         ) -> TaskResult:
             nonlocal call_count
             call_count += 1
@@ -365,7 +369,7 @@ class TestTaskCompleteCallback:
             callback_calls.append((task, result))
 
         async def mock_task(
-            task: Task, sandbox: MagicMock, config: MagicMock, on_tool_use=None
+            task: Task, sandbox: MagicMock, config: MagicMock, plan_path: str, on_tool_use=None
         ) -> TaskResult:
             return TaskResult(
                 task_id=task.id,
@@ -413,7 +417,7 @@ class TestTaskCompleteCallback:
             callback_calls.append((task, result))
 
         async def mock_task(
-            task: Task, sandbox: MagicMock, config: MagicMock, on_tool_use=None
+            task: Task, sandbox: MagicMock, config: MagicMock, plan_path: str, on_tool_use=None
         ) -> TaskResult:
             if task.id == "1.2":
                 return TaskResult(

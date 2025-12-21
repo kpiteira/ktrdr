@@ -116,7 +116,9 @@ async def run_milestone(
                 task_span.set_attribute("task.title", task.title)
 
                 # Run the task (with streaming progress if callback provided)
-                result = await run_task(task, sandbox, config, on_tool_use=on_tool_use)
+                result = await run_task(
+                    task, sandbox, config, plan_path, on_tool_use=on_tool_use
+                )
 
                 # Record telemetry
                 task_span.set_attribute("task.status", result.status)

@@ -66,7 +66,9 @@ async def _run_task(plan_file: str, task_id: str, guidance: str | None) -> None:
         console.print(f"[bold]Task {task_id}:[/bold] {target_task.title}")
         console.print("Invoking Claude Code...")
 
-        result = await run_task(target_task, sandbox, config, guidance)
+        result = await run_task(
+            target_task, sandbox, config, plan_file, human_guidance=guidance
+        )
 
         # Record telemetry on span
         span.set_attribute("task.status", result.status)
