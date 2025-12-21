@@ -6,7 +6,18 @@ for presenting to the user.
 """
 
 import re
+import time
 from dataclasses import dataclass
+
+from opentelemetry import trace
+from rich.console import Console
+from rich.panel import Panel
+from rich.prompt import Prompt
+
+from orchestrator.notifications import send_notification
+
+# Console for output
+console = Console()
 
 
 @dataclass
@@ -170,3 +181,71 @@ def _parse_options(options_text: str) -> list[str]:
 
     # Fallback: return the whole text as a single option
     return [options_text.strip()]
+
+
+async def escalate_and_wait(
+    info: EscalationInfo,
+    tracer: trace.Tracer,
+    notify: bool = True,
+) -> str:
+    """Present escalation question to user and wait for response.
+
+    Displays a formatted question with options and recommendation,
+    sends a notification if requested, and waits for user input.
+    Records timing and response in the trace span.
+
+    Args:
+        info: Extracted escalation information to present.
+        tracer: OpenTelemetry tracer for creating spans.
+        notify: Whether to send a macOS notification (default True).
+
+    Returns:
+        The user's response, or the recommendation if they enter 'skip'.
+    """
+    with tracer.start_as_current_span("orchestrator.escalation") as span:
+        span.set_attribute("task.id", info.task_id)
+        span.set_attribute("escalation.question", info.question[:200])
+
+        start_time = time.time()
+
+        # Send notification if requested
+        if notify:
+            send_notification(
+                title="Orchestrator needs input",
+                message=f"Task {info.task_id}: {info.question[:50]}...",
+            )
+
+        # Display formatted question
+        console.print()
+        console.print(
+            Panel(
+                f"[bold]Claude's question:[/bold]\n\n{info.question}",
+                title=f"Task {info.task_id} - NEEDS HUMAN INPUT",
+                border_style="yellow",
+            )
+        )
+
+        if info.options:
+            console.print("\n[bold]Options:[/bold]")
+            for i, opt in enumerate(info.options):
+                console.print(f"  {chr(65 + i)}) {opt}")
+
+        if info.recommendation:
+            console.print(f"\n[bold]Recommendation:[/bold] {info.recommendation}")
+
+        # Get input
+        console.print()
+        response = Prompt.ask(
+            "Your response (or 'skip' for recommendation)",
+            default="skip" if info.recommendation else None,
+        )
+
+        # Handle skip
+        if response.lower() == "skip" and info.recommendation:
+            response = info.recommendation
+
+        wait_seconds = time.time() - start_time
+        span.set_attribute("escalation.wait_seconds", wait_seconds)
+        span.set_attribute("escalation.response", response[:200])
+
+        return response

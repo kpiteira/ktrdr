@@ -340,3 +340,273 @@ class TestEscalationInfoDataclass:
         )
         assert info.options is None
         assert info.recommendation is None
+
+
+class TestEscalateAndWait:
+    """Test the escalate_and_wait function."""
+
+    def test_returns_user_response(self):
+        """Should return the user's response."""
+        import asyncio
+        from unittest.mock import MagicMock, patch
+
+        from orchestrator.escalation import EscalationInfo, escalate_and_wait
+
+        with (
+            patch("orchestrator.escalation.Prompt") as mock_prompt,
+            patch("orchestrator.escalation.send_notification"),
+        ):
+            mock_prompt.ask.return_value = "Use option A"
+
+            # Create mock tracer
+            mock_tracer = MagicMock()
+            mock_span = MagicMock()
+            mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+                return_value=mock_span
+            )
+            mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+                return_value=False
+            )
+
+            info = EscalationInfo(
+                task_id="4.1",
+                question="Which approach?",
+                options=None,
+                recommendation=None,
+                raw_output="output",
+            )
+
+            result = asyncio.get_event_loop().run_until_complete(
+                escalate_and_wait(info, mock_tracer, notify=False)
+            )
+            assert result == "Use option A"
+
+    def test_skip_uses_recommendation(self):
+        """When user enters 'skip', should use recommendation."""
+        import asyncio
+        from unittest.mock import MagicMock, patch
+
+        from orchestrator.escalation import EscalationInfo, escalate_and_wait
+
+        with (
+            patch("orchestrator.escalation.Prompt") as mock_prompt,
+            patch("orchestrator.escalation.send_notification"),
+        ):
+            mock_prompt.ask.return_value = "skip"
+
+            mock_tracer = MagicMock()
+            mock_span = MagicMock()
+            mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+                return_value=mock_span
+            )
+            mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+                return_value=False
+            )
+
+            info = EscalationInfo(
+                task_id="4.1",
+                question="Which approach?",
+                options=["A", "B"],
+                recommendation="Use A because it's simpler",
+                raw_output="output",
+            )
+
+            result = asyncio.get_event_loop().run_until_complete(
+                escalate_and_wait(info, mock_tracer, notify=False)
+            )
+            assert result == "Use A because it's simpler"
+
+    def test_sends_notification_when_notify_true(self):
+        """Should send notification when notify=True."""
+        import asyncio
+        from unittest.mock import MagicMock, patch
+
+        from orchestrator.escalation import EscalationInfo, escalate_and_wait
+
+        with (
+            patch("orchestrator.escalation.Prompt") as mock_prompt,
+            patch("orchestrator.escalation.send_notification") as mock_notify,
+        ):
+            mock_prompt.ask.return_value = "response"
+
+            mock_tracer = MagicMock()
+            mock_span = MagicMock()
+            mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+                return_value=mock_span
+            )
+            mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+                return_value=False
+            )
+
+            info = EscalationInfo(
+                task_id="4.1",
+                question="Which approach should I use for the caching layer?",
+                options=None,
+                recommendation=None,
+                raw_output="output",
+            )
+
+            asyncio.get_event_loop().run_until_complete(
+                escalate_and_wait(info, mock_tracer, notify=True)
+            )
+
+            mock_notify.assert_called_once()
+            call_args = mock_notify.call_args
+            # Check title contains "Orchestrator" (positional or keyword arg)
+            title = call_args.kwargs.get("title") or call_args.args[0]
+            assert "Orchestrator" in title
+
+    def test_no_notification_when_notify_false(self):
+        """Should not send notification when notify=False."""
+        import asyncio
+        from unittest.mock import MagicMock, patch
+
+        from orchestrator.escalation import EscalationInfo, escalate_and_wait
+
+        with (
+            patch("orchestrator.escalation.Prompt") as mock_prompt,
+            patch("orchestrator.escalation.send_notification") as mock_notify,
+        ):
+            mock_prompt.ask.return_value = "response"
+
+            mock_tracer = MagicMock()
+            mock_span = MagicMock()
+            mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+                return_value=mock_span
+            )
+            mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+                return_value=False
+            )
+
+            info = EscalationInfo(
+                task_id="4.1",
+                question="Question?",
+                options=None,
+                recommendation=None,
+                raw_output="output",
+            )
+
+            asyncio.get_event_loop().run_until_complete(
+                escalate_and_wait(info, mock_tracer, notify=False)
+            )
+
+            mock_notify.assert_not_called()
+
+    def test_records_wait_time_in_span(self):
+        """Should record wait_seconds attribute in the trace span."""
+        import asyncio
+        from unittest.mock import MagicMock, patch
+
+        from orchestrator.escalation import EscalationInfo, escalate_and_wait
+
+        with (
+            patch("orchestrator.escalation.Prompt") as mock_prompt,
+            patch("orchestrator.escalation.send_notification"),
+        ):
+            mock_prompt.ask.return_value = "response"
+
+            mock_tracer = MagicMock()
+            mock_span = MagicMock()
+            mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+                return_value=mock_span
+            )
+            mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+                return_value=False
+            )
+
+            info = EscalationInfo(
+                task_id="4.1",
+                question="Question?",
+                options=None,
+                recommendation=None,
+                raw_output="output",
+            )
+
+            asyncio.get_event_loop().run_until_complete(
+                escalate_and_wait(info, mock_tracer, notify=False)
+            )
+
+            # Check that span attributes were set
+            set_attribute_calls = mock_span.set_attribute.call_args_list
+            attribute_names = [call[0][0] for call in set_attribute_calls]
+            assert "escalation.wait_seconds" in attribute_names
+
+    def test_records_task_id_in_span(self):
+        """Should record task.id attribute in the trace span."""
+        import asyncio
+        from unittest.mock import MagicMock, patch
+
+        from orchestrator.escalation import EscalationInfo, escalate_and_wait
+
+        with (
+            patch("orchestrator.escalation.Prompt") as mock_prompt,
+            patch("orchestrator.escalation.send_notification"),
+        ):
+            mock_prompt.ask.return_value = "response"
+
+            mock_tracer = MagicMock()
+            mock_span = MagicMock()
+            mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+                return_value=mock_span
+            )
+            mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+                return_value=False
+            )
+
+            info = EscalationInfo(
+                task_id="4.1",
+                question="Question?",
+                options=None,
+                recommendation=None,
+                raw_output="output",
+            )
+
+            asyncio.get_event_loop().run_until_complete(
+                escalate_and_wait(info, mock_tracer, notify=False)
+            )
+
+            # Check that task.id was set
+            set_attribute_calls = mock_span.set_attribute.call_args_list
+            task_id_calls = [
+                call for call in set_attribute_calls if call[0][0] == "task.id"
+            ]
+            assert len(task_id_calls) == 1
+            assert task_id_calls[0][0][1] == "4.1"
+
+    def test_creates_span_with_correct_name(self):
+        """Should create a span named 'orchestrator.escalation'."""
+        import asyncio
+        from unittest.mock import MagicMock, patch
+
+        from orchestrator.escalation import EscalationInfo, escalate_and_wait
+
+        with (
+            patch("orchestrator.escalation.Prompt") as mock_prompt,
+            patch("orchestrator.escalation.send_notification"),
+        ):
+            mock_prompt.ask.return_value = "response"
+
+            mock_tracer = MagicMock()
+            mock_span = MagicMock()
+            mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+                return_value=mock_span
+            )
+            mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+                return_value=False
+            )
+
+            info = EscalationInfo(
+                task_id="4.1",
+                question="Question?",
+                options=None,
+                recommendation=None,
+                raw_output="output",
+            )
+
+            asyncio.get_event_loop().run_until_complete(
+                escalate_and_wait(info, mock_tracer, notify=False)
+            )
+
+            mock_tracer.start_as_current_span.assert_called_once_with(
+                "orchestrator.escalation"
+            )
