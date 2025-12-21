@@ -11,6 +11,7 @@ from typing import Callable, Literal
 from opentelemetry import trace
 from rich.console import Console
 
+from orchestrator import telemetry
 from orchestrator.config import OrchestratorConfig
 from orchestrator.escalation import EscalationInfo, escalate_and_wait
 from orchestrator.loop_detector import LoopDetector
@@ -212,6 +213,12 @@ async def run_task_with_escalation(
             with tracer.start_as_current_span("orchestrator.loop_detected") as span:
                 span.set_attribute("task.id", task.id)
                 span.set_attribute("reason", reason)
+
+            # Record loop detection metric
+            try:
+                telemetry.loops_counter.add(1, {"type": "task"})
+            except (AttributeError, NameError):
+                pass  # Metrics not initialized
 
             console.print(f"[bold red]LOOP DETECTED:[/bold] {reason}")
             return TaskResult(

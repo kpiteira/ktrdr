@@ -14,6 +14,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
 
+from orchestrator import telemetry
 from orchestrator.notifications import send_notification
 
 # Console for output
@@ -247,5 +248,11 @@ async def escalate_and_wait(
         wait_seconds = time.time() - start_time
         span.set_attribute("escalation.wait_seconds", wait_seconds)
         span.set_attribute("escalation.response", response[:200])
+
+        # Record escalation metric
+        try:
+            telemetry.escalations_counter.add(1, {"task_id": info.task_id})
+        except (AttributeError, NameError):
+            pass  # Metrics not initialized
 
         return response
