@@ -60,6 +60,23 @@ Stop and ask for clarification when:
 - You need to modify more than 3 files for a "simple" fix
 - You're unsure about the broader impact
 
+### Recognizing "Bad Loops"
+
+**After 2-3 incremental fixes that don't fully solve a problem, STOP.**
+
+Ask yourself:
+
+- Am I treating symptoms or the root cause?
+- Have I researched best practices for this type of problem?
+- Did something change recently that caused this? (check git history)
+
+Then tell Karl: *"I've made a few attempts and this isn't fully resolved. Should we step back, research best practices, and reconsider the approach?"*
+
+This applies especially to: performance issues, flaky tests, configuration problems, and integration bugs.
+
+**Example of a bad loop**: Test slow → move test → still slow → relax assertion → still slow → move more tests...
+**Better approach**: Profile first, research pytest best practices, find root cause (e.g., missing parallelization, heavy imports at load time).
+
 ---
 
 ## Anti-Patterns to Avoid
@@ -169,7 +186,7 @@ For more commands, the `deployment` skill has comprehensive reference
 ## Testing Standards
 
 ```bash
-make test-unit          # Unit tests (<2s)
+make test-unit          # Unit tests (~1min with parallel execution)
 make test-integration   # Integration tests (<30s)
 make test-e2e          # End-to-end tests (<5min)
 make quality           # Lint + format + typecheck
