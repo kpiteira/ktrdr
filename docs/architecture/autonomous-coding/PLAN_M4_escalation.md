@@ -728,19 +728,21 @@ class LLMInterpreter:
 **Type:** CODING
 
 **Description:**
-Replace regex-based `detect_needs_human()` and `extract_escalation_info()` with LLM interpreter. Keep regex as optional fast-path for explicit markers, controlled by config flag.
+Replace regex-based `detect_needs_human()` and `extract_escalation_info()` with LLM interpreter. Keep regex as optional fast-path for explicit markers, controlled by `--llm-only` CLI flag.
 
 **Implementation Notes:**
 
 ```python
-import os
 from orchestrator.llm_interpreter import LLMInterpreter, InterpretationResult
 
-# Config: set ORCHESTRATOR_LLM_ONLY=true to skip regex fast-path
-USE_LLM_ONLY = os.getenv("ORCHESTRATOR_LLM_ONLY", "false").lower() == "true"
-
-# Module-level interpreter (lazy init)
+# Module-level state (set by configure_interpreter)
 _interpreter: LLMInterpreter | None = None
+_llm_only: bool = False
+
+def configure_interpreter(llm_only: bool = False) -> None:
+    """Configure interpreter behavior. Called from CLI."""
+    global _llm_only
+    _llm_only = llm_only
 
 def get_interpreter() -> LLMInterpreter:
     global _interpreter
@@ -750,7 +752,7 @@ def get_interpreter() -> LLMInterpreter:
 
 def _check_explicit_markers(output: str) -> bool | None:
     """Check for explicit markers. Returns None if no match (use LLM)."""
-    if USE_LLM_ONLY:
+    if _llm_only:
         return None  # Skip fast-path, always use LLM
 
     if "STATUS: needs_human" in output:
@@ -764,7 +766,7 @@ def detect_needs_human(output: str) -> bool:
     """Detect if Claude needs human input.
 
     Uses optional fast-path for explicit markers, then LLM interpretation.
-    Set ORCHESTRATOR_LLM_ONLY=true to skip fast-path.
+    Use --llm-only flag to skip fast-path.
     """
     # Optional fast path: explicit markers
     explicit = _check_explicit_markers(output)
@@ -775,43 +777,23 @@ def detect_needs_human(output: str) -> bool:
     result = get_interpreter().interpret(output)
     return result.needs_human
 
-def extract_escalation_info(task_id: str, output: str) -> EscalationInfo:
-    """Extract escalation details using LLM interpretation."""
-    result = get_interpreter().interpret(output)
+# ... rest unchanged ...
+```
 
-    return EscalationInfo(
-        task_id=task_id,
-        question=result.question or "Claude needs guidance. Please review the output.",
-        options=result.options,
-        recommendation=result.recommendation,
-        raw_output=output,
-    )
+**CLI Integration (cli.py):**
 
-def interpret_task_output(output: str) -> InterpretationResult:
-    """Full interpretation of task output.
-
-    Returns complete analysis including completion status, errors, etc.
-    Used by task_runner to determine next action.
-    """
-    # Optional fast path for explicit markers
-    if not USE_LLM_ONLY:
-        if "STATUS: needs_human" in output or "NEEDS_HUMAN:" in output:
-            return InterpretationResult(
-                needs_human=True,
-                question=None,  # Will be extracted by extract_escalation_info
-                options=None,
-                recommendation=None,
-                task_completed=False,
-                task_failed=False,
-                error_message=None,
-            )
-
-    return get_interpreter().interpret(output)
+```python
+@click.option("--llm-only", is_flag=True, help="Use LLM interpreter only, skip regex fast-path")
+def run(plan_path: str, llm_only: bool, ...):
+    """Run a milestone plan."""
+    from orchestrator.escalation import configure_interpreter
+    configure_interpreter(llm_only=llm_only)
+    # ... rest of run command ...
 ```
 
 **Acceptance Criteria:**
 
-- [ ] `ORCHESTRATOR_LLM_ONLY=true` skips all regex, uses pure LLM
+- [ ] `--llm-only` flag skips all regex, uses pure LLM
 - [ ] Default behavior: explicit markers use fast-path, rest uses LLM
 - [ ] Easy to remove regex code later (isolated in `_check_explicit_markers`)
 - [ ] Existing tests still pass
@@ -905,7 +887,9 @@ class TestDetectNeedsHumanWithLLM:
             mock.assert_not_called()  # Fast path, no LLM
 
     def test_llm_only_mode_ignores_markers(self):
-        """ORCHESTRATOR_LLM_ONLY=true should always use LLM."""
+        """--llm-only should always use LLM, skip markers."""
+        from orchestrator.escalation import configure_interpreter, detect_needs_human
+
         mock_result = InterpretationResult(
             needs_human=True,
             question="Q",
@@ -916,20 +900,21 @@ class TestDetectNeedsHumanWithLLM:
             error_message=None,
         )
 
-        with patch.dict(os.environ, {"ORCHESTRATOR_LLM_ONLY": "true"}):
-            # Need to reload module to pick up env change
-            import importlib
-            import orchestrator.escalation as esc
-            importlib.reload(esc)
+        # Enable LLM-only mode
+        configure_interpreter(llm_only=True)
 
-            with patch.object(esc, "get_interpreter") as mock:
+        try:
+            with patch("orchestrator.escalation.get_interpreter") as mock:
                 mock.return_value.interpret.return_value = mock_result
 
                 output = "STATUS: needs_human"  # Has marker
-                result = esc.detect_needs_human(output)
+                result = detect_needs_human(output)
 
-                # Should still call LLM despite marker
+                # Should call LLM despite marker
                 mock.return_value.interpret.assert_called_once()
+        finally:
+            # Reset to default
+            configure_interpreter(llm_only=False)
 
 
 class TestLLMInterpreterIntegration:
@@ -959,7 +944,7 @@ class TestLLMInterpreterIntegration:
 - [ ] LLMInterpreter tests mock subprocess.run
 - [ ] Tests verify correct CLI args (model, --no-session-persistence, --tools)
 - [ ] Tests cover CLI failure fallback
-- [ ] Tests for `ORCHESTRATOR_LLM_ONLY` flag
+- [ ] Tests for `--llm-only` CLI flag via `configure_interpreter()`
 - [ ] Integration test with real CLI (skipped in CI)
 - [ ] All tests pass: `make test-unit`
 
