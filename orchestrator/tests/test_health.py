@@ -499,3 +499,153 @@ class TestGetHealth:
             mock_github.assert_called_with(10.0)
             # Orchestrator does not accept timeout (it's a local file check)
             mock_orch.assert_called_once()
+
+
+class TestHealthCLICommand:
+    """Tests for the health CLI command."""
+
+    def test_health_command_runs_all_checks(self) -> None:
+        """orchestrator health runs all checks and outputs JSON."""
+        from click.testing import CliRunner
+
+        from orchestrator.cli import cli
+
+        runner = CliRunner()
+
+        with (
+            patch("orchestrator.cli.get_health") as mock_get_health,
+        ):
+            mock_report = MagicMock()
+            mock_report.status = "healthy"
+            mock_report.to_dict.return_value = {
+                "status": "healthy",
+                "timestamp": "2024-12-18T10:30:00",
+                "checks": {
+                    "sandbox": {"status": "ok", "message": "container running"},
+                    "claude_auth": {"status": "ok", "message": "authenticated"},
+                    "github_token": {"status": "ok", "message": "present"},
+                    "orchestrator": {"status": "ok", "message": "idle"},
+                },
+            }
+            mock_get_health.return_value = mock_report
+
+            result = runner.invoke(cli, ["health"])
+
+            mock_get_health.assert_called_once_with(checks=None)
+            assert result.exit_code == 0
+
+    def test_health_command_single_check(self) -> None:
+        """orchestrator health --check sandbox runs only sandbox check."""
+        from click.testing import CliRunner
+
+        from orchestrator.cli import cli
+
+        runner = CliRunner()
+
+        with (
+            patch("orchestrator.cli.get_health") as mock_get_health,
+        ):
+            mock_report = MagicMock()
+            mock_report.status = "healthy"
+            mock_report.to_dict.return_value = {
+                "status": "healthy",
+                "timestamp": "2024-12-18T10:30:00",
+                "checks": {
+                    "sandbox": {"status": "ok", "message": "container running"},
+                },
+            }
+            mock_get_health.return_value = mock_report
+
+            result = runner.invoke(cli, ["health", "--check", "sandbox"])
+
+            mock_get_health.assert_called_once_with(checks=["sandbox"])
+            assert result.exit_code == 0
+
+    def test_health_command_exit_code_0_when_healthy(self) -> None:
+        """orchestrator health returns exit code 0 when healthy."""
+        from click.testing import CliRunner
+
+        from orchestrator.cli import cli
+
+        runner = CliRunner()
+
+        with (
+            patch("orchestrator.cli.get_health") as mock_get_health,
+        ):
+            mock_report = MagicMock()
+            mock_report.status = "healthy"
+            mock_report.to_dict.return_value = {"status": "healthy", "checks": {}}
+            mock_get_health.return_value = mock_report
+
+            result = runner.invoke(cli, ["health"])
+
+            assert result.exit_code == 0
+
+    def test_health_command_exit_code_1_when_unhealthy(self) -> None:
+        """orchestrator health returns exit code 1 when unhealthy."""
+        from click.testing import CliRunner
+
+        from orchestrator.cli import cli
+
+        runner = CliRunner()
+
+        with (
+            patch("orchestrator.cli.get_health") as mock_get_health,
+        ):
+            mock_report = MagicMock()
+            mock_report.status = "unhealthy"
+            mock_report.to_dict.return_value = {
+                "status": "unhealthy",
+                "checks": {
+                    "sandbox": {"status": "failed", "message": "not running"},
+                },
+            }
+            mock_get_health.return_value = mock_report
+
+            result = runner.invoke(cli, ["health"])
+
+            assert result.exit_code == 1
+
+    def test_health_command_outputs_valid_json(self) -> None:
+        """orchestrator health outputs valid JSON."""
+        import json
+
+        from click.testing import CliRunner
+
+        from orchestrator.cli import cli
+
+        runner = CliRunner()
+
+        with (
+            patch("orchestrator.cli.get_health") as mock_get_health,
+        ):
+            mock_report = MagicMock()
+            mock_report.status = "healthy"
+            mock_report.to_dict.return_value = {
+                "status": "healthy",
+                "timestamp": "2024-12-18T10:30:00",
+                "checks": {
+                    "sandbox": {"status": "ok", "message": "container running"},
+                },
+            }
+            mock_get_health.return_value = mock_report
+
+            result = runner.invoke(cli, ["health"])
+
+            # Should be valid JSON
+            output = json.loads(result.output)
+            assert output["status"] == "healthy"
+            assert "checks" in output
+            assert "sandbox" in output["checks"]
+
+    def test_health_command_appears_in_help(self) -> None:
+        """orchestrator --help shows health command."""
+        from click.testing import CliRunner
+
+        from orchestrator.cli import cli
+
+        runner = CliRunner()
+
+        result = runner.invoke(cli, ["--help"])
+
+        assert "health" in result.output.lower()
