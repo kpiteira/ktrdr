@@ -213,6 +213,7 @@ async def _monitor_agent_cycle(operation_id: str) -> dict:
 
     Handles Ctrl+C by sending DELETE /operations/{id}.
     Shows nested progress bar for training/backtest child operations.
+    Includes retry logic with exponential backoff for connection errors.
     Returns final operation data.
     """
     from rich.progress import (
@@ -238,6 +239,13 @@ async def _monitor_agent_cycle(operation_id: str) -> dict:
     except Exception:
         signal_handler_registered = False
 
+    # Retry configuration
+    retry_delay = 1.0
+    max_retry_delay = 5.0
+
+    # Track last known child state for cancellation summary
+    last_child_step: str | None = None
+
     try:
         async with AsyncCLIClient() as client:
             with Progress(
@@ -253,64 +261,96 @@ async def _monitor_agent_cycle(operation_id: str) -> dict:
                 current_child_op_id = None
 
                 while not cancelled:
-                    # Poll parent operation
-                    result = await client._make_request(
-                        "GET", f"/operations/{operation_id}"
-                    )
-                    op_data = result.get("data", {})
-                    status = op_data.get("status")
+                    try:
+                        # Poll parent operation
+                        result = await client._make_request(
+                            "GET", f"/operations/{operation_id}"
+                        )
+                        # Reset retry delay on success
+                        retry_delay = 1.0
 
-                    # Update parent progress display
-                    prog = op_data.get("progress", {})
-                    pct = prog.get("percentage", 0)
-                    step = prog.get("current_step", "Working...")
-                    progress.update(
-                        parent_task,
-                        completed=pct,
-                        description=f"[bold blue]Research Cycle[/] {step}",
-                    )
+                        op_data = result.get("data", {})
+                        status = op_data.get("status")
 
-                    # Check for child operation (training or backtest)
-                    params = op_data.get("metadata", {}).get("parameters", {})
-                    child_op_id = params.get("training_op_id") or params.get(
-                        "backtest_op_id"
-                    )
+                        # Update parent progress display
+                        prog = op_data.get("progress", {})
+                        pct = prog.get("percentage", 0)
+                        step = prog.get("current_step", "Working...")
+                        progress.update(
+                            parent_task,
+                            completed=pct,
+                            description=f"[bold blue]Research Cycle[/] {step}",
+                        )
 
-                    # Handle child task lifecycle
-                    if child_op_id and child_op_id != current_child_op_id:
-                        # New child operation - add/replace task
-                        if child_task is not None:
+                        # Check for child operation (training or backtest)
+                        params = op_data.get("metadata", {}).get("parameters", {})
+                        child_op_id = params.get("training_op_id") or params.get(
+                            "backtest_op_id"
+                        )
+
+                        # Handle child task lifecycle
+                        if child_op_id and child_op_id != current_child_op_id:
+                            # New child operation - add/replace task
+                            if child_task is not None:
+                                progress.remove_task(child_task)
+                            child_task = progress.add_task("   └─ Child", total=100)
+                            current_child_op_id = child_op_id
+                        elif not child_op_id and child_task is not None:
+                            # No more child - remove task
                             progress.remove_task(child_task)
-                        child_task = progress.add_task("   └─ Child", total=100)
-                        current_child_op_id = child_op_id
-                    elif not child_op_id and child_task is not None:
-                        # No more child - remove task
-                        progress.remove_task(child_task)
-                        child_task = None
-                        current_child_op_id = None
+                            child_task = None
+                            current_child_op_id = None
 
-                    # Poll child operation if exists
-                    if child_op_id and child_task is not None:
-                        try:
-                            child_result = await client._make_request(
-                                "GET", f"/operations/{child_op_id}"
+                        # Poll child operation if exists
+                        if child_op_id and child_task is not None:
+                            try:
+                                child_result = await client._make_request(
+                                    "GET", f"/operations/{child_op_id}"
+                                )
+                                child_data = child_result.get("data", {})
+                                child_prog = child_data.get("progress", {})
+                                child_pct = child_prog.get("percentage", 0)
+                                child_step = child_prog.get(
+                                    "current_step", "Working..."
+                                )
+                                last_child_step = (
+                                    child_step  # Track for cancellation summary
+                                )
+                                progress.update(
+                                    child_task,
+                                    completed=child_pct,
+                                    description=f"   └─ {child_step}",
+                                )
+                            except Exception:
+                                # Child may not exist yet or may have finished
+                                pass
+
+                        # Check for terminal state
+                        if status in ("completed", "failed", "cancelled"):
+                            break
+
+                    except AsyncCLIClientError as e:
+                        # Check for 404 (operation not found - lost after restart)
+                        if "404" in e.error_code or (
+                            e.details and e.details.get("status_code") == 404
+                        ):
+                            console.print(
+                                "\n[yellow]Operation not found — may have been lost due to restart[/yellow]"
                             )
-                            child_data = child_result.get("data", {})
-                            child_prog = child_data.get("progress", {})
-                            child_pct = child_prog.get("percentage", 0)
-                            child_step = child_prog.get("current_step", "Working...")
+                            return {"status": "lost"}
+
+                        # Connection error - retry with backoff
+                        if "Connection" in e.error_code or "Timeout" in e.error_code:
                             progress.update(
-                                child_task,
-                                completed=child_pct,
-                                description=f"   └─ {child_step}",
+                                parent_task,
+                                description="[bold blue]Research Cycle[/] [yellow]⚠ Connection lost, retrying...[/]",
                             )
-                        except Exception:
-                            # Child may not exist yet or may have finished
-                            pass
+                            await asyncio.sleep(retry_delay)
+                            retry_delay = min(retry_delay * 2, max_retry_delay)
+                            continue
 
-                    # Check for terminal state
-                    if status in ("completed", "failed", "cancelled"):
-                        break
+                        # Other errors - re-raise
+                        raise
 
                     await asyncio.sleep(0.5)
 
@@ -325,13 +365,17 @@ async def _monitor_agent_cycle(operation_id: str) -> dict:
                         pass  # Continue even if cancel fails
                     # Wait briefly for cancellation to process
                     await asyncio.sleep(1)
-                    result = await client._make_request(
-                        "GET", f"/operations/{operation_id}"
-                    )
-                    op_data = result.get("data", {})
+                    try:
+                        result = await client._make_request(
+                            "GET", f"/operations/{operation_id}"
+                        )
+                        op_data = result.get("data", {})
+                    except Exception:
+                        # If we can't get final status, use what we had
+                        pass
 
             # Show final status (outside Progress context)
-            _show_completion_summary(op_data)
+            _show_completion_summary(op_data, child_state=last_child_step)
             return op_data
 
     finally:
@@ -343,8 +387,13 @@ async def _monitor_agent_cycle(operation_id: str) -> dict:
                 pass
 
 
-def _show_completion_summary(op_data: dict) -> None:
-    """Display completion or cancellation summary."""
+def _show_completion_summary(op_data: dict, child_state: str | None = None) -> None:
+    """Display completion or cancellation summary.
+
+    Args:
+        op_data: The operation data from the API
+        child_state: Optional last known child operation state (e.g., "Epoch 67/100")
+    """
     status = op_data.get("status")
     result = op_data.get("result", {})
 
@@ -368,10 +417,15 @@ def _show_completion_summary(op_data: dict) -> None:
             op_data.get("metadata", {}).get("parameters", {}).get("phase", "unknown")
         )
         console.print(f"   Phase: {phase}")
+        if child_state:
+            console.print(f"   Progress: {child_state}")
     elif status == "failed":
         console.print("\n[red]✗ Research cycle failed[/red]")
         error = op_data.get("error", op_data.get("error_message", "Unknown error"))
         console.print(f"   Error: {error}")
+    elif status == "lost":
+        # Already printed message in the monitor function
+        pass
 
 
 @agent_app.command("cancel")
