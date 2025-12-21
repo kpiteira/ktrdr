@@ -1,0 +1,342 @@
+"""Tests for escalation detection and handling.
+
+These tests verify the escalation module can:
+1. Detect when Claude's output indicates human input is needed
+2. Extract structured questions, options, and recommendations
+3. Fall back to heuristics when output is unstructured
+"""
+
+
+class TestDetectNeedsHuman:
+    """Test the detect_needs_human function."""
+
+    def test_detects_explicit_status_needs_human(self):
+        """Should detect explicit STATUS: needs_human marker."""
+        from orchestrator.escalation import detect_needs_human
+
+        output = """
+        I've analyzed the task but need clarification.
+
+        STATUS: needs_human
+
+        The requirements are ambiguous.
+        """
+        assert detect_needs_human(output) is True
+
+    def test_detects_needs_human_marker(self):
+        """Should detect NEEDS_HUMAN: marker."""
+        from orchestrator.escalation import detect_needs_human
+
+        output = """
+        NEEDS_HUMAN: The cache implementation type is not specified.
+        """
+        assert detect_needs_human(output) is True
+
+    def test_detects_options_marker(self):
+        """Should detect OPTIONS: marker as indication of needing input."""
+        from orchestrator.escalation import detect_needs_human
+
+        output = """
+        The task says to add caching but doesn't specify the type.
+
+        OPTIONS:
+        A) Redis (distributed, persistent)
+        B) In-memory (fast, local only)
+        """
+        assert detect_needs_human(output) is True
+
+    def test_detects_should_i_pattern(self):
+        """Should detect 'should I' question pattern."""
+        from orchestrator.escalation import detect_needs_human
+
+        output = "The tests are failing. Should I fix them before proceeding?"
+        assert detect_needs_human(output) is True
+
+    def test_detects_would_you_prefer_pattern(self):
+        """Should detect 'would you prefer' question pattern."""
+        from orchestrator.escalation import detect_needs_human
+
+        output = "Would you prefer option A or option B for the implementation?"
+        assert detect_needs_human(output) is True
+
+    def test_detects_im_not_sure_pattern(self):
+        """Should detect 'I'm not sure' uncertainty pattern."""
+        from orchestrator.escalation import detect_needs_human
+
+        output = "I'm not sure whether to use Redis or Memcached for this."
+        assert detect_needs_human(output) is True
+
+    def test_detects_im_uncertain_pattern(self):
+        """Should detect 'I'm uncertain' pattern."""
+        from orchestrator.escalation import detect_needs_human
+
+        output = "I'm uncertain about the best approach here."
+        assert detect_needs_human(output) is True
+
+    def test_detects_options_are_pattern(self):
+        """Should detect 'the options are' pattern."""
+        from orchestrator.escalation import detect_needs_human
+
+        output = "The options are: use a database or a file system."
+        assert detect_needs_human(output) is True
+
+    def test_detects_recommend_but_pattern(self):
+        """Should detect 'I recommend X but' pattern (hedging)."""
+        from orchestrator.escalation import detect_needs_human
+
+        output = "I recommend using Redis but you might prefer something simpler."
+        assert detect_needs_human(output) is True
+
+    def test_detects_could_go_either_way_pattern(self):
+        """Should detect 'could go either way' pattern."""
+        from orchestrator.escalation import detect_needs_human
+
+        output = "This could go either way - both approaches have merits."
+        assert detect_needs_human(output) is True
+
+    def test_detects_what_would_you_like_pattern(self):
+        """Should detect 'what would you like' pattern."""
+        from orchestrator.escalation import detect_needs_human
+
+        output = "What would you like me to prioritize first?"
+        assert detect_needs_human(output) is True
+
+    def test_detects_do_you_want_me_to_pattern(self):
+        """Should detect 'do you want me to' pattern."""
+        from orchestrator.escalation import detect_needs_human
+
+        output = "Do you want me to refactor the entire module or just this function?"
+        assert detect_needs_human(output) is True
+
+    def test_returns_false_for_completed_output(self):
+        """Should return False for definitive completed output."""
+        from orchestrator.escalation import detect_needs_human
+
+        output = """
+        Task completed successfully.
+
+        I created the file and ran the tests. All 15 tests pass.
+        The implementation follows the existing patterns.
+        """
+        assert detect_needs_human(output) is False
+
+    def test_returns_false_for_error_output(self):
+        """Should return False for error output without uncertainty."""
+        from orchestrator.escalation import detect_needs_human
+
+        output = """
+        Task failed.
+
+        Error: Module 'nonexistent' not found.
+        The import statement on line 5 references a module that doesn't exist.
+        """
+        assert detect_needs_human(output) is False
+
+    def test_case_insensitive_matching(self):
+        """Patterns should match case-insensitively."""
+        from orchestrator.escalation import detect_needs_human
+
+        output = "SHOULD I proceed with the refactoring?"
+        assert detect_needs_human(output) is True
+
+
+class TestExtractEscalationInfo:
+    """Test the extract_escalation_info function."""
+
+    def test_extracts_structured_question(self):
+        """Should extract QUESTION: from structured format."""
+        from orchestrator.escalation import extract_escalation_info
+
+        output = """
+        QUESTION: Which caching strategy should I use?
+        OPTIONS:
+        A) Redis
+        B) Memcached
+        RECOMMENDATION: A because it's more flexible
+        """
+        info = extract_escalation_info("4.1", output)
+        assert info.task_id == "4.1"
+        assert "caching strategy" in info.question
+
+    def test_extracts_structured_options(self):
+        """Should extract OPTIONS: from structured format."""
+        from orchestrator.escalation import extract_escalation_info
+
+        output = """
+        QUESTION: Which approach?
+        OPTIONS:
+        A) First option
+        B) Second option
+        C) Third option
+        """
+        info = extract_escalation_info("4.1", output)
+        assert info.options is not None
+        assert len(info.options) == 3
+        assert "First option" in info.options[0]
+
+    def test_extracts_structured_recommendation(self):
+        """Should extract RECOMMENDATION: from structured format."""
+        from orchestrator.escalation import extract_escalation_info
+
+        output = """
+        QUESTION: What should I do?
+        RECOMMENDATION: Use approach A because it's simpler
+        """
+        info = extract_escalation_info("4.1", output)
+        assert info.recommendation is not None
+        assert "approach A" in info.recommendation
+
+    def test_extracts_question_with_question_mark(self):
+        """Should extract question ending with ? from unstructured output."""
+        from orchestrator.escalation import extract_escalation_info
+
+        output = """
+        I've looked at the code and there are two paths forward.
+        Should I refactor the entire module or just the specific function?
+        """
+        info = extract_escalation_info("4.1", output)
+        assert "?" in info.question
+        assert "refactor" in info.question.lower()
+
+    def test_extracts_uncertainty_statement(self):
+        """Should extract 'I'm not sure' type statements."""
+        from orchestrator.escalation import extract_escalation_info
+
+        output = "I'm not sure whether to use the old API or the new one."
+        info = extract_escalation_info("4.1", output)
+        assert "not sure" in info.question.lower() or "API" in info.question
+
+    def test_fallback_message_when_no_question_found(self):
+        """Should provide fallback message when no question found."""
+        from orchestrator.escalation import extract_escalation_info
+
+        output = "STATUS: needs_human"
+        info = extract_escalation_info("4.1", output)
+        assert info.question is not None
+        assert len(info.question) > 0
+        # Fallback should mention reviewing the output
+        assert "review" in info.question.lower() or "uncertainty" in info.question.lower()
+
+    def test_preserves_raw_output(self):
+        """Should preserve the raw output in the EscalationInfo."""
+        from orchestrator.escalation import extract_escalation_info
+
+        output = "Some output with QUESTION: What should I do?"
+        info = extract_escalation_info("4.1", output)
+        assert info.raw_output == output
+
+    def test_options_none_when_not_present(self):
+        """Options should be None when not present."""
+        from orchestrator.escalation import extract_escalation_info
+
+        output = "QUESTION: Should I proceed?"
+        info = extract_escalation_info("4.1", output)
+        assert info.options is None
+
+    def test_recommendation_none_when_not_present(self):
+        """Recommendation should be None when not present."""
+        from orchestrator.escalation import extract_escalation_info
+
+        output = "QUESTION: Which way?"
+        info = extract_escalation_info("4.1", output)
+        assert info.recommendation is None
+
+
+class TestParseOptions:
+    """Test the _parse_options helper function."""
+
+    def test_parses_lettered_options(self):
+        """Should parse A) B) C) format."""
+        from orchestrator.escalation import _parse_options
+
+        text = "A) First option B) Second option C) Third option"
+        options = _parse_options(text)
+        assert len(options) == 3
+        assert "First option" in options[0]
+        assert "Second option" in options[1]
+        assert "Third option" in options[2]
+
+    def test_parses_numbered_options_with_dot(self):
+        """Should parse 1. 2. 3. format."""
+        from orchestrator.escalation import _parse_options
+
+        text = "1. First option 2. Second option 3. Third option"
+        options = _parse_options(text)
+        assert len(options) == 3
+
+    def test_parses_numbered_options_with_paren(self):
+        """Should parse 1) 2) 3) format."""
+        from orchestrator.escalation import _parse_options
+
+        text = "1) First option 2) Second option"
+        options = _parse_options(text)
+        assert len(options) == 2
+
+    def test_parses_bullet_options_dash(self):
+        """Should parse - bullet format."""
+        from orchestrator.escalation import _parse_options
+
+        text = "- First option - Second option - Third option"
+        options = _parse_options(text)
+        assert len(options) == 3
+
+    def test_parses_bullet_options_asterisk(self):
+        """Should parse * bullet format."""
+        from orchestrator.escalation import _parse_options
+
+        text = "* First option * Second option"
+        options = _parse_options(text)
+        assert len(options) == 2
+
+    def test_returns_single_item_for_unparseable(self):
+        """Should return the whole text as single option if unparseable."""
+        from orchestrator.escalation import _parse_options
+
+        text = "just some plain text without structure"
+        options = _parse_options(text)
+        assert len(options) == 1
+        assert options[0] == "just some plain text without structure"
+
+    def test_strips_whitespace_from_options(self):
+        """Should strip whitespace from parsed options."""
+        from orchestrator.escalation import _parse_options
+
+        text = "A)   Option with spaces   B)  Another option  "
+        options = _parse_options(text)
+        assert options[0] == "Option with spaces"
+        assert options[1] == "Another option"
+
+
+class TestEscalationInfoDataclass:
+    """Test the EscalationInfo dataclass."""
+
+    def test_escalation_info_creation(self):
+        """Should be able to create EscalationInfo with all fields."""
+        from orchestrator.escalation import EscalationInfo
+
+        info = EscalationInfo(
+            task_id="4.1",
+            question="Which approach?",
+            options=["A", "B"],
+            recommendation="A",
+            raw_output="full output here",
+        )
+        assert info.task_id == "4.1"
+        assert info.question == "Which approach?"
+        assert info.options == ["A", "B"]
+        assert info.recommendation == "A"
+        assert info.raw_output == "full output here"
+
+    def test_escalation_info_optional_fields(self):
+        """Options and recommendation should be optional."""
+        from orchestrator.escalation import EscalationInfo
+
+        info = EscalationInfo(
+            task_id="4.1",
+            question="Simple question?",
+            options=None,
+            recommendation=None,
+            raw_output="output",
+        )
+        assert info.options is None
+        assert info.recommendation is None
