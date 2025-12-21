@@ -5,9 +5,52 @@ replacing fragile regex-based detection with semantic understanding.
 """
 
 import json
+import os
 import re
+import shutil
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
+
+# Cache for the Claude CLI path
+_claude_cli_path: str | None = None
+
+
+def find_claude_cli() -> str | None:
+    """Find the Claude CLI executable.
+
+    Checks:
+    1. shutil.which("claude") - standard PATH lookup
+    2. ~/.claude/local/claude - common installation location
+
+    Returns:
+        Path to the Claude CLI, or None if not found.
+    """
+    global _claude_cli_path
+
+    # Return cached path if already found
+    if _claude_cli_path is not None:
+        return _claude_cli_path
+
+    # Try PATH first
+    path_result = shutil.which("claude")
+    if path_result:
+        _claude_cli_path = path_result
+        return _claude_cli_path
+
+    # Try common installation location
+    home = Path.home()
+    common_locations = [
+        home / ".claude" / "local" / "claude",
+        home / ".claude" / "bin" / "claude",
+    ]
+
+    for location in common_locations:
+        if location.exists() and os.access(location, os.X_OK):
+            _claude_cli_path = str(location)
+            return _claude_cli_path
+
+    return None
 
 
 @dataclass
@@ -57,7 +100,7 @@ class LLMInterpreter:
     - Whether the task failed and any error details
     """
 
-    def __init__(self, model: str = "claude-haiku-4.5-20251001"):
+    def __init__(self, model: str = "claude-haiku-4-5-20251001"):
         """Initialize the interpreter.
 
         Args:
@@ -74,6 +117,13 @@ class LLMInterpreter:
         Returns:
             InterpretationResult with structured information about the output.
         """
+        # Find Claude CLI
+        claude_path = find_claude_cli()
+        if claude_path is None:
+            return self._create_fallback_result(
+                "Interpreter error: Claude CLI not found"
+            )
+
         # Truncate output if too large
         truncated_output = output[:MAX_OUTPUT_LENGTH]
         prompt = INTERPRETATION_PROMPT.format(output=truncated_output)
@@ -81,12 +131,12 @@ class LLMInterpreter:
         try:
             result = subprocess.run(
                 [
-                    "claude",
+                    claude_path,
                     "--model",
                     self.model,
                     "--print",
                     "--no-session-persistence",
-                    "--tools",
+                    "--allowedTools",
                     "",
                     "-p",
                     prompt,
@@ -97,15 +147,20 @@ class LLMInterpreter:
             )
 
             if result.returncode != 0:
-                # CLI failed - use fallback
+                # CLI failed - use fallback. Error may be in stdout or stderr.
+                error_text = result.stderr or result.stdout or "unknown error"
                 return self._create_fallback_result(
-                    f"Interpreter error: {result.stderr[:200]}"
+                    f"Interpreter error: {error_text[:200]}"
                 )
 
             return self._parse_response(result.stdout)
 
         except subprocess.TimeoutExpired:
             return self._create_fallback_result("Interpreter error: timeout expired")
+        except FileNotFoundError:
+            return self._create_fallback_result(
+                f"Interpreter error: Claude CLI not found at {claude_path}"
+            )
 
     def _parse_response(self, response: str) -> InterpretationResult:
         """Parse the LLM response into an InterpretationResult.
@@ -140,21 +195,23 @@ class LLMInterpreter:
     def _create_fallback_result(self, error_message: str) -> InterpretationResult:
         """Create a fallback result when interpretation fails.
 
-        When the interpreter fails, we assume the task completed successfully
-        to avoid blocking progress. The error is recorded for debugging.
+        When the interpreter fails, we conservatively assume human input is
+        needed to avoid missing escalation cases. This is safer than assuming
+        task completion, as a false positive escalation is better than silently
+        ignoring a question from Claude.
 
         Args:
             error_message: Description of what went wrong.
 
         Returns:
-            InterpretationResult with safe fallback values.
+            InterpretationResult indicating human review needed.
         """
         return InterpretationResult(
-            needs_human=False,
-            question=None,
+            needs_human=True,  # Conservative: escalate when uncertain
+            question=f"LLM interpretation failed: {error_message}. Please review the task output.",
             options=None,
             recommendation=None,
-            task_completed=True,
+            task_completed=False,
             task_failed=False,
             error_message=error_message,
         )

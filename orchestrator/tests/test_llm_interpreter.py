@@ -71,8 +71,19 @@ class TestInterpretationResult:
 class TestLLMInterpreter:
     """Test LLM interpreter with mocked subprocess."""
 
+    import pytest
+
+    @pytest.fixture(autouse=True)
+    def mock_claude_cli(self):
+        """Mock find_claude_cli for all tests in this class."""
+        with patch(
+            "orchestrator.llm_interpreter.find_claude_cli",
+            return_value="/usr/bin/claude",
+        ):
+            yield
+
     def test_uses_correct_model(self):
-        """Should use claude-haiku-4.5-20251001 model."""
+        """Should use claude-haiku-4-5-20251001 model."""
         from orchestrator.llm_interpreter import LLMInterpreter
 
         mock_result = MagicMock()
@@ -96,7 +107,7 @@ class TestLLMInterpreter:
             call_args = mock_run.call_args[0][0]
             assert "--model" in call_args
             model_idx = call_args.index("--model") + 1
-            assert call_args[model_idx] == "claude-haiku-4.5-20251001"
+            assert call_args[model_idx] == "claude-haiku-4-5-20251001"
 
     def test_uses_no_session_persistence(self):
         """Should use --no-session-persistence flag."""
@@ -124,7 +135,7 @@ class TestLLMInterpreter:
             assert "--no-session-persistence" in call_args
 
     def test_disables_tools(self):
-        """Should use --tools '' to disable tools."""
+        """Should use --allowedTools '' to disable tools."""
         from orchestrator.llm_interpreter import LLMInterpreter
 
         mock_result = MagicMock()
@@ -146,8 +157,8 @@ class TestLLMInterpreter:
             interpreter.interpret("some output")
 
             call_args = mock_run.call_args[0][0]
-            assert "--tools" in call_args
-            tools_idx = call_args.index("--tools") + 1
+            assert "--allowedTools" in call_args
+            tools_idx = call_args.index("--allowedTools") + 1
             assert call_args[tools_idx] == ""
 
     def test_uses_print_flag(self):
@@ -254,7 +265,7 @@ class TestLLMInterpreter:
             assert "ModuleNotFoundError" in result.error_message
 
     def test_cli_failure_fallback(self):
-        """Should fallback gracefully on CLI error (non-zero return code)."""
+        """Should fallback to escalation on CLI error (non-zero return code)."""
         from orchestrator.llm_interpreter import LLMInterpreter
 
         mock_result = MagicMock()
@@ -266,9 +277,9 @@ class TestLLMInterpreter:
             interpreter = LLMInterpreter()
             result = interpreter.interpret("some output")
 
-            # Fallback: assume task completed
-            assert result.needs_human is False
-            assert result.task_completed is True
+            # Fallback: escalate when uncertain (safer than assuming completed)
+            assert result.needs_human is True
+            assert result.task_completed is False
             assert result.task_failed is False
             # Should indicate there was an interpreter error
             assert "Interpreter error" in result.error_message
@@ -295,7 +306,7 @@ class TestLLMInterpreter:
             assert result.question == "Which one?"
 
     def test_json_parse_error_fallback(self):
-        """Should fallback gracefully when JSON is unparseable."""
+        """Should fallback to escalation when JSON is unparseable."""
         from orchestrator.llm_interpreter import LLMInterpreter
 
         mock_result = MagicMock()
@@ -306,9 +317,9 @@ class TestLLMInterpreter:
             interpreter = LLMInterpreter()
             result = interpreter.interpret("output")
 
-            # Fallback: assume task completed
-            assert result.needs_human is False
-            assert result.task_completed is True
+            # Fallback: escalate when uncertain (safer than assuming completed)
+            assert result.needs_human is True
+            assert result.task_completed is False
             assert "Interpreter error" in result.error_message
 
     def test_truncates_large_output(self):
@@ -352,9 +363,9 @@ class TestLLMInterpreter:
             interpreter = LLMInterpreter()
             result = interpreter.interpret("some output")
 
-            # Fallback: assume task completed
-            assert result.needs_human is False
-            assert result.task_completed is True
+            # Fallback: escalate when uncertain (safer than assuming completed)
+            assert result.needs_human is True
+            assert result.task_completed is False
             assert "timeout" in result.error_message.lower()
 
     def test_custom_model(self):
@@ -411,6 +422,17 @@ class TestLLMInterpreter:
 
 class TestInterpretationPrompt:
     """Test the interpretation prompt structure."""
+
+    import pytest
+
+    @pytest.fixture(autouse=True)
+    def mock_claude_cli(self):
+        """Mock find_claude_cli for all tests in this class."""
+        with patch(
+            "orchestrator.llm_interpreter.find_claude_cli",
+            return_value="/usr/bin/claude",
+        ):
+            yield
 
     def test_prompt_contains_output(self):
         """Should include the output in the prompt."""
