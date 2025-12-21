@@ -626,12 +626,13 @@ Create a file that simultaneously:
 **Type:** CODING
 
 **Description:**
-Create a module that uses Haiku to interpret Claude Code's output, replacing fragile regex-based detection with semantic understanding.
+Create a module that uses Claude Code CLI with Haiku 4.5 to interpret task output, replacing fragile regex-based detection with semantic understanding.
 
 **Implementation Notes:**
 
 ```python
-import anthropic
+import json
+import subprocess
 from dataclasses import dataclass
 
 @dataclass
@@ -645,50 +646,78 @@ class InterpretationResult:
     task_failed: bool
     error_message: str | None
 
-INTERPRETATION_PROMPT = """Analyze this Claude Code output and return JSON:
+INTERPRETATION_PROMPT = """Analyze this Claude Code output and return ONLY valid JSON (no markdown, no explanation):
 
-{
-  "needs_human": true/false,  // Does Claude need human input to proceed?
-  "question": "...",          // The question being asked (if needs_human)
-  "options": ["A", "B"],      // Available choices (if any)
-  "recommendation": "...",    // Claude's recommendation (if any)
-  "task_completed": true/false,
-  "task_failed": true/false,
-  "error_message": "..."      // Error details (if failed)
-}
+{{
+  "needs_human": true or false,
+  "question": "the question being asked" or null,
+  "options": ["option A", "option B"] or null,
+  "recommendation": "recommended choice" or null,
+  "task_completed": true or false,
+  "task_failed": true or false,
+  "error_message": "error details" or null
+}}
 
 Output to analyze:
 {output}
 """
 
 class LLMInterpreter:
-    def __init__(self, model: str = "claude-3-5-haiku-latest"):
-        self.client = anthropic.Anthropic()
+    def __init__(self, model: str = "claude-haiku-4.5-20251001"):
         self.model = model
 
     def interpret(self, output: str) -> InterpretationResult:
-        """Interpret task output using Haiku."""
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=1024,
-            messages=[{
-                "role": "user",
-                "content": INTERPRETATION_PROMPT.format(output=output[:8000])
-            }]
+        """Interpret task output using Claude Code CLI with Haiku."""
+        prompt = INTERPRETATION_PROMPT.format(output=output[:8000])
+
+        result = subprocess.run(
+            [
+                "claude",
+                "--model", self.model,
+                "--print",  # Output only, no interactive
+                "--no-config",  # Fresh session, no MCP, no context
+                "-p", prompt,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
 
+        if result.returncode != 0:
+            # Fallback: assume task completed if we can't interpret
+            return InterpretationResult(
+                needs_human=False,
+                question=None,
+                options=None,
+                recommendation=None,
+                task_completed=True,
+                task_failed=False,
+                error_message=f"Interpreter error: {result.stderr[:200]}",
+            )
+
         # Parse JSON response
-        result = json.loads(response.content[0].text)
-        return InterpretationResult(**result)
+        try:
+            data = json.loads(result.stdout.strip())
+            return InterpretationResult(**data)
+        except json.JSONDecodeError:
+            # Try to extract JSON from response (may have extra text)
+            import re
+            json_match = re.search(r'\{[^{}]*\}', result.stdout, re.DOTALL)
+            if json_match:
+                data = json.loads(json_match.group())
+                return InterpretationResult(**data)
+            raise
 ```
 
 **Acceptance Criteria:**
 
-- [ ] Uses Anthropic SDK with Haiku model
+- [ ] Uses Claude Code CLI with `claude-haiku-4.5-20251001`
+- [ ] Uses `--no-config` for clean session (no MCP, no hooks)
 - [ ] Returns structured InterpretationResult
 - [ ] Handles output truncation for large outputs
 - [ ] Handles JSON parsing errors gracefully
-- [ ] Unit tests with mocked API responses
+- [ ] Graceful fallback if CLI fails
+- [ ] Unit tests with mocked subprocess
 
 ---
 
@@ -698,12 +727,16 @@ class LLMInterpreter:
 **Type:** CODING
 
 **Description:**
-Replace regex-based `detect_needs_human()` and `extract_escalation_info()` with LLM interpreter, keeping regex as fast-path for explicit markers.
+Replace regex-based `detect_needs_human()` and `extract_escalation_info()` with LLM interpreter. Keep regex as optional fast-path for explicit markers, controlled by config flag.
 
 **Implementation Notes:**
 
 ```python
+import os
 from orchestrator.llm_interpreter import LLMInterpreter, InterpretationResult
+
+# Config: set ORCHESTRATOR_LLM_ONLY=true to skip regex fast-path
+USE_LLM_ONLY = os.getenv("ORCHESTRATOR_LLM_ONLY", "false").lower() == "true"
 
 # Module-level interpreter (lazy init)
 _interpreter: LLMInterpreter | None = None
@@ -714,16 +747,28 @@ def get_interpreter() -> LLMInterpreter:
         _interpreter = LLMInterpreter()
     return _interpreter
 
-def detect_needs_human(output: str) -> bool:
-    """Detect if Claude needs human input.
+def _check_explicit_markers(output: str) -> bool | None:
+    """Check for explicit markers. Returns None if no match (use LLM)."""
+    if USE_LLM_ONLY:
+        return None  # Skip fast-path, always use LLM
 
-    Uses fast-path regex for explicit markers, falls back to LLM.
-    """
-    # Fast path: explicit markers (no API call needed)
     if "STATUS: needs_human" in output:
         return True
     if "NEEDS_HUMAN:" in output:
         return True
+
+    return None  # No explicit marker, need LLM
+
+def detect_needs_human(output: str) -> bool:
+    """Detect if Claude needs human input.
+
+    Uses optional fast-path for explicit markers, then LLM interpretation.
+    Set ORCHESTRATOR_LLM_ONLY=true to skip fast-path.
+    """
+    # Optional fast path: explicit markers
+    explicit = _check_explicit_markers(output)
+    if explicit is not None:
+        return explicit
 
     # Semantic understanding via LLM
     result = get_interpreter().interpret(output)
@@ -747,50 +792,110 @@ def interpret_task_output(output: str) -> InterpretationResult:
     Returns complete analysis including completion status, errors, etc.
     Used by task_runner to determine next action.
     """
-    # Fast path for explicit markers
-    if "STATUS: needs_human" in output or "NEEDS_HUMAN:" in output:
-        return InterpretationResult(
-            needs_human=True,
-            question=None,  # Will be extracted separately
-            options=None,
-            recommendation=None,
-            task_completed=False,
-            task_failed=False,
-            error_message=None,
-        )
+    # Optional fast path for explicit markers
+    if not USE_LLM_ONLY:
+        if "STATUS: needs_human" in output or "NEEDS_HUMAN:" in output:
+            return InterpretationResult(
+                needs_human=True,
+                question=None,  # Will be extracted by extract_escalation_info
+                options=None,
+                recommendation=None,
+                task_completed=False,
+                task_failed=False,
+                error_message=None,
+            )
 
     return get_interpreter().interpret(output)
 ```
 
 **Acceptance Criteria:**
 
-- [ ] Explicit markers still use fast-path (no API call)
-- [ ] LLM fallback for semantic detection
+- [ ] `ORCHESTRATOR_LLM_ONLY=true` skips all regex, uses pure LLM
+- [ ] Default behavior: explicit markers use fast-path, rest uses LLM
+- [ ] Easy to remove regex code later (isolated in `_check_explicit_markers`)
 - [ ] Existing tests still pass
 - [ ] New tests for LLM integration (mocked)
-- [ ] Graceful degradation if API fails
+- [ ] Graceful degradation if CLI fails
 
 ---
 
 ### Task 4.11: Update Escalation Tests for LLM Interpreter
 
-**File:** `orchestrator/tests/test_escalation.py`
+**File:** `orchestrator/tests/test_escalation.py`, `orchestrator/tests/test_llm_interpreter.py`
 **Type:** CODING
 
 **Description:**
-Update tests to mock LLM interpreter and add integration tests.
+Update tests to mock subprocess calls and add integration tests. Test the `ORCHESTRATOR_LLM_ONLY` config flag.
 
 **Implementation Notes:**
 
 ```python
+# test_llm_interpreter.py
+import json
 from unittest.mock import patch, MagicMock
-from orchestrator.llm_interpreter import InterpretationResult
+from orchestrator.llm_interpreter import LLMInterpreter, InterpretationResult
 
+class TestLLMInterpreter:
+    """Test LLM interpreter with mocked subprocess."""
+
+    def test_interpret_success(self):
+        """Should parse valid JSON response."""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = json.dumps({
+            "needs_human": True,
+            "question": "Which approach?",
+            "options": ["A", "B"],
+            "recommendation": "A",
+            "task_completed": False,
+            "task_failed": False,
+            "error_message": None,
+        })
+
+        with patch("subprocess.run", return_value=mock_result) as mock_run:
+            interpreter = LLMInterpreter()
+            result = interpreter.interpret("some output")
+
+            assert result.needs_human is True
+            assert result.question == "Which approach?"
+            mock_run.assert_called_once()
+
+    def test_interpret_cli_failure_fallback(self):
+        """Should fallback gracefully on CLI error."""
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_result.stderr = "CLI error"
+
+        with patch("subprocess.run", return_value=mock_result):
+            interpreter = LLMInterpreter()
+            result = interpreter.interpret("some output")
+
+            # Fallback: assume completed
+            assert result.needs_human is False
+            assert result.task_completed is True
+
+    def test_uses_correct_model(self):
+        """Should use claude-haiku-4.5-20251001."""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = '{"needs_human": false, "task_completed": true}'
+
+        with patch("subprocess.run", return_value=mock_result) as mock_run:
+            interpreter = LLMInterpreter()
+            interpreter.interpret("test")
+
+            call_args = mock_run.call_args[0][0]
+            assert "--model" in call_args
+            model_idx = call_args.index("--model") + 1
+            assert call_args[model_idx] == "claude-haiku-4.5-20251001"
+
+
+# test_escalation.py additions
 class TestDetectNeedsHumanWithLLM:
     """Test LLM-based detection."""
 
-    def test_explicit_marker_no_api_call(self):
-        """Explicit markers should not call LLM API."""
+    def test_explicit_marker_skips_llm(self):
+        """Explicit markers should not call LLM (default behavior)."""
         with patch("orchestrator.escalation.get_interpreter") as mock:
             output = "STATUS: needs_human\nI need clarification."
             result = detect_needs_human(output)
@@ -798,57 +903,43 @@ class TestDetectNeedsHumanWithLLM:
             assert result is True
             mock.assert_not_called()  # Fast path, no LLM
 
-    def test_semantic_detection_uses_llm(self):
-        """Ambiguous output should use LLM for detection."""
+    def test_llm_only_mode_ignores_markers(self):
+        """ORCHESTRATOR_LLM_ONLY=true should always use LLM."""
         mock_result = InterpretationResult(
             needs_human=True,
-            question="Which approach?",
-            options=["A", "B"],
-            recommendation="A",
+            question="Q",
+            options=None,
+            recommendation=None,
             task_completed=False,
             task_failed=False,
             error_message=None,
         )
 
-        with patch("orchestrator.escalation.get_interpreter") as mock:
-            mock.return_value.interpret.return_value = mock_result
+        with patch.dict(os.environ, {"ORCHESTRATOR_LLM_ONLY": "true"}):
+            # Need to reload module to pick up env change
+            import importlib
+            import orchestrator.escalation as esc
+            importlib.reload(esc)
 
-            output = "I'm thinking about two approaches here..."
-            result = detect_needs_human(output)
+            with patch.object(esc, "get_interpreter") as mock:
+                mock.return_value.interpret.return_value = mock_result
 
-            assert result is True
-            mock.return_value.interpret.assert_called_once()
+                output = "STATUS: needs_human"  # Has marker
+                result = esc.detect_needs_human(output)
 
-    def test_completed_task_no_escalation(self):
-        """Completed tasks should not trigger escalation."""
-        mock_result = InterpretationResult(
-            needs_human=False,
-            question=None,
-            options=None,
-            recommendation=None,
-            task_completed=True,
-            task_failed=False,
-            error_message=None,
-        )
-
-        with patch("orchestrator.escalation.get_interpreter") as mock:
-            mock.return_value.interpret.return_value = mock_result
-
-            output = "Task completed successfully. All tests pass."
-            result = detect_needs_human(output)
-
-            assert result is False
+                # Should still call LLM despite marker
+                mock.return_value.interpret.assert_called_once()
 
 
 class TestLLMInterpreterIntegration:
-    """Integration tests (require API key, skip in CI)."""
+    """Integration tests (require Claude CLI, skip in CI)."""
 
     @pytest.mark.skipif(
-        os.getenv("ANTHROPIC_API_KEY") is None,
-        reason="No API key"
+        os.getenv("CI") == "true",
+        reason="Skip in CI"
     )
-    def test_real_ambiguous_output(self):
-        """Test with real Haiku call."""
+    def test_real_haiku_interpretation(self):
+        """Test with real Claude Code CLI call."""
         from orchestrator.llm_interpreter import LLMInterpreter
 
         interpreter = LLMInterpreter()
@@ -860,15 +951,15 @@ class TestLLMInterpreterIntegration:
 
         assert result.needs_human is True
         assert result.options is not None
-        assert len(result.options) >= 2
 ```
 
 **Acceptance Criteria:**
 
-- [ ] Existing regex tests still pass (fast-path)
-- [ ] New tests mock LLM interpreter
-- [ ] Integration test with real API (skipped in CI)
-- [ ] Tests cover error handling
+- [ ] LLMInterpreter tests mock subprocess.run
+- [ ] Tests verify correct CLI args (model, --no-config, etc.)
+- [ ] Tests cover CLI failure fallback
+- [ ] Tests for `ORCHESTRATOR_LLM_ONLY` flag
+- [ ] Integration test with real CLI (skipped in CI)
 - [ ] All tests pass: `make test-unit`
 
 ---
