@@ -74,13 +74,18 @@ class InterpretationResult:
 MAX_OUTPUT_LENGTH = 8000
 
 # Prompt template for interpretation
-INTERPRETATION_PROMPT = """Analyze this Claude Code output and return ONLY valid JSON (no markdown, no explanation):
+INTERPRETATION_PROMPT = """Analyze this Claude Code output and return ONLY valid JSON.
+
+IMPORTANT:
+- Return ONLY the JSON object, nothing else
+- All string values must be plain text (NO markdown formatting like ** or __)
+- Extract the actual question being asked, not the formatting
 
 {{
   "needs_human": true or false,
-  "question": "the question being asked" or null,
-  "options": ["option A", "option B"] or null,
-  "recommendation": "recommended choice" or null,
+  "question": "the exact question being asked, plain text only" or null,
+  "options": ["option 1 text", "option 2 text"] or null,
+  "recommendation": "the recommendation, plain text only" or null,
   "task_completed": true or false,
   "task_failed": true or false,
   "error_message": "error details" or null

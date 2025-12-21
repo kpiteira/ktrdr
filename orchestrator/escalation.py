@@ -29,31 +29,39 @@ console = Console()
 # Module-level state for interpreter configuration
 _interpreter: LLMInterpreter | None = None
 _llm_only: bool = False
+_model: str | None = None
 
 
-def configure_interpreter(llm_only: bool = False) -> None:
+def configure_interpreter(llm_only: bool = False, model: str | None = None) -> None:
     """Configure interpreter behavior.
 
-    Called from CLI to set the detection mode.
+    Called from CLI to set the detection mode and model.
 
     Args:
         llm_only: If True, skip fast-path markers and always use LLM.
+        model: The model ID to use for LLM interpretation (e.g., 'claude-haiku-4-5-20251001').
     """
-    global _llm_only
+    global _llm_only, _model, _interpreter
     _llm_only = llm_only
+    _model = model
+    # Reset interpreter so it gets recreated with new model
+    _interpreter = None
 
 
 def get_interpreter() -> LLMInterpreter:
     """Get the singleton LLM interpreter instance.
 
-    Lazily creates the interpreter on first use.
+    Lazily creates the interpreter on first use with the configured model.
 
     Returns:
         The LLMInterpreter instance.
     """
     global _interpreter
     if _interpreter is None:
-        _interpreter = LLMInterpreter()
+        if _model:
+            _interpreter = LLMInterpreter(model=_model)
+        else:
+            _interpreter = LLMInterpreter()
     return _interpreter
 
 

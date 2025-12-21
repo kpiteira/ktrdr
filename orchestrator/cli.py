@@ -122,6 +122,14 @@ async def _run_task(plan_file: str, task_id: str, guidance: str | None) -> None:
             console.print(f"\n[red]Error:[/red] {result.error}")
 
 
+# Model aliases for the --model flag
+MODEL_ALIASES = {
+    "haiku": "claude-haiku-4-5-20251001",
+    "sonnet": "claude-sonnet-4-5-20250929",
+    "opus": "claude-opus-4-5-20251101",
+}
+
+
 @cli.command()
 @click.argument("plan_file", type=click.Path(exists=True))
 @click.option("--notify/--no-notify", default=False, help="Send macOS notifications")
@@ -130,11 +138,19 @@ async def _run_task(plan_file: str, task_id: str, guidance: str | None) -> None:
     is_flag=True,
     help="Use LLM interpreter only for escalation detection, skip regex fast-path",
 )
-def run(plan_file: str, notify: bool, llm_only: bool) -> None:
+@click.option(
+    "-m",
+    "--model",
+    type=click.Choice(["haiku", "sonnet", "opus"]),
+    default="haiku",
+    help="Model for LLM interpretation (default: haiku)",
+)
+def run(plan_file: str, notify: bool, llm_only: bool, model: str) -> None:
     """Run all tasks in a milestone."""
     from orchestrator.escalation import configure_interpreter
 
-    configure_interpreter(llm_only=llm_only)
+    model_id = MODEL_ALIASES[model]
+    configure_interpreter(llm_only=llm_only, model=model_id)
     asyncio.run(_run_milestone(plan_file, resume=False, notify=notify))
 
 
@@ -146,11 +162,19 @@ def run(plan_file: str, notify: bool, llm_only: bool) -> None:
     is_flag=True,
     help="Use LLM interpreter only for escalation detection, skip regex fast-path",
 )
-def resume(plan_file: str, notify: bool, llm_only: bool) -> None:
+@click.option(
+    "-m",
+    "--model",
+    type=click.Choice(["haiku", "sonnet", "opus"]),
+    default="haiku",
+    help="Model for LLM interpretation (default: haiku)",
+)
+def resume(plan_file: str, notify: bool, llm_only: bool, model: str) -> None:
     """Resume a previously interrupted milestone."""
     from orchestrator.escalation import configure_interpreter
 
-    configure_interpreter(llm_only=llm_only)
+    model_id = MODEL_ALIASES[model]
+    configure_interpreter(llm_only=llm_only, model=model_id)
 
     config = OrchestratorConfig.from_env()
     milestone_id = Path(plan_file).stem
