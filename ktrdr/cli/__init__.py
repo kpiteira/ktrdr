@@ -8,58 +8,66 @@ including commands for data inspection, indicator calculation, and visualization
 import atexit
 import os
 
+# Skip heavy telemetry initialization in test mode for faster test execution
+# PYTEST_CURRENT_TEST is set by pytest automatically
+_is_testing = os.environ.get("PYTEST_CURRENT_TEST") is not None
+
 # Setup OpenTelemetry tracing for CLI (optional - graceful if Jaeger unavailable)
-try:
-    from opentelemetry import trace
-    from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+# Skip in test mode to avoid slow imports
+if not _is_testing:
+    try:
+        from opentelemetry import trace
+        from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 
-    from ktrdr.monitoring.setup import setup_monitoring
+        from ktrdr.monitoring.setup import setup_monitoring
 
-    # Setup monitoring for CLI
-    # Uses OTLP_ENDPOINT env var if set, otherwise defaults to localhost
-    # CLI doesn't spam console output
-    # Use SimpleSpanProcessor for immediate export (CLI is short-lived)
-    setup_monitoring(
-        service_name="ktrdr-cli",
-        otlp_endpoint=os.getenv("OTLP_ENDPOINT", "http://localhost:4317"),
-        console_output=False,  # CLI shouldn't spam traces to console
-        use_simple_processor=True,  # Immediate export for short-lived CLI process
-    )
+        # Setup monitoring for CLI
+        # Uses OTLP_ENDPOINT env var if set, otherwise defaults to localhost
+        # CLI doesn't spam console output
+        # Use SimpleSpanProcessor for immediate export (CLI is short-lived)
+        setup_monitoring(
+            service_name="ktrdr-cli",
+            otlp_endpoint=os.getenv("OTLP_ENDPOINT", "http://localhost:4317"),
+            console_output=False,  # CLI shouldn't spam traces to console
+            use_simple_processor=True,  # Immediate export for short-lived CLI process
+        )
 
-    # Instrument httpx for automatic trace propagation
-    # This ensures CLI -> API calls include trace context in HTTP headers
-    HTTPXClientInstrumentor().instrument()
+        # Instrument httpx for automatic trace propagation
+        # This ensures CLI -> API calls include trace context in HTTP headers
+        HTTPXClientInstrumentor().instrument()
 
-    # Force flush spans before CLI exit (fixes short-lived process issue)
-    # BatchSpanProcessor buffers spans (5s/512 spans) - CLI exits before flush
-    def flush_spans():
-        """Force flush all pending spans before CLI exit."""
-        try:
-            trace_provider = trace.get_tracer_provider()
-            if hasattr(trace_provider, "force_flush"):
-                trace_provider.force_flush(timeout_millis=1000)
-        except Exception:
-            pass  # Ignore errors during shutdown
+        # Force flush spans before CLI exit (fixes short-lived process issue)
+        # BatchSpanProcessor buffers spans (5s/512 spans) - CLI exits before flush
+        def flush_spans():
+            """Force flush all pending spans before CLI exit."""
+            try:
+                trace_provider = trace.get_tracer_provider()
+                if hasattr(trace_provider, "force_flush"):
+                    trace_provider.force_flush(timeout_millis=1000)
+            except Exception:
+                pass  # Ignore errors during shutdown
 
-    atexit.register(flush_spans)
+        atexit.register(flush_spans)
 
-except Exception:
-    # Gracefully handle case where OTEL packages aren't available
-    # or Jaeger isn't running - CLI should still work
-    pass
+    except Exception:
+        # Gracefully handle case where OTEL packages aren't available
+        # or Jaeger isn't running - CLI should still work
+        pass
 
-from ktrdr.cli.agent_commands import agent_app
-from ktrdr.cli.async_model_commands import async_models_app as models_app
-from ktrdr.cli.backtest_commands import backtest_app
-from ktrdr.cli.commands import cli_app
-from ktrdr.cli.data_commands import data_app
-from ktrdr.cli.deploy_commands import deploy_app
-from ktrdr.cli.dummy_commands import dummy_app
-from ktrdr.cli.fuzzy_commands import fuzzy_app
-from ktrdr.cli.ib_commands import ib_app
-from ktrdr.cli.indicator_commands import indicators_app
-from ktrdr.cli.operations_commands import operations_app
-from ktrdr.cli.strategy_commands import strategies_app
+# CLI submodule imports - these must come after telemetry setup
+# noqa: E402 because telemetry setup is intentionally before these imports
+from ktrdr.cli.agent_commands import agent_app  # noqa: E402
+from ktrdr.cli.async_model_commands import async_models_app as models_app  # noqa: E402
+from ktrdr.cli.backtest_commands import backtest_app  # noqa: E402
+from ktrdr.cli.commands import cli_app  # noqa: E402
+from ktrdr.cli.data_commands import data_app  # noqa: E402
+from ktrdr.cli.deploy_commands import deploy_app  # noqa: E402
+from ktrdr.cli.dummy_commands import dummy_app  # noqa: E402
+from ktrdr.cli.fuzzy_commands import fuzzy_app  # noqa: E402
+from ktrdr.cli.ib_commands import ib_app  # noqa: E402
+from ktrdr.cli.indicator_commands import indicators_app  # noqa: E402
+from ktrdr.cli.operations_commands import operations_app  # noqa: E402
+from ktrdr.cli.strategy_commands import strategies_app  # noqa: E402
 
 # Temporarily disabled while updating multi-timeframe for pure fuzzy
 # from ktrdr.cli.multi_timeframe_commands import multi_timeframe_app
