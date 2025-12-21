@@ -520,8 +520,8 @@ class TestCreateMilestonePR:
         assert "1.2" in prompt
         assert "1.3" in prompt
 
-        # Verify result
-        assert "https://github.com" in result.result
+        # Verify result contains the expected PR URL
+        assert result.result == "PR created: https://github.com/user/repo/pull/123"
 
     @pytest.mark.asyncio
     async def test_handles_claude_error(self, tmp_path: Path) -> None:
