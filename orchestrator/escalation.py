@@ -3,6 +3,11 @@
 Detects when Claude's output indicates uncertainty or the need for human input,
 extracts questions/options/recommendations, and provides structured information
 for presenting to the user.
+
+Detection uses a hybrid approach:
+- Fast-path: Explicit markers (STATUS: needs_human, NEEDS_HUMAN:) skip LLM
+- Semantic: LLM interpretation for everything else (slower but more accurate)
+- Use --llm-only CLI flag to always use LLM interpretation
 """
 
 import re
@@ -15,10 +20,64 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 
 from orchestrator import telemetry
+from orchestrator.llm_interpreter import LLMInterpreter
 from orchestrator.notifications import send_notification
 
 # Console for output
 console = Console()
+
+# Module-level state for interpreter configuration
+_interpreter: LLMInterpreter | None = None
+_llm_only: bool = False
+
+
+def configure_interpreter(llm_only: bool = False) -> None:
+    """Configure interpreter behavior.
+
+    Called from CLI to set the detection mode.
+
+    Args:
+        llm_only: If True, skip fast-path markers and always use LLM.
+    """
+    global _llm_only
+    _llm_only = llm_only
+
+
+def get_interpreter() -> LLMInterpreter:
+    """Get the singleton LLM interpreter instance.
+
+    Lazily creates the interpreter on first use.
+
+    Returns:
+        The LLMInterpreter instance.
+    """
+    global _interpreter
+    if _interpreter is None:
+        _interpreter = LLMInterpreter()
+    return _interpreter
+
+
+def _check_explicit_markers(output: str) -> bool | None:
+    """Check for explicit escalation markers.
+
+    This is a fast-path check that avoids LLM calls when explicit markers
+    are present. Returns None when no marker is found (LLM should be used).
+
+    Args:
+        output: The text output to check.
+
+    Returns:
+        True if explicit marker found, None if no marker (use LLM).
+    """
+    if _llm_only:
+        return None  # Skip fast-path in LLM-only mode
+
+    if "STATUS: needs_human" in output:
+        return True
+    if "NEEDS_HUMAN:" in output:
+        return True
+
+    return None  # No explicit marker, need LLM
 
 
 @dataclass
@@ -39,8 +98,9 @@ class EscalationInfo:
 def detect_needs_human(output: str) -> bool:
     """Detect if Claude's output indicates human input is needed.
 
-    Checks for explicit markers first, then looks for natural language
-    patterns indicating uncertainty or a need for clarification.
+    Uses a hybrid approach:
+    1. Fast-path: Check for explicit markers (unless --llm-only mode)
+    2. Semantic: Use LLM interpretation for everything else
 
     Args:
         output: The text output from Claude Code.
@@ -48,37 +108,14 @@ def detect_needs_human(output: str) -> bool:
     Returns:
         True if the output indicates human input is needed.
     """
-    # Explicit markers (highest priority)
-    if "STATUS: needs_human" in output:
-        return True
-    if "NEEDS_HUMAN:" in output:
-        return True
+    # Fast-path: check explicit markers (skipped in LLM-only mode)
+    explicit = _check_explicit_markers(output)
+    if explicit is not None:
+        return explicit
 
-    # Check for OPTIONS marker (case-insensitive, allowing markdown formatting)
-    if re.search(r"\*{0,2}options\*{0,2}\s*:", output, re.IGNORECASE):
-        return True
-
-    # Question patterns indicating uncertainty
-    question_patterns = [
-        r"should I\s+",
-        r"would you prefer",
-        r"I'm not sure whether",
-        r"I'm uncertain",
-        r"the options (are|seem to be)",
-        r"I recommend .+ but",
-        r"could go either way",
-        r"what would you like",
-        r"do you want me to",
-        r"please clarify",
-        r"which .+ would you",
-        r"did you mean",
-    ]
-
-    for pattern in question_patterns:
-        if re.search(pattern, output, re.IGNORECASE):
-            return True
-
-    return False
+    # Semantic understanding via LLM
+    result = get_interpreter().interpret(output)
+    return result.needs_human
 
 
 def extract_escalation_info(task_id: str, output: str) -> EscalationInfo:
@@ -98,7 +135,9 @@ def extract_escalation_info(task_id: str, output: str) -> EscalationInfo:
     question_match = re.search(
         r"QUESTION:\s*(.+?)(?=OPTIONS:|RECOMMENDATION:|$)", output, re.DOTALL
     )
-    options_match = re.search(r"OPTIONS:\s*(.+?)(?=RECOMMENDATION:|$)", output, re.DOTALL)
+    options_match = re.search(
+        r"OPTIONS:\s*(.+?)(?=RECOMMENDATION:|$)", output, re.DOTALL
+    )
     rec_match = re.search(r"RECOMMENDATION:\s*(.+?)$", output, re.DOTALL)
 
     question = (

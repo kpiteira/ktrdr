@@ -125,16 +125,33 @@ async def _run_task(plan_file: str, task_id: str, guidance: str | None) -> None:
 @cli.command()
 @click.argument("plan_file", type=click.Path(exists=True))
 @click.option("--notify/--no-notify", default=False, help="Send macOS notifications")
-def run(plan_file: str, notify: bool) -> None:
+@click.option(
+    "--llm-only",
+    is_flag=True,
+    help="Use LLM interpreter only for escalation detection, skip regex fast-path",
+)
+def run(plan_file: str, notify: bool, llm_only: bool) -> None:
     """Run all tasks in a milestone."""
+    from orchestrator.escalation import configure_interpreter
+
+    configure_interpreter(llm_only=llm_only)
     asyncio.run(_run_milestone(plan_file, resume=False, notify=notify))
 
 
 @cli.command()
 @click.argument("plan_file", type=click.Path(exists=True))
 @click.option("--notify/--no-notify", default=False, help="Send macOS notifications")
-def resume(plan_file: str, notify: bool) -> None:
+@click.option(
+    "--llm-only",
+    is_flag=True,
+    help="Use LLM interpreter only for escalation detection, skip regex fast-path",
+)
+def resume(plan_file: str, notify: bool, llm_only: bool) -> None:
     """Resume a previously interrupted milestone."""
+    from orchestrator.escalation import configure_interpreter
+
+    configure_interpreter(llm_only=llm_only)
+
     config = OrchestratorConfig.from_env()
     milestone_id = Path(plan_file).stem
 

@@ -90,9 +90,7 @@ async def run_task(
     )
 
 
-def _build_prompt(
-    task: Task, plan_path: str, human_guidance: str | None = None
-) -> str:
+def _build_prompt(task: Task, plan_path: str, human_guidance: str | None = None) -> str:
     """Build the prompt for Claude Code execution using /ktask skill.
 
     Invokes the /ktask skill which handles:
@@ -233,9 +231,7 @@ async def run_task_with_escalation(
             )
 
         # Execute the task
-        result = await run_task(
-            task, sandbox, config, plan_path, guidance, on_tool_use
-        )
+        result = await run_task(task, sandbox, config, plan_path, guidance, on_tool_use)
 
         if result.status == "completed":
             return result

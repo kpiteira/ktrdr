@@ -77,14 +77,20 @@ class TestRunMilestoneBasic:
 
     @pytest.mark.asyncio
     async def test_runs_all_tasks_sequentially(
-        self, tmp_path: Path, sample_tasks: list[Task], mock_run_task_with_escalation: AsyncMock
+        self,
+        tmp_path: Path,
+        sample_tasks: list[Task],
+        mock_run_task_with_escalation: AsyncMock,
     ) -> None:
         """All tasks are executed in order."""
         with (
             patch(
                 "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
             ),
-            patch("orchestrator.milestone_runner.run_task_with_escalation", mock_run_task_with_escalation),
+            patch(
+                "orchestrator.milestone_runner.run_task_with_escalation",
+                mock_run_task_with_escalation,
+            ),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
             result = await run_milestone(
@@ -96,19 +102,27 @@ class TestRunMilestoneBasic:
         assert mock_run_task_with_escalation.call_count == 3
 
         # Verify order of task IDs
-        call_task_ids = [call.args[0].id for call in mock_run_task_with_escalation.call_args_list]
+        call_task_ids = [
+            call.args[0].id for call in mock_run_task_with_escalation.call_args_list
+        ]
         assert call_task_ids == ["1.1", "1.2", "1.3"]
 
     @pytest.mark.asyncio
     async def test_saves_state_after_each_task(
-        self, tmp_path: Path, sample_tasks: list[Task], mock_run_task_with_escalation: AsyncMock
+        self,
+        tmp_path: Path,
+        sample_tasks: list[Task],
+        mock_run_task_with_escalation: AsyncMock,
     ) -> None:
         """State is saved after each task completion."""
         with (
             patch(
                 "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
             ),
-            patch("orchestrator.milestone_runner.run_task_with_escalation", mock_run_task_with_escalation),
+            patch(
+                "orchestrator.milestone_runner.run_task_with_escalation",
+                mock_run_task_with_escalation,
+            ),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
             await run_milestone(
@@ -124,14 +138,20 @@ class TestRunMilestoneBasic:
 
     @pytest.mark.asyncio
     async def test_returns_milestone_result_with_totals(
-        self, tmp_path: Path, sample_tasks: list[Task], mock_run_task_with_escalation: AsyncMock
+        self,
+        tmp_path: Path,
+        sample_tasks: list[Task],
+        mock_run_task_with_escalation: AsyncMock,
     ) -> None:
         """MilestoneResult contains aggregated totals."""
         with (
             patch(
                 "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
             ),
-            patch("orchestrator.milestone_runner.run_task_with_escalation", mock_run_task_with_escalation),
+            patch(
+                "orchestrator.milestone_runner.run_task_with_escalation",
+                mock_run_task_with_escalation,
+            ),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
             result = await run_milestone(
@@ -151,7 +171,10 @@ class TestRunMilestoneResume:
 
     @pytest.mark.asyncio
     async def test_resume_skips_completed_tasks(
-        self, tmp_path: Path, sample_tasks: list[Task], mock_run_task_with_escalation: AsyncMock
+        self,
+        tmp_path: Path,
+        sample_tasks: list[Task],
+        mock_run_task_with_escalation: AsyncMock,
     ) -> None:
         """Resume starts from first incomplete task."""
         # Create existing state with first task completed
@@ -176,7 +199,10 @@ class TestRunMilestoneResume:
             patch(
                 "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
             ),
-            patch("orchestrator.milestone_runner.run_task_with_escalation", mock_run_task_with_escalation),
+            patch(
+                "orchestrator.milestone_runner.run_task_with_escalation",
+                mock_run_task_with_escalation,
+            ),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
             await run_milestone(
@@ -187,12 +213,17 @@ class TestRunMilestoneResume:
 
         # Should only run tasks 1.2 and 1.3
         assert mock_run_task_with_escalation.call_count == 2
-        call_task_ids = [call.args[0].id for call in mock_run_task_with_escalation.call_args_list]
+        call_task_ids = [
+            call.args[0].id for call in mock_run_task_with_escalation.call_args_list
+        ]
         assert call_task_ids == ["1.2", "1.3"]
 
     @pytest.mark.asyncio
     async def test_fresh_run_ignores_existing_state(
-        self, tmp_path: Path, sample_tasks: list[Task], mock_run_task_with_escalation: AsyncMock
+        self,
+        tmp_path: Path,
+        sample_tasks: list[Task],
+        mock_run_task_with_escalation: AsyncMock,
     ) -> None:
         """Fresh run (resume=False) starts from beginning."""
         # Create existing state with first task completed
@@ -208,7 +239,10 @@ class TestRunMilestoneResume:
             patch(
                 "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
             ),
-            patch("orchestrator.milestone_runner.run_task_with_escalation", mock_run_task_with_escalation),
+            patch(
+                "orchestrator.milestone_runner.run_task_with_escalation",
+                mock_run_task_with_escalation,
+            ),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
             await run_milestone(
@@ -232,8 +266,14 @@ class TestRunMilestoneStatusHandling:
         call_count = 0
 
         async def mock_task_with_escalation(
-            task: Task, sandbox: MagicMock, config: MagicMock, plan_path: str,
-            loop_detector, tracer, notify: bool = True, on_tool_use=None
+            task: Task,
+            sandbox: MagicMock,
+            config: MagicMock,
+            plan_path: str,
+            loop_detector,
+            tracer,
+            notify: bool = True,
+            on_tool_use=None,
         ) -> TaskResult:
             nonlocal call_count
             call_count += 1
@@ -287,8 +327,14 @@ class TestRunMilestoneStatusHandling:
         call_count = 0
 
         async def mock_task_with_escalation(
-            task: Task, sandbox: MagicMock, config: MagicMock, plan_path: str,
-            loop_detector, tracer, notify: bool = True, on_tool_use=None
+            task: Task,
+            sandbox: MagicMock,
+            config: MagicMock,
+            plan_path: str,
+            loop_detector,
+            tracer,
+            notify: bool = True,
+            on_tool_use=None,
         ) -> TaskResult:
             nonlocal call_count
             call_count += 1
@@ -374,8 +420,14 @@ class TestTaskCompleteCallback:
             callback_calls.append((task, result))
 
         async def mock_task_with_escalation(
-            task: Task, sandbox: MagicMock, config: MagicMock, plan_path: str,
-            loop_detector, tracer, notify: bool = True, on_tool_use=None
+            task: Task,
+            sandbox: MagicMock,
+            config: MagicMock,
+            plan_path: str,
+            loop_detector,
+            tracer,
+            notify: bool = True,
+            on_tool_use=None,
         ) -> TaskResult:
             return TaskResult(
                 task_id=task.id,
@@ -423,8 +475,14 @@ class TestTaskCompleteCallback:
             callback_calls.append((task, result))
 
         async def mock_task_with_escalation(
-            task: Task, sandbox: MagicMock, config: MagicMock, plan_path: str,
-            loop_detector, tracer, notify: bool = True, on_tool_use=None
+            task: Task,
+            sandbox: MagicMock,
+            config: MagicMock,
+            plan_path: str,
+            loop_detector,
+            tracer,
+            notify: bool = True,
+            on_tool_use=None,
         ) -> TaskResult:
             if task.id == "1.2":
                 return TaskResult(
@@ -469,14 +527,20 @@ class TestTaskCompleteCallback:
 
     @pytest.mark.asyncio
     async def test_callback_optional(
-        self, tmp_path: Path, sample_tasks: list[Task], mock_run_task_with_escalation: AsyncMock
+        self,
+        tmp_path: Path,
+        sample_tasks: list[Task],
+        mock_run_task_with_escalation: AsyncMock,
     ) -> None:
         """Milestone runs without callback (backward compatibility)."""
         with (
             patch(
                 "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
             ),
-            patch("orchestrator.milestone_runner.run_task_with_escalation", mock_run_task_with_escalation),
+            patch(
+                "orchestrator.milestone_runner.run_task_with_escalation",
+                mock_run_task_with_escalation,
+            ),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
             # Should not raise - callback is optional

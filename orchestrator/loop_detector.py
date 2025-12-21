@@ -177,7 +177,11 @@ class LoopDetector:
         first_second_similarity = SequenceMatcher(None, errors[-3], errors[-2]).ratio()
 
         # Oscillation = first and third are similar, but second is different
-        is_first_third_similar = first_third_similarity > self.config.error_similarity_threshold
-        is_second_different = first_second_similarity < self.config.error_similarity_threshold
+        is_first_third_similar = (
+            first_third_similarity > self.config.error_similarity_threshold
+        )
+        is_second_different = (
+            first_second_similarity < self.config.error_similarity_threshold
+        )
 
         return is_first_third_similar and is_second_different

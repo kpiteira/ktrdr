@@ -495,7 +495,9 @@ class TestRunTaskStreaming:
             return_value=make_claude_result("STATUS: completed")
         )
 
-        await run_task(task, sandbox, config, task.plan_file, on_tool_use=lambda n, i: None)
+        await run_task(
+            task, sandbox, config, task.plan_file, on_tool_use=lambda n, i: None
+        )
 
         call_kwargs = sandbox.invoke_claude_streaming.call_args[1]
         assert call_kwargs["max_turns"] == 75
