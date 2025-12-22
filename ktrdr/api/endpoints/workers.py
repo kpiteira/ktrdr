@@ -115,16 +115,18 @@ async def register_worker(
         f"Worker registration request: {request.worker_id} ({request.worker_type})"
     )
 
-    worker = registry.register_worker(
+    result = await registry.register_worker(
         worker_id=request.worker_id,
         worker_type=request.worker_type,
         endpoint_url=request.endpoint_url,
         capabilities=request.capabilities,
+        current_operation_id=request.current_operation_id,
+        completed_operations=request.completed_operations,
     )
 
     logger.info(f"Worker registered successfully: {request.worker_id}")
 
-    return worker.to_dict()
+    return result.worker.to_dict()
 
 
 @router.get(
