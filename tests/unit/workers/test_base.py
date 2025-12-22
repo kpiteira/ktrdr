@@ -263,3 +263,79 @@ class TestWorkerAPIBaseWithDifferentTypes:
         assert response.status_code == 200
         data = response.json()
         assert "training" in data["service"].lower()
+
+
+class TestHealthCheckTracking:
+    """Tests for health check tracking (Task 1.6: preparation for re-registration monitor)."""
+
+    def test_last_health_check_received_initialized_to_none(self):
+        """Test _last_health_check_received is initialized to None."""
+        worker = MockWorker()
+        assert hasattr(worker, "_last_health_check_received")
+        assert worker._last_health_check_received is None
+
+    def test_health_endpoint_updates_last_health_check_received(self):
+        """Test health endpoint updates _last_health_check_received timestamp."""
+        from datetime import datetime
+
+        worker = MockWorker()
+        client = TestClient(worker.app)
+
+        # Initially None
+        assert worker._last_health_check_received is None
+
+        # Call health endpoint
+        before_call = datetime.utcnow()
+        response = client.get("/health")
+        after_call = datetime.utcnow()
+
+        assert response.status_code == 200
+
+        # Timestamp should now be set
+        assert worker._last_health_check_received is not None
+        assert isinstance(worker._last_health_check_received, datetime)
+
+        # Timestamp should be between before and after the call
+        assert before_call <= worker._last_health_check_received <= after_call
+
+    def test_health_endpoint_response_format_unchanged(self):
+        """Test health response format is backward compatible (no new fields)."""
+        worker = MockWorker()
+        client = TestClient(worker.app)
+
+        response = client.get("/health")
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify expected fields exist
+        assert "healthy" in data
+        assert "service" in data
+        assert "timestamp" in data
+        assert "status" in data
+        assert "worker_status" in data
+        assert "current_operation" in data
+
+        # Verify no unexpected fields related to health check tracking
+        # (internal state should not leak into response)
+        assert "last_health_check_received" not in data
+        assert "_last_health_check_received" not in data
+
+    def test_multiple_health_checks_update_timestamp(self):
+        """Test each health check updates the timestamp."""
+        import time
+
+        worker = MockWorker()
+        client = TestClient(worker.app)
+
+        # First health check
+        client.get("/health")
+        first_timestamp = worker._last_health_check_received
+
+        # Small delay to ensure different timestamp
+        time.sleep(0.01)
+
+        # Second health check
+        client.get("/health")
+        second_timestamp = worker._last_health_check_received
+
+        assert second_timestamp > first_timestamp

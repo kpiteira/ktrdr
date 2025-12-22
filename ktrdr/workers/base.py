@@ -135,6 +135,11 @@ class WorkerAPIBase:
             allow_headers=["*"],
         )
 
+        # Health check tracking for re-registration detection (Task 1.6)
+        # When backend health-checks us, we record the timestamp.
+        # If too much time passes without a health check, we assume backend restarted.
+        self._last_health_check_received: Optional[datetime] = None
+
         # Register common endpoints
         self._register_operations_endpoints()
         self._register_health_endpoint()
@@ -288,14 +293,16 @@ class WorkerAPIBase:
                     f"Listing operations: status={status}, type={operation_type}, active_only={active_only}"
                 )
 
-                (operations, total_count, active_count) = (
-                    await self._operations_service.list_operations(
-                        status=status,
-                        operation_type=operation_type,
-                        limit=limit,
-                        offset=offset,
-                        active_only=active_only,
-                    )
+                (
+                    operations,
+                    total_count,
+                    active_count,
+                ) = await self._operations_service.list_operations(
+                    status=status,
+                    operation_type=operation_type,
+                    limit=limit,
+                    offset=offset,
+                    active_only=active_only,
                 )
 
                 operation_summaries = [
@@ -380,6 +387,10 @@ class WorkerAPIBase:
         @self.app.get("/health")
         async def health_check():
             """Health check endpoint - reports worker busy/idle status."""
+            # Track when backend health-checked us (Task 1.6)
+            # This enables detection of backend restart in re-registration monitor
+            self._last_health_check_received = datetime.utcnow()
+
             try:
                 active_ops, _, _ = await self._operations_service.list_operations(
                     operation_type=self.operation_type, active_only=True
