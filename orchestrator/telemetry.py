@@ -25,6 +25,8 @@ cost_counter: metrics.Counter
 task_duration: metrics.Histogram
 escalations_counter: metrics.Counter
 loops_counter: metrics.Counter
+e2e_tests_counter: metrics.Counter
+e2e_fix_counter: metrics.Counter
 
 
 def setup_telemetry(config: OrchestratorConfig) -> tuple[trace.Tracer, metrics.Meter]:
@@ -87,6 +89,8 @@ def create_metrics(meter: metrics.Meter) -> None:
     - Cost in USD
     - Escalations to human (by task_id)
     - Loops detected (by type: task or e2e)
+    - E2E tests run (by milestone, status: passed/failed/unclear)
+    - E2E fix attempts (by success: true/false)
 
     And histograms for:
     - Task duration distribution (for P50/P95/P99 percentiles)
@@ -96,6 +100,7 @@ def create_metrics(meter: metrics.Meter) -> None:
     """
     global tasks_counter, tokens_counter, cost_counter, task_duration
     global escalations_counter, loops_counter
+    global e2e_tests_counter, e2e_fix_counter
 
     tasks_counter = meter.create_counter(
         "orchestrator_tasks_total",
@@ -126,4 +131,14 @@ def create_metrics(meter: metrics.Meter) -> None:
     loops_counter = meter.create_counter(
         "orchestrator_loops_detected_total",
         description="Total loops detected",
+    )
+
+    e2e_tests_counter = meter.create_counter(
+        "orchestrator_e2e_tests_total",
+        description="Total E2E tests run",
+    )
+
+    e2e_fix_counter = meter.create_counter(
+        "orchestrator_e2e_fix_attempts_total",
+        description="Total E2E fix attempts",
     )

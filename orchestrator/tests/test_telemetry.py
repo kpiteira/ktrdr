@@ -379,3 +379,105 @@ class TestLoopDetectionMetrics:
 
         telemetry.loops_counter.add(1, {"type": "e2e"})
         assert counter_mock.add.call_count >= 2
+
+
+class TestE2EMetrics:
+    """Test E2E test metrics."""
+
+    def test_creates_e2e_tests_counter(self):
+        """Should create orchestrator_e2e_tests_total counter."""
+        from orchestrator.telemetry import create_metrics
+
+        meter = MagicMock()
+        counter_mock = MagicMock()
+        meter.create_counter.return_value = counter_mock
+
+        create_metrics(meter)
+
+        counter_names = [call[0][0] for call in meter.create_counter.call_args_list]
+        assert "orchestrator_e2e_tests_total" in counter_names
+
+    def test_e2e_tests_counter_accessible(self):
+        """e2e_tests_counter should be accessible as module-level variable."""
+        from orchestrator import telemetry
+        from orchestrator.telemetry import create_metrics
+
+        meter = MagicMock()
+        counter_mock = MagicMock()
+        meter.create_counter.return_value = counter_mock
+
+        create_metrics(meter)
+
+        assert telemetry.e2e_tests_counter is not None
+
+    def test_e2e_tests_counter_can_add_with_status_label(self):
+        """e2e_tests_counter should support add() with milestone and status labels."""
+        from orchestrator import telemetry
+        from orchestrator.telemetry import create_metrics
+
+        meter = MagicMock()
+        counter_mock = MagicMock()
+        meter.create_counter.return_value = counter_mock
+
+        create_metrics(meter)
+
+        # Test passed status
+        telemetry.e2e_tests_counter.add(1, {"milestone": "M5", "status": "passed"})
+        counter_mock.add.assert_called()
+
+        # Test failed status
+        telemetry.e2e_tests_counter.add(1, {"milestone": "M5", "status": "failed"})
+        assert counter_mock.add.call_count >= 2
+
+        # Test unclear status
+        telemetry.e2e_tests_counter.add(1, {"milestone": "M5", "status": "unclear"})
+        assert counter_mock.add.call_count >= 3
+
+
+class TestE2EFixMetrics:
+    """Test E2E fix metrics."""
+
+    def test_creates_e2e_fix_counter(self):
+        """Should create orchestrator_e2e_fix_attempts_total counter."""
+        from orchestrator.telemetry import create_metrics
+
+        meter = MagicMock()
+        counter_mock = MagicMock()
+        meter.create_counter.return_value = counter_mock
+
+        create_metrics(meter)
+
+        counter_names = [call[0][0] for call in meter.create_counter.call_args_list]
+        assert "orchestrator_e2e_fix_attempts_total" in counter_names
+
+    def test_e2e_fix_counter_accessible(self):
+        """e2e_fix_counter should be accessible as module-level variable."""
+        from orchestrator import telemetry
+        from orchestrator.telemetry import create_metrics
+
+        meter = MagicMock()
+        counter_mock = MagicMock()
+        meter.create_counter.return_value = counter_mock
+
+        create_metrics(meter)
+
+        assert telemetry.e2e_fix_counter is not None
+
+    def test_e2e_fix_counter_can_add_with_success_label(self):
+        """e2e_fix_counter should support add() with success label."""
+        from orchestrator import telemetry
+        from orchestrator.telemetry import create_metrics
+
+        meter = MagicMock()
+        counter_mock = MagicMock()
+        meter.create_counter.return_value = counter_mock
+
+        create_metrics(meter)
+
+        # Test successful fix
+        telemetry.e2e_fix_counter.add(1, {"success": "true"})
+        counter_mock.add.assert_called()
+
+        # Test failed fix
+        telemetry.e2e_fix_counter.add(1, {"success": "false"})
+        assert counter_mock.add.call_count >= 2
