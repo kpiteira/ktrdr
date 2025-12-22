@@ -11,6 +11,7 @@ Source: training-host-service/
 - main.py (FastAPI setup, ~200 lines)
 """
 
+import asyncio
 import os
 from datetime import datetime
 from typing import Any, Optional
@@ -29,7 +30,7 @@ from ktrdr.api.models.operations import (
     OperationSummary,
     OperationType,
 )
-from ktrdr.api.models.workers import WorkerType
+from ktrdr.api.models.workers import CompletedOperationReport, WorkerType
 from ktrdr.api.services.operations_service import (
     OperationsService,
     get_operations_service,
@@ -139,6 +140,19 @@ class WorkerAPIBase:
         # When backend health-checks us, we record the timestamp.
         # If too much time passes without a health check, we assume backend restarted.
         self._last_health_check_received: Optional[datetime] = None
+
+        # Re-registration monitor configuration (Task 1.7)
+        self._health_check_timeout: int = (
+            30  # seconds - if no health check, assume backend restarted
+        )
+        self._reregistration_check_interval: int = 10  # seconds - how often to check
+
+        # Operations that completed while backend was unavailable
+        # These are included in the next registration to sync state
+        self._completed_operations: list[CompletedOperationReport] = []
+
+        # Background task for monitoring health checks
+        self._monitor_task: Optional[asyncio.Task] = None
 
         # Register common endpoints
         self._register_operations_endpoints()
@@ -458,6 +472,9 @@ class WorkerAPIBase:
             # Self-register with backend
             await self.self_register()
 
+            # Start re-registration monitor (Task 1.7)
+            await self._start_reregistration_monitor()
+
     async def self_register(self) -> None:
         """
         Register this worker with backend's WorkerRegistry.
@@ -503,11 +520,27 @@ class WorkerAPIBase:
                 f"No WORKER_PUBLIC_BASE_URL set, using hostname: {endpoint_url}"
             )
 
+        # Get current operation ID from OperationsService (Task 1.7)
+        current_operation_id: Optional[str] = None
+        try:
+            active_ops, _, _ = await self._operations_service.list_operations(
+                operation_type=self.operation_type, active_only=True
+            )
+            if active_ops:
+                current_operation_id = active_ops[0].operation_id
+        except Exception as e:
+            logger.debug(f"Could not get current operation: {e}")
+
         payload = {
             "worker_id": self.worker_id,
             "worker_type": self.worker_type.value,
             "endpoint_url": endpoint_url,
             "capabilities": capabilities,
+            # Resilience fields for re-registration (Task 1.7)
+            "current_operation_id": current_operation_id,
+            "completed_operations": [
+                op.model_dump() for op in self._completed_operations
+            ],
         }
 
         try:
@@ -518,7 +551,106 @@ class WorkerAPIBase:
                     f"✅ Worker registered successfully: {self.worker_id} "
                     f"(type: {self.worker_type.value}, capabilities: {capabilities})"
                 )
+                # Clear completed operations after successful registration
+                self._completed_operations.clear()
         except Exception as e:
             logger.warning(
                 f"⚠️  Worker self-registration failed (will retry via health checks): {e}"
             )
+
+    def record_operation_completed(
+        self,
+        operation_id: str,
+        status: str,
+        result: Optional[dict] = None,
+        error_message: Optional[str] = None,
+    ) -> None:
+        """
+        Record an operation that completed for next registration.
+
+        When the backend is unavailable, completed operations are stored
+        and reported on the next successful registration.
+
+        Args:
+            operation_id: The operation's unique identifier
+            status: Final status (COMPLETED, FAILED, CANCELLED)
+            result: Optional result data
+            error_message: Optional error message for failed operations
+        """
+        report = CompletedOperationReport(
+            operation_id=operation_id,
+            status=status,  # type: ignore[arg-type]
+            result=result,
+            error_message=error_message,
+            completed_at=datetime.utcnow(),
+        )
+        self._completed_operations.append(report)
+        logger.debug(f"Recorded completed operation: {operation_id} ({status})")
+
+    async def _start_reregistration_monitor(self) -> None:
+        """Start the background task that monitors health checks."""
+        if self._monitor_task is None or self._monitor_task.done():
+            self._monitor_task = asyncio.create_task(self._monitor_health_checks())
+            logger.info("Re-registration monitor started")
+
+    async def _monitor_health_checks(self) -> None:
+        """
+        Background task that monitors health check timing.
+
+        If the backend hasn't health-checked this worker within the timeout
+        period, we assume the backend restarted and check our registration.
+        """
+        while True:
+            try:
+                await asyncio.sleep(self._reregistration_check_interval)
+
+                # Skip if no health check has been received yet
+                if self._last_health_check_received is None:
+                    continue
+
+                elapsed = (
+                    datetime.utcnow() - self._last_health_check_received
+                ).total_seconds()
+
+                if elapsed > self._health_check_timeout:
+                    logger.warning(
+                        f"No health check in {elapsed:.0f}s - checking registration"
+                    )
+                    await self._ensure_registered()
+                    # Reset the timer after checking
+                    self._last_health_check_received = datetime.utcnow()
+
+            except asyncio.CancelledError:
+                logger.info("Re-registration monitor stopped")
+                break
+            except Exception as e:
+                logger.error(f"Error in re-registration monitor: {e}")
+                await asyncio.sleep(5)  # Back off on error
+
+    async def _ensure_registered(self) -> None:
+        """
+        Check if this worker is registered with the backend.
+
+        If not registered (404), trigger re-registration with current state.
+        """
+        import httpx
+
+        check_url = f"{self.backend_url}/api/v1/workers/{self.worker_id}"
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(check_url)
+
+                if response.status_code == 200:
+                    logger.debug("Worker is still registered")
+                    return
+
+                if response.status_code == 404:
+                    logger.warning("Worker not found in registry - re-registering")
+                    await self.self_register()
+                else:
+                    logger.warning(
+                        f"Unexpected response checking registration: {response.status_code}"
+                    )
+        except Exception as e:
+            logger.error(f"Error checking registration: {e}")
