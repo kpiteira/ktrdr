@@ -185,3 +185,43 @@ def _extract_acceptance_criteria(section: str) -> list[str]:
             criteria.append(criterion)
 
     return criteria
+
+
+def parse_e2e_scenario(plan_content: str) -> str | None:
+    """Extract E2E test scenario from plan content.
+
+    Looks for a section starting with "## E2E Test" (with optional "Scenario" suffix)
+    and extracts the content, preferring code blocks if present.
+
+    Args:
+        plan_content: The full markdown content of the plan file
+
+    Returns:
+        The E2E scenario text, or None if no E2E section exists
+    """
+    # Find the E2E Test section header
+    # Matches: ## E2E Test, ## E2E Test Scenario, etc.
+    header_match = re.search(r"^##\s+E2E\s+Test.*?$", plan_content, re.MULTILINE | re.IGNORECASE)
+
+    if not header_match:
+        return None
+
+    # Get content from after the header to the next ## section or end of file
+    start = header_match.end()
+    next_section_match = re.search(r"^##\s+", plan_content[start:], re.MULTILINE)
+
+    if next_section_match:
+        section_content = plan_content[start : start + next_section_match.start()]
+    else:
+        section_content = plan_content[start:]
+
+    # Extract all code blocks within this section
+    code_blocks = re.findall(r"```\w*\n(.*?)```", section_content, re.DOTALL)
+
+    if code_blocks:
+        # Return all code blocks joined together
+        return "\n\n".join(block.strip() for block in code_blocks)
+
+    # Fall back to plain text (strip leading/trailing whitespace)
+    plain_text = section_content.strip()
+    return plain_text if plain_text else None
