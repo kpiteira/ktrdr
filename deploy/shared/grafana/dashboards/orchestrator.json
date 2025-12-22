@@ -1,0 +1,575 @@
+{
+  "uid": "orchestrator",
+  "title": "Orchestrator Dashboard",
+  "description": "Observability dashboard for the autonomous coding orchestrator",
+  "schemaVersion": 39,
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "tags": ["orchestrator", "autonomous-coding", "monitoring"],
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Task Success Rate",
+      "description": "Percentage of tasks completing successfully",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(orchestrator_tasks_total{status=\"completed\", milestone=~\"$milestone\"}[1h])) / sum(rate(orchestrator_tasks_total{milestone=~\"$milestone\"}[1h])) * 100 or vector(100)",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 70},
+              {"color": "green", "value": 90}
+            ]
+          },
+          "mappings": [],
+          "unit": "percent"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "E2E Pass Rate",
+      "description": "Percentage of E2E tests passing",
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(orchestrator_e2e_tests_total{status=\"passed\", milestone=~\"$milestone\"}) / sum(orchestrator_e2e_tests_total{milestone=~\"$milestone\"}) * 100 or vector(100)",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 70},
+              {"color": "green", "value": 90}
+            ]
+          },
+          "mappings": [],
+          "unit": "percent"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Task Duration P95",
+      "description": "95th percentile task duration",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, rate(orchestrator_task_duration_seconds_bucket{milestone=~\"$milestone\"}[1h]))",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 300},
+              {"color": "red", "value": 600}
+            ]
+          },
+          "mappings": [],
+          "unit": "s"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Loop Detection Events",
+      "description": "Total loops detected (task or E2E)",
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(orchestrator_loops_detected_total{milestone=~\"$milestone\"}) by (type)",
+          "legendFormat": "{{type}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1},
+              {"color": "red", "value": 5}
+            ]
+          },
+          "mappings": [],
+          "unit": "none"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Cost Over Time",
+      "description": "Cost in USD by milestone over time",
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(orchestrator_cost_usd_total{milestone=~\"$milestone\"}[1h])) by (milestone)",
+          "legendFormat": "{{milestone}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 20,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "showPoints": "never",
+            "pointSize": 5,
+            "stacking": {
+              "mode": "normal"
+            },
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null}
+            ]
+          },
+          "mappings": [],
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Tokens Used Over Time",
+      "description": "Token consumption by milestone",
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(orchestrator_tokens_total{milestone=~\"$milestone\"}[1h])) by (milestone)",
+          "legendFormat": "{{milestone}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 20,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "showPoints": "never",
+            "pointSize": 5,
+            "stacking": {
+              "mode": "normal"
+            },
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null}
+            ]
+          },
+          "mappings": [],
+          "unit": "none"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Escalation Frequency",
+      "description": "Escalations to human by milestone",
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(orchestrator_escalations_total{milestone=~\"$milestone\"}[1h])) by (milestone)",
+          "legendFormat": "{{milestone}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "lineInterpolation": "linear",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "showPoints": "never",
+            "pointSize": 5,
+            "stacking": {
+              "mode": "normal"
+            },
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null}
+            ]
+          },
+          "mappings": [],
+          "unit": "none"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "type": "table",
+      "title": "Active Milestones",
+      "description": "Recent milestone runs with status",
+      "gridPos": {
+        "x": 12,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (milestone, status) (increase(orchestrator_tasks_total{milestone=~\"$milestone\"}[24h]))",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": ["sum"],
+          "countRows": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null}
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "milestone"},
+            "properties": [
+              {"id": "displayName", "value": "Milestone"}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "status"},
+            "properties": [
+              {"id": "displayName", "value": "Status"}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Value"},
+            "properties": [
+              {"id": "displayName", "value": "Count"}
+            ]
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {},
+            "renameByName": {}
+          }
+        }
+      ]
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "milestone",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": "label_values(orchestrator_tasks_total, milestone)",
+        "refresh": 2,
+        "regex": "",
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": [],
+        "hide": 0,
+        "label": "Milestone"
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "version": 1
+}
