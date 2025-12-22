@@ -18,70 +18,74 @@ class TestWorkerRegistry:
         registry = WorkerRegistry()
         assert registry.list_workers() == []
 
-    def test_register_worker_adds_new_worker(self):
+    @pytest.mark.asyncio
+    async def test_register_worker_adds_new_worker(self):
         """Test registering a new worker."""
         registry = WorkerRegistry()
 
-        worker = registry.register_worker(
+        result = await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5003",
         )
 
-        assert worker.worker_id == "worker-1"
-        assert worker.worker_type == WorkerType.BACKTESTING
-        assert worker.endpoint_url == "http://localhost:5003"
-        assert worker.status == WorkerStatus.AVAILABLE
-        assert worker.capabilities == {}
+        assert result.worker_id == "worker-1"
+        assert result.worker.worker_type == WorkerType.BACKTESTING
+        assert result.worker.endpoint_url == "http://localhost:5003"
+        assert result.worker.status == WorkerStatus.AVAILABLE
+        assert result.worker.capabilities == {}
 
-    def test_register_worker_with_capabilities(self):
+    @pytest.mark.asyncio
+    async def test_register_worker_with_capabilities(self):
         """Test registering a worker with capabilities."""
         registry = WorkerRegistry()
 
         capabilities = {"cores": 4, "memory_gb": 8}
-        worker = registry.register_worker(
+        result = await registry.register_worker(
             worker_id="worker-2",
             worker_type=WorkerType.CPU_TRAINING,
             endpoint_url="http://localhost:5004",
             capabilities=capabilities,
         )
 
-        assert worker.worker_id == "worker-2"
-        assert worker.capabilities == capabilities
+        assert result.worker_id == "worker-2"
+        assert result.worker.capabilities == capabilities
 
-    def test_register_worker_is_idempotent(self):
+    @pytest.mark.asyncio
+    async def test_register_worker_is_idempotent(self):
         """Test that re-registering a worker updates the existing one."""
         registry = WorkerRegistry()
 
         # Register worker first time
-        worker1 = registry.register_worker(
+        result1 = await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5003",
         )
 
         # Re-register same worker with different URL
-        worker2 = registry.register_worker(
+        result2 = await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5555",  # Different URL
         )
 
         # Should update existing worker
-        assert worker1.worker_id == worker2.worker_id
-        assert worker2.endpoint_url == "http://localhost:5555"
+        assert result1.worker_id == result2.worker_id
+        assert result2.worker.endpoint_url == "http://localhost:5555"
 
         # Should only have one worker in registry
         workers = registry.list_workers()
         assert len(workers) == 1
         assert workers[0].endpoint_url == "http://localhost:5555"
 
-    def test_get_worker_returns_existing_worker(self):
+    @pytest.mark.asyncio
+    async def test_get_worker_returns_existing_worker(self):
         """Test getting an existing worker by ID."""
         registry = WorkerRegistry()
 
         # Register a worker
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5003",
@@ -102,22 +106,23 @@ class TestWorkerRegistry:
 
         assert worker is None
 
-    def test_list_workers_returns_all_workers(self):
+    @pytest.mark.asyncio
+    async def test_list_workers_returns_all_workers(self):
         """Test listing all workers."""
         registry = WorkerRegistry()
 
         # Register multiple workers
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5003",
         )
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-2",
             worker_type=WorkerType.CPU_TRAINING,
             endpoint_url="http://localhost:5004",
         )
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-3",
             worker_type=WorkerType.GPU_HOST,
             endpoint_url="http://localhost:5002",
@@ -129,22 +134,23 @@ class TestWorkerRegistry:
         worker_ids = {w.worker_id for w in workers}
         assert worker_ids == {"worker-1", "worker-2", "worker-3"}
 
-    def test_list_workers_filter_by_type(self):
+    @pytest.mark.asyncio
+    async def test_list_workers_filter_by_type(self):
         """Test filtering workers by type."""
         registry = WorkerRegistry()
 
         # Register workers of different types
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="backtest-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5003",
         )
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="backtest-2",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5004",
         )
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="training-1",
             worker_type=WorkerType.CPU_TRAINING,
             endpoint_url="http://localhost:5005",
@@ -157,24 +163,25 @@ class TestWorkerRegistry:
         worker_ids = {w.worker_id for w in backtest_workers}
         assert worker_ids == {"backtest-1", "backtest-2"}
 
-    def test_list_workers_filter_by_status(self):
+    @pytest.mark.asyncio
+    async def test_list_workers_filter_by_status(self):
         """Test filtering workers by status."""
         registry = WorkerRegistry()
 
         # Register workers
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5003",
         )
-        worker2 = registry.register_worker(
+        result2 = await registry.register_worker(
             worker_id="worker-2",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5004",
         )
 
         # Manually set one worker to BUSY for testing
-        worker2.status = WorkerStatus.BUSY
+        result2.worker.status = WorkerStatus.BUSY
 
         # Filter by AVAILABLE status
         available_workers = registry.list_workers(status=WorkerStatus.AVAILABLE)
@@ -182,29 +189,30 @@ class TestWorkerRegistry:
         assert len(available_workers) == 1
         assert available_workers[0].worker_id == "worker-1"
 
-    def test_list_workers_filter_by_type_and_status(self):
+    @pytest.mark.asyncio
+    async def test_list_workers_filter_by_type_and_status(self):
         """Test filtering workers by both type and status."""
         registry = WorkerRegistry()
 
         # Register various workers
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="backtest-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5003",
         )
-        worker2 = registry.register_worker(
+        result2 = await registry.register_worker(
             worker_id="backtest-2",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5004",
         )
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="training-1",
             worker_type=WorkerType.CPU_TRAINING,
             endpoint_url="http://localhost:5005",
         )
 
         # Set statuses
-        worker2.status = WorkerStatus.BUSY
+        result2.worker.status = WorkerStatus.BUSY
 
         # Filter by BACKTESTING and AVAILABLE
         filtered_workers = registry.list_workers(
@@ -214,44 +222,46 @@ class TestWorkerRegistry:
         assert len(filtered_workers) == 1
         assert filtered_workers[0].worker_id == "backtest-1"
 
-    def test_register_worker_sets_last_healthy_at(self):
+    @pytest.mark.asyncio
+    async def test_register_worker_sets_last_healthy_at(self):
         """Test that registering a worker sets last_healthy_at timestamp."""
         registry = WorkerRegistry()
 
         before = datetime.utcnow()
-        worker = registry.register_worker(
+        result = await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5003",
         )
         after = datetime.utcnow()
 
-        assert worker.last_healthy_at is not None
-        assert before <= worker.last_healthy_at <= after
+        assert result.worker.last_healthy_at is not None
+        assert before <= result.worker.last_healthy_at <= after
 
-    def test_get_available_workers_returns_only_available(self):
+    @pytest.mark.asyncio
+    async def test_get_available_workers_returns_only_available(self):
         """Test that get_available_workers returns only available workers."""
         registry = WorkerRegistry()
 
         # Register multiple workers
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="backtest-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5003",
         )
-        worker2 = registry.register_worker(
+        result2 = await registry.register_worker(
             worker_id="backtest-2",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5004",
         )
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="training-1",
             worker_type=WorkerType.CPU_TRAINING,
             endpoint_url="http://localhost:5005",
         )
 
         # Mark one backtest worker as busy
-        worker2.status = WorkerStatus.BUSY
+        result2.worker.status = WorkerStatus.BUSY
 
         # Get available backtesting workers
         available = registry.get_available_workers(WorkerType.BACKTESTING)
@@ -260,22 +270,23 @@ class TestWorkerRegistry:
         assert available[0].worker_id == "backtest-1"
         assert available[0].status == WorkerStatus.AVAILABLE
 
-    def test_get_available_workers_sorted_by_last_selected(self):
+    @pytest.mark.asyncio
+    async def test_get_available_workers_sorted_by_last_selected(self):
         """Test that get_available_workers sorts by last_selected."""
         registry = WorkerRegistry()
 
         # Register multiple workers
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5003",
         )
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-2",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5004",
         )
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-3",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5005",
@@ -294,17 +305,18 @@ class TestWorkerRegistry:
         assert available[1].worker_id == "worker-3"
         assert available[2].worker_id == "worker-2"  # Most recently used
 
-    def test_select_worker_returns_least_recently_used(self):
+    @pytest.mark.asyncio
+    async def test_select_worker_returns_least_recently_used(self):
         """Test that select_worker returns least recently used worker."""
         registry = WorkerRegistry()
 
         # Register workers
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5003",
         )
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-2",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5004",
@@ -326,22 +338,23 @@ class TestWorkerRegistry:
     @pytest.mark.skip(
         reason="Round-robin selection implementation needs fixing - pre-existing issue, not related to Task 6.7"
     )
-    def test_select_worker_round_robin_behavior(self):
+    @pytest.mark.asyncio
+    async def test_select_worker_round_robin_behavior(self):
         """Test that select_worker implements round-robin."""
         registry = WorkerRegistry()
 
         # Register 3 workers
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5003",
         )
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-2",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5004",
         )
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-3",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5005",
@@ -370,37 +383,39 @@ class TestWorkerRegistry:
 
         assert worker is None
 
-    def test_select_worker_returns_none_when_all_busy(self):
+    @pytest.mark.asyncio
+    async def test_select_worker_returns_none_when_all_busy(self):
         """Test that select_worker returns None when all workers busy."""
         registry = WorkerRegistry()
 
         # Register workers
-        worker1 = registry.register_worker(
+        result1 = await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5003",
         )
-        worker2 = registry.register_worker(
+        result2 = await registry.register_worker(
             worker_id="worker-2",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5004",
         )
 
         # Mark all as busy
-        worker1.status = WorkerStatus.BUSY
-        worker2.status = WorkerStatus.BUSY
+        result1.worker.status = WorkerStatus.BUSY
+        result2.worker.status = WorkerStatus.BUSY
 
         # Should return None
         worker = registry.select_worker(WorkerType.BACKTESTING)
 
         assert worker is None
 
-    def test_mark_busy_sets_status_and_operation(self):
+    @pytest.mark.asyncio
+    async def test_mark_busy_sets_status_and_operation(self):
         """Test that mark_busy sets worker status and operation_id."""
         registry = WorkerRegistry()
 
         # Register worker
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5003",
@@ -421,12 +436,13 @@ class TestWorkerRegistry:
         # Should not raise exception
         registry.mark_busy("nonexistent", "op-123")
 
-    def test_mark_available_clears_status_and_operation(self):
+    @pytest.mark.asyncio
+    async def test_mark_available_clears_status_and_operation(self):
         """Test that mark_available clears worker status and operation_id."""
         registry = WorkerRegistry()
 
         # Register and mark busy
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5003",
@@ -501,7 +517,7 @@ class TestWorkerHealthChecks:
         registry = WorkerRegistry()
 
         # Register worker
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://worker-1:5003",
@@ -537,7 +553,7 @@ class TestWorkerHealthChecks:
         registry = WorkerRegistry()
 
         # Register worker
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://worker-1:5003",
@@ -560,7 +576,7 @@ class TestWorkerHealthChecks:
         registry = WorkerRegistry()
 
         # Register worker
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://worker-1:5003",
@@ -586,14 +602,14 @@ class TestWorkerHealthChecks:
         registry = WorkerRegistry()
 
         # Register worker
-        worker = registry.register_worker(
+        result = await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://worker-1:5003",
         )
 
         # Manually set failures
-        worker.health_check_failures = 2
+        result.worker.health_check_failures = 2
 
         # Mock successful health check
         mock_response = AsyncMock()
@@ -632,7 +648,7 @@ class TestWorkerHealthChecks:
         registry = WorkerRegistry()
 
         # Register worker
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://worker-1:5003",
@@ -722,12 +738,12 @@ class TestBackgroundHealthCheckTask:
         registry._health_check_interval = 0.1  # Fast for testing
 
         # Register workers
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://worker-1:5003",
         )
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-2",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://worker-2:5003",
@@ -764,7 +780,7 @@ class TestBackgroundHealthCheckTask:
         registry._health_check_interval = 0.1  # Fast for testing
 
         # Register worker
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://worker-1:5003",
@@ -799,22 +815,23 @@ class TestBackgroundHealthCheckTask:
 class TestDeadWorkerCleanup:
     """Tests for dead worker cleanup functionality."""
 
-    def test_cleanup_removes_workers_unavailable_for_threshold(self):
+    @pytest.mark.asyncio
+    async def test_cleanup_removes_workers_unavailable_for_threshold(self):
         """Test that workers unavailable for > 5 minutes are removed."""
         registry = WorkerRegistry()
 
         # Register worker
-        worker = registry.register_worker(
+        result = await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://worker-1:5003",
         )
 
         # Mark as unavailable
-        worker.status = WorkerStatus.TEMPORARILY_UNAVAILABLE
+        result.worker.status = WorkerStatus.TEMPORARILY_UNAVAILABLE
 
         # Set last_healthy_at to 6 minutes ago
-        worker.last_healthy_at = datetime.utcnow() - timedelta(minutes=6)
+        result.worker.last_healthy_at = datetime.utcnow() - timedelta(minutes=6)
 
         # Run cleanup
         registry._cleanup_dead_workers()
@@ -823,22 +840,23 @@ class TestDeadWorkerCleanup:
         assert registry.get_worker("worker-1") is None
         assert len(registry.list_workers()) == 0
 
-    def test_cleanup_keeps_workers_unavailable_below_threshold(self):
+    @pytest.mark.asyncio
+    async def test_cleanup_keeps_workers_unavailable_below_threshold(self):
         """Test that workers unavailable for < 5 minutes are kept."""
         registry = WorkerRegistry()
 
         # Register worker
-        worker = registry.register_worker(
+        result = await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://worker-1:5003",
         )
 
         # Mark as unavailable
-        worker.status = WorkerStatus.TEMPORARILY_UNAVAILABLE
+        result.worker.status = WorkerStatus.TEMPORARILY_UNAVAILABLE
 
         # Set last_healthy_at to 4 minutes ago (below threshold)
-        worker.last_healthy_at = datetime.utcnow() - timedelta(minutes=4)
+        result.worker.last_healthy_at = datetime.utcnow() - timedelta(minutes=4)
 
         # Run cleanup
         registry._cleanup_dead_workers()
@@ -847,22 +865,23 @@ class TestDeadWorkerCleanup:
         assert registry.get_worker("worker-1") is not None
         assert len(registry.list_workers()) == 1
 
-    def test_cleanup_keeps_available_workers(self):
+    @pytest.mark.asyncio
+    async def test_cleanup_keeps_available_workers(self):
         """Test that available workers are never removed."""
         registry = WorkerRegistry()
 
         # Register worker
-        worker = registry.register_worker(
+        result = await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://worker-1:5003",
         )
 
         # Keep as available
-        worker.status = WorkerStatus.AVAILABLE
+        result.worker.status = WorkerStatus.AVAILABLE
 
         # Set last_healthy_at to 10 minutes ago (way past threshold)
-        worker.last_healthy_at = datetime.utcnow() - timedelta(minutes=10)
+        result.worker.last_healthy_at = datetime.utcnow() - timedelta(minutes=10)
 
         # Run cleanup
         registry._cleanup_dead_workers()
@@ -871,22 +890,23 @@ class TestDeadWorkerCleanup:
         assert registry.get_worker("worker-1") is not None
         assert len(registry.list_workers()) == 1
 
-    def test_cleanup_keeps_busy_workers(self):
+    @pytest.mark.asyncio
+    async def test_cleanup_keeps_busy_workers(self):
         """Test that busy workers are never removed."""
         registry = WorkerRegistry()
 
         # Register worker
-        worker = registry.register_worker(
+        result = await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://worker-1:5003",
         )
 
         # Mark as busy
-        worker.status = WorkerStatus.BUSY
+        result.worker.status = WorkerStatus.BUSY
 
         # Set last_healthy_at to 10 minutes ago (way past threshold)
-        worker.last_healthy_at = datetime.utcnow() - timedelta(minutes=10)
+        result.worker.last_healthy_at = datetime.utcnow() - timedelta(minutes=10)
 
         # Run cleanup
         registry._cleanup_dead_workers()
@@ -895,20 +915,21 @@ class TestDeadWorkerCleanup:
         assert registry.get_worker("worker-1") is not None
         assert len(registry.list_workers()) == 1
 
-    def test_cleanup_handles_missing_last_healthy_at(self):
+    @pytest.mark.asyncio
+    async def test_cleanup_handles_missing_last_healthy_at(self):
         """Test cleanup handles workers without last_healthy_at gracefully."""
         registry = WorkerRegistry()
 
         # Register worker
-        worker = registry.register_worker(
+        result = await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://worker-1:5003",
         )
 
         # Mark as unavailable but clear last_healthy_at
-        worker.status = WorkerStatus.TEMPORARILY_UNAVAILABLE
-        worker.last_healthy_at = None
+        result.worker.status = WorkerStatus.TEMPORARILY_UNAVAILABLE
+        result.worker.last_healthy_at = None
 
         # Run cleanup - should not crash
         registry._cleanup_dead_workers()
@@ -916,22 +937,23 @@ class TestDeadWorkerCleanup:
         # Worker should still exist (no timestamp to compare)
         assert registry.get_worker("worker-1") is not None
 
-    def test_cleanup_removes_multiple_dead_workers(self):
+    @pytest.mark.asyncio
+    async def test_cleanup_removes_multiple_dead_workers(self):
         """Test cleanup removes multiple dead workers in one pass."""
         registry = WorkerRegistry()
 
         # Register 3 workers
         for i in range(1, 4):
-            worker = registry.register_worker(
+            result = await registry.register_worker(
                 worker_id=f"worker-{i}",
                 worker_type=WorkerType.BACKTESTING,
                 endpoint_url=f"http://worker-{i}:5003",
             )
-            worker.status = WorkerStatus.TEMPORARILY_UNAVAILABLE
-            worker.last_healthy_at = datetime.utcnow() - timedelta(minutes=6)
+            result.worker.status = WorkerStatus.TEMPORARILY_UNAVAILABLE
+            result.worker.last_healthy_at = datetime.utcnow() - timedelta(minutes=6)
 
         # Register 1 healthy worker
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-4",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://worker-4:5003",
@@ -954,13 +976,13 @@ class TestDeadWorkerCleanup:
         registry._removal_threshold_seconds = 1  # 1 second for testing
 
         # Register worker and mark as unavailable with old timestamp
-        worker = registry.register_worker(
+        result = await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://worker-1:5003",
         )
-        worker.status = WorkerStatus.TEMPORARILY_UNAVAILABLE
-        worker.last_healthy_at = datetime.utcnow() - timedelta(seconds=2)
+        result.worker.status = WorkerStatus.TEMPORARILY_UNAVAILABLE
+        result.worker.last_healthy_at = datetime.utcnow() - timedelta(seconds=2)
 
         # Mock health_check_worker to prevent it from updating timestamps
         async def mock_health_check(worker_id):
@@ -981,3 +1003,348 @@ class TestDeadWorkerCleanup:
         # Worker should be removed by cleanup
         assert registry.get_worker("worker-1") is None
         assert len(registry.list_workers()) == 0
+
+
+class TestReconciliation:
+    """Tests for operation reconciliation during worker registration."""
+
+    @pytest.fixture
+    def mock_operations_service(self):
+        """Create a mock OperationsService."""
+        service = AsyncMock()
+        service.get_operation = AsyncMock(return_value=None)
+        service.complete_operation = AsyncMock()
+        service.fail_operation = AsyncMock()
+        service._repository = AsyncMock()
+        service._repository.update = AsyncMock()
+        return service
+
+    @pytest.mark.asyncio
+    async def test_register_with_completed_operations_updates_db(
+        self, mock_operations_service
+    ):
+        """Test that completed operations reported by worker are reconciled to DB."""
+        registry = WorkerRegistry()
+        registry.set_operations_service(mock_operations_service)
+
+        # Mock an operation that is in RUNNING state in DB
+        from ktrdr.api.models.operations import (
+            OperationStatus,
+        )
+        mock_operation = AsyncMock()
+        mock_operation.status = OperationStatus.RUNNING
+        mock_operation.operation_id = "op-123"
+        mock_operations_service.get_operation.return_value = mock_operation
+
+        # Create completed operation report
+        from ktrdr.api.models.workers import CompletedOperationReport
+        completed_report = CompletedOperationReport(
+            operation_id="op-123",
+            status="COMPLETED",
+            result={"model_path": "/path/to/model.pt"},
+            completed_at=datetime.utcnow(),
+        )
+
+        # Register worker with completed operation
+        await registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.TRAINING,
+            endpoint_url="http://localhost:5004",
+            completed_operations=[completed_report],
+        )
+
+        # Verify operation was updated
+        mock_operations_service.complete_operation.assert_called_once_with(
+            "op-123", result_summary={"model_path": "/path/to/model.pt"}
+        )
+
+    @pytest.mark.asyncio
+    async def test_register_with_completed_operations_skips_terminal(
+        self, mock_operations_service
+    ):
+        """Test that already completed operations are not updated again."""
+        registry = WorkerRegistry()
+        registry.set_operations_service(mock_operations_service)
+
+        # Mock an operation that is already COMPLETED in DB
+        from ktrdr.api.models.operations import OperationStatus
+        mock_operation = AsyncMock()
+        mock_operation.status = OperationStatus.COMPLETED
+        mock_operation.operation_id = "op-123"
+        mock_operations_service.get_operation.return_value = mock_operation
+
+        from ktrdr.api.models.workers import CompletedOperationReport
+        completed_report = CompletedOperationReport(
+            operation_id="op-123",
+            status="COMPLETED",
+            result={},
+            completed_at=datetime.utcnow(),
+        )
+
+        await registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.TRAINING,
+            endpoint_url="http://localhost:5004",
+            completed_operations=[completed_report],
+        )
+
+        # Should NOT have updated the operation
+        mock_operations_service.complete_operation.assert_not_called()
+        mock_operations_service.fail_operation.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_register_with_completed_operations_handles_failed(
+        self, mock_operations_service
+    ):
+        """Test that failed operations are reconciled correctly."""
+        registry = WorkerRegistry()
+        registry.set_operations_service(mock_operations_service)
+
+        from ktrdr.api.models.operations import OperationStatus
+        mock_operation = AsyncMock()
+        mock_operation.status = OperationStatus.RUNNING
+        mock_operation.operation_id = "op-456"
+        mock_operations_service.get_operation.return_value = mock_operation
+
+        from ktrdr.api.models.workers import CompletedOperationReport
+        failed_report = CompletedOperationReport(
+            operation_id="op-456",
+            status="FAILED",
+            error_message="Out of memory",
+            completed_at=datetime.utcnow(),
+        )
+
+        await registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.TRAINING,
+            endpoint_url="http://localhost:5004",
+            completed_operations=[failed_report],
+        )
+
+        mock_operations_service.fail_operation.assert_called_once_with(
+            "op-456", error_message="Out of memory"
+        )
+
+    @pytest.mark.asyncio
+    async def test_register_with_completed_operations_unknown_logs_warning(
+        self, mock_operations_service
+    ):
+        """Test that unknown operations are logged but not created."""
+        registry = WorkerRegistry()
+        registry.set_operations_service(mock_operations_service)
+
+        # Return None to simulate unknown operation
+        mock_operations_service.get_operation.return_value = None
+
+        from ktrdr.api.models.workers import CompletedOperationReport
+        completed_report = CompletedOperationReport(
+            operation_id="unknown-op",
+            status="COMPLETED",
+            result={},
+            completed_at=datetime.utcnow(),
+        )
+
+        # Should not raise, just log warning
+        await registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.TRAINING,
+            endpoint_url="http://localhost:5004",
+            completed_operations=[completed_report],
+        )
+
+        # Should not have called update methods
+        mock_operations_service.complete_operation.assert_not_called()
+        mock_operations_service.fail_operation.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_register_with_current_operation_syncs_running(
+        self, mock_operations_service
+    ):
+        """Test that current operation is synced to RUNNING status."""
+        registry = WorkerRegistry()
+        registry.set_operations_service(mock_operations_service)
+
+        from ktrdr.api.models.operations import OperationStatus
+        mock_operation = AsyncMock()
+        mock_operation.status = OperationStatus.PENDING
+        mock_operation.operation_id = "op-789"
+        mock_operations_service.get_operation.return_value = mock_operation
+
+        await registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.TRAINING,
+            endpoint_url="http://localhost:5004",
+            current_operation_id="op-789",
+        )
+
+        # Should have updated status to RUNNING
+        mock_operations_service._repository.update.assert_called_once()
+        call_args = mock_operations_service._repository.update.call_args
+        assert call_args[0][0] == "op-789"
+        assert call_args[1].get("status") == "RUNNING"
+        assert call_args[1].get("worker_id") == "worker-1"
+
+    @pytest.mark.asyncio
+    async def test_register_with_current_operation_already_running(
+        self, mock_operations_service
+    ):
+        """Test that RUNNING operation with same worker is not updated."""
+        registry = WorkerRegistry()
+        registry.set_operations_service(mock_operations_service)
+
+        from ktrdr.api.models.operations import OperationStatus
+        mock_operation = AsyncMock()
+        mock_operation.status = OperationStatus.RUNNING
+        mock_operation.operation_id = "op-789"
+        mock_operation.worker_id = "worker-1"  # Same worker
+        mock_operations_service.get_operation.return_value = mock_operation
+
+        await registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.TRAINING,
+            endpoint_url="http://localhost:5004",
+            current_operation_id="op-789",
+        )
+
+        # Should NOT update if already RUNNING with same worker
+        mock_operations_service._repository.update.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_register_with_current_operation_failed_syncs_to_running(
+        self, mock_operations_service
+    ):
+        """Test that FAILED operation syncs to RUNNING if worker claims it."""
+        registry = WorkerRegistry()
+        registry.set_operations_service(mock_operations_service)
+
+        from ktrdr.api.models.operations import OperationStatus
+        mock_operation = AsyncMock()
+        mock_operation.status = OperationStatus.FAILED
+        mock_operation.operation_id = "op-789"
+        mock_operations_service.get_operation.return_value = mock_operation
+
+        await registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.TRAINING,
+            endpoint_url="http://localhost:5004",
+            current_operation_id="op-789",
+        )
+
+        # Should have updated status to RUNNING
+        mock_operations_service._repository.update.assert_called_once()
+        call_args = mock_operations_service._repository.update.call_args
+        assert call_args[0][0] == "op-789"
+        assert call_args[1].get("status") == "RUNNING"
+
+    @pytest.mark.asyncio
+    async def test_register_with_current_operation_completed_triggers_stop(
+        self, mock_operations_service
+    ):
+        """Test that COMPLETED operation in DB signals worker to stop."""
+        registry = WorkerRegistry()
+        registry.set_operations_service(mock_operations_service)
+
+        from ktrdr.api.models.operations import OperationStatus
+        mock_operation = AsyncMock()
+        mock_operation.status = OperationStatus.COMPLETED
+        mock_operation.operation_id = "op-completed"
+        mock_operations_service.get_operation.return_value = mock_operation
+
+        result = await registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.TRAINING,
+            endpoint_url="http://localhost:5004",
+            current_operation_id="op-completed",
+        )
+
+        # Should return stop signal for this operation
+        assert result.stop_operations == ["op-completed"]
+
+    @pytest.mark.asyncio
+    async def test_register_with_current_operation_unknown_logs_warning(
+        self, mock_operations_service
+    ):
+        """Test that unknown current operation is logged but not created."""
+        registry = WorkerRegistry()
+        registry.set_operations_service(mock_operations_service)
+
+        mock_operations_service.get_operation.return_value = None
+
+        # Should not raise
+        await registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.TRAINING,
+            endpoint_url="http://localhost:5004",
+            current_operation_id="unknown-op",
+        )
+
+        mock_operations_service._repository.update.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_register_processes_completed_before_current(
+        self, mock_operations_service
+    ):
+        """Test that completed operations are processed before current operation."""
+        registry = WorkerRegistry()
+        registry.set_operations_service(mock_operations_service)
+
+        call_order = []
+
+        async def mock_get_operation(op_id):
+            call_order.append(("get", op_id))
+            from ktrdr.api.models.operations import OperationStatus
+            mock_op = AsyncMock()
+            mock_op.status = OperationStatus.RUNNING
+            mock_op.operation_id = op_id
+            return mock_op
+
+        mock_operations_service.get_operation.side_effect = mock_get_operation
+
+        async def mock_complete(op_id, result_summary=None):
+            call_order.append(("complete", op_id))
+
+        mock_operations_service.complete_operation.side_effect = mock_complete
+
+        async def mock_update(op_id, **kwargs):
+            call_order.append(("update", op_id))
+            return AsyncMock()
+
+        mock_operations_service._repository.update.side_effect = mock_update
+
+        from ktrdr.api.models.workers import CompletedOperationReport
+        completed_report = CompletedOperationReport(
+            operation_id="completed-op",
+            status="COMPLETED",
+            completed_at=datetime.utcnow(),
+        )
+
+        await registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.TRAINING,
+            endpoint_url="http://localhost:5004",
+            completed_operations=[completed_report],
+            current_operation_id="current-op",
+        )
+
+        # Completed operations should be processed first
+        get_calls = [c for c in call_order if c[0] == "get"]
+        assert get_calls[0][1] == "completed-op"
+        assert get_calls[1][1] == "current-op"
+
+    @pytest.mark.asyncio
+    async def test_register_without_reconciliation_fields_works(
+        self, mock_operations_service
+    ):
+        """Test that registration works without reconciliation fields (backward compat)."""
+        registry = WorkerRegistry()
+        registry.set_operations_service(mock_operations_service)
+
+        worker = await registry.register_worker(
+            worker_id="worker-1",
+            worker_type=WorkerType.TRAINING,
+            endpoint_url="http://localhost:5004",
+        )
+
+        assert worker.worker_id == "worker-1"
+        # Should not have called operations service
+        mock_operations_service.get_operation.assert_not_called()
