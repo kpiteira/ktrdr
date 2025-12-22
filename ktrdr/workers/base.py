@@ -426,7 +426,7 @@ class WorkerAPIBase:
                 return {
                     "healthy": False,
                     "service": f"{self.worker_type.value}-worker",
-                    "error": str(e),
+                    "error": "Health check failed - see server logs for details",
                 }
 
     def _register_metrics_endpoint(self) -> None:

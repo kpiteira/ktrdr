@@ -112,8 +112,8 @@ class TestBacktestingServiceWorkerDispatch:
         operation_id = "op_test_123"
         remote_operation_id = "remote_op_456"
 
-        # Register a worker
-        worker_registry.register_worker(
+        # Register a worker (async since M1)
+        await worker_registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://worker-1:5003",
@@ -176,9 +176,9 @@ class TestBacktestingServiceWorkerRegistry:
     @pytest.mark.asyncio
     async def test_worker_dispatch_selects_worker_from_registry(self):
         """Test backtest dispatch selects worker from WorkerRegistry."""
-        # Create registry and register a worker
+        # Create registry and register a worker (async since M1)
         registry = WorkerRegistry()
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://worker-1:5003",
@@ -228,9 +228,9 @@ class TestBacktestingServiceWorkerRegistry:
     @pytest.mark.asyncio
     async def test_worker_dispatch_marks_worker_busy(self):
         """Test backtest dispatch marks worker as busy."""
-        # Create registry and register a worker
+        # Create registry and register a worker (async since M1)
         registry = WorkerRegistry()
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://worker-1:5003",
@@ -310,11 +310,12 @@ class TestBacktestingServiceWorkerRegistry:
                 initial_capital=100000.0,
             )
 
-    def test_cleanup_worker_marks_available(self):
+    @pytest.mark.asyncio
+    async def test_cleanup_worker_marks_available(self):
         """Test cleanup_worker marks worker as available."""
-        # Create registry and register a worker
+        # Create registry and register a worker (async since M1)
         registry = WorkerRegistry()
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://worker-1:5003",
