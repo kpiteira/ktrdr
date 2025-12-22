@@ -4,11 +4,12 @@ This repository isolates database access from business logic, providing
 async CRUD operations for the operations table.
 """
 
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Optional, cast
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ktrdr.api.models.db.operations import OperationRecord
 from ktrdr.api.models.operations import (
@@ -30,19 +31,29 @@ class OperationsRepository:
     the database model (OperationRecord) and domain model (OperationInfo).
 
     Args:
-        session: Async SQLAlchemy session for database access.
+        session_factory: Async session factory for creating database sessions.
     """
 
     # Terminal statuses that should set completed_at timestamp
     TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
 
-    def __init__(self, session: AsyncSession):
-        """Initialize repository with database session.
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]):
+        """Initialize repository with session factory.
 
         Args:
-            session: Async SQLAlchemy session for database access.
+            session_factory: Factory for creating async database sessions.
         """
-        self._session = session
+        self._session_factory = session_factory
+
+    @asynccontextmanager
+    async def _get_session(self):
+        """Get a database session for an operation."""
+        async with self._session_factory() as session:
+            try:
+                yield session
+            except Exception:
+                await session.rollback()
+                raise
 
     async def create(self, operation: OperationInfo) -> OperationInfo:
         """Create a new operation record in the database.
@@ -53,13 +64,14 @@ class OperationsRepository:
         Returns:
             The created OperationInfo (may have updated timestamps).
         """
-        record = self._info_to_record(operation)
-        self._session.add(record)
-        await self._session.commit()
-        await self._session.refresh(record)
+        async with self._get_session() as session:
+            record = self._info_to_record(operation)
+            session.add(record)
+            await session.commit()
+            await session.refresh(record)
 
-        logger.debug(f"Created operation record: {operation.operation_id}")
-        return self._record_to_info(record)
+            logger.debug(f"Created operation record: {operation.operation_id}")
+            return self._record_to_info(record)
 
     async def get(self, operation_id: str) -> Optional[OperationInfo]:
         """Get an operation by ID.
@@ -70,16 +82,17 @@ class OperationsRepository:
         Returns:
             OperationInfo if found, None otherwise.
         """
-        stmt = select(OperationRecord).where(
-            OperationRecord.operation_id == operation_id
-        )
-        result = await self._session.execute(stmt)
-        record = result.scalar_one_or_none()
+        async with self._get_session() as session:
+            stmt = select(OperationRecord).where(
+                OperationRecord.operation_id == operation_id
+            )
+            result = await session.execute(stmt)
+            record = result.scalar_one_or_none()
 
-        if record is None:
-            return None
+            if record is None:
+                return None
 
-        return self._record_to_info(record)
+            return self._record_to_info(record)
 
     async def update(self, operation_id: str, **fields) -> Optional[OperationInfo]:
         """Update an operation's fields.
@@ -91,32 +104,33 @@ class OperationsRepository:
         Returns:
             Updated OperationInfo if found, None otherwise.
         """
-        stmt = select(OperationRecord).where(
-            OperationRecord.operation_id == operation_id
-        )
-        result = await self._session.execute(stmt)
-        record = result.scalar_one_or_none()
+        async with self._get_session() as session:
+            stmt = select(OperationRecord).where(
+                OperationRecord.operation_id == operation_id
+            )
+            result = await session.execute(stmt)
+            record = result.scalar_one_or_none()
 
-        if record is None:
-            return None
+            if record is None:
+                return None
 
-        # Apply field updates
-        for field_name, value in fields.items():
-            if hasattr(record, field_name):
-                setattr(record, field_name, value)
+            # Apply field updates
+            for field_name, value in fields.items():
+                if hasattr(record, field_name):
+                    setattr(record, field_name, value)
 
-        # Auto-set completed_at when transitioning to terminal status
-        if "status" in fields and fields["status"] in self.TERMINAL_STATUSES:
-            if record.completed_at is None:
-                record.completed_at = datetime.now(timezone.utc)
+            # Auto-set completed_at when transitioning to terminal status
+            if "status" in fields and fields["status"] in self.TERMINAL_STATUSES:
+                if record.completed_at is None:
+                    record.completed_at = datetime.now(timezone.utc)
 
-        await self._session.commit()
-        await self._session.refresh(record)
+            await session.commit()
+            await session.refresh(record)
 
-        logger.debug(
-            f"Updated operation record: {operation_id} with {list(fields.keys())}"
-        )
-        return self._record_to_info(record)
+            logger.debug(
+                f"Updated operation record: {operation_id} with {list(fields.keys())}"
+            )
+            return self._record_to_info(record)
 
     async def list(
         self,
@@ -132,17 +146,18 @@ class OperationsRepository:
         Returns:
             List of matching OperationInfo objects.
         """
-        stmt = select(OperationRecord)
+        async with self._get_session() as session:
+            stmt = select(OperationRecord)
 
-        if status is not None:
-            stmt = stmt.where(OperationRecord.status == status)
-        if worker_id is not None:
-            stmt = stmt.where(OperationRecord.worker_id == worker_id)
+            if status is not None:
+                stmt = stmt.where(OperationRecord.status == status)
+            if worker_id is not None:
+                stmt = stmt.where(OperationRecord.worker_id == worker_id)
 
-        result = await self._session.execute(stmt)
-        records = result.scalars().all()
+            result = await session.execute(stmt)
+            records = result.scalars().all()
 
-        return [self._record_to_info(record) for record in records]
+            return [self._record_to_info(record) for record in records]
 
     async def delete(self, operation_id: str) -> bool:
         """Delete an operation by ID.
@@ -153,20 +168,21 @@ class OperationsRepository:
         Returns:
             True if deleted, False if not found.
         """
-        stmt = select(OperationRecord).where(
-            OperationRecord.operation_id == operation_id
-        )
-        result = await self._session.execute(stmt)
-        record = result.scalar_one_or_none()
+        async with self._get_session() as session:
+            stmt = select(OperationRecord).where(
+                OperationRecord.operation_id == operation_id
+            )
+            result = await session.execute(stmt)
+            record = result.scalar_one_or_none()
 
-        if record is None:
-            return False
+            if record is None:
+                return False
 
-        await self._session.delete(record)
-        await self._session.commit()
+            await session.delete(record)
+            await session.commit()
 
-        logger.debug(f"Deleted operation record: {operation_id}")
-        return True
+            logger.debug(f"Deleted operation record: {operation_id}")
+            return True
 
     @staticmethod
     def _record_to_info(record: OperationRecord) -> OperationInfo:

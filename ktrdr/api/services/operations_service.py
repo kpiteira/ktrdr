@@ -1562,10 +1562,18 @@ def get_operations_service() -> OperationsService:
     """
     Get the global operations service instance.
 
+    Creates and injects the database repository for persistence.
+
     Returns:
         OperationsService singleton instance
     """
     global _operations_service
     if _operations_service is None:
-        _operations_service = OperationsService()
+        # Create repository with database session factory
+        from ktrdr.api.database import get_session_factory
+
+        session_factory = get_session_factory()
+        repository = OperationsRepository(session_factory)
+        _operations_service = OperationsService(repository=repository)
+        logger.info("Operations service initialized with database persistence")
     return _operations_service

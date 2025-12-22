@@ -4,6 +4,7 @@ Tests use mocked SQLAlchemy async session to test repository logic
 without requiring a real database connection.
 """
 
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
@@ -20,6 +21,16 @@ from ktrdr.api.models.operations import (
 from ktrdr.api.repositories.operations_repository import OperationsRepository
 
 
+def create_mock_session_factory(mock_session):
+    """Create a mock session factory that returns the given mock session."""
+
+    @asynccontextmanager
+    async def mock_factory():
+        yield mock_session
+
+    return mock_factory
+
+
 class TestOperationsRepositoryCreate:
     """Tests for OperationsRepository.create method."""
 
@@ -30,7 +41,13 @@ class TestOperationsRepositoryCreate:
         session.add = MagicMock()
         session.commit = AsyncMock()
         session.refresh = AsyncMock()
+        session.rollback = AsyncMock()
         return session
+
+    @pytest.fixture
+    def mock_session_factory(self, mock_session):
+        """Create a mock session factory."""
+        return create_mock_session_factory(mock_session)
 
     @pytest.fixture
     def sample_operation_info(self) -> OperationInfo:
@@ -54,10 +71,10 @@ class TestOperationsRepositoryCreate:
 
     @pytest.mark.asyncio
     async def test_create_adds_record_to_session(
-        self, mock_session, sample_operation_info
+        self, mock_session, mock_session_factory, sample_operation_info
     ):
         """create should add an OperationRecord to the session."""
-        repo = OperationsRepository(mock_session)
+        repo = OperationsRepository(mock_session_factory)
 
         await repo.create(sample_operation_info)
 
@@ -68,9 +85,11 @@ class TestOperationsRepositoryCreate:
         assert call_args.operation_id == "op_test_123"
 
     @pytest.mark.asyncio
-    async def test_create_commits_session(self, mock_session, sample_operation_info):
+    async def test_create_commits_session(
+        self, mock_session, mock_session_factory, sample_operation_info
+    ):
         """create should commit the session."""
-        repo = OperationsRepository(mock_session)
+        repo = OperationsRepository(mock_session_factory)
 
         await repo.create(sample_operation_info)
 
@@ -78,10 +97,10 @@ class TestOperationsRepositoryCreate:
 
     @pytest.mark.asyncio
     async def test_create_returns_operation_info(
-        self, mock_session, sample_operation_info
+        self, mock_session, mock_session_factory, sample_operation_info
     ):
         """create should return the created OperationInfo."""
-        repo = OperationsRepository(mock_session)
+        repo = OperationsRepository(mock_session_factory)
 
         result = await repo.create(sample_operation_info)
 
@@ -91,10 +110,10 @@ class TestOperationsRepositoryCreate:
 
     @pytest.mark.asyncio
     async def test_create_converts_metadata_correctly(
-        self, mock_session, sample_operation_info
+        self, mock_session, mock_session_factory, sample_operation_info
     ):
         """create should convert OperationMetadata to JSONB correctly."""
-        repo = OperationsRepository(mock_session)
+        repo = OperationsRepository(mock_session_factory)
 
         await repo.create(sample_operation_info)
 
@@ -104,7 +123,7 @@ class TestOperationsRepositoryCreate:
 
     @pytest.mark.asyncio
     async def test_create_converts_progress_correctly(
-        self, mock_session, sample_operation_info
+        self, mock_session, mock_session_factory, sample_operation_info
     ):
         """create should store progress_percent and progress_message correctly."""
         sample_operation_info.progress = OperationProgress(
@@ -113,7 +132,7 @@ class TestOperationsRepositoryCreate:
             steps_completed=5,
             steps_total=10,
         )
-        repo = OperationsRepository(mock_session)
+        repo = OperationsRepository(mock_session_factory)
 
         await repo.create(sample_operation_info)
 
@@ -129,7 +148,13 @@ class TestOperationsRepositoryGet:
     def mock_session(self):
         """Create a mock async session."""
         session = AsyncMock()
+        session.rollback = AsyncMock()
         return session
+
+    @pytest.fixture
+    def mock_session_factory(self, mock_session):
+        """Create a mock session factory."""
+        return create_mock_session_factory(mock_session)
 
     @pytest.fixture
     def sample_record(self) -> OperationRecord:
@@ -151,7 +176,7 @@ class TestOperationsRepositoryGet:
 
     @pytest.mark.asyncio
     async def test_get_returns_operation_info_when_found(
-        self, mock_session, sample_record
+        self, mock_session, mock_session_factory, sample_record
     ):
         """get should return OperationInfo when record exists."""
         # Set up mock to return the sample record
@@ -159,7 +184,7 @@ class TestOperationsRepositoryGet:
         mock_result.scalar_one_or_none.return_value = sample_record
         mock_session.execute.return_value = mock_result
 
-        repo = OperationsRepository(mock_session)
+        repo = OperationsRepository(mock_session_factory)
 
         result = await repo.get("op_test_456")
 
@@ -169,13 +194,15 @@ class TestOperationsRepositoryGet:
         assert result.status == OperationStatus.RUNNING
 
     @pytest.mark.asyncio
-    async def test_get_returns_none_when_not_found(self, mock_session):
+    async def test_get_returns_none_when_not_found(
+        self, mock_session, mock_session_factory
+    ):
         """get should return None when record doesn't exist."""
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = None
         mock_session.execute.return_value = mock_result
 
-        repo = OperationsRepository(mock_session)
+        repo = OperationsRepository(mock_session_factory)
 
         result = await repo.get("nonexistent")
 
@@ -183,14 +210,14 @@ class TestOperationsRepositoryGet:
 
     @pytest.mark.asyncio
     async def test_get_converts_record_to_operation_info(
-        self, mock_session, sample_record
+        self, mock_session, mock_session_factory, sample_record
     ):
         """get should correctly convert OperationRecord to OperationInfo."""
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = sample_record
         mock_session.execute.return_value = mock_result
 
-        repo = OperationsRepository(mock_session)
+        repo = OperationsRepository(mock_session_factory)
 
         result = await repo.get("op_test_456")
 
@@ -209,7 +236,14 @@ class TestOperationsRepositoryUpdate:
         """Create a mock async session."""
         session = AsyncMock()
         session.commit = AsyncMock()
+        session.refresh = AsyncMock()
+        session.rollback = AsyncMock()
         return session
+
+    @pytest.fixture
+    def mock_session_factory(self, mock_session):
+        """Create a mock session factory."""
+        return create_mock_session_factory(mock_session)
 
     @pytest.fixture
     def sample_record(self) -> OperationRecord:
@@ -227,13 +261,15 @@ class TestOperationsRepositoryUpdate:
         )
 
     @pytest.mark.asyncio
-    async def test_update_modifies_status(self, mock_session, sample_record):
+    async def test_update_modifies_status(
+        self, mock_session, mock_session_factory, sample_record
+    ):
         """update should modify the status field."""
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = sample_record
         mock_session.execute.return_value = mock_result
 
-        repo = OperationsRepository(mock_session)
+        repo = OperationsRepository(mock_session_factory)
 
         result = await repo.update("op_test_789", status="completed")
 
@@ -242,13 +278,15 @@ class TestOperationsRepositoryUpdate:
         mock_session.commit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_update_modifies_progress(self, mock_session, sample_record):
+    async def test_update_modifies_progress(
+        self, mock_session, mock_session_factory, sample_record
+    ):
         """update should modify progress fields."""
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = sample_record
         mock_session.execute.return_value = mock_result
 
-        repo = OperationsRepository(mock_session)
+        repo = OperationsRepository(mock_session_factory)
 
         result = await repo.update(
             "op_test_789",
@@ -261,13 +299,15 @@ class TestOperationsRepositoryUpdate:
         assert sample_record.progress_message == "Almost done"
 
     @pytest.mark.asyncio
-    async def test_update_returns_none_when_not_found(self, mock_session):
+    async def test_update_returns_none_when_not_found(
+        self, mock_session, mock_session_factory
+    ):
         """update should return None when record doesn't exist."""
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = None
         mock_session.execute.return_value = mock_result
 
-        repo = OperationsRepository(mock_session)
+        repo = OperationsRepository(mock_session_factory)
 
         result = await repo.update("nonexistent", status="completed")
 
@@ -275,14 +315,14 @@ class TestOperationsRepositoryUpdate:
 
     @pytest.mark.asyncio
     async def test_update_sets_completed_at_timestamp(
-        self, mock_session, sample_record
+        self, mock_session, mock_session_factory, sample_record
     ):
         """update should set completed_at when status becomes terminal."""
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = sample_record
         mock_session.execute.return_value = mock_result
 
-        repo = OperationsRepository(mock_session)
+        repo = OperationsRepository(mock_session_factory)
 
         await repo.update("op_test_789", status="completed")
 
@@ -290,14 +330,14 @@ class TestOperationsRepositoryUpdate:
 
     @pytest.mark.asyncio
     async def test_update_returns_converted_operation_info(
-        self, mock_session, sample_record
+        self, mock_session, mock_session_factory, sample_record
     ):
         """update should return OperationInfo after updating."""
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = sample_record
         mock_session.execute.return_value = mock_result
 
-        repo = OperationsRepository(mock_session)
+        repo = OperationsRepository(mock_session_factory)
 
         result = await repo.update("op_test_789", status="completed")
 
@@ -312,7 +352,13 @@ class TestOperationsRepositoryList:
     def mock_session(self):
         """Create a mock async session."""
         session = AsyncMock()
+        session.rollback = AsyncMock()
         return session
+
+    @pytest.fixture
+    def mock_session_factory(self, mock_session):
+        """Create a mock session factory."""
+        return create_mock_session_factory(mock_session)
 
     @pytest.fixture
     def sample_records(self) -> list[OperationRecord]:
@@ -348,13 +394,15 @@ class TestOperationsRepositoryList:
         ]
 
     @pytest.mark.asyncio
-    async def test_list_returns_all_operations(self, mock_session, sample_records):
+    async def test_list_returns_all_operations(
+        self, mock_session, mock_session_factory, sample_records
+    ):
         """list should return all operations when no filters specified."""
         mock_result = MagicMock()
         mock_result.scalars.return_value.all.return_value = sample_records
         mock_session.execute.return_value = mock_result
 
-        repo = OperationsRepository(mock_session)
+        repo = OperationsRepository(mock_session_factory)
 
         result = await repo.list()
 
@@ -362,7 +410,9 @@ class TestOperationsRepositoryList:
         assert all(isinstance(op, OperationInfo) for op in result)
 
     @pytest.mark.asyncio
-    async def test_list_filters_by_status(self, mock_session, sample_records):
+    async def test_list_filters_by_status(
+        self, mock_session, mock_session_factory, sample_records
+    ):
         """list should filter by status when specified."""
         # Filter should be applied in the query
         running_records = [r for r in sample_records if r.status == "running"]
@@ -370,7 +420,7 @@ class TestOperationsRepositoryList:
         mock_result.scalars.return_value.all.return_value = running_records
         mock_session.execute.return_value = mock_result
 
-        repo = OperationsRepository(mock_session)
+        repo = OperationsRepository(mock_session_factory)
 
         result = await repo.list(status="running")
 
@@ -378,27 +428,31 @@ class TestOperationsRepositoryList:
         assert all(op.status == OperationStatus.RUNNING for op in result)
 
     @pytest.mark.asyncio
-    async def test_list_filters_by_worker_id(self, mock_session, sample_records):
+    async def test_list_filters_by_worker_id(
+        self, mock_session, mock_session_factory, sample_records
+    ):
         """list should filter by worker_id when specified."""
         worker1_records = [r for r in sample_records if r.worker_id == "worker-1"]
         mock_result = MagicMock()
         mock_result.scalars.return_value.all.return_value = worker1_records
         mock_session.execute.return_value = mock_result
 
-        repo = OperationsRepository(mock_session)
+        repo = OperationsRepository(mock_session_factory)
 
         result = await repo.list(worker_id="worker-1")
 
         assert len(result) == 2
 
     @pytest.mark.asyncio
-    async def test_list_returns_empty_list_when_no_matches(self, mock_session):
+    async def test_list_returns_empty_list_when_no_matches(
+        self, mock_session, mock_session_factory
+    ):
         """list should return empty list when no operations match."""
         mock_result = MagicMock()
         mock_result.scalars.return_value.all.return_value = []
         mock_session.execute.return_value = mock_result
 
-        repo = OperationsRepository(mock_session)
+        repo = OperationsRepository(mock_session_factory)
 
         result = await repo.list(status="failed")
 
@@ -414,7 +468,13 @@ class TestOperationsRepositoryDelete:
         session = AsyncMock()
         session.delete = AsyncMock()
         session.commit = AsyncMock()
+        session.rollback = AsyncMock()
         return session
+
+    @pytest.fixture
+    def mock_session_factory(self, mock_session):
+        """Create a mock session factory."""
+        return create_mock_session_factory(mock_session)
 
     @pytest.fixture
     def sample_record(self) -> OperationRecord:
@@ -428,13 +488,15 @@ class TestOperationsRepositoryDelete:
         )
 
     @pytest.mark.asyncio
-    async def test_delete_returns_true_when_found(self, mock_session, sample_record):
+    async def test_delete_returns_true_when_found(
+        self, mock_session, mock_session_factory, sample_record
+    ):
         """delete should return True when record exists."""
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = sample_record
         mock_session.execute.return_value = mock_result
 
-        repo = OperationsRepository(mock_session)
+        repo = OperationsRepository(mock_session_factory)
 
         result = await repo.delete("op_to_delete")
 
@@ -443,13 +505,15 @@ class TestOperationsRepositoryDelete:
         mock_session.commit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_delete_returns_false_when_not_found(self, mock_session):
+    async def test_delete_returns_false_when_not_found(
+        self, mock_session, mock_session_factory
+    ):
         """delete should return False when record doesn't exist."""
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = None
         mock_session.execute.return_value = mock_result
 
-        repo = OperationsRepository(mock_session)
+        repo = OperationsRepository(mock_session_factory)
 
         result = await repo.delete("nonexistent")
 

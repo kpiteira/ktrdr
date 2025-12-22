@@ -37,21 +37,21 @@ async def _run_startup_reconciliation() -> None:
         return
 
     try:
-        from ktrdr.api.database import get_session
+        from ktrdr.api.database import get_session_factory
         from ktrdr.api.repositories.operations_repository import OperationsRepository
         from ktrdr.api.services.startup_reconciliation import StartupReconciliation
 
-        async with get_session() as session:
-            repository = OperationsRepository(session)
-            reconciliation = StartupReconciliation(repository)
-            result = await reconciliation.reconcile()
+        session_factory = get_session_factory()
+        repository = OperationsRepository(session_factory)
+        reconciliation = StartupReconciliation(repository)
+        result = await reconciliation.reconcile()
 
-            if result.total_processed > 0:
-                logger.info(
-                    f"Startup reconciliation: {result.total_processed} operations "
-                    f"({result.worker_ops_reconciled} worker-based, "
-                    f"{result.backend_ops_failed} backend-local)"
-                )
+        if result.total_processed > 0:
+            logger.info(
+                f"Startup reconciliation: {result.total_processed} operations "
+                f"({result.worker_ops_reconciled} worker-based, "
+                f"{result.backend_ops_failed} backend-local)"
+            )
     except Exception as e:
         # Don't fail startup if reconciliation fails (database might not be available)
         logger.warning(f"Startup reconciliation skipped due to error: {e}")
