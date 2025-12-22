@@ -218,6 +218,58 @@ class TestListWorkersEndpoint:
         assert data == []
 
 
+class TestGetWorkerEndpoint:
+    """Tests for GET /api/v1/workers/{worker_id} endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_get_worker_found(self, client, worker_registry):
+        """Test getting a worker that exists."""
+        # Pre-register a worker
+        await worker_registry.register_worker(
+            worker_id="backtest-1",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://192.168.1.201:5003",
+            capabilities={"cores": 4},
+        )
+
+        response = client.get("/api/v1/workers/backtest-1")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["worker_id"] == "backtest-1"
+        assert data["worker_type"] == "backtesting"
+        assert data["endpoint_url"] == "http://192.168.1.201:5003"
+        assert data["capabilities"] == {"cores": 4}
+
+    def test_get_worker_not_found(self, client, worker_registry):
+        """Test getting a worker that doesn't exist returns 404."""
+        response = client.get("/api/v1/workers/nonexistent-worker")
+
+        assert response.status_code == 404
+        data = response.json()
+        assert "not found" in data["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_get_worker_after_registration(self, client, worker_registry):
+        """Test that a worker can be retrieved immediately after registration."""
+        # Register via endpoint
+        client.post(
+            "/api/v1/workers/register",
+            json={
+                "worker_id": "training-1",
+                "worker_type": "training",
+                "endpoint_url": "http://192.168.1.202:5004",
+            },
+        )
+
+        # Retrieve via GET endpoint
+        response = client.get("/api/v1/workers/training-1")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["worker_id"] == "training-1"
+
+
 class TestWorkerRegistrationWithResilience:
     """Tests for worker registration with resilience fields (M1 checkpoint)."""
 

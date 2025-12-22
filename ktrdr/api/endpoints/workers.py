@@ -7,7 +7,7 @@ in the distributed training and backtesting architecture.
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ktrdr import get_logger
@@ -175,3 +175,38 @@ async def list_workers(
     workers = registry.list_workers(worker_type=worker_type, status=status_enum)
 
     return [worker.to_dict() for worker in workers]
+
+
+@router.get(
+    "/workers/{worker_id}",
+    tags=["Workers"],
+    summary="Get worker by ID",
+    description="Check if a specific worker is registered",
+)
+async def get_worker(
+    worker_id: str,
+    registry: WorkerRegistry = Depends(get_worker_registry),
+) -> dict:
+    """
+    Get a specific worker by ID.
+
+    Used by workers to check if they're still registered after
+    backend restart. Returns 404 if not found, triggering re-registration.
+
+    Args:
+        worker_id: The worker's unique identifier
+        registry: The worker registry (injected dependency)
+
+    Returns:
+        dict: Worker information if found
+
+    Raises:
+        HTTPException: 404 if worker not found
+    """
+    worker = registry.get_worker(worker_id)
+    if worker is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Worker not found: {worker_id}",
+        )
+    return worker.to_dict()
