@@ -1,3 +1,8 @@
+---
+design: docs/architecture/checkpoint/DESIGN.md
+architecture: docs/architecture/checkpoint/ARCHITECTURE.md
+---
+
 # Milestone 7: Backend-Local Operations
 
 **Branch:** `feature/checkpoint-m7-backend-local`

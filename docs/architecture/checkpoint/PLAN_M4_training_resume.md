@@ -1,3 +1,8 @@
+---
+design: docs/architecture/checkpoint/DESIGN.md
+architecture: docs/architecture/checkpoint/ARCHITECTURE.md
+---
+
 # Milestone 4: Training Resume
 
 **Branch:** `feature/checkpoint-m4-training-resume`

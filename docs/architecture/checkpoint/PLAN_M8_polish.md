@@ -1,3 +1,8 @@
+---
+design: docs/architecture/checkpoint/DESIGN.md
+architecture: docs/architecture/checkpoint/ARCHITECTURE.md
+---
+
 # Milestone 8: Polish + Admin
 
 **Branch:** `feature/checkpoint-m8-polish`

@@ -1,3 +1,8 @@
+---
+design: docs/architecture/checkpoint/DESIGN.md
+architecture: docs/architecture/checkpoint/ARCHITECTURE.md
+---
+
 # Milestone 1: Operations Persistence + Worker Re-Registration
 
 **Branch:** `feature/checkpoint-m1-operations-persistence`

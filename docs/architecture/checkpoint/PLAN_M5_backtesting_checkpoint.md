@@ -1,3 +1,8 @@
+---
+design: docs/architecture/checkpoint/DESIGN.md
+architecture: docs/architecture/checkpoint/ARCHITECTURE.md
+---
+
 # Milestone 5: Backtesting Checkpoint + Resume
 
 **Branch:** `feature/checkpoint-m5-backtesting-checkpoint`

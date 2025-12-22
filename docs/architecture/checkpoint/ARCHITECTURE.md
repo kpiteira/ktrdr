@@ -135,13 +135,14 @@ class WorkerAPIBase:
             logger.warning("Cannot reach backend for registration check")
 
     async def _register_with_backend(self) -> None:
-        """Register this worker with backend, including current operation."""
+        """Register this worker with backend, including current and completed operations."""
         payload = {
             "worker_id": self.worker_id,
             "worker_type": self.worker_type.value,
             "endpoint_url": self._get_endpoint_url(),
             "capabilities": self._get_capabilities(),
             "current_operation_id": self._current_operation_id,  # Key for sync!
+            "completed_operations": [op.dict() for op in self._completed_operations],
         }
 
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -150,6 +151,7 @@ class WorkerAPIBase:
                 json=payload
             )
             response.raise_for_status()
+            self._completed_operations.clear()  # Clear after successful report
             logger.info("Re-registered with backend successfully")
 ```
 
@@ -211,6 +213,75 @@ class WorkerRegistry:
                 OperationStatus.RUNNING,
                 worker_id=worker_id
             )
+
+    async def _process_completed_operations(
+        self,
+        worker_id: str,
+        completed_operations: list[dict]
+    ) -> None:
+        """Update DB for operations worker completed while backend was down."""
+        operations_service = get_operations_service()
+
+        for completed in completed_operations:
+            op_id = completed["operation_id"]
+            status = completed["status"]
+            result = completed.get("result")
+
+            operation = await operations_service.get_operation(op_id)
+            if operation is None:
+                logger.warning(f"Worker reports unknown completed operation: {op_id}")
+                continue
+
+            if operation.status in [OperationStatus.COMPLETED, OperationStatus.FAILED]:
+                # Already in terminal state - no action needed
+                continue
+
+            logger.info(f"Reconciling operation {op_id}: {operation.status} → {status}")
+            await operations_service.update_status(op_id, status, result=result)
+```
+
+---
+
+### Component: Startup Reconciliation (Backend-Local Operations)
+
+**Location:** `ktrdr/api/services/startup_reconciliation.py`
+
+**Responsibility:** On backend startup, handle operations that were running when backend shut down. Backend-local operations (like agent sessions) are marked FAILED since they ran in the backend process itself.
+
+```python
+class StartupReconciliation:
+    """Handle operation state on backend startup."""
+
+    async def reconcile(self) -> None:
+        """Called once on backend startup."""
+        running_ops = await self._operations_service.list_operations(
+            status=OperationStatus.RUNNING
+        )
+
+        for op in running_ops:
+            if op.is_backend_local:
+                # Backend-local operation died with the backend
+                checkpoint = await self._checkpoint_service.load_checkpoint(
+                    op.operation_id, load_artifacts=False
+                )
+                if checkpoint:
+                    error_msg = "Backend restarted - checkpoint available for resume"
+                else:
+                    error_msg = "Backend restarted - no checkpoint available"
+
+                await self._operations_service.update_status(
+                    op.operation_id,
+                    OperationStatus.FAILED,
+                    error_message=error_msg
+                )
+                logger.info(f"Marked backend-local operation {op.operation_id} as FAILED")
+            else:
+                # Worker-based operation - mark for reconciliation
+                # OrphanDetector will handle if no worker claims it
+                await self._operations_service.update_reconciliation_status(
+                    op.operation_id,
+                    ReconciliationStatus.PENDING
+                )
 ```
 
 ---
@@ -863,9 +934,19 @@ User          Backend              CheckpointService           Worker
   "worker_type": "training",
   "endpoint_url": "http://192.168.1.201:5004",
   "capabilities": {"gpu": true, "gpu_type": "CUDA"},
-  "current_operation_id": "op_training_20241213_143022_abc123"
+  "current_operation_id": "op_training_20241213_143022_abc123",
+  "completed_operations": [
+    {
+      "operation_id": "op_training_20241213_120000_xyz789",
+      "status": "COMPLETED",
+      "result": {"model_path": "/models/v1/model.pt"},
+      "completed_at": "2024-12-13T13:30:00Z"
+    }
+  ]
 }
 ```
+
+**Note:** `completed_operations` reports operations that finished while backend was unavailable. This allows the backend to reconcile operation status on worker re-registration.
 
 **Response:**
 ```json
@@ -1156,11 +1237,14 @@ All services mount same NFS share at `/app/data/checkpoints/`.
 
 ## SIGTERM Handling
 
-```python
-# Docker configuration
+```yaml
+# Docker configuration (deploy/environments/local/docker-compose.yml)
 services:
-  training-worker:
+  training-worker-1:
     stop_grace_period: 30s  # Give 30s to save checkpoint before SIGKILL
+
+  backtest-worker-1:
+    stop_grace_period: 30s
 ```
 
 Worker SIGTERM flow:

@@ -1,3 +1,8 @@
+---
+design: docs/architecture/checkpoint/DESIGN.md
+architecture: docs/architecture/checkpoint/ARCHITECTURE.md
+---
+
 # Milestone 6: Graceful Shutdown (SIGTERM)
 
 **Branch:** `feature/checkpoint-m6-graceful-shutdown`

@@ -1,3 +1,8 @@
+---
+design: docs/architecture/checkpoint/DESIGN.md
+architecture: docs/architecture/checkpoint/ARCHITECTURE.md
+---
+
 # Milestone 2: Orphan Detection
 
 **Branch:** `feature/checkpoint-m2-orphan-detection`

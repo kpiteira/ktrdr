@@ -1,3 +1,8 @@
+---
+design: docs/architecture/checkpoint/DESIGN.md
+architecture: docs/architecture/checkpoint/ARCHITECTURE.md
+---
+
 # Milestone 3: Training Checkpoint Save
 
 **Branch:** `feature/checkpoint-m3-training-checkpoint-save`
