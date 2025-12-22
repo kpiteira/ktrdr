@@ -500,13 +500,12 @@ class TestOperationsServiceCancellationEvents:
 
     @pytest.mark.asyncio
     async def test_cancellation_events_initialization(self):
-        """Test that _cancellation_events attribute is properly initialized."""
+        """Test that unified cancellation coordinator is properly initialized."""
         operations_service = OperationsService()
 
-        # The attribute should now exist and be initialized as empty dict
-        assert hasattr(operations_service, "_cancellation_events")
-        assert operations_service._cancellation_events == {}
-        assert isinstance(operations_service._cancellation_events, dict)
+        # Uses unified cancellation coordinator instead of legacy _cancellation_events
+        assert hasattr(operations_service, "_cancellation_coordinator")
+        assert operations_service._cancellation_coordinator is not None
 
     @pytest.mark.asyncio
     async def test_cancellation_events_storage_and_retrieval(self):
@@ -838,8 +837,9 @@ class TestOperationsServiceCache:
         time.sleep(0.1)
         op2 = await operations_service.get_operation(operation.operation_id)
 
-        # Should NEVER call get_status for completed operations
-        assert call_count["count"] == 0
+        # complete_operation pulls final metrics once, but subsequent gets should NOT call get_status
+        # The count should be 1 (from complete_operation's final metric pull), not more
+        assert call_count["count"] == 1  # Only from complete_operation
         assert op1.progress.percentage == 100.0  # From complete_operation
         assert op2.progress.percentage == 100.0  # Same
         assert op1.status == OperationStatus.COMPLETED

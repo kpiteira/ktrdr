@@ -21,6 +21,7 @@ from ktrdr.api.models.operations import (
     OperationStatus,
     OperationType,
 )
+from ktrdr.api.repositories.operations_repository import OperationsRepository
 from ktrdr.async_infrastructure.cancellation import (
     AsyncCancellationToken,
     get_global_coordinator,
@@ -55,10 +56,19 @@ class OperationsService:
     progress, and cancellation capabilities.
     """
 
-    def __init__(self):
-        """Initialize the operations service."""
-        # Global operation registry
-        self._operations: dict[str, OperationInfo] = {}
+    def __init__(self, repository: Optional[OperationsRepository] = None):
+        """Initialize the operations service.
+
+        Args:
+            repository: Optional repository for database persistence.
+                       If provided, operations are persisted to DB.
+                       If None, operations are stored in-memory only (backward compatible).
+        """
+        # Repository for database persistence (optional, for backward compatibility)
+        self._repository: Optional[OperationsRepository] = repository
+
+        # In-memory cache (read-through when repository is available)
+        self._cache: dict[str, OperationInfo] = {}
 
         # Operation tasks registry (for cancellation)
         self._operation_tasks: dict[str, asyncio.Task] = {}
@@ -131,21 +141,35 @@ class OperationsService:
             if operation_id is None:
                 operation_id = self.generate_operation_id(operation_type)
 
-            # Ensure operation ID is unique
-            if operation_id in self._operations:
+            # Ensure operation ID is unique (check cache and DB)
+            if operation_id in self._cache:
                 raise DataError(
                     message=f"Operation ID already exists: {operation_id}",
                     error_code="OPERATIONS-DuplicateID",
                     details={"operation_id": operation_id},
                 )
 
-            # Validate parent operation exists if specified
-            if parent_operation_id and parent_operation_id not in self._operations:
-                raise DataError(
-                    message=f"Parent operation not found: {parent_operation_id}",
-                    error_code="OPERATIONS-ParentNotFound",
-                    details={"parent_operation_id": parent_operation_id},
-                )
+            # Also check repository if available
+            if self._repository:
+                existing = await self._repository.get(operation_id)
+                if existing:
+                    raise DataError(
+                        message=f"Operation ID already exists: {operation_id}",
+                        error_code="OPERATIONS-DuplicateID",
+                        details={"operation_id": operation_id},
+                    )
+
+            # Validate parent operation exists if specified (check cache and DB)
+            if parent_operation_id:
+                parent_found = parent_operation_id in self._cache
+                if not parent_found and self._repository:
+                    parent_found = await self._repository.get(parent_operation_id) is not None
+                if not parent_found:
+                    raise DataError(
+                        message=f"Parent operation not found: {parent_operation_id}",
+                        error_code="OPERATIONS-ParentNotFound",
+                        details={"parent_operation_id": parent_operation_id},
+                    )
 
             # Create operation with telemetry
             with create_service_span(
@@ -175,8 +199,12 @@ class OperationsService:
                     metrics=None,  # NEW: M1 - initialize as None
                 )
 
-                # Add to registry
-                self._operations[operation_id] = operation
+                # Persist to repository first (if available)
+                if self._repository:
+                    await self._repository.create(operation)
+
+                # Then add to cache
+                self._cache[operation_id] = operation
 
                 # Update Prometheus metrics
                 operations_active.inc()
@@ -200,7 +228,7 @@ class OperationsService:
             task: Asyncio task for the operation
         """
         async with self._lock:
-            if operation_id not in self._operations:
+            if operation_id not in self._cache:
                 raise DataError(
                     message=f"Operation not found: {operation_id}",
                     error_code="OPERATIONS-NotFound",
@@ -208,7 +236,7 @@ class OperationsService:
                 )
 
             # Update operation status with telemetry
-            operation = self._operations[operation_id]
+            operation = self._cache[operation_id]
             with create_service_span(
                 "operation.state_transition", operation_id=operation_id
             ) as span:
@@ -217,6 +245,14 @@ class OperationsService:
 
                 operation.status = OperationStatus.RUNNING
                 operation.started_at = datetime.now(timezone.utc)
+
+            # Persist to repository (if available)
+            if self._repository:
+                await self._repository.update(
+                    operation_id,
+                    status=OperationStatus.RUNNING.value,
+                    started_at=operation.started_at,
+                )
 
             # Register task for cancellation
             self._operation_tasks[operation_id] = task
@@ -243,13 +279,13 @@ class OperationsService:
             errors: Optional list of error messages
         """
         # Lock-free progress updates for performance
-        if operation_id not in self._operations:
+        if operation_id not in self._cache:
             logger.warning(
                 f"Cannot update progress - operation not found: {operation_id}"
             )
             return
 
-        operation = self._operations[operation_id]
+        operation = self._cache[operation_id]
         # Atomic assignment - no lock needed
         operation.progress = progress
 
@@ -294,6 +330,15 @@ class OperationsService:
             # Don't fail progress updates if telemetry fails
             logger.debug(f"Could not update span attributes: {e}")
 
+        # Persist to repository (if available)
+        # Note: This is async but we don't block on it for performance
+        if self._repository:
+            await self._repository.update(
+                operation_id,
+                progress_percent=progress.percentage,
+                progress_message=progress.current_step,
+            )
+
         # 🔧 TEMP DEBUG: Log ALL progress updates at INFO level
         logger.info(
             f"📊 Operation {operation_id} progress: {progress.percentage:.1f}% - {progress.current_step or 'Loading'}"
@@ -312,11 +357,11 @@ class OperationsService:
             result_summary: Optional summary of results
         """
         async with self._lock:
-            if operation_id not in self._operations:
+            if operation_id not in self._cache:
                 logger.warning(f"Cannot complete - operation not found: {operation_id}")
                 return
 
-            operation = self._operations[operation_id]
+            operation = self._cache[operation_id]
 
             # CRITICAL: Pull final metrics from bridge before marking complete
             # This ensures all metrics captured during training are persisted
@@ -339,6 +384,16 @@ class OperationsService:
                 operation.completed_at = datetime.now(timezone.utc)
                 operation.result_summary = result_summary
                 operation.progress.percentage = 100.0
+
+            # Persist to repository (if available)
+            if self._repository:
+                await self._repository.update(
+                    operation_id,
+                    status=OperationStatus.COMPLETED.value,
+                    completed_at=operation.completed_at,
+                    result=result_summary,
+                    progress_percent=100.0,
+                )
 
             # Clean up task reference
             if operation_id in self._operation_tasks:
@@ -372,11 +427,11 @@ class OperationsService:
             fail_parent: If True and operation has a parent, also fail the parent (Task 1.15)
         """
         async with self._lock:
-            if operation_id not in self._operations:
+            if operation_id not in self._cache:
                 logger.warning(f"Cannot fail - operation not found: {operation_id}")
                 return
 
-            operation = self._operations[operation_id]
+            operation = self._cache[operation_id]
 
             # Update status with telemetry
             with create_service_span(
@@ -389,6 +444,15 @@ class OperationsService:
                 operation.status = OperationStatus.FAILED
                 operation.completed_at = datetime.now(timezone.utc)
                 operation.error_message = error_message
+
+            # Persist to repository (if available)
+            if self._repository:
+                await self._repository.update(
+                    operation_id,
+                    status=OperationStatus.FAILED.value,
+                    completed_at=operation.completed_at,
+                    error_message=error_message,
+                )
 
             # Clean up task reference
             if operation_id in self._operation_tasks:
@@ -409,7 +473,7 @@ class OperationsService:
 
             # Task 1.15: Cascade failure to parent if requested
             if fail_parent and operation.parent_operation_id:
-                parent = self._operations.get(operation.parent_operation_id)
+                parent = self._cache.get(operation.parent_operation_id)
                 if parent and parent.status in [
                     OperationStatus.PENDING,
                     OperationStatus.RUNNING,
@@ -417,6 +481,15 @@ class OperationsService:
                     parent.status = OperationStatus.FAILED
                     parent.completed_at = datetime.now(timezone.utc)
                     parent.error_message = f"Child operation failed: {error_message}"
+
+                    # Persist parent failure to repository
+                    if self._repository:
+                        await self._repository.update(
+                            parent.operation_id,
+                            status=OperationStatus.FAILED.value,
+                            completed_at=parent.completed_at,
+                            error_message=parent.error_message,
+                        )
 
                     # Clean up parent task if exists
                     if parent.operation_id in self._operation_tasks:
@@ -454,13 +527,13 @@ class OperationsService:
             Cancellation result dictionary
         """
         async with self._lock:
-            if operation_id not in self._operations:
+            if operation_id not in self._cache:
                 return {
                     "success": False,
                     "error": f"Operation not found: {operation_id}",
                 }
 
-            operation = self._operations[operation_id]
+            operation = self._cache[operation_id]
 
             # Check if operation can be cancelled
             if operation.status in [
@@ -477,7 +550,7 @@ class OperationsService:
             children_cancelled = []
             children = [
                 op
-                for op in self._operations.values()
+                for op in self._cache.values()
                 if op.parent_operation_id == operation_id
             ]
             for child in children:
@@ -495,6 +568,15 @@ class OperationsService:
                     child.error_message = (
                         f"Parent operation cancelled: {reason or 'User cancelled'}"
                     )
+
+                    # Persist child cancellation to repository
+                    if self._repository:
+                        await self._repository.update(
+                            child.operation_id,
+                            status=OperationStatus.CANCELLED.value,
+                            completed_at=child.completed_at,
+                            error_message=child.error_message,
+                        )
 
                     # Cancel via cancellation coordinator
                     self._cancellation_coordinator.cancel_operation(
@@ -567,6 +649,15 @@ class OperationsService:
                 operation.completed_at = datetime.now(timezone.utc)
                 operation.error_message = reason or "Operation cancelled by user"
 
+            # Persist to repository (if available)
+            if self._repository:
+                await self._repository.update(
+                    operation_id,
+                    status=OperationStatus.CANCELLED.value,
+                    completed_at=operation.completed_at,
+                    error_message=operation.error_message,
+                )
+
             # Update Prometheus metrics
             operations_active.dec()
             increment_operations_total(operation.operation_type.value, "cancelled")
@@ -611,7 +702,16 @@ class OperationsService:
             Operation info or None if not found
         """
         async with self._lock:
-            operation = self._operations.get(operation_id)
+            # Check cache first
+            operation = self._cache.get(operation_id)
+
+            # Cache miss - try repository (read-through cache)
+            if not operation and self._repository:
+                operation = await self._repository.get(operation_id)
+                if operation:
+                    # Populate cache for future reads
+                    self._cache[operation_id] = operation
+
             if not operation:
                 return None
 
@@ -683,7 +783,7 @@ class OperationsService:
         """
         async with self._lock:
             # Get all operations
-            all_operations = list(self._operations.values())
+            all_operations = list(self._cache.values())
 
             # Apply filters
             filtered_operations = all_operations
@@ -739,7 +839,7 @@ class OperationsService:
             DataError: If operation cannot be retried
         """
         async with self._lock:
-            original_operation = self._operations.get(operation_id)
+            original_operation = self._cache.get(operation_id)
 
             if not original_operation:
                 raise DataError(
@@ -778,7 +878,7 @@ class OperationsService:
             )
 
             # Add to registry
-            self._operations[new_operation_id] = new_operation
+            self._cache[new_operation_id] = new_operation
 
             logger.info(
                 f"Created retry operation: {new_operation_id} (original: {operation_id})"
@@ -800,7 +900,7 @@ class OperationsService:
         async with self._lock:
             children = [
                 op
-                for op in self._operations.values()
+                for op in self._cache.values()
                 if op.parent_operation_id == parent_operation_id
             ]
             # Sort by creation time (oldest first)
@@ -915,7 +1015,7 @@ class OperationsService:
             )
 
             operations_to_remove = []
-            for operation_id, operation in self._operations.items():
+            for operation_id, operation in self._cache.items():
                 if (
                     operation.status
                     in [
@@ -930,7 +1030,7 @@ class OperationsService:
 
             # Remove old operations
             for operation_id in operations_to_remove:
-                del self._operations[operation_id]
+                del self._cache[operation_id]
                 # Clean up any remaining task references
                 if operation_id in self._operation_tasks:
                     del self._operation_tasks[operation_id]
@@ -1038,7 +1138,7 @@ class OperationsService:
         new_metrics, new_cursor = bridge.get_metrics(cursor)
 
         # Update operation with fresh data
-        operation = self._operations.get(operation_id)
+        operation = self._cache.get(operation_id)
         if operation:
             # Update progress from state
             operation.progress = OperationProgress(
@@ -1141,7 +1241,7 @@ class OperationsService:
             host_data = await proxy.get_operation(host_operation_id)
 
             # (2) Update backend operation with host's data
-            operation = self._operations.get(operation_id)
+            operation = self._cache.get(operation_id)
             if not operation:
                 logger.warning(
                     f"Operation {operation_id} not found in backend registry"
@@ -1237,7 +1337,7 @@ class OperationsService:
             AsyncCancellationToken for the operation, or None if operation doesn't exist
         """
         # Check if operation exists
-        if operation_id not in self._operations:
+        if operation_id not in self._cache:
             logger.warning(
                 f"Cannot get cancellation token - operation not found: {operation_id}"
             )
@@ -1307,10 +1407,10 @@ class OperationsService:
             ValueError: If metrics_data is invalid
         """
         async with self._lock:
-            if operation_id not in self._operations:
+            if operation_id not in self._cache:
                 raise KeyError(f"Operation not found: {operation_id}")
 
-            operation = self._operations[operation_id]
+            operation = self._cache[operation_id]
 
             # Validate that metrics_data is a dict
             if not isinstance(metrics_data, dict):
