@@ -120,6 +120,9 @@ ignore = [
     "W191",  # indentation contains tabs
 ]
 
+[tool.ruff.lint.isort]
+known-first-party = ["ktrdr", "research_agents", "mcp"]
+
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 "tests/**/*" = ["S101"]  # allow assert statements in tests
