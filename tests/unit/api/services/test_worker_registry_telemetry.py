@@ -40,13 +40,14 @@ def tracer_setup(reset_tracer):
 class TestWorkerSelectionSpans:
     """Tests for worker_registry.select_worker span instrumentation."""
 
-    def test_select_worker_creates_span(self, tracer_setup):
+    @pytest.mark.asyncio
+    async def test_select_worker_creates_span(self, tracer_setup):
         """Test that select_worker creates a span."""
         exporter = tracer_setup
         registry = WorkerRegistry()
 
         # Register some workers
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="backtest-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5003",
@@ -71,25 +72,26 @@ class TestWorkerSelectionSpans:
         assert span.status.status_code == StatusCode.OK
         assert worker is not None
 
-    def test_select_worker_span_attributes_with_available_workers(self, tracer_setup):
+    @pytest.mark.asyncio
+    async def test_select_worker_span_attributes_with_available_workers(self, tracer_setup):
         """Test that select_worker span has required attributes when workers available."""
         exporter = tracer_setup
         registry = WorkerRegistry()
 
         # Register multiple workers of different types
-        registry.register_worker(
+        await registry.register_worker(
             "backtest-1",
             WorkerType.BACKTESTING,
             "http://localhost:5003",
             capabilities={"cores": 4},
         )
-        registry.register_worker(
+        await registry.register_worker(
             "backtest-2",
             WorkerType.BACKTESTING,
             "http://localhost:5004",
             capabilities={"cores": 8},
         )
-        registry.register_worker(
+        await registry.register_worker(
             "training-1",
             WorkerType.TRAINING,
             "http://localhost:5005",
@@ -145,18 +147,19 @@ class TestWorkerSelectionSpans:
         assert attrs.get("worker.selection_status") == "no_workers_available"
         assert worker is None
 
-    def test_select_worker_span_attributes_wrong_type(self, tracer_setup):
+    @pytest.mark.asyncio
+    async def test_select_worker_span_attributes_wrong_type(self, tracer_setup):
         """Test span attributes when workers exist but wrong type."""
         exporter = tracer_setup
         registry = WorkerRegistry()
 
         # Register only training workers
-        registry.register_worker(
+        await registry.register_worker(
             "training-1",
             WorkerType.TRAINING,
             "http://localhost:5005",
         )
-        registry.register_worker(
+        await registry.register_worker(
             "training-2",
             WorkerType.TRAINING,
             "http://localhost:5006",
@@ -184,18 +187,19 @@ class TestWorkerSelectionSpans:
         assert attrs.get("worker.selection_status") == "no_workers_available"
         assert worker is None
 
-    def test_select_worker_span_attributes_all_busy(self, tracer_setup):
+    @pytest.mark.asyncio
+    async def test_select_worker_span_attributes_all_busy(self, tracer_setup):
         """Test span attributes when workers exist but all are busy."""
         exporter = tracer_setup
         registry = WorkerRegistry()
 
         # Register workers and mark them as busy
-        registry.register_worker(
+        await registry.register_worker(
             "backtest-1",
             WorkerType.BACKTESTING,
             "http://localhost:5003",
         )
-        registry.register_worker(
+        await registry.register_worker(
             "backtest-2",
             WorkerType.BACKTESTING,
             "http://localhost:5004",
