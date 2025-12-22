@@ -53,7 +53,11 @@ def get_engine():
             echo=os.getenv("DB_ECHO", "false").lower() == "true",
             pool_pre_ping=True,
         )
-        logger.info(f"Database engine created for: {database_url.split('@')[-1]}")
+        # Log connection info without sensitive data (host/port/db only)
+        db_host = os.getenv("DB_HOST", "localhost")
+        db_port = os.getenv("DB_PORT", "5432")
+        db_name = os.getenv("DB_NAME", "ktrdr")
+        logger.info(f"Database engine created for: {db_host}:{db_port}/{db_name}")
     return _engine
 
 
