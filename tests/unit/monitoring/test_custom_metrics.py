@@ -125,24 +125,36 @@ class TestOperationMetrics:
         assert operations_active._value.get() == 5
 
     def test_operations_total_counter_exists(self):
-        """Test that operations_total counter is defined correctly."""
-        # Counter should support labels
+        """Test that operations_total counter is defined correctly.
+
+        Note: Counters cannot be reset (Prometheus design). We verify
+        increments relative to current values.
+        """
+        # Get initial values (counters accumulate across tests)
+        initial_training = operations_total.labels(
+            operation_type="training", status="completed"
+        )._value.get()
+        initial_backtesting = operations_total.labels(
+            operation_type="backtesting", status="failed"
+        )._value.get()
+
+        # Counter should support labels - increment
         operations_total.labels(operation_type="training", status="completed").inc()
         operations_total.labels(operation_type="backtesting", status="failed").inc()
         operations_total.labels(operation_type="training", status="completed").inc()
 
-        # Verify counts
+        # Verify increments (2 for training, 1 for backtesting)
         assert (
             operations_total.labels(
                 operation_type="training", status="completed"
             )._value.get()
-            == 2
+            == initial_training + 2
         )
         assert (
             operations_total.labels(
                 operation_type="backtesting", status="failed"
             )._value.get()
-            == 1
+            == initial_backtesting + 1
         )
 
     def test_operation_duration_histogram_exists(self):

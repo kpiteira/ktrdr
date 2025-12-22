@@ -1,0 +1,166 @@
+name: volatility_momentum_confluence_20241211
+description: Multi-dimensional strategy combining volatility expansion, momentum confirmation,
+  and volume support for high-probability trade entries
+version: '1.0'
+hypothesis: Markets make significant moves when volatility expands, momentum confirms
+  direction, and volume supports the move - creating high-probability confluence zones
+scope: universal
+training_data:
+  symbols:
+    mode: multi_symbol
+    list:
+    - EURUSD
+    - GBPUSD
+    - USDJPY
+  timeframes:
+    mode: single
+    list:
+    - 1h
+    base_timeframe: 1h
+  history_required: 250
+deployment:
+  target_symbols:
+    mode: universal
+  target_timeframes:
+    mode: single
+    supported:
+    - 1h
+indicators:
+- name: ATR
+  feature_id: atr_14
+  period: 14
+  source: close
+- name: BollingerBandWidth
+  feature_id: bb_width_20
+  period: 20
+  source: close
+- name: MACD
+  feature_id: macd_12
+  period: 12
+  source: close
+- name: MFI
+  feature_id: mfi_14
+  period: 14
+  source: close
+fuzzy_sets:
+  atr_14:
+    low_volatility:
+      type: trapezoidal
+      parameters:
+      - 0
+      - 0
+      - 0.3
+      - 0.5
+    moderate_volatility:
+      type: triangular
+      parameters:
+      - 0.4
+      - 0.6
+      - 0.8
+    high_volatility:
+      type: trapezoidal
+      parameters:
+      - 0.7
+      - 0.9
+      - 1
+      - 1
+  bb_width_20:
+    squeeze:
+      type: trapezoidal
+      parameters:
+      - 0
+      - 0
+      - 0.2
+      - 0.4
+    normal:
+      type: triangular
+      parameters:
+      - 0.3
+      - 0.5
+      - 0.7
+    expansion:
+      type: trapezoidal
+      parameters:
+      - 0.6
+      - 0.8
+      - 1
+      - 1
+  macd_12:
+    bearish:
+      type: trapezoidal
+      parameters:
+      - -1
+      - -1
+      - -0.3
+      - -0.1
+    neutral:
+      type: triangular
+      parameters:
+      - -0.2
+      - 0
+      - 0.2
+    bullish:
+      type: trapezoidal
+      parameters:
+      - 0.1
+      - 0.3
+      - 1
+      - 1
+  mfi_14:
+    oversold:
+      type: trapezoidal
+      parameters:
+      - 0
+      - 0
+      - 20
+      - 35
+    neutral:
+      type: triangular
+      parameters:
+      - 30
+      - 50
+      - 70
+    overbought:
+      type: trapezoidal
+      parameters:
+      - 65
+      - 80
+      - 100
+      - 100
+model:
+  type: mlp
+  architecture:
+    hidden_layers:
+    - 48
+    - 24
+    - 12
+    activation: relu
+    output_activation: softmax
+    dropout: 0.3
+  features:
+    include_price_context: false
+    lookback_periods: 3
+    scale_features: true
+  training:
+    learning_rate: 0.0008
+    batch_size: 64
+    epochs: 75
+    optimizer: adam
+    early_stopping:
+      enabled: true
+      patience: 12
+      min_delta: 0.001
+decisions:
+  output_format: classification
+  confidence_threshold: 0.65
+  position_awareness: true
+training:
+  method: supervised
+  labels:
+    source: zigzag
+    zigzag_threshold: 0.025
+    label_lookahead: 24
+  data_split:
+    train: 0.7
+    validation: 0.15
+    test: 0.15

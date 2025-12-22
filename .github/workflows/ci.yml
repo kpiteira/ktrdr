@@ -27,7 +27,8 @@ jobs:
     
     - name: Run unit tests with coverage
       run: |
-        make test-coverage
+        echo "Running tests in parallel on $(nproc) CPUs"
+        make test-coverage-junit
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4

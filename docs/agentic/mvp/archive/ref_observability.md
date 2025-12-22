@@ -4,9 +4,26 @@ This document contains detailed specifications for telemetry integration.
 
 ---
 
+## ⚠️ Architecture Update (December 2024)
+
+**The agent now uses the Anthropic Python SDK directly instead of Claude Code CLI + MCP.**
+
+**Key Simplifications:**
+
+- **Single service** - Only backend to instrument (no separate MCP server or host service)
+- **No cross-service tracing** - All spans are in one process
+- **Single metrics endpoint** - Backend `:8000/metrics` (no MCP metrics endpoint)
+
+See [ARCHITECTURE_DECISION_anthropic_api.md](ARCHITECTURE_DECISION_anthropic_api.md) for full details.
+
+The MCP Server metrics section below is **no longer applicable** for the agent. Agent observability is now simpler - see Phase 3 plan for updated specifications.
+
+---
+
 ## Stack Overview
 
 KTRDR uses:
+
 - **OTEL** - OpenTelemetry for instrumentation
 - **Prometheus** - Metrics collection and storage
 - **Jaeger** - Distributed tracing

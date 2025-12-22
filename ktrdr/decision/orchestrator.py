@@ -277,13 +277,38 @@ class DecisionOrchestrator:
                 logger.debug("Neural model not initialized")
 
         # Step 5: Generate decision using the decision engine
+        # CRITICAL: Filter fuzzy_memberships to only include features the model was trained with
+        # This prevents shape mismatch errors when strategy config has more features than model expects
+        filtered_fuzzy = context.fuzzy_memberships
+        if self.model_metadata and "features" in self.model_metadata:
+            expected_features = self.model_metadata["features"].get(
+                "fuzzy_features", []
+            )
+            if expected_features:
+                # Filter to only include expected features
+                filtered_fuzzy = {
+                    k: v
+                    for k, v in context.fuzzy_memberships.items()
+                    if k in expected_features
+                }
+                # Pad missing features with 0.0 (neutral value for fuzzy memberships)
+                # This handles cases where indicators produce NaN (e.g., VWAP with 0 volume)
+                missing = set(expected_features) - set(filtered_fuzzy.keys())
+                if missing:
+                    for feature_name in missing:
+                        filtered_fuzzy[feature_name] = 0.0
+                    if len(missing) > 5:
+                        logger.debug(
+                            f"Padded {len(missing)} missing features with 0.0: {list(missing)[:5]}..."
+                        )
+
         logger.debug(
-            f"🎯 [{cast(pd.Timestamp, current_bar.name).strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Calling decision engine with {len(context.fuzzy_memberships)} fuzzy features"
+            f"🎯 [{cast(pd.Timestamp, current_bar.name).strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Calling decision engine with {len(filtered_fuzzy)} fuzzy features (filtered from {len(context.fuzzy_memberships)})"
         )
 
         decision = self.decision_engine.generate_decision(
             current_data=current_bar,
-            fuzzy_memberships=context.fuzzy_memberships,
+            fuzzy_memberships=filtered_fuzzy,
             indicators=context.indicators,
         )
 
@@ -461,35 +486,69 @@ class DecisionOrchestrator:
     def _load_model_from_path(self, model_path: str) -> tuple:
         """Load model from specific path.
 
+        Supports both legacy (symbol-specific) and new (universal/symbol-agnostic) model paths:
+        - Legacy: models/{strategy}/{symbol}_{timeframe}_v{version}
+        - Universal: models/{strategy}/{timeframe}_v{version}
+
         Args:
             model_path: Path to model directory
 
         Returns:
             Tuple of (model, metadata)
         """
-        # Parse path to extract strategy/symbol/timeframe
-        path_parts = Path(model_path).name.split("_")
-        if len(path_parts) < 3:
-            raise ValueError(f"Invalid model path format: {model_path}")
+        path = Path(model_path)
+        dir_name = path.name
 
-        symbol = path_parts[0]
-        timeframe_version = "_".join(path_parts[1:])
-
-        # Split timeframe and version
-        if "_v" in timeframe_version:
-            parts = timeframe_version.split("_v")
-            timeframe = parts[0]
+        # Parse directory name to extract timeframe and version
+        # Format: {timeframe}_v{version} (universal) or {symbol}_{timeframe}_v{version} (legacy)
+        if "_v" in dir_name:
+            parts = dir_name.rsplit("_v", 1)
+            base = parts[0]  # Everything before last _v
             version = "v" + parts[1]  # Re-add the 'v' prefix
-        elif timeframe_version.endswith("_latest"):
-            timeframe = timeframe_version.replace("_latest", "")
-            version = None  # Let model storage handle latest
+
+            # Check if base contains symbol (legacy format: symbol_timeframe)
+            if "_" in base:
+                # Could be legacy format or just a timeframe with underscore
+                # Try to detect: if first part looks like a symbol (e.g., EURUSD), it's legacy
+                first_part = base.split("_")[0]
+                if len(first_part) >= 3 and first_part.isupper():
+                    # Likely legacy symbol_timeframe format
+                    symbol = first_part
+                    timeframe = "_".join(base.split("_")[1:])
+                else:
+                    # Universal format with underscore in timeframe (unlikely but handle it)
+                    symbol = None
+                    timeframe = base
+            else:
+                # Universal format: just timeframe
+                symbol = None
+                timeframe = base
+        elif dir_name.endswith("_latest"):
+            base = dir_name.replace("_latest", "")
+            version = None
+            if "_" in base:
+                first_part = base.split("_")[0]
+                if len(first_part) >= 3 and first_part.isupper():
+                    symbol = first_part
+                    timeframe = "_".join(base.split("_")[1:])
+                else:
+                    symbol = None
+                    timeframe = base
+            else:
+                symbol = None
+                timeframe = base
         else:
-            timeframe = timeframe_version
+            # No version info, treat as timeframe
+            symbol = None
+            timeframe = dir_name
             version = None
 
+        # For universal models, symbol is ignored by ModelStorage
+        # Pass a placeholder that ModelStorage will ignore
         return self.model_loader.load_model(
             strategy_name=self.strategy_name,
-            symbol=symbol,
+            symbol=symbol
+            or "UNIVERSAL",  # Placeholder, ModelStorage tries universal paths first
             timeframe=timeframe,
             version=version,
         )

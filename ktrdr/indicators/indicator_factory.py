@@ -6,6 +6,7 @@ based on configuration settings.
 """
 
 import importlib
+import inspect
 from typing import Union
 
 from ktrdr import get_logger
@@ -258,15 +259,27 @@ class IndicatorFactory:
             # Create a copy of params to avoid modifying the original
             params = config.params.copy()
 
+            # Filter params to only those accepted by the indicator's __init__
+            # This handles Claude sometimes generating extra params like 'source' for indicators
+            # that don't accept it
+            sig = inspect.signature(indicator_class.__init__)
+            valid_params = set(sig.parameters.keys()) - {"self"}
+            filtered_params = {k: v for k, v in params.items() if k in valid_params}
+
+            # Log any filtered params for debugging
+            filtered_out = set(params.keys()) - set(filtered_params.keys())
+            if filtered_out:
+                logger.debug(
+                    f"Filtered out unsupported params for {config.name}: {filtered_out}"
+                )
+
             # Custom name handling
             custom_name = None
             if config.name:
                 custom_name = config.name
 
-            # Create the indicator instance
-            # Note: We can't directly pass 'name' to most indicators as they expect specific parameters
-            # Instead, we'll capture the custom name and properly handle it based on indicator type
-            indicator = indicator_class(**params)
+            # Create the indicator instance with filtered params
+            indicator = indicator_class(**filtered_params)
 
             # If a custom name was specified, update the indicator's name after creation
             if custom_name:

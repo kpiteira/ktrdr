@@ -1,8 +1,9 @@
 .PHONY: test-unit test-integration test-e2e test-host test-coverage test-all test-performance lint lint-fix format typecheck quality test-fast ci validate-mcp test-container-build test-container-smoke test-container canary-up canary-down canary-logs canary-test canary-status docker-build-patch deploy-patch
 
 # Test commands
+# Use -n auto for parallel execution with pytest-xdist
 test-unit:
-	uv run pytest tests/unit/ -v
+	uv run pytest tests/unit/ -v -n auto
 
 test-integration:
 	uv run pytest tests/integration/ -v
@@ -13,11 +14,12 @@ test-e2e:
 test-host:
 	uv run pytest tests/host_service/ -v
 
+# Coverage with parallel execution
 test-coverage:
-	uv run pytest tests/unit/ --cov=ktrdr --cov-report=html --cov-report=term-missing --cov-report=xml
+	uv run pytest tests/unit/ -n auto --cov=ktrdr --cov-report=html --cov-report=term-missing --cov-report=xml
 
 test-coverage-junit:
-	uv run pytest tests/unit/ --cov=ktrdr --cov-report=html --cov-report=term-missing --cov-report=xml --junit-xml=test-results.xml
+	uv run pytest tests/unit/ -n auto --cov=ktrdr --cov-report=html --cov-report=term-missing --cov-report=xml --junit-xml=unit-test-results.xml
 
 test-all:
 	uv run pytest -v

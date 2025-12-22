@@ -223,6 +223,97 @@ async def get_operation_status(
         ) from e
 
 
+@router.get(
+    "/operations/{operation_id}/children",
+    response_model=OperationListResponse,
+    tags=["Operations"],
+    summary="Get child operations (Task 1.15)",
+    description="""
+    Get all child operations for a parent operation (e.g., agent session).
+
+    **Features:**
+    - Returns all child operations in creation order
+    - Includes progress and status for each child
+    - Useful for displaying session progress tree
+
+    **Perfect for:** Agent session monitoring, progress trees, debugging
+    """,
+)
+async def get_operation_children(
+    operation_id: str = Path(..., description="Parent operation identifier"),
+    operations_service: OperationsService = Depends(get_operations_service),
+) -> OperationListResponse:
+    """
+    Get all child operations for a parent operation (Task 1.15).
+
+    Returns children in creation order, which corresponds to the execution order
+    for agent sessions (design → training → backtest).
+
+    Args:
+        operation_id: Unique identifier for the parent operation
+
+    Returns:
+        OperationListResponse: List of child operations
+
+    Example:
+        GET /api/v1/operations/op_agent_session_20241201_123456/children
+    """
+    try:
+        logger.info(f"Getting children for operation: {operation_id}")
+
+        # Verify parent exists
+        parent = await operations_service.get_operation(operation_id)
+        if not parent:
+            logger.warning(f"Parent operation not found: {operation_id}")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Operation not found: {operation_id}",
+            )
+
+        # Get children from service
+        children = await operations_service.get_children(operation_id)
+
+        # Convert to summary format
+        operation_summaries = [
+            OperationSummary(
+                operation_id=op.operation_id,
+                operation_type=op.operation_type,
+                status=op.status,
+                created_at=op.created_at,
+                progress_percentage=op.progress.percentage,
+                current_step=op.progress.current_step,
+                symbol=op.metadata.symbol,
+                duration_seconds=op.duration_seconds,
+            )
+            for op in children
+        ]
+
+        # Count active children
+        active_count = sum(
+            1
+            for op in children
+            if op.status in [OperationStatus.PENDING, OperationStatus.RUNNING]
+        )
+
+        logger.info(f"Retrieved {len(children)} children for operation {operation_id}")
+        return OperationListResponse(
+            success=True,
+            data=operation_summaries,
+            total_count=len(children),
+            active_count=active_count,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting operation children: {str(e)}")
+        raise DataError(
+            message=f"Failed to get children for operation {operation_id}",
+            error_code="OPERATIONS-GetChildrenError",
+            details={"operation_id": operation_id, "error": str(e)},
+        ) from e
+
+
 @router.delete(
     "/operations/{operation_id}",
     response_model=OperationCancelResponse,

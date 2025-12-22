@@ -24,6 +24,11 @@ from ktrdr.version import __version__
 # Load environment variables from .env file
 load_dotenv()
 
-# Default log directory in project root
-default_log_dir = Path(os.path.dirname(os.path.dirname(__file__))) / "logs"
-configure_logging(log_dir=default_log_dir)
+# Skip heavy initialization in test mode for faster test execution
+# PYTEST_CURRENT_TEST is set by pytest automatically
+_is_testing = os.environ.get("PYTEST_CURRENT_TEST") is not None
+
+if not _is_testing:
+    # Default log directory in project root
+    default_log_dir = Path(os.path.dirname(os.path.dirname(__file__))) / "logs"
+    configure_logging(log_dir=default_log_dir)

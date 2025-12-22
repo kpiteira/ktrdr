@@ -1,0 +1,149 @@
+name: volatility_momentum_fusion_v1
+description: Combines Bollinger Band Width volatility signals with Fisher Transform
+  momentum for early trend detection
+version: '1.0'
+hypothesis: Volatility expansion often precedes momentum shifts. Combining BB Width
+  with Fisher Transform can capture early trend reversals and continuations.
+scope: universal
+training_data:
+  symbols:
+    mode: multi_symbol
+    list:
+    - EURUSD
+    - GBPUSD
+    - USDJPY
+  timeframes:
+    mode: multi_timeframe
+    list:
+    - 1h
+    - 5m
+    base_timeframe: 1h
+  history_required: 250
+deployment:
+  target_symbols:
+    mode: universal
+  target_timeframes:
+    mode: multi_timeframe
+    supported:
+    - 1h
+    - 5m
+indicators:
+- name: BollingerBandWidth
+  feature_id: bb_width_20
+  period: 20
+  source: close
+- name: FisherTransform
+  feature_id: fisher_10
+  period: 10
+  source: close
+- name: ATR
+  feature_id: atr_14
+  period: 14
+  source: close
+fuzzy_sets:
+  bb_width_20:
+    low_volatility:
+      type: triangular
+      parameters:
+      - 0.0
+      - 0.02
+      - 0.06
+    moderate_volatility:
+      type: triangular
+      parameters:
+      - 0.04
+      - 0.08
+      - 0.15
+    high_volatility:
+      type: triangular
+      parameters:
+      - 0.12
+      - 0.25
+      - 1.0
+  fisher_10:
+    strong_bearish:
+      type: triangular
+      parameters:
+      - -4.0
+      - -2.5
+      - -1.0
+    bearish:
+      type: triangular
+      parameters:
+      - -2.0
+      - -0.8
+      - -0.2
+    neutral:
+      type: triangular
+      parameters:
+      - -0.5
+      - 0.0
+      - 0.5
+    bullish:
+      type: triangular
+      parameters:
+      - 0.2
+      - 0.8
+      - 2.0
+    strong_bullish:
+      type: triangular
+      parameters:
+      - 1.0
+      - 2.5
+      - 4.0
+  atr_14:
+    low_atr:
+      type: triangular
+      parameters:
+      - 0.0
+      - 0.0003
+      - 0.0008
+    normal_atr:
+      type: triangular
+      parameters:
+      - 0.0006
+      - 0.0012
+      - 0.002
+    high_atr:
+      type: triangular
+      parameters:
+      - 0.0015
+      - 0.0025
+      - 0.01
+model:
+  type: mlp
+  architecture:
+    hidden_layers:
+    - 48
+    - 24
+    - 12
+    activation: relu
+    output_activation: softmax
+    dropout: 0.3
+  features:
+    include_price_context: true
+    lookback_periods: 3
+    scale_features: true
+  training:
+    learning_rate: 0.0008
+    batch_size: 64
+    epochs: 75
+    optimizer: adam
+    early_stopping:
+      enabled: true
+      patience: 12
+      min_delta: 0.0008
+decisions:
+  output_format: classification
+  confidence_threshold: 0.65
+  position_awareness: true
+training:
+  method: supervised
+  labels:
+    source: zigzag
+    zigzag_threshold: 0.025
+    label_lookahead: 24
+  data_split:
+    train: 0.65
+    validation: 0.2
+    test: 0.15

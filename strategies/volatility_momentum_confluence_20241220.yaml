@@ -1,0 +1,140 @@
+name: volatility_momentum_confluence_20241220
+description: Multi-dimensional strategy capturing volatility breakouts with momentum
+  confirmation using Bollinger Band Width, Fisher Transform, and ATR
+version: '1.0'
+hypothesis: Market breakouts following volatility squeezes are more reliable when
+  confirmed by momentum transformation and volatility context
+scope: universal
+training_data:
+  symbols:
+    mode: multi_symbol
+    list:
+    - EURUSD
+    - GBPUSD
+    - USDJPY
+  timeframes:
+    mode: single
+    list:
+    - 1h
+    base_timeframe: 1h
+  history_required: 200
+deployment:
+  target_symbols:
+    mode: universal
+  target_timeframes:
+    mode: single
+    supported:
+    - 1h
+indicators:
+- name: BollingerBandWidth
+  feature_id: bbw_20
+  period: 20
+  source: close
+- name: FisherTransform
+  feature_id: fisher_10
+  period: 10
+  source: close
+- name: ATR
+  feature_id: atr_14
+  period: 14
+  source: close
+fuzzy_sets:
+  bbw_20:
+    squeeze:
+      type: trapezoidal
+      parameters:
+      - 0.0
+      - 0.0
+      - 0.02
+      - 0.05
+    normal:
+      type: triangular
+      parameters:
+      - 0.03
+      - 0.08
+      - 0.15
+    expansion:
+      type: trapezoidal
+      parameters:
+      - 0.12
+      - 0.2
+      - 1.0
+      - 1.0
+  fisher_10:
+    strong_sell:
+      type: trapezoidal
+      parameters:
+      - -5.0
+      - -5.0
+      - -2.0
+      - -1.0
+    neutral:
+      type: triangular
+      parameters:
+      - -0.5
+      - 0.0
+      - 0.5
+    strong_buy:
+      type: trapezoidal
+      parameters:
+      - 1.0
+      - 2.0
+      - 5.0
+      - 5.0
+  atr_14:
+    low_volatility:
+      type: trapezoidal
+      parameters:
+      - 0.0
+      - 0.0
+      - 0.0005
+      - 0.0015
+    medium_volatility:
+      type: triangular
+      parameters:
+      - 0.001
+      - 0.003
+      - 0.006
+    high_volatility:
+      type: trapezoidal
+      parameters:
+      - 0.005
+      - 0.008
+      - 0.05
+      - 0.05
+model:
+  type: mlp
+  architecture:
+    hidden_layers:
+    - 32
+    - 16
+    activation: relu
+    output_activation: softmax
+    dropout: 0.3
+  features:
+    include_price_context: false
+    lookback_periods: 3
+    scale_features: true
+  training:
+    learning_rate: 0.001
+    batch_size: 32
+    epochs: 50
+    optimizer: adam
+    early_stopping:
+      enabled: true
+      patience: 10
+      min_delta: 0.001
+decisions:
+  output_format: classification
+  confidence_threshold: 0.65
+  position_awareness: true
+training:
+  method: supervised
+  labels:
+    source: zigzag
+    zigzag_threshold: 0.025
+    label_lookahead: 24
+  data_split:
+    train: 0.7
+    validation: 0.15
+    test: 0.15

@@ -48,6 +48,9 @@ setup_monitoring(
 # Setup metrics (Phase 5: Prometheus metrics)
 setup_metrics(service_name="ktrdr-api")
 
+# Register agent metrics with Prometheus (imported for side effect)
+import ktrdr.agents.metrics  # noqa: F401, E402
+
 # Set up templates directory
 templates_dir = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(templates_dir))

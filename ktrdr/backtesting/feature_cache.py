@@ -47,6 +47,30 @@ class FeatureCache:
         fuzzy_config = FuzzyConfigLoader.load_from_dict(strategy_fuzzy_sets)
         self.fuzzy_engine = FuzzyEngine(fuzzy_config)
 
+    def _get_timeframe_from_config(self) -> str | None:
+        """Extract timeframe from strategy configuration.
+
+        Looks in training_data.timeframes.base_timeframe or deployment.target_timeframes.
+
+        Returns:
+            Timeframe string (e.g., "1h") or None if not found.
+        """
+        # Try training_data config
+        training_data = self.strategy_config.get("training_data", {})
+        timeframes_config = training_data.get("timeframes", {})
+        if base_tf := timeframes_config.get("base_timeframe"):
+            return base_tf
+        if tf_list := timeframes_config.get("list"):
+            return tf_list[0] if tf_list else None
+
+        # Try deployment config
+        deployment = self.strategy_config.get("deployment", {})
+        target_tf = deployment.get("target_timeframes", {})
+        if supported := target_tf.get("supported"):
+            return supported[0] if supported else None
+
+        return None
+
     def compute_all_features(self, historical_data: pd.DataFrame) -> None:
         """Pre-compute all indicators and fuzzy memberships for entire dataset.
 
@@ -141,6 +165,19 @@ class FeatureCache:
 
         # Convert to DataFrame with historical_data index (skip first 50 bars)
         self.fuzzy_df = pd.DataFrame(fuzzy_data, index=historical_data.index[50:])
+
+        # Step 3b: Add timeframe prefix to match training feature names
+        # Training creates features like "1h_obv_flow_volume_selling" while
+        # backtest fuzzify creates "obv_flow_volume_selling". This fixes the mismatch.
+        timeframe = self._get_timeframe_from_config()
+        if timeframe and self.fuzzy_df is not None:
+            prefixed_columns = {
+                col: f"{timeframe}_{col}" for col in self.fuzzy_df.columns
+            }
+            self.fuzzy_df = self.fuzzy_df.rename(columns=prefixed_columns)
+            logger.debug(
+                f"Added timeframe prefix '{timeframe}_' to {len(prefixed_columns)} fuzzy columns"
+            )
 
         # Step 4: PRE-COMPUTE TEMPORAL FEATURES (lag features) to fix backtesting NaN issue
         logger.debug("⏰ Pre-computing temporal fuzzy features...")

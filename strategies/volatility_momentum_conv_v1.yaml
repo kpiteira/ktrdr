@@ -1,0 +1,141 @@
+name: volatility_momentum_conv_v1
+description: Multi-dimensional strategy combining volatility expansion (ATR), momentum
+  buildup (MACD), and volume flow confirmation (CMF) to identify high-probability
+  trade entries
+version: '1.0'
+hypothesis: Market opportunities arise when volatility expansion coincides with momentum
+  buildup and volume confirmation, creating high-probability trade setups
+scope: universal
+training_data:
+  symbols:
+    mode: multi_symbol
+    list:
+    - EURUSD
+    - GBPUSD
+    - USDJPY
+  timeframes:
+    mode: single
+    list:
+    - 1h
+    base_timeframe: 1h
+  history_required: 250
+deployment:
+  target_symbols:
+    mode: universal
+  target_timeframes:
+    mode: single
+    supported:
+    - 1h
+indicators:
+- name: ATR
+  feature_id: atr_14
+  period: 14
+  source: close
+- name: MACD
+  feature_id: macd_12
+  period: 12
+  source: close
+- name: CMF
+  feature_id: cmf_20
+  period: 20
+  source: close
+fuzzy_sets:
+  atr_14:
+    low_volatility:
+      type: trapezoidal
+      parameters:
+      - 0.0
+      - 0.0
+      - 0.3
+      - 0.5
+    medium_volatility:
+      type: triangular
+      parameters:
+      - 0.4
+      - 0.6
+      - 0.8
+    high_volatility:
+      type: trapezoidal
+      parameters:
+      - 0.7
+      - 0.9
+      - 1.0
+      - 1.0
+  macd_12:
+    strong_bearish:
+      type: trapezoidal
+      parameters:
+      - -1.0
+      - -1.0
+      - -0.3
+      - -0.1
+    neutral:
+      type: triangular
+      parameters:
+      - -0.2
+      - 0.0
+      - 0.2
+    strong_bullish:
+      type: trapezoidal
+      parameters:
+      - 0.1
+      - 0.3
+      - 1.0
+      - 1.0
+  cmf_20:
+    negative_flow:
+      type: trapezoidal
+      parameters:
+      - -1.0
+      - -1.0
+      - -0.2
+      - -0.05
+    neutral_flow:
+      type: triangular
+      parameters:
+      - -0.15
+      - 0.0
+      - 0.15
+    positive_flow:
+      type: trapezoidal
+      parameters:
+      - 0.05
+      - 0.2
+      - 1.0
+      - 1.0
+model:
+  type: mlp
+  architecture:
+    hidden_layers:
+    - 32
+    - 16
+    activation: relu
+    output_activation: softmax
+    dropout: 0.25
+  features:
+    include_price_context: false
+    lookback_periods: 3
+    scale_features: true
+  training:
+    learning_rate: 0.001
+    batch_size: 64
+    epochs: 100
+    optimizer: adam
+    early_stopping:
+      enabled: true
+      patience: 15
+      min_delta: 0.0005
+decisions:
+  output_format: classification
+  confidence_threshold: 0.65
+  position_awareness: true
+training:
+  method: supervised
+  labels:
+    source: zigzag
+    zigzag_threshold: 0.025
+    label_lookahead: 24
+  data_split:
+    train: 0.7
+    validation: 0.15
+    test: 0.15

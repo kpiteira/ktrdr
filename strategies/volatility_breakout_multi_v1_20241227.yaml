@@ -1,0 +1,156 @@
+name: volatility_breakout_multi_v1_20241227
+description: Multi-dimensional volatility breakout strategy using BB width squeeze
+  detection with CCI momentum confirmation
+version: '1.0'
+hypothesis: Markets experience explosive moves after volatility contraction periods.
+  Detect squeeze conditions via BB width, confirm momentum with CCI, and normalize
+  volatility context using ATR.
+scope: universal
+training_data:
+  symbols:
+    mode: multi_symbol
+    list:
+    - EURUSD
+    - GBPUSD
+    - USDJPY
+  timeframes:
+    mode: single
+    list:
+    - 1h
+    base_timeframe: 1h
+  history_required: 250
+deployment:
+  target_symbols:
+    mode: universal
+  target_timeframes:
+    mode: single
+    supported:
+    - 1h
+indicators:
+- name: BollingerBandWidth
+  feature_id: bb_width_20
+  period: 20
+  source: close
+- name: ATR
+  feature_id: atr_14
+  period: 14
+  source: close
+- name: CCI
+  feature_id: cci_20
+  period: 20
+  source: close
+fuzzy_sets:
+  bb_width_20:
+    very_low:
+      type: triangular
+      parameters:
+      - 0.0
+      - 0.2
+      - 0.4
+    low:
+      type: triangular
+      parameters:
+      - 0.3
+      - 0.5
+      - 0.7
+    normal:
+      type: triangular
+      parameters:
+      - 0.6
+      - 0.8
+      - 1.0
+    high:
+      type: triangular
+      parameters:
+      - 0.9
+      - 1.2
+      - 1.5
+  atr_14:
+    low_volatility:
+      type: triangular
+      parameters:
+      - 0.0
+      - 0.3
+      - 0.6
+    moderate_volatility:
+      type: triangular
+      parameters:
+      - 0.5
+      - 0.8
+      - 1.1
+    high_volatility:
+      type: triangular
+      parameters:
+      - 1.0
+      - 1.5
+      - 2.0
+  cci_20:
+    strong_oversold:
+      type: trapezoidal
+      parameters:
+      - -300
+      - -200
+      - -150
+      - -100
+    moderate_oversold:
+      type: triangular
+      parameters:
+      - -150
+      - -100
+      - -50
+    neutral:
+      type: triangular
+      parameters:
+      - -50
+      - 0
+      - 50
+    moderate_overbought:
+      type: triangular
+      parameters:
+      - 50
+      - 100
+      - 150
+    strong_overbought:
+      type: trapezoidal
+      parameters:
+      - 100
+      - 150
+      - 200
+      - 300
+model:
+  type: mlp
+  architecture:
+    hidden_layers:
+    - 48
+    - 24
+    - 12
+    activation: relu
+    output_activation: softmax
+    dropout: 0.3
+  features:
+    include_price_context: false
+    lookback_periods: 3
+    scale_features: true
+  training:
+    learning_rate: 0.0008
+    batch_size: 64
+    epochs: 75
+    optimizer: adam
+    early_stopping:
+      enabled: true
+      patience: 12
+      min_delta: 0.0008
+decisions:
+  output_format: classification
+  confidence_threshold: 0.65
+  position_awareness: true
+training:
+  method: supervised
+  labels:
+    source: zigzag
+    zigzag_threshold: 0.025
+    label_lookahead: 24
+  data_split:
+    train: 0.7
+    validation: 0.15
+    test: 0.15

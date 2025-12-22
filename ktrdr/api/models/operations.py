@@ -32,6 +32,11 @@ class OperationType(str, Enum):
     FUZZY_ANALYSIS = "fuzzy_analysis"
     DUMMY = "dummy"
 
+    # Agent types
+    AGENT_RESEARCH = "agent_research"  # Orchestrator operation for research cycles
+    AGENT_DESIGN = "agent_design"  # Claude design phase operation
+    AGENT_ASSESSMENT = "agent_assessment"  # Claude assessment phase operation
+
 
 class OperationProgress(BaseModel):
     """Progress information for an operation."""
@@ -104,6 +109,10 @@ class OperationInfo(BaseModel):
     """Complete information about an operation."""
 
     operation_id: str = Field(..., description="Unique operation identifier")
+    parent_operation_id: Optional[str] = Field(
+        None,
+        description="Parent operation ID for child operations (e.g., design/training/backtest under agent session)",
+    )
     operation_type: OperationType = Field(..., description="Type of operation")
     status: OperationStatus = Field(..., description="Current operation status")
     created_at: datetime = Field(..., description="When operation was created")

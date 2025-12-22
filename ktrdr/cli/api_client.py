@@ -696,6 +696,19 @@ class KtrdrApiClient:
             )
         return response
 
+    async def get_operation_children(self, operation_id: str) -> dict[str, Any]:
+        """Get child operations for a parent operation (Task 1.15)."""
+        response = await self._make_request(
+            "GET", f"/operations/{operation_id}/children"
+        )
+        if not response.get("success"):
+            raise DataError(
+                message=f"Failed to get children for operation {operation_id}",
+                error_code="API-GetOperationChildrenError",
+                details={"response": response, "operation_id": operation_id},
+            )
+        return response
+
     async def cancel_operation(
         self,
         operation_id: str,
