@@ -131,15 +131,16 @@ class TestWorkerRegistrationEndpoint:
 class TestListWorkersEndpoint:
     """Tests for GET /api/v1/workers endpoint."""
 
-    def test_list_all_workers(self, client, worker_registry):
+    @pytest.mark.asyncio
+    async def test_list_all_workers(self, client, worker_registry):
         """Test listing all registered workers."""
         # Pre-register some workers
-        worker_registry.register_worker(
+        await worker_registry.register_worker(
             worker_id="backtest-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://192.168.1.201:5003",
         )
-        worker_registry.register_worker(
+        await worker_registry.register_worker(
             worker_id="training-1",
             worker_type=WorkerType.CPU_TRAINING,
             endpoint_url="http://192.168.1.202:5004",
@@ -154,19 +155,20 @@ class TestListWorkersEndpoint:
         worker_ids = {w["worker_id"] for w in data}
         assert worker_ids == {"backtest-1", "training-1"}
 
-    def test_list_workers_filter_by_type(self, client, worker_registry):
+    @pytest.mark.asyncio
+    async def test_list_workers_filter_by_type(self, client, worker_registry):
         """Test listing workers filtered by type."""
-        worker_registry.register_worker(
+        await worker_registry.register_worker(
             worker_id="backtest-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://192.168.1.201:5003",
         )
-        worker_registry.register_worker(
+        await worker_registry.register_worker(
             worker_id="backtest-2",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://192.168.1.202:5003",
         )
-        worker_registry.register_worker(
+        await worker_registry.register_worker(
             worker_id="training-1",
             worker_type=WorkerType.CPU_TRAINING,
             endpoint_url="http://192.168.1.203:5004",
@@ -181,21 +183,22 @@ class TestListWorkersEndpoint:
         worker_ids = {w["worker_id"] for w in data}
         assert worker_ids == {"backtest-1", "backtest-2"}
 
-    def test_list_workers_filter_by_status(self, client, worker_registry):
+    @pytest.mark.asyncio
+    async def test_list_workers_filter_by_status(self, client, worker_registry):
         """Test listing workers filtered by status."""
-        worker_registry.register_worker(
+        await worker_registry.register_worker(
             worker_id="backtest-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://192.168.1.201:5003",
         )
-        worker2 = worker_registry.register_worker(
+        result = await worker_registry.register_worker(
             worker_id="backtest-2",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://192.168.1.202:5003",
         )
 
         # Manually set one worker to BUSY
-        worker2.status = WorkerStatus.BUSY
+        result.worker.status = WorkerStatus.BUSY
 
         response = client.get("/api/v1/workers?status=available")
 
