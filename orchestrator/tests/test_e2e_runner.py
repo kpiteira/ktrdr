@@ -494,3 +494,305 @@ class TestEstimateTokens:
 
         tokens = _estimate_tokens(0.0)
         assert tokens == 0
+
+
+class TestApplyE2EFix:
+    """Test apply_e2e_fix function."""
+
+    @pytest.mark.asyncio
+    async def test_applies_fix_via_claude(self):
+        """Should invoke Claude with fix plan."""
+        from orchestrator.e2e_runner import apply_e2e_fix
+
+        sandbox = MagicMock()
+        sandbox.invoke_claude = AsyncMock(
+            return_value=make_claude_result("FIX_APPLIED: yes")
+        )
+        config = OrchestratorConfig()
+        tracer = MagicMock()
+        span = MagicMock()
+        tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=span
+        )
+        tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        await apply_e2e_fix(
+            fix_plan="Add 'app.include_router(new_router)' to main.py",
+            sandbox=sandbox,
+            config=config,
+            tracer=tracer,
+        )
+
+        # Should have invoked Claude
+        sandbox.invoke_claude.assert_called_once()
+        # Prompt should contain the fix plan
+        call_kwargs = sandbox.invoke_claude.call_args[1]
+        assert "app.include_router" in call_kwargs["prompt"]
+
+    @pytest.mark.asyncio
+    async def test_returns_true_on_success(self):
+        """Should return True when fix is applied successfully."""
+        from orchestrator.e2e_runner import apply_e2e_fix
+
+        sandbox = MagicMock()
+        sandbox.invoke_claude = AsyncMock(
+            return_value=make_claude_result("Fix complete.\n\nFIX_APPLIED: yes")
+        )
+        config = OrchestratorConfig()
+        tracer = MagicMock()
+        tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=MagicMock()
+        )
+        tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        result = await apply_e2e_fix(
+            fix_plan="Add router to main.py",
+            sandbox=sandbox,
+            config=config,
+            tracer=tracer,
+        )
+
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_returns_false_on_failure(self):
+        """Should return False when fix cannot be applied."""
+        from orchestrator.e2e_runner import apply_e2e_fix
+
+        sandbox = MagicMock()
+        sandbox.invoke_claude = AsyncMock(
+            return_value=make_claude_result("FIX_APPLIED: no\nREASON: File not found")
+        )
+        config = OrchestratorConfig()
+        tracer = MagicMock()
+        tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=MagicMock()
+        )
+        tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        result = await apply_e2e_fix(
+            fix_plan="Add router to main.py",
+            sandbox=sandbox,
+            config=config,
+            tracer=tracer,
+        )
+
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_returns_false_when_no_marker(self):
+        """Should return False when output has no FIX_APPLIED marker."""
+        from orchestrator.e2e_runner import apply_e2e_fix
+
+        sandbox = MagicMock()
+        sandbox.invoke_claude = AsyncMock(
+            return_value=make_claude_result("I made some changes...")
+        )
+        config = OrchestratorConfig()
+        tracer = MagicMock()
+        tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=MagicMock()
+        )
+        tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        result = await apply_e2e_fix(
+            fix_plan="Add router",
+            sandbox=sandbox,
+            config=config,
+            tracer=tracer,
+        )
+
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_uses_limited_max_turns(self):
+        """Should use 20 max turns for fixes."""
+        from orchestrator.e2e_runner import apply_e2e_fix
+
+        sandbox = MagicMock()
+        sandbox.invoke_claude = AsyncMock(
+            return_value=make_claude_result("FIX_APPLIED: yes")
+        )
+        config = OrchestratorConfig()
+        tracer = MagicMock()
+        tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=MagicMock()
+        )
+        tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        await apply_e2e_fix(
+            fix_plan="Fix something",
+            sandbox=sandbox,
+            config=config,
+            tracer=tracer,
+        )
+
+        call_kwargs = sandbox.invoke_claude.call_args[1]
+        assert call_kwargs["max_turns"] == 20
+
+    @pytest.mark.asyncio
+    async def test_uses_fixed_timeout(self):
+        """Should use 300 second timeout for fixes."""
+        from orchestrator.e2e_runner import apply_e2e_fix
+
+        sandbox = MagicMock()
+        sandbox.invoke_claude = AsyncMock(
+            return_value=make_claude_result("FIX_APPLIED: yes")
+        )
+        config = OrchestratorConfig()
+        tracer = MagicMock()
+        tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=MagicMock()
+        )
+        tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        await apply_e2e_fix(
+            fix_plan="Fix something",
+            sandbox=sandbox,
+            config=config,
+            tracer=tracer,
+        )
+
+        call_kwargs = sandbox.invoke_claude.call_args[1]
+        assert call_kwargs["timeout"] == 300
+
+
+class TestApplyE2EFixTracing:
+    """Test tracing integration in apply_e2e_fix."""
+
+    @pytest.mark.asyncio
+    async def test_creates_span_for_fix(self):
+        """Should create a span for E2E fix execution."""
+        from orchestrator.e2e_runner import apply_e2e_fix
+
+        sandbox = MagicMock()
+        sandbox.invoke_claude = AsyncMock(
+            return_value=make_claude_result("FIX_APPLIED: yes")
+        )
+        config = OrchestratorConfig()
+        tracer = MagicMock()
+        span = MagicMock()
+        tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=span
+        )
+        tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        await apply_e2e_fix(
+            fix_plan="Fix something",
+            sandbox=sandbox,
+            config=config,
+            tracer=tracer,
+        )
+
+        tracer.start_as_current_span.assert_called_with("orchestrator.e2e_fix")
+
+    @pytest.mark.asyncio
+    async def test_sets_fix_plan_attribute(self):
+        """Should set fix.plan attribute on span (truncated)."""
+        from orchestrator.e2e_runner import apply_e2e_fix
+
+        sandbox = MagicMock()
+        sandbox.invoke_claude = AsyncMock(
+            return_value=make_claude_result("FIX_APPLIED: yes")
+        )
+        config = OrchestratorConfig()
+        tracer = MagicMock()
+        span = MagicMock()
+        tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=span
+        )
+        tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        await apply_e2e_fix(
+            fix_plan="Add router to main.py line 45",
+            sandbox=sandbox,
+            config=config,
+            tracer=tracer,
+        )
+
+        attribute_calls = {
+            call[0][0]: call[0][1] for call in span.set_attribute.call_args_list
+        }
+        assert "fix.plan" in attribute_calls
+        assert "Add router" in attribute_calls["fix.plan"]
+
+    @pytest.mark.asyncio
+    async def test_truncates_long_fix_plan(self):
+        """Should truncate fix.plan attribute to 200 chars."""
+        from orchestrator.e2e_runner import apply_e2e_fix
+
+        sandbox = MagicMock()
+        sandbox.invoke_claude = AsyncMock(
+            return_value=make_claude_result("FIX_APPLIED: yes")
+        )
+        config = OrchestratorConfig()
+        tracer = MagicMock()
+        span = MagicMock()
+        tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=span
+        )
+        tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        long_fix_plan = "A" * 500
+
+        await apply_e2e_fix(
+            fix_plan=long_fix_plan,
+            sandbox=sandbox,
+            config=config,
+            tracer=tracer,
+        )
+
+        attribute_calls = {
+            call[0][0]: call[0][1] for call in span.set_attribute.call_args_list
+        }
+        assert len(attribute_calls["fix.plan"]) == 200
+
+    @pytest.mark.asyncio
+    async def test_sets_fix_success_attribute(self):
+        """Should set fix.success attribute on span."""
+        from orchestrator.e2e_runner import apply_e2e_fix
+
+        sandbox = MagicMock()
+        sandbox.invoke_claude = AsyncMock(
+            return_value=make_claude_result("FIX_APPLIED: yes")
+        )
+        config = OrchestratorConfig()
+        tracer = MagicMock()
+        span = MagicMock()
+        tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=span
+        )
+        tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        await apply_e2e_fix(
+            fix_plan="Fix something",
+            sandbox=sandbox,
+            config=config,
+            tracer=tracer,
+        )
+
+        attribute_calls = {
+            call[0][0]: call[0][1] for call in span.set_attribute.call_args_list
+        }
+        assert "fix.success" in attribute_calls
+        assert attribute_calls["fix.success"] is True

@@ -226,3 +226,66 @@ def _estimate_tokens(cost_usd: float) -> int:
     if cost_usd <= 0:
         return 0
     return int(cost_usd * 100000)  # $0.01 = 1000 tokens
+
+
+async def apply_e2e_fix(
+    fix_plan: str,
+    sandbox: SandboxManager,
+    config: OrchestratorConfig,
+    tracer: trace.Tracer,
+) -> bool:
+    """Apply a fix suggested by Claude for a failed E2E test.
+
+    Invokes Claude Code with the fix plan and determines if the fix
+    was successfully applied by parsing the structured output.
+
+    Args:
+        fix_plan: The fix plan text from E2E failure analysis
+        sandbox: Sandbox manager for Claude invocation
+        config: Orchestrator configuration (unused but kept for consistency)
+        tracer: OpenTelemetry tracer for creating spans
+
+    Returns:
+        True if fix was applied successfully, False otherwise
+    """
+    prompt = _build_fix_prompt(fix_plan)
+
+    with tracer.start_as_current_span("orchestrator.e2e_fix") as span:
+        span.set_attribute("fix.plan", fix_plan[:200])
+
+        result = await sandbox.invoke_claude(
+            prompt=prompt,
+            max_turns=20,
+            timeout=300,
+        )
+
+        success = "FIX_APPLIED: yes" in result.result
+        span.set_attribute("fix.success", success)
+
+        # Record metrics (safe if counter not yet defined - see Task 5.5)
+        if hasattr(telemetry, "e2e_fix_counter"):
+            telemetry.e2e_fix_counter.add(1, {"success": str(success).lower()})
+
+        return success
+
+
+def _build_fix_prompt(fix_plan: str) -> str:
+    """Build the prompt for applying an E2E fix.
+
+    Instructs Claude to apply the specific fix and report success/failure.
+
+    Args:
+        fix_plan: The fix plan to apply
+
+    Returns:
+        Formatted prompt string
+    """
+    return f"""Apply the following fix:
+
+{fix_plan}
+
+Make the specific changes described. Do not make additional changes.
+Report when complete:
+- FIX_APPLIED: yes | no
+- If no: REASON: <why it couldn't be applied>
+"""
