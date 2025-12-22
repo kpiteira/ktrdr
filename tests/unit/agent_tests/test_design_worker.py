@@ -63,6 +63,11 @@ class TestAgentDesignWorkerRun:
         ops.fail_operation = AsyncMock()
         ops.cancel_operation = AsyncMock()
 
+        # Mock get_operation for parent metadata updates
+        mock_parent_op = MagicMock()
+        mock_parent_op.metadata.parameters = {}
+        ops.get_operation = AsyncMock(return_value=mock_parent_op)
+
         return ops
 
     @pytest.fixture
@@ -327,6 +332,12 @@ class TestDesignWorkerContextGathering:
         ops.create_operation = AsyncMock(return_value=mock_op)
         ops.complete_operation = AsyncMock()
         ops.fail_operation = AsyncMock()
+
+        # Mock get_operation for parent metadata updates
+        mock_parent_op = MagicMock()
+        mock_parent_op.metadata.parameters = {}
+        ops.get_operation = AsyncMock(return_value=mock_parent_op)
+
         return ops
 
     @pytest.fixture

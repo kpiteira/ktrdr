@@ -185,7 +185,13 @@ Always validate your configuration before saving it."""
             metadata=OperationMetadata(  # type: ignore[call-arg]
                 parameters={"parent_operation_id": parent_operation_id}
             ),
+            parent_operation_id=parent_operation_id,
         )
+
+        # Store child op ID in parent metadata for tracking by orchestrator
+        parent_op = await self.ops.get_operation(parent_operation_id)
+        if parent_op:
+            parent_op.metadata.parameters["design_op_id"] = op.operation_id
 
         try:
             # Task 8.1: Gather ALL context upfront to embed in prompt

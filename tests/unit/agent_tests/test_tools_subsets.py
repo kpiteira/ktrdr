@@ -103,6 +103,11 @@ class TestDesignWorkerUsesReducedTools:
         mock_ops.create_operation = AsyncMock(return_value=mock_op)
         mock_ops.complete_operation = AsyncMock()
 
+        # Mock get_operation for parent metadata updates
+        mock_parent_op = MagicMock()
+        mock_parent_op.metadata.parameters = {}
+        mock_ops.get_operation = AsyncMock(return_value=mock_parent_op)
+
         mock_invoker = MagicMock()
         mock_invoker.run = AsyncMock(
             return_value=AgentResult(

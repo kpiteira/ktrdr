@@ -191,7 +191,11 @@ class AgentAssessmentWorker:
             metadata=OperationMetadata(  # type: ignore[call-arg]
                 parameters={"parent_operation_id": parent_operation_id}
             ),
+            parent_operation_id=parent_operation_id,
         )
+
+        # Store child op ID in parent metadata for tracking by orchestrator
+        parent_op.metadata.parameters["assessment_op_id"] = op.operation_id
 
         try:
             # Build context for prompt

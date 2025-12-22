@@ -247,14 +247,14 @@ class TestPhaseSpans:
 
         provider, exporter = tracer_provider
 
-        # _start_design makes 3 calls to get_operation, then run() polls
+        # _start_design makes 1 call to get_operation, then run() polls
+        # Workers now own their child operations (set design_op_id via parent metadata)
         # Total call sequence:
         # 1. run(): get parent (idle) -> calls _start_design
-        # 2. _start_design: get parent to set phase
-        # 3. _start_design: get parent to track child
-        # 4. run(): get parent (designing)
-        # 5. run(): get child (completed)
-        # 6. _handle_designing_phase: get parent for metrics
+        # 2. _start_design: get parent to set phase (design_op_id set by worker)
+        # 3. run(): get parent (designing)
+        # 4. run(): get child (completed)
+        # 5. _handle_designing_phase: get parent for metrics
         # Then cancel
 
         call_count = [0]
@@ -269,15 +269,16 @@ class TestPhaseSpans:
                 # run(): First loop - idle phase, triggers _start_design
                 mock_op.metadata.parameters = {"phase": "idle"}
                 mock_op.status = OperationStatus.PENDING
-            elif call_count[0] in (2, 3):
-                # _start_design: gets parent twice to update metadata
+            elif call_count[0] == 2:
+                # _start_design: get parent to set phase
+                # design_op_id is set by design_worker (mocked, so we simulate it)
                 mock_op.metadata.parameters = {
                     "phase": "designing",
                     "design_op_id": "op_design_test",
                     "phase_start_time": 1000.0,
                 }
                 mock_op.status = OperationStatus.RUNNING
-            elif call_count[0] == 4:
+            elif call_count[0] == 3:
                 # run(): Second loop - get parent (designing phase)
                 mock_op.metadata.parameters = {
                     "phase": "designing",
@@ -285,7 +286,7 @@ class TestPhaseSpans:
                     "phase_start_time": 1000.0,
                 }
                 mock_op.status = OperationStatus.RUNNING
-            elif call_count[0] == 5:
+            elif call_count[0] == 4:
                 # run(): get child op (completed)
                 if op_id == "op_design_test":
                     mock_op.status = OperationStatus.COMPLETED
@@ -302,7 +303,7 @@ class TestPhaseSpans:
                         "phase_start_time": 1000.0,
                     }
                     mock_op.status = OperationStatus.RUNNING
-            elif call_count[0] == 6:
+            elif call_count[0] == 5:
                 # _handle_designing_phase: get parent for metrics update
                 mock_op.metadata.parameters = {
                     "phase": "designing",

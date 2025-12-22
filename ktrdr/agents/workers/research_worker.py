@@ -33,10 +33,8 @@ from ktrdr.agents.metrics import (
     record_tokens,
 )
 from ktrdr.api.models.operations import (
-    OperationMetadata,
     OperationProgress,
     OperationStatus,
-    OperationType,
 )
 
 logger = get_logger(__name__)
@@ -333,39 +331,16 @@ class AgentResearchWorker:
             OperationProgress(percentage=5.0, current_step="Designing strategy..."),  # type: ignore[call-arg]
         )
 
-        # Create child operation for design
-        child_op = await self.ops.create_operation(
-            operation_type=OperationType.AGENT_DESIGN,
-            metadata=OperationMetadata(),  # type: ignore[call-arg]
-            parent_operation_id=operation_id,
-        )
-
-        # Track child in parent metadata
-        parent_op = await self.ops.get_operation(operation_id)
-        if parent_op:
-            parent_op.metadata.parameters["design_op_id"] = child_op.operation_id
-
-        # Create task wrapper that completes the child operation
+        # Create task wrapper - worker owns its child operation
         async def run_child():
-            try:
-                # Pass model to design worker (Task 8.3 runtime selection)
-                result = await self.design_worker.run(
-                    child_op.operation_id, model=model
-                )
-                await self.ops.complete_operation(child_op.operation_id, result)
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                await self.ops.fail_operation(child_op.operation_id, str(e))
-                raise
+            # Pass parent operation_id - worker creates and manages its own child op
+            # Worker stores child op ID in parent metadata (design_op_id) for tracking
+            await self.design_worker.run(operation_id, model=model)
 
         # Start as asyncio task
         task = asyncio.create_task(run_child())
-        self._current_child_op_id = child_op.operation_id
         self._current_child_task = task
-
-        # Register task with operations service
-        await self.ops.start_operation(child_op.operation_id, task)
+        # Note: child op ID will be available in parent metadata after worker starts
 
     async def _handle_designing_phase(self, operation_id: str, child_op: Any) -> None:
         """Handle designing phase state transitions.
@@ -750,45 +725,22 @@ class AgentResearchWorker:
             OperationProgress(percentage=90.0, current_step="Assessing results..."),  # type: ignore[call-arg]
         )
 
-        # Create child operation for assessment
-        child_op = await self.ops.create_operation(
-            operation_type=OperationType.AGENT_ASSESSMENT,
-            metadata=OperationMetadata(),  # type: ignore[call-arg]
-            parent_operation_id=operation_id,
-        )
-
-        # Track child in parent metadata
-        parent_op = await self.ops.get_operation(operation_id)
-        if parent_op:
-            parent_op.metadata.parameters["assessment_op_id"] = child_op.operation_id
-
-        # Get results for assessment
+        # Get results for assessment from parent metadata
         params = parent_op.metadata.parameters if parent_op else {}
         training_result = params.get("training_result", {})
         backtest_result = params.get("backtest_result", {})
         results = {"training": training_result, "backtest": backtest_result}
 
-        # Create task wrapper that completes the child operation
+        # Create task wrapper - worker owns its child operation
         async def run_child():
-            try:
-                # Pass model to assessment worker (Task 8.3 runtime selection)
-                result = await self.assessment_worker.run(
-                    child_op.operation_id, results, model=model
-                )
-                await self.ops.complete_operation(child_op.operation_id, result)
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                await self.ops.fail_operation(child_op.operation_id, str(e))
-                raise
+            # Pass parent operation_id - worker creates and manages its own child op
+            # Worker stores child op ID in parent metadata (assessment_op_id) for tracking
+            await self.assessment_worker.run(operation_id, results, model=model)
 
         # Start as asyncio task
         task = asyncio.create_task(run_child())
-        self._current_child_op_id = child_op.operation_id
         self._current_child_task = task
-
-        # Register task with operations service
-        await self.ops.start_operation(child_op.operation_id, task)
+        # Note: child op ID will be available in parent metadata after worker starts
 
     async def _handle_assessing_phase(
         self, operation_id: str, child_op: Any
