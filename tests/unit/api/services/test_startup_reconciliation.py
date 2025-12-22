@@ -5,7 +5,7 @@ as either PENDING_RECONCILIATION (for worker-based ops) or FAILED (for backend-l
 """
 
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 

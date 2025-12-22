@@ -274,7 +274,9 @@ class TestOperationsRepositoryUpdate:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_update_sets_completed_at_timestamp(self, mock_session, sample_record):
+    async def test_update_sets_completed_at_timestamp(
+        self, mock_session, sample_record
+    ):
         """update should set completed_at when status becomes terminal."""
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = sample_record

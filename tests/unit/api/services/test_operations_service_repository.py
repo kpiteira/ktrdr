@@ -187,9 +187,7 @@ class TestOperationsServiceRepositoryIntegration:
         mock_repository.get.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_get_operation_returns_none_when_not_in_db(
-        self, mock_repository
-    ):
+    async def test_get_operation_returns_none_when_not_in_db(self, mock_repository):
         """get_operation should return None when not in cache or DB."""
         mock_repository.get.return_value = None
 
@@ -330,12 +328,10 @@ class TestOperationsServiceRuntimeHandles:
         # Verify repository.create was called but task is NOT in the call
         # (tasks are runtime handles, not persisted)
         create_call_args = mock_repository.create.call_args[0][0]
-        assert not hasattr(create_call_args, 'task')
+        assert not hasattr(create_call_args, "task")
 
     @pytest.mark.asyncio
-    async def test_local_bridges_not_persisted(
-        self, mock_repository, sample_metadata
-    ):
+    async def test_local_bridges_not_persisted(self, mock_repository, sample_metadata):
         """local_bridges should remain in-memory, not persisted."""
         sample_op = OperationInfo(
             operation_id="op_bridge_test",

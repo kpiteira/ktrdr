@@ -14,21 +14,21 @@ class TestOperationRecordModel:
         columns = OperationRecord.__table__.columns
 
         required_columns = [
-            'operation_id',
-            'operation_type',
-            'status',
-            'worker_id',
-            'is_backend_local',
-            'created_at',
-            'started_at',
-            'completed_at',
-            'progress_percent',
-            'progress_message',
-            'metadata',
-            'result',
-            'error_message',
-            'last_heartbeat_at',
-            'reconciliation_status',
+            "operation_id",
+            "operation_type",
+            "status",
+            "worker_id",
+            "is_backend_local",
+            "created_at",
+            "started_at",
+            "completed_at",
+            "progress_percent",
+            "progress_message",
+            "metadata",
+            "result",
+            "error_message",
+            "last_heartbeat_at",
+            "reconciliation_status",
         ]
 
         for col_name in required_columns:
@@ -37,28 +37,31 @@ class TestOperationRecordModel:
     def test_operation_id_is_primary_key(self):
         """operation_id should be the primary key."""
         columns = OperationRecord.__table__.columns
-        assert columns['operation_id'].primary_key is True
+        assert columns["operation_id"].primary_key is True
 
     def test_status_is_not_nullable(self):
         """status should be required (not nullable)."""
         columns = OperationRecord.__table__.columns
-        assert columns['status'].nullable is False
+        assert columns["status"].nullable is False
 
     def test_operation_type_is_not_nullable(self):
         """operation_type should be required (not nullable)."""
         columns = OperationRecord.__table__.columns
-        assert columns['operation_type'].nullable is False
+        assert columns["operation_type"].nullable is False
 
     def test_worker_id_is_nullable(self):
         """worker_id should be nullable (operations may not have a worker assigned)."""
         columns = OperationRecord.__table__.columns
-        assert columns['worker_id'].nullable is True
+        assert columns["worker_id"].nullable is True
 
     def test_created_at_has_default(self):
         """created_at should have a server default."""
         columns = OperationRecord.__table__.columns
         # Check that there's a server_default or default
-        assert columns['created_at'].server_default is not None or columns['created_at'].default is not None
+        assert (
+            columns["created_at"].server_default is not None
+            or columns["created_at"].default is not None
+        )
 
     def test_table_has_indexes(self):
         """Table should have indexes on status, worker_id, and operation_type."""
@@ -69,13 +72,13 @@ class TestOperationRecordModel:
                 index_columns.add(col.name)
 
         # Check that the key columns are indexed
-        assert 'status' in index_columns, "Missing index on 'status'"
-        assert 'worker_id' in index_columns, "Missing index on 'worker_id'"
-        assert 'operation_type' in index_columns, "Missing index on 'operation_type'"
+        assert "status" in index_columns, "Missing index on 'status'"
+        assert "worker_id" in index_columns, "Missing index on 'worker_id'"
+        assert "operation_type" in index_columns, "Missing index on 'operation_type'"
 
     def test_tablename(self):
         """Table name should be 'operations'."""
-        assert OperationRecord.__tablename__ == 'operations'
+        assert OperationRecord.__tablename__ == "operations"
 
     def test_metadata_column_uses_jsonb(self):
         """metadata column should use JSONB type.
@@ -85,14 +88,14 @@ class TestOperationRecordModel:
         """
         columns = OperationRecord.__table__.columns
         # The column type should be JSONB (PostgreSQL JSON with binary storage)
-        col_type = str(columns['metadata'].type)
-        assert 'JSONB' in col_type.upper() or 'JSON' in col_type.upper()
+        col_type = str(columns["metadata"].type)
+        assert "JSONB" in col_type.upper() or "JSON" in col_type.upper()
 
     def test_result_column_uses_jsonb(self):
         """result column should use JSONB type."""
         columns = OperationRecord.__table__.columns
-        col_type = str(columns['result'].type)
-        assert 'JSONB' in col_type.upper() or 'JSON' in col_type.upper()
+        col_type = str(columns["result"].type)
+        assert "JSONB" in col_type.upper() or "JSON" in col_type.upper()
 
 
 class TestOperationRecordCreation:
@@ -116,9 +119,9 @@ class TestOperationRecordCreation:
     def test_is_backend_local_column_has_default(self):
         """is_backend_local should have a default of False."""
         columns = OperationRecord.__table__.columns
-        assert columns['is_backend_local'].default is not None
+        assert columns["is_backend_local"].default is not None
         # The default arg returns a ColumnDefault object, the actual default is accessed via .arg
-        assert columns['is_backend_local'].default.arg is False
+        assert columns["is_backend_local"].default.arg is False
 
     def test_create_full_operation_record(self):
         """Should be able to create a record with all fields populated."""

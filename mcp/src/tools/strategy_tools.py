@@ -10,14 +10,13 @@ to allow proper unit testing.
 
 from typing import Any
 
+from mcp.server.fastmcp import FastMCP
 from research_agents.services.strategy_service import (
     get_recent_strategies as _get_recent_strategies,
 )
 from research_agents.services.strategy_service import (
     save_strategy_config as _save_strategy_config,
 )
-
-from mcp.server.fastmcp import FastMCP
 
 from ..telemetry import trace_mcp_tool
 

@@ -1031,6 +1031,7 @@ class TestReconciliation:
         from ktrdr.api.models.operations import (
             OperationStatus,
         )
+
         mock_operation = AsyncMock()
         mock_operation.status = OperationStatus.RUNNING
         mock_operation.operation_id = "op-123"
@@ -1038,6 +1039,7 @@ class TestReconciliation:
 
         # Create completed operation report
         from ktrdr.api.models.workers import CompletedOperationReport
+
         completed_report = CompletedOperationReport(
             operation_id="op-123",
             status="COMPLETED",
@@ -1068,12 +1070,14 @@ class TestReconciliation:
 
         # Mock an operation that is already COMPLETED in DB
         from ktrdr.api.models.operations import OperationStatus
+
         mock_operation = AsyncMock()
         mock_operation.status = OperationStatus.COMPLETED
         mock_operation.operation_id = "op-123"
         mock_operations_service.get_operation.return_value = mock_operation
 
         from ktrdr.api.models.workers import CompletedOperationReport
+
         completed_report = CompletedOperationReport(
             operation_id="op-123",
             status="COMPLETED",
@@ -1101,12 +1105,14 @@ class TestReconciliation:
         registry.set_operations_service(mock_operations_service)
 
         from ktrdr.api.models.operations import OperationStatus
+
         mock_operation = AsyncMock()
         mock_operation.status = OperationStatus.RUNNING
         mock_operation.operation_id = "op-456"
         mock_operations_service.get_operation.return_value = mock_operation
 
         from ktrdr.api.models.workers import CompletedOperationReport
+
         failed_report = CompletedOperationReport(
             operation_id="op-456",
             status="FAILED",
@@ -1137,6 +1143,7 @@ class TestReconciliation:
         mock_operations_service.get_operation.return_value = None
 
         from ktrdr.api.models.workers import CompletedOperationReport
+
         completed_report = CompletedOperationReport(
             operation_id="unknown-op",
             status="COMPLETED",
@@ -1165,6 +1172,7 @@ class TestReconciliation:
         registry.set_operations_service(mock_operations_service)
 
         from ktrdr.api.models.operations import OperationStatus
+
         mock_operation = AsyncMock()
         mock_operation.status = OperationStatus.PENDING
         mock_operation.operation_id = "op-789"
@@ -1193,6 +1201,7 @@ class TestReconciliation:
         registry.set_operations_service(mock_operations_service)
 
         from ktrdr.api.models.operations import OperationStatus
+
         mock_operation = AsyncMock()
         mock_operation.status = OperationStatus.RUNNING
         mock_operation.operation_id = "op-789"
@@ -1218,6 +1227,7 @@ class TestReconciliation:
         registry.set_operations_service(mock_operations_service)
 
         from ktrdr.api.models.operations import OperationStatus
+
         mock_operation = AsyncMock()
         mock_operation.status = OperationStatus.FAILED
         mock_operation.operation_id = "op-789"
@@ -1245,6 +1255,7 @@ class TestReconciliation:
         registry.set_operations_service(mock_operations_service)
 
         from ktrdr.api.models.operations import OperationStatus
+
         mock_operation = AsyncMock()
         mock_operation.status = OperationStatus.COMPLETED
         mock_operation.operation_id = "op-completed"
@@ -1293,6 +1304,7 @@ class TestReconciliation:
         async def mock_get_operation(op_id):
             call_order.append(("get", op_id))
             from ktrdr.api.models.operations import OperationStatus
+
             mock_op = AsyncMock()
             mock_op.status = OperationStatus.RUNNING
             mock_op.operation_id = op_id
@@ -1312,6 +1324,7 @@ class TestReconciliation:
         mock_operations_service._repository.update.side_effect = mock_update
 
         from ktrdr.api.models.workers import CompletedOperationReport
+
         completed_report = CompletedOperationReport(
             operation_id="completed-op",
             status="COMPLETED",

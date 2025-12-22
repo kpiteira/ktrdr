@@ -387,7 +387,9 @@ class WorkerRegistry:
         from ktrdr.api.models.operations import OperationStatus
 
         for report in completed_operations:
-            operation = await self._operations_service.get_operation(report.operation_id)
+            operation = await self._operations_service.get_operation(
+                report.operation_id
+            )
 
             if operation is None:
                 logger.warning(
@@ -419,7 +421,9 @@ class WorkerRegistry:
                 )
             elif report.status == "FAILED":
                 await self._operations_service.fail_operation(
-                    report.operation_id, error_message=report.error_message
+                    report.operation_id,
+                    error_message=report.error_message
+                    or "Operation failed (no details)",
                 )
             elif report.status == "CANCELLED":
                 await self._operations_service.cancel_operation(report.operation_id)

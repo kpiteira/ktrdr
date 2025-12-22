@@ -73,7 +73,9 @@ class TestWorkerSelectionSpans:
         assert worker is not None
 
     @pytest.mark.asyncio
-    async def test_select_worker_span_attributes_with_available_workers(self, tracer_setup):
+    async def test_select_worker_span_attributes_with_available_workers(
+        self, tracer_setup
+    ):
         """Test that select_worker span has required attributes when workers available."""
         exporter = tracer_setup
         registry = WorkerRegistry()

@@ -163,7 +163,9 @@ class OperationsService:
             if parent_operation_id:
                 parent_found = parent_operation_id in self._cache
                 if not parent_found and self._repository:
-                    parent_found = await self._repository.get(parent_operation_id) is not None
+                    parent_found = (
+                        await self._repository.get(parent_operation_id) is not None
+                    )
                 if not parent_found:
                     raise DataError(
                         message=f"Parent operation not found: {parent_operation_id}",

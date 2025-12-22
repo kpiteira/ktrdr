@@ -5,7 +5,7 @@ async CRUD operations for the operations table.
 """
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -81,9 +81,7 @@ class OperationsRepository:
 
         return self._record_to_info(record)
 
-    async def update(
-        self, operation_id: str, **fields
-    ) -> Optional[OperationInfo]:
+    async def update(self, operation_id: str, **fields) -> Optional[OperationInfo]:
         """Update an operation's fields.
 
         Args:
@@ -115,7 +113,9 @@ class OperationsRepository:
         await self._session.commit()
         await self._session.refresh(record)
 
-        logger.debug(f"Updated operation record: {operation_id} with {list(fields.keys())}")
+        logger.debug(
+            f"Updated operation record: {operation_id} with {list(fields.keys())}"
+        )
         return self._record_to_info(record)
 
     async def list(
@@ -177,9 +177,12 @@ class OperationsRepository:
 
         Returns:
             The domain model representation.
+
+        Note:
+            SQLAlchemy Column types require cast() for mypy compatibility.
         """
-        # Parse metadata from JSONB
-        metadata_dict = record.metadata_ or {}
+        # Parse metadata from JSONB (cast for mypy - SQLAlchemy Column type)
+        metadata_dict: dict[str, Any] = cast(dict[str, Any], record.metadata_) or {}
         metadata = OperationMetadata(
             symbol=metadata_dict.get("symbol"),
             timeframe=metadata_dict.get("timeframe"),
@@ -189,17 +192,20 @@ class OperationsRepository:
             parameters=metadata_dict.get("parameters", {}),
         )
 
-        # Build progress from stored fields
+        # Build progress from stored fields (cast for mypy)
         progress = OperationProgress(
-            percentage=record.progress_percent or 0.0,
-            current_step=record.progress_message,
+            percentage=cast(float, record.progress_percent) or 0.0,
+            current_step=cast(Optional[str], record.progress_message),
             steps_completed=0,  # Not stored in DB
             steps_total=0,  # Not stored in DB
+            items_processed=0,  # Not stored in DB
+            items_total=None,  # Not stored in DB
+            current_item=None,  # Not stored in DB
         )
 
         # Map operation type string to enum
         try:
-            operation_type = OperationType(record.operation_type)
+            operation_type = OperationType(cast(str, record.operation_type))
         except ValueError:
             # Handle unknown operation types gracefully
             operation_type = OperationType.DUMMY
@@ -207,22 +213,24 @@ class OperationsRepository:
 
         # Map status string to enum
         try:
-            status = OperationStatus(record.status)
+            status = OperationStatus(cast(str, record.status))
         except ValueError:
             status = OperationStatus.PENDING
             logger.warning(f"Unknown status: {record.status}")
 
         return OperationInfo(
-            operation_id=record.operation_id,
+            operation_id=cast(str, record.operation_id),
+            parent_operation_id=None,  # Not stored in DB (yet)
             operation_type=operation_type,
             status=status,
-            created_at=record.created_at,
-            started_at=record.started_at,
-            completed_at=record.completed_at,
+            created_at=cast(datetime, record.created_at),
+            started_at=cast(Optional[datetime], record.started_at),
+            completed_at=cast(Optional[datetime], record.completed_at),
             progress=progress,
             metadata=metadata,
-            error_message=record.error_message,
-            result_summary=record.result,
+            error_message=cast(Optional[str], record.error_message),
+            result_summary=cast(Optional[dict[str, Any]], record.result),
+            metrics=None,  # Not stored in DB (yet)
         )
 
     @staticmethod
@@ -236,7 +244,7 @@ class OperationsRepository:
             The database record representation.
         """
         # Flatten metadata for JSONB storage
-        metadata_dict = {}
+        metadata_dict: dict[str, Any] = {}
         if info.metadata:
             if info.metadata.symbol:
                 metadata_dict["symbol"] = info.metadata.symbol

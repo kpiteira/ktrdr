@@ -12,7 +12,6 @@ Operations are persisted to survive backend restarts. The model includes:
 - Reconciliation support (heartbeat, reconciliation_status)
 """
 
-
 from sqlalchemy import (
     Boolean,
     Column,
