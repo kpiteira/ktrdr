@@ -47,6 +47,7 @@ async def run_milestone(
     on_task_complete: Callable[[Task, TaskResult], None] | None = None,
     on_tool_use: Callable[[str, dict], None] | None = None,
     notify: bool = True,
+    model: str | None = None,
 ) -> MilestoneResult:
     """Run all tasks in a milestone sequentially.
 
@@ -68,6 +69,8 @@ async def run_milestone(
             Receives (tool_name, tool_input) for each Claude tool invocation.
             Use with format_tool_call() for human-readable progress display.
         notify: Whether to send notifications on escalation (default True)
+        model: Claude model to use for task execution (e.g., 'sonnet', 'opus').
+            If None, uses Claude's default model.
 
     Returns:
         MilestoneResult with final status and aggregated metrics
@@ -139,6 +142,7 @@ async def run_milestone(
                     tracer,
                     notify=notify,
                     on_tool_use=on_tool_use,
+                    model=model,
                 )
 
                 # Record telemetry

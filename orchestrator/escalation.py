@@ -29,39 +29,35 @@ console = Console()
 # Module-level state for interpreter configuration
 _interpreter: LLMInterpreter | None = None
 _llm_only: bool = False
-_model: str | None = None
 
 
-def configure_interpreter(llm_only: bool = False, model: str | None = None) -> None:
+def configure_interpreter(llm_only: bool = False) -> None:
     """Configure interpreter behavior.
 
-    Called from CLI to set the detection mode and model.
+    Called from CLI to set the detection mode.
+    The interpreter always uses Haiku for fast, cheap output interpretation.
 
     Args:
         llm_only: If True, skip fast-path markers and always use LLM.
-        model: The model ID to use for LLM interpretation (e.g., 'claude-haiku-4-5-20251001').
     """
-    global _llm_only, _model, _interpreter
+    global _llm_only, _interpreter
     _llm_only = llm_only
-    _model = model
-    # Reset interpreter so it gets recreated with new model
+    # Reset interpreter so it gets recreated
     _interpreter = None
 
 
 def get_interpreter() -> LLMInterpreter:
     """Get the singleton LLM interpreter instance.
 
-    Lazily creates the interpreter on first use with the configured model.
+    Lazily creates the interpreter on first use.
+    Always uses Haiku for fast, cheap output interpretation.
 
     Returns:
         The LLMInterpreter instance.
     """
     global _interpreter
     if _interpreter is None:
-        if _model:
-            _interpreter = LLMInterpreter(model=_model)
-        else:
-            _interpreter = LLMInterpreter()
+        _interpreter = LLMInterpreter()  # Always uses Haiku default
     return _interpreter
 
 
@@ -268,23 +264,44 @@ async def escalate_and_wait(
                 message=f"Task {info.task_id}: {info.question[:50]}...",
             )
 
-        # Display formatted question
+        # Display Claude's full output first (what Claude actually said)
         console.print()
         console.print(
             Panel(
-                f"[bold]Claude's question:[/bold]\n\n{info.question}",
-                title=f"Task {info.task_id} - NEEDS HUMAN INPUT",
+                info.raw_output[:2000]
+                if len(info.raw_output) > 2000
+                else info.raw_output,
+                title=f"Task {info.task_id} - Claude's Output",
+                border_style="dim",
+            )
+        )
+
+        # Display parsed question
+        console.print()
+        console.print(
+            Panel(
+                f"[bold]Parsed question:[/bold]\n\n{info.question}",
+                title="NEEDS HUMAN INPUT",
                 border_style="yellow",
             )
         )
 
-        if info.options:
-            console.print("\n[bold]Options:[/bold]")
-            for i, opt in enumerate(info.options):
-                console.print(f"  {chr(65 + i)}) {opt}")
+        if info.options and len(info.options) > 0 and info.options[0]:
+            # Only show options if they look valid (not garbled)
+            valid_options = [
+                opt for opt in info.options if len(opt) > 2 and not opt.startswith('"')
+            ]
+            if valid_options:
+                console.print("\n[bold]Options:[/bold]")
+                for i, opt in enumerate(valid_options):
+                    console.print(f"  {chr(65 + i)}) {opt}")
 
-        if info.recommendation:
-            console.print(f"\n[bold]Recommendation:[/bold] {info.recommendation}")
+        if info.recommendation and len(info.recommendation) > 5:
+            # Only show recommendation if it looks valid
+            if not info.recommendation.startswith(
+                '"'
+            ) and not info.recommendation.startswith(")"):
+                console.print(f"\n[bold]Recommendation:[/bold] {info.recommendation}")
 
         # Get input
         console.print()

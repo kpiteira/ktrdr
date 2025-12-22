@@ -11,6 +11,225 @@ import json
 from unittest.mock import MagicMock, patch
 
 
+class TestStripMarkdown:
+    """Test the strip_markdown utility function."""
+
+    def test_strips_bold_asterisks(self):
+        """Should remove **bold** formatting."""
+        from orchestrator.llm_interpreter import strip_markdown
+
+        assert strip_markdown("**Hello** world") == "Hello world"
+        assert strip_markdown("This is **very important**") == "This is very important"
+
+    def test_strips_bold_underscores(self):
+        """Should remove __bold__ formatting."""
+        from orchestrator.llm_interpreter import strip_markdown
+
+        assert strip_markdown("__Hello__ world") == "Hello world"
+
+    def test_strips_headers(self):
+        """Should remove # header markers."""
+        from orchestrator.llm_interpreter import strip_markdown
+
+        assert strip_markdown("# Header") == "Header"
+        assert strip_markdown("## Subheader") == "Subheader"
+        assert strip_markdown("### Deep header") == "Deep header"
+
+    def test_strips_multiline_headers(self):
+        """Should remove headers from each line."""
+        from orchestrator.llm_interpreter import strip_markdown
+
+        result = strip_markdown("# Title\n## Section\nPlain text")
+        assert result == "Title\nSection\nPlain text"
+
+    def test_handles_none(self):
+        """Should return None for None input."""
+        from orchestrator.llm_interpreter import strip_markdown
+
+        assert strip_markdown(None) is None
+
+    def test_handles_empty_string(self):
+        """Should return empty string for empty input."""
+        from orchestrator.llm_interpreter import strip_markdown
+
+        assert strip_markdown("") == ""
+
+    def test_preserves_underscores_in_identifiers(self):
+        """Should not break variable names with underscores."""
+        from orchestrator.llm_interpreter import strip_markdown
+
+        result = strip_markdown("Use my_variable_name in the code")
+        assert "my_variable_name" in result
+
+    def test_complex_markdown(self):
+        """Should handle text with mixed markdown."""
+        from orchestrator.llm_interpreter import strip_markdown
+
+        text = "**QUESTION:** This task asks for caching but lacks **critical** specs"
+        result = strip_markdown(text)
+        assert "QUESTION:" in result
+        assert "critical" in result
+        assert "**" not in result
+
+    def test_strips_orphan_bold_at_start(self):
+        """Should remove ** at start of line without closing **."""
+        from orchestrator.llm_interpreter import strip_markdown
+
+        # This pattern appears in Claude output: "**QUESTION:" without closing **
+        result = strip_markdown("** This task asks for clarification")
+        assert result == "This task asks for clarification"
+        assert "**" not in result
+
+    def test_strips_orphan_bold_multiline(self):
+        """Should remove orphan ** from multiple lines."""
+        from orchestrator.llm_interpreter import strip_markdown
+
+        text = "**QUESTION: What approach?\n** Option A\n** Option B"
+        result = strip_markdown(text)
+        assert "**" not in result
+        assert "QUESTION:" in result
+        assert "Option A" in result
+        assert "Option B" in result
+
+
+class TestJsonExtraction:
+    """Test the JSON extraction helper."""
+
+    import pytest
+
+    @pytest.fixture(autouse=True)
+    def mock_claude_cli(self):
+        """Mock find_claude_cli for all tests in this class."""
+        with patch(
+            "orchestrator.llm_interpreter.find_claude_cli",
+            return_value="/usr/bin/claude",
+        ):
+            yield
+
+    def test_extracts_simple_json(self):
+        """Should extract simple JSON object."""
+        from orchestrator.llm_interpreter import LLMInterpreter
+
+        interpreter = LLMInterpreter()
+        result = interpreter._extract_json_object('{"key": "value"}')
+        assert result == {"key": "value"}
+
+    def test_extracts_json_with_surrounding_text(self):
+        """Should extract JSON from text with preamble and postamble."""
+        from orchestrator.llm_interpreter import LLMInterpreter
+
+        interpreter = LLMInterpreter()
+        text = 'Here is the result:\n{"needs_human": true}\nThat is all.'
+        result = interpreter._extract_json_object(text)
+        assert result == {"needs_human": True}
+
+    def test_handles_nested_json(self):
+        """Should handle JSON with nested objects."""
+        from orchestrator.llm_interpreter import LLMInterpreter
+
+        interpreter = LLMInterpreter()
+        text = '{"outer": {"inner": "value"}, "list": [1, 2, 3]}'
+        result = interpreter._extract_json_object(text)
+        assert result == {"outer": {"inner": "value"}, "list": [1, 2, 3]}
+
+    def test_handles_braces_in_strings(self):
+        """Should correctly handle JSON with braces inside string values."""
+        from orchestrator.llm_interpreter import LLMInterpreter
+
+        interpreter = LLMInterpreter()
+        text = '{"message": "Use {variable} syntax"}'
+        result = interpreter._extract_json_object(text)
+        assert result == {"message": "Use {variable} syntax"}
+
+    def test_handles_escaped_quotes(self):
+        """Should handle escaped quotes in strings."""
+        from orchestrator.llm_interpreter import LLMInterpreter
+
+        interpreter = LLMInterpreter()
+        text = r'{"message": "He said \"hello\""}'
+        result = interpreter._extract_json_object(text)
+        assert result == {"message": 'He said "hello"'}
+
+    def test_returns_none_for_no_json(self):
+        """Should return None when no JSON is found."""
+        from orchestrator.llm_interpreter import LLMInterpreter
+
+        interpreter = LLMInterpreter()
+        result = interpreter._extract_json_object("No JSON here")
+        assert result is None
+
+    def test_returns_none_for_invalid_json(self):
+        """Should return None for malformed JSON."""
+        from orchestrator.llm_interpreter import LLMInterpreter
+
+        interpreter = LLMInterpreter()
+        result = interpreter._extract_json_object('{"unclosed": "value"')
+        assert result is None
+
+
+class TestDataCleaning:
+    """Test the data cleaning for markdown removal."""
+
+    import pytest
+
+    @pytest.fixture(autouse=True)
+    def mock_claude_cli(self):
+        """Mock find_claude_cli for all tests in this class."""
+        with patch(
+            "orchestrator.llm_interpreter.find_claude_cli",
+            return_value="/usr/bin/claude",
+        ):
+            yield
+
+    def test_cleans_string_values(self):
+        """Should clean markdown from string values."""
+        from orchestrator.llm_interpreter import LLMInterpreter
+
+        interpreter = LLMInterpreter()
+        data = {"question": "**QUESTION:** What approach?", "recommendation": "Use **Redis**"}
+        result = interpreter._clean_data(data)
+
+        assert "**" not in result["question"]
+        assert "QUESTION:" in result["question"]
+        assert "**" not in result["recommendation"]
+        assert "Redis" in result["recommendation"]
+
+    def test_cleans_list_values(self):
+        """Should clean markdown from list items."""
+        from orchestrator.llm_interpreter import LLMInterpreter
+
+        interpreter = LLMInterpreter()
+        data = {"options": ["**Option A** - first", "__Option B__ - second"]}
+        result = interpreter._clean_data(data)
+
+        assert "**" not in result["options"][0]
+        assert "Option A" in result["options"][0]
+        assert "__" not in result["options"][1]
+        assert "Option B" in result["options"][1]
+
+    def test_preserves_boolean_values(self):
+        """Should not modify boolean values."""
+        from orchestrator.llm_interpreter import LLMInterpreter
+
+        interpreter = LLMInterpreter()
+        data = {"needs_human": True, "task_completed": False}
+        result = interpreter._clean_data(data)
+
+        assert result["needs_human"] is True
+        assert result["task_completed"] is False
+
+    def test_preserves_none_values(self):
+        """Should preserve None values."""
+        from orchestrator.llm_interpreter import LLMInterpreter
+
+        interpreter = LLMInterpreter()
+        data = {"question": None, "options": None}
+        result = interpreter._clean_data(data)
+
+        assert result["question"] is None
+        assert result["options"] is None
+
+
 class TestInterpretationResult:
     """Test the InterpretationResult dataclass."""
 
@@ -283,6 +502,26 @@ class TestLLMInterpreter:
             assert result.task_failed is False
             # Should indicate there was an interpreter error
             assert "Interpreter error" in result.error_message
+
+    def test_cli_terms_acceptance_error(self):
+        """Should provide clear message when Claude CLI needs terms acceptance."""
+        from orchestrator.llm_interpreter import LLMInterpreter
+
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_result.stderr = (
+            "[ACTION REQUIRED] An update to our Consumer Terms and Privacy Policy "
+            "has taken effect. You must run `claude` to review the updated terms."
+        )
+        mock_result.stdout = ""
+
+        with patch("subprocess.run", return_value=mock_result):
+            interpreter = LLMInterpreter()
+            result = interpreter.interpret("some output")
+
+            assert result.needs_human is True
+            assert "terms acceptance" in result.error_message.lower()
+            assert "run 'claude'" in result.error_message.lower()
 
     def test_json_parse_error_with_embedded_json(self):
         """Should extract embedded JSON from response with extra text."""

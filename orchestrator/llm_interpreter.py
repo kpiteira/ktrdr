@@ -12,6 +12,43 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+
+def strip_markdown(text: str | None) -> str | None:
+    """Strip common markdown formatting from text.
+
+    Removes:
+    - Bold: **text** or __text__ → text
+    - Orphan bold markers: ** at start of text/line
+    - Headers: # Header → Header
+    - Leading/trailing whitespace
+
+    Args:
+        text: The text to clean.
+
+    Returns:
+        Cleaned text with markdown formatting removed, or None if input was None.
+    """
+    if text is None:
+        return None
+
+    # Remove complete bold markers (**text** or __text__)
+    result = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
+    result = re.sub(r"__(.+?)__", r"\1", result)
+
+    # Remove orphan ** at the start of lines (e.g., "**QUESTION:" with no closing **)
+    result = re.sub(r"^\*\*\s*", "", result, flags=re.MULTILINE)
+
+    # Remove orphan ** that appears after a newline or space
+    result = re.sub(r"(\s)\*\*\s*", r"\1", result)
+
+    # Remove header markers (# Header)
+    result = re.sub(r"^#+\s*", "", result, flags=re.MULTILINE)
+
+    # Remove italic markers (*text* or _text_) - be careful not to break underscores in identifiers
+    result = re.sub(r"(?<!\w)\*([^*\n]+)\*(?!\w)", r"\1", result)
+
+    return result.strip()
+
 # Cache for the Claude CLI path
 _claude_cli_path: str | None = None
 
@@ -74,21 +111,32 @@ class InterpretationResult:
 MAX_OUTPUT_LENGTH = 8000
 
 # Prompt template for interpretation
-INTERPRETATION_PROMPT = """Analyze this Claude Code output and return ONLY valid JSON.
+INTERPRETATION_PROMPT = """Analyze this Claude Code output and determine if human input is needed.
 
-IMPORTANT:
-- Return ONLY the JSON object, nothing else
-- All string values must be plain text (NO markdown formatting like ** or __)
-- Extract the actual question being asked, not the formatting
+Return ONLY a valid JSON object with no additional text.
 
+CRITICAL RULES:
+1. Return ONLY the JSON, nothing before or after
+2. All string values MUST be plain text - NO markdown (**bold**, __italic__, #headers)
+3. For "question": Extract the COMPLETE question including all context. If there are multiple related questions or sub-questions, combine them into one coherent question.
+4. For "options": Extract each distinct choice as a separate array element
+5. For "recommendation": Extract the suggested approach if one is given
+
+Detect "needs_human" as TRUE if:
+- Claude explicitly asks a question requiring human decision
+- Claude presents options/choices for the user to pick from
+- Claude says it needs clarification, is uncertain, or can't proceed without input
+- The output contains "ESCALATION", "NEEDS_HUMAN", or asks "which approach should I take?"
+
+JSON format:
 {{
   "needs_human": true or false,
-  "question": "the exact question being asked, plain text only" or null,
-  "options": ["option 1 text", "option 2 text"] or null,
-  "recommendation": "the recommendation, plain text only" or null,
+  "question": "Complete question text, plain text only, include all context and sub-questions" or null,
+  "options": ["Option A description", "Option B description", ...] or null,
+  "recommendation": "Recommended approach if stated" or null,
   "task_completed": true or false,
   "task_failed": true or false,
-  "error_message": "error details" or null
+  "error_message": "Error details if task failed" or null
 }}
 
 Output to analyze:
@@ -154,6 +202,13 @@ class LLMInterpreter:
             if result.returncode != 0:
                 # CLI failed - use fallback. Error may be in stdout or stderr.
                 error_text = result.stderr or result.stdout or "unknown error"
+
+                # Check for known CLI issues with clearer messages
+                if "Consumer Terms" in error_text or "Privacy Policy" in error_text:
+                    return self._create_fallback_result(
+                        "Claude CLI needs terms acceptance. Run 'claude' directly first to accept."
+                    )
+
                 return self._create_fallback_result(
                     f"Interpreter error: {error_text[:200]}"
                 )
@@ -176,26 +231,100 @@ class LLMInterpreter:
         Returns:
             Parsed InterpretationResult.
         """
+        data = None
+
+        # Try direct JSON parse first
         try:
-            # Try direct JSON parse first
             data = json.loads(response.strip())
-            return InterpretationResult(**data)
         except (json.JSONDecodeError, TypeError):
             pass
 
-        # Try to extract embedded JSON from response
+        # Try to extract embedded JSON using balanced brace matching
+        if data is None:
+            data = self._extract_json_object(response)
+
+        if data is None:
+            return self._create_fallback_result(
+                "Interpreter error: could not parse response"
+            )
+
+        # Clean markdown from string values
+        data = self._clean_data(data)
+
         try:
-            json_match = re.search(r"\{[^{}]*\}", response, re.DOTALL)
-            if json_match:
-                data = json.loads(json_match.group())
-                return InterpretationResult(**data)
-        except (json.JSONDecodeError, TypeError):
-            pass
+            return InterpretationResult(**data)
+        except TypeError as e:
+            return self._create_fallback_result(f"Interpreter error: {e}")
 
-        # Fallback if we can't parse
-        return self._create_fallback_result(
-            "Interpreter error: could not parse response"
-        )
+    def _extract_json_object(self, text: str) -> dict | None:
+        """Extract a JSON object from text using balanced brace matching.
+
+        Finds the first { and matches it to its closing } by counting braces,
+        handling nested objects properly.
+
+        Args:
+            text: The text potentially containing a JSON object.
+
+        Returns:
+            Parsed dict if found, None otherwise.
+        """
+        start = text.find("{")
+        if start == -1:
+            return None
+
+        depth = 0
+        in_string = False
+        escape_next = False
+
+        for i, char in enumerate(text[start:], start):
+            if escape_next:
+                escape_next = False
+                continue
+
+            if char == "\\":
+                escape_next = True
+                continue
+
+            if char == '"' and not escape_next:
+                in_string = not in_string
+                continue
+
+            if in_string:
+                continue
+
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    try:
+                        return json.loads(text[start : i + 1])
+                    except json.JSONDecodeError:
+                        return None
+
+        return None
+
+    def _clean_data(self, data: dict) -> dict:
+        """Clean markdown formatting from string values in the data dict.
+
+        Args:
+            data: The parsed JSON data.
+
+        Returns:
+            Data with markdown stripped from string values.
+        """
+        cleaned = {}
+        for key, value in data.items():
+            if isinstance(value, str):
+                cleaned[key] = strip_markdown(value)
+            elif isinstance(value, list):
+                cleaned[key] = [
+                    strip_markdown(item) if isinstance(item, str) else item
+                    for item in value
+                ]
+            else:
+                cleaned[key] = value
+        return cleaned
 
     def _create_fallback_result(self, error_message: str) -> InterpretationResult:
         """Create a fallback result when interpretation fails.

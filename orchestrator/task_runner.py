@@ -32,6 +32,8 @@ async def run_task(
     plan_path: str,
     human_guidance: str | None = None,
     on_tool_use: Callable[[str, dict], None] | None = None,
+    model: str | None = None,
+    session_id: str | None = None,
 ) -> TaskResult:
     """Execute a task via Claude Code in the sandbox.
 
@@ -43,6 +45,8 @@ async def run_task(
         human_guidance: Optional guidance from human (for retry after escalation)
         on_tool_use: Optional callback for streaming tool use events.
             If provided, uses streaming mode for real-time progress visibility.
+        model: Claude model to use (e.g., 'sonnet', 'opus'). If None, uses default.
+        session_id: Session ID to resume. If provided, continues previous session.
 
     Returns:
         TaskResult with execution outcome
@@ -60,6 +64,8 @@ async def run_task(
             on_tool_use=on_tool_use,
             max_turns=config.max_turns,
             timeout=config.task_timeout_seconds,
+            model=model,
+            session_id=session_id,
         )
     else:
         # Use standard mode (no streaming)
@@ -67,6 +73,8 @@ async def run_task(
             prompt=prompt,
             max_turns=config.max_turns,
             timeout=config.task_timeout_seconds,
+            model=model,
+            session_id=session_id,
         )
 
     duration = time.time() - start_time
@@ -201,6 +209,7 @@ async def run_task_with_escalation(
     tracer: trace.Tracer,
     notify: bool = True,
     on_tool_use: Callable[[str, dict], None] | None = None,
+    model: str | None = None,
 ) -> TaskResult:
     """Execute task with escalation and retry support.
 
@@ -208,6 +217,7 @@ async def run_task_with_escalation(
     - Loop detection to prevent runaway execution
     - Escalation to human when Claude needs input
     - Retry with human guidance after escalation
+    - Session continuation via --resume after escalation
 
     Args:
         task: The task to execute
@@ -218,11 +228,13 @@ async def run_task_with_escalation(
         tracer: OpenTelemetry tracer for creating spans
         notify: Whether to send notifications on escalation
         on_tool_use: Optional callback for streaming tool use events
+        model: Claude model to use (e.g., 'sonnet', 'opus'). If None, uses default.
 
     Returns:
         TaskResult with execution outcome
     """
     guidance: str | None = None
+    session_id: str | None = None  # Track session for continuation
 
     while True:
         # Check loop detection before attempting
@@ -238,7 +250,7 @@ async def run_task_with_escalation(
             except (AttributeError, NameError):
                 pass  # Metrics not initialized
 
-            console.print(f"[bold red]LOOP DETECTED:[/bold] {reason}")
+            console.print(f"[bold red]LOOP DETECTED:[/] {reason}")
             return TaskResult(
                 task_id=task.id,
                 status="failed",
@@ -251,7 +263,13 @@ async def run_task_with_escalation(
             )
 
         # Execute the task
-        result = await run_task(task, sandbox, config, plan_path, guidance, on_tool_use)
+        result = await run_task(
+            task, sandbox, config, plan_path, guidance, on_tool_use, model, session_id
+        )
+
+        # Track session for continuation after escalation
+        if result.session_id:
+            session_id = result.session_id
 
         if result.status == "completed":
             return result
@@ -271,10 +289,12 @@ async def run_task_with_escalation(
 
             attempts = loop_detector.state.task_attempt_counts.get(task.id, 0)
             max_attempts = loop_detector.config.max_task_attempts
+            session_info = f" session {session_id[:8]}..." if session_id else ""
             console.print(
-                f"Task {task.id}: Resuming with guidance (attempt {attempts + 1}/{max_attempts})"
+                f"Task {task.id}: Resuming{session_info} with guidance "
+                f"(attempt {attempts + 1}/{max_attempts})"
             )
-            # Loop continues with guidance
+            # Loop continues with guidance and session resumption
 
         elif result.status == "failed":
             # Record failure for loop detection
@@ -284,7 +304,7 @@ async def run_task_with_escalation(
             max_attempts = loop_detector.config.max_task_attempts
 
             console.print(
-                f"Task {task.id}: [bold red]FAILED[/bold] (attempt {attempts}/{max_attempts})"
+                f"Task {task.id}: [bold red]FAILED[/] (attempt {attempts}/{max_attempts})"
             )
 
             if attempts < max_attempts:

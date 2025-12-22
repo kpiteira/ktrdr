@@ -105,6 +105,8 @@ class SandboxManager:
         max_turns: int = 50,
         allowed_tools: list[str] | None = None,
         timeout: int = 600,
+        model: str | None = None,
+        session_id: str | None = None,
     ) -> ClaudeResult:
         """Invoke Claude Code in the sandbox with JSON output.
 
@@ -113,6 +115,8 @@ class SandboxManager:
             max_turns: Maximum conversation turns
             allowed_tools: List of tools Claude can use
             timeout: Maximum execution time in seconds
+            model: Claude model to use (e.g., 'sonnet', 'opus'). If None, uses default.
+            session_id: Session ID to resume. If provided, continues previous session.
 
         Returns:
             ClaudeResult with parsed response
@@ -132,16 +136,29 @@ class SandboxManager:
             self.workspace_path,
             self.container_name,
             "claude",
-            "-p",
-            prompt,
-            "--output-format",
-            "json",
-            "--dangerously-skip-permissions",
-            "--max-turns",
-            str(max_turns),
-            "--allowedTools",
-            ",".join(tools),
         ]
+
+        # Add --resume if continuing a session
+        if session_id:
+            cmd.extend(["--resume", session_id])
+
+        cmd.extend(
+            [
+                "-p",
+                prompt,
+                "--output-format",
+                "json",
+                "--dangerously-skip-permissions",
+                "--max-turns",
+                str(max_turns),
+                "--allowedTools",
+                ",".join(tools),
+            ]
+        )
+
+        # Add model if specified
+        if model:
+            cmd.extend(["--model", model])
 
         result = subprocess.run(
             cmd,
@@ -172,6 +189,8 @@ class SandboxManager:
         max_turns: int = 50,
         allowed_tools: list[str] | None = None,
         timeout: int = 600,
+        model: str | None = None,
+        session_id: str | None = None,
     ) -> ClaudeResult:
         """Invoke Claude Code with streaming output for real-time progress.
 
@@ -184,6 +203,8 @@ class SandboxManager:
             max_turns: Maximum conversation turns
             allowed_tools: List of tools Claude can use
             timeout: Maximum execution time in seconds
+            model: Claude model to use (e.g., 'sonnet', 'opus'). If None, uses default.
+            session_id: Session ID to resume. If provided, continues previous session.
 
         Returns:
             ClaudeResult with parsed response
@@ -203,17 +224,30 @@ class SandboxManager:
             self.workspace_path,
             self.container_name,
             "claude",
-            "-p",
-            prompt,
-            "--output-format",
-            "stream-json",
-            "--verbose",  # Required for stream-json with -p
-            "--dangerously-skip-permissions",
-            "--max-turns",
-            str(max_turns),
-            "--allowedTools",
-            ",".join(tools),
         ]
+
+        # Add --resume if continuing a session
+        if session_id:
+            cmd.extend(["--resume", session_id])
+
+        cmd.extend(
+            [
+                "-p",
+                prompt,
+                "--output-format",
+                "stream-json",
+                "--verbose",  # Required for stream-json with -p
+                "--dangerously-skip-permissions",
+                "--max-turns",
+                str(max_turns),
+                "--allowedTools",
+                ",".join(tools),
+            ]
+        )
+
+        # Add model if specified
+        if model:
+            cmd.extend(["--model", model])
 
         # Use Popen for streaming output
         process = subprocess.Popen(

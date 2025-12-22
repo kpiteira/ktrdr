@@ -58,6 +58,7 @@ def mock_run_task_with_escalation() -> AsyncMock:
         tracer,
         notify: bool = True,
         on_tool_use=None,
+        model: str | None = None,
     ) -> TaskResult:
         return TaskResult(
             task_id=task.id,
@@ -274,6 +275,7 @@ class TestRunMilestoneStatusHandling:
             tracer,
             notify: bool = True,
             on_tool_use=None,
+            model: str | None = None,
         ) -> TaskResult:
             nonlocal call_count
             call_count += 1
@@ -335,6 +337,7 @@ class TestRunMilestoneStatusHandling:
             tracer,
             notify: bool = True,
             on_tool_use=None,
+            model: str | None = None,
         ) -> TaskResult:
             nonlocal call_count
             call_count += 1
@@ -428,6 +431,7 @@ class TestTaskCompleteCallback:
             tracer,
             notify: bool = True,
             on_tool_use=None,
+            model: str | None = None,
         ) -> TaskResult:
             return TaskResult(
                 task_id=task.id,
@@ -483,6 +487,7 @@ class TestTaskCompleteCallback:
             tracer,
             notify: bool = True,
             on_tool_use=None,
+            model: str | None = None,
         ) -> TaskResult:
             if task.id == "1.2":
                 return TaskResult(
@@ -641,6 +646,7 @@ class TestLoopDetectionIntegration:
             tracer,
             notify: bool = True,
             on_tool_use=None,
+            model: str | None = None,
         ) -> TaskResult:
             # Capture the state reference from the loop detector
             detector_state_refs.append(loop_detector.state)
@@ -692,6 +698,7 @@ class TestLoopDetectionIntegration:
             tracer,
             notify: bool = True,
             on_tool_use=None,
+            model: str | None = None,
         ) -> TaskResult:
             nonlocal call_count
             call_count += 1
@@ -755,6 +762,7 @@ class TestLoopDetectionIntegration:
             tracer,
             notify: bool = True,
             on_tool_use=None,
+            model: str | None = None,
         ) -> TaskResult:
             nonlocal call_count
             call_count += 1
@@ -829,6 +837,7 @@ class TestLoopDetectionIntegration:
             tracer,
             notify: bool = True,
             on_tool_use=None,
+            model: str | None = None,
         ) -> TaskResult:
             captured_detector.append(loop_detector)
             return TaskResult(
