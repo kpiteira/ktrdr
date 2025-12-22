@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from ktrdr import get_logger
-from ktrdr.api.models.workers import WorkerType
+from ktrdr.api.models.workers import CompletedOperationReport, WorkerType
 from ktrdr.api.services.worker_registry import WorkerRegistry
 
 # Setup module-level logger
@@ -39,13 +39,27 @@ def get_worker_registry() -> WorkerRegistry:
 
 
 class WorkerRegistrationRequest(BaseModel):
-    """Request model for worker registration."""
+    """Request model for worker registration.
+
+    Supports resilience fields for re-registration after backend restart:
+    - current_operation_id: Operation currently being executed
+    - completed_operations: Operations that finished while backend was unavailable
+    """
 
     worker_id: str = Field(..., description="Unique identifier for the worker")
     worker_type: WorkerType = Field(..., description="Type of worker")
     endpoint_url: str = Field(..., description="HTTP URL where worker can be reached")
     capabilities: Optional[dict] = Field(
         default=None, description="Worker capabilities (cores, memory, etc.)"
+    )
+    # Resilience fields for re-registration (M1 checkpoint)
+    current_operation_id: Optional[str] = Field(
+        default=None,
+        description="ID of operation currently being executed by this worker",
+    )
+    completed_operations: list[CompletedOperationReport] = Field(
+        default_factory=list,
+        description="Operations that completed while backend was unavailable",
     )
 
     class Config:
@@ -57,6 +71,8 @@ class WorkerRegistrationRequest(BaseModel):
                 "worker_type": "backtesting",
                 "endpoint_url": "http://192.168.1.201:5003",
                 "capabilities": {"cores": 4, "memory_gb": 8},
+                "current_operation_id": None,
+                "completed_operations": [],
             }
         }
 

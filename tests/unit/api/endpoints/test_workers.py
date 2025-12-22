@@ -213,3 +213,119 @@ class TestListWorkersEndpoint:
         data = response.json()
 
         assert data == []
+
+
+class TestWorkerRegistrationWithResilience:
+    """Tests for worker registration with resilience fields (M1 checkpoint)."""
+
+    def test_register_worker_with_current_operation(self, client, worker_registry):
+        """Test registering a worker that reports a current operation."""
+        response = client.post(
+            "/api/v1/workers/register",
+            json={
+                "worker_id": "training-1",
+                "worker_type": "training",
+                "endpoint_url": "http://192.168.1.201:5004",
+                "current_operation_id": "op_training_123",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["worker_id"] == "training-1"
+        # Note: The endpoint doesn't return current_operation_id in response,
+        # but it should accept it without error
+
+    def test_register_worker_with_completed_operations(self, client, worker_registry):
+        """Test registering a worker that reports completed operations."""
+        response = client.post(
+            "/api/v1/workers/register",
+            json={
+                "worker_id": "training-2",
+                "worker_type": "training",
+                "endpoint_url": "http://192.168.1.202:5004",
+                "completed_operations": [
+                    {
+                        "operation_id": "op_completed_1",
+                        "status": "COMPLETED",
+                        "result": {"accuracy": 0.95},
+                        "completed_at": "2024-01-15T10:30:00Z",
+                    },
+                    {
+                        "operation_id": "op_failed_1",
+                        "status": "FAILED",
+                        "error_message": "Out of memory",
+                        "completed_at": "2024-01-15T11:00:00Z",
+                    },
+                ],
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["worker_id"] == "training-2"
+
+    def test_register_worker_with_all_resilience_fields(self, client, worker_registry):
+        """Test registering a worker with all new resilience fields."""
+        response = client.post(
+            "/api/v1/workers/register",
+            json={
+                "worker_id": "training-3",
+                "worker_type": "training",
+                "endpoint_url": "http://192.168.1.203:5004",
+                "capabilities": {"gpu": True, "memory_gb": 16},
+                "current_operation_id": "op_running_456",
+                "completed_operations": [
+                    {
+                        "operation_id": "op_done_1",
+                        "status": "COMPLETED",
+                        "result": {"model_path": "/models/v1.pt"},
+                        "completed_at": "2024-01-15T09:00:00Z",
+                    },
+                ],
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["worker_id"] == "training-3"
+        assert data["capabilities"] == {"gpu": True, "memory_gb": 16}
+
+    def test_register_worker_backward_compatible(self, client, worker_registry):
+        """Test that registration still works without new fields (backward compatible)."""
+        # This is essentially the same as existing tests, but explicit about backward compatibility
+        response = client.post(
+            "/api/v1/workers/register",
+            json={
+                "worker_id": "backtest-compat",
+                "worker_type": "backtesting",
+                "endpoint_url": "http://192.168.1.204:5003",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["worker_id"] == "backtest-compat"
+
+    def test_register_worker_invalid_completed_operation_status(
+        self, client, worker_registry
+    ):
+        """Test that invalid status in completed_operations is rejected."""
+        response = client.post(
+            "/api/v1/workers/register",
+            json={
+                "worker_id": "training-invalid",
+                "worker_type": "training",
+                "endpoint_url": "http://192.168.1.205:5004",
+                "completed_operations": [
+                    {
+                        "operation_id": "op_bad",
+                        "status": "RUNNING",  # Invalid - not a terminal status
+                        "completed_at": "2024-01-15T10:30:00Z",
+                    },
+                ],
+            },
+        )
+
+        # Should fail validation
+        assert response.status_code == 422

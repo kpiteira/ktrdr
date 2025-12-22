@@ -7,7 +7,9 @@ distributed training and backtesting architecture.
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Literal, Optional
+
+from pydantic import BaseModel
 
 
 class WorkerType(str, Enum):
@@ -27,6 +29,22 @@ class WorkerStatus(str, Enum):
     AVAILABLE = "available"
     BUSY = "busy"
     TEMPORARILY_UNAVAILABLE = "temporarily_unavailable"
+
+
+class CompletedOperationReport(BaseModel):
+    """
+    Report of an operation that completed while backend was unavailable.
+
+    Workers use this to report operations that finished during a backend
+    restart. The backend reconciles these with its database state on
+    worker re-registration.
+    """
+
+    operation_id: str
+    status: Literal["COMPLETED", "FAILED", "CANCELLED"]
+    result: Optional[dict] = None
+    error_message: Optional[str] = None
+    completed_at: datetime
 
 
 @dataclass
