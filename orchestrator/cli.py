@@ -10,6 +10,7 @@ from pathlib import Path
 
 import click
 from rich.console import Console
+from rich.table import Table
 
 from orchestrator import telemetry
 from orchestrator.config import OrchestratorConfig
@@ -355,6 +356,63 @@ async def _prompt_for_pr(result: MilestoneResult, config: OrchestratorConfig) ->
             console.print(f"[red]PR creation failed:[/red] {pr_result.result}")
         else:
             console.print(pr_result.result)
+
+
+@cli.command()
+@click.option("--milestone", "-m", default=None, help="Filter by milestone name")
+@click.option("--limit", "-n", default=10, help="Number of runs to show")
+def history(milestone: str | None, limit: int) -> None:
+    """Show history of milestone runs."""
+    config = OrchestratorConfig.from_env()
+
+    # Find all state files
+    if not config.state_dir.exists():
+        console.print("[yellow]No state directory found[/yellow]")
+        return
+
+    state_files = list(config.state_dir.glob("*_state.json"))
+
+    if not state_files:
+        console.print("[yellow]No milestone runs found[/yellow]")
+        return
+
+    # Load and filter states
+    runs: list[OrchestratorState] = []
+    for path in state_files:
+        milestone_id = path.stem.replace("_state", "")
+        state = OrchestratorState.load(config.state_dir, milestone_id)
+        if state:
+            if milestone is None or milestone in state.milestone_id:
+                runs.append(state)
+
+    # Sort by date descending (most recent first)
+    runs.sort(key=lambda s: s.started_at, reverse=True)
+    runs = runs[:limit]
+
+    if not runs:
+        console.print("[yellow]No matching milestone runs found[/yellow]")
+        return
+
+    # Display table
+    table = Table(title="Milestone History")
+    table.add_column("Milestone")
+    table.add_column("Started")
+    table.add_column("Tasks")
+    table.add_column("E2E")
+    table.add_column("Cost")
+
+    for run in runs:
+        total_cost = sum(r.get("cost_usd", 0) for r in run.task_results.values())
+        total_tasks = len(run.completed_tasks) + len(run.failed_tasks)
+        table.add_row(
+            run.milestone_id,
+            run.started_at.strftime("%Y-%m-%d %H:%M"),
+            f"{len(run.completed_tasks)}/{total_tasks}",
+            run.e2e_status or "-",
+            f"${total_cost:.2f}",
+        )
+
+    console.print(table)
 
 
 def main() -> None:
