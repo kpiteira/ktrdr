@@ -23,6 +23,8 @@ tasks_counter: metrics.Counter
 tokens_counter: metrics.Counter
 cost_counter: metrics.Counter
 task_duration: metrics.Histogram
+escalations_counter: metrics.Counter
+loops_counter: metrics.Counter
 
 
 def setup_telemetry(config: OrchestratorConfig) -> tuple[trace.Tracer, metrics.Meter]:
@@ -83,6 +85,8 @@ def create_metrics(meter: metrics.Meter) -> None:
     - Tasks executed (by status)
     - Tokens used
     - Cost in USD
+    - Escalations to human (by task_id)
+    - Loops detected (by type: task or e2e)
 
     And histograms for:
     - Task duration distribution (for P50/P95/P99 percentiles)
@@ -91,6 +95,7 @@ def create_metrics(meter: metrics.Meter) -> None:
         meter: OpenTelemetry meter for creating instruments
     """
     global tasks_counter, tokens_counter, cost_counter, task_duration
+    global escalations_counter, loops_counter
 
     tasks_counter = meter.create_counter(
         "orchestrator_tasks_total",
@@ -111,4 +116,14 @@ def create_metrics(meter: metrics.Meter) -> None:
         "orchestrator_task_duration_seconds",
         description="Task execution duration",
         unit="s",
+    )
+
+    escalations_counter = meter.create_counter(
+        "orchestrator_escalations_total",
+        description="Total escalations to human",
+    )
+
+    loops_counter = meter.create_counter(
+        "orchestrator_loops_detected_total",
+        description="Total loops detected",
     )

@@ -51,12 +51,22 @@ def health(check: str | None) -> None:
 @click.argument("plan_file", type=click.Path(exists=True))
 @click.argument("task_id")
 @click.option("--guidance", "-g", help="Additional guidance for Claude")
-def task(plan_file: str, task_id: str, guidance: str | None) -> None:
+@click.option(
+    "-m",
+    "--model",
+    type=click.Choice(["haiku", "sonnet", "opus"]),
+    default=None,
+    help="Claude model for task execution (default: Claude's default)",
+)
+def task(plan_file: str, task_id: str, guidance: str | None, model: str | None) -> None:
     """Execute a single task from a plan file."""
-    asyncio.run(_run_task(plan_file, task_id, guidance))
+    model_id = MODEL_ALIASES[model] if model else None
+    asyncio.run(_run_task(plan_file, task_id, guidance, model_id))
 
 
-async def _run_task(plan_file: str, task_id: str, guidance: str | None) -> None:
+async def _run_task(
+    plan_file: str, task_id: str, guidance: str | None, model: str | None = None
+) -> None:
     """Internal async implementation of task execution."""
     config = OrchestratorConfig.from_env()
     tracer, meter = setup_telemetry(config)
@@ -80,7 +90,12 @@ async def _run_task(plan_file: str, task_id: str, guidance: str | None) -> None:
         console.print("Invoking Claude Code...")
 
         result = await run_task(
-            target_task, sandbox, config, plan_file, human_guidance=guidance
+            target_task,
+            sandbox,
+            config,
+            plan_file,
+            human_guidance=guidance,
+            model=model,
         )
 
         # Record telemetry on span
@@ -122,19 +137,59 @@ async def _run_task(plan_file: str, task_id: str, guidance: str | None) -> None:
             console.print(f"\n[red]Error:[/red] {result.error}")
 
 
+# Model aliases for the --model flag
+MODEL_ALIASES = {
+    "haiku": "claude-haiku-4-5-20251001",
+    "sonnet": "claude-sonnet-4-5-20250929",
+    "opus": "claude-opus-4-5-20251101",
+}
+
+
 @cli.command()
 @click.argument("plan_file", type=click.Path(exists=True))
 @click.option("--notify/--no-notify", default=False, help="Send macOS notifications")
-def run(plan_file: str, notify: bool) -> None:
+@click.option(
+    "--llm-only",
+    is_flag=True,
+    help="Use LLM interpreter only for escalation detection, skip regex fast-path",
+)
+@click.option(
+    "-m",
+    "--model",
+    type=click.Choice(["haiku", "sonnet", "opus"]),
+    default=None,
+    help="Claude model for task execution (default: Claude's default)",
+)
+def run(plan_file: str, notify: bool, llm_only: bool, model: str | None) -> None:
     """Run all tasks in a milestone."""
-    asyncio.run(_run_milestone(plan_file, resume=False, notify=notify))
+    from orchestrator.escalation import configure_interpreter
+
+    configure_interpreter(llm_only=llm_only)
+    model_id = MODEL_ALIASES[model] if model else None
+    asyncio.run(_run_milestone(plan_file, resume=False, notify=notify, model=model_id))
 
 
 @cli.command()
 @click.argument("plan_file", type=click.Path(exists=True))
 @click.option("--notify/--no-notify", default=False, help="Send macOS notifications")
-def resume(plan_file: str, notify: bool) -> None:
+@click.option(
+    "--llm-only",
+    is_flag=True,
+    help="Use LLM interpreter only for escalation detection, skip regex fast-path",
+)
+@click.option(
+    "-m",
+    "--model",
+    type=click.Choice(["haiku", "sonnet", "opus"]),
+    default=None,
+    help="Claude model for task execution (default: Claude's default)",
+)
+def resume(plan_file: str, notify: bool, llm_only: bool, model: str | None) -> None:
     """Resume a previously interrupted milestone."""
+    from orchestrator.escalation import configure_interpreter
+
+    configure_interpreter(llm_only=llm_only)
+
     config = OrchestratorConfig.from_env()
     milestone_id = Path(plan_file).stem
 
@@ -153,11 +208,15 @@ def resume(plan_file: str, notify: bool) -> None:
 
     console.print(f"Found state: {len(state.completed_tasks)} task(s) completed")
 
-    asyncio.run(_run_milestone(plan_file, resume=True, notify=notify))
+    model_id = MODEL_ALIASES[model] if model else None
+    asyncio.run(_run_milestone(plan_file, resume=True, notify=notify, model=model_id))
 
 
 async def _run_milestone(
-    plan_file: str, resume: bool = False, notify: bool = False
+    plan_file: str,
+    resume: bool = False,
+    notify: bool = False,
+    model: str | None = None,
 ) -> None:
     """Internal async implementation of milestone execution."""
     config = OrchestratorConfig.from_env()
@@ -212,6 +271,7 @@ async def _run_milestone(
                 tracer=tracer,
                 on_task_complete=on_task_complete,
                 on_tool_use=on_tool_use,
+                model=model,
             )
 
             # Output summary

@@ -288,3 +288,94 @@ class TestTaskDurationHistogram:
         # Should be able to record a duration
         telemetry.task_duration.record(45.5, {"milestone": "M3"})
         histogram_mock.record.assert_called_with(45.5, {"milestone": "M3"})
+
+
+class TestEscalationMetrics:
+    """Test escalation metrics."""
+
+    def test_creates_escalations_counter(self):
+        """Should create orchestrator_escalations_total counter."""
+        from orchestrator.telemetry import create_metrics
+
+        meter = MagicMock()
+        counter_mock = MagicMock()
+        meter.create_counter.return_value = counter_mock
+
+        create_metrics(meter)
+
+        counter_names = [call[0][0] for call in meter.create_counter.call_args_list]
+        assert "orchestrator_escalations_total" in counter_names
+
+    def test_escalations_counter_accessible(self):
+        """escalations_counter should be accessible as module-level variable."""
+        from orchestrator import telemetry
+        from orchestrator.telemetry import create_metrics
+
+        meter = MagicMock()
+        counter_mock = MagicMock()
+        meter.create_counter.return_value = counter_mock
+
+        create_metrics(meter)
+
+        assert telemetry.escalations_counter is not None
+
+    def test_escalations_counter_can_add(self):
+        """escalations_counter should support add() with task_id label."""
+        from orchestrator import telemetry
+        from orchestrator.telemetry import create_metrics
+
+        meter = MagicMock()
+        counter_mock = MagicMock()
+        meter.create_counter.return_value = counter_mock
+
+        create_metrics(meter)
+
+        telemetry.escalations_counter.add(1, {"task_id": "1.2"})
+        counter_mock.add.assert_called()
+
+
+class TestLoopDetectionMetrics:
+    """Test loop detection metrics."""
+
+    def test_creates_loops_counter(self):
+        """Should create orchestrator_loops_detected_total counter."""
+        from orchestrator.telemetry import create_metrics
+
+        meter = MagicMock()
+        counter_mock = MagicMock()
+        meter.create_counter.return_value = counter_mock
+
+        create_metrics(meter)
+
+        counter_names = [call[0][0] for call in meter.create_counter.call_args_list]
+        assert "orchestrator_loops_detected_total" in counter_names
+
+    def test_loops_counter_accessible(self):
+        """loops_counter should be accessible as module-level variable."""
+        from orchestrator import telemetry
+        from orchestrator.telemetry import create_metrics
+
+        meter = MagicMock()
+        counter_mock = MagicMock()
+        meter.create_counter.return_value = counter_mock
+
+        create_metrics(meter)
+
+        assert telemetry.loops_counter is not None
+
+    def test_loops_counter_can_add_with_type_label(self):
+        """loops_counter should support add() with type label."""
+        from orchestrator import telemetry
+        from orchestrator.telemetry import create_metrics
+
+        meter = MagicMock()
+        counter_mock = MagicMock()
+        meter.create_counter.return_value = counter_mock
+
+        create_metrics(meter)
+
+        telemetry.loops_counter.add(1, {"type": "task"})
+        counter_mock.add.assert_called()
+
+        telemetry.loops_counter.add(1, {"type": "e2e"})
+        assert counter_mock.add.call_count >= 2

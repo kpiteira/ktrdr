@@ -8,9 +8,21 @@ import re
 import time
 from typing import Callable, Literal
 
+from opentelemetry import trace
+from rich.console import Console
+
+from orchestrator import telemetry
 from orchestrator.config import OrchestratorConfig
+from orchestrator.escalation import (
+    EscalationInfo,
+    escalate_and_wait,
+    get_interpreter,
+)
+from orchestrator.loop_detector import LoopDetector
 from orchestrator.models import Task, TaskResult
 from orchestrator.sandbox import SandboxManager
+
+console = Console()
 
 
 async def run_task(
@@ -20,6 +32,8 @@ async def run_task(
     plan_path: str,
     human_guidance: str | None = None,
     on_tool_use: Callable[[str, dict], None] | None = None,
+    model: str | None = None,
+    session_id: str | None = None,
 ) -> TaskResult:
     """Execute a task via Claude Code in the sandbox.
 
@@ -31,6 +45,8 @@ async def run_task(
         human_guidance: Optional guidance from human (for retry after escalation)
         on_tool_use: Optional callback for streaming tool use events.
             If provided, uses streaming mode for real-time progress visibility.
+        model: Claude model to use (e.g., 'sonnet', 'opus'). If None, uses default.
+        session_id: Session ID to resume. If provided, continues previous session.
 
     Returns:
         TaskResult with execution outcome
@@ -48,6 +64,8 @@ async def run_task(
             on_tool_use=on_tool_use,
             max_turns=config.max_turns,
             timeout=config.task_timeout_seconds,
+            model=model,
+            session_id=session_id,
         )
     else:
         # Use standard mode (no streaming)
@@ -55,6 +73,8 @@ async def run_task(
             prompt=prompt,
             max_turns=config.max_turns,
             timeout=config.task_timeout_seconds,
+            model=model,
+            session_id=session_id,
         )
 
     duration = time.time() - start_time
@@ -82,9 +102,7 @@ async def run_task(
     )
 
 
-def _build_prompt(
-    task: Task, plan_path: str, human_guidance: str | None = None
-) -> str:
+def _build_prompt(task: Task, plan_path: str, human_guidance: str | None = None) -> str:
     """Build the prompt for Claude Code execution using /ktask skill.
 
     Invokes the /ktask skill which handles:
@@ -122,7 +140,10 @@ def parse_task_output(
 ]:
     """Parse structured output from Claude Code.
 
-    Extracts STATUS and related fields from Claude's output.
+    Uses a hybrid approach:
+    1. First checks for explicit STATUS markers (fast path)
+    2. If no marker found, uses LLM interpretation for semantic understanding
+       The LLM interpreter extracts question/options/recommendation semantically.
 
     Args:
         output: Raw output text from Claude Code
@@ -137,30 +158,156 @@ def parse_task_output(
     recommendation: str | None = None
     error: str | None = None
 
-    # Parse STATUS
+    # Parse explicit STATUS marker (fast path)
     status_match = re.search(r"STATUS:\s*(completed|failed|needs_human)", output)
     if status_match:
         status = status_match.group(1)  # type: ignore[assignment]
+    else:
+        # No explicit marker - use LLM interpretation for semantic understanding
+        interpreter_result = get_interpreter().interpret(output)
+        if interpreter_result.needs_human:
+            status = "needs_human"
+            # Use question/options/recommendation from LLM interpretation
+            question = interpreter_result.question
+            options = interpreter_result.options
+            recommendation = interpreter_result.recommendation
+        elif interpreter_result.task_failed:
+            status = "failed"
+            error = interpreter_result.error_message
+        # else: default to "completed" (LLM said task completed)
 
-    # Parse ERROR for failed status
+    # Parse ERROR for failed status (explicit marker overrides LLM)
     error_match = re.search(r"ERROR:\s*(.+?)(?:\n|$)", output)
     if error_match:
         error = error_match.group(1).strip()
 
-    # Parse QUESTION for needs_human status
+    # Parse QUESTION for needs_human status (explicit marker overrides LLM)
     question_match = re.search(r"QUESTION:\s*(.+?)(?:\n|$)", output)
     if question_match:
         question = question_match.group(1).strip()
 
-    # Parse OPTIONS for needs_human status
+    # Parse OPTIONS for needs_human status (explicit marker overrides LLM)
     options_match = re.search(r"OPTIONS:\s*(.+?)(?:\n|$)", output)
     if options_match:
         options_str = options_match.group(1).strip()
         options = [opt.strip() for opt in options_str.split(",")]
 
-    # Parse RECOMMENDATION for needs_human status
+    # Parse RECOMMENDATION for needs_human status (explicit marker overrides LLM)
     rec_match = re.search(r"RECOMMENDATION:\s*(.+?)(?:\n|$)", output)
     if rec_match:
         recommendation = rec_match.group(1).strip()
 
     return status, question, options, recommendation, error
+
+
+async def run_task_with_escalation(
+    task: Task,
+    sandbox: SandboxManager,
+    config: OrchestratorConfig,
+    plan_path: str,
+    loop_detector: LoopDetector,
+    tracer: trace.Tracer,
+    notify: bool = True,
+    on_tool_use: Callable[[str, dict], None] | None = None,
+    model: str | None = None,
+) -> TaskResult:
+    """Execute task with escalation and retry support.
+
+    Wraps run_task with:
+    - Loop detection to prevent runaway execution
+    - Escalation to human when Claude needs input
+    - Retry with human guidance after escalation
+    - Session continuation via --resume after escalation
+
+    Args:
+        task: The task to execute
+        sandbox: Sandbox manager for Claude invocation
+        config: Orchestrator configuration
+        plan_path: Path to the milestone plan file
+        loop_detector: Loop detector for failure tracking
+        tracer: OpenTelemetry tracer for creating spans
+        notify: Whether to send notifications on escalation
+        on_tool_use: Optional callback for streaming tool use events
+        model: Claude model to use (e.g., 'sonnet', 'opus'). If None, uses default.
+
+    Returns:
+        TaskResult with execution outcome
+    """
+    guidance: str | None = None
+    session_id: str | None = None  # Track session for continuation
+
+    while True:
+        # Check loop detection before attempting
+        should_stop, reason = loop_detector.should_stop_task(task.id)
+        if should_stop:
+            with tracer.start_as_current_span("orchestrator.loop_detected") as span:
+                span.set_attribute("task.id", task.id)
+                span.set_attribute("reason", reason)
+
+            # Record loop detection metric
+            try:
+                telemetry.loops_counter.add(1, {"type": "task"})
+            except (AttributeError, NameError):
+                pass  # Metrics not initialized
+
+            console.print(f"[bold red]LOOP DETECTED:[/] {reason}")
+            return TaskResult(
+                task_id=task.id,
+                status="failed",
+                duration_seconds=0.0,
+                tokens_used=0,
+                cost_usd=0.0,
+                output="",
+                session_id="",
+                error=reason,
+            )
+
+        # Execute the task
+        result = await run_task(
+            task, sandbox, config, plan_path, guidance, on_tool_use, model, session_id
+        )
+
+        # Track session for continuation after escalation
+        if result.session_id:
+            session_id = result.session_id
+
+        if result.status == "completed":
+            return result
+
+        elif result.status == "needs_human":
+            # Extract escalation info and present to user
+            info = EscalationInfo(
+                task_id=task.id,
+                question=result.question or "Claude needs clarification.",
+                options=result.options,
+                recommendation=result.recommendation,
+                raw_output=result.output,
+            )
+
+            response = await escalate_and_wait(info, tracer, notify)
+            guidance = response
+
+            attempts = loop_detector.state.task_attempt_counts.get(task.id, 0)
+            max_attempts = loop_detector.config.max_task_attempts
+            session_info = f" session {session_id[:8]}..." if session_id else ""
+            console.print(
+                f"Task {task.id}: Resuming{session_info} with guidance "
+                f"(attempt {attempts + 1}/{max_attempts})"
+            )
+            # Loop continues with guidance and session resumption
+
+        elif result.status == "failed":
+            # Record failure for loop detection
+            loop_detector.record_task_failure(task.id, result.error or "Unknown error")
+
+            attempts = loop_detector.state.task_attempt_counts.get(task.id, 0)
+            max_attempts = loop_detector.config.max_task_attempts
+
+            console.print(
+                f"Task {task.id}: [bold red]FAILED[/] (attempt {attempts}/{max_attempts})"
+            )
+
+            if attempts < max_attempts:
+                console.print("Retrying...")
+                # Loop continues for retry
+            # else loop detection will catch it next iteration

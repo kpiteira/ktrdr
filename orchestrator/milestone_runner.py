@@ -13,11 +13,12 @@ from opentelemetry import trace
 
 from orchestrator import telemetry
 from orchestrator.config import OrchestratorConfig
+from orchestrator.loop_detector import LoopDetector, LoopDetectorConfig
 from orchestrator.models import ClaudeResult, Task, TaskResult
 from orchestrator.plan_parser import parse_plan
 from orchestrator.sandbox import SandboxManager
 from orchestrator.state import OrchestratorState
-from orchestrator.task_runner import run_task
+from orchestrator.task_runner import run_task_with_escalation
 
 
 @dataclass
@@ -45,11 +46,16 @@ async def run_milestone(
     tracer: trace.Tracer | None = None,
     on_task_complete: Callable[[Task, TaskResult], None] | None = None,
     on_tool_use: Callable[[str, dict], None] | None = None,
+    notify: bool = True,
+    model: str | None = None,
 ) -> MilestoneResult:
     """Run all tasks in a milestone sequentially.
 
     Parses the plan file, executes tasks in order, persists state after
     each task, and handles needs_human/failed statuses by stopping.
+
+    Uses run_task_with_escalation for automatic loop detection and
+    escalation handling. Loop detection state is persisted for resumability.
 
     Args:
         plan_path: Path to the milestone plan markdown file
@@ -62,6 +68,9 @@ async def run_milestone(
         on_tool_use: Optional callback for real-time streaming of tool calls.
             Receives (tool_name, tool_input) for each Claude tool invocation.
             Use with format_tool_call() for human-readable progress display.
+        notify: Whether to send notifications on escalation (default True)
+        model: Claude model to use for task execution (e.g., 'sonnet', 'opus').
+            If None, uses Claude's default model.
 
     Returns:
         MilestoneResult with final status and aggregated metrics
@@ -97,6 +106,10 @@ async def run_milestone(
             starting_branch=starting_branch,
         )
 
+    # Create loop detector with state (persists failure tracking across resumes)
+    loop_detector_config = LoopDetectorConfig()
+    loop_detector = LoopDetector(loop_detector_config, state)
+
     # Determine starting point
     start_index = state.get_next_task_index() if resume else 0
 
@@ -119,9 +132,17 @@ async def run_milestone(
                 task_span.set_attribute("task.id", task.id)
                 task_span.set_attribute("task.title", task.title)
 
-                # Run the task (with streaming progress if callback provided)
-                result = await run_task(
-                    task, sandbox, config, plan_path, on_tool_use=on_tool_use
+                # Run the task with escalation handling and loop detection
+                result = await run_task_with_escalation(
+                    task,
+                    sandbox,
+                    config,
+                    plan_path,
+                    loop_detector,
+                    tracer,
+                    notify=notify,
+                    on_tool_use=on_tool_use,
+                    model=model,
                 )
 
                 # Record telemetry

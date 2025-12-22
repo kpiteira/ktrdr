@@ -23,14 +23,18 @@ class TestCheckResult:
 
     def test_create_with_ok_status(self) -> None:
         """CheckResult can be created with ok status."""
-        result = CheckResult(status="ok", message="container running", check_name="sandbox")
+        result = CheckResult(
+            status="ok", message="container running", check_name="sandbox"
+        )
         assert result.status == "ok"
         assert result.message == "container running"
         assert result.check_name == "sandbox"
 
     def test_create_with_failed_status(self) -> None:
         """CheckResult can be created with failed status."""
-        result = CheckResult(status="failed", message="not running", check_name="sandbox")
+        result = CheckResult(
+            status="failed", message="not running", check_name="sandbox"
+        )
         assert result.status == "failed"
         assert result.message == "not running"
         assert result.check_name == "sandbox"
@@ -79,7 +83,9 @@ class TestHealthReport:
             timestamp=datetime(2024, 12, 18, 10, 30, 0),
             checks={
                 "sandbox": CheckResult(
-                    status="failed", message="container not running", check_name="sandbox"
+                    status="failed",
+                    message="container not running",
+                    check_name="sandbox",
                 ),
             },
         )
@@ -96,7 +102,9 @@ class TestCheckDependencies:
     def test_check_order_contains_all_dependency_keys(self) -> None:
         """CHECK_ORDER contains all keys from CHECK_DEPENDENCIES."""
         for key in CHECK_DEPENDENCIES:
-            assert key in CHECK_ORDER, f"'{key}' from CHECK_DEPENDENCIES not in CHECK_ORDER"
+            assert key in CHECK_ORDER, (
+                f"'{key}' from CHECK_DEPENDENCIES not in CHECK_ORDER"
+            )
 
     def test_all_check_order_keys_in_dependencies(self) -> None:
         """All CHECK_ORDER entries have a corresponding CHECK_DEPENDENCIES entry."""
@@ -153,7 +161,10 @@ class TestCheckSandbox:
             assert result.status == "failed"
             assert result.check_name == "sandbox"
             # Should include actionable guidance
-            assert "sandbox-init" in result.message.lower() or "not running" in result.message
+            assert (
+                "sandbox-init" in result.message.lower()
+                or "not running" in result.message
+            )
 
     def test_returns_failed_when_container_not_found(self) -> None:
         """check_sandbox returns failed when container doesn't exist."""
@@ -169,7 +180,9 @@ class TestCheckSandbox:
 
     def test_returns_failed_on_timeout(self) -> None:
         """check_sandbox returns failed when docker command times out."""
-        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("docker", 5)):
+        with patch(
+            "subprocess.run", side_effect=subprocess.TimeoutExpired("docker", 5)
+        ):
             result = check_sandbox()
 
             assert result.status == "failed"
@@ -220,7 +233,10 @@ class TestCheckClaudeAuth:
             assert result.status == "failed"
             assert result.check_name == "claude_auth"
             # Should include actionable guidance
-            assert "claude login" in result.message.lower() or "not logged in" in result.message
+            assert (
+                "claude login" in result.message.lower()
+                or "not logged in" in result.message
+            )
 
     def test_uses_5_second_timeout(self) -> None:
         """check_claude_auth uses 5 second timeout by default."""
@@ -344,7 +360,9 @@ class TestGetHealth:
             patch("orchestrator.health.check_github_token") as mock_github,
             patch("orchestrator.health.check_orchestrator") as mock_orch,
         ):
-            mock_sandbox.return_value = CheckResult("ok", "container running", "sandbox")
+            mock_sandbox.return_value = CheckResult(
+                "ok", "container running", "sandbox"
+            )
             mock_claude.return_value = CheckResult("ok", "authenticated", "claude_auth")
             mock_github.return_value = CheckResult("ok", "present", "github_token")
             mock_orch.return_value = CheckResult("ok", "idle", "orchestrator")
@@ -363,7 +381,9 @@ class TestGetHealth:
             patch("orchestrator.health.check_github_token") as mock_github,
             patch("orchestrator.health.check_orchestrator") as mock_orch,
         ):
-            mock_sandbox.return_value = CheckResult("ok", "container running", "sandbox")
+            mock_sandbox.return_value = CheckResult(
+                "ok", "container running", "sandbox"
+            )
             mock_claude.return_value = CheckResult(
                 "failed", "not logged in", "claude_auth"
             )
@@ -425,7 +445,9 @@ class TestGetHealth:
             patch("orchestrator.health.check_github_token") as mock_github,
             patch("orchestrator.health.check_orchestrator") as mock_orch,
         ):
-            mock_sandbox.return_value = CheckResult("ok", "container running", "sandbox")
+            mock_sandbox.return_value = CheckResult(
+                "ok", "container running", "sandbox"
+            )
 
             report = get_health(checks=["sandbox"])
 
@@ -468,7 +490,9 @@ class TestGetHealth:
             patch("orchestrator.health.check_github_token") as mock_github,
             patch("orchestrator.health.check_orchestrator") as mock_orch,
         ):
-            mock_sandbox.return_value = CheckResult("ok", "container running", "sandbox")
+            mock_sandbox.return_value = CheckResult(
+                "ok", "container running", "sandbox"
+            )
             mock_claude.return_value = CheckResult("ok", "authenticated", "claude_auth")
             mock_github.return_value = CheckResult("ok", "present", "github_token")
             mock_orch.return_value = CheckResult("ok", "idle", "orchestrator")
@@ -486,7 +510,9 @@ class TestGetHealth:
             patch("orchestrator.health.check_github_token") as mock_github,
             patch("orchestrator.health.check_orchestrator") as mock_orch,
         ):
-            mock_sandbox.return_value = CheckResult("ok", "container running", "sandbox")
+            mock_sandbox.return_value = CheckResult(
+                "ok", "container running", "sandbox"
+            )
             mock_claude.return_value = CheckResult("ok", "authenticated", "claude_auth")
             mock_github.return_value = CheckResult("ok", "present", "github_token")
             mock_orch.return_value = CheckResult("ok", "idle", "orchestrator")
@@ -683,7 +709,9 @@ class TestHealthTelemetry:
             patch("orchestrator.health.check_github_token") as mock_github,
             patch("orchestrator.health.check_orchestrator") as mock_orch,
         ):
-            mock_sandbox.return_value = CheckResult("ok", "container running", "sandbox")
+            mock_sandbox.return_value = CheckResult(
+                "ok", "container running", "sandbox"
+            )
             mock_claude.return_value = CheckResult("ok", "authenticated", "claude_auth")
             mock_github.return_value = CheckResult("ok", "present", "github_token")
             mock_orch.return_value = CheckResult("ok", "idle", "orchestrator")
@@ -724,7 +752,9 @@ class TestHealthTelemetry:
             patch("orchestrator.health.check_github_token") as mock_github,
             patch("orchestrator.health.check_orchestrator") as mock_orch,
         ):
-            mock_sandbox.return_value = CheckResult("ok", "container running", "sandbox")
+            mock_sandbox.return_value = CheckResult(
+                "ok", "container running", "sandbox"
+            )
             mock_claude.return_value = CheckResult(
                 "failed", "not logged in", "claude_auth"
             )
@@ -773,7 +803,9 @@ class TestHealthTelemetry:
             patch("orchestrator.health.check_github_token") as mock_github,
             patch("orchestrator.health.check_orchestrator") as mock_orch,
         ):
-            mock_sandbox.return_value = CheckResult("ok", "container running", "sandbox")
+            mock_sandbox.return_value = CheckResult(
+                "ok", "container running", "sandbox"
+            )
             mock_claude.return_value = CheckResult("ok", "authenticated", "claude_auth")
             mock_github.return_value = CheckResult("ok", "present", "github_token")
             mock_orch.return_value = CheckResult("ok", "idle", "orchestrator")
@@ -794,7 +826,9 @@ class TestHealthTelemetry:
                         data_points = list(metric.data.data_points)
                         assert len(data_points) >= 4
 
-        assert counter_found, "Counter metric 'orchestrator_health_checks_total' not found"
+        assert counter_found, (
+            "Counter metric 'orchestrator_health_checks_total' not found"
+        )
 
     def test_gauge_reflects_current_status(self) -> None:
         """Gauge shows 1 for ok status, 0 for failed/skipped."""
@@ -824,7 +858,9 @@ class TestHealthTelemetry:
             patch("orchestrator.health.check_github_token") as mock_github,
             patch("orchestrator.health.check_orchestrator") as mock_orch,
         ):
-            mock_sandbox.return_value = CheckResult("ok", "container running", "sandbox")
+            mock_sandbox.return_value = CheckResult(
+                "ok", "container running", "sandbox"
+            )
             mock_claude.return_value = CheckResult(
                 "failed", "not logged in", "claude_auth"
             )
@@ -867,7 +903,9 @@ class TestHealthTelemetry:
             patch("orchestrator.health.check_github_token") as mock_github,
             patch("orchestrator.health.check_orchestrator") as mock_orch,
         ):
-            mock_sandbox.return_value = CheckResult("ok", "container running", "sandbox")
+            mock_sandbox.return_value = CheckResult(
+                "ok", "container running", "sandbox"
+            )
             mock_claude.return_value = CheckResult("ok", "authenticated", "claude_auth")
             mock_github.return_value = CheckResult("ok", "present", "github_token")
             mock_orch.return_value = CheckResult("ok", "idle", "orchestrator")
