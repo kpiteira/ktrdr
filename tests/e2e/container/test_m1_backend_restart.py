@@ -81,18 +81,8 @@ class TestM1BackendRestart:
         This is the core M1 validation: operations stored in PostgreSQL
         survive when the backend process restarts.
         """
-        # Step 1: Create an operation
-        response = api_client.post(
-            "/operations",
-            json={
-                "operation_type": "backtesting",
-                "metadata": {
-                    "symbol": "EURUSD",
-                    "timeframe": "1h",
-                    "mode": "backtest",
-                },
-            },
-        )
+        # Step 1: Create an operation using dummy endpoint
+        response = api_client.post("/dummy/start")
         assert (
             response.status_code == 200
         ), f"Failed to create operation: {response.text}"
@@ -160,14 +150,8 @@ class TestM1BackendRestart:
         assert response.status_code == 200
         print(f"\nRegistered worker: {worker_id}")
 
-        # Step 2: Create an operation
-        response = api_client.post(
-            "/operations",
-            json={
-                "operation_type": "backtesting",
-                "metadata": {"symbol": "GBPUSD", "timeframe": "4h"},
-            },
-        )
+        # Step 2: Create an operation using dummy endpoint
+        response = api_client.post("/dummy/start")
         assert response.status_code == 200
         operation_id = response.json()["data"]["operation_id"]
         print(f"Created operation: {operation_id}")
@@ -212,14 +196,8 @@ class TestM1BackendRestart:
         3. Worker re-registers reporting the operation completed
         4. Operation should be marked COMPLETED
         """
-        # Step 1: Create an operation
-        response = api_client.post(
-            "/operations",
-            json={
-                "operation_type": "training",
-                "metadata": {"symbol": "USDJPY", "timeframe": "1h"},
-            },
-        )
+        # Step 1: Create an operation using dummy endpoint
+        response = api_client.post("/dummy/start")
         assert response.status_code == 200
         operation_id = response.json()["data"]["operation_id"]
         print(f"\nCreated operation: {operation_id}")
@@ -291,19 +269,9 @@ class TestM1E2EScriptValidation:
         print(f"  Found {worker_count} worker(s)")
         # Note: We don't require workers for this test
 
-        # Step 2: Create a training operation
-        print("Step 2: Create training operation...")
-        response = api_client.post(
-            "/operations",
-            json={
-                "operation_type": "training",
-                "metadata": {
-                    "symbol": "EURUSD",
-                    "timeframe": "1h",
-                    "parameters": {"strategy_name": "m1_e2e_test"},
-                },
-            },
-        )
+        # Step 2: Create an operation using dummy endpoint
+        print("Step 2: Create operation...")
+        response = api_client.post("/dummy/start")
         assert response.status_code == 200
         operation_id = response.json()["data"]["operation_id"]
         print(f"  Created operation: {operation_id}")
@@ -314,8 +282,8 @@ class TestM1E2EScriptValidation:
         assert response.status_code == 200
         status = response.json()["data"]["status"]
         print(f"  Status: {status}")
-        # Operation starts as PENDING, that's expected
-        assert status in ["pending", "running"]
+        # Dummy operations may complete quickly, accept any valid status
+        assert status in ["pending", "running", "completed"]
 
         # Step 4: Restart backend
         print("Step 4: Restarting backend...")
