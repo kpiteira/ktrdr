@@ -169,7 +169,7 @@ class TestReconciliationPersistence:
         session_factory = get_session_factory()
         repository = OperationsRepository(session_factory)
         reconciliation = StartupReconciliation(repository)
-        result = await reconciliation.reconcile()
+        await reconciliation.reconcile()
 
         # 3. Verify DB was updated (not just cache)
         async with get_session() as session:
@@ -272,10 +272,7 @@ class TestDatabaseSchema:
             )
             exists = result.scalar()
 
-        assert exists, (
-            "Operations table does not exist! "
-            "Run: alembic upgrade head"
-        )
+        assert exists, "Operations table does not exist! " "Run: alembic upgrade head"
 
     @pytest.mark.asyncio
     async def test_operations_table_has_required_columns(self):
@@ -319,9 +316,7 @@ class TestDatabaseSchema:
 
         async with get_session() as session:
             # This should not raise
-            result = await session.execute(
-                text("SELECT COUNT(*) FROM operations")
-            )
+            result = await session.execute(text("SELECT COUNT(*) FROM operations"))
             count = result.scalar()
 
         # Just verify the query works (count can be 0 or more)
@@ -358,7 +353,7 @@ class TestServiceLogging:
             ops_module._operations_service = None
 
             # Initialize service
-            service = get_operations_service()
+            _ = get_operations_service()
 
             # Verify log message indicates persistence
             log_text = log_stream.getvalue().lower()
