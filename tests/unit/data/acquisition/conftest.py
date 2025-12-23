@@ -1,7 +1,8 @@
 """Test fixtures for data acquisition tests."""
 
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 from ktrdr.api.services.operations_service import OperationsService
 

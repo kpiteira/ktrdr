@@ -4,7 +4,6 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import MagicMock
 
 from ktrdr.api.models.operations import OperationType
 from ktrdr.api.models.workers import WorkerType
@@ -71,7 +70,9 @@ class TestWorkerAPIBase:
         assert data["healthy"] is True
 
     @pytest.mark.asyncio
-    async def test_health_reports_busy_when_operation_active(self, mock_operations_service):
+    async def test_health_reports_busy_when_operation_active(
+        self, mock_operations_service
+    ):
         """Test health endpoint reports 'busy' when operation is active."""
         worker = MockWorker(operations_service=mock_operations_service)
 
@@ -109,7 +110,9 @@ class TestWorkerAPIBase:
         assert response.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_operations_endpoint_returns_operation_status(self, mock_operations_service):
+    async def test_operations_endpoint_returns_operation_status(
+        self, mock_operations_service
+    ):
         """Test /api/v1/operations/{id} returns operation status."""
         worker = MockWorker(operations_service=mock_operations_service)
 

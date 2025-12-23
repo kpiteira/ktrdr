@@ -150,9 +150,9 @@ class TestDatabaseWiring:
         url = get_database_url()
 
         # Should be a valid PostgreSQL async URL
-        assert url.startswith("postgresql+asyncpg://"), (
-            f"Expected postgresql+asyncpg:// URL, got: {url[:30]}..."
-        )
+        assert url.startswith(
+            "postgresql+asyncpg://"
+        ), f"Expected postgresql+asyncpg:// URL, got: {url[:30]}..."
 
     def test_session_factory_created(self):
         """Verify session factory can be created."""
@@ -204,7 +204,4 @@ class TestDatabaseWiring:
             )
             exists = result.scalar()
 
-        assert exists, (
-            "Operations table does not exist! "
-            "Run: alembic upgrade head"
-        )
+        assert exists, "Operations table does not exist! " "Run: alembic upgrade head"

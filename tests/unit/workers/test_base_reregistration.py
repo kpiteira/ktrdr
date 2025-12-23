@@ -166,7 +166,9 @@ class TestSelfRegisterWithResilienceFields:
     """Test that self_register includes resilience fields."""
 
     @pytest.mark.asyncio
-    async def test_self_register_includes_current_operation_id(self, mock_operations_service):
+    async def test_self_register_includes_current_operation_id(
+        self, mock_operations_service
+    ):
         """Test that registration includes current_operation_id."""
         worker = MockWorker(operations_service=mock_operations_service)
 
