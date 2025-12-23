@@ -1,5 +1,7 @@
 """Tests for WorkerAPIBase extracted from training-host-service pattern."""
 
+import uuid
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -65,8 +67,9 @@ class TestWorkerAPIBase:
 
         from ktrdr.api.models.operations import OperationMetadata
 
+        operation_id = f"test_op_{uuid.uuid4().hex[:8]}"
         await worker._operations_service.create_operation(
-            operation_id="test_op_123",
+            operation_id=operation_id,
             operation_type=OperationType.BACKTESTING,
             metadata=OperationMetadata(
                 symbol="AAPL",
@@ -82,7 +85,7 @@ class TestWorkerAPIBase:
         assert response.status_code == 200
         data = response.json()
         assert data["worker_status"] == "busy"
-        assert data["current_operation"] == "test_op_123"
+        assert data["current_operation"] == operation_id
 
     def test_operations_endpoint_returns_404_for_missing_operation(self):
         """Test /api/v1/operations/{id} returns 404 for non-existent operation."""
@@ -102,8 +105,9 @@ class TestWorkerAPIBase:
 
         from ktrdr.api.models.operations import OperationMetadata
 
+        operation_id = f"test_op_{uuid.uuid4().hex[:8]}"
         await worker._operations_service.create_operation(
-            operation_id="test_op_456",
+            operation_id=operation_id,
             operation_type=OperationType.BACKTESTING,
             metadata=OperationMetadata(
                 symbol="EURUSD",
@@ -115,11 +119,11 @@ class TestWorkerAPIBase:
         )
 
         client = TestClient(worker.app)
-        response = client.get("/api/v1/operations/test_op_456")
+        response = client.get(f"/api/v1/operations/{operation_id}")
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
-        assert data["data"]["operation_id"] == "test_op_456"
+        assert data["data"]["operation_id"] == operation_id
         # Operations start in "pending" status until explicitly started
         assert data["data"]["status"] in ["pending", "running"]
 
@@ -182,8 +186,9 @@ class TestWorkerAPIBase:
 
         from ktrdr.api.models.operations import OperationMetadata
 
+        operation_id = f"test_op_{uuid.uuid4().hex[:8]}"
         await worker._operations_service.create_operation(
-            operation_id="test_op_789",
+            operation_id=operation_id,
             operation_type=OperationType.BACKTESTING,
             metadata=OperationMetadata(
                 symbol="GBPUSD",
@@ -195,12 +200,12 @@ class TestWorkerAPIBase:
         )
 
         client = TestClient(worker.app)
-        response = client.get("/api/v1/operations/test_op_789/metrics?cursor=0")
+        response = client.get(f"/api/v1/operations/{operation_id}/metrics?cursor=0")
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
         assert "data" in data
-        assert data["data"]["operation_id"] == "test_op_789"
+        assert data["data"]["operation_id"] == operation_id
 
     @pytest.mark.asyncio
     async def test_cancel_operation_endpoint(self):
@@ -212,8 +217,9 @@ class TestWorkerAPIBase:
 
         from ktrdr.api.models.operations import OperationMetadata
 
+        operation_id = f"test_op_{uuid.uuid4().hex[:8]}"
         await worker._operations_service.create_operation(
-            operation_id="test_op_cancel",
+            operation_id=operation_id,
             operation_type=OperationType.BACKTESTING,
             metadata=OperationMetadata(
                 symbol="USDJPY",
@@ -225,7 +231,7 @@ class TestWorkerAPIBase:
         )
 
         client = TestClient(worker.app)
-        response = client.delete("/api/v1/operations/test_op_cancel/cancel")
+        response = client.delete(f"/api/v1/operations/{operation_id}/cancel")
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
