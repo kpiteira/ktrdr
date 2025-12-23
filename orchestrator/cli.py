@@ -10,6 +10,7 @@ from pathlib import Path
 
 import click
 from rich.console import Console
+from rich.table import Table
 
 from orchestrator import telemetry
 from orchestrator.config import OrchestratorConfig
@@ -355,6 +356,117 @@ async def _prompt_for_pr(result: MilestoneResult, config: OrchestratorConfig) ->
             console.print(f"[red]PR creation failed:[/red] {pr_result.result}")
         else:
             console.print(pr_result.result)
+
+
+@cli.command()
+@click.option("--milestone", "-m", default=None, help="Filter by milestone name")
+@click.option("--limit", "-n", default=10, help="Number of runs to show")
+def history(milestone: str | None, limit: int) -> None:
+    """Show history of milestone runs."""
+    config = OrchestratorConfig.from_env()
+
+    # Find all state files
+    if not config.state_dir.exists():
+        console.print("[yellow]No state directory found[/yellow]")
+        return
+
+    state_files = list(config.state_dir.glob("*_state.json"))
+
+    if not state_files:
+        console.print("[yellow]No milestone runs found[/yellow]")
+        return
+
+    # Load and filter states
+    runs: list[OrchestratorState] = []
+    for path in state_files:
+        milestone_id = path.stem.replace("_state", "")
+        state = OrchestratorState.load(config.state_dir, milestone_id)
+        if state:
+            if milestone is None or milestone in state.milestone_id:
+                runs.append(state)
+
+    # Sort by date descending (most recent first)
+    runs.sort(key=lambda s: s.started_at, reverse=True)
+    runs = runs[:limit]
+
+    if not runs:
+        console.print("[yellow]No matching milestone runs found[/yellow]")
+        return
+
+    # Display table
+    table = Table(title="Milestone History")
+    table.add_column("Milestone")
+    table.add_column("Started")
+    table.add_column("Tasks")
+    table.add_column("E2E")
+    table.add_column("Cost")
+
+    for run in runs:
+        total_cost = sum(r.get("cost_usd", 0) for r in run.task_results.values())
+        total_tasks = len(run.completed_tasks) + len(run.failed_tasks)
+        table.add_row(
+            run.milestone_id,
+            run.started_at.strftime("%Y-%m-%d %H:%M"),
+            f"{len(run.completed_tasks)}/{total_tasks}",
+            run.e2e_status or "-",
+            f"${total_cost:.2f}",
+        )
+
+    console.print(table)
+
+
+@cli.command()
+@click.option("--since", default=None, help="Show costs since date (YYYY-MM-DD)")
+@click.option("--by-milestone/--total", default=True, help="Break down by milestone")
+def costs(since: str | None, by_milestone: bool) -> None:
+    """Show cost summary."""
+    from collections import defaultdict
+    from datetime import datetime
+
+    config = OrchestratorConfig.from_env()
+
+    # Parse since date
+    since_date = datetime.fromisoformat(since) if since else datetime.min
+
+    # Check for state directory
+    if not config.state_dir.exists():
+        console.print("[yellow]No state directory found[/yellow]")
+        return
+
+    state_files = list(config.state_dir.glob("*_state.json"))
+
+    if not state_files:
+        console.print("[yellow]No milestone runs found[/yellow]")
+        return
+
+    # Aggregate costs from state files
+    costs_by_milestone: dict[str, float] = defaultdict(float)
+    total_cost = 0.0
+
+    for path in state_files:
+        milestone_id = path.stem.replace("_state", "")
+        state = OrchestratorState.load(config.state_dir, milestone_id)
+        if state and state.started_at >= since_date:
+            cost = sum(r.get("cost_usd", 0) for r in state.task_results.values())
+            costs_by_milestone[state.milestone_id] += cost
+            total_cost += cost
+
+    if not costs_by_milestone:
+        console.print("[yellow]No matching milestone runs found[/yellow]")
+        return
+
+    if by_milestone:
+        table = Table(title="Costs by Milestone")
+        table.add_column("Milestone")
+        table.add_column("Cost", justify="right")
+
+        for milestone, cost in sorted(costs_by_milestone.items()):
+            table.add_row(milestone, f"${cost:.2f}")
+
+        table.add_row("[bold]Total[/bold]", f"[bold]${total_cost:.2f}[/bold]")
+        console.print(table)
+    else:
+        console.print(f"Total cost: ${total_cost:.2f}")
 
 
 def main() -> None:

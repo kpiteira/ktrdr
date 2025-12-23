@@ -1206,3 +1206,571 @@ class TestPRPromptAfterMilestone:
         call_kwargs = mock_run.call_args.kwargs
         assert "on_task_complete" in call_kwargs
         assert call_kwargs["on_task_complete"] is not None
+
+
+class TestHistoryCommand:
+    """Test the history CLI command."""
+
+    def test_history_command_exists(self):
+        """The history command should exist in the CLI."""
+        from orchestrator.cli import cli
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["history", "--help"])
+
+        assert result.exit_code == 0
+        assert "history" in result.output.lower()
+
+    def test_history_command_has_milestone_option(self):
+        """history command should have --milestone option."""
+        from orchestrator.cli import cli
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["history", "--help"])
+
+        assert "--milestone" in result.output or "-m" in result.output
+
+    def test_history_command_has_limit_option(self):
+        """history command should have --limit option."""
+        from orchestrator.cli import cli
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["history", "--help"])
+
+        assert "--limit" in result.output or "-n" in result.output
+
+
+class TestHistoryCommandExecution:
+    """Test history command execution with mocked dependencies."""
+
+    def test_history_shows_empty_when_no_state_files(self):
+        """history command should handle empty state directory."""
+        from orchestrator.cli import cli
+
+        runner = CliRunner()
+
+        with patch("orchestrator.cli.OrchestratorConfig.from_env") as mock_config:
+            mock_config.return_value = MagicMock(state_dir=Path("/nonexistent"))
+            result = runner.invoke(cli, ["history"])
+
+        # Should complete without error (just show empty or message)
+        assert result.exit_code == 0
+
+    def test_history_shows_past_runs(self):
+        """history command should show past runs from state files."""
+        from datetime import datetime
+        from tempfile import TemporaryDirectory
+
+        from orchestrator.cli import cli
+        from orchestrator.state import OrchestratorState
+
+        runner = CliRunner()
+
+        with TemporaryDirectory() as temp_dir:
+            state_dir = Path(temp_dir)
+
+            # Create a test state file
+            state = OrchestratorState(
+                milestone_id="test_milestone",
+                plan_path="test.md",
+                started_at=datetime(2025, 1, 15, 10, 30),
+                completed_tasks=["1.1", "1.2"],
+                task_results={
+                    "1.1": {"cost_usd": 0.05},
+                    "1.2": {"cost_usd": 0.03},
+                },
+                e2e_status="passed",
+            )
+            state.save(state_dir)
+
+            with patch("orchestrator.cli.OrchestratorConfig.from_env") as mock_config:
+                mock_config.return_value = MagicMock(state_dir=state_dir)
+                result = runner.invoke(cli, ["history"])
+
+        # Should show milestone info
+        assert "test_milestone" in result.output
+        assert result.exit_code == 0
+
+    def test_history_shows_tasks_completed(self):
+        """history command should show tasks completed count."""
+        from datetime import datetime
+        from tempfile import TemporaryDirectory
+
+        from orchestrator.cli import cli
+        from orchestrator.state import OrchestratorState
+
+        runner = CliRunner()
+
+        with TemporaryDirectory() as temp_dir:
+            state_dir = Path(temp_dir)
+
+            state = OrchestratorState(
+                milestone_id="test_milestone",
+                plan_path="test.md",
+                started_at=datetime(2025, 1, 15, 10, 30),
+                completed_tasks=["1.1", "1.2", "1.3"],
+                failed_tasks=["1.4"],
+                task_results={
+                    "1.1": {"cost_usd": 0.05},
+                    "1.2": {"cost_usd": 0.03},
+                    "1.3": {"cost_usd": 0.02},
+                },
+            )
+            state.save(state_dir)
+
+            with patch("orchestrator.cli.OrchestratorConfig.from_env") as mock_config:
+                mock_config.return_value = MagicMock(state_dir=state_dir)
+                result = runner.invoke(cli, ["history"])
+
+        # Should show "3/4" (3 completed out of 4 total)
+        assert "3/4" in result.output or ("3" in result.output and "4" in result.output)
+
+    def test_history_shows_e2e_status(self):
+        """history command should show E2E status."""
+        from datetime import datetime
+        from tempfile import TemporaryDirectory
+
+        from orchestrator.cli import cli
+        from orchestrator.state import OrchestratorState
+
+        runner = CliRunner()
+
+        with TemporaryDirectory() as temp_dir:
+            state_dir = Path(temp_dir)
+
+            state = OrchestratorState(
+                milestone_id="test_milestone",
+                plan_path="test.md",
+                started_at=datetime(2025, 1, 15, 10, 30),
+                completed_tasks=["1.1"],
+                task_results={"1.1": {"cost_usd": 0.05}},
+                e2e_status="passed",
+            )
+            state.save(state_dir)
+
+            with patch("orchestrator.cli.OrchestratorConfig.from_env") as mock_config:
+                mock_config.return_value = MagicMock(state_dir=state_dir)
+                result = runner.invoke(cli, ["history"])
+
+        # Should show E2E status
+        assert "passed" in result.output.lower()
+
+    def test_history_shows_cost(self):
+        """history command should show total cost."""
+        from datetime import datetime
+        from tempfile import TemporaryDirectory
+
+        from orchestrator.cli import cli
+        from orchestrator.state import OrchestratorState
+
+        runner = CliRunner()
+
+        with TemporaryDirectory() as temp_dir:
+            state_dir = Path(temp_dir)
+
+            state = OrchestratorState(
+                milestone_id="test_milestone",
+                plan_path="test.md",
+                started_at=datetime(2025, 1, 15, 10, 30),
+                completed_tasks=["1.1", "1.2"],
+                task_results={
+                    "1.1": {"cost_usd": 0.05},
+                    "1.2": {"cost_usd": 0.03},
+                },
+            )
+            state.save(state_dir)
+
+            with patch("orchestrator.cli.OrchestratorConfig.from_env") as mock_config:
+                mock_config.return_value = MagicMock(state_dir=state_dir)
+                result = runner.invoke(cli, ["history"])
+
+        # Should show cost with $ sign
+        assert "$" in result.output
+        assert "0.08" in result.output
+
+    def test_history_filters_by_milestone(self):
+        """history command --milestone should filter results."""
+        from datetime import datetime
+        from tempfile import TemporaryDirectory
+
+        from orchestrator.cli import cli
+        from orchestrator.state import OrchestratorState
+
+        runner = CliRunner()
+
+        with TemporaryDirectory() as temp_dir:
+            state_dir = Path(temp_dir)
+
+            # Create two milestones
+            state1 = OrchestratorState(
+                milestone_id="feature_auth",
+                plan_path="auth.md",
+                started_at=datetime(2025, 1, 15, 10, 30),
+                completed_tasks=["1.1"],
+                task_results={"1.1": {"cost_usd": 0.05}},
+            )
+            state1.save(state_dir)
+
+            state2 = OrchestratorState(
+                milestone_id="feature_api",
+                plan_path="api.md",
+                started_at=datetime(2025, 1, 16, 10, 30),
+                completed_tasks=["1.1"],
+                task_results={"1.1": {"cost_usd": 0.03}},
+            )
+            state2.save(state_dir)
+
+            with patch("orchestrator.cli.OrchestratorConfig.from_env") as mock_config:
+                mock_config.return_value = MagicMock(state_dir=state_dir)
+                result = runner.invoke(cli, ["history", "--milestone", "auth"])
+
+        # Should show only auth, not api
+        assert "feature_auth" in result.output
+        assert "feature_api" not in result.output
+
+    def test_history_respects_limit(self):
+        """history command --limit should limit results."""
+        from datetime import datetime
+        from tempfile import TemporaryDirectory
+
+        from orchestrator.cli import cli
+        from orchestrator.state import OrchestratorState
+
+        runner = CliRunner()
+
+        with TemporaryDirectory() as temp_dir:
+            state_dir = Path(temp_dir)
+
+            # Create three milestones
+            for i in range(3):
+                state = OrchestratorState(
+                    milestone_id=f"milestone_{i}",
+                    plan_path=f"plan_{i}.md",
+                    started_at=datetime(2025, 1, 15 + i, 10, 30),
+                    completed_tasks=["1.1"],
+                    task_results={"1.1": {"cost_usd": 0.05}},
+                )
+                state.save(state_dir)
+
+            with patch("orchestrator.cli.OrchestratorConfig.from_env") as mock_config:
+                mock_config.return_value = MagicMock(state_dir=state_dir)
+                result = runner.invoke(cli, ["history", "--limit", "2"])
+
+        # Should only show 2 milestones (most recent first)
+        output = result.output
+        assert "milestone_2" in output  # Most recent
+        assert "milestone_1" in output  # Second most recent
+        assert "milestone_0" not in output  # Oldest should be excluded
+
+    def test_history_sorts_by_date_descending(self):
+        """history command should show most recent runs first."""
+        from datetime import datetime
+        from tempfile import TemporaryDirectory
+
+        from orchestrator.cli import cli
+        from orchestrator.state import OrchestratorState
+
+        runner = CliRunner()
+
+        with TemporaryDirectory() as temp_dir:
+            state_dir = Path(temp_dir)
+
+            # Create milestones with different dates (save in random order)
+            state_old = OrchestratorState(
+                milestone_id="old_milestone",
+                plan_path="old.md",
+                started_at=datetime(2025, 1, 1, 10, 30),
+                completed_tasks=["1.1"],
+                task_results={"1.1": {"cost_usd": 0.05}},
+            )
+            state_old.save(state_dir)
+
+            state_new = OrchestratorState(
+                milestone_id="new_milestone",
+                plan_path="new.md",
+                started_at=datetime(2025, 1, 20, 10, 30),
+                completed_tasks=["1.1"],
+                task_results={"1.1": {"cost_usd": 0.05}},
+            )
+            state_new.save(state_dir)
+
+            with patch("orchestrator.cli.OrchestratorConfig.from_env") as mock_config:
+                mock_config.return_value = MagicMock(state_dir=state_dir)
+                result = runner.invoke(cli, ["history"])
+
+        # new_milestone should appear before old_milestone
+        new_pos = result.output.find("new_milestone")
+        old_pos = result.output.find("old_milestone")
+        assert new_pos < old_pos
+
+
+class TestCostsCommand:
+    """Test the costs CLI command."""
+
+    def test_costs_command_exists(self):
+        """The costs command should exist in the CLI."""
+        from orchestrator.cli import cli
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["costs", "--help"])
+
+        assert result.exit_code == 0
+        assert "cost" in result.output.lower()
+
+    def test_costs_command_has_since_option(self):
+        """costs command should have --since option."""
+        from orchestrator.cli import cli
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["costs", "--help"])
+
+        assert "--since" in result.output
+
+    def test_costs_command_has_by_milestone_option(self):
+        """costs command should have --by-milestone option."""
+        from orchestrator.cli import cli
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["costs", "--help"])
+
+        assert "--by-milestone" in result.output or "--total" in result.output
+
+
+class TestCostsCommandExecution:
+    """Test costs command execution with mocked dependencies."""
+
+    def test_costs_shows_empty_when_no_state_files(self):
+        """costs command should handle empty state directory."""
+        from orchestrator.cli import cli
+
+        runner = CliRunner()
+
+        with patch("orchestrator.cli.OrchestratorConfig.from_env") as mock_config:
+            mock_config.return_value = MagicMock(state_dir=Path("/nonexistent"))
+            result = runner.invoke(cli, ["costs"])
+
+        # Should complete without error
+        assert result.exit_code == 0
+
+    def test_costs_shows_total_cost(self):
+        """costs command should show total cost from all state files."""
+        from datetime import datetime
+        from tempfile import TemporaryDirectory
+
+        from orchestrator.cli import cli
+        from orchestrator.state import OrchestratorState
+
+        runner = CliRunner()
+
+        with TemporaryDirectory() as temp_dir:
+            state_dir = Path(temp_dir)
+
+            # Create state files with known costs
+            state1 = OrchestratorState(
+                milestone_id="milestone_1",
+                plan_path="plan1.md",
+                started_at=datetime(2025, 1, 15, 10, 30),
+                completed_tasks=["1.1", "1.2"],
+                task_results={
+                    "1.1": {"cost_usd": 0.10},
+                    "1.2": {"cost_usd": 0.05},
+                },
+            )
+            state1.save(state_dir)
+
+            state2 = OrchestratorState(
+                milestone_id="milestone_2",
+                plan_path="plan2.md",
+                started_at=datetime(2025, 1, 16, 10, 30),
+                completed_tasks=["2.1"],
+                task_results={
+                    "2.1": {"cost_usd": 0.20},
+                },
+            )
+            state2.save(state_dir)
+
+            with patch("orchestrator.cli.OrchestratorConfig.from_env") as mock_config:
+                mock_config.return_value = MagicMock(state_dir=state_dir)
+                result = runner.invoke(cli, ["costs"])
+
+        # Total should be 0.10 + 0.05 + 0.20 = 0.35
+        assert "$0.35" in result.output or "0.35" in result.output
+
+    def test_costs_shows_breakdown_by_milestone(self):
+        """costs command should show breakdown by milestone by default."""
+        from datetime import datetime
+        from tempfile import TemporaryDirectory
+
+        from orchestrator.cli import cli
+        from orchestrator.state import OrchestratorState
+
+        runner = CliRunner()
+
+        with TemporaryDirectory() as temp_dir:
+            state_dir = Path(temp_dir)
+
+            state1 = OrchestratorState(
+                milestone_id="feature_auth",
+                plan_path="auth.md",
+                started_at=datetime(2025, 1, 15, 10, 30),
+                completed_tasks=["1.1"],
+                task_results={"1.1": {"cost_usd": 0.15}},
+            )
+            state1.save(state_dir)
+
+            state2 = OrchestratorState(
+                milestone_id="feature_api",
+                plan_path="api.md",
+                started_at=datetime(2025, 1, 16, 10, 30),
+                completed_tasks=["1.1"],
+                task_results={"1.1": {"cost_usd": 0.25}},
+            )
+            state2.save(state_dir)
+
+            with patch("orchestrator.cli.OrchestratorConfig.from_env") as mock_config:
+                mock_config.return_value = MagicMock(state_dir=state_dir)
+                result = runner.invoke(cli, ["costs"])
+
+        # Should show both milestones
+        assert "feature_auth" in result.output
+        assert "feature_api" in result.output
+        # Should show individual costs
+        assert "$0.15" in result.output or "0.15" in result.output
+        assert "$0.25" in result.output or "0.25" in result.output
+
+    def test_costs_total_only_flag(self):
+        """costs command --total should show only total, not breakdown."""
+        from datetime import datetime
+        from tempfile import TemporaryDirectory
+
+        from orchestrator.cli import cli
+        from orchestrator.state import OrchestratorState
+
+        runner = CliRunner()
+
+        with TemporaryDirectory() as temp_dir:
+            state_dir = Path(temp_dir)
+
+            state = OrchestratorState(
+                milestone_id="feature_auth",
+                plan_path="auth.md",
+                started_at=datetime(2025, 1, 15, 10, 30),
+                completed_tasks=["1.1"],
+                task_results={"1.1": {"cost_usd": 0.15}},
+            )
+            state.save(state_dir)
+
+            with patch("orchestrator.cli.OrchestratorConfig.from_env") as mock_config:
+                mock_config.return_value = MagicMock(state_dir=state_dir)
+                result = runner.invoke(cli, ["costs", "--total"])
+
+        # Should show total but not the milestone name in table format
+        assert "0.15" in result.output
+        # Total only mode should be simpler output
+        assert "Total cost:" in result.output or "total" in result.output.lower()
+
+    def test_costs_filters_by_since_date(self):
+        """costs command --since should filter by date."""
+        from datetime import datetime
+        from tempfile import TemporaryDirectory
+
+        from orchestrator.cli import cli
+        from orchestrator.state import OrchestratorState
+
+        runner = CliRunner()
+
+        with TemporaryDirectory() as temp_dir:
+            state_dir = Path(temp_dir)
+
+            # Old run - before cutoff
+            state_old = OrchestratorState(
+                milestone_id="old_run",
+                plan_path="old.md",
+                started_at=datetime(2025, 1, 1, 10, 30),
+                completed_tasks=["1.1"],
+                task_results={"1.1": {"cost_usd": 1.00}},
+            )
+            state_old.save(state_dir)
+
+            # New run - after cutoff
+            state_new = OrchestratorState(
+                milestone_id="new_run",
+                plan_path="new.md",
+                started_at=datetime(2025, 1, 20, 10, 30),
+                completed_tasks=["1.1"],
+                task_results={"1.1": {"cost_usd": 0.50}},
+            )
+            state_new.save(state_dir)
+
+            with patch("orchestrator.cli.OrchestratorConfig.from_env") as mock_config:
+                mock_config.return_value = MagicMock(state_dir=state_dir)
+                result = runner.invoke(cli, ["costs", "--since", "2025-01-15"])
+
+        # Should only include new_run (0.50), not old_run (1.00)
+        assert "new_run" in result.output
+        assert "old_run" not in result.output
+        # Total should be 0.50
+        assert "$0.50" in result.output or "0.50" in result.output
+
+    def test_costs_handles_missing_cost_in_results(self):
+        """costs command should handle task_results without cost_usd."""
+        from datetime import datetime
+        from tempfile import TemporaryDirectory
+
+        from orchestrator.cli import cli
+        from orchestrator.state import OrchestratorState
+
+        runner = CliRunner()
+
+        with TemporaryDirectory() as temp_dir:
+            state_dir = Path(temp_dir)
+
+            # State with missing cost_usd in one result
+            state = OrchestratorState(
+                milestone_id="test_milestone",
+                plan_path="test.md",
+                started_at=datetime(2025, 1, 15, 10, 30),
+                completed_tasks=["1.1", "1.2"],
+                task_results={
+                    "1.1": {"cost_usd": 0.10},
+                    "1.2": {"status": "completed"},  # No cost_usd
+                },
+            )
+            state.save(state_dir)
+
+            with patch("orchestrator.cli.OrchestratorConfig.from_env") as mock_config:
+                mock_config.return_value = MagicMock(state_dir=state_dir)
+                result = runner.invoke(cli, ["costs"])
+
+        # Should not crash, should show at least $0.10
+        assert result.exit_code == 0
+        assert "0.10" in result.output
+
+    def test_costs_shows_table_with_total_row(self):
+        """costs command should show table with Total row."""
+        from datetime import datetime
+        from tempfile import TemporaryDirectory
+
+        from orchestrator.cli import cli
+        from orchestrator.state import OrchestratorState
+
+        runner = CliRunner()
+
+        with TemporaryDirectory() as temp_dir:
+            state_dir = Path(temp_dir)
+
+            state = OrchestratorState(
+                milestone_id="test_milestone",
+                plan_path="test.md",
+                started_at=datetime(2025, 1, 15, 10, 30),
+                completed_tasks=["1.1"],
+                task_results={"1.1": {"cost_usd": 0.25}},
+            )
+            state.save(state_dir)
+
+            with patch("orchestrator.cli.OrchestratorConfig.from_env") as mock_config:
+                mock_config.return_value = MagicMock(state_dir=state_dir)
+                result = runner.invoke(cli, ["costs"])
+
+        # Should show Total row
+        assert "Total" in result.output

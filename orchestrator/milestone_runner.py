@@ -10,15 +10,23 @@ from pathlib import Path
 from typing import Callable, Literal
 
 from opentelemetry import trace
+from rich.console import Console
+from rich.panel import Panel
+from rich.prompt import Prompt
 
 from orchestrator import telemetry
 from orchestrator.config import OrchestratorConfig
+from orchestrator.e2e_runner import apply_e2e_fix, run_e2e_tests
+from orchestrator.escalation import EscalationInfo, escalate_and_wait
 from orchestrator.loop_detector import LoopDetector, LoopDetectorConfig
 from orchestrator.models import ClaudeResult, Task, TaskResult
-from orchestrator.plan_parser import parse_plan
+from orchestrator.plan_parser import parse_e2e_scenario, parse_plan
 from orchestrator.sandbox import SandboxManager
 from orchestrator.state import OrchestratorState
 from orchestrator.task_runner import run_task_with_escalation
+
+# Console for E2E output
+console = Console()
 
 
 @dataclass
@@ -26,9 +34,15 @@ class MilestoneResult:
     """Result of milestone execution.
 
     Contains final status, aggregated metrics, and state reference.
+
+    Status values:
+        completed: All tasks and E2E tests passed
+        failed: Task execution failed
+        needs_human: Task requires human input
+        e2e_failed: E2E tests failed after tasks completed
     """
 
-    status: Literal["completed", "failed", "needs_human"]
+    status: Literal["completed", "failed", "needs_human", "e2e_failed"]
     state: OrchestratorState
     total_tasks: int
     completed_tasks: int
@@ -117,7 +131,7 @@ async def run_milestone(
     total_cost = 0.0
     total_tokens = 0
     total_duration = 0.0
-    final_status: Literal["completed", "failed", "needs_human"] = "completed"
+    final_status: Literal["completed", "failed", "needs_human", "e2e_failed"] = "completed"
 
     # Create milestone span
     with tracer.start_as_current_span("orchestrator.milestone") as milestone_span:
@@ -183,6 +197,108 @@ async def run_milestone(
                     final_status = "failed"
                     break
 
+        # Run E2E tests if all tasks completed successfully
+        if final_status == "completed":
+            # Read plan content and parse E2E scenario
+            plan_content = Path(plan_path).read_text()
+            e2e_scenario = parse_e2e_scenario(plan_content)
+
+            if e2e_scenario:
+                console.print("\n[bold]Running E2E tests...[/bold]")
+
+                while True:
+                    e2e_result = await run_e2e_tests(
+                        milestone_id, e2e_scenario, sandbox, config, tracer
+                    )
+
+                    # Accumulate E2E costs
+                    total_cost += e2e_result.cost_usd
+                    total_tokens += e2e_result.tokens_used
+                    total_duration += e2e_result.duration_seconds
+
+                    if e2e_result.status == "passed":
+                        console.print(
+                            f"E2E: [bold green]PASSED[/bold green] "
+                            f"({e2e_result.duration_seconds:.0f}s)"
+                        )
+                        state.e2e_status = "passed"
+                        state.save(state_dir)
+                        break
+
+                    elif e2e_result.status == "failed":
+                        console.print("E2E: [bold red]FAILED[/bold red]")
+
+                        # Record failure for loop detection
+                        loop_detector.record_e2e_failure(
+                            e2e_result.diagnosis or "Unknown"
+                        )
+                        should_stop, reason = loop_detector.should_stop_e2e()
+
+                        if should_stop:
+                            console.print(f"[bold red]LOOP DETECTED:[/bold red] {reason}")
+                            state.e2e_status = "failed"
+                            state.save(state_dir)
+                            final_status = "e2e_failed"
+                            break
+
+                        # Show diagnosis
+                        if e2e_result.diagnosis:
+                            console.print(
+                                Panel(
+                                    e2e_result.diagnosis,
+                                    title="Claude's Diagnosis",
+                                    border_style="red",
+                                )
+                            )
+
+                        if e2e_result.is_fixable and e2e_result.fix_suggestion:
+                            # Prompt for fix
+                            apply = prompt_for_fix(e2e_result.fix_suggestion)
+
+                            if apply:
+                                console.print("Applying fix...")
+                                success = await apply_e2e_fix(
+                                    e2e_result.fix_suggestion, sandbox, config, tracer
+                                )
+
+                                if success:
+                                    console.print("Fix applied. Re-running E2E...")
+                                    continue  # Re-run E2E
+                                else:
+                                    console.print("[red]Fix could not be applied[/red]")
+
+                        # Not fixable or fix declined - escalate
+                        info = EscalationInfo(
+                            task_id="e2e",
+                            question=e2e_result.diagnosis or "E2E test failed",
+                            options=_extract_options(e2e_result.raw_output),
+                            recommendation=_extract_recommendation(
+                                e2e_result.raw_output
+                            ),
+                            raw_output=e2e_result.raw_output,
+                        )
+                        await escalate_and_wait(info, tracer, notify)
+                        state.e2e_status = "failed"
+                        state.save(state_dir)
+                        final_status = "e2e_failed"
+                        break
+
+                    else:  # unclear
+                        console.print("E2E: [bold yellow]UNCLEAR[/bold yellow]")
+                        # Escalate for human interpretation
+                        info = EscalationInfo(
+                            task_id="e2e",
+                            question="E2E test result unclear. Please review the output.",
+                            options=None,
+                            recommendation=None,
+                            raw_output=e2e_result.raw_output,
+                        )
+                        await escalate_and_wait(info, tracer, notify)
+                        state.e2e_status = "failed"
+                        state.save(state_dir)
+                        final_status = "e2e_failed"
+                        break
+
         # Record final milestone attributes
         milestone_span.set_attribute("milestone.status", final_status)
         milestone_span.set_attribute("milestone.total_cost_usd", total_cost)
@@ -221,6 +337,77 @@ def _record_metrics(
     except (AttributeError, NameError):
         # Counters not initialized - telemetry disabled
         pass
+
+
+def prompt_for_fix(fix_suggestion: str) -> bool:
+    """Prompt user to apply a suggested fix.
+
+    Displays the fix suggestion and asks for confirmation.
+
+    Args:
+        fix_suggestion: The suggested fix from Claude's diagnosis
+
+    Returns:
+        True if user wants to apply the fix, False otherwise
+    """
+    console.print(
+        Panel(
+            fix_suggestion,
+            title="Suggested Fix",
+            border_style="yellow",
+        )
+    )
+    response = Prompt.ask("Apply fix?", choices=["y", "n"], default="y")
+    return response.lower() == "y"
+
+
+def _extract_options(raw_output: str) -> list[str] | None:
+    """Extract options from E2E failure output.
+
+    Looks for OPTIONS: marker in the output.
+
+    Args:
+        raw_output: Raw output from Claude E2E test
+
+    Returns:
+        List of options if found, None otherwise
+    """
+    import re
+
+    match = re.search(
+        r"OPTIONS:\s*(.+?)(?=RECOMMENDATION:|$)", raw_output, re.DOTALL | re.IGNORECASE
+    )
+    if match:
+        options_text = match.group(1).strip()
+        # Parse options from various formats
+        lettered = re.findall(r"[A-Z]\)\s*(.+?)(?=[A-Z]\)|$)", options_text, re.DOTALL)
+        if lettered:
+            return [opt.strip() for opt in lettered]
+        # Try bullet points
+        bullets = re.findall(r"-\s*(.+?)(?=-|$)", options_text, re.DOTALL)
+        if bullets:
+            return [opt.strip() for opt in bullets]
+        return [options_text]
+    return None
+
+
+def _extract_recommendation(raw_output: str) -> str | None:
+    """Extract recommendation from E2E failure output.
+
+    Looks for RECOMMENDATION: marker in the output.
+
+    Args:
+        raw_output: Raw output from Claude E2E test
+
+    Returns:
+        Recommendation if found, None otherwise
+    """
+    import re
+
+    match = re.search(r"RECOMMENDATION:\s*(.+?)$", raw_output, re.DOTALL | re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+    return None
 
 
 def _get_current_branch(sandbox: SandboxManager) -> str:
