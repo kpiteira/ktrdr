@@ -83,8 +83,11 @@ async def lifespan(app: FastAPI):
 
     # Start worker registry background health checks
     from ktrdr.api.endpoints.workers import get_worker_registry
+    from ktrdr.api.services.operations_service import get_operations_service
 
     registry = get_worker_registry()
+    # CRITICAL: Inject OperationsService for reconciliation to work (M1)
+    registry.set_operations_service(get_operations_service())
     await registry.start()
     logger.info("Worker registry started")
 
