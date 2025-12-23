@@ -11,19 +11,31 @@ import pytest
 
 from ktrdr.api.models.operations import OperationType
 from ktrdr.api.models.workers import CompletedOperationReport, WorkerType
+from ktrdr.api.services.operations_service import OperationsService
 from ktrdr.workers.base import WorkerAPIBase
+
+
+@pytest.fixture
+def mock_operations_service():
+    """Provide a mock OperationsService without real DB connections."""
+    # Create service without repository to avoid DB connections in unit tests
+    service = OperationsService(repository=None)
+    return service
 
 
 class MockWorker(WorkerAPIBase):
     """Mock worker for testing re-registration."""
 
-    def __init__(self):
+    def __init__(self, operations_service=None):
         super().__init__(
             worker_type=WorkerType.BACKTESTING,
             operation_type=OperationType.BACKTESTING,
             worker_port=5003,
             backend_url="http://backend:8000",
         )
+        # Override with mock service for unit tests (avoid real DB connections)
+        if operations_service is not None:
+            self._operations_service = operations_service
 
 
 class TestReregistrationMonitorConfiguration:
@@ -154,9 +166,9 @@ class TestSelfRegisterWithResilienceFields:
     """Test that self_register includes resilience fields."""
 
     @pytest.mark.asyncio
-    async def test_self_register_includes_current_operation_id(self):
+    async def test_self_register_includes_current_operation_id(self, mock_operations_service):
         """Test that registration includes current_operation_id."""
-        worker = MockWorker()
+        worker = MockWorker(operations_service=mock_operations_service)
 
         # Add a mock active operation
         from ktrdr.api.models.operations import OperationMetadata

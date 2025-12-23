@@ -4,22 +4,35 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
+from unittest.mock import MagicMock
 
 from ktrdr.api.models.operations import OperationType
 from ktrdr.api.models.workers import WorkerType
+from ktrdr.api.services.operations_service import OperationsService
 from ktrdr.workers.base import WorkerAPIBase
+
+
+@pytest.fixture
+def mock_operations_service():
+    """Provide a mock OperationsService without real DB connections."""
+    # Create service without repository to avoid DB connections in unit tests
+    service = OperationsService(repository=None)
+    return service
 
 
 class MockWorker(WorkerAPIBase):
     """Mock worker for testing base class."""
 
-    def __init__(self):
+    def __init__(self, operations_service=None):
         super().__init__(
             worker_type=WorkerType.BACKTESTING,
             operation_type=OperationType.BACKTESTING,
             worker_port=5003,
             backend_url="http://backend:8000",
         )
+        # Override with mock service for unit tests (avoid real DB connections)
+        if operations_service is not None:
+            self._operations_service = operations_service
 
 
 @pytest.mark.asyncio
@@ -58,9 +71,9 @@ class TestWorkerAPIBase:
         assert data["healthy"] is True
 
     @pytest.mark.asyncio
-    async def test_health_reports_busy_when_operation_active(self):
+    async def test_health_reports_busy_when_operation_active(self, mock_operations_service):
         """Test health endpoint reports 'busy' when operation is active."""
-        worker = MockWorker()
+        worker = MockWorker(operations_service=mock_operations_service)
 
         # Create a test operation
         from datetime import datetime
@@ -96,9 +109,9 @@ class TestWorkerAPIBase:
         assert response.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_operations_endpoint_returns_operation_status(self):
+    async def test_operations_endpoint_returns_operation_status(self, mock_operations_service):
         """Test /api/v1/operations/{id} returns operation status."""
-        worker = MockWorker()
+        worker = MockWorker(operations_service=mock_operations_service)
 
         # Create a test operation
         from datetime import datetime
@@ -177,9 +190,9 @@ class TestWorkerAPIBase:
         assert "worker_id" in data
 
     @pytest.mark.asyncio
-    async def test_operations_metrics_endpoint(self):
+    async def test_operations_metrics_endpoint(self, mock_operations_service):
         """Test /api/v1/operations/{id}/metrics endpoint."""
-        worker = MockWorker()
+        worker = MockWorker(operations_service=mock_operations_service)
 
         # Create a test operation
         from datetime import datetime
@@ -208,9 +221,9 @@ class TestWorkerAPIBase:
         assert data["data"]["operation_id"] == operation_id
 
     @pytest.mark.asyncio
-    async def test_cancel_operation_endpoint(self):
+    async def test_cancel_operation_endpoint(self, mock_operations_service):
         """Test DELETE /api/v1/operations/{id}/cancel endpoint."""
-        worker = MockWorker()
+        worker = MockWorker(operations_service=mock_operations_service)
 
         # Create a test operation
         from datetime import datetime
