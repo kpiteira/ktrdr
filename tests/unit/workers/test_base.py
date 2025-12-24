@@ -101,9 +101,11 @@ class TestWorkerAPIBase:
         assert data["worker_status"] == "busy"
         assert data["current_operation"] == operation_id
 
-    def test_operations_endpoint_returns_404_for_missing_operation(self):
+    def test_operations_endpoint_returns_404_for_missing_operation(
+        self, mock_operations_service
+    ):
         """Test /api/v1/operations/{id} returns 404 for non-existent operation."""
-        worker = MockWorker()
+        worker = MockWorker(operations_service=mock_operations_service)
         client = TestClient(worker.app)
 
         response = client.get("/api/v1/operations/nonexistent")
