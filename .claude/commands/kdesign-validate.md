@@ -140,18 +140,24 @@ For each approved scenario, Claude traces through the architecture step-by-step:
 
 ### Execution Trace
 
-| Step | Component | Action | Input | Output | State Change |
-|------|-----------|--------|-------|--------|--------------|
-| 1 | CLI | User runs command | `ktrdr agent trigger` | HTTP POST | - |
-| 2 | API | Receives request | POST /agent/trigger | operation_id | Operation: PENDING |
-| 3 | AgentService | Creates session | trigger_reason | session_id | Session: DESIGNING |
-| ... | ... | ... | ... | ... | ... |
+| Step | Component | Action | Input | Output | State Change | Verification |
+|------|-----------|--------|-------|--------|--------------|--------------|
+| 1 | CLI | User runs command | `ktrdr agent trigger` | HTTP POST | - | Response test |
+| 2 | API | Receives request | POST /agent/trigger | operation_id | Operation: PENDING | **Wiring: has service?** |
+| 3 | AgentService | Creates session | trigger_reason | session_id | Session: DESIGNING | **DB: row exists?** |
+| ... | ... | ... | ... | ... | ... | ... |
 
 ### Questions / Gaps Identified
 
 - **[Q1]**: [Question about ambiguity or missing detail]
 - **[GAP]**: [Something the design doesn't cover]
+- **[VERIFY]**: [Verification approach needed for this component type]
 ```
+
+The **Verification** column surfaces test requirements during design validation, not during implementation. For each step, ask:
+- Does this component store data? → DB verification needed
+- Does this use dependency injection? → Wiring test needed
+- Is this a background task? → Lifecycle test needed
 
 **Key questions Claude asks during walk-through:**
 - "What happens if this fails?" (for each step)
@@ -190,6 +196,11 @@ After all scenarios are traced, Claude consolidates findings:
 6. **Infrastructure Gaps** — Deployment, restart, recovery issues
    - "What happens on backend restart mid-operation?"
    - "How are orphaned child operations cleaned up?"
+
+7. **Verification Gaps** — Missing integration/smoke tests for component types
+   - "This component stores data but no DB verification is specified"
+   - "This component uses DI but no wiring test is specified"
+   - "This component runs async but no lifecycle test is specified"
 
 **Output format:**
 ```markdown
