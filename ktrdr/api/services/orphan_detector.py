@@ -141,7 +141,7 @@ class OrphanOperationDetector:
 
         now = datetime.now(timezone.utc)
 
-        # Get all RUNNING operations (includes PENDING_RECONCILIATION via status check)
+        # Get all RUNNING operations (operations pending reconciliation are still RUNNING)
         running_ops, _, _ = await self._operations_service.list_operations(
             status=OperationStatus.RUNNING,
         )
@@ -164,6 +164,8 @@ class OrphanOperationDetector:
             # Check if backend-local (handled by StartupReconciliation)
             if self._is_backend_local(op):
                 # Skip - already handled on startup
+                # Defensive: remove from tracking if previously tracked
+                self._potential_orphans.pop(op_id, None)
                 continue
 
             # No worker claims this operation - potential orphan
