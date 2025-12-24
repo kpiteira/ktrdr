@@ -14,6 +14,7 @@ from rich.table import Table
 
 from orchestrator import telemetry
 from orchestrator.config import OrchestratorConfig
+from orchestrator.haiku_brain import HaikuBrain
 from orchestrator.health import CHECK_ORDER, get_health
 from orchestrator.lock import MilestoneLock
 from orchestrator.milestone_runner import (
@@ -22,7 +23,6 @@ from orchestrator.milestone_runner import (
     run_milestone,
 )
 from orchestrator.models import Task, TaskResult
-from orchestrator.plan_parser import parse_plan
 from orchestrator.sandbox import SandboxManager, format_tool_call
 from orchestrator.state import OrchestratorState
 from orchestrator.task_runner import run_task
@@ -73,8 +73,25 @@ async def _run_task(
     tracer, meter = setup_telemetry(config)
     create_metrics(meter)
 
-    # Parse plan and find task
-    tasks = parse_plan(plan_file)
+    # Parse plan and find task using HaikuBrain
+    milestone_id = Path(plan_file).stem
+    brain = HaikuBrain()
+    plan_content = Path(plan_file).read_text()
+    extracted = brain.extract_tasks(plan_content)
+
+    # Convert ExtractedTask to Task and find target
+    tasks = [
+        Task(
+            id=t.id,
+            title=t.title,
+            description=t.description,
+            file_path=None,
+            acceptance_criteria=[],
+            plan_file=plan_file,
+            milestone_id=milestone_id,
+        )
+        for t in extracted
+    ]
     target_task = next((t for t in tasks if t.id == task_id), None)
 
     if not target_task:
