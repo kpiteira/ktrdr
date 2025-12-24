@@ -165,6 +165,21 @@ Some background information.
         assert len(tasks) == 1
         assert tasks[0].id == "1.1"
 
+    def test_json_with_escaped_quotes_in_strings(self) -> None:
+        """JSON with escaped quotes in strings should be parsed correctly."""
+        plan_content = "# Some Plan"
+        # JSON with escaped quotes inside string values
+        response_with_escapes = r'[{"id": "1.1", "title": "Task with \"quoted\" word", "description": "A \"complex\" description"}]'
+
+        brain = HaikuBrain()
+        with patch.object(brain, "_invoke_haiku", return_value=response_with_escapes):
+            tasks = brain.extract_tasks(plan_content)
+
+        assert len(tasks) == 1
+        assert tasks[0].id == "1.1"
+        assert tasks[0].title == 'Task with "quoted" word'
+        assert tasks[0].description == 'A "complex" description'
+
     def test_uses_correct_model(self) -> None:
         """HaikuBrain should use the specified model."""
         brain = HaikuBrain(model="claude-haiku-4-5-20251001")

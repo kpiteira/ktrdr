@@ -191,19 +191,27 @@ class HaikuBrain:
         escape_next = False
 
         for i, char in enumerate(text[start:], start):
-            if escape_next:
-                escape_next = False
-                continue
-
-            if char == "\\":
-                escape_next = True
-                continue
-
-            if char == '"' and not escape_next:
-                in_string = not in_string
-                continue
-
             if in_string:
+                # When inside a string, handle escapes and closing quote
+                if escape_next:
+                    # Current character is escaped; consume it as literal
+                    escape_next = False
+                    continue
+
+                if char == "\\":
+                    # Next character is escaped
+                    escape_next = True
+                    continue
+
+                if char == '"':
+                    # End of string
+                    in_string = False
+                # Ignore all other characters while in a string
+                continue
+
+            # Not currently inside a string
+            if char == '"':
+                in_string = True
                 continue
 
             if char == "[":
