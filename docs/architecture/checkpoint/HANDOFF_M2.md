@@ -186,11 +186,49 @@ Both values must be > 0 (Pydantic `gt=0` constraint). Invalid values raise `Vali
 
 ---
 
-## Next: Task 2.5 (Integration Test)
+## Task 2.5 Complete
 
-The integration test should:
+**Implemented:** Integration tests for orphan detection in `tests/integration/test_m2_orphan_detection.py`
 
-1. Create operation with worker
-2. Simulate worker disappearance (remove from registry)
-3. Wait for orphan detection
-4. Verify operation marked FAILED
+### Test Coverage
+
+| Test | Scenario |
+| ---- | -------- |
+| `test_orphan_detection_after_worker_disappearance` | Full flow: register worker → create op → mark busy → clear registry → wait timeout → verify FAILED |
+| `test_worker_reclaiming_clears_potential_orphan` | Operation removed from tracking when worker reclaims it |
+| `test_backend_local_operations_ignored` | Backend-local ops not flagged as orphans |
+| `test_multiple_orphans_handled_independently` | Each orphan has independent timeout tracking |
+| `test_error_message_is_informative` | Error message explains "RUNNING but no worker claimed it" |
+| `test_full_detection_loop_integration` | Tests actual background task with fast intervals |
+| `test_detector_start_stop_lifecycle` | Detector starts/stops cleanly |
+
+### Gotchas (Task 2.5)
+
+**Worker claiming operations:**
+`register_worker(current_operation_id=X)` only performs reconciliation with the database - it does NOT set `worker.current_operation_id` on the WorkerEndpoint. To make a worker claim an operation (so orphan detector sees it), use:
+
+```python
+await worker_registry.register_worker(...)
+worker_registry.mark_busy(worker_id, operation_id)  # This sets current_operation_id
+```
+
+**Mock repository pattern:**
+Integration tests use a mock repository (same pattern as M1) that stores operations in memory:
+
+```python
+repo._storage = {}  # Dict[operation_id, OperationInfo]
+```
+
+This allows inspection of internal state for assertions.
+
+---
+
+## Milestone 2 Complete
+
+All 5 tasks implemented and tested:
+
+- Task 2.1: OrphanOperationDetector service
+- Task 2.2: Integration with backend startup
+- Task 2.3: Health check endpoint integration
+- Task 2.4: Configurable settings
+- Task 2.5: Integration tests
