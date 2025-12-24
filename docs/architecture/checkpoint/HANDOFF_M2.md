@@ -81,15 +81,68 @@ The codebase uses the modern `lifespan` context manager pattern, not the depreca
 **Import at module level:**
 `OrphanOperationDetector` is imported at module level in `startup.py`, not inside the lifespan function. This is consistent with how it's used in tests (patching `ktrdr.api.startup.OrphanOperationDetector`).
 
-### For Task 2.3 (Health Check)
+---
 
-Use `get_orphan_detector().get_status()` in the health endpoint. The status dict can be directly included in the response. Import from `ktrdr.api.startup`:
+## Task 2.3 Complete
+
+**Implemented:** Orphan detector status exposed via `/health` endpoint
+
+### Health Endpoint Integration
+
+The health endpoint in `ktrdr/api/endpoints/__init__.py` now includes orphan detector status:
 
 ```python
-from ktrdr.api.startup import get_orphan_detector
+# Lazy import to avoid circular dependencies
+def get_orphan_detector():
+    from ktrdr.api.startup import get_orphan_detector as _get_orphan_detector
+    return _get_orphan_detector()
 
-@router.get("/health")
-async def health():
-    detector = get_orphan_detector()
-    return {"orphan_detector": detector.get_status()}
+def _get_orphan_detector_status() -> dict[str, Any] | None:
+    try:
+        detector = get_orphan_detector()
+        return detector.get_status()
+    except RuntimeError:
+        return None  # Not initialized yet
+
+@api_router.get("/health")
+async def health_check(config: APIConfig = Depends(get_api_config)):
+    return {
+        "status": "ok",
+        "version": config.version,
+        "orphan_detector": _get_orphan_detector_status(),
+    }
 ```
+
+### Gotchas (Task 2.3)
+
+**Lazy import pattern:**
+The `get_orphan_detector()` is defined locally with a lazy import to avoid circular dependencies between `endpoints/__init__.py` and `startup.py`.
+
+**Handling uninitialized detector:**
+During tests or before startup completes, `get_orphan_detector()` raises RuntimeError. The helper `_get_orphan_detector_status()` catches this and returns `None`. Tests can verify this behavior.
+
+**Response format:**
+
+```json
+{
+  "status": "ok",
+  "version": "1.0.x",
+  "orphan_detector": {
+    "running": true,
+    "potential_orphans_count": 0,
+    "last_check": "2024-12-21T10:30:00+00:00",
+    "orphan_timeout_seconds": 60,
+    "check_interval_seconds": 15
+  }
+}
+```
+
+When detector is not initialized, `orphan_detector` is `null`.
+
+### For Task 2.4 (Configuration)
+
+The timeout values are currently hardcoded in the `OrphanOperationDetector` constructor. Task 2.4 should:
+
+1. Add environment variables: `ORPHAN_TIMEOUT_SECONDS`, `ORPHAN_CHECK_INTERVAL_SECONDS`
+2. Read them in `startup.py` when creating the detector
+3. Pass them to the constructor
