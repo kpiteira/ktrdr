@@ -5,11 +5,53 @@ for semantic understanding of milestone plans and task execution results.
 """
 
 import json
+import os
 import re
+import shutil
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Literal
 
-from orchestrator.llm_interpreter import find_claude_cli
+# Cache for the Claude CLI path
+_claude_cli_path: str | None = None
+
+
+def find_claude_cli() -> str | None:
+    """Find the Claude CLI executable.
+
+    Checks:
+    1. shutil.which("claude") - standard PATH lookup
+    2. ~/.claude/local/claude - common installation location
+
+    Returns:
+        Path to the Claude CLI, or None if not found.
+    """
+    global _claude_cli_path
+
+    # Return cached path if already found
+    if _claude_cli_path is not None:
+        return _claude_cli_path
+
+    # Try PATH first
+    path_result = shutil.which("claude")
+    if path_result:
+        _claude_cli_path = path_result
+        return _claude_cli_path
+
+    # Try common installation locations
+    home = Path.home()
+    common_locations = [
+        home / ".claude" / "local" / "claude",
+        home / ".claude" / "bin" / "claude",
+    ]
+
+    for location in common_locations:
+        if location.exists() and os.access(location, os.X_OK):
+            _claude_cli_path = str(location)
+            return _claude_cli_path
+
+    return None
 
 
 @dataclass
@@ -23,6 +65,22 @@ class ExtractedTask:
     id: str
     title: str
     description: str
+
+
+@dataclass
+class InterpretationResult:
+    """Result of interpreting Claude Code task execution output.
+
+    Provides structured information about what happened during task execution,
+    including whether human input is needed and what questions/options to present.
+    """
+
+    status: Literal["completed", "failed", "needs_help"]
+    summary: str
+    error: str | None
+    question: str | None
+    options: list[str] | None
+    recommendation: str | None
 
 
 # Prompt for extracting tasks from a milestone plan
@@ -49,6 +107,37 @@ Return ONLY the JSON array, no other text.
 
 Plan content:
 {plan_content}
+"""
+
+# Prompt for interpreting task execution results
+# From Architecture doc Appendix: Prompt 2
+INTERPRET_RESULT_PROMPT = """Analyze this Claude Code output and determine the task status.
+
+Return a JSON object:
+{{
+  "status": "completed" | "failed" | "needs_help",
+  "summary": "Brief description of what happened",
+  "error": "Error details if failed, null otherwise",
+  "question": "The question Claude is asking, if needs_help",
+  "options": ["Option A", "Option B"] or null,
+  "recommendation": "Claude's recommended option, if stated"
+}}
+
+Determine status as:
+- "completed": Task finished successfully. Look for task summaries, passing tests, successful commits.
+- "failed": Task encountered an error it couldn't recover from. Look for unresolved errors, failed tests that weren't fixed, explicit failure messages.
+- "needs_help": Claude is asking a question or needs human decision. Look for:
+  - AskUserQuestion tool usage
+  - Questions like "Which approach should I take?"
+  - Statements like "I need clarification" or "I'm blocked"
+  - Multiple options presented for human to choose
+
+When in doubt between "completed" and "needs_help", prefer "needs_help" — it's safer to ask than to assume.
+
+Return ONLY the JSON, no other text.
+
+Claude Code output:
+{output}
 """
 
 
@@ -220,5 +309,132 @@ class HaikuBrain:
                 depth -= 1
                 if depth == 0:
                     return text[start : i + 1]
+
+        return None
+
+    def interpret_result(self, output: str) -> InterpretationResult:
+        """Interpret Claude Code output to determine task status.
+
+        Uses Haiku to semantically understand the task execution output and
+        determine whether the task completed, failed, or needs human help.
+
+        No truncation - full output is sent to Haiku (per Decision 8).
+
+        Args:
+            output: The full text output from Claude Code task execution.
+
+        Returns:
+            InterpretationResult with status, summary, and any question/options.
+        """
+        prompt = INTERPRET_RESULT_PROMPT.format(output=output)
+        try:
+            response = self._invoke_haiku(prompt)
+        except (RuntimeError, subprocess.TimeoutExpired) as e:
+            # Conservative fallback: if Haiku invocation fails, do not crash task execution.
+            return InterpretationResult(
+                status="needs_help",
+                summary="Failed to interpret task output",
+                error=f"Haiku invocation failed: {e}",
+                question="Please review the task output and advise on next steps.",
+                options=None,
+                recommendation=None,
+            )
+        return self._parse_interpretation(response)
+
+    def _parse_interpretation(self, response: str) -> InterpretationResult:
+        """Parse Haiku response into an InterpretationResult.
+
+        Handles JSON that may be wrapped in markdown code blocks.
+        Falls back to needs_help status when parsing fails (conservative).
+
+        Args:
+            response: The raw response from Haiku.
+
+        Returns:
+            InterpretationResult parsed from the response.
+        """
+        data = None
+
+        # Try direct JSON parse first
+        try:
+            data = json.loads(response.strip())
+        except (json.JSONDecodeError, TypeError):
+            # If direct parsing fails, fall back to extracting an embedded JSON object below.
+            pass
+
+        # Try to extract embedded JSON using balanced brace matching
+        if data is None:
+            data = self._extract_json_object(response)
+
+        # If parsing failed, return conservative needs_help result
+        if data is None:
+            return InterpretationResult(
+                status="needs_help",
+                summary="Failed to interpret task output",
+                error="Could not parse Haiku response as JSON",
+                question="Please review the task output and advise on next steps.",
+                options=None,
+                recommendation=None,
+            )
+
+        # Handle both string and None values for status
+        status = data.get("status", "needs_help")
+        if status not in ("completed", "failed", "needs_help"):
+            status = "needs_help"
+
+        return InterpretationResult(
+            status=status,
+            summary=data.get("summary", ""),
+            error=data.get("error"),
+            question=data.get("question"),
+            options=data.get("options"),
+            recommendation=data.get("recommendation"),
+        )
+
+    def _extract_json_object(self, text: str) -> dict | None:
+        """Extract a JSON object from text using balanced brace matching.
+
+        Finds the first { and matches it to its closing } by counting braces,
+        handling nested objects and strings properly.
+
+        Args:
+            text: The text potentially containing a JSON object.
+
+        Returns:
+            Parsed dict if found, None otherwise.
+        """
+        start = text.find("{")
+        if start == -1:
+            return None
+
+        depth = 0
+        in_string = False
+        escape_next = False
+
+        for i, char in enumerate(text[start:], start):
+            if in_string:
+                if escape_next:
+                    escape_next = False
+                    continue
+                if char == "\\":
+                    escape_next = True
+                    continue
+                if char == '"':
+                    in_string = False
+                continue
+
+            if char == '"':
+                in_string = True
+                continue
+
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    try:
+                        return json.loads(text[start : i + 1])
+                    except json.JSONDecodeError:
+                        return None
 
         return None

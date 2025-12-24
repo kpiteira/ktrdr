@@ -10,46 +10,44 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from orchestrator.llm_interpreter import InterpretationResult
+from orchestrator.haiku_brain import InterpretationResult
 
 
-# Fixture to mock LLM interpreter for pattern tests
+# Fixture to mock HaikuBrain for pattern tests
 @pytest.fixture
-def mock_llm_needs_human():
-    """Mock LLM interpreter that returns needs_human=True."""
+def mock_brain_needs_help():
+    """Mock HaikuBrain that returns status=needs_help."""
     result = InterpretationResult(
-        needs_human=True,
+        status="needs_help",
+        summary="Mock summary",
+        error=None,
         question="Mock question",
         options=None,
         recommendation=None,
-        task_completed=False,
-        task_failed=False,
-        error_message=None,
     )
-    with patch("orchestrator.escalation.get_interpreter") as mock_get:
-        mock_interpreter = MagicMock()
-        mock_interpreter.interpret.return_value = result
-        mock_get.return_value = mock_interpreter
-        yield mock_interpreter
+    with patch("orchestrator.escalation.get_brain") as mock_get:
+        mock_brain = MagicMock()
+        mock_brain.interpret_result.return_value = result
+        mock_get.return_value = mock_brain
+        yield mock_brain
 
 
 @pytest.fixture
-def mock_llm_completed():
-    """Mock LLM interpreter that returns task completed (no human needed)."""
+def mock_brain_completed():
+    """Mock HaikuBrain that returns status=completed (no human needed)."""
     result = InterpretationResult(
-        needs_human=False,
+        status="completed",
+        summary="Task completed successfully",
+        error=None,
         question=None,
         options=None,
         recommendation=None,
-        task_completed=True,
-        task_failed=False,
-        error_message=None,
     )
-    with patch("orchestrator.escalation.get_interpreter") as mock_get:
-        mock_interpreter = MagicMock()
-        mock_interpreter.interpret.return_value = result
-        mock_get.return_value = mock_interpreter
-        yield mock_interpreter
+    with patch("orchestrator.escalation.get_brain") as mock_get:
+        mock_brain = MagicMock()
+        mock_brain.interpret_result.return_value = result
+        mock_get.return_value = mock_brain
+        yield mock_brain
 
 
 class TestDetectNeedsHuman:
@@ -79,7 +77,7 @@ class TestDetectNeedsHuman:
         # Fast-path: no LLM call needed
         assert detect_needs_human(output) is True
 
-    def test_detects_options_marker(self, mock_llm_needs_human):
+    def test_detects_options_marker(self, mock_brain_needs_help):
         """Should detect OPTIONS: marker via LLM."""
         from orchestrator.escalation import detect_needs_human
 
@@ -91,81 +89,81 @@ class TestDetectNeedsHuman:
         B) In-memory (fast, local only)
         """
         assert detect_needs_human(output) is True
-        mock_llm_needs_human.interpret.assert_called_once()
+        mock_brain_needs_help.interpret_result.assert_called_once()
 
-    def test_detects_should_i_pattern(self, mock_llm_needs_human):
+    def test_detects_should_i_pattern(self, mock_brain_needs_help):
         """Should detect 'should I' question pattern via LLM."""
         from orchestrator.escalation import detect_needs_human
 
         output = "The tests are failing. Should I fix them before proceeding?"
         assert detect_needs_human(output) is True
-        mock_llm_needs_human.interpret.assert_called_once()
+        mock_brain_needs_help.interpret_result.assert_called_once()
 
-    def test_detects_would_you_prefer_pattern(self, mock_llm_needs_human):
+    def test_detects_would_you_prefer_pattern(self, mock_brain_needs_help):
         """Should detect 'would you prefer' question pattern via LLM."""
         from orchestrator.escalation import detect_needs_human
 
         output = "Would you prefer option A or option B for the implementation?"
         assert detect_needs_human(output) is True
-        mock_llm_needs_human.interpret.assert_called_once()
+        mock_brain_needs_help.interpret_result.assert_called_once()
 
-    def test_detects_im_not_sure_pattern(self, mock_llm_needs_human):
+    def test_detects_im_not_sure_pattern(self, mock_brain_needs_help):
         """Should detect 'I'm not sure' uncertainty pattern via LLM."""
         from orchestrator.escalation import detect_needs_human
 
         output = "I'm not sure whether to use Redis or Memcached for this."
         assert detect_needs_human(output) is True
-        mock_llm_needs_human.interpret.assert_called_once()
+        mock_brain_needs_help.interpret_result.assert_called_once()
 
-    def test_detects_im_uncertain_pattern(self, mock_llm_needs_human):
+    def test_detects_im_uncertain_pattern(self, mock_brain_needs_help):
         """Should detect 'I'm uncertain' pattern via LLM."""
         from orchestrator.escalation import detect_needs_human
 
         output = "I'm uncertain about the best approach here."
         assert detect_needs_human(output) is True
-        mock_llm_needs_human.interpret.assert_called_once()
+        mock_brain_needs_help.interpret_result.assert_called_once()
 
-    def test_detects_options_are_pattern(self, mock_llm_needs_human):
+    def test_detects_options_are_pattern(self, mock_brain_needs_help):
         """Should detect 'the options are' pattern via LLM."""
         from orchestrator.escalation import detect_needs_human
 
         output = "The options are: use a database or a file system."
         assert detect_needs_human(output) is True
-        mock_llm_needs_human.interpret.assert_called_once()
+        mock_brain_needs_help.interpret_result.assert_called_once()
 
-    def test_detects_recommend_but_pattern(self, mock_llm_needs_human):
+    def test_detects_recommend_but_pattern(self, mock_brain_needs_help):
         """Should detect 'I recommend X but' pattern (hedging) via LLM."""
         from orchestrator.escalation import detect_needs_human
 
         output = "I recommend using Redis but you might prefer something simpler."
         assert detect_needs_human(output) is True
-        mock_llm_needs_human.interpret.assert_called_once()
+        mock_brain_needs_help.interpret_result.assert_called_once()
 
-    def test_detects_could_go_either_way_pattern(self, mock_llm_needs_human):
+    def test_detects_could_go_either_way_pattern(self, mock_brain_needs_help):
         """Should detect 'could go either way' pattern via LLM."""
         from orchestrator.escalation import detect_needs_human
 
         output = "This could go either way - both approaches have merits."
         assert detect_needs_human(output) is True
-        mock_llm_needs_human.interpret.assert_called_once()
+        mock_brain_needs_help.interpret_result.assert_called_once()
 
-    def test_detects_what_would_you_like_pattern(self, mock_llm_needs_human):
+    def test_detects_what_would_you_like_pattern(self, mock_brain_needs_help):
         """Should detect 'what would you like' pattern via LLM."""
         from orchestrator.escalation import detect_needs_human
 
         output = "What would you like me to prioritize first?"
         assert detect_needs_human(output) is True
-        mock_llm_needs_human.interpret.assert_called_once()
+        mock_brain_needs_help.interpret_result.assert_called_once()
 
-    def test_detects_do_you_want_me_to_pattern(self, mock_llm_needs_human):
+    def test_detects_do_you_want_me_to_pattern(self, mock_brain_needs_help):
         """Should detect 'do you want me to' pattern via LLM."""
         from orchestrator.escalation import detect_needs_human
 
         output = "Do you want me to refactor the entire module or just this function?"
         assert detect_needs_human(output) is True
-        mock_llm_needs_human.interpret.assert_called_once()
+        mock_brain_needs_help.interpret_result.assert_called_once()
 
-    def test_returns_false_for_completed_output(self, mock_llm_completed):
+    def test_returns_false_for_completed_output(self, mock_brain_completed):
         """Should return False for definitive completed output."""
         from orchestrator.escalation import detect_needs_human
 
@@ -176,9 +174,9 @@ class TestDetectNeedsHuman:
         The implementation follows the existing patterns.
         """
         assert detect_needs_human(output) is False
-        mock_llm_completed.interpret.assert_called_once()
+        mock_brain_completed.interpret_result.assert_called_once()
 
-    def test_returns_false_for_error_output(self, mock_llm_completed):
+    def test_returns_false_for_error_output(self, mock_brain_completed):
         """Should return False for error output without uncertainty."""
         from orchestrator.escalation import detect_needs_human
 
@@ -189,17 +187,17 @@ class TestDetectNeedsHuman:
         The import statement on line 5 references a module that doesn't exist.
         """
         assert detect_needs_human(output) is False
-        mock_llm_completed.interpret.assert_called_once()
+        mock_brain_completed.interpret_result.assert_called_once()
 
-    def test_case_insensitive_matching(self, mock_llm_needs_human):
+    def test_case_insensitive_matching(self, mock_brain_needs_help):
         """Patterns should be detected via LLM regardless of case."""
         from orchestrator.escalation import detect_needs_human
 
         output = "SHOULD I proceed with the refactoring?"
         assert detect_needs_human(output) is True
-        mock_llm_needs_human.interpret.assert_called_once()
+        mock_brain_needs_help.interpret_result.assert_called_once()
 
-    def test_detects_markdown_options(self, mock_llm_needs_human):
+    def test_detects_markdown_options(self, mock_brain_needs_help):
         """Should detect **Options:** with markdown bold formatting via LLM."""
         from orchestrator.escalation import detect_needs_human
 
@@ -212,9 +210,9 @@ class TestDetectNeedsHuman:
         2. Should I create it?
         """
         assert detect_needs_human(output) is True
-        mock_llm_needs_human.interpret.assert_called_once()
+        mock_brain_needs_help.interpret_result.assert_called_once()
 
-    def test_detects_lowercase_options(self, mock_llm_needs_human):
+    def test_detects_lowercase_options(self, mock_brain_needs_help):
         """Should detect options: in lowercase via LLM."""
         from orchestrator.escalation import detect_needs_human
 
@@ -224,31 +222,31 @@ class TestDetectNeedsHuman:
         - Use Memcached
         """
         assert detect_needs_human(output) is True
-        mock_llm_needs_human.interpret.assert_called_once()
+        mock_brain_needs_help.interpret_result.assert_called_once()
 
-    def test_detects_please_clarify(self, mock_llm_needs_human):
+    def test_detects_please_clarify(self, mock_brain_needs_help):
         """Should detect 'please clarify' pattern via LLM."""
         from orchestrator.escalation import detect_needs_human
 
         output = "Please clarify which implementation plan you'd like me to work with."
         assert detect_needs_human(output) is True
-        mock_llm_needs_human.interpret.assert_called_once()
+        mock_brain_needs_help.interpret_result.assert_called_once()
 
-    def test_detects_did_you_mean(self, mock_llm_needs_human):
+    def test_detects_did_you_mean(self, mock_brain_needs_help):
         """Should detect 'did you mean' pattern via LLM."""
         from orchestrator.escalation import detect_needs_human
 
         output = "Did you mean one of these existing files?"
         assert detect_needs_human(output) is True
-        mock_llm_needs_human.interpret.assert_called_once()
+        mock_brain_needs_help.interpret_result.assert_called_once()
 
-    def test_detects_which_would_you(self, mock_llm_needs_human):
+    def test_detects_which_would_you(self, mock_brain_needs_help):
         """Should detect 'which X would you' pattern via LLM."""
         from orchestrator.escalation import detect_needs_human
 
         output = "Which approach would you like me to take?"
         assert detect_needs_human(output) is True
-        mock_llm_needs_human.interpret.assert_called_once()
+        mock_brain_needs_help.interpret_result.assert_called_once()
 
 
 class TestExtractEscalationInfo:
@@ -711,11 +709,11 @@ class TestEscalateAndWait:
             )
 
 
-class TestLLMInterpreterIntegration:
-    """Test LLM-based detection integration."""
+class TestHaikuBrainIntegration:
+    """Test HaikuBrain-based detection integration."""
 
-    def test_explicit_marker_skips_llm_by_default(self):
-        """Explicit STATUS: needs_human should not call LLM in default mode."""
+    def test_explicit_marker_skips_brain_by_default(self):
+        """Explicit STATUS: needs_human should not call HaikuBrain in default mode."""
         from unittest.mock import patch
 
         from orchestrator.escalation import configure_interpreter, detect_needs_human
@@ -723,82 +721,80 @@ class TestLLMInterpreterIntegration:
         # Reset to default mode
         configure_interpreter(llm_only=False)
 
-        with patch("orchestrator.escalation.get_interpreter") as mock_get:
+        with patch("orchestrator.escalation.get_brain") as mock_get:
             output = "STATUS: needs_human\nI need clarification."
             result = detect_needs_human(output)
 
             assert result is True
             mock_get.assert_not_called()  # Fast path, no LLM
 
-    def test_needs_human_marker_skips_llm(self):
-        """NEEDS_HUMAN: marker should not call LLM in default mode."""
+    def test_needs_human_marker_skips_brain(self):
+        """NEEDS_HUMAN: marker should not call HaikuBrain in default mode."""
         from unittest.mock import patch
 
         from orchestrator.escalation import configure_interpreter, detect_needs_human
 
         configure_interpreter(llm_only=False)
 
-        with patch("orchestrator.escalation.get_interpreter") as mock_get:
+        with patch("orchestrator.escalation.get_brain") as mock_get:
             output = "NEEDS_HUMAN: Please clarify the caching type."
             result = detect_needs_human(output)
 
             assert result is True
             mock_get.assert_not_called()
 
-    def test_no_explicit_marker_calls_llm(self):
-        """Output without explicit markers should use LLM interpretation."""
+    def test_no_explicit_marker_calls_brain(self):
+        """Output without explicit markers should use HaikuBrain interpretation."""
         from unittest.mock import MagicMock, patch
 
         from orchestrator.escalation import configure_interpreter, detect_needs_human
-        from orchestrator.llm_interpreter import InterpretationResult
+        from orchestrator.haiku_brain import InterpretationResult
 
         configure_interpreter(llm_only=False)
 
         mock_result = InterpretationResult(
-            needs_human=True,
+            status="needs_help",
+            summary="Needs clarification",
+            error=None,
             question="Which approach?",
             options=["A", "B"],
             recommendation="A",
-            task_completed=False,
-            task_failed=False,
-            error_message=None,
         )
 
-        with patch("orchestrator.escalation.get_interpreter") as mock_get:
-            mock_interpreter = MagicMock()
-            mock_interpreter.interpret.return_value = mock_result
-            mock_get.return_value = mock_interpreter
+        with patch("orchestrator.escalation.get_brain") as mock_get:
+            mock_brain = MagicMock()
+            mock_brain.interpret_result.return_value = mock_result
+            mock_get.return_value = mock_brain
 
             output = "Task completed. Some ambiguous text here."
             result = detect_needs_human(output)
 
             assert result is True
             mock_get.assert_called_once()
-            mock_interpreter.interpret.assert_called_once_with(output)
+            mock_brain.interpret_result.assert_called_once_with(output)
 
-    def test_llm_returns_false_for_completed_task(self):
-        """LLM saying task completed should return False."""
+    def test_brain_returns_false_for_completed_task(self):
+        """HaikuBrain saying task completed should return False."""
         from unittest.mock import MagicMock, patch
 
         from orchestrator.escalation import configure_interpreter, detect_needs_human
-        from orchestrator.llm_interpreter import InterpretationResult
+        from orchestrator.haiku_brain import InterpretationResult
 
         configure_interpreter(llm_only=False)
 
         mock_result = InterpretationResult(
-            needs_human=False,
+            status="completed",
+            summary="Task completed successfully",
+            error=None,
             question=None,
             options=None,
             recommendation=None,
-            task_completed=True,
-            task_failed=False,
-            error_message=None,
         )
 
-        with patch("orchestrator.escalation.get_interpreter") as mock_get:
-            mock_interpreter = MagicMock()
-            mock_interpreter.interpret.return_value = mock_result
-            mock_get.return_value = mock_interpreter
+        with patch("orchestrator.escalation.get_brain") as mock_get:
+            mock_brain = MagicMock()
+            mock_brain.interpret_result.return_value = mock_result
+            mock_get.return_value = mock_brain
 
             output = "Task completed successfully. All tests pass."
             result = detect_needs_human(output)
@@ -806,37 +802,36 @@ class TestLLMInterpreterIntegration:
             assert result is False
 
     def test_llm_only_mode_ignores_explicit_markers(self):
-        """--llm-only mode should always use LLM, even with explicit markers."""
+        """--llm-only mode should always use HaikuBrain, even with explicit markers."""
         from unittest.mock import MagicMock, patch
 
         from orchestrator.escalation import configure_interpreter, detect_needs_human
-        from orchestrator.llm_interpreter import InterpretationResult
+        from orchestrator.haiku_brain import InterpretationResult
 
         # Enable LLM-only mode
         configure_interpreter(llm_only=True)
 
         try:
             mock_result = InterpretationResult(
-                needs_human=True,
+                status="needs_help",
+                summary="Needs help",
+                error=None,
                 question="Q",
                 options=None,
                 recommendation=None,
-                task_completed=False,
-                task_failed=False,
-                error_message=None,
             )
 
-            with patch("orchestrator.escalation.get_interpreter") as mock_get:
-                mock_interpreter = MagicMock()
-                mock_interpreter.interpret.return_value = mock_result
-                mock_get.return_value = mock_interpreter
+            with patch("orchestrator.escalation.get_brain") as mock_get:
+                mock_brain = MagicMock()
+                mock_brain.interpret_result.return_value = mock_result
+                mock_get.return_value = mock_brain
 
                 output = "STATUS: needs_human"  # Has explicit marker
                 result = detect_needs_human(output)
 
-                # Should call LLM despite marker
+                # Should call HaikuBrain despite marker
                 mock_get.assert_called_once()
-                mock_interpreter.interpret.assert_called_once()
+                mock_brain.interpret_result.assert_called_once()
                 assert result is True
         finally:
             # Reset to default
@@ -847,42 +842,41 @@ class TestLLMInterpreterIntegration:
         from unittest.mock import MagicMock, patch
 
         from orchestrator.escalation import configure_interpreter, detect_needs_human
-        from orchestrator.llm_interpreter import InterpretationResult
+        from orchestrator.haiku_brain import InterpretationResult
 
         configure_interpreter(llm_only=True)
 
         try:
             mock_result = InterpretationResult(
-                needs_human=False,
+                status="completed",
+                summary="Task completed",
+                error=None,
                 question=None,
                 options=None,
                 recommendation=None,
-                task_completed=True,
-                task_failed=False,
-                error_message=None,
             )
 
-            with patch("orchestrator.escalation.get_interpreter") as mock_get:
-                mock_interpreter = MagicMock()
-                mock_interpreter.interpret.return_value = mock_result
-                mock_get.return_value = mock_interpreter
+            with patch("orchestrator.escalation.get_brain") as mock_get:
+                mock_brain = MagicMock()
+                mock_brain.interpret_result.return_value = mock_result
+                mock_get.return_value = mock_brain
 
-                output = "NEEDS_HUMAN: But LLM says no."
+                output = "NEEDS_HUMAN: But HaikuBrain says no."
                 result = detect_needs_human(output)
 
-                # LLM says needs_human=False, so return False
+                # HaikuBrain says status=completed, so return False
                 assert result is False
-                mock_interpreter.interpret.assert_called_once()
+                mock_brain.interpret_result.assert_called_once()
         finally:
             configure_interpreter(llm_only=False)
 
-    def test_get_interpreter_singleton(self):
-        """get_interpreter should return the same instance on repeated calls."""
-        from orchestrator.escalation import get_interpreter
+    def test_get_brain_singleton(self):
+        """get_brain should return the same instance on repeated calls."""
+        from orchestrator.escalation import get_brain
 
-        interpreter1 = get_interpreter()
-        interpreter2 = get_interpreter()
-        assert interpreter1 is interpreter2
+        brain1 = get_brain()
+        brain2 = get_brain()
+        assert brain1 is brain2
 
     def test_configure_interpreter_resets_state(self):
         """configure_interpreter should set the llm_only flag."""
