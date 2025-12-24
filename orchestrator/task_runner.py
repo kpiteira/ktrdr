@@ -15,8 +15,8 @@ from orchestrator.config import OrchestratorConfig
 from orchestrator.escalation import (
     EscalationInfo,
     escalate_and_wait,
+    get_brain,
 )
-from orchestrator.haiku_brain import HaikuBrain
 from orchestrator.loop_detector import LoopDetector
 from orchestrator.models import Task, TaskResult
 from orchestrator.sandbox import SandboxManager
@@ -78,8 +78,8 @@ async def run_task(
 
     duration = time.time() - start_time
 
-    # Use HaikuBrain for semantic interpretation of output
-    brain = HaikuBrain()
+    # Use HaikuBrain singleton for semantic interpretation of output
+    brain = get_brain()
     interpretation = brain.interpret_result(claude_result.result)
 
     # Map status: HaikuBrain uses "needs_help", TaskResult uses "needs_human"

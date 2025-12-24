@@ -327,7 +327,18 @@ class HaikuBrain:
             InterpretationResult with status, summary, and any question/options.
         """
         prompt = INTERPRET_RESULT_PROMPT.format(output=output)
-        response = self._invoke_haiku(prompt)
+        try:
+            response = self._invoke_haiku(prompt)
+        except (RuntimeError, subprocess.TimeoutExpired) as e:
+            # Conservative fallback: if Haiku invocation fails, do not crash task execution.
+            return InterpretationResult(
+                status="needs_help",
+                summary="Failed to interpret task output",
+                error=f"Haiku invocation failed: {e}",
+                question="Please review the task output and advise on next steps.",
+                options=None,
+                recommendation=None,
+            )
         return self._parse_interpretation(response)
 
     def _parse_interpretation(self, response: str) -> InterpretationResult:

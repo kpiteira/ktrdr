@@ -80,7 +80,7 @@ class TestRunTaskPromptConstruction:
         mock_brain = MagicMock()
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
-        with patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain):
+        with patch("orchestrator.task_runner.get_brain", return_value=mock_brain):
             await run_task(task, sandbox, config, task.plan_file)
 
         call_args = sandbox.invoke_claude.call_args
@@ -104,7 +104,7 @@ class TestRunTaskPromptConstruction:
         mock_brain = MagicMock()
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
-        with patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain):
+        with patch("orchestrator.task_runner.get_brain", return_value=mock_brain):
             await run_task(
                 task, sandbox, config, task.plan_file, human_guidance="Use option A"
             )
@@ -128,7 +128,7 @@ class TestRunTaskPromptConstruction:
         mock_brain = MagicMock()
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
-        with patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain):
+        with patch("orchestrator.task_runner.get_brain", return_value=mock_brain):
             await run_task(task, sandbox, config, task.plan_file)
 
         call_kwargs = sandbox.invoke_claude.call_args[1]
@@ -149,7 +149,7 @@ class TestRunTaskPromptConstruction:
         mock_brain = MagicMock()
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
-        with patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain):
+        with patch("orchestrator.task_runner.get_brain", return_value=mock_brain):
             await run_task(task, sandbox, config, task.plan_file)
 
         call_kwargs = sandbox.invoke_claude.call_args[1]
@@ -176,7 +176,7 @@ class TestRunTaskStatusParsing:
             status="completed", summary="Task finished"
         )
 
-        with patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain):
+        with patch("orchestrator.task_runner.get_brain", return_value=mock_brain):
             result = await run_task(task, sandbox, config, task.plan_file)
 
         assert result.status == "completed"
@@ -198,7 +198,7 @@ class TestRunTaskStatusParsing:
             status="failed", summary="Task failed", error="Module not found"
         )
 
-        with patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain):
+        with patch("orchestrator.task_runner.get_brain", return_value=mock_brain):
             result = await run_task(task, sandbox, config, task.plan_file)
 
         assert result.status == "failed"
@@ -223,7 +223,7 @@ class TestRunTaskStatusParsing:
             recommendation="A",
         )
 
-        with patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain):
+        with patch("orchestrator.task_runner.get_brain", return_value=mock_brain):
             result = await run_task(task, sandbox, config, task.plan_file)
 
         assert result.status == "needs_human"
@@ -249,7 +249,7 @@ class TestRunTaskErrorExtraction:
             status="failed", summary="Task failed", error="Import error in module"
         )
 
-        with patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain):
+        with patch("orchestrator.task_runner.get_brain", return_value=mock_brain):
             result = await run_task(task, sandbox, config, task.plan_file)
 
         assert result.error is not None
@@ -276,7 +276,7 @@ class TestRunTaskNeedsHumanExtraction:
             status="needs_help", question="Should I use Redis or PostgreSQL?"
         )
 
-        with patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain):
+        with patch("orchestrator.task_runner.get_brain", return_value=mock_brain):
             result = await run_task(task, sandbox, config, task.plan_file)
 
         assert result.question is not None
@@ -299,7 +299,7 @@ class TestRunTaskNeedsHumanExtraction:
             status="needs_help", question="Which?", options=["A", "B", "C"]
         )
 
-        with patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain):
+        with patch("orchestrator.task_runner.get_brain", return_value=mock_brain):
             result = await run_task(task, sandbox, config, task.plan_file)
 
         assert result.options is not None
@@ -326,7 +326,7 @@ class TestRunTaskNeedsHumanExtraction:
             recommendation="Option A is safer",
         )
 
-        with patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain):
+        with patch("orchestrator.task_runner.get_brain", return_value=mock_brain):
             result = await run_task(task, sandbox, config, task.plan_file)
 
         assert result.recommendation is not None
@@ -351,7 +351,7 @@ class TestRunTaskResultFields:
         mock_brain = MagicMock()
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
-        with patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain):
+        with patch("orchestrator.task_runner.get_brain", return_value=mock_brain):
             result = await run_task(task, sandbox, config, task.plan_file)
 
         assert result.task_id == "3.5"
@@ -371,7 +371,7 @@ class TestRunTaskResultFields:
         mock_brain = MagicMock()
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
-        with patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain):
+        with patch("orchestrator.task_runner.get_brain", return_value=mock_brain):
             result = await run_task(task, sandbox, config, task.plan_file)
 
         assert result.cost_usd == 0.12
@@ -391,7 +391,7 @@ class TestRunTaskResultFields:
         mock_brain = MagicMock()
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
-        with patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain):
+        with patch("orchestrator.task_runner.get_brain", return_value=mock_brain):
             result = await run_task(task, sandbox, config, task.plan_file)
 
         assert result.session_id == "test-session-123"
@@ -410,7 +410,7 @@ class TestRunTaskResultFields:
         mock_brain = MagicMock()
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
-        with patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain):
+        with patch("orchestrator.task_runner.get_brain", return_value=mock_brain):
             result = await run_task(task, sandbox, config, task.plan_file)
 
         assert "Detailed task output" in result.output
@@ -430,7 +430,7 @@ class TestRunTaskResultFields:
         mock_brain = MagicMock()
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
-        with patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain):
+        with patch("orchestrator.task_runner.get_brain", return_value=mock_brain):
             result = await run_task(task, sandbox, config, task.plan_file)
 
         assert result.duration_seconds >= 0
@@ -457,7 +457,7 @@ class TestRunTaskHaikuBrainInterpretation:
             status="completed", summary="Task finished"
         )
 
-        with patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain):
+        with patch("orchestrator.task_runner.get_brain", return_value=mock_brain):
             result = await run_task(task, sandbox, config, task.plan_file)
 
         # HaikuBrain should have been used
@@ -484,7 +484,7 @@ class TestRunTaskHaikuBrainInterpretation:
             recommendation="Option A is safer",
         )
 
-        with patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain):
+        with patch("orchestrator.task_runner.get_brain", return_value=mock_brain):
             result = await run_task(task, sandbox, config, task.plan_file)
 
         # Status should be mapped to needs_human
@@ -512,7 +512,7 @@ class TestRunTaskHaikuBrainInterpretation:
             error="Import error in module",
         )
 
-        with patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain):
+        with patch("orchestrator.task_runner.get_brain", return_value=mock_brain):
             result = await run_task(task, sandbox, config, task.plan_file)
 
         assert result.status == "failed"
@@ -538,7 +538,7 @@ class TestRunTaskHaikuBrainInterpretation:
             status="completed"
         )
 
-        with patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain):
+        with patch("orchestrator.task_runner.get_brain", return_value=mock_brain):
             await run_task(task, sandbox, config, task.plan_file)
 
         # Full output should be passed (no truncation)
@@ -575,7 +575,7 @@ class TestRunTaskStreaming:
         mock_brain = MagicMock()
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
-        with patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain):
+        with patch("orchestrator.task_runner.get_brain", return_value=mock_brain):
             await run_task(task, sandbox, config, task.plan_file, on_tool_use=on_tool)
 
         # Should have used streaming method
@@ -602,7 +602,7 @@ class TestRunTaskStreaming:
         mock_brain = MagicMock()
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
-        with patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain):
+        with patch("orchestrator.task_runner.get_brain", return_value=mock_brain):
             await run_task(task, sandbox, config, task.plan_file)
 
         # Should have used non-streaming method
@@ -629,7 +629,7 @@ class TestRunTaskStreaming:
         mock_brain = MagicMock()
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
-        with patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain):
+        with patch("orchestrator.task_runner.get_brain", return_value=mock_brain):
             await run_task(task, sandbox, config, task.plan_file, on_tool_use=my_callback)
 
         # Verify callback was passed
@@ -653,7 +653,7 @@ class TestRunTaskStreaming:
         mock_brain = MagicMock()
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
-        with patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain):
+        with patch("orchestrator.task_runner.get_brain", return_value=mock_brain):
             await run_task(
                 task, sandbox, config, task.plan_file, on_tool_use=lambda n, i: None
             )
@@ -697,7 +697,7 @@ class TestRunTaskWithEscalation:
 
         with (
             patch("orchestrator.task_runner.console"),
-            patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain),
+            patch("orchestrator.task_runner.get_brain", return_value=mock_brain),
         ):
             result = await run_task_with_escalation(
                 task, sandbox, config, task.plan_file, loop_detector, mock_tracer
@@ -753,7 +753,7 @@ class TestRunTaskWithEscalation:
         with (
             patch("orchestrator.task_runner.console"),
             patch("orchestrator.task_runner.escalate_and_wait") as mock_escalate,
-            patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain),
+            patch("orchestrator.task_runner.get_brain", return_value=mock_brain),
         ):
             mock_escalate.return_value = "Use option A"
 
@@ -813,7 +813,7 @@ class TestRunTaskWithEscalation:
         with (
             patch("orchestrator.task_runner.console"),
             patch("orchestrator.task_runner.escalate_and_wait") as mock_escalate,
-            patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain),
+            patch("orchestrator.task_runner.get_brain", return_value=mock_brain),
         ):
             mock_escalate.return_value = "Use option B"
 
@@ -864,7 +864,7 @@ class TestRunTaskWithEscalation:
 
         with (
             patch("orchestrator.task_runner.console"),
-            patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain),
+            patch("orchestrator.task_runner.get_brain", return_value=mock_brain),
         ):
             result = await run_task_with_escalation(
                 task, sandbox, config, task.plan_file, loop_detector, mock_tracer
@@ -918,7 +918,7 @@ class TestRunTaskWithEscalation:
 
         with (
             patch("orchestrator.task_runner.console"),
-            patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain),
+            patch("orchestrator.task_runner.get_brain", return_value=mock_brain),
         ):
             await run_task_with_escalation(
                 task, sandbox, config, task.plan_file, loop_detector, mock_tracer
@@ -964,7 +964,7 @@ class TestRunTaskWithEscalation:
 
         with (
             patch("orchestrator.task_runner.console"),
-            patch("orchestrator.task_runner.HaikuBrain", return_value=mock_brain),
+            patch("orchestrator.task_runner.get_brain", return_value=mock_brain),
         ):
             result = await run_task_with_escalation(
                 task, sandbox, config, task.plan_file, loop_detector, mock_tracer
