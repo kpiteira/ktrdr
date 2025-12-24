@@ -1,16 +1,49 @@
 """Tests for E2E test plan files.
 
 Verifies that e2e_will_pass.md and e2e_will_fail_fixable.md
-are parseable by the plan_parser and contain valid E2E scenarios.
+contain valid E2E scenarios.
+
+Note: Task parsing tests are skipped as they require HaikuBrain LLM calls.
+E2E scenario extraction is still tested as it uses regex.
 """
 
 from pathlib import Path
 
 import pytest
 
-from orchestrator.plan_parser import parse_e2e_scenario, parse_plan
+from orchestrator.haiku_brain import HaikuBrain
+from orchestrator.milestone_runner import parse_e2e_scenario
+from orchestrator.models import Task
 
 TEST_PLANS_DIR = Path(__file__).parent.parent / "test_plans"
+
+
+def parse_plan_with_haiku(plan_path: Path) -> list[Task]:
+    """Parse a plan file using HaikuBrain and convert to Task objects.
+
+    This is a helper for tests that need to validate task structure.
+    Note: Requires Claude CLI to be available.
+    """
+    brain = HaikuBrain()
+    content = plan_path.read_text()
+    extracted = brain.extract_tasks(content)
+    milestone_id = plan_path.stem
+    return [
+        Task(
+            id=t.id,
+            title=t.title,
+            description=t.description,
+            file_path=None,
+            acceptance_criteria=[],
+            plan_file=str(plan_path),
+            milestone_id=milestone_id,
+        )
+        for t in extracted
+    ]
+
+
+# Skip marker for tests that require LLM calls
+requires_llm = pytest.mark.skip(reason="Requires Claude CLI for HaikuBrain")
 
 
 class TestE2EWillPassPlan:
@@ -30,22 +63,25 @@ class TestE2EWillPassPlan:
         """Plan file should exist."""
         assert plan_path.exists(), f"Plan file not found: {plan_path}"
 
+    @requires_llm
     def test_plan_is_parseable(self, plan_path: Path):
-        """Plan should be parseable by parse_plan."""
-        tasks = parse_plan(plan_path)
+        """Plan should be parseable by HaikuBrain."""
+        tasks = parse_plan_with_haiku(plan_path)
         assert len(tasks) >= 1, "Should have at least one task"
 
+    @requires_llm
     def test_has_calculator_task(self, plan_path: Path):
         """Should have a task to create calculator module."""
-        tasks = parse_plan(plan_path)
+        tasks = parse_plan_with_haiku(plan_path)
         task_titles = [t.title.lower() for t in tasks]
         assert any("calculator" in title for title in task_titles), (
             "Should have a calculator-related task"
         )
 
+    @requires_llm
     def test_has_test_task(self, plan_path: Path):
         """Should have a task to create tests."""
-        tasks = parse_plan(plan_path)
+        tasks = parse_plan_with_haiku(plan_path)
         task_titles = [t.title.lower() for t in tasks]
         assert any("test" in title for title in task_titles), (
             "Should have a test-related task"
@@ -86,14 +122,16 @@ class TestE2EWillFailFixablePlan:
         """Plan file should exist."""
         assert plan_path.exists(), f"Plan file not found: {plan_path}"
 
+    @requires_llm
     def test_plan_is_parseable(self, plan_path: Path):
-        """Plan should be parseable by parse_plan."""
-        tasks = parse_plan(plan_path)
+        """Plan should be parseable by HaikuBrain."""
+        tasks = parse_plan_with_haiku(plan_path)
         assert len(tasks) >= 1, "Should have at least one task"
 
+    @requires_llm
     def test_has_greeting_task(self, plan_path: Path):
         """Should have a task to create greeting module."""
-        tasks = parse_plan(plan_path)
+        tasks = parse_plan_with_haiku(plan_path)
         task_titles = [t.title.lower() for t in tasks]
         assert any("greeting" in title for title in task_titles), (
             "Should have a greeting-related task"
@@ -119,9 +157,10 @@ class TestE2EWillFailFixablePlan:
             "E2E should indicate expected failure"
         )
 
+    @requires_llm
     def test_task_mentions_intentional_bug(self, plan_path: Path):
         """Task description should mention intentional bug."""
-        tasks = parse_plan(plan_path)
+        tasks = parse_plan_with_haiku(plan_path)
         # Find the greeting task
         greeting_tasks = [t for t in tasks if "greeting" in t.title.lower()]
         assert len(greeting_tasks) > 0, "Should have greeting task"
@@ -161,9 +200,15 @@ class TestBothPlansHaveValidStructure:
         )
         assert has_main_header, "Should have main milestone/title header"
 
+    @pytest.mark.skip(reason="acceptance_criteria no longer extracted by HaikuBrain")
     def test_tasks_have_acceptance_criteria(self, plan_path: Path):
-        """All tasks should have acceptance criteria."""
-        tasks = parse_plan(plan_path)
+        """All tasks should have acceptance criteria.
+
+        Note: This test is skipped because HaikuBrain extracts minimal task info
+        (id, title, description). Acceptance criteria are read directly from the
+        plan file by /ktask skill.
+        """
+        tasks = parse_plan_with_haiku(plan_path)
         for task in tasks:
             assert len(task.acceptance_criteria) > 0, (
                 f"Task {task.id} should have acceptance criteria"
