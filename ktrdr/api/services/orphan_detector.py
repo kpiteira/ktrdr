@@ -102,6 +102,7 @@ class OrphanOperationDetector:
         try:
             await self._task
         except asyncio.CancelledError:
+            # Expected when cancelling the task - just proceed with cleanup
             pass
 
         self._task = None
@@ -120,7 +121,10 @@ class OrphanOperationDetector:
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                logger.error(f"Error in orphan detection loop: {e}")
+                logger.error(f"Error in orphan detection loop: {e}", exc_info=True)
+                # Sleep inside exception handler to ensure consistent timing
+                await asyncio.sleep(self._check_interval)
+                continue
 
             await asyncio.sleep(self._check_interval)
 
@@ -177,6 +181,14 @@ class OrphanOperationDetector:
                 # Timeout exceeded - mark as FAILED
                 await self._mark_orphan_failed(op_id, elapsed)
                 self._potential_orphans.pop(op_id, None)
+
+        # Clean up stale entries: operations that transitioned to a terminal
+        # state outside the orphan detector (e.g., completed or failed normally)
+        running_op_ids = {op.operation_id for op in running_ops}
+        stale_orphans = set(self._potential_orphans.keys()) - running_op_ids
+        for op_id in stale_orphans:
+            logger.debug(f"Removing {op_id} from orphan tracking (no longer RUNNING)")
+            self._potential_orphans.pop(op_id, None)
 
     async def _mark_orphan_failed(self, operation_id: str, elapsed: float) -> None:
         """Mark an orphan operation as FAILED.

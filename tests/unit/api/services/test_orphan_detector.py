@@ -357,6 +357,37 @@ class TestOrphanOperationDetector:
             error_message="Operation was RUNNING but no worker claimed it",
         )
 
+    @pytest.mark.asyncio
+    async def test_check_for_orphans_cleans_up_stale_entries(
+        self, mock_operations_service, mock_worker_registry
+    ):
+        """Operations no longer RUNNING should be removed from potential orphans."""
+        # No running operations
+        mock_operations_service.list_operations.return_value = ([], 0, 0)
+        mock_worker_registry.list_workers.return_value = []
+
+        detector = OrphanOperationDetector(
+            operations_service=mock_operations_service,
+            worker_registry=mock_worker_registry,
+        )
+
+        # Simulate that we were tracking these as potential orphans
+        # (e.g., they transitioned to COMPLETED/FAILED outside the detector)
+        detector._potential_orphans["op_completed"] = datetime.now(
+            timezone.utc
+        ) - timedelta(seconds=30)
+        detector._potential_orphans["op_failed"] = datetime.now(
+            timezone.utc
+        ) - timedelta(seconds=45)
+
+        await detector._check_for_orphans()
+
+        # Both should be cleaned up since they're no longer in running_ops
+        assert "op_completed" not in detector._potential_orphans
+        assert "op_failed" not in detector._potential_orphans
+        # fail_operation should NOT be called (they weren't orphaned, just completed)
+        mock_operations_service.fail_operation.assert_not_called()
+
 
 class TestOrphanOperationDetectorLifecycle:
     """Test OrphanOperationDetector start/stop lifecycle."""
@@ -461,16 +492,16 @@ class TestOrphanOperationDetectorHealthStatus:
         self, mock_operations_service, mock_worker_registry
     ):
         """Status should show running and track orphans."""
-        mock_operations_service.list_operations.return_value = ([], 0, 0)
+        # Create a running operation that will become an orphan (no worker claims it)
+        running_op = _create_operation("op_123")
+        mock_operations_service.list_operations.return_value = ([running_op], 1, 1)
+        mock_worker_registry.list_workers.return_value = []  # No workers
 
         detector = OrphanOperationDetector(
             operations_service=mock_operations_service,
             worker_registry=mock_worker_registry,
             check_interval_seconds=0.1,
         )
-
-        # Add a potential orphan manually
-        detector._potential_orphans["op_123"] = datetime.now(timezone.utc)
 
         await detector.start()
         import asyncio
@@ -480,6 +511,7 @@ class TestOrphanOperationDetectorHealthStatus:
         status = detector.get_status()
 
         assert status["running"] is True
+        # Operation should be tracked as potential orphan (no worker claims it)
         assert status["potential_orphans_count"] == 1
         assert status["last_check"] is not None
 
