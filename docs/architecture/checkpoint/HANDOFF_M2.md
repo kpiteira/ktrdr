@@ -139,10 +139,58 @@ During tests or before startup completes, `get_orphan_detector()` raises Runtime
 
 When detector is not initialized, `orphan_detector` is `null`.
 
-### For Task 2.4 (Configuration)
+---
 
-The timeout values are currently hardcoded in the `OrphanOperationDetector` constructor. Task 2.4 should:
+## Task 2.4 Complete
 
-1. Add environment variables: `ORPHAN_TIMEOUT_SECONDS`, `ORPHAN_CHECK_INTERVAL_SECONDS`
-2. Read them in `startup.py` when creating the detector
-3. Pass them to the constructor
+**Implemented:** Configurable orphan detection settings via environment variables
+
+### Settings Pattern
+
+Configuration is in `ktrdr/config/settings.py` using Pydantic `BaseSettings`:
+
+```python
+class OrphanDetectorSettings(BaseSettings):
+    timeout_seconds: int = Field(default=60, gt=0)
+    check_interval_seconds: int = Field(default=15, gt=0)
+
+    model_config = SettingsConfigDict(env_prefix="ORPHAN_")
+```
+
+Environment variables:
+
+- `ORPHAN_TIMEOUT_SECONDS` — Time before orphan marked FAILED (default: 60)
+- `ORPHAN_CHECK_INTERVAL_SECONDS` — Check interval (default: 15)
+
+### Wiring in startup.py
+
+```python
+from ktrdr.config.settings import get_orphan_detector_settings
+
+orphan_settings = get_orphan_detector_settings()
+_orphan_detector = OrphanOperationDetector(
+    operations_service=operations_service,
+    worker_registry=registry,
+    orphan_timeout_seconds=orphan_settings.timeout_seconds,
+    check_interval_seconds=orphan_settings.check_interval_seconds,
+)
+```
+
+### Gotchas (Task 2.4)
+
+**Field naming for env var mapping:**
+With `env_prefix="ORPHAN_"`, the field `timeout_seconds` maps to `ORPHAN_TIMEOUT_SECONDS`. If the field were named `orphan_timeout_seconds`, the env var would be `ORPHAN_ORPHAN_TIMEOUT_SECONDS`.
+
+**Validation:**
+Both values must be > 0 (Pydantic `gt=0` constraint). Invalid values raise `ValidationError` at startup, preventing misconfiguration.
+
+---
+
+## Next: Task 2.5 (Integration Test)
+
+The integration test should:
+
+1. Create operation with worker
+2. Simulate worker disappearance (remove from registry)
+3. Wait for orphan detection
+4. Verify operation marked FAILED
