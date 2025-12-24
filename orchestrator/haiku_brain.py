@@ -348,6 +348,7 @@ class HaikuBrain:
         try:
             data = json.loads(response.strip())
         except (json.JSONDecodeError, TypeError):
+            # If direct parsing fails, fall back to extracting an embedded JSON object below.
             pass
 
         # Try to extract embedded JSON using balanced brace matching
