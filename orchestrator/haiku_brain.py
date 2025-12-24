@@ -5,12 +5,53 @@ for semantic understanding of milestone plans and task execution results.
 """
 
 import json
+import os
 import re
+import shutil
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
-from orchestrator.llm_interpreter import find_claude_cli
+# Cache for the Claude CLI path
+_claude_cli_path: str | None = None
+
+
+def find_claude_cli() -> str | None:
+    """Find the Claude CLI executable.
+
+    Checks:
+    1. shutil.which("claude") - standard PATH lookup
+    2. ~/.claude/local/claude - common installation location
+
+    Returns:
+        Path to the Claude CLI, or None if not found.
+    """
+    global _claude_cli_path
+
+    # Return cached path if already found
+    if _claude_cli_path is not None:
+        return _claude_cli_path
+
+    # Try PATH first
+    path_result = shutil.which("claude")
+    if path_result:
+        _claude_cli_path = path_result
+        return _claude_cli_path
+
+    # Try common installation locations
+    home = Path.home()
+    common_locations = [
+        home / ".claude" / "local" / "claude",
+        home / ".claude" / "bin" / "claude",
+    ]
+
+    for location in common_locations:
+        if location.exists() and os.access(location, os.X_OK):
+            _claude_cli_path = str(location)
+            return _claude_cli_path
+
+    return None
 
 
 @dataclass

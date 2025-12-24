@@ -20,14 +20,14 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 
 from orchestrator import telemetry
-from orchestrator.llm_interpreter import LLMInterpreter
+from orchestrator.haiku_brain import HaikuBrain
 from orchestrator.notifications import send_notification
 
 # Console for output
 console = Console()
 
 # Module-level state for interpreter configuration
-_interpreter: LLMInterpreter | None = None
+_brain: HaikuBrain | None = None
 _llm_only: bool = False
 
 
@@ -40,25 +40,25 @@ def configure_interpreter(llm_only: bool = False) -> None:
     Args:
         llm_only: If True, skip fast-path markers and always use LLM.
     """
-    global _llm_only, _interpreter
+    global _llm_only, _brain
     _llm_only = llm_only
-    # Reset interpreter so it gets recreated
-    _interpreter = None
+    # Reset brain so it gets recreated
+    _brain = None
 
 
-def get_interpreter() -> LLMInterpreter:
-    """Get the singleton LLM interpreter instance.
+def get_brain() -> HaikuBrain:
+    """Get the singleton HaikuBrain instance.
 
-    Lazily creates the interpreter on first use.
+    Lazily creates the brain on first use.
     Always uses Haiku for fast, cheap output interpretation.
 
     Returns:
-        The LLMInterpreter instance.
+        The HaikuBrain instance.
     """
-    global _interpreter
-    if _interpreter is None:
-        _interpreter = LLMInterpreter()  # Always uses Haiku default
-    return _interpreter
+    global _brain
+    if _brain is None:
+        _brain = HaikuBrain()  # Always uses Haiku default
+    return _brain
 
 
 def _check_explicit_markers(output: str) -> bool | None:
@@ -104,7 +104,7 @@ def detect_needs_human(output: str) -> bool:
 
     Uses a hybrid approach:
     1. Fast-path: Check for explicit markers (unless --llm-only mode)
-    2. Semantic: Use LLM interpretation for everything else
+    2. Semantic: Use HaikuBrain interpretation for everything else
 
     Args:
         output: The text output from Claude Code.
@@ -117,9 +117,9 @@ def detect_needs_human(output: str) -> bool:
     if explicit is not None:
         return explicit
 
-    # Semantic understanding via LLM
-    result = get_interpreter().interpret(output)
-    return result.needs_human
+    # Semantic understanding via HaikuBrain
+    result = get_brain().interpret_result(output)
+    return result.status == "needs_help"
 
 
 def extract_escalation_info(task_id: str, output: str) -> EscalationInfo:
