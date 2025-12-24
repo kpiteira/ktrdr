@@ -293,6 +293,49 @@ For each approved milestone, Claude generates detailed tasks. Each task must tra
 
 ---
 
+### Step 4.5: Test Requirement Analysis
+
+**Before finalizing tasks**, Claude analyzes each task to determine required integration and smoke tests. This prevents "components work but aren't connected" bugs.
+
+**For each task, Claude:**
+
+1. **Identifies Categories** — Read the task description and identify which categories apply (see Appendix: Task Type Categories)
+
+2. **Looks Up Failure Modes** — For each category, consult the failure mode table
+
+3. **Adds Required Tests** — For each failure mode, add the corresponding integration test to the task
+
+4. **Adds Smoke Test** — For tasks touching infrastructure, add a manual verification command
+
+**Example Analysis:**
+
+Task: "Refactor OperationsService to Use Repository"
+
+```
+Categories identified:
+- Persistence (uses repository)
+- Wiring/DI (factory provides repository)
+- State Machine (operation status)
+
+Failure modes to test:
+- Persistence: Not wired → Wiring test required
+- Persistence: Transaction issues → DB verification required
+- Wiring/DI: Missing injection → Wiring test required
+- State Machine: State not persisted → State persistence test required
+
+Tests to add:
+- Integration: test_operations_service_has_repository()
+- Integration: test_operation_persists_to_db()
+- Integration: test_status_change_persists()
+
+Smoke test:
+  psql -c "SELECT operation_id, status FROM operations LIMIT 1"
+```
+
+**This step is CRITICAL.** The M1 persistence bug was caught by this type of analysis — unit tests with mocks passed, but the wiring test would have failed because the factory wasn't injecting the repository.
+
+---
+
 ### Step 5: Review and Refine
 
 After generating all tasks, Claude presents summary:
@@ -393,6 +436,8 @@ Each task follows this structure for compatibility with `/ktask`:
 **Type:** CODING | RESEARCH | MIXED
 **Estimated time:** [1-4 hours]
 
+**Task Categories:** [List categories that apply — see Appendix]
+
 **Description:**
 [What this task accomplishes — be specific about behavior, not just "implement X"]
 
@@ -407,13 +452,26 @@ Each task follows this structure for compatibility with `/ktask`:
 - [ ] Edge case: [description]
 - [ ] Error case: [description]
 
-*Integration Test (if applicable):*
-- [ ] [How to verify this works with connected components]
+*Integration Tests (based on categories):*
+[For each category that applies, list required integration tests from Step 4.5 analysis]
+- [ ] [Wiring test if Persistence/DI category]
+- [ ] [DB verification if Persistence category]
+- [ ] [State persistence if State Machine category]
+- [ ] [Contract test if Cross-Component category]
+- [ ] [Lifecycle test if Background/Async category]
+
+*Smoke Test:*
+```bash
+# Command to manually verify after implementation
+[smoke test command based on category]
+```
 
 **Acceptance Criteria:**
 - [ ] [Functional criterion 1]
 - [ ] [Functional criterion 2]
 - [ ] Unit tests written and passing
+- [ ] Integration tests written and passing
+- [ ] Smoke test verified manually
 - [ ] Code follows existing patterns in [reference file]
 
 **Branch Strategy:** [If different from milestone branch]
@@ -649,3 +707,59 @@ This structure means `/ktask` only loads the milestone file it needs.
 3. `/ktask` → Executes individual tasks with TDD
 
 The validation output (scenarios, decisions, milestone structure) feeds directly into implementation planning. If validation was done, reference it to maintain consistency.
+
+---
+
+## Appendix: Task Type Categories
+
+When generating tasks, classify each by type to determine required integration/smoke tests. This systematic approach prevents "components work but aren't connected" bugs.
+
+### Category Identification
+
+| Category | Indicators in Task Description |
+|----------|-------------------------------|
+| **Persistence** | DB, repository, store, save, table, migration |
+| **Wiring/DI** | Factory, inject, singleton, `get_X_service()` |
+| **State Machine** | Status, state, transition, phase, workflow |
+| **Cross-Component** | Calls, integrates, sends to, receives from |
+| **Background/Async** | Background task, worker, queue, async loop |
+| **External** | Third-party API, gateway, external service |
+| **Configuration** | Env var, config, setting, flag |
+| **API Endpoint** | Endpoint, route, request, response |
+
+Tasks often belong to multiple categories. Apply tests for all that match.
+
+### Failure Modes by Category
+
+| Category | Key Failure Modes |
+|----------|-------------------|
+| **Persistence** | Not wired, wrong connection, transaction issues, schema mismatch |
+| **Wiring/DI** | Missing injection, wrong type, stale singleton |
+| **State Machine** | Missing transition, invalid transition allowed, state not persisted |
+| **Cross-Component** | Contract mismatch, timing issues, error not propagated |
+| **Background/Async** | Never starts, never stops, orphaned work, race conditions |
+| **External** | Connection failure, auth failure, parsing errors, timeout handling |
+| **Configuration** | Missing required, wrong type, invalid value |
+| **API Endpoint** | Missing validation, wrong status code, state not actually changed |
+
+### Required Tests by Failure Mode
+
+| Failure Mode | Test Type | Pattern |
+|--------------|-----------|---------|
+| Not wired | Wiring test | `assert get_{service}()._{dependency} is not None` |
+| Missing transition | State coverage | Parameterized test for all valid transitions |
+| Contract mismatch | Contract test | Capture and verify data between components |
+| Never starts | Lifecycle test | `assert {task} is not None and not {task}.done()` |
+| Connection failure | Connection test | Health check + error handling |
+| Missing validation | Validation test | Test that endpoint returns 422 for invalid input |
+| State not changed | DB verification | Query table directly after operation |
+
+### Smoke Test Patterns
+
+| Category | Smoke Test Pattern |
+|----------|-------------------|
+| Persistence | `psql -c "SELECT * FROM {table_name} LIMIT 1"` |
+| Wiring/DI | Python: `get_{service_name}()._{dependency_name} is not None` |
+| Background | `docker compose logs \| grep "{task_log_message}"` |
+| Configuration | `env \| grep {ENV_VAR_NAME}` |
+| API Endpoint | `curl -X {method} {endpoint}` then verify DB state |

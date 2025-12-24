@@ -250,6 +250,20 @@ How this feature connects to existing systems:
 ## Migration / Rollout
 
 [If applicable: How we get from current state to new state]
+
+## Verification Strategy
+
+For each component, specify how its correctness will be verified beyond unit tests.
+This prevents "components work in isolation but aren't connected" bugs.
+
+### [Component 1]
+**Type:** [Persistence | Wiring/DI | State Machine | Background | etc.]
+**Unit Test Focus:** [What unit tests verify]
+**Integration Test:** [What integration tests verify — wiring, DB persistence, etc.]
+**Smoke Test:** [Quick manual verification command]
+
+### [Component 2]
+...
 ```
 
 ---

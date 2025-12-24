@@ -105,6 +105,8 @@ fi
 
 **Type:** CODING
 
+**Task Categories:** Background/Async
+
 **Description:**
 Add signal handler for SIGTERM that triggers graceful shutdown.
 
@@ -153,6 +155,16 @@ class WorkerAPIBase:
 - [ ] Handler works correctly in async context
 - [ ] Logged when SIGTERM received
 
+**Integration Tests (based on categories):**
+- [ ] **Lifecycle:** Signal handler is registered after worker startup
+- [ ] **Lifecycle:** Shutdown event is set when SIGTERM sent
+
+**Smoke Test:**
+```bash
+# Check logs for handler registration:
+docker compose logs training-worker | grep "SIGTERM handler registered"
+```
+
 ---
 
 ### Task 6.2: Implement Graceful Shutdown in Operation Execution
@@ -161,6 +173,8 @@ class WorkerAPIBase:
 - `ktrdr/workers/base.py` (modify)
 
 **Type:** CODING
+
+**Task Categories:** Background/Async, Persistence, State Machine
 
 **Description:**
 Modify operation execution to detect shutdown and save checkpoint.
@@ -227,6 +241,22 @@ async def run_with_graceful_shutdown(
 - [ ] Checkpoint saved with type="shutdown"
 - [ ] Status updated to CANCELLED
 - [ ] Completes within grace period
+
+**Integration Tests (based on categories):**
+- [ ] **DB Verification:** After shutdown, checkpoint exists with type="shutdown"
+- [ ] **State Machine:** After shutdown, operation status is CANCELLED in DB
+- [ ] **Lifecycle:** Shutdown completes within 25 seconds
+
+**Smoke Test:**
+```bash
+# Start training, then gracefully stop worker:
+docker compose stop -t 30 training-worker
+# Check checkpoint and status:
+docker compose exec db psql -U ktrdr -d ktrdr -c \
+  "SELECT operation_id, status FROM operations WHERE status = 'CANCELLED' ORDER BY updated_at DESC LIMIT 1"
+docker compose exec db psql -U ktrdr -d ktrdr -c \
+  "SELECT operation_id, checkpoint_type FROM operation_checkpoints WHERE checkpoint_type = 'shutdown'"
+```
 
 ---
 

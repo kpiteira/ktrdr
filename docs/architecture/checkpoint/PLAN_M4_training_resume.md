@@ -130,6 +130,8 @@ fi
 
 **Type:** CODING
 
+**Task Categories:** API Endpoint, State Machine, Persistence
+
 **Description:**
 Add the resume endpoint with optimistic locking.
 
@@ -192,6 +194,19 @@ async def resume_operation(operation_id: str, ...):
 - [ ] Returns 409 if already running/completed
 - [ ] Returns success with resumed_from info
 
+**Integration Tests (based on categories):**
+- [ ] **API:** POST /operations/{id}/resume returns success for resumable operation
+- [ ] **API:** Returns 409 for already running operation
+- [ ] **State Machine:** After resume, operation status is RUNNING in DB
+- [ ] **DB Verification:** Query DB directly to verify status changed
+
+**Smoke Test:**
+```bash
+curl -X POST http://localhost:8000/api/v1/operations/<op_id>/resume | jq
+docker compose exec db psql -U ktrdr -d ktrdr -c \
+  "SELECT operation_id, status FROM operations WHERE operation_id = '<op_id>'"
+```
+
 ---
 
 ### Task 4.2: Add try_resume to OperationsService
@@ -201,6 +216,8 @@ async def resume_operation(operation_id: str, ...):
 - `ktrdr/api/repositories/operations_repository.py` (modify)
 
 **Type:** CODING
+
+**Task Categories:** Persistence, State Machine
 
 **Description:**
 Add optimistic locking method for resume.
@@ -242,6 +259,18 @@ async def try_resume(self, operation_id: str) -> bool:
 - [ ] Cache updated on success
 - [ ] Concurrent calls: only one succeeds
 
+**Integration Tests (based on categories):**
+- [ ] **Persistence:** After try_resume, query DB directly to verify status=RUNNING
+- [ ] **State Machine:** try_resume returns False for non-resumable statuses (COMPLETED, RUNNING)
+- [ ] **Concurrency:** Concurrent try_resume calls: exactly one succeeds
+
+**Smoke Test:**
+```bash
+# After resume, verify DB:
+docker compose exec db psql -U ktrdr -d ktrdr -c \
+  "SELECT operation_id, status, started_at FROM operations WHERE operation_id = '<op_id>'"
+```
+
 ---
 
 ### Task 4.3: Implement Training Restore in Worker
@@ -251,6 +280,8 @@ async def try_resume(self, operation_id: str) -> bool:
 - `ktrdr/training/checkpoint_restore.py` (new)
 
 **Type:** CODING
+
+**Task Categories:** Cross-Component, Persistence
 
 **Description:**
 Implement the restore logic in training worker to resume from checkpoint.
@@ -296,6 +327,16 @@ async def restore_from_checkpoint(self, operation_id: str) -> TrainingResumeCont
 - [ ] Training history restored
 - [ ] Start epoch is checkpoint_epoch + 1
 - [ ] Artifacts validated before use
+
+**Integration Tests (based on categories):**
+- [ ] **Cross-Component:** Restored model produces same predictions as original
+- [ ] **Persistence:** Artifacts loaded from checkpoint directory
+
+**Smoke Test:**
+```bash
+# Check training worker logs for restore:
+docker compose logs training-worker | grep "Restoring from checkpoint"
+```
 
 ---
 
