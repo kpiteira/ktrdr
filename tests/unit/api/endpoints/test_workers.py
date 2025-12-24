@@ -131,15 +131,16 @@ class TestWorkerRegistrationEndpoint:
 class TestListWorkersEndpoint:
     """Tests for GET /api/v1/workers endpoint."""
 
-    def test_list_all_workers(self, client, worker_registry):
+    @pytest.mark.asyncio
+    async def test_list_all_workers(self, client, worker_registry):
         """Test listing all registered workers."""
         # Pre-register some workers
-        worker_registry.register_worker(
+        await worker_registry.register_worker(
             worker_id="backtest-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://192.168.1.201:5003",
         )
-        worker_registry.register_worker(
+        await worker_registry.register_worker(
             worker_id="training-1",
             worker_type=WorkerType.CPU_TRAINING,
             endpoint_url="http://192.168.1.202:5004",
@@ -154,19 +155,20 @@ class TestListWorkersEndpoint:
         worker_ids = {w["worker_id"] for w in data}
         assert worker_ids == {"backtest-1", "training-1"}
 
-    def test_list_workers_filter_by_type(self, client, worker_registry):
+    @pytest.mark.asyncio
+    async def test_list_workers_filter_by_type(self, client, worker_registry):
         """Test listing workers filtered by type."""
-        worker_registry.register_worker(
+        await worker_registry.register_worker(
             worker_id="backtest-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://192.168.1.201:5003",
         )
-        worker_registry.register_worker(
+        await worker_registry.register_worker(
             worker_id="backtest-2",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://192.168.1.202:5003",
         )
-        worker_registry.register_worker(
+        await worker_registry.register_worker(
             worker_id="training-1",
             worker_type=WorkerType.CPU_TRAINING,
             endpoint_url="http://192.168.1.203:5004",
@@ -181,21 +183,22 @@ class TestListWorkersEndpoint:
         worker_ids = {w["worker_id"] for w in data}
         assert worker_ids == {"backtest-1", "backtest-2"}
 
-    def test_list_workers_filter_by_status(self, client, worker_registry):
+    @pytest.mark.asyncio
+    async def test_list_workers_filter_by_status(self, client, worker_registry):
         """Test listing workers filtered by status."""
-        worker_registry.register_worker(
+        await worker_registry.register_worker(
             worker_id="backtest-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://192.168.1.201:5003",
         )
-        worker2 = worker_registry.register_worker(
+        result = await worker_registry.register_worker(
             worker_id="backtest-2",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://192.168.1.202:5003",
         )
 
         # Manually set one worker to BUSY
-        worker2.status = WorkerStatus.BUSY
+        result.worker.status = WorkerStatus.BUSY
 
         response = client.get("/api/v1/workers?status=available")
 
@@ -213,3 +216,171 @@ class TestListWorkersEndpoint:
         data = response.json()
 
         assert data == []
+
+
+class TestGetWorkerEndpoint:
+    """Tests for GET /api/v1/workers/{worker_id} endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_get_worker_found(self, client, worker_registry):
+        """Test getting a worker that exists."""
+        # Pre-register a worker
+        await worker_registry.register_worker(
+            worker_id="backtest-1",
+            worker_type=WorkerType.BACKTESTING,
+            endpoint_url="http://192.168.1.201:5003",
+            capabilities={"cores": 4},
+        )
+
+        response = client.get("/api/v1/workers/backtest-1")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["worker_id"] == "backtest-1"
+        assert data["worker_type"] == "backtesting"
+        assert data["endpoint_url"] == "http://192.168.1.201:5003"
+        assert data["capabilities"] == {"cores": 4}
+
+    def test_get_worker_not_found(self, client, worker_registry):
+        """Test getting a worker that doesn't exist returns 404."""
+        response = client.get("/api/v1/workers/nonexistent-worker")
+
+        assert response.status_code == 404
+        data = response.json()
+        assert "not found" in data["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_get_worker_after_registration(self, client, worker_registry):
+        """Test that a worker can be retrieved immediately after registration."""
+        # Register via endpoint
+        client.post(
+            "/api/v1/workers/register",
+            json={
+                "worker_id": "training-1",
+                "worker_type": "training",
+                "endpoint_url": "http://192.168.1.202:5004",
+            },
+        )
+
+        # Retrieve via GET endpoint
+        response = client.get("/api/v1/workers/training-1")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["worker_id"] == "training-1"
+
+
+class TestWorkerRegistrationWithResilience:
+    """Tests for worker registration with resilience fields (M1 checkpoint)."""
+
+    def test_register_worker_with_current_operation(self, client, worker_registry):
+        """Test registering a worker that reports a current operation."""
+        response = client.post(
+            "/api/v1/workers/register",
+            json={
+                "worker_id": "training-1",
+                "worker_type": "training",
+                "endpoint_url": "http://192.168.1.201:5004",
+                "current_operation_id": "op_training_123",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["worker_id"] == "training-1"
+        # Note: The endpoint doesn't return current_operation_id in response,
+        # but it should accept it without error
+
+    def test_register_worker_with_completed_operations(self, client, worker_registry):
+        """Test registering a worker that reports completed operations."""
+        response = client.post(
+            "/api/v1/workers/register",
+            json={
+                "worker_id": "training-2",
+                "worker_type": "training",
+                "endpoint_url": "http://192.168.1.202:5004",
+                "completed_operations": [
+                    {
+                        "operation_id": "op_completed_1",
+                        "status": "COMPLETED",
+                        "result": {"accuracy": 0.95},
+                        "completed_at": "2024-01-15T10:30:00Z",
+                    },
+                    {
+                        "operation_id": "op_failed_1",
+                        "status": "FAILED",
+                        "error_message": "Out of memory",
+                        "completed_at": "2024-01-15T11:00:00Z",
+                    },
+                ],
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["worker_id"] == "training-2"
+
+    def test_register_worker_with_all_resilience_fields(self, client, worker_registry):
+        """Test registering a worker with all new resilience fields."""
+        response = client.post(
+            "/api/v1/workers/register",
+            json={
+                "worker_id": "training-3",
+                "worker_type": "training",
+                "endpoint_url": "http://192.168.1.203:5004",
+                "capabilities": {"gpu": True, "memory_gb": 16},
+                "current_operation_id": "op_running_456",
+                "completed_operations": [
+                    {
+                        "operation_id": "op_done_1",
+                        "status": "COMPLETED",
+                        "result": {"model_path": "/models/v1.pt"},
+                        "completed_at": "2024-01-15T09:00:00Z",
+                    },
+                ],
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["worker_id"] == "training-3"
+        assert data["capabilities"] == {"gpu": True, "memory_gb": 16}
+
+    def test_register_worker_backward_compatible(self, client, worker_registry):
+        """Test that registration still works without new fields (backward compatible)."""
+        # This is essentially the same as existing tests, but explicit about backward compatibility
+        response = client.post(
+            "/api/v1/workers/register",
+            json={
+                "worker_id": "backtest-compat",
+                "worker_type": "backtesting",
+                "endpoint_url": "http://192.168.1.204:5003",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["worker_id"] == "backtest-compat"
+
+    def test_register_worker_invalid_completed_operation_status(
+        self, client, worker_registry
+    ):
+        """Test that invalid status in completed_operations is rejected."""
+        response = client.post(
+            "/api/v1/workers/register",
+            json={
+                "worker_id": "training-invalid",
+                "worker_type": "training",
+                "endpoint_url": "http://192.168.1.205:5004",
+                "completed_operations": [
+                    {
+                        "operation_id": "op_bad",
+                        "status": "RUNNING",  # Invalid - not a terminal status
+                        "completed_at": "2024-01-15T10:30:00Z",
+                    },
+                ],
+            },
+        )
+
+        # Should fail validation
+        assert response.status_code == 422

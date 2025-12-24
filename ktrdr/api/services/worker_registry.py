@@ -4,18 +4,43 @@ This module provides the WorkerRegistry class which manages the lifecycle of
 worker nodes in the distributed training and backtesting architecture.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING
 
 import httpx
 
-from ktrdr.api.models.workers import WorkerEndpoint, WorkerStatus, WorkerType
+from ktrdr.api.models.workers import (
+    CompletedOperationReport,
+    WorkerEndpoint,
+    WorkerStatus,
+    WorkerType,
+)
 from ktrdr.monitoring.metrics import update_worker_metrics
 from ktrdr.monitoring.service_telemetry import trace_service_method
 
+if TYPE_CHECKING:
+    from ktrdr.api.services.operations_service import OperationsService
+
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class RegistrationResult:
+    """Result of worker registration including any signals for the worker."""
+
+    worker: WorkerEndpoint
+    stop_operations: list[str] = field(default_factory=list)
+    """Operations that the worker should stop (e.g., already completed in DB)."""
+
+    @property
+    def worker_id(self) -> str:
+        """Convenience property for backward compatibility."""
+        return self.worker.worker_id
 
 
 class WorkerRegistry:
@@ -35,35 +60,58 @@ class WorkerRegistry:
     def __init__(self):
         """Initialize an empty worker registry."""
         self._workers: dict[str, WorkerEndpoint] = {}
-        self._health_check_task: Optional[asyncio.Task] = None
+        self._health_check_task: asyncio.Task | None = None
         self._health_check_interval: int = 10  # seconds
         self._removal_threshold_seconds: int = 300  # 5 minutes
+        self._operations_service: OperationsService | None = None
 
-    def register_worker(
+    def set_operations_service(self, operations_service: OperationsService) -> None:
+        """
+        Set the operations service for reconciliation.
+
+        This must be called after initialization to enable operation
+        reconciliation during worker registration.
+
+        Args:
+            operations_service: The OperationsService instance
+        """
+        self._operations_service = operations_service
+
+    async def register_worker(
         self,
         worker_id: str,
         worker_type: WorkerType,
         endpoint_url: str,
-        capabilities: Optional[dict] = None,
-    ) -> WorkerEndpoint:
+        capabilities: dict | None = None,
+        current_operation_id: str | None = None,
+        completed_operations: list[CompletedOperationReport] | None = None,
+    ) -> RegistrationResult:
         """
-        Register or update a worker.
+        Register or update a worker with optional operation reconciliation.
 
         This method is idempotent - if a worker with the same ID already exists,
         it will be updated instead of creating a duplicate.
+
+        When workers re-register after a backend restart, they can report:
+        - completed_operations: Operations that finished while backend was unavailable
+        - current_operation_id: Operation the worker is currently running
+
+        The backend reconciles these reports with its database state.
 
         Args:
             worker_id: Unique identifier for the worker
             worker_type: Type of worker (backtesting, training, etc.)
             endpoint_url: HTTP URL where the worker can be reached
             capabilities: Optional dict of worker capabilities (cores, memory, etc.)
+            current_operation_id: ID of operation worker is currently running (if any)
+            completed_operations: Operations that completed while backend was unavailable
 
         Returns:
-            The registered WorkerEndpoint
+            RegistrationResult containing the worker and any signals (e.g., stop_operations)
 
         Example:
             >>> registry = WorkerRegistry()
-            >>> worker = registry.register_worker(
+            >>> result = await registry.register_worker(
             ...     worker_id="backtest-1",
             ...     worker_type=WorkerType.BACKTESTING,
             ...     endpoint_url="http://192.168.1.201:5003",
@@ -106,9 +154,24 @@ class WorkerRegistry:
         # Update Prometheus metrics
         update_worker_metrics(self._workers)
 
-        return worker
+        # Perform operation reconciliation if operations service is configured
+        stop_operations: list[str] = []
+        if self._operations_service is not None:
+            # Process completed operations first (terminal state updates)
+            if completed_operations:
+                await self._reconcile_completed_operations(completed_operations)
 
-    def get_worker(self, worker_id: str) -> Optional[WorkerEndpoint]:
+            # Then process current operation (sync running status)
+            if current_operation_id:
+                should_stop = await self._reconcile_current_operation(
+                    worker_id, current_operation_id
+                )
+                if should_stop:
+                    stop_operations.append(current_operation_id)
+
+        return RegistrationResult(worker=worker, stop_operations=stop_operations)
+
+    def get_worker(self, worker_id: str) -> WorkerEndpoint | None:
         """
         Get a worker by ID.
 
@@ -127,8 +190,8 @@ class WorkerRegistry:
     @trace_service_method("workers.list")
     def list_workers(
         self,
-        worker_type: Optional[WorkerType] = None,
-        status: Optional[WorkerStatus] = None,
+        worker_type: WorkerType | None = None,
+        status: WorkerStatus | None = None,
     ) -> list[WorkerEndpoint]:
         """
         List workers with optional filtering.
@@ -196,7 +259,7 @@ class WorkerRegistry:
         return workers
 
     @trace_service_method("workers.select")
-    def select_worker(self, worker_type: WorkerType) -> Optional[WorkerEndpoint]:
+    def select_worker(self, worker_type: WorkerType) -> WorkerEndpoint | None:
         """
         Select an available worker using round-robin (least recently used).
 
@@ -299,6 +362,145 @@ class WorkerRegistry:
             logger.info(f"Worker {worker_id} marked as AVAILABLE")
             # Update Prometheus metrics
             update_worker_metrics(self._workers)
+
+    async def _reconcile_completed_operations(
+        self, completed_operations: list[CompletedOperationReport]
+    ) -> None:
+        """
+        Reconcile completed operations reported by worker during re-registration.
+
+        When a worker re-registers after backend restart, it reports operations
+        that completed while the backend was unavailable. This method updates
+        the database to reflect those terminal states.
+
+        Args:
+            completed_operations: List of operation completion reports from worker
+
+        Reconciliation rules:
+        - Unknown operation: Log warning, skip (no metadata to create record)
+        - Already in terminal state: Skip (idempotent)
+        - Not in terminal state: Update to reported terminal state
+        """
+        if not self._operations_service:
+            return
+
+        from ktrdr.api.models.operations import OperationStatus
+
+        for report in completed_operations:
+            operation = await self._operations_service.get_operation(
+                report.operation_id
+            )
+
+            if operation is None:
+                logger.warning(
+                    f"Worker reported unknown completed operation: {report.operation_id}"
+                )
+                continue
+
+            # Skip if already in terminal state
+            if operation.status in [
+                OperationStatus.COMPLETED,
+                OperationStatus.FAILED,
+                OperationStatus.CANCELLED,
+            ]:
+                logger.debug(
+                    f"Operation {report.operation_id} already in terminal state "
+                    f"({operation.status}), skipping reconciliation"
+                )
+                continue
+
+            # Update to reported terminal state
+            logger.info(
+                f"Reconciling operation {report.operation_id}: "
+                f"{operation.status} → {report.status}"
+            )
+
+            if report.status == "COMPLETED":
+                await self._operations_service.complete_operation(
+                    report.operation_id, result_summary=report.result
+                )
+            elif report.status == "FAILED":
+                await self._operations_service.fail_operation(
+                    report.operation_id,
+                    error_message=report.error_message
+                    or "Operation failed (no details)",
+                )
+            elif report.status == "CANCELLED":
+                await self._operations_service.cancel_operation(report.operation_id)
+
+    async def _reconcile_current_operation(
+        self, worker_id: str, operation_id: str
+    ) -> bool:
+        """
+        Reconcile a currently running operation reported by worker.
+
+        When a worker re-registers and reports it's running an operation,
+        we sync the database status based on reconciliation rules.
+
+        Args:
+            worker_id: ID of the worker claiming the operation
+            operation_id: ID of the operation the worker claims is running
+
+        Returns:
+            True if the worker should stop this operation (e.g., DB says COMPLETED)
+
+        Reconciliation rules:
+        - Unknown operation: Log warning, return False (don't signal stop)
+        - COMPLETED in DB: Return True (signal worker to stop)
+        - RUNNING with same worker: No update needed
+        - FAILED/CANCELLED/PENDING: Update to RUNNING
+        """
+        if not self._operations_service:
+            return False
+
+        from ktrdr.api.models.operations import OperationStatus
+
+        operation = await self._operations_service.get_operation(operation_id)
+
+        if operation is None:
+            logger.warning(
+                f"Worker {worker_id} claims unknown operation: {operation_id}"
+            )
+            return False
+
+        # If DB says COMPLETED, trust DB - tell worker to stop
+        if operation.status == OperationStatus.COMPLETED:
+            logger.info(
+                f"Operation {operation_id} is COMPLETED in DB, signaling worker to stop"
+            )
+            return True
+
+        # If already RUNNING with same worker, no update needed
+        if (
+            operation.status == OperationStatus.RUNNING
+            and getattr(operation, "worker_id", None) == worker_id
+        ):
+            logger.debug(
+                f"Operation {operation_id} already RUNNING on worker {worker_id}"
+            )
+            return False
+
+        # For other statuses (FAILED, CANCELLED, PENDING, etc.), sync to RUNNING
+        # because the worker is actually running it
+        if operation.status in [
+            OperationStatus.FAILED,
+            OperationStatus.CANCELLED,
+            OperationStatus.PENDING,
+        ]:
+            logger.info(
+                f"Syncing operation {operation_id}: {operation.status} → RUNNING "
+                f"(worker {worker_id} is running it)"
+            )
+
+            # Use repository directly for field update (status + worker_id)
+            if self._operations_service._repository:
+                await self._operations_service._repository.update(
+                    operation_id,
+                    status="RUNNING",
+                    worker_id=worker_id,
+                )
+
+        return False
 
     async def health_check_worker(self, worker_id: str) -> bool:
         """

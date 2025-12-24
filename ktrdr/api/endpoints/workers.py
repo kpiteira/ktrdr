@@ -7,11 +7,11 @@ in the distributed training and backtesting architecture.
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ktrdr import get_logger
-from ktrdr.api.models.workers import WorkerType
+from ktrdr.api.models.workers import CompletedOperationReport, WorkerType
 from ktrdr.api.services.worker_registry import WorkerRegistry
 
 # Setup module-level logger
@@ -39,13 +39,27 @@ def get_worker_registry() -> WorkerRegistry:
 
 
 class WorkerRegistrationRequest(BaseModel):
-    """Request model for worker registration."""
+    """Request model for worker registration.
+
+    Supports resilience fields for re-registration after backend restart:
+    - current_operation_id: Operation currently being executed
+    - completed_operations: Operations that finished while backend was unavailable
+    """
 
     worker_id: str = Field(..., description="Unique identifier for the worker")
     worker_type: WorkerType = Field(..., description="Type of worker")
     endpoint_url: str = Field(..., description="HTTP URL where worker can be reached")
     capabilities: Optional[dict] = Field(
         default=None, description="Worker capabilities (cores, memory, etc.)"
+    )
+    # Resilience fields for re-registration (M1 checkpoint)
+    current_operation_id: Optional[str] = Field(
+        default=None,
+        description="ID of operation currently being executed by this worker",
+    )
+    completed_operations: list[CompletedOperationReport] = Field(
+        default_factory=list,
+        description="Operations that completed while backend was unavailable",
     )
 
     class Config:
@@ -57,6 +71,8 @@ class WorkerRegistrationRequest(BaseModel):
                 "worker_type": "backtesting",
                 "endpoint_url": "http://192.168.1.201:5003",
                 "capabilities": {"cores": 4, "memory_gb": 8},
+                "current_operation_id": None,
+                "completed_operations": [],
             }
         }
 
@@ -99,16 +115,18 @@ async def register_worker(
         f"Worker registration request: {request.worker_id} ({request.worker_type})"
     )
 
-    worker = registry.register_worker(
+    result = await registry.register_worker(
         worker_id=request.worker_id,
         worker_type=request.worker_type,
         endpoint_url=request.endpoint_url,
         capabilities=request.capabilities,
+        current_operation_id=request.current_operation_id,
+        completed_operations=request.completed_operations,
     )
 
     logger.info(f"Worker registered successfully: {request.worker_id}")
 
-    return worker.to_dict()
+    return result.worker.to_dict()
 
 
 @router.get(
@@ -157,3 +175,38 @@ async def list_workers(
     workers = registry.list_workers(worker_type=worker_type, status=status_enum)
 
     return [worker.to_dict() for worker in workers]
+
+
+@router.get(
+    "/workers/{worker_id}",
+    tags=["Workers"],
+    summary="Get worker by ID",
+    description="Check if a specific worker is registered",
+)
+async def get_worker(
+    worker_id: str,
+    registry: WorkerRegistry = Depends(get_worker_registry),
+) -> dict:
+    """
+    Get a specific worker by ID.
+
+    Used by workers to check if they're still registered after
+    backend restart. Returns 404 if not found, triggering re-registration.
+
+    Args:
+        worker_id: The worker's unique identifier
+        registry: The worker registry (injected dependency)
+
+    Returns:
+        dict: Worker information if found
+
+    Raises:
+        HTTPException: 404 if worker not found
+    """
+    worker = registry.get_worker(worker_id)
+    if worker is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Worker not found: {worker_id}",
+        )
+    return worker.to_dict()

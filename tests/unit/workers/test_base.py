@@ -1,23 +1,37 @@
 """Tests for WorkerAPIBase extracted from training-host-service pattern."""
 
+import uuid
+
 import pytest
 from fastapi.testclient import TestClient
 
 from ktrdr.api.models.operations import OperationType
 from ktrdr.api.models.workers import WorkerType
+from ktrdr.api.services.operations_service import OperationsService
 from ktrdr.workers.base import WorkerAPIBase
+
+
+@pytest.fixture
+def mock_operations_service():
+    """Provide a mock OperationsService without real DB connections."""
+    # Create service without repository to avoid DB connections in unit tests
+    service = OperationsService(repository=None)
+    return service
 
 
 class MockWorker(WorkerAPIBase):
     """Mock worker for testing base class."""
 
-    def __init__(self):
+    def __init__(self, operations_service=None):
         super().__init__(
             worker_type=WorkerType.BACKTESTING,
             operation_type=OperationType.BACKTESTING,
             worker_port=5003,
             backend_url="http://backend:8000",
         )
+        # Override with mock service for unit tests (avoid real DB connections)
+        if operations_service is not None:
+            self._operations_service = operations_service
 
 
 @pytest.mark.asyncio
@@ -56,17 +70,20 @@ class TestWorkerAPIBase:
         assert data["healthy"] is True
 
     @pytest.mark.asyncio
-    async def test_health_reports_busy_when_operation_active(self):
+    async def test_health_reports_busy_when_operation_active(
+        self, mock_operations_service
+    ):
         """Test health endpoint reports 'busy' when operation is active."""
-        worker = MockWorker()
+        worker = MockWorker(operations_service=mock_operations_service)
 
         # Create a test operation
         from datetime import datetime
 
         from ktrdr.api.models.operations import OperationMetadata
 
+        operation_id = f"test_op_{uuid.uuid4().hex[:8]}"
         await worker._operations_service.create_operation(
-            operation_id="test_op_123",
+            operation_id=operation_id,
             operation_type=OperationType.BACKTESTING,
             metadata=OperationMetadata(
                 symbol="AAPL",
@@ -82,28 +99,33 @@ class TestWorkerAPIBase:
         assert response.status_code == 200
         data = response.json()
         assert data["worker_status"] == "busy"
-        assert data["current_operation"] == "test_op_123"
+        assert data["current_operation"] == operation_id
 
-    def test_operations_endpoint_returns_404_for_missing_operation(self):
+    def test_operations_endpoint_returns_404_for_missing_operation(
+        self, mock_operations_service
+    ):
         """Test /api/v1/operations/{id} returns 404 for non-existent operation."""
-        worker = MockWorker()
+        worker = MockWorker(operations_service=mock_operations_service)
         client = TestClient(worker.app)
 
         response = client.get("/api/v1/operations/nonexistent")
         assert response.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_operations_endpoint_returns_operation_status(self):
+    async def test_operations_endpoint_returns_operation_status(
+        self, mock_operations_service
+    ):
         """Test /api/v1/operations/{id} returns operation status."""
-        worker = MockWorker()
+        worker = MockWorker(operations_service=mock_operations_service)
 
         # Create a test operation
         from datetime import datetime
 
         from ktrdr.api.models.operations import OperationMetadata
 
+        operation_id = f"test_op_{uuid.uuid4().hex[:8]}"
         await worker._operations_service.create_operation(
-            operation_id="test_op_456",
+            operation_id=operation_id,
             operation_type=OperationType.BACKTESTING,
             metadata=OperationMetadata(
                 symbol="EURUSD",
@@ -115,11 +137,11 @@ class TestWorkerAPIBase:
         )
 
         client = TestClient(worker.app)
-        response = client.get("/api/v1/operations/test_op_456")
+        response = client.get(f"/api/v1/operations/{operation_id}")
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
-        assert data["data"]["operation_id"] == "test_op_456"
+        assert data["data"]["operation_id"] == operation_id
         # Operations start in "pending" status until explicitly started
         assert data["data"]["status"] in ["pending", "running"]
 
@@ -173,17 +195,18 @@ class TestWorkerAPIBase:
         assert "worker_id" in data
 
     @pytest.mark.asyncio
-    async def test_operations_metrics_endpoint(self):
+    async def test_operations_metrics_endpoint(self, mock_operations_service):
         """Test /api/v1/operations/{id}/metrics endpoint."""
-        worker = MockWorker()
+        worker = MockWorker(operations_service=mock_operations_service)
 
         # Create a test operation
         from datetime import datetime
 
         from ktrdr.api.models.operations import OperationMetadata
 
+        operation_id = f"test_op_{uuid.uuid4().hex[:8]}"
         await worker._operations_service.create_operation(
-            operation_id="test_op_789",
+            operation_id=operation_id,
             operation_type=OperationType.BACKTESTING,
             metadata=OperationMetadata(
                 symbol="GBPUSD",
@@ -195,25 +218,26 @@ class TestWorkerAPIBase:
         )
 
         client = TestClient(worker.app)
-        response = client.get("/api/v1/operations/test_op_789/metrics?cursor=0")
+        response = client.get(f"/api/v1/operations/{operation_id}/metrics?cursor=0")
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
         assert "data" in data
-        assert data["data"]["operation_id"] == "test_op_789"
+        assert data["data"]["operation_id"] == operation_id
 
     @pytest.mark.asyncio
-    async def test_cancel_operation_endpoint(self):
+    async def test_cancel_operation_endpoint(self, mock_operations_service):
         """Test DELETE /api/v1/operations/{id}/cancel endpoint."""
-        worker = MockWorker()
+        worker = MockWorker(operations_service=mock_operations_service)
 
         # Create a test operation
         from datetime import datetime
 
         from ktrdr.api.models.operations import OperationMetadata
 
+        operation_id = f"test_op_{uuid.uuid4().hex[:8]}"
         await worker._operations_service.create_operation(
-            operation_id="test_op_cancel",
+            operation_id=operation_id,
             operation_type=OperationType.BACKTESTING,
             metadata=OperationMetadata(
                 symbol="USDJPY",
@@ -225,7 +249,7 @@ class TestWorkerAPIBase:
         )
 
         client = TestClient(worker.app)
-        response = client.delete("/api/v1/operations/test_op_cancel/cancel")
+        response = client.delete(f"/api/v1/operations/{operation_id}/cancel")
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
@@ -263,3 +287,79 @@ class TestWorkerAPIBaseWithDifferentTypes:
         assert response.status_code == 200
         data = response.json()
         assert "training" in data["service"].lower()
+
+
+class TestHealthCheckTracking:
+    """Tests for health check tracking (Task 1.6: preparation for re-registration monitor)."""
+
+    def test_last_health_check_received_initialized_to_none(self):
+        """Test _last_health_check_received is initialized to None."""
+        worker = MockWorker()
+        assert hasattr(worker, "_last_health_check_received")
+        assert worker._last_health_check_received is None
+
+    def test_health_endpoint_updates_last_health_check_received(self):
+        """Test health endpoint updates _last_health_check_received timestamp."""
+        from datetime import datetime
+
+        worker = MockWorker()
+        client = TestClient(worker.app)
+
+        # Initially None
+        assert worker._last_health_check_received is None
+
+        # Call health endpoint
+        before_call = datetime.utcnow()
+        response = client.get("/health")
+        after_call = datetime.utcnow()
+
+        assert response.status_code == 200
+
+        # Timestamp should now be set
+        assert worker._last_health_check_received is not None
+        assert isinstance(worker._last_health_check_received, datetime)
+
+        # Timestamp should be between before and after the call
+        assert before_call <= worker._last_health_check_received <= after_call
+
+    def test_health_endpoint_response_format_unchanged(self):
+        """Test health response format is backward compatible (no new fields)."""
+        worker = MockWorker()
+        client = TestClient(worker.app)
+
+        response = client.get("/health")
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify expected fields exist
+        assert "healthy" in data
+        assert "service" in data
+        assert "timestamp" in data
+        assert "status" in data
+        assert "worker_status" in data
+        assert "current_operation" in data
+
+        # Verify no unexpected fields related to health check tracking
+        # (internal state should not leak into response)
+        assert "last_health_check_received" not in data
+        assert "_last_health_check_received" not in data
+
+    def test_multiple_health_checks_update_timestamp(self):
+        """Test each health check updates the timestamp."""
+        import time
+
+        worker = MockWorker()
+        client = TestClient(worker.app)
+
+        # First health check
+        client.get("/health")
+        first_timestamp = worker._last_health_check_received
+
+        # Small delay to ensure different timestamp
+        time.sleep(0.01)
+
+        # Second health check
+        client.get("/health")
+        second_timestamp = worker._last_health_check_received
+
+        assert second_timestamp > first_timestamp

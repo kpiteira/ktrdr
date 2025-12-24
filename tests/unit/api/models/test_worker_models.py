@@ -1,8 +1,12 @@
 """Unit tests for worker data models."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+import pytest
+from pydantic import ValidationError
 
 from ktrdr.api.models.workers import (
+    CompletedOperationReport,
     WorkerEndpoint,
     WorkerStatus,
     WorkerType,
@@ -161,3 +165,97 @@ class TestWorkerEndpoint:
 
         assert data["capabilities"] == {"cores": 4, "memory_gb": 8}
         assert data["metadata"] == {"datacenter": "dc1", "rack": "A5"}
+
+
+class TestCompletedOperationReport:
+    """Tests for CompletedOperationReport Pydantic model."""
+
+    def test_create_completed_operation_report_minimal(self):
+        """Test creating a CompletedOperationReport with required fields only."""
+        completed_at = datetime.now(timezone.utc)
+        report = CompletedOperationReport(
+            operation_id="op_123",
+            status="COMPLETED",
+            completed_at=completed_at,
+        )
+
+        assert report.operation_id == "op_123"
+        assert report.status == "COMPLETED"
+        assert report.completed_at == completed_at
+        assert report.result is None
+        assert report.error_message is None
+
+    def test_create_completed_operation_report_with_result(self):
+        """Test creating a CompletedOperationReport with result."""
+        completed_at = datetime.now(timezone.utc)
+        report = CompletedOperationReport(
+            operation_id="op_456",
+            status="COMPLETED",
+            completed_at=completed_at,
+            result={"accuracy": 0.95, "loss": 0.05},
+        )
+
+        assert report.operation_id == "op_456"
+        assert report.status == "COMPLETED"
+        assert report.result == {"accuracy": 0.95, "loss": 0.05}
+
+    def test_create_completed_operation_report_failed(self):
+        """Test creating a CompletedOperationReport for failed operation."""
+        completed_at = datetime.now(timezone.utc)
+        report = CompletedOperationReport(
+            operation_id="op_789",
+            status="FAILED",
+            completed_at=completed_at,
+            error_message="Out of memory error",
+        )
+
+        assert report.status == "FAILED"
+        assert report.error_message == "Out of memory error"
+
+    def test_create_completed_operation_report_cancelled(self):
+        """Test creating a CompletedOperationReport for cancelled operation."""
+        completed_at = datetime.now(timezone.utc)
+        report = CompletedOperationReport(
+            operation_id="op_cancel",
+            status="CANCELLED",
+            completed_at=completed_at,
+        )
+
+        assert report.status == "CANCELLED"
+
+    def test_completed_operation_report_validates_status(self):
+        """Test that status must be a valid terminal status."""
+        completed_at = datetime.now(timezone.utc)
+
+        # Valid statuses should work
+        for status in ["COMPLETED", "FAILED", "CANCELLED"]:
+            report = CompletedOperationReport(
+                operation_id="op_test",
+                status=status,
+                completed_at=completed_at,
+            )
+            assert report.status == status
+
+        # Invalid status should raise validation error
+        with pytest.raises(ValidationError):
+            CompletedOperationReport(
+                operation_id="op_test",
+                status="RUNNING",  # Not a valid terminal status
+                completed_at=completed_at,
+            )
+
+    def test_completed_operation_report_requires_operation_id(self):
+        """Test that operation_id is required."""
+        with pytest.raises(ValidationError):
+            CompletedOperationReport(
+                status="COMPLETED",
+                completed_at=datetime.now(timezone.utc),
+            )
+
+    def test_completed_operation_report_requires_completed_at(self):
+        """Test that completed_at is required."""
+        with pytest.raises(ValidationError):
+            CompletedOperationReport(
+                operation_id="op_test",
+                status="COMPLETED",
+            )
