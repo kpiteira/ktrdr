@@ -168,6 +168,8 @@ class BacktestCheckpointState:
 
 **Type:** CODING
 
+**Task Categories:** Persistence, Cross-Component, Wiring/DI
+
 **Description:**
 Integrate checkpoint saving into backtest worker.
 
@@ -212,6 +214,18 @@ class BacktestWorker(WorkerAPIBase):
 - [ ] No filesystem artifacts
 - [ ] Portfolio state captured correctly
 
+**Integration Tests (based on categories):**
+- [ ] **Wiring:** `assert backtest_worker.checkpoint_service is not None`
+- [ ] **DB Verification:** After checkpoint interval, query DB to verify checkpoint exists
+- [ ] **Cross-Component:** Checkpoint state matches engine state (bar_index, cash, positions)
+
+**Smoke Test:**
+```bash
+# Start backtest, wait for checkpoint interval, then:
+docker compose exec db psql -U ktrdr -d ktrdr -c \
+  "SELECT operation_id, state->>'bar_index' as bar FROM operation_checkpoints"
+```
+
 ---
 
 ### Task 5.3: Implement Backtest Restore
@@ -221,6 +235,8 @@ class BacktestWorker(WorkerAPIBase):
 - `ktrdr/backtesting/checkpoint_restore.py` (new)
 
 **Type:** CODING
+
+**Task Categories:** Cross-Component, Persistence
 
 **Description:**
 Implement restore logic for backtesting.

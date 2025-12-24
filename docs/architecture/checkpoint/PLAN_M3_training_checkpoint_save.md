@@ -109,6 +109,8 @@ fi
 
 **Type:** CODING
 
+**Task Categories:** Persistence
+
 **Description:**
 Create the operation_checkpoints table for storing checkpoint metadata and state.
 
@@ -133,6 +135,15 @@ class CheckpointRecord(Base):
 - [ ] Migration runs successfully
 - [ ] Rollback works
 
+**Integration Tests (based on categories):**
+- [ ] **DB Verification:** Table exists after migration: `SELECT * FROM operation_checkpoints LIMIT 1`
+- [ ] **DB Verification:** Foreign key constraint works (insert with invalid operation_id fails)
+
+**Smoke Test:**
+```bash
+docker compose exec db psql -U ktrdr -d ktrdr -c "\\d operation_checkpoints"
+```
+
 ---
 
 ### Task 3.2: Create CheckpointService
@@ -142,6 +153,8 @@ class CheckpointRecord(Base):
 - `tests/unit/checkpointing/test_checkpoint_service.py` (new)
 
 **Type:** CODING
+
+**Task Categories:** Persistence, Wiring/DI
 
 **Description:**
 Create the service for checkpoint CRUD operations (DB + filesystem).
@@ -185,6 +198,21 @@ class CheckpointService:
 - [ ] Load optionally loads artifacts from filesystem
 - [ ] Delete removes both DB row and artifacts
 - [ ] Unit tests with mocked DB and filesystem
+
+**Integration Tests (based on categories):**
+- [ ] **Wiring:** `assert get_checkpoint_service()._session_factory is not None`
+- [ ] **DB Verification:** After save, query DB directly to verify row exists
+- [ ] **DB Verification:** After delete, query DB directly to verify row removed
+- [ ] **Filesystem:** After save, verify artifacts exist at expected path
+- [ ] **Filesystem:** After delete, verify artifacts removed
+
+**Smoke Test:**
+```bash
+# After saving a checkpoint:
+docker compose exec db psql -U ktrdr -d ktrdr -c \
+  "SELECT operation_id, checkpoint_type FROM operation_checkpoints LIMIT 5"
+ls -la data/checkpoints/
+```
 
 ---
 
@@ -307,6 +335,8 @@ TRAINING_ARTIFACTS = {
 
 **Type:** CODING
 
+**Task Categories:** Persistence, Cross-Component, Wiring/DI
+
 **Description:**
 Integrate checkpoint saving into the training worker for periodic and cancellation checkpoints.
 
@@ -369,6 +399,19 @@ class TrainingWorker(WorkerAPIBase):
 - [ ] Checkpoint deleted on successful completion
 - [ ] Integration with existing training flow
 
+**Integration Tests (based on categories):**
+- [ ] **Wiring:** `assert training_worker.checkpoint_service is not None`
+- [ ] **Wiring:** `assert training_worker.checkpoint_policy is not None`
+- [ ] **DB Verification:** After training reaches checkpoint epoch, query DB to verify checkpoint exists
+- [ ] **Cross-Component:** Checkpoint state matches trainer state (epoch, loss values)
+
+**Smoke Test:**
+```bash
+# Start training, wait for checkpoint interval, then:
+docker compose exec db psql -U ktrdr -d ktrdr -c \
+  "SELECT operation_id, checkpoint_type, state->>'epoch' as epoch FROM operation_checkpoints"
+```
+
 ---
 
 ### Task 3.6: Add Checkpoint API Endpoints
@@ -378,6 +421,8 @@ class TrainingWorker(WorkerAPIBase):
 - `ktrdr/api/main.py` (modify to register router)
 
 **Type:** CODING
+
+**Task Categories:** API Endpoint, Persistence
 
 **Description:**
 API endpoints for listing and viewing checkpoints.
@@ -403,6 +448,18 @@ async def delete_checkpoint(operation_id: str) -> DeleteResponse
 - [ ] Delete endpoint removes checkpoint
 - [ ] Proper error responses (404, etc.)
 
+**Integration Tests (based on categories):**
+- [ ] **API:** GET /checkpoints returns list
+- [ ] **API:** GET /checkpoints/{id} returns checkpoint details
+- [ ] **API:** GET /checkpoints/{id} returns 404 for non-existent
+- [ ] **DB Verification:** After DELETE, verify row removed from DB
+
+**Smoke Test:**
+```bash
+curl http://localhost:8000/api/v1/checkpoints | jq
+curl http://localhost:8000/api/v1/checkpoints/<operation_id> | jq
+```
+
 ---
 
 ### Task 3.7: Configuration for Checkpointing
@@ -412,6 +469,8 @@ async def delete_checkpoint(operation_id: str) -> DeleteResponse
 - Environment variables
 
 **Type:** CODING
+
+**Task Categories:** Configuration
 
 **Description:**
 Make checkpoint intervals and paths configurable. The checkpoint directory must work across different deployment environments (local, homelab).
@@ -447,6 +506,15 @@ self._artifacts_dir = Path(os.getenv("CHECKPOINT_DIR", "/app/data/checkpoints"))
 - [ ] Max age configurable
 - [ ] Sensible defaults
 - [ ] Works with both local and NFS paths
+
+**Integration Tests (based on categories):**
+- [ ] **Config:** Defaults work when env vars not set
+- [ ] **Config:** Custom CHECKPOINT_DIR is used when set
+
+**Smoke Test:**
+```bash
+docker compose exec backend env | grep CHECKPOINT
+```
 
 ---
 

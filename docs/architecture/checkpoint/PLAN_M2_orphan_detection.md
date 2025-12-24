@@ -94,6 +94,8 @@ fi
 
 **Type:** CODING
 
+**Task Categories:** Background/Async, Wiring/DI, Cross-Component
+
 **Description:**
 Create the orphan detection service that runs as a background task, checking for RUNNING operations with no worker.
 
@@ -184,6 +186,21 @@ class OrphanOperationDetector:
 - [ ] Ignores backend-local operations
 - [ ] Unit tests cover detection logic
 
+**Integration Tests (based on categories):**
+- [ ] **Wiring:** `assert get_orphan_detector()._operations_service is not None`
+- [ ] **Wiring:** `assert get_orphan_detector()._worker_registry is not None`
+- [ ] **Lifecycle:** Background task starts: `assert detector._task is not None and not detector._task.done()`
+- [ ] **Lifecycle:** Background task stops cleanly on shutdown
+- [ ] **DB Verification:** After orphan detected, query DB directly to verify status=FAILED
+
+**Smoke Test:**
+```bash
+# Check orphan detector is running:
+docker compose logs backend | grep "Orphan detector started"
+# After killing a worker, check for detection:
+docker compose logs backend | grep "Orphan operation detected"
+```
+
 ---
 
 ### Task 2.2: Integrate OrphanDetector with Backend Startup
@@ -193,6 +210,8 @@ class OrphanOperationDetector:
 - `ktrdr/api/dependencies.py` (modify if needed)
 
 **Type:** CODING
+
+**Task Categories:** Wiring/DI, Background/Async
 
 **Description:**
 Start the orphan detector on backend startup and stop it on shutdown.
@@ -234,6 +253,16 @@ async def shutdown():
 - [ ] Stops cleanly on shutdown
 - [ ] Logged startup/shutdown
 
+**Integration Tests (based on categories):**
+- [ ] **Wiring:** Verify `orphan_detector` global is not None after startup
+- [ ] **Lifecycle:** Verify detector task is running after startup event
+
+**Smoke Test:**
+```bash
+# After backend starts, verify detector is running:
+docker compose logs backend | grep "Orphan detector started"
+```
+
 ---
 
 ### Task 2.3: Add Health Check to Orphan Detector
@@ -243,6 +272,8 @@ async def shutdown():
 - `ktrdr/api/endpoints/health.py` (modify if exists)
 
 **Type:** CODING
+
+**Task Categories:** API Endpoint
 
 **Description:**
 Add health check endpoint or metrics for orphan detector status.
@@ -258,6 +289,15 @@ Add health check endpoint or metrics for orphan detector status.
 - [ ] Number of watched orphans tracked
 - [ ] Can query status via API or metrics
 
+**Integration Tests (based on categories):**
+- [ ] **API:** Health endpoint returns correct response format
+- [ ] **API:** Health endpoint reflects actual detector state
+
+**Smoke Test:**
+```bash
+curl http://localhost:8000/api/v1/health | jq '.orphan_detector'
+```
+
 ---
 
 ### Task 2.4: Configuration for Orphan Detection
@@ -267,6 +307,8 @@ Add health check endpoint or metrics for orphan detector status.
 - Environment variables
 
 **Type:** CODING
+
+**Task Categories:** Configuration
 
 **Description:**
 Make orphan detection timeouts configurable.
@@ -283,6 +325,15 @@ ORPHAN_CHECK_INTERVAL_SECONDS=15
 - [ ] Check interval configurable
 - [ ] Sensible defaults (60s, 15s)
 - [ ] Documentation in config
+
+**Integration Tests (based on categories):**
+- [ ] **Config:** Startup fails with invalid ORPHAN_TIMEOUT_SECONDS (e.g., negative)
+- [ ] **Config:** Defaults work when env vars not set
+
+**Smoke Test:**
+```bash
+docker compose exec backend env | grep ORPHAN
+```
 
 ---
 
