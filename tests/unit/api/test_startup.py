@@ -163,9 +163,12 @@ class TestLifespanOrphanDetector:
                 pass
 
         # Verify OrphanOperationDetector was created with correct dependencies
+        # Task 2.4: Now includes configurable timeout/interval from settings
         mock_orphan_detector_class.assert_called_once_with(
             operations_service=mock_ops_service,
             worker_registry=mock_registry,
+            orphan_timeout_seconds=60,  # Default from OrphanDetectorSettings
+            check_interval_seconds=15,  # Default from OrphanDetectorSettings
         )
 
     @pytest.mark.asyncio

@@ -17,6 +17,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from ktrdr.api.services.orphan_detector import OrphanOperationDetector
+from ktrdr.config.settings import get_orphan_detector_settings
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
@@ -108,12 +109,20 @@ async def lifespan(app: FastAPI):
     operations_service = get_operations_service()
     registry = get_worker_registry()
 
+    # M2 Task 2.4: Use configurable settings for orphan detection
+    orphan_settings = get_orphan_detector_settings()
     _orphan_detector = OrphanOperationDetector(
         operations_service=operations_service,
         worker_registry=registry,
+        orphan_timeout_seconds=orphan_settings.timeout_seconds,
+        check_interval_seconds=orphan_settings.check_interval_seconds,
     )
     await _orphan_detector.start()
-    logger.info("Orphan detector started")
+    logger.info(
+        "Orphan detector started (timeout=%ds, interval=%ds)",
+        orphan_settings.timeout_seconds,
+        orphan_settings.check_interval_seconds,
+    )
 
     # Initialize training service to log training mode at startup
     from ktrdr.api.endpoints.training import get_training_service
