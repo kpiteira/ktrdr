@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from orchestrator.haiku_brain import ExtractedTask
 from orchestrator.milestone_runner import MilestoneResult, run_milestone
 from orchestrator.models import Task, TaskResult
 from orchestrator.state import OrchestratorState
@@ -46,6 +47,16 @@ def sample_tasks() -> list[Task]:
 
 
 @pytest.fixture
+def sample_extracted_tasks() -> list[ExtractedTask]:
+    """Sample extracted tasks for HaikuBrain mocking."""
+    return [
+        ExtractedTask(id="1.1", title="First task", description="Do the first thing"),
+        ExtractedTask(id="1.2", title="Second task", description="Do the second thing"),
+        ExtractedTask(id="1.3", title="Third task", description="Do the third thing"),
+    ]
+
+
+@pytest.fixture
 def mock_run_task_with_escalation() -> AsyncMock:
     """Mock for run_task_with_escalation that returns completed status."""
 
@@ -81,6 +92,15 @@ def basic_plan_file(tmp_path: Path) -> Path:
     return plan_path
 
 
+def configure_haiku_mock(mock_brain_class: MagicMock) -> None:
+    """Configure HaikuBrain mock to return sample extracted tasks."""
+    mock_brain_class.return_value.extract_tasks.return_value = [
+        ExtractedTask(id="1.1", title="First task", description="Do the first thing"),
+        ExtractedTask(id="1.2", title="Second task", description="Do the second thing"),
+        ExtractedTask(id="1.3", title="Third task", description="Do the third thing"),
+    ]
+
+
 class TestRunMilestoneBasic:
     """Tests for basic milestone execution."""
 
@@ -94,15 +114,14 @@ class TestRunMilestoneBasic:
     ) -> None:
         """All tasks are executed in order."""
         with (
-            patch(
-                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
-            ),
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
             patch(
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
+            configure_haiku_mock(mock_brain_class)
             result = await run_milestone(
                 plan_path=str(basic_plan_file),
                 state_dir=tmp_path,
@@ -127,15 +146,14 @@ class TestRunMilestoneBasic:
     ) -> None:
         """State is saved after each task completion."""
         with (
-            patch(
-                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
-            ),
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
             patch(
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
+            configure_haiku_mock(mock_brain_class)
             await run_milestone(
                 plan_path=str(basic_plan_file),
                 state_dir=tmp_path,
@@ -157,15 +175,14 @@ class TestRunMilestoneBasic:
     ) -> None:
         """MilestoneResult contains aggregated totals."""
         with (
-            patch(
-                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
-            ),
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
             patch(
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
+            configure_haiku_mock(mock_brain_class)
             result = await run_milestone(
                 plan_path=str(basic_plan_file),
                 state_dir=tmp_path,
@@ -209,15 +226,14 @@ class TestRunMilestoneResume:
         existing_state.save(tmp_path)
 
         with (
-            patch(
-                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
-            ),
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
             patch(
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
+            configure_haiku_mock(mock_brain_class)
             await run_milestone(
                 plan_path=str(basic_plan_file),
                 state_dir=tmp_path,
@@ -250,15 +266,14 @@ class TestRunMilestoneResume:
         existing_state.save(tmp_path)
 
         with (
-            patch(
-                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
-            ),
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
             patch(
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
+            configure_haiku_mock(mock_brain_class)
             await run_milestone(
                 plan_path=str(basic_plan_file),
                 state_dir=tmp_path,
@@ -274,7 +289,7 @@ class TestRunMilestoneStatusHandling:
 
     @pytest.mark.asyncio
     async def test_stops_on_needs_human(
-        self, tmp_path: Path, sample_tasks: list[Task]
+        self, tmp_path: Path, basic_plan_file: Path, sample_tasks: list[Task]
     ) -> None:
         """Stops execution when task needs human input."""
         call_count = 0
@@ -316,17 +331,16 @@ class TestRunMilestoneStatusHandling:
             )
 
         with (
-            patch(
-                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
-            ),
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
             patch(
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_with_escalation),
             ),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
+            configure_haiku_mock(mock_brain_class)
             result = await run_milestone(
-                plan_path="test_plan.md",
+                plan_path=str(basic_plan_file),
                 state_dir=tmp_path,
             )
 
@@ -336,7 +350,7 @@ class TestRunMilestoneStatusHandling:
 
     @pytest.mark.asyncio
     async def test_stops_on_failed(
-        self, tmp_path: Path, sample_tasks: list[Task]
+        self, tmp_path: Path, basic_plan_file: Path, sample_tasks: list[Task]
     ) -> None:
         """Stops execution when task fails."""
         call_count = 0
@@ -376,17 +390,16 @@ class TestRunMilestoneStatusHandling:
             )
 
         with (
-            patch(
-                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
-            ),
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
             patch(
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_with_escalation),
             ),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
+            configure_haiku_mock(mock_brain_class)
             result = await run_milestone(
-                plan_path="test_plan.md",
+                plan_path=str(basic_plan_file),
                 state_dir=tmp_path,
             )
 
@@ -457,15 +470,14 @@ class TestTaskCompleteCallback:
             )
 
         with (
-            patch(
-                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
-            ),
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
             patch(
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_with_escalation),
             ),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
+            configure_haiku_mock(mock_brain_class)
             await run_milestone(
                 plan_path=str(basic_plan_file),
                 state_dir=tmp_path,
@@ -524,15 +536,14 @@ class TestTaskCompleteCallback:
             )
 
         with (
-            patch(
-                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
-            ),
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
             patch(
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_with_escalation),
             ),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
+            configure_haiku_mock(mock_brain_class)
             await run_milestone(
                 plan_path=str(basic_plan_file),
                 state_dir=tmp_path,
@@ -553,9 +564,7 @@ class TestTaskCompleteCallback:
     ) -> None:
         """Milestone runs without callback (backward compatibility)."""
         with (
-            patch(
-                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
-            ),
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
             patch(
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
@@ -563,6 +572,7 @@ class TestTaskCompleteCallback:
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
             # Should not raise - callback is optional
+            configure_haiku_mock(mock_brain_class)
             result = await run_milestone(
                 plan_path=str(basic_plan_file),
                 state_dir=tmp_path,
@@ -675,15 +685,14 @@ class TestLoopDetectionIntegration:
             )
 
         with (
-            patch(
-                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
-            ),
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
             patch(
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_with_escalation),
             ),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
+            configure_haiku_mock(mock_brain_class)
             await run_milestone(
                 plan_path=str(basic_plan_file),
                 state_dir=tmp_path,
@@ -697,7 +706,7 @@ class TestLoopDetectionIntegration:
 
     @pytest.mark.asyncio
     async def test_loop_state_persisted_for_resume(
-        self, tmp_path: Path, sample_tasks: list[Task]
+        self, tmp_path: Path, basic_plan_file: Path, sample_tasks: list[Task]
     ) -> None:
         """Loop detection state survives resume."""
         # First run: task 1.2 fails but doesn't trigger loop detection yet
@@ -740,29 +749,28 @@ class TestLoopDetectionIntegration:
             )
 
         with (
-            patch(
-                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
-            ),
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
             patch(
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=first_run_mock),
             ),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
+            configure_haiku_mock(mock_brain_class)
             await run_milestone(
-                plan_path="test_plan.md",
+                plan_path=str(basic_plan_file),
                 state_dir=tmp_path,
             )
 
         # Load state and verify loop detection state was persisted
-        state = OrchestratorState.load(tmp_path, "test_plan")
+        state = OrchestratorState.load(tmp_path, basic_plan_file.stem)
         assert state is not None
         assert state.task_attempt_counts.get("1.2") == 1
         assert state.task_errors.get("1.2") == ["First failure"]
 
     @pytest.mark.asyncio
     async def test_milestone_stops_on_loop_detection(
-        self, tmp_path: Path, sample_tasks: list[Task]
+        self, tmp_path: Path, basic_plan_file: Path, sample_tasks: list[Task]
     ) -> None:
         """Milestone stops when loop detection triggers."""
         call_count = 0
@@ -804,17 +812,16 @@ class TestLoopDetectionIntegration:
             )
 
         with (
-            patch(
-                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
-            ),
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
             patch(
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=loop_detection_mock),
             ),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
+            configure_haiku_mock(mock_brain_class)
             result = await run_milestone(
-                plan_path="test_plan.md",
+                plan_path=str(basic_plan_file),
                 state_dir=tmp_path,
             )
 
@@ -865,15 +872,14 @@ class TestLoopDetectionIntegration:
             )
 
         with (
-            patch(
-                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
-            ),
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
             patch(
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=check_detector_mock),
             ),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
+            configure_haiku_mock(mock_brain_class)
             await run_milestone(
                 plan_path=str(basic_plan_file),
                 state_dir=tmp_path,
@@ -926,9 +932,7 @@ pytest tests/ -v
         )
 
         with (
-            patch(
-                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
-            ),
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
             patch(
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
@@ -939,6 +943,7 @@ pytest tests/ -v
                 AsyncMock(return_value=mock_e2e_result),
             ) as mock_run_e2e,
         ):
+            configure_haiku_mock(mock_brain_class)
             result = await run_milestone(
                 plan_path=str(plan_file),
                 state_dir=tmp_path,
@@ -962,9 +967,7 @@ pytest tests/ -v
         no_e2e_plan.write_text("# Test Milestone\n\nNo E2E here.\n")
 
         with (
-            patch(
-                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
-            ),
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
             patch(
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
@@ -975,6 +978,7 @@ pytest tests/ -v
                 AsyncMock(),
             ) as mock_run_e2e,
         ):
+            configure_haiku_mock(mock_brain_class)
             result = await run_milestone(
                 plan_path=str(no_e2e_plan),
                 state_dir=tmp_path,
@@ -1022,9 +1026,7 @@ pytest tests/ -v
         )
 
         with (
-            patch(
-                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
-            ),
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
             patch(
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_success),
@@ -1039,6 +1041,7 @@ pytest tests/ -v
                 AsyncMock(return_value="Skip for now"),
             ),
         ):
+            configure_haiku_mock(mock_brain_class)
             result = await run_milestone(
                 plan_path=str(plan_file),
                 state_dir=tmp_path,
@@ -1102,9 +1105,7 @@ pytest tests/ -v
             return result
 
         with (
-            patch(
-                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
-            ),
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
             patch(
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_success),
@@ -1123,6 +1124,7 @@ pytest tests/ -v
                 return_value=True,
             ),
         ):
+            configure_haiku_mock(mock_brain_class)
             result = await run_milestone(
                 plan_path=str(plan_file),
                 state_dir=tmp_path,
@@ -1181,9 +1183,7 @@ pytest tests/ -v
             return mock_e2e_result
 
         with (
-            patch(
-                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
-            ),
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
             patch(
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_success),
@@ -1202,6 +1202,7 @@ pytest tests/ -v
                 return_value=True,  # User keeps saying yes
             ),
         ):
+            configure_haiku_mock(mock_brain_class)
             result = await run_milestone(
                 plan_path=str(plan_file),
                 state_dir=tmp_path,
@@ -1246,9 +1247,7 @@ pytest tests/ -v
         )
 
         with (
-            patch(
-                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
-            ),
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
             patch(
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_success),
@@ -1263,6 +1262,7 @@ pytest tests/ -v
                 AsyncMock(return_value="Skip"),
             ) as mock_escalate,
         ):
+            configure_haiku_mock(mock_brain_class)
             result = await run_milestone(
                 plan_path=str(plan_file),
                 state_dir=tmp_path,
@@ -1307,9 +1307,7 @@ pytest tests/ -v
         )
 
         with (
-            patch(
-                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
-            ),
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
             patch(
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_success),
@@ -1320,6 +1318,7 @@ pytest tests/ -v
                 AsyncMock(return_value=mock_e2e_result),
             ),
         ):
+            configure_haiku_mock(mock_brain_class)
             await run_milestone(
                 plan_path=str(plan_file),
                 state_dir=tmp_path,
@@ -1370,9 +1369,7 @@ pytest tests/ -v
             )
 
         with (
-            patch(
-                "orchestrator.milestone_runner.parse_plan", return_value=sample_tasks
-            ),
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
             patch(
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_with_failure),
@@ -1383,6 +1380,7 @@ pytest tests/ -v
                 AsyncMock(),
             ) as mock_run_e2e,
         ):
+            configure_haiku_mock(mock_brain_class)
             result = await run_milestone(
                 plan_path=str(plan_file),
                 state_dir=tmp_path,

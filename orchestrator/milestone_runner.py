@@ -18,9 +18,9 @@ from orchestrator import telemetry
 from orchestrator.config import OrchestratorConfig
 from orchestrator.e2e_runner import apply_e2e_fix, run_e2e_tests
 from orchestrator.escalation import EscalationInfo, escalate_and_wait
+from orchestrator.haiku_brain import HaikuBrain
 from orchestrator.loop_detector import LoopDetector, LoopDetectorConfig
 from orchestrator.models import ClaudeResult, Task, TaskResult
-from orchestrator.plan_parser import parse_e2e_scenario, parse_plan
 from orchestrator.sandbox import SandboxManager
 from orchestrator.state import OrchestratorState
 from orchestrator.task_runner import run_task_with_escalation
@@ -95,8 +95,24 @@ async def run_milestone(
     # Extract milestone ID from plan filename
     milestone_id = Path(plan_path).stem
 
-    # Parse plan to get tasks
-    tasks = parse_plan(plan_path)
+    # Parse plan to get tasks using HaikuBrain
+    brain = HaikuBrain()
+    plan_content = Path(plan_path).read_text()
+    extracted = brain.extract_tasks(plan_content)
+
+    # Convert ExtractedTask to Task model for compatibility
+    tasks = [
+        Task(
+            id=t.id,
+            title=t.title,
+            description=t.description,
+            file_path=None,  # /ktask reads this from plan
+            acceptance_criteria=[],
+            plan_file=str(plan_path),
+            milestone_id=milestone_id,
+        )
+        for t in extracted
+    ]
 
     # Initialize sandbox
     sandbox = SandboxManager(
@@ -440,6 +456,53 @@ def _get_current_branch(sandbox: SandboxManager) -> str:
     except Exception:
         pass
     return "main"
+
+
+def parse_e2e_scenario(plan_content: str) -> str | None:
+    """Extract E2E test scenario from plan content.
+
+    Looks for a section starting with "## E2E Test" (with optional "Scenario" suffix)
+    and extracts the content, preferring code blocks if present.
+
+    This function uses regex for E2E extraction (Decision 10: keep regex for E2E,
+    only use Haiku for task extraction and result interpretation).
+
+    Args:
+        plan_content: The full markdown content of the plan file
+
+    Returns:
+        The E2E scenario text, or None if no E2E section exists
+    """
+    import re
+
+    # Find the E2E Test section header
+    # Matches: ## E2E Test, ## E2E Test Scenario, etc.
+    header_match = re.search(
+        r"^##\s+E2E\s+Test.*?$", plan_content, re.MULTILINE | re.IGNORECASE
+    )
+
+    if not header_match:
+        return None
+
+    # Get content from after the header to the next ## section or end of file
+    start = header_match.end()
+    next_section_match = re.search(r"^##\s+", plan_content[start:], re.MULTILINE)
+
+    if next_section_match:
+        section_content = plan_content[start : start + next_section_match.start()]
+    else:
+        section_content = plan_content[start:]
+
+    # Extract all code blocks within this section
+    code_blocks = re.findall(r"```\w*\n(.*?)```", section_content, re.DOTALL)
+
+    if code_blocks:
+        # Return all code blocks joined together
+        return "\n\n".join(block.strip() for block in code_blocks)
+
+    # Fall back to plain text (strip leading/trailing whitespace)
+    plain_text = section_content.strip()
+    return plain_text if plain_text else None
 
 
 async def create_milestone_pr(
