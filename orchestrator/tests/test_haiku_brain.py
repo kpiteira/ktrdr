@@ -1,7 +1,8 @@
 """Tests for HaikuBrain - Haiku-powered orchestration intelligence.
 
-These tests verify that HaikuBrain correctly extracts tasks from milestone plans,
-particularly handling the edge case of ignoring tasks inside code blocks.
+These tests verify that HaikuBrain correctly:
+- Extracts tasks from milestone plans (ignoring code blocks)
+- Interprets task execution results (completed/failed/needs_help)
 """
 
 import json
@@ -9,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from orchestrator.haiku_brain import ExtractedTask, HaikuBrain
+from orchestrator.haiku_brain import ExtractedTask, HaikuBrain, InterpretationResult
 
 
 class TestExtractTasks:
@@ -252,3 +253,244 @@ class TestExtractedTask:
         assert task.id == "1.1"
         assert task.title == "Create data model"
         assert task.description == "Create the data model for the feature."
+
+
+class TestInterpretResult:
+    """Tests for HaikuBrain.interpret_result()."""
+
+    def test_completed_task_with_summary(self) -> None:
+        """Output with task completion summary should return status=completed."""
+        output = """
+## Task Complete: 1.1
+
+**What was implemented:**
+- Created the data model
+
+**Files changed:**
+- models.py (created)
+
+All tests passing.
+"""
+        mock_response = json.dumps({
+            "status": "completed",
+            "summary": "Created data model with all tests passing",
+            "error": None,
+            "question": None,
+            "options": None,
+            "recommendation": None,
+        })
+
+        brain = HaikuBrain()
+        with patch.object(brain, "_invoke_haiku", return_value=mock_response):
+            result = brain.interpret_result(output)
+
+        assert result.status == "completed"
+        assert result.summary == "Created data model with all tests passing"
+        assert result.error is None
+        assert result.question is None
+
+    def test_failed_task_with_error(self) -> None:
+        """Output with unresolved error should return status=failed."""
+        output = """
+I attempted to implement the feature but encountered an error I couldn't resolve.
+
+Error: ModuleNotFoundError: No module named 'some_library'
+
+I tried installing it but it's not available in this environment.
+The task cannot be completed without this dependency.
+"""
+        mock_response = json.dumps({
+            "status": "failed",
+            "summary": "Failed due to missing dependency",
+            "error": "ModuleNotFoundError: No module named 'some_library'",
+            "question": None,
+            "options": None,
+            "recommendation": None,
+        })
+
+        brain = HaikuBrain()
+        with patch.object(brain, "_invoke_haiku", return_value=mock_response):
+            result = brain.interpret_result(output)
+
+        assert result.status == "failed"
+        assert "dependency" in result.summary.lower() or "missing" in result.summary.lower()
+        assert result.error is not None
+        assert "some_library" in result.error
+
+    def test_needs_help_with_ask_user_question(self) -> None:
+        """Output with AskUserQuestion tool call should return status=needs_help."""
+        output = """
+I need clarification before proceeding.
+
+<tool_call>
+<name>AskUserQuestion</name>
+<parameters>
+{"question": "Which authentication method should I use?", "options": ["JWT tokens", "API keys", "OAuth"]}
+</parameters>
+</tool_call>
+
+I recommend option A (JWT) as it matches the existing user service.
+"""
+        mock_response = json.dumps({
+            "status": "needs_help",
+            "summary": "Asking about authentication method",
+            "error": None,
+            "question": "Which authentication method should I use?",
+            "options": ["JWT tokens", "API keys", "OAuth"],
+            "recommendation": "JWT tokens (matches existing user service)",
+        })
+
+        brain = HaikuBrain()
+        with patch.object(brain, "_invoke_haiku", return_value=mock_response):
+            result = brain.interpret_result(output)
+
+        assert result.status == "needs_help"
+        assert result.question is not None
+        assert "authentication" in result.question.lower()
+        assert result.options is not None
+        assert len(result.options) == 3
+        assert result.recommendation is not None
+
+    def test_ambiguous_output_returns_needs_help(self) -> None:
+        """Ambiguous output should conservatively return status=needs_help."""
+        output = """
+I've made some progress on the task but I'm not sure if the approach is correct.
+
+The implementation works but there might be edge cases I haven't considered.
+Should I continue with this approach?
+"""
+        mock_response = json.dumps({
+            "status": "needs_help",
+            "summary": "Uncertain about approach, seeking confirmation",
+            "error": None,
+            "question": "Should I continue with this approach?",
+            "options": None,
+            "recommendation": None,
+        })
+
+        brain = HaikuBrain()
+        with patch.object(brain, "_invoke_haiku", return_value=mock_response):
+            result = brain.interpret_result(output)
+
+        assert result.status == "needs_help"
+        assert result.question is not None
+
+    def test_large_output_not_truncated(self) -> None:
+        """Large output (10k+ chars) should be sent without truncation."""
+        # Create large output > 10k characters
+        large_output = "Line of text\n" * 1000  # ~13k chars
+        assert len(large_output) > 10000
+
+        mock_response = json.dumps({
+            "status": "completed",
+            "summary": "Task completed successfully",
+            "error": None,
+            "question": None,
+            "options": None,
+            "recommendation": None,
+        })
+
+        brain = HaikuBrain()
+        captured_prompt = None
+
+        def capture_invoke(prompt: str) -> str:
+            nonlocal captured_prompt
+            captured_prompt = prompt
+            return mock_response
+
+        with patch.object(brain, "_invoke_haiku", side_effect=capture_invoke):
+            result = brain.interpret_result(large_output)
+
+        # Verify full output was included in prompt (not truncated)
+        assert captured_prompt is not None
+        assert large_output in captured_prompt
+        assert result.status == "completed"
+
+    def test_json_parsing_error_returns_needs_help(self) -> None:
+        """When JSON parsing fails, should return needs_help for safety."""
+        output = "Some task output"
+        invalid_response = "This is not valid JSON at all"
+
+        brain = HaikuBrain()
+        with patch.object(brain, "_invoke_haiku", return_value=invalid_response):
+            result = brain.interpret_result(output)
+
+        # Conservative: when uncertain, treat as needs_help
+        assert result.status == "needs_help"
+
+    def test_completed_without_explicit_marker(self) -> None:
+        """Task without STATUS marker but clear completion should be detected."""
+        output = """
+I've implemented the feature as requested.
+
+Changes made:
+1. Created models/user.py with User dataclass
+2. Added validation for email format
+3. Wrote 5 unit tests - all passing
+
+The implementation follows the existing patterns in the codebase.
+"""
+        mock_response = json.dumps({
+            "status": "completed",
+            "summary": "Created User model with validation and tests",
+            "error": None,
+            "question": None,
+            "options": None,
+            "recommendation": None,
+        })
+
+        brain = HaikuBrain()
+        with patch.object(brain, "_invoke_haiku", return_value=mock_response):
+            result = brain.interpret_result(output)
+
+        assert result.status == "completed"
+        assert "tests" in result.summary.lower() or "user" in result.summary.lower()
+
+
+class TestInterpretationResult:
+    """Tests for the InterpretationResult dataclass."""
+
+    def test_interpretation_result_fields(self) -> None:
+        """InterpretationResult should have all required fields."""
+        result = InterpretationResult(
+            status="completed",
+            summary="Task completed successfully",
+            error=None,
+            question=None,
+            options=None,
+            recommendation=None,
+        )
+        assert result.status == "completed"
+        assert result.summary == "Task completed successfully"
+        assert result.error is None
+        assert result.question is None
+        assert result.options is None
+        assert result.recommendation is None
+
+    def test_interpretation_result_with_needs_help(self) -> None:
+        """InterpretationResult should store question and options for needs_help."""
+        result = InterpretationResult(
+            status="needs_help",
+            summary="Awaiting user decision",
+            error=None,
+            question="Which approach should I use?",
+            options=["Option A", "Option B"],
+            recommendation="Option A",
+        )
+        assert result.status == "needs_help"
+        assert result.question == "Which approach should I use?"
+        assert result.options == ["Option A", "Option B"]
+        assert result.recommendation == "Option A"
+
+    def test_interpretation_result_with_failed(self) -> None:
+        """InterpretationResult should store error for failed status."""
+        result = InterpretationResult(
+            status="failed",
+            summary="Task failed due to import error",
+            error="ImportError: No module named 'xyz'",
+            question=None,
+            options=None,
+            recommendation=None,
+        )
+        assert result.status == "failed"
+        assert result.error == "ImportError: No module named 'xyz'"
