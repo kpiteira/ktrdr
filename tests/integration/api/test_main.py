@@ -34,7 +34,15 @@ class TestMainApplication:
         """Test that the health endpoint returns the expected response."""
         response = self.client.get("/api/v1/health")
         assert response.status_code == 200
-        assert response.json() == {"status": "ok", "version": metadata.VERSION}
+        data = response.json()
+
+        # Verify required fields
+        assert data["status"] == "ok"
+        assert data["version"] == metadata.VERSION
+
+        # Orphan detector is included (M2: Orphan Detection)
+        # May be None if not initialized during test
+        assert "orphan_detector" in data
 
     def test_error_handlers(self):
         """Test all error handlers at once to simplify the test."""

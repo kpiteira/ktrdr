@@ -4,6 +4,8 @@ API router module.
 This module defines the main API router with versioned endpoints.
 """
 
+from typing import Any
+
 from fastapi import APIRouter, Depends
 
 from ktrdr.api.config import APIConfig
@@ -26,16 +28,46 @@ from ktrdr.api.endpoints.workers import router as workers_router
 api_router = APIRouter()
 
 
+# Lazy import to avoid circular dependencies
+def get_orphan_detector():
+    """Get the orphan detector instance (lazy import)."""
+    from ktrdr.api.startup import get_orphan_detector as _get_orphan_detector
+
+    return _get_orphan_detector()
+
+
+def _get_orphan_detector_status() -> dict[str, Any] | None:
+    """Get orphan detector status if available.
+
+    Returns:
+        Orphan detector status dict, or None if not initialized.
+    """
+    try:
+        detector = get_orphan_detector()
+        return detector.get_status()
+    except RuntimeError:
+        # Detector not initialized yet (during startup or in tests)
+        return None
+
+
 # Define API endpoints
 @api_router.get("/health")
 async def health_check(config: APIConfig = Depends(get_api_config)):
     """
     Health check endpoint.
 
+    Returns overall system health status including:
+    - Basic status and version
+    - Orphan detector status (M2: Orphan Detection)
+
     Returns:
         dict: Health status information
     """
-    return {"status": "ok", "version": config.version}
+    return {
+        "status": "ok",
+        "version": config.version,
+        "orphan_detector": _get_orphan_detector_status(),
+    }
 
 
 # Import and include other endpoint routers
