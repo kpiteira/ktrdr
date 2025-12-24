@@ -65,7 +65,6 @@ def mock_run_task_with_escalation() -> AsyncMock:
         sandbox: MagicMock,
         config: MagicMock,
         plan_path: str,
-        loop_detector,
         tracer,
         notify: bool = True,
         on_tool_use=None,
@@ -299,7 +298,6 @@ class TestRunMilestoneStatusHandling:
             sandbox: MagicMock,
             config: MagicMock,
             plan_path: str,
-            loop_detector,
             tracer,
             notify: bool = True,
             on_tool_use=None,
@@ -360,7 +358,6 @@ class TestRunMilestoneStatusHandling:
             sandbox: MagicMock,
             config: MagicMock,
             plan_path: str,
-            loop_detector,
             tracer,
             notify: bool = True,
             on_tool_use=None,
@@ -453,7 +450,6 @@ class TestTaskCompleteCallback:
             sandbox: MagicMock,
             config: MagicMock,
             plan_path: str,
-            loop_detector,
             tracer,
             notify: bool = True,
             on_tool_use=None,
@@ -508,7 +504,6 @@ class TestTaskCompleteCallback:
             sandbox: MagicMock,
             config: MagicMock,
             plan_path: str,
-            loop_detector,
             tracer,
             notify: bool = True,
             on_tool_use=None,
@@ -655,25 +650,24 @@ class TestLoopDetectionIntegration:
     """Tests for loop detection integration in milestone runner."""
 
     @pytest.mark.asyncio
-    async def test_loop_detector_initialized_per_milestone(
+    async def test_haiku_brain_handles_retry_decisions(
         self, tmp_path: Path, basic_plan_file: Path, sample_tasks: list[Task]
     ) -> None:
-        """LoopDetector is created at milestone start with correct config."""
-        detector_state_refs: list[OrchestratorState] = []
+        """HaikuBrain handles retry/escalate decisions (not LoopDetector)."""
+        task_ids_called: list[str] = []
 
         async def mock_task_with_escalation(
             task: Task,
             sandbox: MagicMock,
             config: MagicMock,
             plan_path: str,
-            loop_detector,
             tracer,
             notify: bool = True,
             on_tool_use=None,
             model: str | None = None,
         ) -> TaskResult:
-            # Capture the state reference from the loop detector
-            detector_state_refs.append(loop_detector.state)
+            # Track which tasks were called
+            task_ids_called.append(task.id)
             return TaskResult(
                 task_id=task.id,
                 status="completed",
@@ -698,18 +692,16 @@ class TestLoopDetectionIntegration:
                 state_dir=tmp_path,
             )
 
-        # Verify loop detector was passed to each task
-        assert len(detector_state_refs) == 3
-        # All tasks should share the same state instance
-        assert detector_state_refs[0] is detector_state_refs[1]
-        assert detector_state_refs[1] is detector_state_refs[2]
+        # All tasks should be called
+        assert len(task_ids_called) == 3
+        assert task_ids_called == ["1.1", "1.2", "1.3"]
 
     @pytest.mark.asyncio
-    async def test_loop_state_persisted_for_resume(
+    async def test_state_persisted_for_resume(
         self, tmp_path: Path, basic_plan_file: Path, sample_tasks: list[Task]
     ) -> None:
-        """Loop detection state survives resume."""
-        # First run: task 1.2 fails but doesn't trigger loop detection yet
+        """Task state survives resume (completed_tasks, failed_tasks)."""
+        # First run: task 1.2 fails
         call_count = 0
 
         async def first_run_mock(
@@ -717,7 +709,6 @@ class TestLoopDetectionIntegration:
             sandbox: MagicMock,
             config: MagicMock,
             plan_path: str,
-            loop_detector,
             tracer,
             notify: bool = True,
             on_tool_use=None,
@@ -726,8 +717,6 @@ class TestLoopDetectionIntegration:
             nonlocal call_count
             call_count += 1
             if task.id == "1.2":
-                # Record a failure in the loop detector
-                loop_detector.record_task_failure(task.id, "First failure")
                 return TaskResult(
                     task_id=task.id,
                     status="failed",
@@ -762,25 +751,24 @@ class TestLoopDetectionIntegration:
                 state_dir=tmp_path,
             )
 
-        # Load state and verify loop detection state was persisted
+        # Load state and verify task state was persisted
         state = OrchestratorState.load(tmp_path, basic_plan_file.stem)
         assert state is not None
-        assert state.task_attempt_counts.get("1.2") == 1
-        assert state.task_errors.get("1.2") == ["First failure"]
+        assert "1.1" in state.completed_tasks
+        assert "1.2" in state.failed_tasks
 
     @pytest.mark.asyncio
-    async def test_milestone_stops_on_loop_detection(
+    async def test_milestone_stops_on_failed_task(
         self, tmp_path: Path, basic_plan_file: Path, sample_tasks: list[Task]
     ) -> None:
-        """Milestone stops when loop detection triggers."""
+        """Milestone stops when task fails."""
         call_count = 0
 
-        async def loop_detection_mock(
+        async def failed_task_mock(
             task: Task,
             sandbox: MagicMock,
             config: MagicMock,
             plan_path: str,
-            loop_detector,
             tracer,
             notify: bool = True,
             on_tool_use=None,
@@ -790,7 +778,7 @@ class TestLoopDetectionIntegration:
             call_count += 1
 
             if task.id == "1.2":
-                # Simulate loop detection by returning failed with error indicating loop
+                # Simulate task failure (HaikuBrain escalation triggered)
                 return TaskResult(
                     task_id=task.id,
                     status="failed",
@@ -799,7 +787,7 @@ class TestLoopDetectionIntegration:
                     cost_usd=0.0,
                     output="",
                     session_id="",
-                    error="Task 1.2 failed 3 times. Error similarity: 90%. Stopping to prevent resource waste.",
+                    error="Task failed after multiple attempts",
                 )
             return TaskResult(
                 task_id=task.id,
@@ -815,7 +803,7 @@ class TestLoopDetectionIntegration:
             patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
             patch(
                 "orchestrator.milestone_runner.run_task_with_escalation",
-                AsyncMock(side_effect=loop_detection_mock),
+                AsyncMock(side_effect=failed_task_mock),
             ),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
@@ -827,40 +815,37 @@ class TestLoopDetectionIntegration:
 
         # Milestone should stop with failed status
         assert result.status == "failed"
-        # Should only run 1.1 (completed) and 1.2 (failed with loop detection)
+        # Should only run 1.1 (completed) and 1.2 (failed)
         assert call_count == 2
         assert result.failed_tasks == 1
 
     @pytest.mark.asyncio
-    async def test_resume_preserves_loop_detection_counts(
+    async def test_resume_skips_previously_completed_tasks(
         self, tmp_path: Path, basic_plan_file: Path, sample_tasks: list[Task]
     ) -> None:
-        """Resume continues with previous attempt counts."""
-        # Create state with existing loop detection data
+        """Resume skips previously completed tasks."""
+        # Create state with existing completed tasks
         existing_state = OrchestratorState(
             milestone_id=basic_plan_file.stem,
             plan_path=str(basic_plan_file),
             started_at=datetime.now(),
-            completed_tasks=["1.1"],
-            task_attempt_counts={"1.2": 2},  # Already failed twice
-            task_errors={"1.2": ["Error 1", "Error 2"]},
+            completed_tasks=["1.1"],  # 1.1 already completed
         )
         existing_state.save(tmp_path)
 
-        captured_detector = []
+        tasks_called: list[str] = []
 
-        async def check_detector_mock(
+        async def check_tasks_mock(
             task: Task,
             sandbox: MagicMock,
             config: MagicMock,
             plan_path: str,
-            loop_detector,
             tracer,
             notify: bool = True,
             on_tool_use=None,
             model: str | None = None,
         ) -> TaskResult:
-            captured_detector.append(loop_detector)
+            tasks_called.append(task.id)
             return TaskResult(
                 task_id=task.id,
                 status="completed",
@@ -875,7 +860,7 @@ class TestLoopDetectionIntegration:
             patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
             patch(
                 "orchestrator.milestone_runner.run_task_with_escalation",
-                AsyncMock(side_effect=check_detector_mock),
+                AsyncMock(side_effect=check_tasks_mock),
             ),
             patch("orchestrator.milestone_runner.SandboxManager"),
         ):
@@ -886,11 +871,10 @@ class TestLoopDetectionIntegration:
                 resume=True,
             )
 
-        # Verify the loop detector has the preserved state
-        assert len(captured_detector) > 0
-        detector = captured_detector[0]
-        assert detector.state.task_attempt_counts.get("1.2") == 2
-        assert detector.state.task_errors.get("1.2") == ["Error 1", "Error 2"]
+        # Verify 1.1 was skipped (already completed)
+        assert "1.1" not in tasks_called
+        # Verify 1.2 and 1.3 were run
+        assert tasks_called == ["1.2", "1.3"]
 
 
 class TestE2EIntegration:
@@ -1001,7 +985,6 @@ pytest tests/ -v
             sandbox: MagicMock,
             config: MagicMock,
             plan_path: str,
-            loop_detector,
             tracer,
             **kwargs,
         ) -> TaskResult:
@@ -1062,7 +1045,6 @@ pytest tests/ -v
             sandbox: MagicMock,
             config: MagicMock,
             plan_path: str,
-            loop_detector,
             tracer,
             **kwargs,
         ) -> TaskResult:
@@ -1149,7 +1131,6 @@ pytest tests/ -v
             sandbox: MagicMock,
             config: MagicMock,
             plan_path: str,
-            loop_detector,
             tracer,
             **kwargs,
         ) -> TaskResult:
@@ -1224,7 +1205,6 @@ pytest tests/ -v
             sandbox: MagicMock,
             config: MagicMock,
             plan_path: str,
-            loop_detector,
             tracer,
             **kwargs,
         ) -> TaskResult:
@@ -1284,7 +1264,6 @@ pytest tests/ -v
             sandbox: MagicMock,
             config: MagicMock,
             plan_path: str,
-            loop_detector,
             tracer,
             **kwargs,
         ) -> TaskResult:
@@ -1341,7 +1320,6 @@ pytest tests/ -v
             sandbox: MagicMock,
             config: MagicMock,
             plan_path: str,
-            loop_detector,
             tracer,
             **kwargs,
         ) -> TaskResult:

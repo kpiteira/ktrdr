@@ -664,15 +664,11 @@ class TestRunTaskStreaming:
 
 
 class TestRunTaskWithEscalation:
-    """Test run_task_with_escalation for loop detection and escalation."""
+    """Test run_task_with_escalation with HaikuBrain retry/escalate decisions."""
 
     @pytest.mark.asyncio
     async def test_returns_completed_result_immediately(self):
         """Should return immediately when task completes successfully."""
-        from datetime import datetime
-
-        from orchestrator.loop_detector import LoopDetector, LoopDetectorConfig
-        from orchestrator.state import OrchestratorState
         from orchestrator.task_runner import run_task_with_escalation
 
         task = make_task()
@@ -681,11 +677,6 @@ class TestRunTaskWithEscalation:
         sandbox.invoke_claude = AsyncMock(
             return_value=make_claude_result("Task completed")
         )
-
-        state = OrchestratorState(
-            milestone_id="M4", plan_path="test.md", started_at=datetime.now()
-        )
-        loop_detector = LoopDetector(LoopDetectorConfig(), state)
 
         # Mock tracer
         mock_tracer = MagicMock()
@@ -700,7 +691,7 @@ class TestRunTaskWithEscalation:
             patch("orchestrator.task_runner.get_brain", return_value=mock_brain),
         ):
             result = await run_task_with_escalation(
-                task, sandbox, config, task.plan_file, loop_detector, mock_tracer
+                task, sandbox, config, task.plan_file, mock_tracer
             )
 
         assert result.status == "completed"
@@ -708,10 +699,6 @@ class TestRunTaskWithEscalation:
     @pytest.mark.asyncio
     async def test_triggers_escalation_on_needs_human(self):
         """Should trigger escalation when task returns needs_human."""
-        from datetime import datetime
-
-        from orchestrator.loop_detector import LoopDetector, LoopDetectorConfig
-        from orchestrator.state import OrchestratorState
         from orchestrator.task_runner import run_task_with_escalation
 
         task = make_task()
@@ -725,11 +712,6 @@ class TestRunTaskWithEscalation:
                 make_claude_result("Task completed"),
             ]
         )
-
-        state = OrchestratorState(
-            milestone_id="M4", plan_path="test.md", started_at=datetime.now()
-        )
-        loop_detector = LoopDetector(LoopDetectorConfig(), state)
 
         mock_tracer = MagicMock()
         mock_span = MagicMock()
@@ -758,7 +740,7 @@ class TestRunTaskWithEscalation:
             mock_escalate.return_value = "Use option A"
 
             result = await run_task_with_escalation(
-                task, sandbox, config, task.plan_file, loop_detector, mock_tracer
+                task, sandbox, config, task.plan_file, mock_tracer
             )
 
         # Should have called escalate_and_wait
@@ -769,10 +751,6 @@ class TestRunTaskWithEscalation:
     @pytest.mark.asyncio
     async def test_retries_with_guidance_after_escalation(self):
         """Should retry task with human guidance after escalation."""
-        from datetime import datetime
-
-        from orchestrator.loop_detector import LoopDetector, LoopDetectorConfig
-        from orchestrator.state import OrchestratorState
         from orchestrator.task_runner import run_task_with_escalation
 
         task = make_task()
@@ -789,11 +767,6 @@ class TestRunTaskWithEscalation:
             return make_claude_result("Task completed")
 
         sandbox.invoke_claude = mock_invoke
-
-        state = OrchestratorState(
-            milestone_id="M4", plan_path="test.md", started_at=datetime.now()
-        )
-        loop_detector = LoopDetector(LoopDetectorConfig(), state)
 
         mock_tracer = MagicMock()
         mock_span = MagicMock()
@@ -818,7 +791,7 @@ class TestRunTaskWithEscalation:
             mock_escalate.return_value = "Use option B"
 
             await run_task_with_escalation(
-                task, sandbox, config, task.plan_file, loop_detector, mock_tracer
+                task, sandbox, config, task.plan_file, mock_tracer
             )
 
         # Second call should have guidance in prompt
@@ -826,40 +799,38 @@ class TestRunTaskWithEscalation:
         assert "Use option B" in calls[1]["prompt"]
 
     @pytest.mark.asyncio
-    async def test_records_failure_in_loop_detector(self):
-        """Should record task failure in loop detector."""
-        from datetime import datetime
-
-        from orchestrator.loop_detector import LoopDetector, LoopDetectorConfig
-        from orchestrator.state import OrchestratorState
+    async def test_first_failure_retries_with_haiku_guidance(self):
+        """First failure should call HaikuBrain for retry decision and use guidance."""
+        from orchestrator.haiku_brain import RetryDecision
         from orchestrator.task_runner import run_task_with_escalation
 
         task = make_task(task_id="4.1")
         config = OrchestratorConfig()
         sandbox = MagicMock()
 
-        # Fail 3 times to trigger loop detection
-        sandbox.invoke_claude = AsyncMock(
-            return_value=make_claude_result("Module not found error")
-        )
+        # Track calls to verify guidance is passed
+        calls = []
 
-        state = OrchestratorState(
-            milestone_id="M4", plan_path="test.md", started_at=datetime.now()
-        )
-        loop_detector = LoopDetector(LoopDetectorConfig(max_task_attempts=3), state)
+        async def mock_invoke(**kwargs):
+            calls.append(kwargs)
+            if len(calls) == 1:
+                return make_claude_result("Import error occurred")
+            return make_claude_result("Task completed")
+
+        sandbox.invoke_claude = mock_invoke
 
         mock_tracer = MagicMock()
-        mock_span = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
-            return_value=mock_span
-        )
-        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
-            return_value=False
-        )
 
         mock_brain = MagicMock()
-        mock_brain.interpret_result.return_value = make_interpretation_result(
-            status="failed", error="Module not found"
+        mock_brain.interpret_result.side_effect = [
+            make_interpretation_result(status="failed", error="Import error"),
+            make_interpretation_result(status="completed"),
+        ]
+        # Haiku says retry with guidance
+        mock_brain.should_retry_or_escalate.return_value = RetryDecision(
+            decision="retry",
+            reason="First attempt, error is fixable",
+            guidance_for_retry="Add the missing import at the top of the file",
         )
 
         with (
@@ -867,21 +838,28 @@ class TestRunTaskWithEscalation:
             patch("orchestrator.task_runner.get_brain", return_value=mock_brain),
         ):
             result = await run_task_with_escalation(
-                task, sandbox, config, task.plan_file, loop_detector, mock_tracer
+                task, sandbox, config, task.plan_file, mock_tracer
             )
 
-        # Should have recorded failures
-        assert state.task_attempt_counts.get("4.1", 0) == 3
-        # Result should indicate loop detected
-        assert result.status == "failed"
+        # Should have called should_retry_or_escalate
+        mock_brain.should_retry_or_escalate.assert_called_once()
+        call_args = mock_brain.should_retry_or_escalate.call_args
+        assert call_args[1]["task_id"] == "4.1"
+        assert call_args[1]["attempt_count"] == 1
+        assert len(call_args[1]["attempt_history"]) == 1
+        assert "Import error" in call_args[1]["attempt_history"][0]
+
+        # Second call should have guidance in prompt
+        assert len(calls) == 2
+        assert "missing import" in calls[1]["prompt"]
+
+        # Final result should be completed
+        assert result.status == "completed"
 
     @pytest.mark.asyncio
-    async def test_stops_at_loop_detection(self):
-        """Should stop retrying when loop detected."""
-        from datetime import datetime
-
-        from orchestrator.loop_detector import LoopDetector, LoopDetectorConfig
-        from orchestrator.state import OrchestratorState
+    async def test_same_error_three_times_escalates(self):
+        """Same error 3 times should trigger HaikuBrain escalation decision."""
+        from orchestrator.haiku_brain import RetryDecision
         from orchestrator.task_runner import run_task_with_escalation
 
         task = make_task(task_id="4.1")
@@ -893,14 +871,12 @@ class TestRunTaskWithEscalation:
         async def mock_invoke(**kwargs):
             nonlocal call_count
             call_count += 1
-            return make_claude_result("Module not found error")
+            # After escalation (4th call), task completes
+            if call_count == 4:
+                return make_claude_result("Task completed after human help")
+            return make_claude_result("Same import error")
 
         sandbox.invoke_claude = mock_invoke
-
-        state = OrchestratorState(
-            milestone_id="M4", plan_path="test.md", started_at=datetime.now()
-        )
-        loop_detector = LoopDetector(LoopDetectorConfig(max_task_attempts=3), state)
 
         mock_tracer = MagicMock()
         mock_span = MagicMock()
@@ -912,64 +888,217 @@ class TestRunTaskWithEscalation:
         )
 
         mock_brain = MagicMock()
-        mock_brain.interpret_result.return_value = make_interpretation_result(
-            status="failed", error="Module not found"
-        )
+        # First 3 fail, 4th succeeds
+        mock_brain.interpret_result.side_effect = [
+            make_interpretation_result(status="failed", error="Same import error"),
+            make_interpretation_result(status="failed", error="Same import error"),
+            make_interpretation_result(status="failed", error="Same import error"),
+            make_interpretation_result(status="completed"),
+        ]
+        # First two times: retry. Third time: escalate
+        mock_brain.should_retry_or_escalate.side_effect = [
+            RetryDecision(
+                decision="retry",
+                reason="First attempt",
+                guidance_for_retry="Try adding the import",
+            ),
+            RetryDecision(
+                decision="retry",
+                reason="Second attempt, different approach",
+                guidance_for_retry="Check if module is installed",
+            ),
+            RetryDecision(
+                decision="escalate",
+                reason="Same error 3 times, stuck in a loop",
+                guidance_for_retry=None,
+            ),
+        ]
 
         with (
             patch("orchestrator.task_runner.console"),
+            patch("orchestrator.task_runner.escalate_and_wait") as mock_escalate,
             patch("orchestrator.task_runner.get_brain", return_value=mock_brain),
         ):
-            await run_task_with_escalation(
-                task, sandbox, config, task.plan_file, loop_detector, mock_tracer
+            mock_escalate.return_value = "Human provided guidance"
+
+            result = await run_task_with_escalation(
+                task, sandbox, config, task.plan_file, mock_tracer
             )
 
-        # Should have stopped at exactly 3 attempts
-        assert call_count == 3
+        # Should have tried 4 times (3 fails + 1 success after human help)
+        assert call_count == 4
+        # Should have called should_retry_or_escalate 3 times (not for success)
+        assert mock_brain.should_retry_or_escalate.call_count == 3
+        # Should have escalated
+        mock_escalate.assert_called_once()
+        # Final result should be completed
+        assert result.status == "completed"
 
     @pytest.mark.asyncio
-    async def test_loop_detection_includes_reason_in_error(self):
-        """Loop detection should include reason in result error."""
-        from datetime import datetime
-
-        from orchestrator.loop_detector import LoopDetector, LoopDetectorConfig
-        from orchestrator.state import OrchestratorState
+    async def test_different_errors_continues_retrying(self):
+        """Different errors each attempt should continue retrying (making progress)."""
+        from orchestrator.haiku_brain import RetryDecision
         from orchestrator.task_runner import run_task_with_escalation
 
         task = make_task(task_id="4.1")
         config = OrchestratorConfig()
         sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
-            return_value=make_claude_result("Same error occurred")
-        )
 
-        state = OrchestratorState(
-            milestone_id="M4", plan_path="test.md", started_at=datetime.now()
-        )
-        loop_detector = LoopDetector(LoopDetectorConfig(max_task_attempts=3), state)
+        call_count = 0
+
+        async def mock_invoke(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            return make_claude_result(f"Attempt {call_count}")
+
+        sandbox.invoke_claude = mock_invoke
 
         mock_tracer = MagicMock()
-        mock_span = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
-            return_value=mock_span
-        )
-        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
-            return_value=False
-        )
 
         mock_brain = MagicMock()
-        mock_brain.interpret_result.return_value = make_interpretation_result(
-            status="failed", error="Same error"
-        )
+        mock_brain.interpret_result.side_effect = [
+            make_interpretation_result(status="failed", error="Import error"),
+            make_interpretation_result(status="failed", error="Type error"),
+            make_interpretation_result(status="completed"),
+        ]
+        # Haiku says retry both times (different errors = progress)
+        mock_brain.should_retry_or_escalate.side_effect = [
+            RetryDecision(
+                decision="retry",
+                reason="First attempt, fixable error",
+                guidance_for_retry="Fix the import",
+            ),
+            RetryDecision(
+                decision="retry",
+                reason="Different error, making progress",
+                guidance_for_retry="Fix the type annotation",
+            ),
+        ]
 
         with (
             patch("orchestrator.task_runner.console"),
             patch("orchestrator.task_runner.get_brain", return_value=mock_brain),
         ):
             result = await run_task_with_escalation(
-                task, sandbox, config, task.plan_file, loop_detector, mock_tracer
+                task, sandbox, config, task.plan_file, mock_tracer
             )
 
-        # Error should mention loop detection
-        assert result.error is not None
-        assert "3 times" in result.error or "loop" in result.error.lower()
+        # Should have tried 3 times (2 failures + 1 success)
+        assert call_count == 3
+        # Should have called should_retry_or_escalate 2 times (not for success)
+        assert mock_brain.should_retry_or_escalate.call_count == 2
+        # Final result should be completed
+        assert result.status == "completed"
+
+    @pytest.mark.asyncio
+    async def test_escalation_triggered_on_haiku_escalate_decision(self):
+        """Escalation should be triggered when HaikuBrain returns escalate decision."""
+        from orchestrator.haiku_brain import RetryDecision
+        from orchestrator.task_runner import run_task_with_escalation
+
+        task = make_task(task_id="4.1")
+        config = OrchestratorConfig()
+        sandbox = MagicMock()
+        sandbox.invoke_claude = AsyncMock(
+            return_value=make_claude_result("I need human clarification")
+        )
+
+        mock_tracer = MagicMock()
+        mock_span = MagicMock()
+        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=mock_span
+        )
+        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        mock_brain = MagicMock()
+        mock_brain.interpret_result.side_effect = [
+            make_interpretation_result(
+                status="failed", error="I need clarification on which database to use"
+            ),
+            make_interpretation_result(status="completed"),
+        ]
+        # Haiku immediately says escalate
+        mock_brain.should_retry_or_escalate.return_value = RetryDecision(
+            decision="escalate",
+            reason="Claude explicitly needs human input",
+            guidance_for_retry=None,
+        )
+
+        with (
+            patch("orchestrator.task_runner.console"),
+            patch("orchestrator.task_runner.escalate_and_wait") as mock_escalate,
+            patch("orchestrator.task_runner.get_brain", return_value=mock_brain),
+        ):
+            mock_escalate.return_value = "Use PostgreSQL"
+
+            await run_task_with_escalation(
+                task, sandbox, config, task.plan_file, mock_tracer
+            )
+
+        # Should have escalated
+        mock_escalate.assert_called_once()
+        info = mock_escalate.call_args[0][0]
+        assert info.task_id == "4.1"
+        assert "clarification" in info.question.lower() or "failed" in info.question.lower()
+
+    @pytest.mark.asyncio
+    async def test_attempt_history_tracked_correctly(self):
+        """Attempt history should accumulate across retries."""
+        from orchestrator.haiku_brain import RetryDecision
+        from orchestrator.task_runner import run_task_with_escalation
+
+        task = make_task(task_id="4.1")
+        config = OrchestratorConfig()
+        sandbox = MagicMock()
+
+        async def mock_invoke(**kwargs):
+            return make_claude_result("Error output")
+
+        sandbox.invoke_claude = mock_invoke
+
+        mock_tracer = MagicMock()
+
+        mock_brain = MagicMock()
+        mock_brain.interpret_result.side_effect = [
+            make_interpretation_result(status="failed", error="Error A"),
+            make_interpretation_result(status="failed", error="Error B"),
+            make_interpretation_result(status="completed"),
+        ]
+        # Track the attempt_history passed to should_retry_or_escalate
+        history_calls = []
+
+        def capture_retry_call(
+            task_id: str,
+            task_title: str,
+            attempt_history: list[str],
+            attempt_count: int,
+        ) -> RetryDecision:
+            history_calls.append((attempt_count, list(attempt_history)))
+            return RetryDecision(
+                decision="retry",
+                reason="Keep trying",
+                guidance_for_retry=f"Guidance {attempt_count}",
+            )
+
+        mock_brain.should_retry_or_escalate.side_effect = capture_retry_call
+
+        with (
+            patch("orchestrator.task_runner.console"),
+            patch("orchestrator.task_runner.get_brain", return_value=mock_brain),
+        ):
+            await run_task_with_escalation(
+                task, sandbox, config, task.plan_file, mock_tracer
+            )
+
+        # First call: 1 attempt, 1 error in history
+        assert history_calls[0][0] == 1
+        assert len(history_calls[0][1]) == 1
+        assert "Error A" in history_calls[0][1][0]
+
+        # Second call: 2 attempts, 2 errors in history
+        assert history_calls[1][0] == 2
+        assert len(history_calls[1][1]) == 2
+        assert "Error A" in history_calls[1][1][0]
+        assert "Error B" in history_calls[1][1][1]

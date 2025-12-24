@@ -162,13 +162,12 @@ async def run_milestone(
                 task_span.set_attribute("task.id", task.id)
                 task_span.set_attribute("task.title", task.title)
 
-                # Run the task with escalation handling and loop detection
+                # Run the task with escalation handling (HaikuBrain decides retry/escalate)
                 result = await run_task_with_escalation(
                     task,
                     sandbox,
                     config,
                     plan_path,
-                    loop_detector,
                     tracer,
                     notify=notify,
                     on_tool_use=on_tool_use,
