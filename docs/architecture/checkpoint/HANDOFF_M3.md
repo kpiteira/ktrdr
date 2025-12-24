@@ -207,20 +207,101 @@ for epoch in range(100):
         policy.record_checkpoint(epoch)
 ```
 
+---
+
+## Task 3.4 Complete
+
+**Implemented:** Training checkpoint state schema and builder functions
+
+### Locations
+
+- `ktrdr/checkpoint/schemas.py` — State dataclass and artifact manifest
+- `ktrdr/training/checkpoint_builder.py` — Builder functions
+
+### Key Classes and Functions
+
+```python
+@dataclass
+class TrainingCheckpointState:
+    epoch: int
+    train_loss: float
+    val_loss: float
+    train_accuracy: Optional[float] = None
+    val_accuracy: Optional[float] = None
+    learning_rate: float = 0.001
+    best_val_loss: float = float("inf")
+    training_history: dict[str, list[float]] = field(default_factory=dict)
+    original_request: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "TrainingCheckpointState"
+
+TRAINING_ARTIFACTS = {
+    "model.pt": "required",
+    "optimizer.pt": "required",
+    "scheduler.pt": "optional",
+    "best_model.pt": "optional",
+}
+
+def build_training_checkpoint_state(
+    trainer: ModelTrainer,
+    current_epoch: int,
+    original_request: Optional[dict] = None,
+) -> TrainingCheckpointState
+
+def build_training_checkpoint_artifacts(
+    model: nn.Module,
+    optimizer: optim.Optimizer,
+    scheduler: Optional[Any] = None,
+    best_model_state: Optional[dict] = None,
+) -> dict[str, bytes]
+
+def validate_artifacts(artifacts: dict[str, bytes]) -> None
+```
+
+### Key Design Decisions
+
+**Explicit parameters for artifacts:**
+Model, optimizer, and scheduler are passed explicitly (not extracted from trainer) because they're local to the training loop.
+
+**Separate state from artifacts:**
+State (JSON) goes to DB, artifacts (bytes) go to filesystem. This matches CheckpointService's interface.
+
+**Validation raises exceptions:**
+`validate_artifacts()` raises `ArtifactValidationError` for missing/empty required artifacts.
+
+### Usage Pattern
+
+```python
+from ktrdr.checkpoint import TrainingCheckpointState, TRAINING_ARTIFACTS
+from ktrdr.training.checkpoint_builder import (
+    build_training_checkpoint_state,
+    build_training_checkpoint_artifacts,
+    validate_artifacts,
+)
+
+# In training loop
+state = build_training_checkpoint_state(trainer, epoch, original_request)
+artifacts = build_training_checkpoint_artifacts(model, optimizer, scheduler)
+validate_artifacts(artifacts)
+
+# Save via CheckpointService
+await checkpoint_service.save_checkpoint(
+    operation_id=op_id,
+    checkpoint_type="periodic",
+    state=state.to_dict(),
+    artifacts=artifacts,
+)
+```
+
 ### Guidance for Next Tasks
-
-**Task 3.4 (Checkpoint State Shape):**
-
-- Define `TrainingCheckpointState` dataclass with all fields needed for resume
-- Define artifact manifest (model.pt, optimizer.pt, etc.)
 
 **Task 3.5 (Training Worker Integration):**
 
-```python
-# In training loop
-if self.checkpoint_policy.should_checkpoint(epoch):
-    await self._save_training_checkpoint(operation_id, trainer, "periodic")
-    self.checkpoint_policy.record_checkpoint(epoch)
-```
+- Import `build_training_checkpoint_state` and `build_training_checkpoint_artifacts`
+- Call them in `_save_training_checkpoint` method
+- Pass model, optimizer, scheduler from training loop scope
+- Use `trainer.best_model_state` for `best_model_state` parameter
 
 ---
