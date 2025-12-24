@@ -5,6 +5,7 @@ Simplified startup:
 - IB connections created on-demand via DataManager
 - Agent system triggered on-demand via API/CLI
 - Startup reconciliation for operation persistence (M1)
+- Orphan detection for worker crash recovery (M2)
 - Clean separation of concerns
 """
 
@@ -15,9 +16,31 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from ktrdr.api.services.orphan_detector import OrphanOperationDetector
+from ktrdr.config.settings import get_orphan_detector_settings
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
+
+# Module-level singleton for orphan detector (M2)
+_orphan_detector: OrphanOperationDetector | None = None
+
+
+def get_orphan_detector() -> OrphanOperationDetector:
+    """Get the global OrphanOperationDetector instance.
+
+    Returns:
+        OrphanOperationDetector: The global orphan detector singleton.
+
+    Raises:
+        RuntimeError: If called before the detector is initialized in lifespan.
+    """
+    if _orphan_detector is None:
+        raise RuntimeError(
+            "OrphanOperationDetector not initialized. "
+            "This should only be called after API startup."
+        )
+    return _orphan_detector
 
 
 async def _run_startup_reconciliation() -> None:
@@ -63,17 +86,43 @@ async def lifespan(app: FastAPI):
 
     Services initialized:
     - StartupReconciliation (M1: syncs operations after restart)
+    - OrphanOperationDetector (M2: detects orphaned operations)
     - TrainingService (logs training mode)
     - WorkerRegistry (background health checks)
 
     IB connections are created on-demand via DataManager.
     Agent system is triggered on-demand via POST /agent/trigger.
     """
+    global _orphan_detector
+
     # Startup
     logger.info("Starting KTRDR API...")
 
     # Run startup reconciliation (M1: Operations Persistence)
     await _run_startup_reconciliation()
+
+    # Start orphan detector (M2: Orphan Detection)
+    # Must be after reconciliation so we don't mark reconciling ops as orphans
+    from ktrdr.api.endpoints.workers import get_worker_registry
+    from ktrdr.api.services.operations_service import get_operations_service
+
+    operations_service = get_operations_service()
+    registry = get_worker_registry()
+
+    # M2 Task 2.4: Use configurable settings for orphan detection
+    orphan_settings = get_orphan_detector_settings()
+    _orphan_detector = OrphanOperationDetector(
+        operations_service=operations_service,
+        worker_registry=registry,
+        orphan_timeout_seconds=orphan_settings.timeout_seconds,
+        check_interval_seconds=orphan_settings.check_interval_seconds,
+    )
+    await _orphan_detector.start()
+    logger.info(
+        "Orphan detector started (timeout=%ds, interval=%ds)",
+        orphan_settings.timeout_seconds,
+        orphan_settings.check_interval_seconds,
+    )
 
     # Initialize training service to log training mode at startup
     from ktrdr.api.endpoints.training import get_training_service
@@ -82,12 +131,8 @@ async def lifespan(app: FastAPI):
     logger.info("TrainingService initialized")
 
     # Start worker registry background health checks
-    from ktrdr.api.endpoints.workers import get_worker_registry
-    from ktrdr.api.services.operations_service import get_operations_service
-
-    registry = get_worker_registry()
     # CRITICAL: Inject OperationsService for reconciliation to work (M1)
-    registry.set_operations_service(get_operations_service())
+    registry.set_operations_service(operations_service)
     await registry.start()
     logger.info("Worker registry started")
 
@@ -97,6 +142,11 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down KTRDR API...")
+
+    # Stop orphan detector first (M2)
+    if _orphan_detector:
+        await _orphan_detector.stop()
+        logger.info("Orphan detector stopped")
 
     # Stop worker registry background health checks
     await registry.stop()

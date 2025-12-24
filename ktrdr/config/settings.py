@@ -47,6 +47,33 @@ class LoggingSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="KTRDR_LOGGING_")
 
 
+class OrphanDetectorSettings(BaseSettings):
+    """Orphan Detector Settings.
+
+    Configures the background orphan detection service that identifies
+    RUNNING operations with no worker and marks them as FAILED.
+
+    Environment variables:
+        ORPHAN_TIMEOUT_SECONDS: Time (seconds) before an unclaimed operation
+            is marked as orphaned. Default: 60
+        ORPHAN_CHECK_INTERVAL_SECONDS: How often (seconds) to check for
+            orphaned operations. Default: 15
+    """
+
+    timeout_seconds: int = Field(
+        default=60,
+        gt=0,
+        description="Time in seconds before an unclaimed operation is marked FAILED",
+    )
+    check_interval_seconds: int = Field(
+        default=15,
+        gt=0,
+        description="Interval in seconds between orphan detection checks",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="ORPHAN_")
+
+
 # Cache settings to avoid repeated disk/env access
 @lru_cache
 def get_api_settings() -> APISettings:
@@ -58,6 +85,12 @@ def get_api_settings() -> APISettings:
 def get_logging_settings() -> LoggingSettings:
     """Get logging settings with caching."""
     return LoggingSettings()
+
+
+@lru_cache
+def get_orphan_detector_settings() -> OrphanDetectorSettings:
+    """Get orphan detector settings with caching."""
+    return OrphanDetectorSettings()
 
 
 # Compatibility aliases for existing code
@@ -75,15 +108,18 @@ def clear_settings_cache() -> None:
     get_api_settings.cache_clear()
     get_logging_settings.cache_clear()
     get_api_service_settings.cache_clear()
+    get_orphan_detector_settings.cache_clear()
 
 
 # Export IB config for convenience
 __all__ = [
     "APISettings",
     "LoggingSettings",
+    "OrphanDetectorSettings",
     "ApiServiceSettings",
     "get_api_settings",
     "get_logging_settings",
+    "get_orphan_detector_settings",
     "get_api_service_settings",
     "clear_settings_cache",
     # Compatibility aliases
