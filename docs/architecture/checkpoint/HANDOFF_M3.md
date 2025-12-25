@@ -463,3 +463,63 @@ Uses global singleton pattern (`_checkpoint_service`) initialized on first reque
 - Test list/get/delete flow after training
 
 ---
+
+## Task 3.7 Complete
+
+**Implemented:** Centralized checkpoint configuration via Pydantic settings
+
+### Location
+
+`ktrdr/config/settings.py`
+
+### Key Classes and Functions
+
+```python
+class CheckpointSettings(BaseSettings):
+    epoch_interval: int = 10           # Every N epochs
+    time_interval_seconds: int = 300   # Every M seconds
+    dir: str = "/app/data/checkpoints" # Artifacts storage path
+    max_age_days: int = 30             # Auto-cleanup threshold
+
+    model_config = SettingsConfigDict(env_prefix="CHECKPOINT_")
+
+@lru_cache
+def get_checkpoint_settings() -> CheckpointSettings:
+    """Get checkpoint settings with caching."""
+```
+
+### Environment Variables
+
+```bash
+CHECKPOINT_EPOCH_INTERVAL=10           # Every N epochs
+CHECKPOINT_TIME_INTERVAL_SECONDS=300   # Every M seconds
+CHECKPOINT_DIR=/app/data/checkpoints   # Artifacts directory
+CHECKPOINT_MAX_AGE_DAYS=30             # Auto-cleanup after N days
+```
+
+### Usage Pattern
+
+```python
+from ktrdr.config.settings import get_checkpoint_settings
+
+settings = get_checkpoint_settings()
+print(settings.epoch_interval)     # 10 (or env override)
+print(settings.dir)                # /app/data/checkpoints
+```
+
+### Refactored Code
+
+Both `TrainingWorker` and checkpoint endpoints now use `get_checkpoint_settings()` instead of direct `os.getenv()` calls.
+
+### Guidance for Next Tasks
+
+**Task 3.8 (Integration Tests):**
+- Settings are now centralized, use `clear_settings_cache()` in test setup/teardown
+- Override via environment variables in test fixtures
+
+**Task 3.9 (Deployment Configuration):**
+- Add `CHECKPOINT_DIR` to docker-compose environment sections
+- Local: `/app/data/checkpoints`
+- Homelab: `/mnt/ktrdr_data/checkpoints`
+
+---
