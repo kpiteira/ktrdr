@@ -305,3 +305,95 @@ await checkpoint_service.save_checkpoint(
 - Use `trainer.best_model_state` for `best_model_state` parameter
 
 ---
+
+## Task 3.5 Complete
+
+**Implemented:** Checkpoint save integration into training worker
+
+### Key Changes
+
+**1. checkpoint_callback parameter chain:**
+
+```text
+TrainingWorker
+  → LocalTrainingOrchestrator(checkpoint_callback=...)
+    → TrainingPipeline.train_strategy(checkpoint_callback=...)
+      → TrainingPipeline.train_model(checkpoint_callback=...)
+        → ModelTrainer(checkpoint_callback=...)
+```
+
+**2. ModelTrainer calls checkpoint_callback after each epoch:**
+
+```python
+# In ModelTrainer.train(), after each epoch:
+if self.checkpoint_callback:
+    self.checkpoint_callback(
+        epoch=epoch,
+        model=model,
+        optimizer=optimizer,
+        scheduler=scheduler,
+        trainer=self,
+    )
+```
+
+**3. TrainingWorker creates checkpoint callback:**
+
+```python
+# Creates CheckpointPolicy and CheckpointService
+checkpoint_service = self.get_checkpoint_service()
+checkpoint_policy = CheckpointPolicy(
+    unit_interval=self.checkpoint_epoch_interval,
+    time_interval_seconds=self.checkpoint_time_interval,
+)
+
+# Callback checks policy and saves if needed
+def checkpoint_callback(**kwargs):
+    if checkpoint_policy.should_checkpoint(epoch):
+        state = build_training_checkpoint_state(trainer, epoch, original_request)
+        artifacts = build_training_checkpoint_artifacts(model, optimizer, ...)
+        await checkpoint_service.save_checkpoint(
+            operation_id, "periodic", state.to_dict(), artifacts
+        )
+        checkpoint_policy.record_checkpoint(epoch)
+```
+
+### Environment Variables
+
+```bash
+CHECKPOINT_EPOCH_INTERVAL=10      # Checkpoint every N epochs
+CHECKPOINT_TIME_INTERVAL_SECONDS=300  # Checkpoint every M seconds
+CHECKPOINT_DIR=/app/data/checkpoints  # Artifacts storage path
+```
+
+### Checkpoint Types
+
+- `periodic` — Saved at epoch intervals based on policy
+- `cancellation` — Saved when training is cancelled (CancellationError)
+- `failure` — Saved when training fails (Exception)
+
+### Gotcha: Sync callback calling async service
+
+The checkpoint callback runs inside ModelTrainer.train() which runs in a thread pool. To call the async CheckpointService, we create a new event loop:
+
+```python
+loop = asyncio.new_event_loop()
+try:
+    loop.run_until_complete(checkpoint_service.save_checkpoint(...))
+finally:
+    loop.close()
+```
+
+### Guidance for Next Tasks
+
+**Task 3.6 (Checkpoint API Endpoints):**
+
+- Inject `CheckpointService` via FastAPI dependency
+- Use same session factory pattern as other endpoints
+
+**Task 3.8 (Integration Tests):**
+
+- Start training with low epoch count (3-5)
+- Set `CHECKPOINT_EPOCH_INTERVAL=1` for frequent checkpoints
+- Verify DB has checkpoint after first epoch completes
+
+---
