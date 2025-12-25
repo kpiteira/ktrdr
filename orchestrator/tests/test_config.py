@@ -69,6 +69,20 @@ class TestOrchestratorConfigDefaults:
         config = OrchestratorConfig()
         assert config.state_dir == Path("state")
 
+    def test_discord_webhook_url_default(self):
+        """Default discord webhook URL should be None."""
+        from orchestrator.config import OrchestratorConfig
+
+        config = OrchestratorConfig()
+        assert config.discord_webhook_url is None
+
+    def test_discord_enabled_false_when_no_url(self):
+        """discord_enabled should be False when no webhook URL."""
+        from orchestrator.config import OrchestratorConfig
+
+        config = OrchestratorConfig()
+        assert config.discord_enabled is False
+
 
 class TestOrchestratorConfigEnvOverrides:
     """Test that environment variables override defaults."""
@@ -106,6 +120,24 @@ class TestOrchestratorConfigEnvOverrides:
             assert config.max_turns == 50
             assert config.task_timeout_seconds == 600
             assert config.otlp_endpoint == "http://localhost:4317"
+
+    def test_discord_webhook_url_env_override(self):
+        """DISCORD_WEBHOOK_URL should set discord_webhook_url."""
+        from orchestrator.config import OrchestratorConfig
+
+        webhook_url = "https://discord.com/api/webhooks/123/abc"
+        with patch.dict(os.environ, {"DISCORD_WEBHOOK_URL": webhook_url}):
+            config = OrchestratorConfig.from_env()
+            assert config.discord_webhook_url == webhook_url
+
+    def test_discord_enabled_true_when_url_set(self):
+        """discord_enabled should be True when webhook URL is set."""
+        from orchestrator.config import OrchestratorConfig
+
+        webhook_url = "https://discord.com/api/webhooks/123/abc"
+        with patch.dict(os.environ, {"DISCORD_WEBHOOK_URL": webhook_url}):
+            config = OrchestratorConfig.from_env()
+            assert config.discord_enabled is True
 
 
 class TestOrchestratorConfigTypeHints:
