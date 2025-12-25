@@ -397,3 +397,69 @@ finally:
 - Verify DB has checkpoint after first epoch completes
 
 ---
+
+## Task 3.6 Complete
+
+**Implemented:** Checkpoint API endpoints for listing, viewing, and deleting checkpoints
+
+### Location
+
+`ktrdr/api/endpoints/checkpoints.py`
+
+### Endpoints
+
+```python
+GET /api/v1/checkpoints
+# List all checkpoints
+# Query params: older_than_days (optional)
+# Response: CheckpointListResponse
+
+GET /api/v1/checkpoints/{operation_id}
+# Get checkpoint details (without artifact bytes)
+# Response: CheckpointResponse
+
+DELETE /api/v1/checkpoints/{operation_id}
+# Delete checkpoint (DB + filesystem)
+# Response: DeleteCheckpointResponse
+```
+
+### Usage Pattern
+
+```bash
+# List all checkpoints
+curl http://localhost:8000/api/v1/checkpoints | jq
+
+# List checkpoints older than 7 days
+curl "http://localhost:8000/api/v1/checkpoints?older_than_days=7" | jq
+
+# Get checkpoint details
+curl http://localhost:8000/api/v1/checkpoints/op_training_123 | jq
+
+# Delete checkpoint
+curl -X DELETE http://localhost:8000/api/v1/checkpoints/op_training_123 | jq
+```
+
+### Key Design Decisions
+
+**Singleton CheckpointService:**
+Uses global singleton pattern (`_checkpoint_service`) initialized on first request, similar to other service dependencies.
+
+**No artifact bytes in GET response:**
+`load_checkpoint(operation_id, load_artifacts=False)` avoids loading large artifact bytes. The `artifacts_path` is returned for clients that need direct filesystem access.
+
+**Proper error handling:**
+- 404 for non-existent checkpoints
+- DataError for service failures
+- Follows existing endpoint error patterns
+
+### Guidance for Next Tasks
+
+**Task 3.7 (Configuration):**
+- `CHECKPOINT_DIR` env var already used in endpoint dependency
+- May need to expose configuration values via `/checkpoints/config` endpoint
+
+**Task 3.8 (Integration Tests):**
+- Use API endpoints to verify checkpoint creation
+- Test list/get/delete flow after training
+
+---
