@@ -523,3 +523,53 @@ Both `TrainingWorker` and checkpoint endpoints now use `get_checkpoint_settings(
 - Homelab: `/mnt/ktrdr_data/checkpoints`
 
 ---
+
+## Task 3.8 Complete
+
+**Implemented:** Integration tests for checkpoint save functionality
+
+### Location
+
+`tests/integration/test_m3_training_checkpoint_save.py`
+
+### Test Classes
+
+```python
+TestM3PeriodicCheckpoint         # 3 tests - periodic checkpoint saving
+TestM3CancellationCheckpoint     # 2 tests - cancellation checkpoint saving
+TestM3DBStateVerification        # 3 tests - DB state validation
+TestM3FilesystemArtifactsVerification  # 4 tests - filesystem artifacts
+TestM3FullFlow                   # 3 tests - end-to-end flows
+TestM3CheckpointPolicyIntegration # 3 tests - policy integration
+```
+
+### Key Design Decisions
+
+**IntegrationCheckpointService:**
+Uses in-memory `MockCheckpointRepository` instead of real DB for fast, isolated tests. Still writes real artifacts to temp directories to verify filesystem operations.
+
+**Test scenarios covered:**
+- Periodic checkpoint saves at epoch intervals
+- Cancellation checkpoint overwrites periodic
+- Failure checkpoint saved on exception
+- Successful completion deletes checkpoint
+- Artifacts written atomically and can be reloaded
+- UPSERT behavior verified
+
+### Running Tests
+
+```bash
+# Run M3 integration tests only
+uv run pytest tests/integration/test_m3_training_checkpoint_save.py -v
+
+# Run all milestone integration tests
+uv run pytest tests/integration/test_m1_*.py tests/integration/test_m2_*.py tests/integration/test_m3_*.py -v
+```
+
+### Guidance for Task 3.9
+
+- Integration tests do NOT test Docker deployment
+- Task 3.9 should add CHECKPOINT_DIR to all docker-compose files
+- Consider running smoke test after deployment changes
+
+---
