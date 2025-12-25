@@ -319,3 +319,347 @@ class TestRunTask:
 
         call_args = sandbox.invoke_claude.call_args
         assert call_args[1]["session_id"] == "prev-session"
+
+
+# =============================================================================
+# E2E EXECUTION TESTS (Task 4.2 - Merged from e2e_runner.py)
+# =============================================================================
+
+
+class TestE2EResultInRunner:
+    """Test E2EResult dataclass in runner.py."""
+
+    def test_e2e_result_is_exported(self):
+        """E2EResult should be importable from runner."""
+        from orchestrator.runner import E2EResult
+
+        assert E2EResult is not None
+
+    def test_e2e_result_has_all_required_fields(self):
+        """E2EResult should have all required fields."""
+        from orchestrator.runner import E2EResult
+
+        result = E2EResult(
+            status="passed",
+            duration_seconds=45.0,
+            tokens_used=5000,
+            cost_usd=0.05,
+            diagnosis=None,
+            fix_suggestion=None,
+            is_fixable=False,
+            raw_output="Test output",
+        )
+
+        assert result.status == "passed"
+        assert result.duration_seconds == 45.0
+        assert result.tokens_used == 5000
+        assert result.cost_usd == 0.05
+        assert result.diagnosis is None
+        assert result.is_fixable is False
+
+
+class TestRunE2ETestsInRunner:
+    """Test run_e2e_tests function in runner.py."""
+
+    def test_run_e2e_tests_is_exported(self):
+        """run_e2e_tests should be importable from runner."""
+        from orchestrator.runner import run_e2e_tests
+
+        assert callable(run_e2e_tests)
+
+    @pytest.mark.asyncio
+    async def test_executes_e2e_via_claude(self):
+        """Should invoke Claude with E2E scenario."""
+        from orchestrator.runner import run_e2e_tests
+
+        sandbox = MagicMock()
+        sandbox.invoke_claude = AsyncMock(
+            return_value=make_claude_result("E2E tests completed")
+        )
+        config = OrchestratorConfig()
+        tracer = MagicMock()
+        tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=MagicMock()
+        )
+        tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        mock_brain = MagicMock()
+        mock_brain.interpret_result.return_value = make_interpretation_result(
+            status="completed"
+        )
+
+        with patch("orchestrator.runner.get_brain", return_value=mock_brain):
+            await run_e2e_tests(
+                milestone_id="M5",
+                e2e_scenario="Run pytest tests/",
+                sandbox=sandbox,
+                config=config,
+                tracer=tracer,
+            )
+
+        sandbox.invoke_claude.assert_called_once()
+        call_kwargs = sandbox.invoke_claude.call_args[1]
+        assert "pytest tests/" in call_kwargs["prompt"]
+        assert "M5" in call_kwargs["prompt"]
+
+    @pytest.mark.asyncio
+    async def test_uses_haiku_brain_for_interpretation(self):
+        """Should use HaikuBrain for E2E result interpretation."""
+        from orchestrator.runner import run_e2e_tests
+
+        sandbox = MagicMock()
+        sandbox.invoke_claude = AsyncMock(
+            return_value=make_claude_result("All tests pass ✓")
+        )
+        config = OrchestratorConfig()
+        tracer = MagicMock()
+        tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=MagicMock()
+        )
+        tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        mock_brain = MagicMock()
+        mock_brain.interpret_result.return_value = make_interpretation_result(
+            status="completed", summary="All tests passed"
+        )
+
+        with patch("orchestrator.runner.get_brain", return_value=mock_brain):
+            result = await run_e2e_tests(
+                milestone_id="M5",
+                e2e_scenario="Test scenario",
+                sandbox=sandbox,
+                config=config,
+                tracer=tracer,
+            )
+
+        # Verify HaikuBrain was used
+        mock_brain.interpret_result.assert_called_once_with("All tests pass ✓")
+        assert result.status == "passed"
+
+    @pytest.mark.asyncio
+    async def test_maps_completed_to_passed(self):
+        """Should map HaikuBrain 'completed' status to E2E 'passed'."""
+        from orchestrator.runner import run_e2e_tests
+
+        sandbox = MagicMock()
+        sandbox.invoke_claude = AsyncMock(return_value=make_claude_result("Done"))
+        config = OrchestratorConfig()
+        tracer = MagicMock()
+        tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=MagicMock()
+        )
+        tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        mock_brain = MagicMock()
+        mock_brain.interpret_result.return_value = make_interpretation_result(
+            status="completed"
+        )
+
+        with patch("orchestrator.runner.get_brain", return_value=mock_brain):
+            result = await run_e2e_tests(
+                milestone_id="M5",
+                e2e_scenario="Test",
+                sandbox=sandbox,
+                config=config,
+                tracer=tracer,
+            )
+
+        assert result.status == "passed"
+
+    @pytest.mark.asyncio
+    async def test_maps_failed_to_failed(self):
+        """Should map HaikuBrain 'failed' status to E2E 'failed'."""
+        from orchestrator.runner import run_e2e_tests
+
+        sandbox = MagicMock()
+        sandbox.invoke_claude = AsyncMock(
+            return_value=make_claude_result("Error: test failed")
+        )
+        config = OrchestratorConfig()
+        tracer = MagicMock()
+        tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=MagicMock()
+        )
+        tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        mock_brain = MagicMock()
+        mock_brain.interpret_result.return_value = make_interpretation_result(
+            status="failed", error="Assertion error in test_foo"
+        )
+
+        with patch("orchestrator.runner.get_brain", return_value=mock_brain):
+            result = await run_e2e_tests(
+                milestone_id="M5",
+                e2e_scenario="Test",
+                sandbox=sandbox,
+                config=config,
+                tracer=tracer,
+            )
+
+        assert result.status == "failed"
+        assert result.diagnosis is not None
+
+    @pytest.mark.asyncio
+    async def test_maps_needs_help_to_unclear(self):
+        """Should map HaikuBrain 'needs_help' status to E2E 'unclear'."""
+        from orchestrator.runner import run_e2e_tests
+
+        sandbox = MagicMock()
+        sandbox.invoke_claude = AsyncMock(
+            return_value=make_claude_result("I'm not sure what to do")
+        )
+        config = OrchestratorConfig()
+        tracer = MagicMock()
+        tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=MagicMock()
+        )
+        tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        mock_brain = MagicMock()
+        mock_brain.interpret_result.return_value = make_interpretation_result(
+            status="needs_help", question="How should I proceed?"
+        )
+
+        with patch("orchestrator.runner.get_brain", return_value=mock_brain):
+            result = await run_e2e_tests(
+                milestone_id="M5",
+                e2e_scenario="Test",
+                sandbox=sandbox,
+                config=config,
+                tracer=tracer,
+            )
+
+        assert result.status == "unclear"
+
+    @pytest.mark.asyncio
+    async def test_records_duration(self):
+        """Should record execution duration in result."""
+        from orchestrator.runner import run_e2e_tests
+
+        sandbox = MagicMock()
+        sandbox.invoke_claude = AsyncMock(return_value=make_claude_result("Done"))
+        config = OrchestratorConfig()
+        tracer = MagicMock()
+        tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=MagicMock()
+        )
+        tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        mock_brain = MagicMock()
+        mock_brain.interpret_result.return_value = make_interpretation_result()
+
+        with patch("orchestrator.runner.get_brain", return_value=mock_brain):
+            result = await run_e2e_tests(
+                milestone_id="M5",
+                e2e_scenario="Test",
+                sandbox=sandbox,
+                config=config,
+                tracer=tracer,
+            )
+
+        assert result.duration_seconds >= 0
+
+
+class TestApplyE2EFixInRunner:
+    """Test apply_e2e_fix function in runner.py."""
+
+    def test_apply_e2e_fix_is_exported(self):
+        """apply_e2e_fix should be importable from runner."""
+        from orchestrator.runner import apply_e2e_fix
+
+        assert callable(apply_e2e_fix)
+
+    @pytest.mark.asyncio
+    async def test_applies_fix_via_claude(self):
+        """Should invoke Claude with fix plan."""
+        from orchestrator.runner import apply_e2e_fix
+
+        sandbox = MagicMock()
+        sandbox.invoke_claude = AsyncMock(
+            return_value=make_claude_result("FIX_APPLIED: yes")
+        )
+        config = OrchestratorConfig()
+        tracer = MagicMock()
+        tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=MagicMock()
+        )
+        tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        await apply_e2e_fix(
+            fix_plan="Add 'app.include_router(new_router)' to main.py",
+            sandbox=sandbox,
+            config=config,
+            tracer=tracer,
+        )
+
+        sandbox.invoke_claude.assert_called_once()
+        call_kwargs = sandbox.invoke_claude.call_args[1]
+        assert "app.include_router" in call_kwargs["prompt"]
+
+    @pytest.mark.asyncio
+    async def test_returns_true_on_success(self):
+        """Should return True when fix is applied successfully."""
+        from orchestrator.runner import apply_e2e_fix
+
+        sandbox = MagicMock()
+        sandbox.invoke_claude = AsyncMock(
+            return_value=make_claude_result("Fix complete.\n\nFIX_APPLIED: yes")
+        )
+        config = OrchestratorConfig()
+        tracer = MagicMock()
+        tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=MagicMock()
+        )
+        tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        result = await apply_e2e_fix(
+            fix_plan="Add router to main.py",
+            sandbox=sandbox,
+            config=config,
+            tracer=tracer,
+        )
+
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_returns_false_on_failure(self):
+        """Should return False when fix cannot be applied."""
+        from orchestrator.runner import apply_e2e_fix
+
+        sandbox = MagicMock()
+        sandbox.invoke_claude = AsyncMock(
+            return_value=make_claude_result("FIX_APPLIED: no\nREASON: File not found")
+        )
+        config = OrchestratorConfig()
+        tracer = MagicMock()
+        tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=MagicMock()
+        )
+        tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        result = await apply_e2e_fix(
+            fix_plan="Add router to main.py",
+            sandbox=sandbox,
+            config=config,
+            tracer=tracer,
+        )
+
+        assert result is False
