@@ -524,6 +524,30 @@ Both `TrainingWorker` and checkpoint endpoints now use `get_checkpoint_settings(
 
 ---
 
+## Task 3.9 Complete
+
+**Implemented:** Deployment configuration updates for checkpoint storage
+
+### Changes Made
+
+**Local Development** (`deploy/environments/local/docker-compose.yml`):
+- Backend: Added `CHECKPOINT_DIR=/app/data/checkpoints`
+- Workers: Changed data mounts from `:ro` to `:rw` (no suffix = RW default)
+- Workers: Added `CHECKPOINT_DIR=/app/data/checkpoints`
+
+**Homelab Core** (`deploy/environments/homelab/docker-compose.core.yml`):
+- Backend: Added `CHECKPOINT_DIR=/mnt/ktrdr_data/checkpoints`
+
+**Homelab Workers** (`deploy/environments/homelab/docker-compose.workers.yml`):
+- Backtest workers: Changed mounts from `:ro` to `:rw`
+- All workers: Added `CHECKPOINT_DIR=/mnt/ktrdr_data/checkpoints`
+
+### Deployment Note
+
+After deploying these changes, the checkpoint directory is created automatically by CheckpointService on first checkpoint save. No manual directory creation required.
+
+---
+
 ## Task 3.8 Complete
 
 **Implemented:** Integration tests for checkpoint save functionality
