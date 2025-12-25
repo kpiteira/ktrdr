@@ -25,7 +25,7 @@ def mock_brain_needs_help():
         options=None,
         recommendation=None,
     )
-    with patch("orchestrator.escalation.get_brain") as mock_get:
+    with patch("orchestrator.runner.get_brain") as mock_get:
         mock_brain = MagicMock()
         mock_brain.interpret_result.return_value = result
         mock_get.return_value = mock_brain
@@ -43,7 +43,7 @@ def mock_brain_completed():
         options=None,
         recommendation=None,
     )
-    with patch("orchestrator.escalation.get_brain") as mock_get:
+    with patch("orchestrator.runner.get_brain") as mock_get:
         mock_brain = MagicMock()
         mock_brain.interpret_result.return_value = result
         mock_get.return_value = mock_brain
@@ -464,8 +464,8 @@ class TestEscalateAndWait:
         from orchestrator.escalation import EscalationInfo, escalate_and_wait
 
         with (
-            patch("orchestrator.escalation.Prompt") as mock_prompt,
-            patch("orchestrator.escalation.send_notification"),
+            patch("orchestrator.runner.Prompt") as mock_prompt,
+            patch("orchestrator.runner.send_notification"),
         ):
             mock_prompt.ask.return_value = "Use option A"
 
@@ -498,8 +498,8 @@ class TestEscalateAndWait:
         from orchestrator.escalation import EscalationInfo, escalate_and_wait
 
         with (
-            patch("orchestrator.escalation.Prompt") as mock_prompt,
-            patch("orchestrator.escalation.send_notification"),
+            patch("orchestrator.runner.Prompt") as mock_prompt,
+            patch("orchestrator.runner.send_notification"),
         ):
             mock_prompt.ask.return_value = "skip"
 
@@ -531,8 +531,8 @@ class TestEscalateAndWait:
         from orchestrator.escalation import EscalationInfo, escalate_and_wait
 
         with (
-            patch("orchestrator.escalation.Prompt") as mock_prompt,
-            patch("orchestrator.escalation.send_notification") as mock_notify,
+            patch("orchestrator.runner.Prompt") as mock_prompt,
+            patch("orchestrator.runner.send_notification") as mock_notify,
         ):
             mock_prompt.ask.return_value = "response"
 
@@ -569,8 +569,8 @@ class TestEscalateAndWait:
         from orchestrator.escalation import EscalationInfo, escalate_and_wait
 
         with (
-            patch("orchestrator.escalation.Prompt") as mock_prompt,
-            patch("orchestrator.escalation.send_notification") as mock_notify,
+            patch("orchestrator.runner.Prompt") as mock_prompt,
+            patch("orchestrator.runner.send_notification") as mock_notify,
         ):
             mock_prompt.ask.return_value = "response"
 
@@ -603,8 +603,8 @@ class TestEscalateAndWait:
         from orchestrator.escalation import EscalationInfo, escalate_and_wait
 
         with (
-            patch("orchestrator.escalation.Prompt") as mock_prompt,
-            patch("orchestrator.escalation.send_notification"),
+            patch("orchestrator.runner.Prompt") as mock_prompt,
+            patch("orchestrator.runner.send_notification"),
         ):
             mock_prompt.ask.return_value = "response"
 
@@ -640,8 +640,8 @@ class TestEscalateAndWait:
         from orchestrator.escalation import EscalationInfo, escalate_and_wait
 
         with (
-            patch("orchestrator.escalation.Prompt") as mock_prompt,
-            patch("orchestrator.escalation.send_notification"),
+            patch("orchestrator.runner.Prompt") as mock_prompt,
+            patch("orchestrator.runner.send_notification"),
         ):
             mock_prompt.ask.return_value = "response"
 
@@ -680,8 +680,8 @@ class TestEscalateAndWait:
         from orchestrator.escalation import EscalationInfo, escalate_and_wait
 
         with (
-            patch("orchestrator.escalation.Prompt") as mock_prompt,
-            patch("orchestrator.escalation.send_notification"),
+            patch("orchestrator.runner.Prompt") as mock_prompt,
+            patch("orchestrator.runner.send_notification"),
         ):
             mock_prompt.ask.return_value = "response"
 
@@ -721,7 +721,7 @@ class TestHaikuBrainIntegration:
         # Reset to default mode
         configure_interpreter(llm_only=False)
 
-        with patch("orchestrator.escalation.get_brain") as mock_get:
+        with patch("orchestrator.runner.get_brain") as mock_get:
             output = "STATUS: needs_human\nI need clarification."
             result = detect_needs_human(output)
 
@@ -736,7 +736,7 @@ class TestHaikuBrainIntegration:
 
         configure_interpreter(llm_only=False)
 
-        with patch("orchestrator.escalation.get_brain") as mock_get:
+        with patch("orchestrator.runner.get_brain") as mock_get:
             output = "NEEDS_HUMAN: Please clarify the caching type."
             result = detect_needs_human(output)
 
@@ -761,7 +761,7 @@ class TestHaikuBrainIntegration:
             recommendation="A",
         )
 
-        with patch("orchestrator.escalation.get_brain") as mock_get:
+        with patch("orchestrator.runner.get_brain") as mock_get:
             mock_brain = MagicMock()
             mock_brain.interpret_result.return_value = mock_result
             mock_get.return_value = mock_brain
@@ -791,7 +791,7 @@ class TestHaikuBrainIntegration:
             recommendation=None,
         )
 
-        with patch("orchestrator.escalation.get_brain") as mock_get:
+        with patch("orchestrator.runner.get_brain") as mock_get:
             mock_brain = MagicMock()
             mock_brain.interpret_result.return_value = mock_result
             mock_get.return_value = mock_brain
@@ -821,7 +821,7 @@ class TestHaikuBrainIntegration:
                 recommendation=None,
             )
 
-            with patch("orchestrator.escalation.get_brain") as mock_get:
+            with patch("orchestrator.runner.get_brain") as mock_get:
                 mock_brain = MagicMock()
                 mock_brain.interpret_result.return_value = mock_result
                 mock_get.return_value = mock_brain
@@ -856,7 +856,7 @@ class TestHaikuBrainIntegration:
                 recommendation=None,
             )
 
-            with patch("orchestrator.escalation.get_brain") as mock_get:
+            with patch("orchestrator.runner.get_brain") as mock_get:
                 mock_brain = MagicMock()
                 mock_brain.interpret_result.return_value = mock_result
                 mock_get.return_value = mock_brain

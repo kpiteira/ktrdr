@@ -663,3 +663,197 @@ class TestApplyE2EFixInRunner:
         )
 
         assert result is False
+
+
+# =============================================================================
+# ESCALATION TESTS (Task 4.3 - Merged from escalation.py)
+# =============================================================================
+
+
+class TestEscalationInfoInRunner:
+    """Test EscalationInfo dataclass in runner.py."""
+
+    def test_escalation_info_is_exported(self):
+        """EscalationInfo should be importable from runner."""
+        from orchestrator.runner import EscalationInfo
+
+        assert EscalationInfo is not None
+
+    def test_escalation_info_has_all_required_fields(self):
+        """EscalationInfo should have all required fields."""
+        from orchestrator.runner import EscalationInfo
+
+        info = EscalationInfo(
+            task_id="3.1",
+            question="Which database should I use?",
+            options=["PostgreSQL", "MySQL"],
+            recommendation="PostgreSQL",
+            raw_output="Full Claude output here",
+        )
+
+        assert info.task_id == "3.1"
+        assert info.question == "Which database should I use?"
+        assert info.options == ["PostgreSQL", "MySQL"]
+        assert info.recommendation == "PostgreSQL"
+        assert info.raw_output == "Full Claude output here"
+
+    def test_escalation_info_allows_none_options(self):
+        """EscalationInfo should allow None for optional fields."""
+        from orchestrator.runner import EscalationInfo
+
+        info = EscalationInfo(
+            task_id="3.1",
+            question="Help needed",
+            options=None,
+            recommendation=None,
+            raw_output="Output",
+        )
+
+        assert info.options is None
+        assert info.recommendation is None
+
+
+class TestEscalateAndWaitInRunner:
+    """Test escalate_and_wait function in runner.py."""
+
+    def test_escalate_and_wait_is_exported(self):
+        """escalate_and_wait should be importable from runner."""
+        from orchestrator.runner import escalate_and_wait
+
+        assert callable(escalate_and_wait)
+
+    @pytest.mark.asyncio
+    async def test_displays_question_and_gets_response(self):
+        """Should display question and collect user response."""
+        from orchestrator.runner import EscalationInfo, escalate_and_wait
+
+        info = EscalationInfo(
+            task_id="3.1",
+            question="Which option?",
+            options=["A", "B"],
+            recommendation="A",
+            raw_output="Full output",
+        )
+
+        tracer = MagicMock()
+        tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=MagicMock()
+        )
+        tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        # Mock the Prompt.ask to simulate user input
+        with patch("orchestrator.runner.Prompt.ask", return_value="Use option B"):
+            with patch("orchestrator.runner.send_notification"):
+                response = await escalate_and_wait(info, tracer, notify=False)
+
+        assert response == "Use option B"
+
+    @pytest.mark.asyncio
+    async def test_uses_recommendation_on_skip(self):
+        """Should use recommendation when user enters 'skip'."""
+        from orchestrator.runner import EscalationInfo, escalate_and_wait
+
+        info = EscalationInfo(
+            task_id="3.1",
+            question="Which option?",
+            options=["A", "B"],
+            recommendation="Use PostgreSQL for production",
+            raw_output="Full output",
+        )
+
+        tracer = MagicMock()
+        tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=MagicMock()
+        )
+        tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        with patch("orchestrator.runner.Prompt.ask", return_value="skip"):
+            with patch("orchestrator.runner.send_notification"):
+                response = await escalate_and_wait(info, tracer, notify=False)
+
+        assert response == "Use PostgreSQL for production"
+
+    @pytest.mark.asyncio
+    async def test_sends_notification_when_enabled(self):
+        """Should send notification when notify=True."""
+        from orchestrator.runner import EscalationInfo, escalate_and_wait
+
+        info = EscalationInfo(
+            task_id="3.1",
+            question="Help needed",
+            options=None,
+            recommendation=None,
+            raw_output="Output",
+        )
+
+        tracer = MagicMock()
+        tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=MagicMock()
+        )
+        tracer.start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        with patch("orchestrator.runner.Prompt.ask", return_value="response"):
+            with patch("orchestrator.runner.send_notification") as mock_notify:
+                await escalate_and_wait(info, tracer, notify=True)
+
+        mock_notify.assert_called_once()
+        call_kwargs = mock_notify.call_args[1]
+        assert "3.1" in call_kwargs["message"]
+
+
+class TestGetBrainInRunner:
+    """Test get_brain function in runner.py."""
+
+    def test_get_brain_is_exported(self):
+        """get_brain should be importable from runner."""
+        from orchestrator.runner import get_brain
+
+        assert callable(get_brain)
+
+    def test_get_brain_returns_haiku_brain(self):
+        """get_brain should return a HaikuBrain instance."""
+        from orchestrator.haiku_brain import HaikuBrain
+        from orchestrator.runner import get_brain
+
+        brain = get_brain()
+        assert isinstance(brain, HaikuBrain)
+
+    def test_get_brain_returns_singleton(self):
+        """get_brain should return the same instance on subsequent calls."""
+        from orchestrator.runner import get_brain
+
+        brain1 = get_brain()
+        brain2 = get_brain()
+        assert brain1 is brain2
+
+
+class TestConfigureInterpreterInRunner:
+    """Test configure_interpreter function in runner.py."""
+
+    def test_configure_interpreter_is_exported(self):
+        """configure_interpreter should be importable from runner."""
+        from orchestrator.runner import configure_interpreter
+
+        assert callable(configure_interpreter)
+
+    def test_configure_interpreter_resets_brain(self):
+        """configure_interpreter should reset the brain singleton."""
+        from orchestrator.runner import configure_interpreter, get_brain
+
+        # Get initial brain
+        brain1 = get_brain()
+
+        # Configure interpreter (should reset)
+        configure_interpreter(llm_only=True)
+
+        # Get new brain - should be a new instance
+        brain2 = get_brain()
+
+        # They should be different instances
+        assert brain1 is not brain2
