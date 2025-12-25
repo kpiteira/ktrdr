@@ -4,7 +4,6 @@ Coordinates running all tasks in a milestone, persisting state after
 each task for resumability, and reporting progress.
 """
 
-import asyncio
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
