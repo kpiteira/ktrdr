@@ -17,6 +17,7 @@ from pydantic import Field
 from ktrdr.api.models.operations import OperationMetadata, OperationType
 from ktrdr.api.models.workers import WorkerType
 from ktrdr.async_infrastructure.cancellation import CancellationError
+from ktrdr.config.settings import get_checkpoint_settings
 
 # Note: TrainingProgressBridge requires TrainingOperationContext which is complex
 # For now, we'll use direct progress callbacks instead
@@ -81,14 +82,11 @@ class TrainingWorker(WorkerAPIBase):
             backend_url=backend_url,
         )
 
-        # Load checkpoint configuration from environment
-        self.checkpoint_epoch_interval = int(
-            os.getenv("CHECKPOINT_EPOCH_INTERVAL", "10")
-        )
-        self.checkpoint_time_interval = int(
-            os.getenv("CHECKPOINT_TIME_INTERVAL_SECONDS", "300")
-        )
-        self._checkpoint_dir = os.getenv("CHECKPOINT_DIR", "/app/data/checkpoints")
+        # Load checkpoint configuration from centralized settings
+        checkpoint_settings = get_checkpoint_settings()
+        self.checkpoint_epoch_interval = checkpoint_settings.epoch_interval
+        self.checkpoint_time_interval = checkpoint_settings.time_interval_seconds
+        self._checkpoint_dir = checkpoint_settings.dir
 
         # Register domain-specific endpoint
         @self.app.post("/training/start")

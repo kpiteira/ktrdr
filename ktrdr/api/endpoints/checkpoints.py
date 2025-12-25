@@ -7,7 +7,6 @@ This module provides endpoints for managing training checkpoints:
 - Delete checkpoints
 """
 
-import os
 from datetime import datetime
 from typing import Any, Optional
 
@@ -17,6 +16,7 @@ from pydantic import BaseModel, Field
 from ktrdr import get_logger
 from ktrdr.api.database import get_session_factory
 from ktrdr.checkpoint.checkpoint_service import CheckpointService
+from ktrdr.config.settings import get_checkpoint_settings
 from ktrdr.errors import DataError
 
 # Setup module-level logger
@@ -107,10 +107,10 @@ def get_checkpoint_service() -> CheckpointService:
     global _checkpoint_service
     if _checkpoint_service is None:
         session_factory = get_session_factory()
-        artifacts_dir = os.getenv("CHECKPOINT_DIR", "/app/data/checkpoints")
+        checkpoint_settings = get_checkpoint_settings()
         _checkpoint_service = CheckpointService(
             session_factory=session_factory,
-            artifacts_dir=artifacts_dir,
+            artifacts_dir=checkpoint_settings.dir,
         )
     return _checkpoint_service
 
