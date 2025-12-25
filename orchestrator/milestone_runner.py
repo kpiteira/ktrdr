@@ -4,6 +4,7 @@ Coordinates running all tasks in a milestone, persisting state after
 each task for resumability, and reporting progress.
 """
 
+import asyncio
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -16,6 +17,13 @@ from rich.prompt import Prompt
 
 from orchestrator import telemetry
 from orchestrator.config import OrchestratorConfig
+from orchestrator.discord_notifier import (
+    format_milestone_completed,
+    format_milestone_started,
+    format_task_completed,
+    format_task_failed,
+    send_discord_message,
+)
 from orchestrator.haiku_brain import HaikuBrain
 from orchestrator.models import ClaudeResult, Task, TaskResult
 from orchestrator.runner import (
@@ -33,6 +41,19 @@ MAX_E2E_FIX_ATTEMPTS = 5
 
 # Console for E2E output
 console = Console()
+
+
+def _send_discord_notification(webhook_url: str, embed) -> None:
+    """Send a Discord notification in fire-and-forget mode.
+
+    Uses asyncio.create_task to dispatch the notification without blocking.
+    If the webhook call fails, it's logged but doesn't affect execution.
+
+    Args:
+        webhook_url: Discord webhook URL
+        embed: DiscordEmbed to send
+    """
+    asyncio.create_task(send_discord_message(webhook_url, embed))
 
 
 @dataclass
@@ -158,6 +179,13 @@ async def run_milestone(
         milestone_span.set_attribute("milestone.resume", resume)
         milestone_span.set_attribute("milestone.start_index", start_index)
 
+        # Send Discord notification: Milestone started
+        if config.discord_enabled:
+            _send_discord_notification(
+                config.discord_webhook_url,
+                format_milestone_started(milestone_id, len(tasks)),
+            )
+
         # Execute tasks sequentially
         for _i, task in enumerate(tasks[start_index:], start=start_index):
             with tracer.start_as_current_span("orchestrator.task") as task_span:
@@ -199,6 +227,18 @@ async def run_milestone(
                     state.mark_task_completed(task.id, asdict(result))
                     state.save(state_dir)
 
+                    # Send Discord notification: Task completed
+                    if config.discord_enabled:
+                        _send_discord_notification(
+                            config.discord_webhook_url,
+                            format_task_completed(
+                                task.id,
+                                task.title,
+                                result.duration_seconds,
+                                result.cost_usd,
+                            ),
+                        )
+
                     # Invoke callback for task summary display
                     if on_task_complete is not None:
                         on_task_complete(task, result)
@@ -211,6 +251,18 @@ async def run_milestone(
                 elif result.status == "failed":
                     state.failed_tasks.append(task.id)
                     state.save(state_dir)
+
+                    # Send Discord notification: Task failed
+                    if config.discord_enabled:
+                        _send_discord_notification(
+                            config.discord_webhook_url,
+                            format_task_failed(
+                                task.id,
+                                task.title,
+                                result.error or "Task failed",
+                            ),
+                        )
+
                     final_status = "failed"
                     break
 
@@ -325,6 +377,19 @@ async def run_milestone(
             "milestone.completed_tasks", len(state.completed_tasks)
         )
         milestone_span.set_attribute("milestone.failed_tasks", len(state.failed_tasks))
+
+        # Send Discord notification: Milestone completed
+        if config.discord_enabled:
+            _send_discord_notification(
+                config.discord_webhook_url,
+                format_milestone_completed(
+                    milestone_id,
+                    len(state.completed_tasks),
+                    len(tasks),
+                    total_cost,
+                    total_duration,
+                ),
+            )
 
     return MilestoneResult(
         status=final_status,
