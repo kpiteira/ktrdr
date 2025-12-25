@@ -905,7 +905,7 @@ pytest tests/ -v
         mock_run_task_with_escalation: AsyncMock,
     ) -> None:
         """E2E tests are run after all tasks complete successfully."""
-        from orchestrator.e2e_runner import E2EResult
+        from orchestrator.runner import E2EResult
 
         mock_e2e_result = E2EResult(
             status="passed",
@@ -978,7 +978,7 @@ pytest tests/ -v
         self, tmp_path: Path, plan_file: Path, sample_tasks: list[Task]
     ) -> None:
         """E2E failure that can't be fixed returns e2e_failed status."""
-        from orchestrator.e2e_runner import E2EResult
+        from orchestrator.runner import E2EResult
 
         async def mock_task_success(
             task: Task,
@@ -1038,7 +1038,7 @@ pytest tests/ -v
         self, tmp_path: Path, plan_file: Path, sample_tasks: list[Task]
     ) -> None:
         """Fixable E2E failure prompts user and applies fix."""
-        from orchestrator.e2e_runner import E2EResult
+        from orchestrator.runner import E2EResult
 
         async def mock_task_success(
             task: Task,
@@ -1124,7 +1124,7 @@ pytest tests/ -v
         self, tmp_path: Path, plan_file: Path, sample_tasks: list[Task]
     ) -> None:
         """Loop detection stops E2E fix cycle."""
-        from orchestrator.e2e_runner import E2EResult
+        from orchestrator.runner import E2EResult
 
         async def mock_task_success(
             task: Task,
@@ -1198,7 +1198,7 @@ pytest tests/ -v
         self, tmp_path: Path, plan_file: Path, sample_tasks: list[Task]
     ) -> None:
         """Unclear E2E status escalates to human."""
-        from orchestrator.e2e_runner import E2EResult
+        from orchestrator.runner import E2EResult
 
         async def mock_task_success(
             task: Task,
@@ -1257,7 +1257,7 @@ pytest tests/ -v
         self, tmp_path: Path, plan_file: Path, sample_tasks: list[Task]
     ) -> None:
         """E2E status is persisted to state."""
-        from orchestrator.e2e_runner import E2EResult
+        from orchestrator.runner import E2EResult
 
         async def mock_task_success(
             task: Task,

@@ -23,9 +23,9 @@ from orchestrator.milestone_runner import (
     run_milestone,
 )
 from orchestrator.models import Task, TaskResult
+from orchestrator.runner import run_task
 from orchestrator.sandbox import SandboxManager, format_tool_call
 from orchestrator.state import OrchestratorState
-from orchestrator.task_runner import run_task
 from orchestrator.telemetry import create_metrics, setup_telemetry
 
 console = Console()
@@ -180,7 +180,7 @@ MODEL_ALIASES = {
 )
 def run(plan_file: str, notify: bool, llm_only: bool, model: str | None) -> None:
     """Run all tasks in a milestone."""
-    from orchestrator.escalation import configure_interpreter
+    from orchestrator.runner import configure_interpreter
 
     configure_interpreter(llm_only=llm_only)
     model_id = MODEL_ALIASES[model] if model else None
@@ -204,7 +204,7 @@ def run(plan_file: str, notify: bool, llm_only: bool, model: str | None) -> None
 )
 def resume(plan_file: str, notify: bool, llm_only: bool, model: str | None) -> None:
     """Resume a previously interrupted milestone."""
-    from orchestrator.escalation import configure_interpreter
+    from orchestrator.runner import configure_interpreter
 
     configure_interpreter(llm_only=llm_only)
 

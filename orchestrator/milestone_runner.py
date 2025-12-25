@@ -16,13 +16,17 @@ from rich.prompt import Prompt
 
 from orchestrator import telemetry
 from orchestrator.config import OrchestratorConfig
-from orchestrator.e2e_runner import apply_e2e_fix, run_e2e_tests
-from orchestrator.escalation import EscalationInfo, escalate_and_wait
 from orchestrator.haiku_brain import HaikuBrain
 from orchestrator.models import ClaudeResult, Task, TaskResult
+from orchestrator.runner import (
+    EscalationInfo,
+    apply_e2e_fix,
+    escalate_and_wait,
+    run_e2e_tests,
+    run_task_with_escalation,
+)
 from orchestrator.sandbox import SandboxManager
 from orchestrator.state import OrchestratorState
-from orchestrator.task_runner import run_task_with_escalation
 
 # Maximum E2E fix attempts before stopping (prevents runaway fix cycles)
 MAX_E2E_FIX_ATTEMPTS = 5

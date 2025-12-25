@@ -68,7 +68,7 @@ class TestRunTaskPromptConstruction:
     @pytest.mark.asyncio
     async def test_prompt_includes_task_details(self):
         """Prompt should include task ID, title, and details."""
-        from orchestrator.task_runner import run_task
+        from orchestrator.runner import run_task
 
         task = make_task()
         config = OrchestratorConfig()
@@ -92,7 +92,7 @@ class TestRunTaskPromptConstruction:
     @pytest.mark.asyncio
     async def test_prompt_includes_human_guidance_when_provided(self):
         """Prompt should include human guidance when provided."""
-        from orchestrator.task_runner import run_task
+        from orchestrator.runner import run_task
 
         task = make_task()
         config = OrchestratorConfig()
@@ -116,7 +116,7 @@ class TestRunTaskPromptConstruction:
     @pytest.mark.asyncio
     async def test_uses_config_max_turns(self):
         """Should use max_turns from config."""
-        from orchestrator.task_runner import run_task
+        from orchestrator.runner import run_task
 
         task = make_task()
         config = OrchestratorConfig(max_turns=100)
@@ -137,7 +137,7 @@ class TestRunTaskPromptConstruction:
     @pytest.mark.asyncio
     async def test_uses_config_timeout(self):
         """Should use task_timeout_seconds from config."""
-        from orchestrator.task_runner import run_task
+        from orchestrator.runner import run_task
 
         task = make_task()
         config = OrchestratorConfig(task_timeout_seconds=1200)
@@ -162,7 +162,7 @@ class TestRunTaskStatusParsing:
     @pytest.mark.asyncio
     async def test_parses_completed_status(self):
         """Should detect 'completed' status via HaikuBrain."""
-        from orchestrator.task_runner import run_task
+        from orchestrator.runner import run_task
 
         task = make_task()
         config = OrchestratorConfig()
@@ -184,7 +184,7 @@ class TestRunTaskStatusParsing:
     @pytest.mark.asyncio
     async def test_parses_failed_status(self):
         """Should detect 'failed' status via HaikuBrain."""
-        from orchestrator.task_runner import run_task
+        from orchestrator.runner import run_task
 
         task = make_task()
         config = OrchestratorConfig()
@@ -206,7 +206,7 @@ class TestRunTaskStatusParsing:
     @pytest.mark.asyncio
     async def test_parses_needs_human_status(self):
         """Should detect 'needs_human' status via HaikuBrain."""
-        from orchestrator.task_runner import run_task
+        from orchestrator.runner import run_task
 
         task = make_task()
         config = OrchestratorConfig()
@@ -235,7 +235,7 @@ class TestRunTaskErrorExtraction:
     @pytest.mark.asyncio
     async def test_extracts_error_for_failed_status(self):
         """Should extract error message via HaikuBrain when status is failed."""
-        from orchestrator.task_runner import run_task
+        from orchestrator.runner import run_task
 
         task = make_task()
         config = OrchestratorConfig()
@@ -262,7 +262,7 @@ class TestRunTaskNeedsHumanExtraction:
     @pytest.mark.asyncio
     async def test_extracts_question(self):
         """Should extract question via HaikuBrain for needs_human status."""
-        from orchestrator.task_runner import run_task
+        from orchestrator.runner import run_task
 
         task = make_task()
         config = OrchestratorConfig()
@@ -285,7 +285,7 @@ class TestRunTaskNeedsHumanExtraction:
     @pytest.mark.asyncio
     async def test_extracts_options(self):
         """Should extract options via HaikuBrain for needs_human status."""
-        from orchestrator.task_runner import run_task
+        from orchestrator.runner import run_task
 
         task = make_task()
         config = OrchestratorConfig()
@@ -309,7 +309,7 @@ class TestRunTaskNeedsHumanExtraction:
     @pytest.mark.asyncio
     async def test_extracts_recommendation(self):
         """Should extract recommendation via HaikuBrain for needs_human status."""
-        from orchestrator.task_runner import run_task
+        from orchestrator.runner import run_task
 
         task = make_task()
         config = OrchestratorConfig()
@@ -339,7 +339,7 @@ class TestRunTaskResultFields:
     @pytest.mark.asyncio
     async def test_result_contains_task_id(self):
         """Result should contain the task ID."""
-        from orchestrator.task_runner import run_task
+        from orchestrator.runner import run_task
 
         task = make_task(task_id="3.5")
         config = OrchestratorConfig()
@@ -359,7 +359,7 @@ class TestRunTaskResultFields:
     @pytest.mark.asyncio
     async def test_result_contains_cost(self):
         """Result should contain cost from Claude result."""
-        from orchestrator.task_runner import run_task
+        from orchestrator.runner import run_task
 
         task = make_task()
         config = OrchestratorConfig()
@@ -379,7 +379,7 @@ class TestRunTaskResultFields:
     @pytest.mark.asyncio
     async def test_result_contains_session_id(self):
         """Result should contain session ID from Claude result."""
-        from orchestrator.task_runner import run_task
+        from orchestrator.runner import run_task
 
         task = make_task()
         config = OrchestratorConfig()
@@ -399,7 +399,7 @@ class TestRunTaskResultFields:
     @pytest.mark.asyncio
     async def test_result_contains_output(self):
         """Result should contain full Claude output."""
-        from orchestrator.task_runner import run_task
+        from orchestrator.runner import run_task
 
         task = make_task()
         config = OrchestratorConfig()
@@ -418,7 +418,7 @@ class TestRunTaskResultFields:
     @pytest.mark.asyncio
     async def test_result_contains_duration(self):
         """Result should contain execution duration."""
-        from orchestrator.task_runner import run_task
+        from orchestrator.runner import run_task
 
         task = make_task()
         config = OrchestratorConfig()
@@ -442,7 +442,7 @@ class TestRunTaskHaikuBrainInterpretation:
     @pytest.mark.asyncio
     async def test_uses_haiku_brain_for_interpretation(self):
         """Should use HaikuBrain.interpret_result() for status detection."""
-        from orchestrator.task_runner import run_task
+        from orchestrator.runner import run_task
 
         task = make_task()
         config = OrchestratorConfig()
@@ -467,7 +467,7 @@ class TestRunTaskHaikuBrainInterpretation:
     @pytest.mark.asyncio
     async def test_maps_needs_help_to_needs_human(self):
         """Should map InterpretationResult 'needs_help' to TaskResult 'needs_human'."""
-        from orchestrator.task_runner import run_task
+        from orchestrator.runner import run_task
 
         task = make_task()
         config = OrchestratorConfig()
@@ -496,7 +496,7 @@ class TestRunTaskHaikuBrainInterpretation:
     @pytest.mark.asyncio
     async def test_extracts_error_for_failed_status(self):
         """Should extract error from InterpretationResult when status is failed."""
-        from orchestrator.task_runner import run_task
+        from orchestrator.runner import run_task
 
         task = make_task()
         config = OrchestratorConfig()
@@ -521,7 +521,7 @@ class TestRunTaskHaikuBrainInterpretation:
     @pytest.mark.asyncio
     async def test_full_output_passed_to_haiku_brain(self):
         """Should pass full output to HaikuBrain without truncation."""
-        from orchestrator.task_runner import run_task
+        from orchestrator.runner import run_task
 
         task = make_task()
         config = OrchestratorConfig()
@@ -552,7 +552,7 @@ class TestRunTaskStreaming:
     @pytest.mark.asyncio
     async def test_uses_streaming_when_callback_provided(self):
         """Should use invoke_claude_streaming when on_tool_use is provided."""
-        from orchestrator.task_runner import run_task
+        from orchestrator.runner import run_task
 
         task = make_task()
         config = OrchestratorConfig()
@@ -586,7 +586,7 @@ class TestRunTaskStreaming:
     @pytest.mark.asyncio
     async def test_uses_non_streaming_when_no_callback(self):
         """Should use invoke_claude when no on_tool_use callback."""
-        from orchestrator.task_runner import run_task
+        from orchestrator.runner import run_task
 
         task = make_task()
         config = OrchestratorConfig()
@@ -613,7 +613,7 @@ class TestRunTaskStreaming:
     @pytest.mark.asyncio
     async def test_streaming_passes_callback_to_sandbox(self):
         """Callback should be passed through to sandbox streaming method."""
-        from orchestrator.task_runner import run_task
+        from orchestrator.runner import run_task
 
         task = make_task()
         config = OrchestratorConfig()
@@ -640,7 +640,7 @@ class TestRunTaskStreaming:
     @pytest.mark.asyncio
     async def test_streaming_passes_config_params(self):
         """Should pass max_turns and timeout to streaming method."""
-        from orchestrator.task_runner import run_task
+        from orchestrator.runner import run_task
 
         task = make_task()
         config = OrchestratorConfig(max_turns=75, task_timeout_seconds=900)
@@ -669,7 +669,7 @@ class TestRunTaskWithEscalation:
     @pytest.mark.asyncio
     async def test_returns_completed_result_immediately(self):
         """Should return immediately when task completes successfully."""
-        from orchestrator.task_runner import run_task_with_escalation
+        from orchestrator.runner import run_task_with_escalation
 
         task = make_task()
         config = OrchestratorConfig()
@@ -699,7 +699,7 @@ class TestRunTaskWithEscalation:
     @pytest.mark.asyncio
     async def test_triggers_escalation_on_needs_human(self):
         """Should trigger escalation when task returns needs_human."""
-        from orchestrator.task_runner import run_task_with_escalation
+        from orchestrator.runner import run_task_with_escalation
 
         task = make_task()
         config = OrchestratorConfig()
@@ -751,7 +751,7 @@ class TestRunTaskWithEscalation:
     @pytest.mark.asyncio
     async def test_retries_with_guidance_after_escalation(self):
         """Should retry task with human guidance after escalation."""
-        from orchestrator.task_runner import run_task_with_escalation
+        from orchestrator.runner import run_task_with_escalation
 
         task = make_task()
         config = OrchestratorConfig()
@@ -802,7 +802,7 @@ class TestRunTaskWithEscalation:
     async def test_first_failure_retries_with_haiku_guidance(self):
         """First failure should call HaikuBrain for retry decision and use guidance."""
         from orchestrator.haiku_brain import RetryDecision
-        from orchestrator.task_runner import run_task_with_escalation
+        from orchestrator.runner import run_task_with_escalation
 
         task = make_task(task_id="4.1")
         config = OrchestratorConfig()
@@ -860,7 +860,7 @@ class TestRunTaskWithEscalation:
     async def test_same_error_three_times_escalates(self):
         """Same error 3 times should trigger HaikuBrain escalation decision."""
         from orchestrator.haiku_brain import RetryDecision
-        from orchestrator.task_runner import run_task_with_escalation
+        from orchestrator.runner import run_task_with_escalation
 
         task = make_task(task_id="4.1")
         config = OrchestratorConfig()
@@ -938,7 +938,7 @@ class TestRunTaskWithEscalation:
     async def test_different_errors_continues_retrying(self):
         """Different errors each attempt should continue retrying (making progress)."""
         from orchestrator.haiku_brain import RetryDecision
-        from orchestrator.task_runner import run_task_with_escalation
+        from orchestrator.runner import run_task_with_escalation
 
         task = make_task(task_id="4.1")
         config = OrchestratorConfig()
@@ -994,7 +994,7 @@ class TestRunTaskWithEscalation:
     async def test_escalation_triggered_on_haiku_escalate_decision(self):
         """Escalation should be triggered when HaikuBrain returns escalate decision."""
         from orchestrator.haiku_brain import RetryDecision
-        from orchestrator.task_runner import run_task_with_escalation
+        from orchestrator.runner import run_task_with_escalation
 
         task = make_task(task_id="4.1")
         config = OrchestratorConfig()
@@ -1047,7 +1047,7 @@ class TestRunTaskWithEscalation:
     async def test_attempt_history_tracked_correctly(self):
         """Attempt history should accumulate across retries."""
         from orchestrator.haiku_brain import RetryDecision
-        from orchestrator.task_runner import run_task_with_escalation
+        from orchestrator.runner import run_task_with_escalation
 
         task = make_task(task_id="4.1")
         config = OrchestratorConfig()
