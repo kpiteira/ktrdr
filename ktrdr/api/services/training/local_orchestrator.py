@@ -35,6 +35,7 @@ class LocalTrainingOrchestrator:
         progress_bridge: TrainingProgressBridge,
         cancellation_token: CancellationToken | None,
         model_storage: ModelStorage,
+        checkpoint_callback=None,
     ):
         """
         Initialize the local training orchestrator.
@@ -44,11 +45,14 @@ class LocalTrainingOrchestrator:
             progress_bridge: Bridge for progress reporting
             cancellation_token: Optional cancellation token
             model_storage: Model storage for saving trained models
+            checkpoint_callback: Optional callback for checkpointing after each epoch.
+                Called with kwargs: epoch, model, optimizer, scheduler, trainer.
         """
         self._context = context
         self._bridge = progress_bridge
         self._token = cancellation_token
         self._model_storage = model_storage
+        self._checkpoint_callback = checkpoint_callback
 
     async def run(self) -> dict[str, Any]:
         """
@@ -106,6 +110,7 @@ class LocalTrainingOrchestrator:
             progress_callback=progress_callback,
             cancellation_token=self._token,
             repository=None,  # Let pipeline create it (cached data only)
+            checkpoint_callback=self._checkpoint_callback,
         )
 
         # Step 4: Add session metadata to result

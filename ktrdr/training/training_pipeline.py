@@ -545,6 +545,7 @@ class TrainingPipeline:
         training_config: dict[str, Any],
         progress_callback=None,
         cancellation_token: Optional[CancellationToken] = None,
+        checkpoint_callback=None,
     ) -> dict[str, Any]:
         """
         Train the neural network model (symbol-agnostic).
@@ -571,6 +572,8 @@ class TrainingPipeline:
                 - learning_rate: Learning rate
             progress_callback: Optional callback(epoch, total_epochs, metrics)
             cancellation_token: Optional cancellation token
+            checkpoint_callback: Optional callback for checkpointing after each epoch.
+                Called with kwargs: epoch, model, optimizer, scheduler, trainer.
 
         Returns:
             Training results dict containing:
@@ -592,6 +595,7 @@ class TrainingPipeline:
             training_config,
             progress_callback=progress_callback,
             cancellation_token=cancellation_token,
+            checkpoint_callback=checkpoint_callback,
         )
 
         # Symbol-agnostic training: Always use the same path regardless of number of symbols
@@ -777,6 +781,7 @@ class TrainingPipeline:
         progress_callback=None,
         cancellation_token: Optional[CancellationToken] = None,
         repository: Optional[DataRepository] = None,
+        checkpoint_callback=None,
     ) -> dict[str, Any]:
         """
         Complete training pipeline from data to trained model.
@@ -784,9 +789,9 @@ class TrainingPipeline:
         Orchestrates all steps: load data → indicators → fuzzy → features →
         labels → train → evaluate → save. Returns standardized result.
 
-        Key: progress_callback and cancellation_token are PASSED THROUGH
-        to train_model(), not handled here. This avoids the trap of trying
-        to unify progress/cancellation mechanisms.
+        Key: progress_callback, cancellation_token, and checkpoint_callback are
+        PASSED THROUGH to train_model(), not handled here. This avoids the trap
+        of trying to unify progress/cancellation mechanisms.
 
         Args:
             symbols: Trading symbols to train on
@@ -798,6 +803,8 @@ class TrainingPipeline:
             progress_callback: Optional progress callback (orchestrator-provided)
             cancellation_token: Optional cancellation token (orchestrator-provided)
             repository: Optional DataRepository instance (cached data only)
+            checkpoint_callback: Optional callback for checkpointing after each epoch.
+                Called with kwargs: epoch, model, optimizer, scheduler, trainer.
 
         Returns:
             Standardized result dict with model_path, metrics, artifacts
@@ -1037,6 +1044,7 @@ class TrainingPipeline:
             training_config=strategy_config["model"]["training"],
             progress_callback=progress_callback,  # ← Pass through
             cancellation_token=cancellation_token,  # ← Pass through
+            checkpoint_callback=checkpoint_callback,  # ← Pass through
         )
 
         # Step 10: Evaluate model
