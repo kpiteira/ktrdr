@@ -10,6 +10,7 @@ Consolidation notes (M4):
 - Escalation merged from escalation.py (Task 4.3)
 """
 
+import asyncio
 import re
 import time
 from dataclasses import dataclass
@@ -22,6 +23,7 @@ from rich.prompt import Prompt
 
 from orchestrator import telemetry
 from orchestrator.config import OrchestratorConfig
+from orchestrator.discord_notifier import format_escalation_needed, send_discord_message
 from orchestrator.haiku_brain import HaikuBrain
 from orchestrator.models import Task, TaskResult
 from orchestrator.notifications import send_notification
@@ -29,6 +31,20 @@ from orchestrator.sandbox import SandboxManager
 
 # Console for output
 console = Console()
+
+
+def _send_discord_notification(webhook_url: str, embed) -> None:
+    """Send a Discord notification in fire-and-forget mode.
+
+    Uses asyncio.create_task to dispatch the notification without blocking.
+    If the webhook call fails, it's logged but doesn't affect execution.
+
+    Args:
+        webhook_url: Discord webhook URL
+        embed: DiscordEmbed to send
+    """
+    asyncio.create_task(send_discord_message(webhook_url, embed))
+
 
 # =============================================================================
 # ESCALATION LOGIC (Task 4.3 - Merged from escalation.py)
@@ -510,6 +526,18 @@ async def run_task_with_escalation(
                 raw_output=result.output,
             )
 
+            # Send Discord notification: Escalation needed
+            if config.discord_enabled:
+                _send_discord_notification(
+                    config.discord_webhook_url,
+                    format_escalation_needed(
+                        task.id,
+                        task.title,
+                        info.question,
+                        info.options,
+                    ),
+                )
+
             response = await escalate_and_wait(info, tracer, notify)
             guidance = response
 
@@ -565,6 +593,19 @@ async def run_task_with_escalation(
                     recommendation=None,
                     raw_output=result.output,
                 )
+
+                # Send Discord notification: Escalation needed (failure)
+                if config.discord_enabled:
+                    _send_discord_notification(
+                        config.discord_webhook_url,
+                        format_escalation_needed(
+                            task.id,
+                            task.title,
+                            info.question,
+                            info.options,
+                        ),
+                    )
+
                 response = await escalate_and_wait(info, tracer, notify)
                 guidance = response
                 # Loop continues with human guidance after escalation

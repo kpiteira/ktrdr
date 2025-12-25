@@ -1536,6 +1536,72 @@ class TestCostsCommand:
         assert "--by-milestone" in result.output or "--total" in result.output
 
 
+class TestNotifyTestCommand:
+    """Test the notify-test CLI command."""
+
+    def test_notify_test_command_exists(self):
+        """The notify-test command should exist in the CLI."""
+        from orchestrator.cli import cli
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["notify-test", "--help"])
+
+        assert result.exit_code == 0
+        assert "test" in result.output.lower() or "discord" in result.output.lower()
+
+    def test_notify_test_shows_error_when_not_configured(self):
+        """notify-test should show error when DISCORD_WEBHOOK_URL not set."""
+        from orchestrator.cli import cli
+
+        runner = CliRunner()
+
+        with patch("orchestrator.cli.OrchestratorConfig.from_env") as mock_config:
+            mock_config.return_value = MagicMock(
+                discord_enabled=False,
+                discord_webhook_url=None,
+            )
+            result = runner.invoke(cli, ["notify-test"])
+
+        assert "not configured" in result.output.lower() or "discord_webhook_url" in result.output.lower()
+
+    def test_notify_test_sends_notification_when_configured(self):
+        """notify-test should send notification when webhook is configured."""
+        from orchestrator.cli import cli
+
+        runner = CliRunner()
+
+        with patch("orchestrator.cli.OrchestratorConfig.from_env") as mock_config:
+            mock_config.return_value = MagicMock(
+                discord_enabled=True,
+                discord_webhook_url="https://discord.com/api/webhooks/test",
+            )
+            with patch("orchestrator.cli.send_discord_message", new_callable=AsyncMock) as mock_send:
+                with patch("orchestrator.cli.format_test_notification") as mock_format:
+                    mock_format.return_value = MagicMock()
+                    result = runner.invoke(cli, ["notify-test"])
+
+        mock_send.assert_called_once()
+        assert "success" in result.output.lower() or "sent" in result.output.lower()
+
+    def test_notify_test_shows_sending_message(self):
+        """notify-test should show 'Sending test notification...' message."""
+        from orchestrator.cli import cli
+
+        runner = CliRunner()
+
+        with patch("orchestrator.cli.OrchestratorConfig.from_env") as mock_config:
+            mock_config.return_value = MagicMock(
+                discord_enabled=True,
+                discord_webhook_url="https://discord.com/api/webhooks/test",
+            )
+            with patch("orchestrator.cli.send_discord_message", new_callable=AsyncMock):
+                with patch("orchestrator.cli.format_test_notification") as mock_format:
+                    mock_format.return_value = MagicMock()
+                    result = runner.invoke(cli, ["notify-test"])
+
+        assert "sending" in result.output.lower()
+
+
 class TestCostsCommandExecution:
     """Test costs command execution with mocked dependencies."""
 
