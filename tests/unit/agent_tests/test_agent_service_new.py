@@ -120,6 +120,12 @@ class TestAgentServiceTrigger:
     """Test trigger() method."""
 
     @pytest.fixture(autouse=True)
+    def use_stub_workers(self, monkeypatch):
+        """Use stub workers to avoid real API calls in unit tests."""
+        monkeypatch.setenv("USE_STUB_WORKERS", "true")
+        monkeypatch.setenv("STUB_WORKER_FAST", "true")
+
+    @pytest.fixture(autouse=True)
     def mock_budget(self):
         """Mock budget tracker to allow triggers in tests."""
         from unittest.mock import MagicMock, patch

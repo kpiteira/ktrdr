@@ -83,6 +83,19 @@ class InterpretationResult:
     recommendation: str | None
 
 
+@dataclass
+class RetryDecision:
+    """Decision on whether to retry a failed task or escalate to human.
+
+    When decision is "retry", guidance_for_retry provides suggestions for
+    the next attempt. When "escalate", guidance_for_retry is None.
+    """
+
+    decision: Literal["retry", "escalate"]
+    reason: str
+    guidance_for_retry: str | None  # Suggestion for next attempt
+
+
 # Prompt for extracting tasks from a milestone plan
 # From Architecture doc Appendix: Prompt 1
 EXTRACT_TASKS_PROMPT = """You are parsing a milestone plan to extract tasks for an orchestrator to execute.
@@ -138,6 +151,40 @@ Return ONLY the JSON, no other text.
 
 Claude Code output:
 {output}
+"""
+
+# Prompt for deciding retry vs escalate
+# From Architecture doc Appendix: Prompt 3
+RETRY_ESCALATE_PROMPT = """You are deciding whether to retry a failed task or escalate to a human.
+
+Task: {task_id} - {task_title}
+
+Attempt history:
+{attempt_history}
+
+Current attempt count: {attempt_count}
+
+Decide: Should we retry or escalate?
+
+RETRY when:
+- The error is different from previous attempts (making progress)
+- The error seems transient or fixable (import errors, typos, missing files)
+- Only 1-2 attempts so far and the errors aren't identical
+
+ESCALATE when:
+- Same or very similar error 3+ times (stuck in a loop)
+- The error indicates a design/architecture issue, not a coding bug
+- Claude explicitly said it needs human input or is confused
+- The error is about something Claude can't fix (permissions, external service, missing context)
+
+Return a JSON object:
+{{
+  "decision": "retry" | "escalate",
+  "reason": "Brief explanation of why",
+  "guidance_for_retry": "If retrying, what to tell Claude differently (null if escalating)"
+}}
+
+Return ONLY the JSON, no other text.
 """
 
 
@@ -438,3 +485,88 @@ class HaikuBrain:
                         return None
 
         return None
+
+    def should_retry_or_escalate(
+        self,
+        task_id: str,
+        task_title: str,
+        attempt_history: list[str],
+        attempt_count: int,
+    ) -> RetryDecision:
+        """Decide whether to retry a failed task or escalate to human.
+
+        Uses Haiku to semantically analyze the attempt history and determine
+        if the errors show progress (retry) or indicate being stuck (escalate).
+
+        Args:
+            task_id: The task identifier (e.g., "1.1").
+            task_title: The task title for context.
+            attempt_history: List of error summaries from previous attempts.
+            attempt_count: Number of attempts so far.
+
+        Returns:
+            RetryDecision with decision, reason, and guidance_for_retry if retrying.
+        """
+        prompt = RETRY_ESCALATE_PROMPT.format(
+            task_id=task_id,
+            task_title=task_title,
+            attempt_history="\n".join(
+                f"Attempt {i + 1}: {h}" for i, h in enumerate(attempt_history)
+            ),
+            attempt_count=attempt_count,
+        )
+
+        try:
+            response = self._invoke_haiku(prompt)
+        except (RuntimeError, subprocess.TimeoutExpired) as e:
+            # Conservative fallback: if Haiku invocation fails, escalate for safety
+            return RetryDecision(
+                decision="escalate",
+                reason=f"Haiku invocation failed: {e}",
+                guidance_for_retry=None,
+            )
+
+        return self._parse_retry_decision(response)
+
+    def _parse_retry_decision(self, response: str) -> RetryDecision:
+        """Parse Haiku response into a RetryDecision.
+
+        Handles JSON that may be wrapped in markdown code blocks.
+        Falls back to escalate decision when parsing fails (conservative).
+
+        Args:
+            response: The raw response from Haiku.
+
+        Returns:
+            RetryDecision parsed from the response.
+        """
+        data = None
+
+        # Try direct JSON parse first
+        try:
+            data = json.loads(response.strip())
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+        # Try to extract embedded JSON using balanced brace matching
+        if data is None:
+            data = self._extract_json_object(response)
+
+        # If parsing failed, return conservative escalate decision
+        if data is None:
+            return RetryDecision(
+                decision="escalate",
+                reason="Failed to parse Haiku response as JSON",
+                guidance_for_retry=None,
+            )
+
+        # Validate decision field
+        decision = data.get("decision", "escalate")
+        if decision not in ("retry", "escalate"):
+            decision = "escalate"
+
+        return RetryDecision(
+            decision=decision,
+            reason=data.get("reason", ""),
+            guidance_for_retry=data.get("guidance_for_retry"),
+        )

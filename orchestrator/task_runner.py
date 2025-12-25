@@ -17,7 +17,6 @@ from orchestrator.escalation import (
     escalate_and_wait,
     get_brain,
 )
-from orchestrator.loop_detector import LoopDetector
 from orchestrator.models import Task, TaskResult
 from orchestrator.sandbox import SandboxManager
 
@@ -141,7 +140,6 @@ async def run_task_with_escalation(
     sandbox: SandboxManager,
     config: OrchestratorConfig,
     plan_path: str,
-    loop_detector: LoopDetector,
     tracer: trace.Tracer,
     notify: bool = True,
     on_tool_use: Callable[[str, dict], None] | None = None,
@@ -150,9 +148,9 @@ async def run_task_with_escalation(
     """Execute task with escalation and retry support.
 
     Wraps run_task with:
-    - Loop detection to prevent runaway execution
-    - Escalation to human when Claude needs input
-    - Retry with human guidance after escalation
+    - HaikuBrain-based retry/escalate decisions (contextual, not count-based)
+    - Escalation to human when Claude needs input or Haiku says escalate
+    - Retry with guidance_for_retry from Haiku
     - Session continuation via --resume after escalation
 
     Args:
@@ -160,7 +158,6 @@ async def run_task_with_escalation(
         sandbox: Sandbox manager for Claude invocation
         config: Orchestrator configuration
         plan_path: Path to the milestone plan file
-        loop_detector: Loop detector for failure tracking
         tracer: OpenTelemetry tracer for creating spans
         notify: Whether to send notifications on escalation
         on_tool_use: Optional callback for streaming tool use events
@@ -171,33 +168,9 @@ async def run_task_with_escalation(
     """
     guidance: str | None = None
     session_id: str | None = None  # Track session for continuation
+    attempt_history: list[str] = []  # Track errors for retry decisions
 
     while True:
-        # Check loop detection before attempting
-        should_stop, reason = loop_detector.should_stop_task(task.id)
-        if should_stop:
-            with tracer.start_as_current_span("orchestrator.loop_detected") as span:
-                span.set_attribute("task.id", task.id)
-                span.set_attribute("reason", reason)
-
-            # Record loop detection metric
-            try:
-                telemetry.loops_counter.add(1, {"type": "task"})
-            except (AttributeError, NameError):
-                pass  # Metrics not initialized
-
-            console.print(f"[bold red]LOOP DETECTED:[/] {reason}")
-            return TaskResult(
-                task_id=task.id,
-                status="failed",
-                duration_seconds=0.0,
-                tokens_used=0,
-                cost_usd=0.0,
-                output="",
-                session_id="",
-                error=reason,
-            )
-
         # Execute the task
         result = await run_task(
             task, sandbox, config, plan_path, guidance, on_tool_use, model, session_id
@@ -223,27 +196,58 @@ async def run_task_with_escalation(
             response = await escalate_and_wait(info, tracer, notify)
             guidance = response
 
-            attempts = loop_detector.state.task_attempt_counts.get(task.id, 0)
-            max_attempts = loop_detector.config.max_task_attempts
             session_info = f" session {session_id[:8]}..." if session_id else ""
-            console.print(
-                f"Task {task.id}: Resuming{session_info} with guidance "
-                f"(attempt {attempts + 1}/{max_attempts})"
-            )
+            console.print(f"Task {task.id}: Resuming{session_info} with guidance")
             # Loop continues with guidance and session resumption
 
         elif result.status == "failed":
-            # Record failure for loop detection
-            loop_detector.record_task_failure(task.id, result.error or "Unknown error")
-
-            attempts = loop_detector.state.task_attempt_counts.get(task.id, 0)
-            max_attempts = loop_detector.config.max_task_attempts
+            # Record failure in attempt history
+            error_summary = f"Failed: {result.error or 'Unknown error'}"
+            attempt_history.append(error_summary)
+            attempt_count = len(attempt_history)
 
             console.print(
-                f"Task {task.id}: [bold red]FAILED[/] (attempt {attempts}/{max_attempts})"
+                f"Task {task.id}: [bold red]FAILED[/] (attempt {attempt_count})"
             )
 
-            if attempts < max_attempts:
-                console.print("Retrying...")
-                # Loop continues for retry
-            # else loop detection will catch it next iteration
+            # Ask HaikuBrain for retry/escalate decision
+            brain = get_brain()
+            decision = brain.should_retry_or_escalate(
+                task_id=task.id,
+                task_title=task.title,
+                attempt_history=attempt_history,
+                attempt_count=attempt_count,
+            )
+
+            if decision.decision == "retry":
+                console.print(f"Retrying: {decision.reason}")
+                if decision.guidance_for_retry:
+                    console.print(f"Guidance: {decision.guidance_for_retry}")
+                    guidance = decision.guidance_for_retry
+                else:
+                    guidance = None
+                # Loop continues with guidance
+            else:
+                # Escalate
+                console.print(f"Escalating: {decision.reason}")
+
+                with tracer.start_as_current_span("orchestrator.escalate") as span:
+                    span.set_attribute("task.id", task.id)
+                    span.set_attribute("reason", decision.reason)
+
+                # Record escalation metric
+                try:
+                    telemetry.loops_counter.add(1, {"type": "escalation"})
+                except (AttributeError, NameError):
+                    pass  # Metrics not initialized
+
+                info = EscalationInfo(
+                    task_id=task.id,
+                    question=f"Task failed after {attempt_count} attempts: {decision.reason}",
+                    options=None,
+                    recommendation=None,
+                    raw_output=result.output,
+                )
+                response = await escalate_and_wait(info, tracer, notify)
+                guidance = response
+                # Loop continues with human guidance after escalation

@@ -19,11 +19,13 @@ from orchestrator.config import OrchestratorConfig
 from orchestrator.e2e_runner import apply_e2e_fix, run_e2e_tests
 from orchestrator.escalation import EscalationInfo, escalate_and_wait
 from orchestrator.haiku_brain import HaikuBrain
-from orchestrator.loop_detector import LoopDetector, LoopDetectorConfig
 from orchestrator.models import ClaudeResult, Task, TaskResult
 from orchestrator.sandbox import SandboxManager
 from orchestrator.state import OrchestratorState
 from orchestrator.task_runner import run_task_with_escalation
+
+# Maximum E2E fix attempts before stopping (prevents runaway fix cycles)
+MAX_E2E_FIX_ATTEMPTS = 5
 
 # Console for E2E output
 console = Console()
@@ -68,8 +70,8 @@ async def run_milestone(
     Parses the plan file, executes tasks in order, persists state after
     each task, and handles needs_human/failed statuses by stopping.
 
-    Uses run_task_with_escalation for automatic loop detection and
-    escalation handling. Loop detection state is persisted for resumability.
+    Uses run_task_with_escalation with HaikuBrain for intelligent retry/escalate
+    decisions. State is persisted for resumability.
 
     Args:
         plan_path: Path to the milestone plan markdown file
@@ -136,10 +138,6 @@ async def run_milestone(
             starting_branch=starting_branch,
         )
 
-    # Create loop detector with state (persists failure tracking across resumes)
-    loop_detector_config = LoopDetectorConfig()
-    loop_detector = LoopDetector(loop_detector_config, state)
-
     # Determine starting point
     start_index = state.get_next_task_index() if resume else 0
 
@@ -162,13 +160,12 @@ async def run_milestone(
                 task_span.set_attribute("task.id", task.id)
                 task_span.set_attribute("task.title", task.title)
 
-                # Run the task with escalation handling and loop detection
+                # Run the task with escalation handling (HaikuBrain decides retry/escalate)
                 result = await run_task_with_escalation(
                     task,
                     sandbox,
                     config,
                     plan_path,
-                    loop_detector,
                     tracer,
                     notify=notify,
                     on_tool_use=on_tool_use,
@@ -244,13 +241,14 @@ async def run_milestone(
                     elif e2e_result.status == "failed":
                         console.print("E2E: [bold red]FAILED[/bold red]")
 
-                        # Record failure for loop detection
-                        loop_detector.record_e2e_failure(
-                            e2e_result.diagnosis or "Unknown"
-                        )
-                        should_stop, reason = loop_detector.should_stop_e2e()
+                        # Track E2E attempt count for loop detection
+                        state.e2e_attempt_count += 1
 
-                        if should_stop:
+                        if state.e2e_attempt_count >= MAX_E2E_FIX_ATTEMPTS:
+                            reason = (
+                                f"E2E tests failed {state.e2e_attempt_count} times. "
+                                "Stopping to prevent resource waste."
+                            )
                             console.print(f"[bold red]LOOP DETECTED:[/bold red] {reason}")
                             state.e2e_status = "failed"
                             state.save(state_dir)

@@ -3,6 +3,7 @@
 These tests verify that HaikuBrain correctly:
 - Extracts tasks from milestone plans (ignoring code blocks)
 - Interprets task execution results (completed/failed/needs_help)
+- Decides retry vs escalate based on attempt history
 """
 
 import json
@@ -10,7 +11,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from orchestrator.haiku_brain import ExtractedTask, HaikuBrain, InterpretationResult
+from orchestrator.haiku_brain import (
+    ExtractedTask,
+    HaikuBrain,
+    InterpretationResult,
+    RetryDecision,
+)
 
 
 class TestExtractTasks:
@@ -494,3 +500,208 @@ class TestInterpretationResult:
         )
         assert result.status == "failed"
         assert result.error == "ImportError: No module named 'xyz'"
+
+
+class TestRetryDecision:
+    """Tests for the RetryDecision dataclass."""
+
+    def test_retry_decision_with_retry(self) -> None:
+        """RetryDecision should store decision, reason, and guidance when retrying."""
+        decision = RetryDecision(
+            decision="retry",
+            reason="Error seems transient, first attempt",
+            guidance_for_retry="Try installing the missing dependency first",
+        )
+        assert decision.decision == "retry"
+        assert decision.reason == "Error seems transient, first attempt"
+        assert decision.guidance_for_retry == "Try installing the missing dependency first"
+
+    def test_retry_decision_with_escalate(self) -> None:
+        """RetryDecision should have null guidance when escalating."""
+        decision = RetryDecision(
+            decision="escalate",
+            reason="Same error 3 times, stuck in loop",
+            guidance_for_retry=None,
+        )
+        assert decision.decision == "escalate"
+        assert decision.reason == "Same error 3 times, stuck in loop"
+        assert decision.guidance_for_retry is None
+
+
+class TestShouldRetryOrEscalate:
+    """Tests for HaikuBrain.should_retry_or_escalate()."""
+
+    def test_first_failure_with_fixable_error_returns_retry(self) -> None:
+        """First failure with fixable error (import error) should return retry with guidance."""
+        mock_response = json.dumps({
+            "decision": "retry",
+            "reason": "First attempt, error is fixable",
+            "guidance_for_retry": "Try adding the missing import at the top of the file",
+        })
+
+        brain = HaikuBrain()
+        with patch.object(brain, "_invoke_haiku", return_value=mock_response):
+            result = brain.should_retry_or_escalate(
+                task_id="1.1",
+                task_title="Create data model",
+                attempt_history=["Failed: ImportError - no module named pandas"],
+                attempt_count=1,
+            )
+
+        assert result.decision == "retry"
+        assert result.guidance_for_retry is not None
+        assert len(result.guidance_for_retry) > 0
+
+    def test_same_error_three_times_returns_escalate(self) -> None:
+        """Same error repeated 3 times should return escalate (stuck in loop)."""
+        mock_response = json.dumps({
+            "decision": "escalate",
+            "reason": "Same error 3 times, stuck in a loop",
+            "guidance_for_retry": None,
+        })
+
+        brain = HaikuBrain()
+        with patch.object(brain, "_invoke_haiku", return_value=mock_response):
+            result = brain.should_retry_or_escalate(
+                task_id="1.1",
+                task_title="Create data model",
+                attempt_history=[
+                    "Failed: ImportError - no module named pandas",
+                    "Failed: ImportError - no module named pandas",
+                    "Failed: ImportError - no module named pandas",
+                ],
+                attempt_count=3,
+            )
+
+        assert result.decision == "escalate"
+        assert result.guidance_for_retry is None
+
+    def test_different_errors_each_time_returns_retry(self) -> None:
+        """Different errors each attempt means progress, should retry."""
+        mock_response = json.dumps({
+            "decision": "retry",
+            "reason": "Errors are different, making progress",
+            "guidance_for_retry": "The import error was fixed, now focus on the type error",
+        })
+
+        brain = HaikuBrain()
+        with patch.object(brain, "_invoke_haiku", return_value=mock_response):
+            result = brain.should_retry_or_escalate(
+                task_id="1.1",
+                task_title="Create data model",
+                attempt_history=[
+                    "Failed: ImportError - no module named pandas",
+                    "Failed: TypeError - expected str, got int",
+                ],
+                attempt_count=2,
+            )
+
+        assert result.decision == "retry"
+        assert result.guidance_for_retry is not None
+
+    def test_clarification_needed_returns_escalate(self) -> None:
+        """Error saying 'I need clarification' should escalate."""
+        mock_response = json.dumps({
+            "decision": "escalate",
+            "reason": "Claude explicitly needs human input",
+            "guidance_for_retry": None,
+        })
+
+        brain = HaikuBrain()
+        with patch.object(brain, "_invoke_haiku", return_value=mock_response):
+            result = brain.should_retry_or_escalate(
+                task_id="1.1",
+                task_title="Create data model",
+                attempt_history=[
+                    "Failed: I need clarification on which database to use",
+                ],
+                attempt_count=1,
+            )
+
+        assert result.decision == "escalate"
+
+    def test_architecture_issue_returns_escalate(self) -> None:
+        """Error mentioning architecture/design issue should escalate."""
+        mock_response = json.dumps({
+            "decision": "escalate",
+            "reason": "This is a design issue, not a coding bug",
+            "guidance_for_retry": None,
+        })
+
+        brain = HaikuBrain()
+        with patch.object(brain, "_invoke_haiku", return_value=mock_response):
+            result = brain.should_retry_or_escalate(
+                task_id="1.1",
+                task_title="Create data model",
+                attempt_history=[
+                    "Failed: The current architecture doesn't support this pattern. We need to redesign the data layer.",
+                ],
+                attempt_count=1,
+            )
+
+        assert result.decision == "escalate"
+
+    def test_prompt_includes_all_attempt_history(self) -> None:
+        """Prompt to Haiku should include all attempt history formatted correctly."""
+        mock_response = json.dumps({
+            "decision": "retry",
+            "reason": "Still making progress",
+            "guidance_for_retry": "Keep trying",
+        })
+
+        brain = HaikuBrain()
+        captured_prompt = None
+
+        def capture_invoke(prompt: str) -> str:
+            nonlocal captured_prompt
+            captured_prompt = prompt
+            return mock_response
+
+        with patch.object(brain, "_invoke_haiku", side_effect=capture_invoke):
+            brain.should_retry_or_escalate(
+                task_id="2.3",
+                task_title="Add API endpoint",
+                attempt_history=[
+                    "Attempt 1 error",
+                    "Attempt 2 error",
+                ],
+                attempt_count=2,
+            )
+
+        assert captured_prompt is not None
+        assert "2.3" in captured_prompt
+        assert "Add API endpoint" in captured_prompt
+        assert "Attempt 1: Attempt 1 error" in captured_prompt
+        assert "Attempt 2: Attempt 2 error" in captured_prompt
+        assert "Current attempt count: 2" in captured_prompt
+
+    def test_json_parsing_error_returns_safe_default(self) -> None:
+        """When JSON parsing fails, should return a safe escalate decision."""
+        invalid_response = "This is not valid JSON"
+
+        brain = HaikuBrain()
+        with patch.object(brain, "_invoke_haiku", return_value=invalid_response):
+            result = brain.should_retry_or_escalate(
+                task_id="1.1",
+                task_title="Create data model",
+                attempt_history=["Some error"],
+                attempt_count=1,
+            )
+
+        # Conservative: escalate when uncertain
+        assert result.decision == "escalate"
+        assert "parse" in result.reason.lower() or "failed" in result.reason.lower()
+
+    def test_haiku_invocation_failure_returns_escalate(self) -> None:
+        """When Haiku invocation fails, should return escalate for safety."""
+        brain = HaikuBrain()
+        with patch.object(brain, "_invoke_haiku", side_effect=RuntimeError("CLI failed")):
+            result = brain.should_retry_or_escalate(
+                task_id="1.1",
+                task_title="Create data model",
+                attempt_history=["Some error"],
+                attempt_count=1,
+            )
+
+        assert result.decision == "escalate"
+        assert "failed" in result.reason.lower() or "error" in result.reason.lower()
