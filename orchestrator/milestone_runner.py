@@ -43,17 +43,18 @@ MAX_E2E_FIX_ATTEMPTS = 5
 console = Console()
 
 
-def _send_discord_notification(webhook_url: str, embed) -> None:
-    """Send a Discord notification in fire-and-forget mode.
+async def _send_discord_notification(webhook_url: str, embed) -> None:
+    """Send a Discord notification.
 
-    Uses asyncio.create_task to dispatch the notification without blocking.
+    Awaits the notification to ensure delivery before continuing.
+    The HTTP request typically takes <200ms so impact is minimal.
     If the webhook call fails, it's logged but doesn't affect execution.
 
     Args:
         webhook_url: Discord webhook URL
         embed: DiscordEmbed to send
     """
-    asyncio.create_task(send_discord_message(webhook_url, embed))
+    await send_discord_message(webhook_url, embed)
 
 
 @dataclass
@@ -181,7 +182,7 @@ async def run_milestone(
 
         # Send Discord notification: Milestone started
         if config.discord_enabled:
-            _send_discord_notification(
+            await _send_discord_notification(
                 config.discord_webhook_url,
                 format_milestone_started(milestone_id, len(tasks)),
             )
@@ -229,7 +230,7 @@ async def run_milestone(
 
                     # Send Discord notification: Task completed
                     if config.discord_enabled:
-                        _send_discord_notification(
+                        await _send_discord_notification(
                             config.discord_webhook_url,
                             format_task_completed(
                                 task.id,
@@ -254,7 +255,7 @@ async def run_milestone(
 
                     # Send Discord notification: Task failed
                     if config.discord_enabled:
-                        _send_discord_notification(
+                        await _send_discord_notification(
                             config.discord_webhook_url,
                             format_task_failed(
                                 task.id,
@@ -380,7 +381,7 @@ async def run_milestone(
 
         # Send Discord notification: Milestone completed
         if config.discord_enabled:
-            _send_discord_notification(
+            await _send_discord_notification(
                 config.discord_webhook_url,
                 format_milestone_completed(
                     milestone_id,

@@ -1071,23 +1071,23 @@ class TestDiscordNotificationIntegration:
         mock_send.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_notifications_dont_block_execution(
+    async def test_notifications_complete_with_milestone(
         self, tmp_path: Path, basic_plan_file: Path, mock_run_task_with_escalation: AsyncMock
     ) -> None:
-        """Discord notifications don't block milestone execution.
+        """Discord notifications are awaited and complete with the milestone.
 
-        When Discord notifications are slow or timeout, the milestone should
-        still complete quickly without waiting for them.
+        Notifications are now awaited to ensure delivery. The HTTP client
+        has a 5-second timeout, so notifications won't block indefinitely.
         """
-        import asyncio
-
         from orchestrator.config import OrchestratorConfig
 
         config = OrchestratorConfig(discord_webhook_url="https://discord.com/test")
 
-        # Simulate a slow Discord notification
-        async def slow_discord_message(*args, **kwargs):
-            await asyncio.sleep(5)  # Would block for 5 seconds if not fire-and-forget
+        # Track notification calls
+        notification_calls = []
+
+        async def track_discord_message(*args, **kwargs):
+            notification_calls.append(args)
 
         with (
             patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
@@ -1098,29 +1098,30 @@ class TestDiscordNotificationIntegration:
             patch("orchestrator.milestone_runner.SandboxManager"),
             patch(
                 "orchestrator.milestone_runner.send_discord_message",
-                side_effect=slow_discord_message,
+                side_effect=track_discord_message,
             ),
         ):
             configure_haiku_mock(mock_brain_class)
-            import time
-
-            start = time.time()
             await run_milestone(
                 plan_path=str(basic_plan_file),
                 state_dir=tmp_path,
                 config=config,
             )
-            elapsed = time.time() - start
 
-        # Milestone should complete quickly (under 2 seconds) even though
-        # Discord notifications would take 5 seconds each if blocking
-        assert elapsed < 2.0, f"Milestone took {elapsed}s - notifications may be blocking"
+        # Should have sent milestone started + task completed + milestone completed
+        assert len(notification_calls) >= 2, "Expected at least 2 notifications"
 
     @pytest.mark.asyncio
     async def test_graceful_failure_with_invalid_webhook(
         self, tmp_path: Path, basic_plan_file: Path, mock_run_task_with_escalation: AsyncMock
     ) -> None:
-        """Milestone completes successfully even if webhook fails."""
+        """Milestone completes successfully even if webhook fails.
+
+        The send_discord_message function handles exceptions internally,
+        so we mock at the httpx level to trigger that error handling.
+        """
+        import httpx
+
         from orchestrator.config import OrchestratorConfig
 
         config = OrchestratorConfig(discord_webhook_url="https://invalid.webhook")
@@ -1133,9 +1134,9 @@ class TestDiscordNotificationIntegration:
             ),
             patch("orchestrator.milestone_runner.SandboxManager"),
             patch(
-                "orchestrator.milestone_runner.send_discord_message",
+                "orchestrator.discord_notifier.httpx.AsyncClient.post",
                 new_callable=AsyncMock,
-                side_effect=Exception("Webhook failed"),
+                side_effect=httpx.ConnectError("Connection failed"),
             ),
         ):
             configure_haiku_mock(mock_brain_class)
