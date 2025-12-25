@@ -1,0 +1,259 @@
+"""Consolidated runner for orchestrator task execution.
+
+This module is the single coordination point for task execution.
+Handles task execution by constructing prompts, invoking Claude Code
+in the sandbox, and parsing structured output using HaikuBrain.
+
+Consolidation notes (M4):
+- Task execution moved from task_runner.py
+- E2E execution will be merged from e2e_runner.py (Task 4.2)
+- Escalation will be merged from escalation.py (Task 4.3)
+"""
+
+import time
+from typing import Callable, Literal
+
+from opentelemetry import trace
+from rich.console import Console
+
+from orchestrator import telemetry
+from orchestrator.config import OrchestratorConfig
+from orchestrator.escalation import (
+    EscalationInfo,
+    escalate_and_wait,
+    get_brain,
+)
+from orchestrator.models import Task, TaskResult
+from orchestrator.sandbox import SandboxManager
+
+console = Console()
+
+
+async def run_task(
+    task: Task,
+    sandbox: SandboxManager,
+    config: OrchestratorConfig,
+    plan_path: str,
+    human_guidance: str | None = None,
+    on_tool_use: Callable[[str, dict], None] | None = None,
+    model: str | None = None,
+    session_id: str | None = None,
+) -> TaskResult:
+    """Execute a task via Claude Code in the sandbox.
+
+    Args:
+        task: The task to execute
+        sandbox: Sandbox manager for Claude invocation
+        config: Orchestrator configuration
+        plan_path: Path to the milestone plan file (for /ktask invocation)
+        human_guidance: Optional guidance from human (for retry after escalation)
+        on_tool_use: Optional callback for streaming tool use events.
+            If provided, uses streaming mode for real-time progress visibility.
+        model: Claude model to use (e.g., 'sonnet', 'opus'). If None, uses default.
+        session_id: Session ID to resume. If provided, continues previous session.
+
+    Returns:
+        TaskResult with execution outcome
+    """
+    # Construct prompt with /ktask command
+    prompt = _build_prompt(task, plan_path, human_guidance)
+
+    # Invoke Claude Code (streaming if callback provided)
+    start_time = time.time()
+
+    if on_tool_use is not None:
+        # Use streaming mode for real-time progress
+        claude_result = await sandbox.invoke_claude_streaming(
+            prompt=prompt,
+            on_tool_use=on_tool_use,
+            max_turns=config.max_turns,
+            timeout=config.task_timeout_seconds,
+            model=model,
+            session_id=session_id,
+        )
+    else:
+        # Use standard mode (no streaming)
+        claude_result = await sandbox.invoke_claude(
+            prompt=prompt,
+            max_turns=config.max_turns,
+            timeout=config.task_timeout_seconds,
+            model=model,
+            session_id=session_id,
+        )
+
+    duration = time.time() - start_time
+
+    # Use HaikuBrain singleton for semantic interpretation of output
+    brain = get_brain()
+    interpretation = brain.interpret_result(claude_result.result)
+
+    # Map status: HaikuBrain uses "needs_help", TaskResult uses "needs_human"
+    status: Literal["completed", "failed", "needs_human"]
+    if interpretation.status == "needs_help":
+        status = "needs_human"
+    elif interpretation.status == "completed":
+        status = "completed"
+    else:
+        status = "failed"
+
+    # Estimate tokens from cost (rough estimate: ~$0.01 per 1000 tokens)
+    tokens_used = _estimate_tokens(claude_result.total_cost_usd)
+
+    return TaskResult(
+        task_id=task.id,
+        status=status,
+        duration_seconds=duration,
+        tokens_used=tokens_used,
+        cost_usd=claude_result.total_cost_usd,
+        output=claude_result.result,
+        session_id=claude_result.session_id,
+        question=interpretation.question,
+        options=interpretation.options,
+        recommendation=interpretation.recommendation,
+        error=interpretation.error,
+    )
+
+
+def _build_prompt(task: Task, plan_path: str, human_guidance: str | None = None) -> str:
+    """Build the prompt for Claude Code execution using /ktask skill.
+
+    Invokes the /ktask skill which handles:
+    - TDD workflow (RED → GREEN → REFACTOR)
+    - Git workflow (branch, commits)
+    - Memory reflection
+    - Handoff documents
+    """
+    prompt = f"/ktask impl: {plan_path} task: {task.id}"
+
+    if human_guidance:
+        prompt += f"\n\nAdditional guidance: {human_guidance}"
+
+    return prompt
+
+
+def _estimate_tokens(cost_usd: float) -> int:
+    """Estimate token count from cost.
+
+    Rough estimate based on Claude pricing (~$0.01 per 1000 tokens average).
+    """
+    if cost_usd <= 0:
+        return 0
+    return int(cost_usd * 100000)  # $0.01 = 1000 tokens
+
+
+async def run_task_with_escalation(
+    task: Task,
+    sandbox: SandboxManager,
+    config: OrchestratorConfig,
+    plan_path: str,
+    tracer: trace.Tracer,
+    notify: bool = True,
+    on_tool_use: Callable[[str, dict], None] | None = None,
+    model: str | None = None,
+) -> TaskResult:
+    """Execute task with escalation and retry support.
+
+    Wraps run_task with:
+    - HaikuBrain-based retry/escalate decisions (contextual, not count-based)
+    - Escalation to human when Claude needs input or Haiku says escalate
+    - Retry with guidance_for_retry from Haiku
+    - Session continuation via --resume after escalation
+
+    Args:
+        task: The task to execute
+        sandbox: Sandbox manager for Claude invocation
+        config: Orchestrator configuration
+        plan_path: Path to the milestone plan file
+        tracer: OpenTelemetry tracer for creating spans
+        notify: Whether to send notifications on escalation
+        on_tool_use: Optional callback for streaming tool use events
+        model: Claude model to use (e.g., 'sonnet', 'opus'). If None, uses default.
+
+    Returns:
+        TaskResult with execution outcome
+    """
+    guidance: str | None = None
+    session_id: str | None = None  # Track session for continuation
+    attempt_history: list[str] = []  # Track errors for retry decisions
+
+    while True:
+        # Execute the task
+        result = await run_task(
+            task, sandbox, config, plan_path, guidance, on_tool_use, model, session_id
+        )
+
+        # Track session for continuation after escalation
+        if result.session_id:
+            session_id = result.session_id
+
+        if result.status == "completed":
+            return result
+
+        elif result.status == "needs_human":
+            # Extract escalation info and present to user
+            info = EscalationInfo(
+                task_id=task.id,
+                question=result.question or "Claude needs clarification.",
+                options=result.options,
+                recommendation=result.recommendation,
+                raw_output=result.output,
+            )
+
+            response = await escalate_and_wait(info, tracer, notify)
+            guidance = response
+
+            session_info = f" session {session_id[:8]}..." if session_id else ""
+            console.print(f"Task {task.id}: Resuming{session_info} with guidance")
+            # Loop continues with guidance and session resumption
+
+        elif result.status == "failed":
+            # Record failure in attempt history
+            error_summary = f"Failed: {result.error or 'Unknown error'}"
+            attempt_history.append(error_summary)
+            attempt_count = len(attempt_history)
+
+            console.print(
+                f"Task {task.id}: [bold red]FAILED[/] (attempt {attempt_count})"
+            )
+
+            # Ask HaikuBrain for retry/escalate decision
+            brain = get_brain()
+            decision = brain.should_retry_or_escalate(
+                task_id=task.id,
+                task_title=task.title,
+                attempt_history=attempt_history,
+                attempt_count=attempt_count,
+            )
+
+            if decision.decision == "retry":
+                console.print(f"Retrying: {decision.reason}")
+                if decision.guidance_for_retry:
+                    console.print(f"Guidance: {decision.guidance_for_retry}")
+                    guidance = decision.guidance_for_retry
+                else:
+                    guidance = None
+                # Loop continues with guidance
+            else:
+                # Escalate
+                console.print(f"Escalating: {decision.reason}")
+
+                with tracer.start_as_current_span("orchestrator.escalate") as span:
+                    span.set_attribute("task.id", task.id)
+                    span.set_attribute("reason", decision.reason)
+
+                # Record escalation metric
+                try:
+                    telemetry.loops_counter.add(1, {"type": "escalation"})
+                except (AttributeError, NameError):
+                    pass  # Metrics not initialized
+
+                info = EscalationInfo(
+                    task_id=task.id,
+                    question=f"Task failed after {attempt_count} attempts: {decision.reason}",
+                    options=None,
+                    recommendation=None,
+                    raw_output=result.output,
+                )
+                response = await escalate_and_wait(info, tracer, notify)
+                guidance = response
+                # Loop continues with human guidance after escalation
