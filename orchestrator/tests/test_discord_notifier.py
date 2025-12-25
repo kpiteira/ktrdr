@@ -499,6 +499,53 @@ class TestFormatMilestoneCompleted:
         assert "2" in full_text or "7200" in full_text
 
 
+class TestFormatTestNotification:
+    """Test the format_test_notification formatter."""
+
+    def test_returns_discord_embed(self):
+        """Should return a DiscordEmbed instance."""
+        from orchestrator.discord_notifier import DiscordEmbed, format_test_notification
+
+        result = format_test_notification()
+
+        assert isinstance(result, DiscordEmbed)
+
+    def test_uses_teal_color(self):
+        """Should use teal color (0x1ABC9C)."""
+        from orchestrator.discord_notifier import format_test_notification
+
+        result = format_test_notification()
+
+        assert result.color == 0x1ABC9C
+
+    def test_has_test_notification_title(self):
+        """Should have test notification title."""
+        from orchestrator.discord_notifier import format_test_notification
+
+        result = format_test_notification()
+
+        assert "Test" in result.title or "test" in result.title.lower()
+
+    def test_has_success_description(self):
+        """Should indicate webhook is configured correctly."""
+        from orchestrator.discord_notifier import format_test_notification
+
+        result = format_test_notification()
+
+        assert "configured" in result.description.lower() or "working" in result.description.lower()
+
+    def test_includes_timestamp_and_hostname(self):
+        """Should include timestamp and hostname fields."""
+        from orchestrator.discord_notifier import format_test_notification
+
+        result = format_test_notification()
+
+        assert result.fields is not None
+        field_names = [f["name"] for f in result.fields]
+        assert "Sent at" in field_names
+        assert "From" in field_names
+
+
 class TestTextTruncation:
     """Test that long text is truncated appropriately."""
 

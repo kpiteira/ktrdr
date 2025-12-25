@@ -247,6 +247,32 @@ def format_escalation_needed(
     )
 
 
+def format_test_notification() -> DiscordEmbed:
+    """Format a test notification to verify webhook configuration.
+
+    Creates a simple embed to verify the Discord webhook is working.
+    Uses teal color (0x1ABC9C) to distinguish from operational notifications.
+
+    Returns:
+        DiscordEmbed ready to send to Discord
+    """
+    import socket
+    from datetime import datetime, timezone
+
+    hostname = socket.gethostname()
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+    return DiscordEmbed(
+        title="🔔 Test Notification",
+        description="Discord webhook is configured correctly!",
+        color=0x1ABC9C,  # Teal
+        fields=[
+            {"name": "Sent at", "value": timestamp, "inline": True},
+            {"name": "From", "value": hostname, "inline": True},
+        ],
+    )
+
+
 def format_milestone_completed(
     milestone_id: str, completed: int, total: int, cost_usd: float, duration_s: float
 ) -> DiscordEmbed:
