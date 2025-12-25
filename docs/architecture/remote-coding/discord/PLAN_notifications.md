@@ -166,10 +166,10 @@ if config.discord_enabled:
 
 **Acceptance Criteria:**
 
-- [ ] Notifications sent at all 5 lifecycle points
-- [ ] Notifications don't block execution
-- [ ] Works correctly when Discord is disabled
-- [ ] No errors when webhook URL is invalid (graceful failure)
+- [x] Notifications sent at all 5 lifecycle points
+- [x] Notifications don't block execution
+- [x] Works correctly when Discord is disabled
+- [x] No errors when webhook URL is invalid (graceful failure)
 
 ---
 
