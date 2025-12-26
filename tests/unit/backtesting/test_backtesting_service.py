@@ -73,32 +73,47 @@ class TestBacktestingServiceDistributedMode:
     """Test distributed mode backtest execution (workers-only)."""
 
     @pytest.mark.asyncio
-    async def test_run_backtest_creates_operation_via_orchestrator(
+    async def test_run_backtest_bypasses_start_managed_operation(
         self, backtest_service
     ):
-        """Test run_backtest uses ServiceOrchestrator's start_managed_operation."""
+        """Test run_backtest bypasses start_managed_operation (Task 3.10 fix).
+
+        For distributed operations, the worker creates the operation in DB.
+        Backend just dispatches to worker and registers a proxy.
+        This avoids the duplicate operation ID error.
+        """
         with patch.object(
             backtest_service, "start_managed_operation", new_callable=AsyncMock
         ) as mock_start:
-            mock_start.return_value = {
-                "operation_id": "op_test_123",
-                "status": "started",
-                "message": "Test operation started",
-            }
+            with patch.object(
+                backtest_service, "run_backtest_on_worker", new_callable=AsyncMock
+            ) as mock_dispatch:
+                mock_dispatch.return_value = {
+                    "remote_operation_id": "op_remote_123",
+                    "backend_operation_id": "op_test_123",
+                    "status": "started",
+                    "message": "Test operation started",
+                    "worker_id": "worker-1",
+                }
 
-            result = await backtest_service.run_backtest(
-                symbol="AAPL",
-                timeframe="1h",
-                strategy_config_path="strategies/test.yaml",
-                model_path="models/test.pt",
-                start_date=datetime(2024, 1, 1),
-                end_date=datetime(2024, 12, 31),
-            )
+                result = await backtest_service.run_backtest(
+                    symbol="AAPL",
+                    timeframe="1h",
+                    strategy_config_path="strategies/test.yaml",
+                    model_path="models/test.pt",
+                    start_date=datetime(2024, 1, 1),
+                    end_date=datetime(2024, 12, 31),
+                )
 
-            # Verify start_managed_operation was called
-            mock_start.assert_called_once()
-            assert result["operation_id"] == "op_test_123"
-            assert result["status"] == "started"
+                # Verify start_managed_operation was NOT called (Task 3.10)
+                mock_start.assert_not_called()
+
+                # Worker dispatch should be called directly
+                mock_dispatch.assert_called_once()
+
+                # Result should have operation_id from worker
+                assert result["operation_id"] == "op_test_123"
+                assert result["status"] == "started"
 
 
 class TestBacktestingServiceWorkerDispatch:

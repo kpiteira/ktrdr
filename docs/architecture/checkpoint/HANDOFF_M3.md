@@ -597,3 +597,75 @@ uv run pytest tests/integration/test_m1_*.py tests/integration/test_m2_*.py test
 - Consider running smoke test after deployment changes
 
 ---
+
+## Discovery Notes: Task 3.10 & 3.11
+
+During E2E testing after Task 3.9, we discovered two blocking issues that required architectural analysis. Full task definitions are in `PLAN_M3_training_checkpoint_save.md`.
+
+### How We Discovered the Issues
+
+**Problem 1 - Duplicate Operation ID:**
+E2E test failed with `DataError: Operation ID already exists: op_training_...` when starting training. Root cause analysis revealed M1's DB persistence affected both backend and workers, causing duplicate inserts.
+
+**Problem 2 - Performance Concern:**
+During discussion, identified that `update_progress()` writes to DB on every call (added in M1). This would slow workers unacceptably. Design principle: workers should only write to DB for create, checkpoint, and complete/fail.
+
+### Key Architecture Decision
+
+**DB is for durability, not live state:**
+
+- Create operation → DB (once)
+- Progress updates → Memory only (proxy pulls on demand)
+- Checkpoint → DB (periodic, policy-driven)
+- Complete/Fail → DB (once)
+
+This keeps workers fast while maintaining crash recoverability.
+
+---
+
+## Task 3.10 Complete
+
+**Implemented:** Fix two blocking architecture issues that prevented distributed operations from working.
+
+### Fix 1: Duplicate Operation ID Error
+
+**Problem:** When M1 added database persistence to `get_operations_service()`, it affected workers. Backend's `start_managed_operation` creates operation in DB, then worker also tries to create with same ID → DB rejects duplicate.
+
+**Solution:** For distributed operations (training/backtesting), bypass `start_managed_operation` entirely. Backend generates operation_id, dispatches directly to worker, and registers proxy. Worker creates the operation in its own DB.
+
+**Files changed:**
+- `ktrdr/api/services/training_service.py:start_training()` — Skip `start_managed_operation`, call `_run_distributed_worker_training_wrapper()` directly
+- `ktrdr/backtesting/backtesting_service.py:run_backtest()` — Skip `start_managed_operation`, call `run_backtest_on_worker()` directly
+
+### Fix 2: Progress DB Writes Removed
+
+**Problem:** M1 added DB writes on every `update_progress()` call. This slows workers unacceptably.
+
+**Solution:** Removed DB write from `update_progress()`. Progress stays in-memory; clients pull via proxy for live progress.
+
+**File changed:**
+- `ktrdr/api/services/operations_service.py:update_progress()` — Removed `self._repository.update(...)` call
+
+### Test Files
+
+**New tests:**
+- `tests/unit/api/services/test_operations_architecture_fix.py` — 7 tests for both fixes
+
+**Updated tests:**
+- `tests/unit/api/services/test_operations_service_repository.py` — Changed `test_update_progress_persists_to_repository` → `test_update_progress_does_not_persist_to_repository`
+- `tests/unit/backtesting/test_backtesting_service.py` — Changed `test_run_backtest_creates_operation_via_orchestrator` → `test_run_backtest_bypasses_start_managed_operation`
+
+### Verification
+
+All quality gates pass:
+- `make test-unit` — 2775 tests passed
+- `make quality` — All checks passed
+
+### Guidance for Task 3.11
+
+E2E verification should now work:
+1. Start training/backtesting — No duplicate operation ID error
+2. Query operation status — Returns live progress via proxy
+3. Verify operation appears in DB — Created by worker, not backend
+
+---

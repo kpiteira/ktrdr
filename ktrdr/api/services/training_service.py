@@ -164,9 +164,20 @@ class TrainingService(ServiceOrchestrator[None]):
         task_id: Optional[str] = None,
         detailed_analytics: bool = False,
     ) -> dict[str, Any]:
-        """Start neural network training task."""
+        """Start neural network training task.
+
+        Task 3.10 Fix: For distributed operations, bypass start_managed_operation.
+        The worker creates the operation in DB (not the backend) to avoid duplicate
+        key errors. Backend just dispatches to worker and registers a proxy.
+        """
+        # Task 3.10: Generate operation_id here if not provided
+        # The worker creates the operation in its DB (distributed-only mode)
+        operation_id = task_id or self.operations_service.generate_operation_id(
+            OperationType.TRAINING
+        )
+
         context = build_training_context(
-            operation_id=task_id,
+            operation_id=operation_id,
             strategy_name=strategy_name,
             symbols=symbols,
             timeframes=timeframes,
@@ -176,17 +187,19 @@ class TrainingService(ServiceOrchestrator[None]):
             use_host_service=False,  # Distributed-only mode (no local/remote toggle)
         )
 
-        operation_result = await self.start_managed_operation(
-            operation_name="training",
-            operation_type=OperationType.TRAINING.value,
-            operation_func=self._legacy_operation_entrypoint,
-            context=context,
-            metadata=context.metadata,
-            total_steps=context.total_steps,
+        logger.info(
+            f"Starting training (distributed mode): {operation_id} "
+            f"for {', '.join(symbols)} using {strategy_name}"
         )
 
-        operation_id = operation_result["operation_id"]
-        context.operation_id = operation_id
+        # Task 3.10: Dispatch directly to worker (no start_managed_operation)
+        # Worker will create the operation in DB
+        worker_result = await self._run_distributed_worker_training_wrapper(
+            context=context
+        )
+
+        # Get operation_id from worker result (may differ from our generated ID)
+        final_operation_id = worker_result.get("backend_operation_id", operation_id)
 
         estimated_duration = context.training_config.get(
             "estimated_duration_minutes", 30
@@ -198,14 +211,15 @@ class TrainingService(ServiceOrchestrator[None]):
 
         return {
             "success": True,
-            "operation_id": operation_id,  # Added for MCP compatibility
-            "task_id": operation_id,  # Keep for backward compatibility
+            "operation_id": final_operation_id,  # Added for MCP compatibility
+            "task_id": final_operation_id,  # Keep for backward compatibility
             "status": "training_started",
             "message": message,
             "symbols": context.symbols,
             "timeframes": context.timeframes,
             "strategy_name": strategy_name,
             "estimated_duration_minutes": estimated_duration,
+            "worker_id": worker_result.get("worker_id"),
         }
 
     async def _legacy_operation_entrypoint(

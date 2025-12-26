@@ -332,14 +332,12 @@ class OperationsService:
             # Don't fail progress updates if telemetry fails
             logger.debug(f"Could not update span attributes: {e}")
 
-        # Persist to repository (if available)
-        # Note: This is async but we don't block on it for performance
-        if self._repository:
-            await self._repository.update(
-                operation_id,
-                progress_percent=progress.percentage,
-                progress_message=progress.current_step,
-            )
+        # Task 3.10: Do NOT persist progress updates to repository
+        # Design principle: Workers must be fast. DB is only for:
+        # - Create operation (once)
+        # - Checkpoint (periodic, policy-driven)
+        # - Complete/Fail (once)
+        # Progress updates stay in-memory; clients pull via proxy for live progress.
 
         # 🔧 TEMP DEBUG: Log ALL progress updates at INFO level
         logger.info(

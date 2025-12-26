@@ -257,10 +257,18 @@ class TestOperationsServiceUpdatePersistence:
         mock_repository.update.assert_called()
 
     @pytest.mark.asyncio
-    async def test_update_progress_persists_to_repository(
+    async def test_update_progress_does_not_persist_to_repository(
         self, mock_repository, sample_metadata
     ):
-        """update_progress should persist progress to repository."""
+        """update_progress should NOT persist progress to repository (Task 3.10).
+
+        Design principle: Workers must be fast. DB writes should only happen for:
+        - Create operation (once)
+        - Checkpoint (periodic, policy-driven)
+        - Complete/Fail (once)
+
+        Progress updates stay in-memory; clients pull via proxy for live progress.
+        """
         service = OperationsService(repository=mock_repository)
 
         # Create operation in cache
@@ -281,8 +289,11 @@ class TestOperationsServiceUpdatePersistence:
         )
         await service.update_progress("op_progress_test", new_progress)
 
-        # Verify repository.update was called with progress
-        mock_repository.update.assert_called()
+        # Verify repository.update was NOT called (Task 3.10 fix)
+        mock_repository.update.assert_not_called()
+
+        # But in-memory cache should still be updated
+        assert service._cache["op_progress_test"].progress.percentage == 75.0
 
 
 class TestOperationsServiceRuntimeHandles:
