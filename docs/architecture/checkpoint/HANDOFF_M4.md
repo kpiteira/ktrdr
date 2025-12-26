@@ -389,11 +389,58 @@ Location: [tests/unit/cli/test_resume_command.py](tests/unit/cli/test_resume_com
 
 ---
 
-### Notes for Task 4.7
+## Task 4.7 Complete
 
-Task 4.7 will add full integration tests:
+**Implemented:** Full integration test suite for training resume flow
 
-- Start training, cancel at known epoch
-- Resume training
-- Verify training continues from correct epoch
-- Verify checkpoint deleted after completion
+### Test File
+
+Location: [tests/integration/test_m4_training_resume.py](tests/integration/test_m4_training_resume.py)
+
+### Test Classes
+
+| Class                            | Tests | Purpose                                     |
+| -------------------------------- | ----- | ------------------------------------------- |
+| `TestM4FullResumeFlow`           | 1     | Full start→cancel→resume→complete flow     |
+| `TestM4ResumeFromCorrectEpoch`   | 3     | Verify epoch continuation (D7 compliance)  |
+| `TestM4CheckpointCleanup`        | 3     | Verify checkpoint deletion on completion   |
+| `TestM4ModelValidityAfterResume` | 3     | Verify model/optimizer state restoration   |
+| `TestM4EdgeCases`                | 5     | Resume status transitions, no-checkpoint   |
+| `TestM4ResumeContextIntegration` | 2     | TrainingResumeContext field validation     |
+
+**Total:** 17 tests covering all acceptance criteria
+
+### Test Infrastructure
+
+Uses in-memory mock services for fast feedback:
+
+- `IntegrationCheckpointService` — In-memory checkpoint storage with filesystem artifacts
+- `MockOperationsRepository` — In-memory operation state with `try_resume()` semantics
+
+### Key Scenarios Tested
+
+1. **Full Resume Flow:** Start training → periodic checkpoints → cancel → resume → complete → checkpoint deleted
+2. **Epoch Continuation:** Per design D7, resume starts from `checkpoint_epoch + 1`
+3. **Model Validity:** Checkpoint weights/optimizer state load correctly into fresh models
+4. **Status Transitions:** Only CANCELLED/FAILED operations can be resumed
+
+### Task 4.7 Acceptance Criteria
+
+- [x] Test covers full resume flow
+- [x] Test verifies correct resume epoch
+- [x] Test verifies checkpoint cleanup
+- [x] Tests pass
+
+---
+
+## Milestone 4 Complete
+
+All 7 tasks completed:
+
+- Task 4.1: Resume API Endpoint
+- Task 4.2: try_resume in OperationsService
+- Task 4.3: Training Restore in Worker
+- Task 4.4: Resume Endpoint in Training Worker API
+- Task 4.5: Resume Context in ModelTrainer
+- Task 4.6: Resume CLI Command
+- Task 4.7: Integration Tests
