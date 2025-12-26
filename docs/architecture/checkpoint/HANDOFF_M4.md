@@ -323,9 +323,77 @@ Location: [tests/unit/training/test_model_trainer_resume.py](tests/unit/training
 
 ---
 
-### Notes for Task 4.6
+## Task 4.6 Complete
 
-Task 4.6 will add CLI command:
-- `ktrdr operations resume <operation_id>`
-- Call backend's resume endpoint
-- Display resumed_from info
+**Implemented:** Resume CLI command `ktrdr operations resume <operation_id>`
+
+### CLI Command Added
+
+Location: [ktrdr/cli/operations_commands.py:668-771](ktrdr/cli/operations_commands.py#L668-L771)
+
+```bash
+ktrdr operations resume <operation_id> [--verbose]
+```
+
+**Usage:**
+
+```bash
+# Resume a cancelled or failed operation
+ktrdr operations resume op_training_20241201_123456
+
+# With verbose output
+ktrdr operations resume op_training_20241201_123456 --verbose
+```
+
+**Output (success):**
+```
+✅ Successfully resumed operation: op_training_20241201_123456
+Status: RUNNING
+Resumed from: epoch 25
+💡 Use 'ktrdr operations status op_training_20241201_123456' to monitor progress
+```
+
+### API Client Method Added
+
+Location: [ktrdr/cli/api_client.py:772-781](ktrdr/cli/api_client.py#L772-L781)
+
+```python
+async def resume_operation(self, operation_id: str) -> dict[str, Any]:
+    """Resume a cancelled or failed operation from checkpoint."""
+```
+
+### Error Handling
+
+- 404: Operation not found or no checkpoint available
+- 409: Operation already running/completed or not in resumable state
+
+### Acceptance Criteria Verified
+
+- [x] Command exists: `ktrdr operations resume <id>`
+- [x] Shows success message with epoch
+- [x] Shows error message on failure
+- [x] Works with existing CLI infrastructure
+
+### Tests Added
+
+Location: [tests/unit/cli/test_resume_command.py](tests/unit/cli/test_resume_command.py)
+
+- 9 unit tests covering:
+  - API client `resume_operation` method (success, failure)
+  - CLI command success with epoch display
+  - API connection failure handling
+  - 404 not found error handling
+  - 409 conflict error handling
+  - No checkpoint error handling
+  - Command registration verification
+
+---
+
+### Notes for Task 4.7
+
+Task 4.7 will add full integration tests:
+
+- Start training, cancel at known epoch
+- Resume training
+- Verify training continues from correct epoch
+- Verify checkpoint deleted after completion
