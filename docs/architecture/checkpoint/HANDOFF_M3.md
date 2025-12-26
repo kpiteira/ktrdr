@@ -669,13 +669,15 @@ All quality gates pass:
 
 ### E2E Test Results
 
-| Test                                       | Result                      |
-| ------------------------------------------ | --------------------------- |
-| Training starts (no duplicate ID error)    | ✅ PASS                     |
-| Backtesting starts (no duplicate ID error) | ✅ PASS                     |
-| Operation appears in database              | ✅ PASS                     |
-| Operation status queryable via proxy       | ✅ PASS                     |
-| Checkpoint on success                      | ✅ N/A (deleted by design)  |
+| Test                                       | Result                                           |
+| ------------------------------------------ | ------------------------------------------------ |
+| Training starts (no duplicate ID error)    | ✅ PASS                                          |
+| Backtesting starts (no duplicate ID error) | ✅ PASS                                          |
+| Operation appears in database              | ✅ PASS                                          |
+| Operation status queryable via proxy       | ✅ PASS                                          |
+| Periodic checkpoint created                | ✅ PASS (epoch 34, EURUSD 5m)                    |
+| Checkpoint state in DB                     | ✅ PASS                                          |
+| Checkpoint artifacts on filesystem         | ✅ PASS (model.pt, optimizer.pt, best_model.pt) |
 
 ### Verified Commands
 
@@ -695,6 +697,15 @@ curl -s -X POST http://localhost:8000/api/v1/backtests/start \
 
 # Check operation in DB
 docker exec ktrdr2-db-1 psql -U ktrdr -d ktrdr -c "SELECT operation_id, status FROM operations WHERE operation_id = '<OP_ID>'"
+
+# Check checkpoint via API
+curl -s "http://localhost:8000/api/v1/checkpoints/<OP_ID>" | jq '.data.state.epoch'
+
+# Check checkpoint in DB
+docker exec ktrdr2-db-1 psql -U ktrdr -d ktrdr -c "SELECT operation_id, checkpoint_type FROM operation_checkpoints WHERE operation_id = '<OP_ID>'"
+
+# Check artifacts on filesystem
+docker exec ktrdr2-training-worker-1-1 ls -la /app/data/checkpoints/<OP_ID>/
 ```
 
 ---
