@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Optional, cast
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ktrdr.api.models.db.operations import OperationRecord
@@ -183,6 +183,51 @@ class OperationsRepository:
 
             logger.debug(f"Deleted operation record: {operation_id}")
             return True
+
+    async def try_resume(self, operation_id: str) -> bool:
+        """Atomically update status to RUNNING if currently resumable.
+
+        Uses an atomic UPDATE with a status check in the WHERE clause,
+        ensuring that concurrent resume requests result in exactly one success.
+        This is true optimistic locking at the database level.
+
+        Args:
+            operation_id: The operation's unique identifier.
+
+        Returns:
+            True if the operation was resumed (status was CANCELLED/FAILED),
+            False if operation not found or not in a resumable state.
+        """
+        async with self._get_session() as session:
+            # Atomic UPDATE - only updates if status is resumable
+            stmt = (
+                update(OperationRecord)
+                .where(
+                    OperationRecord.operation_id == operation_id,
+                    OperationRecord.status.in_(["cancelled", "failed"]),
+                )
+                .values(
+                    status="running",
+                    started_at=datetime.now(timezone.utc),
+                    completed_at=None,
+                    error_message=None,
+                )
+            )
+
+            result = await session.execute(stmt)
+            await session.commit()
+
+            rows_updated = result.rowcount
+
+            if rows_updated > 0:
+                logger.info(f"Resumed operation in DB: {operation_id}")
+                return True
+            else:
+                logger.debug(
+                    f"Could not resume operation {operation_id}: "
+                    "not found or not in resumable state"
+                )
+                return False
 
     @staticmethod
     def _record_to_info(record: OperationRecord) -> OperationInfo:

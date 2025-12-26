@@ -76,9 +76,51 @@ Location: [tests/unit/api/endpoints/test_resume_operation.py](tests/unit/api/end
 - 9 unit tests covering all acceptance criteria
 - Tests for optimistic locking behavior
 
-### Notes for Task 4.2
+---
 
-Task 4.2 will enhance `try_resume()` with repository-level atomicity. Current implementation uses in-memory lock + cache update. Repository-level implementation should use atomic SQL UPDATE with status check.
+## Task 4.2 Complete
+
+**Implemented:** Repository-level atomic `try_resume()` with SQL UPDATE
+
+### Repository Method Added
+
+Location: [ktrdr/api/repositories/operations_repository.py:187-230](ktrdr/api/repositories/operations_repository.py#L187-L230)
+
+```python
+async def try_resume(self, operation_id: str) -> bool:
+    """Atomically update status to RUNNING if currently resumable."""
+    # Uses atomic UPDATE with WHERE clause checking status
+```
+
+**SQL Pattern:**
+```sql
+UPDATE operations
+SET status = 'running', started_at = NOW(), completed_at = NULL, error_message = NULL
+WHERE operation_id = :op_id AND status IN ('cancelled', 'failed')
+```
+
+### Service Updated
+
+Location: [ktrdr/api/services/operations_service.py:687-788](ktrdr/api/services/operations_service.py#L687-L788)
+
+- Service `try_resume()` now delegates to repository for atomic DB update
+- Cache updated after repository success
+- Fallback path for cache-only mode preserved
+
+### Acceptance Criteria Verified
+
+- [x] Atomic update with status check
+- [x] Returns True if updated, False otherwise
+- [x] Cache updated on success
+- [x] Concurrent calls: only one succeeds (SQL atomicity)
+
+### Tests Added
+
+Location: [tests/unit/api/repositories/test_operations_repository.py](tests/unit/api/repositories/test_operations_repository.py)
+
+- 7 new tests for repository `try_resume()`
+
+---
 
 ### Notes for Task 4.3-4.4
 

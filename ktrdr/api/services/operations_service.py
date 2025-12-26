@@ -689,8 +689,9 @@ class OperationsService:
         """
         Atomically update status to RUNNING if currently resumable.
 
-        Uses optimistic locking: only updates if status is CANCELLED or FAILED.
-        This prevents race conditions when multiple resume requests are made.
+        Uses optimistic locking at the database level: the repository performs
+        an atomic UPDATE with a status check in the WHERE clause, ensuring that
+        concurrent resume requests result in exactly one success.
 
         Args:
             operation_id: Operation identifier
@@ -699,23 +700,61 @@ class OperationsService:
             True if status was updated (operation is now RUNNING),
             False if operation not found or not in resumable state.
         """
-        async with self._lock:
-            # Check cache first
-            operation = self._cache.get(operation_id)
+        # First try atomic DB update via repository
+        if self._repository:
+            success = await self._repository.try_resume(operation_id)
 
-            if operation is None and self._repository:
-                # Try to load from repository
-                db_op = await self._repository.get(operation_id)
-                if db_op:
-                    # Repository.get() returns OperationInfo directly
-                    operation = db_op
-                    self._cache[operation_id] = operation
+            if not success:
+                logger.warning(
+                    f"Cannot resume - operation not found or not in resumable state: "
+                    f"{operation_id}"
+                )
+                return False
+
+            # Atomic update succeeded - now update cache
+            old_status: OperationStatus = OperationStatus.FAILED  # Default
+
+            async with self._lock:
+                cached_op = self._cache.get(operation_id)
+                if cached_op is not None:
+                    old_status = cached_op.status
+                    cached_op.status = OperationStatus.RUNNING
+                    cached_op.started_at = datetime.now(timezone.utc)
+                    cached_op.completed_at = None
+                    cached_op.error_message = None
+                else:
+                    # Load from DB to populate cache
+                    db_op = await self._repository.get(operation_id)
+                    if db_op is not None:
+                        self._cache[operation_id] = db_op
+                        # DB state is already RUNNING after try_resume
+                        old_status = OperationStatus.CANCELLED  # Assume from context
+
+            # Tracing for state transition
+            with create_service_span(
+                "operation.state_transition", operation_id=operation_id
+            ) as span:
+                span.set_attribute("operation.from_status", old_status.value)
+                span.set_attribute("operation.to_status", OperationStatus.RUNNING.value)
+                span.set_attribute("operation.resumed", True)
+
+            # Update Prometheus metrics
+            operations_active.inc()
+
+            logger.info(
+                f"Resumed operation: {operation_id} (from {old_status.value} to running)"
+            )
+
+            return True
+
+        # Fallback for cache-only mode (no repository)
+        async with self._lock:
+            operation = self._cache.get(operation_id)
 
             if operation is None:
                 logger.warning(f"Cannot resume - operation not found: {operation_id}")
                 return False
 
-            # Check if operation is in a resumable state
             if operation.status not in [
                 OperationStatus.CANCELLED,
                 OperationStatus.FAILED,
@@ -726,31 +765,20 @@ class OperationsService:
                 )
                 return False
 
-            # Update status to RUNNING
+            old_status = operation.status
+            operation.status = OperationStatus.RUNNING
+            operation.started_at = datetime.now(timezone.utc)
+            operation.completed_at = None
+            operation.error_message = None
+
+            # Tracing
             with create_service_span(
                 "operation.state_transition", operation_id=operation_id
             ) as span:
-                span.set_attribute("operation.from_status", operation.status.value)
+                span.set_attribute("operation.from_status", old_status.value)
                 span.set_attribute("operation.to_status", OperationStatus.RUNNING.value)
                 span.set_attribute("operation.resumed", True)
 
-                old_status = operation.status
-                operation.status = OperationStatus.RUNNING
-                operation.started_at = datetime.now(timezone.utc)
-                operation.completed_at = None
-                operation.error_message = None
-
-            # Persist to repository
-            if self._repository:
-                await self._repository.update(
-                    operation_id,
-                    status=OperationStatus.RUNNING.value,
-                    started_at=operation.started_at,
-                    completed_at=None,
-                    error_message=None,
-                )
-
-            # Update Prometheus metrics
             operations_active.inc()
 
             logger.info(

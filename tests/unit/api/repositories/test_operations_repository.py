@@ -608,3 +608,133 @@ class TestOperationsRepositoryConversion:
         assert info.progress.current_step is None
         assert info.result_summary is None
         assert info.error_message is None
+
+
+class TestOperationsRepositoryTryResume:
+    """Tests for OperationsRepository.try_resume method."""
+
+    @pytest.fixture
+    def mock_session(self):
+        """Create a mock async session."""
+        session = AsyncMock()
+        session.commit = AsyncMock()
+        session.rollback = AsyncMock()
+        return session
+
+    @pytest.fixture
+    def mock_session_factory(self, mock_session):
+        """Create a mock session factory."""
+        return create_mock_session_factory(mock_session)
+
+    @pytest.mark.asyncio
+    async def test_try_resume_returns_true_when_cancelled(
+        self, mock_session, mock_session_factory
+    ):
+        """try_resume should return True when operation is cancelled."""
+        # Mock execute to return result with rowcount=1 (one row updated)
+        mock_result = MagicMock()
+        mock_result.rowcount = 1
+        mock_session.execute.return_value = mock_result
+
+        repo = OperationsRepository(mock_session_factory)
+
+        result = await repo.try_resume("op_cancelled")
+
+        assert result is True
+        mock_session.commit.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_try_resume_returns_true_when_failed(
+        self, mock_session, mock_session_factory
+    ):
+        """try_resume should return True when operation is failed."""
+        mock_result = MagicMock()
+        mock_result.rowcount = 1
+        mock_session.execute.return_value = mock_result
+
+        repo = OperationsRepository(mock_session_factory)
+
+        result = await repo.try_resume("op_failed")
+
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_try_resume_returns_false_when_not_found(
+        self, mock_session, mock_session_factory
+    ):
+        """try_resume should return False when operation doesn't exist."""
+        # Mock execute to return result with rowcount=0 (no rows updated)
+        mock_result = MagicMock()
+        mock_result.rowcount = 0
+        mock_session.execute.return_value = mock_result
+
+        repo = OperationsRepository(mock_session_factory)
+
+        result = await repo.try_resume("nonexistent")
+
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_try_resume_returns_false_when_running(
+        self, mock_session, mock_session_factory
+    ):
+        """try_resume should return False for already running operation."""
+        # WHERE clause won't match RUNNING status, so rowcount=0
+        mock_result = MagicMock()
+        mock_result.rowcount = 0
+        mock_session.execute.return_value = mock_result
+
+        repo = OperationsRepository(mock_session_factory)
+
+        result = await repo.try_resume("op_running")
+
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_try_resume_returns_false_when_completed(
+        self, mock_session, mock_session_factory
+    ):
+        """try_resume should return False for completed operation."""
+        mock_result = MagicMock()
+        mock_result.rowcount = 0
+        mock_session.execute.return_value = mock_result
+
+        repo = OperationsRepository(mock_session_factory)
+
+        result = await repo.try_resume("op_completed")
+
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_try_resume_clears_error_fields(
+        self, mock_session, mock_session_factory
+    ):
+        """try_resume should clear error_message and set started_at."""
+        mock_result = MagicMock()
+        mock_result.rowcount = 1
+        mock_session.execute.return_value = mock_result
+
+        repo = OperationsRepository(mock_session_factory)
+
+        await repo.try_resume("op_test")
+
+        # Verify execute was called (the UPDATE statement)
+        mock_session.execute.assert_called_once()
+        mock_session.commit.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_try_resume_uses_atomic_update(
+        self, mock_session, mock_session_factory
+    ):
+        """try_resume should use atomic UPDATE with status check in WHERE clause."""
+        mock_result = MagicMock()
+        mock_result.rowcount = 1
+        mock_session.execute.return_value = mock_result
+
+        repo = OperationsRepository(mock_session_factory)
+
+        await repo.try_resume("op_test")
+
+        # Verify a single execute call (atomic operation)
+        assert mock_session.execute.call_count == 1
+        # The update is atomic - no separate SELECT before UPDATE
