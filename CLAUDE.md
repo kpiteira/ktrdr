@@ -213,20 +213,6 @@ For detailed debugging workflows, the `observability` skill provides Jaeger quer
 
 ---
 
-## Skills Available
-
-Claude automatically loads detailed guidance when tasks match these skill descriptions:
-
-- **distributed-workers** — Worker implementation, ServiceOrchestrator, WorkerAPIBase patterns
-- **observability** — Jaeger traces, Grafana dashboards, diagnosing operation failures
-- **deployment** — Docker Compose, Proxmox LXC, patch deployments, CLI commands
-- **api-development** — FastAPI endpoints, async operations, Pydantic models
-- **debugging** — Host service connectivity, data loading issues, environment problems
-- **integration-testing** — E2E tests, smoke tests, system-level validation
-- **memory-reflection** — Capturing learnings and context gaps after tasks
-
----
-
 ## Key Files to Know
 
 - `ktrdr/async_infrastructure/service_orchestrator.py` — Base class for all service managers

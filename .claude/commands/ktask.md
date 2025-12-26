@@ -207,15 +207,6 @@ All must pass before completion:
 
 ## 5. Completion
 
-### Memory Reflection
-
-Use the **memory-reflection skill** to capture learnings:
-- Context gaps encountered during the task
-- Patterns re-discovered
-- Recommendations for memory updates
-
-The skill appends to `.claude/context_reflections.md`.
-
 ### Handoff Document
 
 Update or create `HANDOFF_<phase/feature>.md` in the implementation plan directory.
