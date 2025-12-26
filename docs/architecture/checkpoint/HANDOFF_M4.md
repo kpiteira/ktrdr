@@ -192,14 +192,78 @@ Location: [tests/unit/training/test_checkpoint_restore.py](tests/unit/training/t
 
 ---
 
-### Notes for Task 4.4
+## Task 4.4 Complete
 
-Task 4.4 will add the worker API endpoint:
+**Implemented:** Training worker resume endpoint at `POST /training/resume`
+
+### Endpoint Added
+
+Location: [ktrdr/training/training_worker.py:127-170](ktrdr/training/training_worker.py#L127-L170)
+
 ```python
-@app.post("/training/resume")
+@self.app.post("/training/resume")
 async def resume_training(request: TrainingResumeRequest):
-    resume_context = await worker.restore_from_checkpoint(operation_id)
-    asyncio.create_task(worker.run_resumed_training(operation_id, resume_context))
+    resume_context = await self.restore_from_checkpoint(operation_id)
+    asyncio.create_task(self._execute_resumed_training(operation_id, resume_context))
+    return {"success": True, "operation_id": operation_id, "status": "started", ...}
 ```
 
-Task 4.5 will integrate the resume context into ModelTrainer to load weights/optimizer state.
+### Request Model Added
+
+Location: [ktrdr/training/training_worker.py:65-72](ktrdr/training/training_worker.py#L65-L72)
+
+```python
+class TrainingResumeRequest(WorkerOperationMixin):
+    operation_id: str = Field(description="Operation ID to resume")
+```
+
+### New Method Added
+
+Location: [ktrdr/training/training_worker.py:538-759](ktrdr/training/training_worker.py#L538-L759)
+
+```python
+async def _execute_resumed_training(
+    self, operation_id: str, resume_context: TrainingResumeContext
+) -> dict[str, Any]:
+    """Execute resumed training from checkpoint."""
+```
+
+### Key Implementation Notes
+
+**Endpoint Pattern:**
+Follows same pattern as `/training/start` - returns immediately, executes training in background via `asyncio.create_task()`.
+
+**Error Handling:**
+- 404 if no checkpoint found (`CheckpointNotFoundError`)
+- 422 if checkpoint corrupted (`CheckpointCorruptedError`)
+
+**Resume Context Integration:**
+`_execute_resumed_training` is structurally ready but actual model/optimizer restoration requires Task 4.5 to add `resume_context` support to `LocalTrainingOrchestrator`.
+
+### Acceptance Criteria Verified
+
+- [x] Endpoint accepts operation_id
+- [x] Loads checkpoint (via `restore_from_checkpoint`)
+- [x] Starts training in background
+- [x] Returns success response
+
+### Tests Added
+
+Location: [tests/unit/training/test_training_worker_resume_endpoint.py](tests/unit/training/test_training_worker_resume_endpoint.py)
+
+- 10 unit tests covering:
+  - TrainingResumeRequest model
+  - Endpoint existence and success response
+  - restore_from_checkpoint integration
+  - Error handling (404, 422)
+  - _execute_resumed_training method
+
+---
+
+### Notes for Task 4.5
+
+Task 4.5 will integrate `resume_context` into `ModelTrainer`:
+- Add `resume_context` parameter to `LocalTrainingOrchestrator`
+- Load model weights from `resume_context.model_weights`
+- Load optimizer state from `resume_context.optimizer_state`
+- Set starting epoch to `resume_context.start_epoch`
