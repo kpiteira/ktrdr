@@ -8,9 +8,12 @@ WorkerAPIBase for common infrastructure.
 import asyncio
 import os
 import uuid
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from fastapi import FastAPI
+
+if TYPE_CHECKING:
+    from ktrdr.training.checkpoint_restore import TrainingResumeContext
 from opentelemetry import trace
 from pydantic import Field
 
@@ -449,6 +452,32 @@ class TrainingWorker(WorkerAPIBase):
         return CheckpointService(
             session_factory=get_session_factory(),
             artifacts_dir=self._checkpoint_dir,
+        )
+
+    async def restore_from_checkpoint(
+        self, operation_id: str
+    ) -> "TrainingResumeContext":
+        """Restore training context from a checkpoint.
+
+        Loads the checkpoint for the given operation and creates a
+        TrainingResumeContext that can be used to resume training.
+
+        Args:
+            operation_id: The operation ID to restore.
+
+        Returns:
+            TrainingResumeContext with all state needed to resume.
+
+        Raises:
+            CheckpointNotFoundError: If no checkpoint exists for the operation.
+            CheckpointCorruptedError: If required artifacts are missing or invalid.
+        """
+        from ktrdr.training.checkpoint_restore import restore_from_checkpoint
+
+        checkpoint_service = self.get_checkpoint_service()
+        return await restore_from_checkpoint(
+            checkpoint_service=checkpoint_service,
+            operation_id=operation_id,
         )
 
 

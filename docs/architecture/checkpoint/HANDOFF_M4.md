@@ -122,17 +122,84 @@ Location: [tests/unit/api/repositories/test_operations_repository.py](tests/unit
 
 ---
 
-### Notes for Task 4.3-4.4
+## Task 4.3 Complete
 
-The resume endpoint currently:
-1. Updates status to RUNNING (via try_resume)
-2. Verifies checkpoint exists
-3. Returns success response
+**Implemented:** Training restore functionality in `checkpoint_restore.py` and `TrainingWorker.restore_from_checkpoint()`
 
-**TODO:** Task 4.4 will add worker dispatch:
+### New Module: checkpoint_restore.py
+
+Location: [ktrdr/training/checkpoint_restore.py](ktrdr/training/checkpoint_restore.py)
+
 ```python
-# After checkpoint verification, dispatch to worker
-await dispatch_resume_to_worker(worker, operation_id)
+@dataclass
+class TrainingResumeContext:
+    """Context for resuming training from a checkpoint."""
+    start_epoch: int           # checkpoint_epoch + 1 (per design D7)
+    model_weights: bytes       # Serialized model state_dict
+    optimizer_state: bytes     # Serialized optimizer state_dict
+    scheduler_state: Optional[bytes] = None
+    best_model_weights: Optional[bytes] = None
+    training_history: dict[str, list[float]] = field(default_factory=dict)
+    best_val_loss: float = float("inf")
+    original_request: dict[str, Any] = field(default_factory=dict)
+
+async def restore_from_checkpoint(
+    checkpoint_service: CheckpointService,
+    operation_id: str,
+) -> TrainingResumeContext:
+    """Load checkpoint and create resume context."""
 ```
 
-The worker dispatch pattern should follow existing training dispatch in TrainingService._run_distributed_worker_training.
+**Custom Exceptions:**
+- `CheckpointNotFoundError`: No checkpoint for operation
+- `CheckpointCorruptedError`: Missing/invalid artifacts
+
+### TrainingWorker Method Added
+
+Location: [ktrdr/training/training_worker.py:454-481](ktrdr/training/training_worker.py#L454-L481)
+
+```python
+async def restore_from_checkpoint(self, operation_id: str) -> TrainingResumeContext:
+    """Restore training context from a checkpoint."""
+```
+
+### Key Implementation Notes
+
+**Start Epoch Calculation:**
+Per design decision D7, resume starts from `checkpoint_epoch + 1` (may redo partial epoch for reproducibility).
+
+**Artifact Validation:**
+Uses existing `validate_artifacts()` from `checkpoint_builder.py` to ensure required artifacts (model.pt, optimizer.pt) are present before restore.
+
+### Acceptance Criteria Verified
+
+- [x] Checkpoint loaded from shared storage
+- [x] Model weights restored
+- [x] Optimizer state restored
+- [x] Training history restored
+- [x] Start epoch is checkpoint_epoch + 1
+- [x] Artifacts validated before use
+
+### Tests Added
+
+Location: [tests/unit/training/test_checkpoint_restore.py](tests/unit/training/test_checkpoint_restore.py)
+
+- 20 unit tests covering:
+  - TrainingResumeContext dataclass
+  - restore_from_checkpoint function
+  - Artifact validation (missing/empty)
+  - TrainingWorker.restore_from_checkpoint method
+
+---
+
+### Notes for Task 4.4
+
+Task 4.4 will add the worker API endpoint:
+```python
+@app.post("/training/resume")
+async def resume_training(request: TrainingResumeRequest):
+    resume_context = await worker.restore_from_checkpoint(operation_id)
+    asyncio.create_task(worker.run_resumed_training(operation_id, resume_context))
+```
+
+Task 4.5 will integrate the resume context into ModelTrainer to load weights/optimizer state.
