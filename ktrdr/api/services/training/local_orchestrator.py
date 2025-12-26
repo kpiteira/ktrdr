@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 import yaml
 
@@ -14,6 +14,9 @@ from ktrdr.api.services.training.progress_bridge import TrainingProgressBridge
 from ktrdr.async_infrastructure.cancellation import CancellationError, CancellationToken
 from ktrdr.training.model_storage import ModelStorage
 from ktrdr.training.training_pipeline import TrainingPipeline
+
+if TYPE_CHECKING:
+    from ktrdr.training.checkpoint_restore import TrainingResumeContext
 
 logger = get_logger(__name__)
 
@@ -36,6 +39,7 @@ class LocalTrainingOrchestrator:
         cancellation_token: CancellationToken | None,
         model_storage: ModelStorage,
         checkpoint_callback=None,
+        resume_context: TrainingResumeContext | None = None,
     ):
         """
         Initialize the local training orchestrator.
@@ -47,12 +51,14 @@ class LocalTrainingOrchestrator:
             model_storage: Model storage for saving trained models
             checkpoint_callback: Optional callback for checkpointing after each epoch.
                 Called with kwargs: epoch, model, optimizer, scheduler, trainer.
+            resume_context: Optional resume context for resumed training from checkpoint.
         """
         self._context = context
         self._bridge = progress_bridge
         self._token = cancellation_token
         self._model_storage = model_storage
         self._checkpoint_callback = checkpoint_callback
+        self._resume_context = resume_context
 
     async def run(self) -> dict[str, Any]:
         """
@@ -111,6 +117,7 @@ class LocalTrainingOrchestrator:
             cancellation_token=self._token,
             repository=None,  # Let pipeline create it (cached data only)
             checkpoint_callback=self._checkpoint_callback,
+            resume_context=self._resume_context,
         )
 
         # Step 4: Add session metadata to result

@@ -12,7 +12,7 @@ Design Philosophy:
 - Code is EXTRACTED from existing implementations, not rewritten
 """
 
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -40,6 +40,9 @@ from ktrdr.neural.models.mlp import MLPTradingModel
 from ktrdr.training.fuzzy_neural_processor import FuzzyNeuralProcessor
 from ktrdr.training.model_trainer import ModelTrainer
 from ktrdr.training.zigzag_labeler import ZigZagLabeler
+
+if TYPE_CHECKING:
+    from ktrdr.training.checkpoint_restore import TrainingResumeContext
 
 logger = get_logger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -546,6 +549,7 @@ class TrainingPipeline:
         progress_callback=None,
         cancellation_token: Optional[CancellationToken] = None,
         checkpoint_callback=None,
+        resume_context: "Optional[TrainingResumeContext]" = None,
     ) -> dict[str, Any]:
         """
         Train the neural network model (symbol-agnostic).
@@ -574,6 +578,7 @@ class TrainingPipeline:
             cancellation_token: Optional cancellation token
             checkpoint_callback: Optional callback for checkpointing after each epoch.
                 Called with kwargs: epoch, model, optimizer, scheduler, trainer.
+            resume_context: Optional resume context for resumed training from checkpoint.
 
         Returns:
             Training results dict containing:
@@ -596,6 +601,7 @@ class TrainingPipeline:
             progress_callback=progress_callback,
             cancellation_token=cancellation_token,
             checkpoint_callback=checkpoint_callback,
+            resume_context=resume_context,
         )
 
         # Symbol-agnostic training: Always use the same path regardless of number of symbols
@@ -782,6 +788,7 @@ class TrainingPipeline:
         cancellation_token: Optional[CancellationToken] = None,
         repository: Optional[DataRepository] = None,
         checkpoint_callback=None,
+        resume_context: "Optional[TrainingResumeContext]" = None,
     ) -> dict[str, Any]:
         """
         Complete training pipeline from data to trained model.
@@ -789,9 +796,9 @@ class TrainingPipeline:
         Orchestrates all steps: load data → indicators → fuzzy → features →
         labels → train → evaluate → save. Returns standardized result.
 
-        Key: progress_callback, cancellation_token, and checkpoint_callback are
-        PASSED THROUGH to train_model(), not handled here. This avoids the trap
-        of trying to unify progress/cancellation mechanisms.
+        Key: progress_callback, cancellation_token, checkpoint_callback, and
+        resume_context are PASSED THROUGH to train_model(), not handled here.
+        This avoids the trap of trying to unify progress/cancellation mechanisms.
 
         Args:
             symbols: Trading symbols to train on
@@ -1033,7 +1040,7 @@ class TrainingPipeline:
             model_config=strategy_config["model"],
         )
 
-        # Step 9: Train model (PASS THROUGH callbacks/token)
+        # Step 9: Train model (PASS THROUGH callbacks/token/resume_context)
         logger.info("🏋️ Training model...")
         training_results = TrainingPipeline.train_model(
             model=model,
@@ -1045,6 +1052,7 @@ class TrainingPipeline:
             progress_callback=progress_callback,  # ← Pass through
             cancellation_token=cancellation_token,  # ← Pass through
             checkpoint_callback=checkpoint_callback,  # ← Pass through
+            resume_context=resume_context,  # ← Pass through for resumed training
         )
 
         # Step 10: Evaluate model

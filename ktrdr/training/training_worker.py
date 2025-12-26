@@ -711,19 +711,15 @@ class TrainingWorker(WorkerAPIBase):
                     except Exception as e:
                         logger.warning(f"Failed to save periodic checkpoint: {e}")
 
-            # Create orchestrator
-            # Note: Task 4.5 will add resume_context support to LocalTrainingOrchestrator
-            # For now, the orchestrator will start fresh but this endpoint is ready
+            # Create orchestrator with resume_context for model/optimizer restoration
             orchestrator = LocalTrainingOrchestrator(
                 context=context,
                 progress_bridge=bridge,
                 cancellation_token=cancellation_token,
                 model_storage=model_storage,
                 checkpoint_callback=checkpoint_callback,
+                resume_context=resume_context,
             )
-
-            # TODO (Task 4.5): Pass resume_context to orchestrator for model/optimizer restoration
-            # orchestrator.set_resume_context(resume_context)
 
             # Run training (async)
             result = await orchestrator.run()

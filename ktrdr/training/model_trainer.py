@@ -4,8 +4,9 @@ import json
 import time
 from dataclasses import dataclass
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import torch
 import torch.nn as nn
@@ -20,6 +21,9 @@ from ktrdr.async_infrastructure.cancellation import (
 from .analytics import TrainingAnalyzer
 from .device_manager import DeviceManager
 from .multi_symbol_data_loader import MultiSymbolDataLoader
+
+if TYPE_CHECKING:
+    from .checkpoint_restore import TrainingResumeContext
 
 
 @dataclass
@@ -102,6 +106,7 @@ class ModelTrainer:
         progress_callback=None,
         cancellation_token: CancellationToken | None = None,
         checkpoint_callback=None,
+        resume_context: Optional["TrainingResumeContext"] = None,
     ):
         """Initialize trainer.
 
@@ -111,6 +116,9 @@ class ModelTrainer:
             cancellation_token: Optional token for cancellation support
             checkpoint_callback: Optional callback for checkpointing after each epoch.
                 Called with kwargs: epoch, model, optimizer, scheduler, trainer.
+            resume_context: Optional resume context from checkpoint for resumed training.
+                If provided, training will start from resume_context.start_epoch and
+                restore model/optimizer state from the checkpoint.
         """
         self.config = config
         self.cancellation_token = cancellation_token
@@ -123,6 +131,19 @@ class ModelTrainer:
         self.best_val_accuracy = 0.0
         self.progress_callback = progress_callback
         self.checkpoint_callback = checkpoint_callback
+        self._resume_context = resume_context
+
+        # If resuming, restore best model state from checkpoint
+        if resume_context is not None and resume_context.best_model_weights:
+            buffer = BytesIO(resume_context.best_model_weights)
+            self.best_model_state = torch.load(buffer, weights_only=True)
+            # Estimate best_val_accuracy from best_val_loss
+            # (inverse relationship: lower loss = higher accuracy approximation)
+            if resume_context.best_val_loss < float("inf"):
+                # Use a simple heuristic: accuracy ~ 1 - loss (clamped to [0, 1])
+                self.best_val_accuracy = max(
+                    0.0, min(1.0, 1.0 - resume_context.best_val_loss)
+                )
 
         # Progress update frequency: update every N batches
         # Default to 1 (every batch) for responsive UI, can be increased for performance
@@ -188,10 +209,24 @@ class ModelTrainer:
         # Move model to device
         model = model.to(self.device)
 
+        # Resume: Load model weights from checkpoint if resuming
+        if self._resume_context is not None:
+            buffer = BytesIO(self._resume_context.model_weights)
+            model.load_state_dict(torch.load(buffer, weights_only=True))
+            print(
+                f"🔄 Resuming from checkpoint: loaded model weights, "
+                f"starting from epoch {self._resume_context.start_epoch}"
+            )
+
         # Get training parameters
         learning_rate = self.config.get("learning_rate", 0.001)
         batch_size = self.config.get("batch_size", 32)
         epochs = self.config.get("epochs", 100)
+
+        # Resume: Determine start epoch
+        start_epoch = 0
+        if self._resume_context is not None:
+            start_epoch = self._resume_context.start_epoch
 
         # PERFORMANCE FIX: For GPU training with large datasets, keep data on CPU and use
         # pin_memory + prefetching for efficient async transfer. Moving entire dataset to GPU
@@ -238,11 +273,24 @@ class ModelTrainer:
         # Setup optimizer
         optimizer = self._create_optimizer(model, learning_rate)
 
+        # Resume: Load optimizer state from checkpoint if resuming
+        if self._resume_context is not None:
+            buffer = BytesIO(self._resume_context.optimizer_state)
+            optimizer.load_state_dict(torch.load(buffer, weights_only=False))
+            print("🔄 Restored optimizer state from checkpoint")
+
         # Setup loss function
         criterion = nn.CrossEntropyLoss()
 
         # Setup learning rate scheduler
         scheduler = self._create_scheduler(optimizer)
+
+        # Resume: Load scheduler state from checkpoint if resuming and scheduler exists
+        if self._resume_context is not None and self._resume_context.scheduler_state:
+            if scheduler is not None and hasattr(scheduler, "load_state_dict"):
+                buffer = BytesIO(self._resume_context.scheduler_state)
+                scheduler.load_state_dict(torch.load(buffer, weights_only=False))  # type: ignore[union-attr]
+                print("🔄 Restored scheduler state from checkpoint")
 
         # Setup early stopping
         early_stopping_config = self.config.get("early_stopping", {})
@@ -257,12 +305,14 @@ class ModelTrainer:
 
         # Calculate total batches and bars for progress tracking
         total_batches_per_epoch = len(train_loader)
-        total_batches = epochs * total_batches_per_epoch
+        # For resumed training, only count remaining batches
+        remaining_epochs = epochs - start_epoch
+        total_batches = remaining_epochs * total_batches_per_epoch
         total_bars = len(X_train)  # Total number of market data bars
         total_bars_all_epochs = total_bars * epochs  # Total bars across all epochs
 
-        # Training loop
-        for epoch in range(epochs):
+        # Training loop (starts from start_epoch for resumed training)
+        for epoch in range(start_epoch, epochs):
             self._check_cancelled()
             start_time = time.time()
 
@@ -359,15 +409,19 @@ class ModelTrainer:
                 ):
                     try:
                         self._check_cancelled()
-                        completed_batches = epoch * total_batches_per_epoch + batch_idx
+                        # For resumed training, progress is relative to remaining epochs
+                        completed_batches = (
+                            epoch - start_epoch
+                        ) * total_batches_per_epoch + batch_idx
                         current_train_loss = train_loss / max(train_total, 1)
                         current_train_acc = train_correct / max(train_total, 1)
 
                         # Calculate bars processed (market data points)
                         bars_processed_this_epoch = batch_idx * batch_size
+                        # For resumed training, track bars within this resumed run
                         total_bars_processed = (
-                            epoch * total_bars + bars_processed_this_epoch
-                        )
+                            epoch - start_epoch
+                        ) * total_bars + bars_processed_this_epoch
 
                         # Calculate progress percentage (source of truth)
                         progress_percent = (
@@ -532,8 +586,9 @@ class ModelTrainer:
                     self._check_cancelled()
 
                     # Calculate progress percentage (source of truth)
+                    # For resumed training, progress is relative to remaining epochs
                     completed_batches_at_epoch_end = (
-                        epoch + 1
+                        epoch - start_epoch + 1
                     ) * total_batches_per_epoch
                     progress_percent = (
                         (completed_batches_at_epoch_end / total_batches) * 100.0
@@ -544,6 +599,7 @@ class ModelTrainer:
 
                     # Epoch-level metrics (complete epoch with validation)
                     # M2: Added learning_rate, duration, timestamp for metrics storage
+                    # For resumed training, bars tracked are within resumed run
                     epoch_metrics = {
                         "epoch": epoch,
                         "total_epochs": epochs,
@@ -551,8 +607,8 @@ class ModelTrainer:
                         "completed_batches": completed_batches_at_epoch_end,
                         "total_batches": total_batches,
                         "progress_percent": progress_percent,
-                        "total_bars_processed": (epoch + 1)
-                        * total_bars,  # All bars in completed epochs
+                        "total_bars_processed": (epoch - start_epoch + 1)
+                        * total_bars,  # Bars in completed epochs since resume
                         "total_bars": total_bars,
                         "total_bars_all_epochs": total_bars_all_epochs,
                         "train_loss": avg_train_loss,
