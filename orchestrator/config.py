@@ -37,6 +37,14 @@ class OrchestratorConfig:
     # State persistence
     state_dir: Path = field(default_factory=lambda: Path("state"))
 
+    # Discord notifications
+    discord_webhook_url: str | None = None
+
+    @property
+    def discord_enabled(self) -> bool:
+        """Whether Discord notifications are enabled."""
+        return bool(self.discord_webhook_url)
+
     @classmethod
     def from_env(cls) -> "OrchestratorConfig":
         """Load config with environment variable overrides.
@@ -45,9 +53,11 @@ class OrchestratorConfig:
             ORCHESTRATOR_MAX_TURNS: Override max_turns (default: 50)
             ORCHESTRATOR_TASK_TIMEOUT: Override task_timeout_seconds (default: 600)
             OTLP_ENDPOINT: Override otlp_endpoint (default: http://localhost:4317)
+            DISCORD_WEBHOOK_URL: Discord webhook URL for notifications (default: None)
         """
         return cls(
             max_turns=int(os.getenv("ORCHESTRATOR_MAX_TURNS", "50")),
             task_timeout_seconds=int(os.getenv("ORCHESTRATOR_TASK_TIMEOUT", "600")),
             otlp_endpoint=os.getenv("OTLP_ENDPOINT", "http://localhost:4317"),
+            discord_webhook_url=os.getenv("DISCORD_WEBHOOK_URL"),
         )

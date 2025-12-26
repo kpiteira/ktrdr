@@ -14,6 +14,7 @@ from rich.table import Table
 
 from orchestrator import telemetry
 from orchestrator.config import OrchestratorConfig
+from orchestrator.discord_notifier import format_test_notification, send_discord_message
 from orchestrator.haiku_brain import HaikuBrain
 from orchestrator.health import CHECK_ORDER, get_health
 from orchestrator.lock import MilestoneLock
@@ -23,9 +24,9 @@ from orchestrator.milestone_runner import (
     run_milestone,
 )
 from orchestrator.models import Task, TaskResult
+from orchestrator.runner import run_task
 from orchestrator.sandbox import SandboxManager, format_tool_call
 from orchestrator.state import OrchestratorState
-from orchestrator.task_runner import run_task
 from orchestrator.telemetry import create_metrics, setup_telemetry
 
 console = Console()
@@ -46,6 +47,28 @@ def health(check: str | None) -> None:
     report = get_health(checks=checks)
     click.echo(json.dumps(report.to_dict(), indent=2))
     sys.exit(0 if report.status == "healthy" else 1)
+
+
+@cli.command("notify-test")
+def notify_test() -> None:
+    """Send a test notification to Discord to verify webhook configuration."""
+    config = OrchestratorConfig.from_env()
+
+    if not config.discord_enabled:
+        console.print(
+            "[red]✗ Discord not configured. "
+            "Set DISCORD_WEBHOOK_URL environment variable.[/red]"
+        )
+        return
+
+    console.print("Sending test notification to Discord...")
+
+    embed = format_test_notification()
+    # Type narrowing: discord_enabled ensures webhook_url is set
+    assert config.discord_webhook_url is not None
+    asyncio.run(send_discord_message(config.discord_webhook_url, embed))
+
+    console.print("[green]✓ Discord notification sent successfully![/green]")
 
 
 @cli.command()
@@ -180,7 +203,7 @@ MODEL_ALIASES = {
 )
 def run(plan_file: str, notify: bool, llm_only: bool, model: str | None) -> None:
     """Run all tasks in a milestone."""
-    from orchestrator.escalation import configure_interpreter
+    from orchestrator.runner import configure_interpreter
 
     configure_interpreter(llm_only=llm_only)
     model_id = MODEL_ALIASES[model] if model else None
@@ -204,7 +227,7 @@ def run(plan_file: str, notify: bool, llm_only: bool, model: str | None) -> None
 )
 def resume(plan_file: str, notify: bool, llm_only: bool, model: str | None) -> None:
     """Resume a previously interrupted milestone."""
-    from orchestrator.escalation import configure_interpreter
+    from orchestrator.runner import configure_interpreter
 
     configure_interpreter(llm_only=llm_only)
 

@@ -35,9 +35,9 @@ if ! docker exec "$CONTAINER_NAME" test -d /workspace/.git; then
     exit 1
 fi
 
-# Step 1: Reset git state
+# Step 1: Reset git state (run as ubuntu to avoid ownership issues)
 echo "Step 1: Resetting workspace to clean git state..."
-docker exec "$CONTAINER_NAME" bash -c '
+docker exec -u ubuntu "$CONTAINER_NAME" bash -c '
     cd /workspace
     echo "  - Removing untracked files..."
     git clean -fdx

@@ -155,12 +155,15 @@ else
     fi
 fi
 
-# Step 7: Check GitHub CLI authentication
+# Step 7: Check GitHub CLI authentication and configure git
 echo ""
 echo "Step 7: Checking GitHub CLI authentication..."
 if docker exec "$CONTAINER_NAME" gh auth status &>/dev/null; then
     GH_USER=$(docker exec "$CONTAINER_NAME" gh api user --jq '.login' 2>/dev/null || echo "unknown")
     echo "  GitHub CLI: authenticated as $GH_USER"
+    # Configure git to use gh for credentials (enables push/pull)
+    docker exec -u ubuntu "$CONTAINER_NAME" gh auth setup-git 2>/dev/null || true
+    echo "  Git credentials: configured via gh"
 else
     if [ -n "$GH_TOKEN" ]; then
         echo "  GitHub CLI: GH_TOKEN set but not yet verified"

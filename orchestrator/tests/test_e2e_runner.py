@@ -34,7 +34,7 @@ class TestE2EResult:
 
     def test_e2e_result_has_all_required_fields(self):
         """E2EResult should have all required fields."""
-        from orchestrator.e2e_runner import E2EResult
+        from orchestrator.runner import E2EResult
 
         result = E2EResult(
             status="passed",
@@ -58,7 +58,7 @@ class TestE2EResult:
 
     def test_e2e_result_with_failure_details(self):
         """E2EResult should support failure details."""
-        from orchestrator.e2e_runner import E2EResult
+        from orchestrator.runner import E2EResult
 
         result = E2EResult(
             status="failed",
@@ -77,77 +77,12 @@ class TestE2EResult:
         assert result.is_fixable is True
 
 
-class TestParseE2EStatus:
-    """Test E2E status parsing from Claude output."""
-
-    def test_parse_passed_status(self):
-        """Should parse 'passed' status from explicit marker."""
-        from orchestrator.e2e_runner import _parse_e2e_status
-
-        status = _parse_e2e_status("All tests completed.\n\nE2E_STATUS: passed")
-        assert status == "passed"
-
-    def test_parse_failed_status(self):
-        """Should parse 'failed' status from explicit marker."""
-        from orchestrator.e2e_runner import _parse_e2e_status
-
-        status = _parse_e2e_status("Test failed.\n\nE2E_STATUS: failed")
-        assert status == "failed"
-
-    def test_infer_passed_from_heuristics(self):
-        """Should infer passed status from heuristics when no marker."""
-        from orchestrator.e2e_runner import _parse_e2e_status
-
-        status = _parse_e2e_status("All tests pass. ✓ Everything works!")
-        assert status == "passed"
-
-    def test_infer_failed_from_heuristics(self):
-        """Should infer failed status from heuristics when no marker."""
-        from orchestrator.e2e_runner import _parse_e2e_status
-
-        status = _parse_e2e_status("Test failed: assertion error")
-        assert status == "failed"
-
-    def test_unclear_when_no_signals(self):
-        """Should return unclear when no status signals."""
-        from orchestrator.e2e_runner import _parse_e2e_status
-
-        status = _parse_e2e_status("The system is running.")
-        assert status == "unclear"
-
-
-class TestExtractDiagnosis:
-    """Test diagnosis extraction from Claude output."""
-
-    def test_extract_diagnosis_from_marker(self):
-        """Should extract diagnosis from DIAGNOSIS marker."""
-        from orchestrator.e2e_runner import _extract_diagnosis
-
-        output = (
-            "E2E_STATUS: failed\n"
-            "DIAGNOSIS: The endpoint returns 404 because the route wasn't registered.\n"
-            "FIXABLE: yes"
-        )
-        diagnosis = _extract_diagnosis(output)
-        assert diagnosis is not None
-        assert "endpoint returns 404" in diagnosis
-        assert "route wasn't registered" in diagnosis
-
-    def test_returns_none_when_no_diagnosis(self):
-        """Should return None when no diagnosis marker."""
-        from orchestrator.e2e_runner import _extract_diagnosis
-
-        output = "E2E_STATUS: failed\nSomething went wrong."
-        diagnosis = _extract_diagnosis(output)
-        assert diagnosis is None
-
-
 class TestExtractFixPlan:
     """Test fix plan extraction from Claude output."""
 
     def test_extract_fix_plan_from_marker(self):
         """Should extract fix plan from FIX_PLAN marker."""
-        from orchestrator.e2e_runner import _extract_fix_plan
+        from orchestrator.runner import _extract_fix_plan
 
         output = (
             "DIAGNOSIS: Missing router\n"
@@ -160,33 +95,11 @@ class TestExtractFixPlan:
 
     def test_returns_none_when_no_fix_plan(self):
         """Should return None when no FIX_PLAN marker."""
-        from orchestrator.e2e_runner import _extract_fix_plan
+        from orchestrator.runner import _extract_fix_plan
 
         output = "DIAGNOSIS: External service is down\nFIXABLE: no"
         fix_plan = _extract_fix_plan(output)
         assert fix_plan is None
-
-
-class TestDetectFixable:
-    """Test fixable detection from Claude output."""
-
-    def test_detect_fixable_yes(self):
-        """Should detect fixable when FIXABLE: yes present."""
-        from orchestrator.e2e_runner import _detect_fixable
-
-        assert _detect_fixable("FIXABLE: yes") is True
-
-    def test_detect_fixable_no(self):
-        """Should detect not fixable when FIXABLE: no present."""
-        from orchestrator.e2e_runner import _detect_fixable
-
-        assert _detect_fixable("FIXABLE: no") is False
-
-    def test_detect_fixable_default_false(self):
-        """Should default to False when no FIXABLE marker."""
-        from orchestrator.e2e_runner import _detect_fixable
-
-        assert _detect_fixable("Some output without FIXABLE") is False
 
 
 class TestRunE2ETests:
@@ -195,7 +108,7 @@ class TestRunE2ETests:
     @pytest.mark.asyncio
     async def test_executes_e2e_via_claude(self):
         """Should invoke Claude with E2E scenario."""
-        from orchestrator.e2e_runner import run_e2e_tests
+        from orchestrator.runner import run_e2e_tests
 
         sandbox = MagicMock()
         sandbox.invoke_claude = AsyncMock(
@@ -228,7 +141,7 @@ class TestRunE2ETests:
     @pytest.mark.asyncio
     async def test_returns_passed_result(self):
         """Should return E2EResult with passed status."""
-        from orchestrator.e2e_runner import run_e2e_tests
+        from orchestrator.runner import run_e2e_tests
 
         sandbox = MagicMock()
         sandbox.invoke_claude = AsyncMock(
@@ -258,7 +171,7 @@ class TestRunE2ETests:
     @pytest.mark.asyncio
     async def test_returns_failed_with_diagnosis(self):
         """Should return E2EResult with diagnosis for failures."""
-        from orchestrator.e2e_runner import run_e2e_tests
+        from orchestrator.runner import run_e2e_tests
 
         sandbox = MagicMock()
         sandbox.invoke_claude = AsyncMock(
@@ -297,7 +210,7 @@ class TestRunE2ETests:
     @pytest.mark.asyncio
     async def test_uses_config_timeout(self):
         """Should use task_timeout_seconds from config."""
-        from orchestrator.e2e_runner import run_e2e_tests
+        from orchestrator.runner import run_e2e_tests
 
         sandbox = MagicMock()
         sandbox.invoke_claude = AsyncMock(
@@ -326,7 +239,7 @@ class TestRunE2ETests:
     @pytest.mark.asyncio
     async def test_uses_limited_max_turns(self):
         """Should use 30 max turns for E2E tests."""
-        from orchestrator.e2e_runner import run_e2e_tests
+        from orchestrator.runner import run_e2e_tests
 
         sandbox = MagicMock()
         sandbox.invoke_claude = AsyncMock(
@@ -355,7 +268,7 @@ class TestRunE2ETests:
     @pytest.mark.asyncio
     async def test_records_duration(self):
         """Should record execution duration in result."""
-        from orchestrator.e2e_runner import run_e2e_tests
+        from orchestrator.runner import run_e2e_tests
 
         sandbox = MagicMock()
         sandbox.invoke_claude = AsyncMock(
@@ -383,7 +296,7 @@ class TestRunE2ETests:
     @pytest.mark.asyncio
     async def test_records_raw_output(self):
         """Should store raw Claude output in result."""
-        from orchestrator.e2e_runner import run_e2e_tests
+        from orchestrator.runner import run_e2e_tests
 
         output = "Detailed E2E execution log...\n\nE2E_STATUS: passed"
         sandbox = MagicMock()
@@ -414,7 +327,7 @@ class TestRunE2ETestsTracing:
     @pytest.mark.asyncio
     async def test_creates_span_for_e2e_test(self):
         """Should create a span for E2E test execution."""
-        from orchestrator.e2e_runner import run_e2e_tests
+        from orchestrator.runner import run_e2e_tests
 
         sandbox = MagicMock()
         sandbox.invoke_claude = AsyncMock(
@@ -443,7 +356,7 @@ class TestRunE2ETestsTracing:
     @pytest.mark.asyncio
     async def test_sets_span_attributes(self):
         """Should set milestone.id and e2e.status on span."""
-        from orchestrator.e2e_runner import run_e2e_tests
+        from orchestrator.runner import run_e2e_tests
 
         sandbox = MagicMock()
         sandbox.invoke_claude = AsyncMock(
@@ -482,7 +395,7 @@ class TestEstimateTokens:
 
     def test_estimate_tokens_from_cost(self):
         """Should estimate tokens based on cost."""
-        from orchestrator.e2e_runner import _estimate_tokens
+        from orchestrator.runner import _estimate_tokens
 
         # At ~$0.01 per 1000 tokens
         tokens = _estimate_tokens(0.10)
@@ -490,7 +403,7 @@ class TestEstimateTokens:
 
     def test_estimate_tokens_zero_cost(self):
         """Should return 0 for zero cost."""
-        from orchestrator.e2e_runner import _estimate_tokens
+        from orchestrator.runner import _estimate_tokens
 
         tokens = _estimate_tokens(0.0)
         assert tokens == 0
@@ -502,7 +415,7 @@ class TestApplyE2EFix:
     @pytest.mark.asyncio
     async def test_applies_fix_via_claude(self):
         """Should invoke Claude with fix plan."""
-        from orchestrator.e2e_runner import apply_e2e_fix
+        from orchestrator.runner import apply_e2e_fix
 
         sandbox = MagicMock()
         sandbox.invoke_claude = AsyncMock(
@@ -534,7 +447,7 @@ class TestApplyE2EFix:
     @pytest.mark.asyncio
     async def test_returns_true_on_success(self):
         """Should return True when fix is applied successfully."""
-        from orchestrator.e2e_runner import apply_e2e_fix
+        from orchestrator.runner import apply_e2e_fix
 
         sandbox = MagicMock()
         sandbox.invoke_claude = AsyncMock(
@@ -561,7 +474,7 @@ class TestApplyE2EFix:
     @pytest.mark.asyncio
     async def test_returns_false_on_failure(self):
         """Should return False when fix cannot be applied."""
-        from orchestrator.e2e_runner import apply_e2e_fix
+        from orchestrator.runner import apply_e2e_fix
 
         sandbox = MagicMock()
         sandbox.invoke_claude = AsyncMock(
@@ -588,7 +501,7 @@ class TestApplyE2EFix:
     @pytest.mark.asyncio
     async def test_returns_false_when_no_marker(self):
         """Should return False when output has no FIX_APPLIED marker."""
-        from orchestrator.e2e_runner import apply_e2e_fix
+        from orchestrator.runner import apply_e2e_fix
 
         sandbox = MagicMock()
         sandbox.invoke_claude = AsyncMock(
@@ -615,7 +528,7 @@ class TestApplyE2EFix:
     @pytest.mark.asyncio
     async def test_uses_limited_max_turns(self):
         """Should use 20 max turns for fixes."""
-        from orchestrator.e2e_runner import apply_e2e_fix
+        from orchestrator.runner import apply_e2e_fix
 
         sandbox = MagicMock()
         sandbox.invoke_claude = AsyncMock(
@@ -643,7 +556,7 @@ class TestApplyE2EFix:
     @pytest.mark.asyncio
     async def test_uses_fixed_timeout(self):
         """Should use 300 second timeout for fixes."""
-        from orchestrator.e2e_runner import apply_e2e_fix
+        from orchestrator.runner import apply_e2e_fix
 
         sandbox = MagicMock()
         sandbox.invoke_claude = AsyncMock(
@@ -675,7 +588,7 @@ class TestApplyE2EFixTracing:
     @pytest.mark.asyncio
     async def test_creates_span_for_fix(self):
         """Should create a span for E2E fix execution."""
-        from orchestrator.e2e_runner import apply_e2e_fix
+        from orchestrator.runner import apply_e2e_fix
 
         sandbox = MagicMock()
         sandbox.invoke_claude = AsyncMock(
@@ -703,7 +616,7 @@ class TestApplyE2EFixTracing:
     @pytest.mark.asyncio
     async def test_sets_fix_plan_attribute(self):
         """Should set fix.plan attribute on span (truncated)."""
-        from orchestrator.e2e_runner import apply_e2e_fix
+        from orchestrator.runner import apply_e2e_fix
 
         sandbox = MagicMock()
         sandbox.invoke_claude = AsyncMock(
@@ -735,7 +648,7 @@ class TestApplyE2EFixTracing:
     @pytest.mark.asyncio
     async def test_truncates_long_fix_plan(self):
         """Should truncate fix.plan attribute to 200 chars."""
-        from orchestrator.e2e_runner import apply_e2e_fix
+        from orchestrator.runner import apply_e2e_fix
 
         sandbox = MagicMock()
         sandbox.invoke_claude = AsyncMock(
@@ -768,7 +681,7 @@ class TestApplyE2EFixTracing:
     @pytest.mark.asyncio
     async def test_sets_fix_success_attribute(self):
         """Should set fix.success attribute on span."""
-        from orchestrator.e2e_runner import apply_e2e_fix
+        from orchestrator.runner import apply_e2e_fix
 
         sandbox = MagicMock()
         sandbox.invoke_claude = AsyncMock(

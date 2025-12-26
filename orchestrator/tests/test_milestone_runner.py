@@ -877,6 +877,280 @@ class TestLoopDetectionIntegration:
         assert tasks_called == ["1.2", "1.3"]
 
 
+class TestDiscordNotificationIntegration:
+    """Tests for Discord notification integration in milestone runner."""
+
+    @pytest.mark.asyncio
+    async def test_sends_milestone_started_notification(
+        self, tmp_path: Path, basic_plan_file: Path, mock_run_task_with_escalation: AsyncMock
+    ) -> None:
+        """Discord notification sent when milestone starts."""
+        from orchestrator.config import OrchestratorConfig
+
+        config = OrchestratorConfig(discord_webhook_url="https://discord.com/test")
+
+        with (
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
+            patch(
+                "orchestrator.milestone_runner.run_task_with_escalation",
+                mock_run_task_with_escalation,
+            ),
+            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch(
+                "orchestrator.milestone_runner.send_discord_message",
+                new_callable=AsyncMock,
+            ) as mock_send,
+        ):
+            configure_haiku_mock(mock_brain_class)
+            await run_milestone(
+                plan_path=str(basic_plan_file),
+                state_dir=tmp_path,
+                config=config,
+            )
+
+        # Should have sent milestone started notification
+        assert mock_send.called
+        # First call should be milestone started (format_milestone_started returns blue embed)
+        first_call_embed = mock_send.call_args_list[0][0][1]
+        assert "Started" in first_call_embed.title or "🚀" in first_call_embed.title
+
+    @pytest.mark.asyncio
+    async def test_sends_task_completed_notifications(
+        self, tmp_path: Path, basic_plan_file: Path, mock_run_task_with_escalation: AsyncMock
+    ) -> None:
+        """Discord notification sent for each completed task."""
+        from orchestrator.config import OrchestratorConfig
+
+        config = OrchestratorConfig(discord_webhook_url="https://discord.com/test")
+
+        with (
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
+            patch(
+                "orchestrator.milestone_runner.run_task_with_escalation",
+                mock_run_task_with_escalation,
+            ),
+            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch(
+                "orchestrator.milestone_runner.send_discord_message",
+                new_callable=AsyncMock,
+            ) as mock_send,
+        ):
+            configure_haiku_mock(mock_brain_class)
+            await run_milestone(
+                plan_path=str(basic_plan_file),
+                state_dir=tmp_path,
+                config=config,
+            )
+
+        # Should have sent: 1 milestone started + 3 task completed + 1 milestone completed = 5
+        assert mock_send.call_count >= 4  # At least started + 3 tasks
+
+    @pytest.mark.asyncio
+    async def test_sends_task_failed_notification(
+        self, tmp_path: Path, basic_plan_file: Path
+    ) -> None:
+        """Discord notification sent when task fails."""
+        from orchestrator.config import OrchestratorConfig
+
+        config = OrchestratorConfig(discord_webhook_url="https://discord.com/test")
+
+        async def mock_task_with_failure(
+            task: Task,
+            sandbox: MagicMock,
+            config: MagicMock,
+            plan_path: str,
+            tracer,
+            **kwargs,
+        ) -> TaskResult:
+            if task.id == "1.2":
+                return TaskResult(
+                    task_id=task.id,
+                    status="failed",
+                    duration_seconds=5.0,
+                    tokens_used=500,
+                    cost_usd=0.005,
+                    output="Failed",
+                    session_id="test",
+                    error="Connection refused",
+                )
+            return TaskResult(
+                task_id=task.id,
+                status="completed",
+                duration_seconds=10.0,
+                tokens_used=1000,
+                cost_usd=0.01,
+                output="Done",
+                session_id="test",
+            )
+
+        with (
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
+            patch(
+                "orchestrator.milestone_runner.run_task_with_escalation",
+                AsyncMock(side_effect=mock_task_with_failure),
+            ),
+            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch(
+                "orchestrator.milestone_runner.send_discord_message",
+                new_callable=AsyncMock,
+            ) as mock_send,
+        ):
+            configure_haiku_mock(mock_brain_class)
+            await run_milestone(
+                plan_path=str(basic_plan_file),
+                state_dir=tmp_path,
+                config=config,
+            )
+
+        # Should have sent task failed notification (red color)
+        call_embeds = [call[0][1] for call in mock_send.call_args_list]
+        failed_embeds = [e for e in call_embeds if "Failed" in e.title or "❌" in e.title]
+        assert len(failed_embeds) >= 1
+
+    @pytest.mark.asyncio
+    async def test_sends_milestone_completed_notification(
+        self, tmp_path: Path, basic_plan_file: Path, mock_run_task_with_escalation: AsyncMock
+    ) -> None:
+        """Discord notification sent when milestone completes."""
+        from orchestrator.config import OrchestratorConfig
+
+        config = OrchestratorConfig(discord_webhook_url="https://discord.com/test")
+
+        with (
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
+            patch(
+                "orchestrator.milestone_runner.run_task_with_escalation",
+                mock_run_task_with_escalation,
+            ),
+            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch(
+                "orchestrator.milestone_runner.send_discord_message",
+                new_callable=AsyncMock,
+            ) as mock_send,
+        ):
+            configure_haiku_mock(mock_brain_class)
+            await run_milestone(
+                plan_path=str(basic_plan_file),
+                state_dir=tmp_path,
+                config=config,
+            )
+
+        # Last notification should be milestone completed (purple color)
+        last_call_embed = mock_send.call_args_list[-1][0][1]
+        assert "Complete" in last_call_embed.title or "🎉" in last_call_embed.title
+
+    @pytest.mark.asyncio
+    async def test_no_notifications_when_discord_disabled(
+        self, tmp_path: Path, basic_plan_file: Path, mock_run_task_with_escalation: AsyncMock
+    ) -> None:
+        """No Discord notifications when webhook URL is not set."""
+        from orchestrator.config import OrchestratorConfig
+
+        config = OrchestratorConfig(discord_webhook_url=None)
+
+        with (
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
+            patch(
+                "orchestrator.milestone_runner.run_task_with_escalation",
+                mock_run_task_with_escalation,
+            ),
+            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch(
+                "orchestrator.milestone_runner.send_discord_message",
+                new_callable=AsyncMock,
+            ) as mock_send,
+        ):
+            configure_haiku_mock(mock_brain_class)
+            await run_milestone(
+                plan_path=str(basic_plan_file),
+                state_dir=tmp_path,
+                config=config,
+            )
+
+        # Should not have sent any notifications
+        mock_send.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_notifications_complete_with_milestone(
+        self, tmp_path: Path, basic_plan_file: Path, mock_run_task_with_escalation: AsyncMock
+    ) -> None:
+        """Discord notifications are awaited and complete with the milestone.
+
+        Notifications are now awaited to ensure delivery. The HTTP client
+        has a 5-second timeout, so notifications won't block indefinitely.
+        """
+        from orchestrator.config import OrchestratorConfig
+
+        config = OrchestratorConfig(discord_webhook_url="https://discord.com/test")
+
+        # Track notification calls
+        notification_calls = []
+
+        async def track_discord_message(*args, **kwargs):
+            notification_calls.append(args)
+
+        with (
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
+            patch(
+                "orchestrator.milestone_runner.run_task_with_escalation",
+                mock_run_task_with_escalation,
+            ),
+            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch(
+                "orchestrator.milestone_runner.send_discord_message",
+                side_effect=track_discord_message,
+            ),
+        ):
+            configure_haiku_mock(mock_brain_class)
+            await run_milestone(
+                plan_path=str(basic_plan_file),
+                state_dir=tmp_path,
+                config=config,
+            )
+
+        # Should have sent milestone started + task completed + milestone completed
+        assert len(notification_calls) >= 2, "Expected at least 2 notifications"
+
+    @pytest.mark.asyncio
+    async def test_graceful_failure_with_invalid_webhook(
+        self, tmp_path: Path, basic_plan_file: Path, mock_run_task_with_escalation: AsyncMock
+    ) -> None:
+        """Milestone completes successfully even if webhook fails.
+
+        The send_discord_message function handles exceptions internally,
+        so we mock at the httpx level to trigger that error handling.
+        """
+        import httpx
+
+        from orchestrator.config import OrchestratorConfig
+
+        config = OrchestratorConfig(discord_webhook_url="https://invalid.webhook")
+
+        with (
+            patch("orchestrator.milestone_runner.HaikuBrain") as mock_brain_class,
+            patch(
+                "orchestrator.milestone_runner.run_task_with_escalation",
+                mock_run_task_with_escalation,
+            ),
+            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch(
+                "orchestrator.discord_notifier.httpx.AsyncClient.post",
+                new_callable=AsyncMock,
+                side_effect=httpx.ConnectError("Connection failed"),
+            ),
+        ):
+            configure_haiku_mock(mock_brain_class)
+            # Should not raise even if Discord fails
+            result = await run_milestone(
+                plan_path=str(basic_plan_file),
+                state_dir=tmp_path,
+                config=config,
+            )
+
+        # Milestone should still complete successfully
+        assert result.status == "completed"
+
+
 class TestE2EIntegration:
     """Tests for E2E test integration in milestone runner."""
 
@@ -905,7 +1179,7 @@ pytest tests/ -v
         mock_run_task_with_escalation: AsyncMock,
     ) -> None:
         """E2E tests are run after all tasks complete successfully."""
-        from orchestrator.e2e_runner import E2EResult
+        from orchestrator.runner import E2EResult
 
         mock_e2e_result = E2EResult(
             status="passed",
@@ -978,7 +1252,7 @@ pytest tests/ -v
         self, tmp_path: Path, plan_file: Path, sample_tasks: list[Task]
     ) -> None:
         """E2E failure that can't be fixed returns e2e_failed status."""
-        from orchestrator.e2e_runner import E2EResult
+        from orchestrator.runner import E2EResult
 
         async def mock_task_success(
             task: Task,
@@ -1038,7 +1312,7 @@ pytest tests/ -v
         self, tmp_path: Path, plan_file: Path, sample_tasks: list[Task]
     ) -> None:
         """Fixable E2E failure prompts user and applies fix."""
-        from orchestrator.e2e_runner import E2EResult
+        from orchestrator.runner import E2EResult
 
         async def mock_task_success(
             task: Task,
@@ -1124,7 +1398,7 @@ pytest tests/ -v
         self, tmp_path: Path, plan_file: Path, sample_tasks: list[Task]
     ) -> None:
         """Loop detection stops E2E fix cycle."""
-        from orchestrator.e2e_runner import E2EResult
+        from orchestrator.runner import E2EResult
 
         async def mock_task_success(
             task: Task,
@@ -1198,7 +1472,7 @@ pytest tests/ -v
         self, tmp_path: Path, plan_file: Path, sample_tasks: list[Task]
     ) -> None:
         """Unclear E2E status escalates to human."""
-        from orchestrator.e2e_runner import E2EResult
+        from orchestrator.runner import E2EResult
 
         async def mock_task_success(
             task: Task,
@@ -1257,7 +1531,7 @@ pytest tests/ -v
         self, tmp_path: Path, plan_file: Path, sample_tasks: list[Task]
     ) -> None:
         """E2E status is persisted to state."""
-        from orchestrator.e2e_runner import E2EResult
+        from orchestrator.runner import E2EResult
 
         async def mock_task_success(
             task: Task,

@@ -25,7 +25,7 @@ def mock_brain_needs_help():
         options=None,
         recommendation=None,
     )
-    with patch("orchestrator.escalation.get_brain") as mock_get:
+    with patch("orchestrator.runner.get_brain") as mock_get:
         mock_brain = MagicMock()
         mock_brain.interpret_result.return_value = result
         mock_get.return_value = mock_brain
@@ -43,7 +43,7 @@ def mock_brain_completed():
         options=None,
         recommendation=None,
     )
-    with patch("orchestrator.escalation.get_brain") as mock_get:
+    with patch("orchestrator.runner.get_brain") as mock_get:
         mock_brain = MagicMock()
         mock_brain.interpret_result.return_value = result
         mock_get.return_value = mock_brain
@@ -55,7 +55,7 @@ class TestDetectNeedsHuman:
 
     def test_detects_explicit_status_needs_human(self):
         """Should detect explicit STATUS: needs_human marker (fast-path)."""
-        from orchestrator.escalation import detect_needs_human
+        from orchestrator.runner import detect_needs_human
 
         output = """
         I've analyzed the task but need clarification.
@@ -69,7 +69,7 @@ class TestDetectNeedsHuman:
 
     def test_detects_needs_human_marker(self):
         """Should detect NEEDS_HUMAN: marker (fast-path)."""
-        from orchestrator.escalation import detect_needs_human
+        from orchestrator.runner import detect_needs_human
 
         output = """
         NEEDS_HUMAN: The cache implementation type is not specified.
@@ -79,7 +79,7 @@ class TestDetectNeedsHuman:
 
     def test_detects_options_marker(self, mock_brain_needs_help):
         """Should detect OPTIONS: marker via LLM."""
-        from orchestrator.escalation import detect_needs_human
+        from orchestrator.runner import detect_needs_human
 
         output = """
         The task says to add caching but doesn't specify the type.
@@ -93,7 +93,7 @@ class TestDetectNeedsHuman:
 
     def test_detects_should_i_pattern(self, mock_brain_needs_help):
         """Should detect 'should I' question pattern via LLM."""
-        from orchestrator.escalation import detect_needs_human
+        from orchestrator.runner import detect_needs_human
 
         output = "The tests are failing. Should I fix them before proceeding?"
         assert detect_needs_human(output) is True
@@ -101,7 +101,7 @@ class TestDetectNeedsHuman:
 
     def test_detects_would_you_prefer_pattern(self, mock_brain_needs_help):
         """Should detect 'would you prefer' question pattern via LLM."""
-        from orchestrator.escalation import detect_needs_human
+        from orchestrator.runner import detect_needs_human
 
         output = "Would you prefer option A or option B for the implementation?"
         assert detect_needs_human(output) is True
@@ -109,7 +109,7 @@ class TestDetectNeedsHuman:
 
     def test_detects_im_not_sure_pattern(self, mock_brain_needs_help):
         """Should detect 'I'm not sure' uncertainty pattern via LLM."""
-        from orchestrator.escalation import detect_needs_human
+        from orchestrator.runner import detect_needs_human
 
         output = "I'm not sure whether to use Redis or Memcached for this."
         assert detect_needs_human(output) is True
@@ -117,7 +117,7 @@ class TestDetectNeedsHuman:
 
     def test_detects_im_uncertain_pattern(self, mock_brain_needs_help):
         """Should detect 'I'm uncertain' pattern via LLM."""
-        from orchestrator.escalation import detect_needs_human
+        from orchestrator.runner import detect_needs_human
 
         output = "I'm uncertain about the best approach here."
         assert detect_needs_human(output) is True
@@ -125,7 +125,7 @@ class TestDetectNeedsHuman:
 
     def test_detects_options_are_pattern(self, mock_brain_needs_help):
         """Should detect 'the options are' pattern via LLM."""
-        from orchestrator.escalation import detect_needs_human
+        from orchestrator.runner import detect_needs_human
 
         output = "The options are: use a database or a file system."
         assert detect_needs_human(output) is True
@@ -133,7 +133,7 @@ class TestDetectNeedsHuman:
 
     def test_detects_recommend_but_pattern(self, mock_brain_needs_help):
         """Should detect 'I recommend X but' pattern (hedging) via LLM."""
-        from orchestrator.escalation import detect_needs_human
+        from orchestrator.runner import detect_needs_human
 
         output = "I recommend using Redis but you might prefer something simpler."
         assert detect_needs_human(output) is True
@@ -141,7 +141,7 @@ class TestDetectNeedsHuman:
 
     def test_detects_could_go_either_way_pattern(self, mock_brain_needs_help):
         """Should detect 'could go either way' pattern via LLM."""
-        from orchestrator.escalation import detect_needs_human
+        from orchestrator.runner import detect_needs_human
 
         output = "This could go either way - both approaches have merits."
         assert detect_needs_human(output) is True
@@ -149,7 +149,7 @@ class TestDetectNeedsHuman:
 
     def test_detects_what_would_you_like_pattern(self, mock_brain_needs_help):
         """Should detect 'what would you like' pattern via LLM."""
-        from orchestrator.escalation import detect_needs_human
+        from orchestrator.runner import detect_needs_human
 
         output = "What would you like me to prioritize first?"
         assert detect_needs_human(output) is True
@@ -157,7 +157,7 @@ class TestDetectNeedsHuman:
 
     def test_detects_do_you_want_me_to_pattern(self, mock_brain_needs_help):
         """Should detect 'do you want me to' pattern via LLM."""
-        from orchestrator.escalation import detect_needs_human
+        from orchestrator.runner import detect_needs_human
 
         output = "Do you want me to refactor the entire module or just this function?"
         assert detect_needs_human(output) is True
@@ -165,7 +165,7 @@ class TestDetectNeedsHuman:
 
     def test_returns_false_for_completed_output(self, mock_brain_completed):
         """Should return False for definitive completed output."""
-        from orchestrator.escalation import detect_needs_human
+        from orchestrator.runner import detect_needs_human
 
         output = """
         Task completed successfully.
@@ -178,7 +178,7 @@ class TestDetectNeedsHuman:
 
     def test_returns_false_for_error_output(self, mock_brain_completed):
         """Should return False for error output without uncertainty."""
-        from orchestrator.escalation import detect_needs_human
+        from orchestrator.runner import detect_needs_human
 
         output = """
         Task failed.
@@ -191,7 +191,7 @@ class TestDetectNeedsHuman:
 
     def test_case_insensitive_matching(self, mock_brain_needs_help):
         """Patterns should be detected via LLM regardless of case."""
-        from orchestrator.escalation import detect_needs_human
+        from orchestrator.runner import detect_needs_human
 
         output = "SHOULD I proceed with the refactoring?"
         assert detect_needs_human(output) is True
@@ -199,7 +199,7 @@ class TestDetectNeedsHuman:
 
     def test_detects_markdown_options(self, mock_brain_needs_help):
         """Should detect **Options:** with markdown bold formatting via LLM."""
-        from orchestrator.escalation import detect_needs_human
+        from orchestrator.runner import detect_needs_human
 
         output = """
         The file doesn't exist.
@@ -214,7 +214,7 @@ class TestDetectNeedsHuman:
 
     def test_detects_lowercase_options(self, mock_brain_needs_help):
         """Should detect options: in lowercase via LLM."""
-        from orchestrator.escalation import detect_needs_human
+        from orchestrator.runner import detect_needs_human
 
         output = """
         options:
@@ -226,7 +226,7 @@ class TestDetectNeedsHuman:
 
     def test_detects_please_clarify(self, mock_brain_needs_help):
         """Should detect 'please clarify' pattern via LLM."""
-        from orchestrator.escalation import detect_needs_human
+        from orchestrator.runner import detect_needs_human
 
         output = "Please clarify which implementation plan you'd like me to work with."
         assert detect_needs_human(output) is True
@@ -234,7 +234,7 @@ class TestDetectNeedsHuman:
 
     def test_detects_did_you_mean(self, mock_brain_needs_help):
         """Should detect 'did you mean' pattern via LLM."""
-        from orchestrator.escalation import detect_needs_human
+        from orchestrator.runner import detect_needs_human
 
         output = "Did you mean one of these existing files?"
         assert detect_needs_human(output) is True
@@ -242,7 +242,7 @@ class TestDetectNeedsHuman:
 
     def test_detects_which_would_you(self, mock_brain_needs_help):
         """Should detect 'which X would you' pattern via LLM."""
-        from orchestrator.escalation import detect_needs_human
+        from orchestrator.runner import detect_needs_human
 
         output = "Which approach would you like me to take?"
         assert detect_needs_human(output) is True
@@ -254,7 +254,7 @@ class TestExtractEscalationInfo:
 
     def test_extracts_structured_question(self):
         """Should extract QUESTION: from structured format."""
-        from orchestrator.escalation import extract_escalation_info
+        from orchestrator.runner import extract_escalation_info
 
         output = """
         QUESTION: Which caching strategy should I use?
@@ -269,7 +269,7 @@ class TestExtractEscalationInfo:
 
     def test_extracts_structured_options(self):
         """Should extract OPTIONS: from structured format."""
-        from orchestrator.escalation import extract_escalation_info
+        from orchestrator.runner import extract_escalation_info
 
         output = """
         QUESTION: Which approach?
@@ -285,7 +285,7 @@ class TestExtractEscalationInfo:
 
     def test_extracts_structured_recommendation(self):
         """Should extract RECOMMENDATION: from structured format."""
-        from orchestrator.escalation import extract_escalation_info
+        from orchestrator.runner import extract_escalation_info
 
         output = """
         QUESTION: What should I do?
@@ -297,7 +297,7 @@ class TestExtractEscalationInfo:
 
     def test_extracts_question_with_question_mark(self):
         """Should extract question ending with ? from unstructured output."""
-        from orchestrator.escalation import extract_escalation_info
+        from orchestrator.runner import extract_escalation_info
 
         output = """
         I've looked at the code and there are two paths forward.
@@ -309,7 +309,7 @@ class TestExtractEscalationInfo:
 
     def test_extracts_uncertainty_statement(self):
         """Should extract 'I'm not sure' type statements."""
-        from orchestrator.escalation import extract_escalation_info
+        from orchestrator.runner import extract_escalation_info
 
         output = "I'm not sure whether to use the old API or the new one."
         info = extract_escalation_info("4.1", output)
@@ -317,7 +317,7 @@ class TestExtractEscalationInfo:
 
     def test_fallback_message_when_no_question_found(self):
         """Should provide fallback message when no question found."""
-        from orchestrator.escalation import extract_escalation_info
+        from orchestrator.runner import extract_escalation_info
 
         output = "STATUS: needs_human"
         info = extract_escalation_info("4.1", output)
@@ -330,7 +330,7 @@ class TestExtractEscalationInfo:
 
     def test_preserves_raw_output(self):
         """Should preserve the raw output in the EscalationInfo."""
-        from orchestrator.escalation import extract_escalation_info
+        from orchestrator.runner import extract_escalation_info
 
         output = "Some output with QUESTION: What should I do?"
         info = extract_escalation_info("4.1", output)
@@ -338,7 +338,7 @@ class TestExtractEscalationInfo:
 
     def test_options_none_when_not_present(self):
         """Options should be None when not present."""
-        from orchestrator.escalation import extract_escalation_info
+        from orchestrator.runner import extract_escalation_info
 
         output = "QUESTION: Should I proceed?"
         info = extract_escalation_info("4.1", output)
@@ -346,7 +346,7 @@ class TestExtractEscalationInfo:
 
     def test_recommendation_none_when_not_present(self):
         """Recommendation should be None when not present."""
-        from orchestrator.escalation import extract_escalation_info
+        from orchestrator.runner import extract_escalation_info
 
         output = "QUESTION: Which way?"
         info = extract_escalation_info("4.1", output)
@@ -358,7 +358,7 @@ class TestParseOptions:
 
     def test_parses_lettered_options(self):
         """Should parse A) B) C) format."""
-        from orchestrator.escalation import _parse_options
+        from orchestrator.runner import _parse_options
 
         text = "A) First option B) Second option C) Third option"
         options = _parse_options(text)
@@ -369,7 +369,7 @@ class TestParseOptions:
 
     def test_parses_numbered_options_with_dot(self):
         """Should parse 1. 2. 3. format."""
-        from orchestrator.escalation import _parse_options
+        from orchestrator.runner import _parse_options
 
         text = "1. First option 2. Second option 3. Third option"
         options = _parse_options(text)
@@ -377,7 +377,7 @@ class TestParseOptions:
 
     def test_parses_numbered_options_with_paren(self):
         """Should parse 1) 2) 3) format."""
-        from orchestrator.escalation import _parse_options
+        from orchestrator.runner import _parse_options
 
         text = "1) First option 2) Second option"
         options = _parse_options(text)
@@ -385,7 +385,7 @@ class TestParseOptions:
 
     def test_parses_bullet_options_dash(self):
         """Should parse - bullet format."""
-        from orchestrator.escalation import _parse_options
+        from orchestrator.runner import _parse_options
 
         text = "- First option - Second option - Third option"
         options = _parse_options(text)
@@ -393,7 +393,7 @@ class TestParseOptions:
 
     def test_parses_bullet_options_asterisk(self):
         """Should parse * bullet format."""
-        from orchestrator.escalation import _parse_options
+        from orchestrator.runner import _parse_options
 
         text = "* First option * Second option"
         options = _parse_options(text)
@@ -401,7 +401,7 @@ class TestParseOptions:
 
     def test_returns_single_item_for_unparseable(self):
         """Should return the whole text as single option if unparseable."""
-        from orchestrator.escalation import _parse_options
+        from orchestrator.runner import _parse_options
 
         text = "just some plain text without structure"
         options = _parse_options(text)
@@ -410,7 +410,7 @@ class TestParseOptions:
 
     def test_strips_whitespace_from_options(self):
         """Should strip whitespace from parsed options."""
-        from orchestrator.escalation import _parse_options
+        from orchestrator.runner import _parse_options
 
         text = "A)   Option with spaces   B)  Another option  "
         options = _parse_options(text)
@@ -423,7 +423,7 @@ class TestEscalationInfoDataclass:
 
     def test_escalation_info_creation(self):
         """Should be able to create EscalationInfo with all fields."""
-        from orchestrator.escalation import EscalationInfo
+        from orchestrator.runner import EscalationInfo
 
         info = EscalationInfo(
             task_id="4.1",
@@ -440,7 +440,7 @@ class TestEscalationInfoDataclass:
 
     def test_escalation_info_optional_fields(self):
         """Options and recommendation should be optional."""
-        from orchestrator.escalation import EscalationInfo
+        from orchestrator.runner import EscalationInfo
 
         info = EscalationInfo(
             task_id="4.1",
@@ -461,11 +461,11 @@ class TestEscalateAndWait:
         import asyncio
         from unittest.mock import MagicMock, patch
 
-        from orchestrator.escalation import EscalationInfo, escalate_and_wait
+        from orchestrator.runner import EscalationInfo, escalate_and_wait
 
         with (
-            patch("orchestrator.escalation.Prompt") as mock_prompt,
-            patch("orchestrator.escalation.send_notification"),
+            patch("orchestrator.runner.Prompt") as mock_prompt,
+            patch("orchestrator.runner.send_notification"),
         ):
             mock_prompt.ask.return_value = "Use option A"
 
@@ -495,11 +495,11 @@ class TestEscalateAndWait:
         import asyncio
         from unittest.mock import MagicMock, patch
 
-        from orchestrator.escalation import EscalationInfo, escalate_and_wait
+        from orchestrator.runner import EscalationInfo, escalate_and_wait
 
         with (
-            patch("orchestrator.escalation.Prompt") as mock_prompt,
-            patch("orchestrator.escalation.send_notification"),
+            patch("orchestrator.runner.Prompt") as mock_prompt,
+            patch("orchestrator.runner.send_notification"),
         ):
             mock_prompt.ask.return_value = "skip"
 
@@ -528,11 +528,11 @@ class TestEscalateAndWait:
         import asyncio
         from unittest.mock import MagicMock, patch
 
-        from orchestrator.escalation import EscalationInfo, escalate_and_wait
+        from orchestrator.runner import EscalationInfo, escalate_and_wait
 
         with (
-            patch("orchestrator.escalation.Prompt") as mock_prompt,
-            patch("orchestrator.escalation.send_notification") as mock_notify,
+            patch("orchestrator.runner.Prompt") as mock_prompt,
+            patch("orchestrator.runner.send_notification") as mock_notify,
         ):
             mock_prompt.ask.return_value = "response"
 
@@ -566,11 +566,11 @@ class TestEscalateAndWait:
         import asyncio
         from unittest.mock import MagicMock, patch
 
-        from orchestrator.escalation import EscalationInfo, escalate_and_wait
+        from orchestrator.runner import EscalationInfo, escalate_and_wait
 
         with (
-            patch("orchestrator.escalation.Prompt") as mock_prompt,
-            patch("orchestrator.escalation.send_notification") as mock_notify,
+            patch("orchestrator.runner.Prompt") as mock_prompt,
+            patch("orchestrator.runner.send_notification") as mock_notify,
         ):
             mock_prompt.ask.return_value = "response"
 
@@ -600,11 +600,11 @@ class TestEscalateAndWait:
         import asyncio
         from unittest.mock import MagicMock, patch
 
-        from orchestrator.escalation import EscalationInfo, escalate_and_wait
+        from orchestrator.runner import EscalationInfo, escalate_and_wait
 
         with (
-            patch("orchestrator.escalation.Prompt") as mock_prompt,
-            patch("orchestrator.escalation.send_notification"),
+            patch("orchestrator.runner.Prompt") as mock_prompt,
+            patch("orchestrator.runner.send_notification"),
         ):
             mock_prompt.ask.return_value = "response"
 
@@ -637,11 +637,11 @@ class TestEscalateAndWait:
         import asyncio
         from unittest.mock import MagicMock, patch
 
-        from orchestrator.escalation import EscalationInfo, escalate_and_wait
+        from orchestrator.runner import EscalationInfo, escalate_and_wait
 
         with (
-            patch("orchestrator.escalation.Prompt") as mock_prompt,
-            patch("orchestrator.escalation.send_notification"),
+            patch("orchestrator.runner.Prompt") as mock_prompt,
+            patch("orchestrator.runner.send_notification"),
         ):
             mock_prompt.ask.return_value = "response"
 
@@ -677,11 +677,11 @@ class TestEscalateAndWait:
         import asyncio
         from unittest.mock import MagicMock, patch
 
-        from orchestrator.escalation import EscalationInfo, escalate_and_wait
+        from orchestrator.runner import EscalationInfo, escalate_and_wait
 
         with (
-            patch("orchestrator.escalation.Prompt") as mock_prompt,
-            patch("orchestrator.escalation.send_notification"),
+            patch("orchestrator.runner.Prompt") as mock_prompt,
+            patch("orchestrator.runner.send_notification"),
         ):
             mock_prompt.ask.return_value = "response"
 
@@ -716,12 +716,12 @@ class TestHaikuBrainIntegration:
         """Explicit STATUS: needs_human should not call HaikuBrain in default mode."""
         from unittest.mock import patch
 
-        from orchestrator.escalation import configure_interpreter, detect_needs_human
+        from orchestrator.runner import configure_interpreter, detect_needs_human
 
         # Reset to default mode
         configure_interpreter(llm_only=False)
 
-        with patch("orchestrator.escalation.get_brain") as mock_get:
+        with patch("orchestrator.runner.get_brain") as mock_get:
             output = "STATUS: needs_human\nI need clarification."
             result = detect_needs_human(output)
 
@@ -732,11 +732,11 @@ class TestHaikuBrainIntegration:
         """NEEDS_HUMAN: marker should not call HaikuBrain in default mode."""
         from unittest.mock import patch
 
-        from orchestrator.escalation import configure_interpreter, detect_needs_human
+        from orchestrator.runner import configure_interpreter, detect_needs_human
 
         configure_interpreter(llm_only=False)
 
-        with patch("orchestrator.escalation.get_brain") as mock_get:
+        with patch("orchestrator.runner.get_brain") as mock_get:
             output = "NEEDS_HUMAN: Please clarify the caching type."
             result = detect_needs_human(output)
 
@@ -747,8 +747,8 @@ class TestHaikuBrainIntegration:
         """Output without explicit markers should use HaikuBrain interpretation."""
         from unittest.mock import MagicMock, patch
 
-        from orchestrator.escalation import configure_interpreter, detect_needs_human
         from orchestrator.haiku_brain import InterpretationResult
+        from orchestrator.runner import configure_interpreter, detect_needs_human
 
         configure_interpreter(llm_only=False)
 
@@ -761,7 +761,7 @@ class TestHaikuBrainIntegration:
             recommendation="A",
         )
 
-        with patch("orchestrator.escalation.get_brain") as mock_get:
+        with patch("orchestrator.runner.get_brain") as mock_get:
             mock_brain = MagicMock()
             mock_brain.interpret_result.return_value = mock_result
             mock_get.return_value = mock_brain
@@ -777,8 +777,8 @@ class TestHaikuBrainIntegration:
         """HaikuBrain saying task completed should return False."""
         from unittest.mock import MagicMock, patch
 
-        from orchestrator.escalation import configure_interpreter, detect_needs_human
         from orchestrator.haiku_brain import InterpretationResult
+        from orchestrator.runner import configure_interpreter, detect_needs_human
 
         configure_interpreter(llm_only=False)
 
@@ -791,7 +791,7 @@ class TestHaikuBrainIntegration:
             recommendation=None,
         )
 
-        with patch("orchestrator.escalation.get_brain") as mock_get:
+        with patch("orchestrator.runner.get_brain") as mock_get:
             mock_brain = MagicMock()
             mock_brain.interpret_result.return_value = mock_result
             mock_get.return_value = mock_brain
@@ -805,8 +805,8 @@ class TestHaikuBrainIntegration:
         """--llm-only mode should always use HaikuBrain, even with explicit markers."""
         from unittest.mock import MagicMock, patch
 
-        from orchestrator.escalation import configure_interpreter, detect_needs_human
         from orchestrator.haiku_brain import InterpretationResult
+        from orchestrator.runner import configure_interpreter, detect_needs_human
 
         # Enable LLM-only mode
         configure_interpreter(llm_only=True)
@@ -821,7 +821,7 @@ class TestHaikuBrainIntegration:
                 recommendation=None,
             )
 
-            with patch("orchestrator.escalation.get_brain") as mock_get:
+            with patch("orchestrator.runner.get_brain") as mock_get:
                 mock_brain = MagicMock()
                 mock_brain.interpret_result.return_value = mock_result
                 mock_get.return_value = mock_brain
@@ -841,8 +841,8 @@ class TestHaikuBrainIntegration:
         """--llm-only mode should skip fast-path check entirely."""
         from unittest.mock import MagicMock, patch
 
-        from orchestrator.escalation import configure_interpreter, detect_needs_human
         from orchestrator.haiku_brain import InterpretationResult
+        from orchestrator.runner import configure_interpreter, detect_needs_human
 
         configure_interpreter(llm_only=True)
 
@@ -856,7 +856,7 @@ class TestHaikuBrainIntegration:
                 recommendation=None,
             )
 
-            with patch("orchestrator.escalation.get_brain") as mock_get:
+            with patch("orchestrator.runner.get_brain") as mock_get:
                 mock_brain = MagicMock()
                 mock_brain.interpret_result.return_value = mock_result
                 mock_get.return_value = mock_brain
@@ -872,7 +872,7 @@ class TestHaikuBrainIntegration:
 
     def test_get_brain_singleton(self):
         """get_brain should return the same instance on repeated calls."""
-        from orchestrator.escalation import get_brain
+        from orchestrator.runner import get_brain
 
         brain1 = get_brain()
         brain2 = get_brain()
@@ -880,7 +880,7 @@ class TestHaikuBrainIntegration:
 
     def test_configure_interpreter_resets_state(self):
         """configure_interpreter should set the llm_only flag."""
-        from orchestrator.escalation import configure_interpreter
+        from orchestrator.runner import configure_interpreter
 
         # Just verify no exception
         configure_interpreter(llm_only=True)
