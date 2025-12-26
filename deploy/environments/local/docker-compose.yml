@@ -82,6 +82,8 @@ services:
       - KTRDR_API_URL=http://backend:8000
       # Observability
       - OTLP_ENDPOINT=http://jaeger:4317
+      # Checkpointing
+      - CHECKPOINT_DIR=/app/data/checkpoints
       # IB Host Service (runs natively on Mac)
       - USE_IB_HOST_SERVICE=${USE_IB_HOST_SERVICE:-true}
       - IB_HOST_SERVICE_URL=http://host.docker.internal:5001
@@ -202,7 +204,7 @@ services:
       - "5003:5003"
     volumes:
       - ./ktrdr:/app/ktrdr
-      - ./data:/app/data:ro
+      - ./data:/app/data  # RW for checkpoint artifacts
       - ./models:/app/models:ro
       - ./strategies:/app/strategies:ro
       - ./config:/app/config:ro
@@ -218,6 +220,7 @@ services:
       - WORKER_PORT=5003
       - WORKER_PUBLIC_BASE_URL=http://backtest-worker-1:5003
       - OTLP_ENDPOINT=http://jaeger:4317
+      - CHECKPOINT_DIR=/app/data/checkpoints
       # Database access for checkpointing
       - DB_HOST=db
       - DB_PORT=5432
@@ -257,7 +260,7 @@ services:
       - "5004:5004"
     volumes:
       - ./ktrdr:/app/ktrdr
-      - ./data:/app/data:ro
+      - ./data:/app/data  # RW for checkpoint artifacts
       - ./models:/app/models:ro
       - ./strategies:/app/strategies:ro
       - ./config:/app/config:ro
@@ -273,6 +276,7 @@ services:
       - WORKER_PORT=5004
       - WORKER_PUBLIC_BASE_URL=http://backtest-worker-2:5004
       - OTLP_ENDPOINT=http://jaeger:4317
+      - CHECKPOINT_DIR=/app/data/checkpoints
       - DB_HOST=db
       - DB_PORT=5432
       - DB_NAME=${DB_NAME:-ktrdr}
@@ -311,7 +315,7 @@ services:
       - "5005:5005"
     volumes:
       - ./ktrdr:/app/ktrdr
-      - ./data:/app/data:ro
+      - ./data:/app/data  # RW for checkpoint artifacts
       - ./models:/app/models
       - ./strategies:/app/strategies:ro
       - ./config:/app/config:ro
@@ -327,6 +331,7 @@ services:
       - WORKER_PORT=5005
       - WORKER_PUBLIC_BASE_URL=http://training-worker-1:5005
       - OTLP_ENDPOINT=http://jaeger:4317
+      - CHECKPOINT_DIR=/app/data/checkpoints
       - DB_HOST=db
       - DB_PORT=5432
       - DB_NAME=${DB_NAME:-ktrdr}
@@ -365,7 +370,7 @@ services:
       - "5006:5006"
     volumes:
       - ./ktrdr:/app/ktrdr
-      - ./data:/app/data:ro
+      - ./data:/app/data  # RW for checkpoint artifacts
       - ./models:/app/models
       - ./strategies:/app/strategies:ro
       - ./config:/app/config:ro
@@ -381,6 +386,7 @@ services:
       - WORKER_PORT=5006
       - WORKER_PUBLIC_BASE_URL=http://training-worker-2:5006
       - OTLP_ENDPOINT=http://jaeger:4317
+      - CHECKPOINT_DIR=/app/data/checkpoints
       - DB_HOST=db
       - DB_PORT=5432
       - DB_NAME=${DB_NAME:-ktrdr}

@@ -47,6 +47,7 @@ services:
       DATA_DIR: /mnt/ktrdr_data/data
       MODELS_DIR: /mnt/ktrdr_data/models
       STRATEGIES_DIR: /mnt/ktrdr_data/strategies
+      CHECKPOINT_DIR: /mnt/ktrdr_data/checkpoints
     depends_on:
       db:
         condition: service_healthy

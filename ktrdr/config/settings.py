@@ -74,6 +74,42 @@ class OrphanDetectorSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="ORPHAN_")
 
 
+class CheckpointSettings(BaseSettings):
+    """Checkpoint Settings.
+
+    Configures checkpoint saving for long-running operations like training.
+    Settings control checkpoint frequency and storage location.
+
+    Environment variables:
+        CHECKPOINT_EPOCH_INTERVAL: Save checkpoint every N epochs. Default: 10
+        CHECKPOINT_TIME_INTERVAL_SECONDS: Save checkpoint every M seconds. Default: 300
+        CHECKPOINT_DIR: Directory for checkpoint artifacts. Default: /app/data/checkpoints
+        CHECKPOINT_MAX_AGE_DAYS: Auto-cleanup checkpoints older than N days. Default: 30
+    """
+
+    epoch_interval: int = Field(
+        default=10,
+        gt=0,
+        description="Save checkpoint every N epochs/units",
+    )
+    time_interval_seconds: int = Field(
+        default=300,
+        gt=0,
+        description="Save checkpoint every M seconds",
+    )
+    dir: str = Field(
+        default="/app/data/checkpoints",
+        description="Directory for checkpoint artifact storage",
+    )
+    max_age_days: int = Field(
+        default=30,
+        gt=0,
+        description="Auto-cleanup checkpoints older than N days",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="CHECKPOINT_")
+
+
 # Cache settings to avoid repeated disk/env access
 @lru_cache
 def get_api_settings() -> APISettings:
@@ -93,6 +129,12 @@ def get_orphan_detector_settings() -> OrphanDetectorSettings:
     return OrphanDetectorSettings()
 
 
+@lru_cache
+def get_checkpoint_settings() -> CheckpointSettings:
+    """Get checkpoint settings with caching."""
+    return CheckpointSettings()
+
+
 # Compatibility aliases for existing code
 CLISettings = ApiServiceSettings  # CLI uses API service settings for client connections
 
@@ -109,6 +151,7 @@ def clear_settings_cache() -> None:
     get_logging_settings.cache_clear()
     get_api_service_settings.cache_clear()
     get_orphan_detector_settings.cache_clear()
+    get_checkpoint_settings.cache_clear()
 
 
 # Export IB config for convenience
@@ -116,10 +159,12 @@ __all__ = [
     "APISettings",
     "LoggingSettings",
     "OrphanDetectorSettings",
+    "CheckpointSettings",
     "ApiServiceSettings",
     "get_api_settings",
     "get_logging_settings",
     "get_orphan_detector_settings",
+    "get_checkpoint_settings",
     "get_api_service_settings",
     "clear_settings_cache",
     # Compatibility aliases

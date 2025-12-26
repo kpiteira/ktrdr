@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import httpx
 
-from ktrdr.api.models.operations import OperationMetadata, OperationType
+from ktrdr.api.models.operations import OperationType
 from ktrdr.api.models.workers import WorkerType
 from ktrdr.api.services.adapters.operation_service_proxy import OperationServiceProxy
 from ktrdr.api.services.operations_service import get_operations_service
@@ -136,6 +136,10 @@ class BacktestingService(ServiceOrchestrator[None]):
         Returns operation_id immediately. Clients poll for progress via:
           GET /operations/{operation_id}
 
+        Task 3.10 Fix: For distributed operations, bypass start_managed_operation.
+        The worker creates the operation in DB (not the backend) to avoid duplicate
+        key errors. Backend just dispatches to worker and registers a proxy.
+
         Args:
             symbol: Trading symbol
             timeframe: Timeframe for backtest
@@ -150,55 +154,42 @@ class BacktestingService(ServiceOrchestrator[None]):
         Returns:
             Dictionary with operation_id and status
         """
-        # Create context for the operation
-        context = {
-            "symbol": symbol,
-            "timeframe": timeframe,
-            "strategy_config_path": strategy_config_path,
-            "model_path": model_path,
-            "start_date": start_date.isoformat(),
-            "end_date": end_date.isoformat(),
-            "initial_capital": initial_capital,
-            "commission": commission,
-            "slippage": slippage,
-        }
+        # Task 3.10: Generate operation_id here, bypass start_managed_operation
+        # The worker creates the operation in its DB (distributed-only mode)
+        operation_id = self.operations_service.generate_operation_id(
+            OperationType.BACKTESTING
+        )
 
-        # Create operation metadata
-        metadata = OperationMetadata(
+        logger.info(
+            f"Starting backtest (distributed mode): {operation_id} "
+            f"for {symbol} {timeframe}"
+        )
+
+        # Dispatch directly to worker (no start_managed_operation)
+        # Worker will create the operation in DB
+        worker_result = await self.run_backtest_on_worker(
+            operation_id=operation_id,
             symbol=symbol,
             timeframe=timeframe,
-            mode="distributed",
+            strategy_config_path=strategy_config_path,
+            model_path=model_path,
             start_date=start_date,
             end_date=end_date,
-            parameters={
-                "strategy_config_path": strategy_config_path,
-                "model_path": model_path,
-                "initial_capital": initial_capital,
-                "commission": commission,
-                "slippage": slippage,
-            },
+            initial_capital=initial_capital,
+            commission=commission,
+            slippage=slippage,
         )
 
-        # Use ServiceOrchestrator's start_managed_operation
-        operation_result = await self.start_managed_operation(
-            operation_name="backtest",
-            operation_type=OperationType.BACKTESTING.value,
-            operation_func=self._operation_entrypoint,
-            context=context,
-            metadata=metadata,
-            total_steps=100,  # Default estimate
-        )
-
-        operation_id = operation_result["operation_id"]
-
+        # Return with the operation_id (backend_operation_id from worker)
         return {
             "success": True,
-            "operation_id": operation_id,
+            "operation_id": worker_result.get("backend_operation_id", operation_id),
             "status": "started",
             "message": f"Backtest started for {symbol} {timeframe}",
             "symbol": symbol,
             "timeframe": timeframe,
             "mode": "distributed",
+            "worker_id": worker_result.get("worker_id"),
         }
 
     async def _operation_entrypoint(
@@ -244,7 +235,7 @@ class BacktestingService(ServiceOrchestrator[None]):
         symbol: str,
         timeframe: str,
         strategy_config_path: str,
-        model_path: str,
+        model_path: Optional[str],
         start_date: datetime,
         end_date: datetime,
         initial_capital: float,

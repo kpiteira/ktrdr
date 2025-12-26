@@ -101,12 +101,16 @@ class ModelTrainer:
         config: dict[str, Any],
         progress_callback=None,
         cancellation_token: CancellationToken | None = None,
+        checkpoint_callback=None,
     ):
         """Initialize trainer.
 
         Args:
             config: Training configuration
             progress_callback: Optional callback for progress updates
+            cancellation_token: Optional token for cancellation support
+            checkpoint_callback: Optional callback for checkpointing after each epoch.
+                Called with kwargs: epoch, model, optimizer, scheduler, trainer.
         """
         self.config = config
         self.cancellation_token = cancellation_token
@@ -118,6 +122,7 @@ class ModelTrainer:
         self.best_model_state: Optional[dict[str, Any]] = None
         self.best_val_accuracy = 0.0
         self.progress_callback = progress_callback
+        self.checkpoint_callback = checkpoint_callback
 
         # Progress update frequency: update every N batches
         # Default to 1 (every batch) for responsive UI, can be increased for performance
@@ -562,6 +567,20 @@ class ModelTrainer:
                     self.progress_callback(epoch, epochs, epoch_metrics)
                 except Exception as e:
                     print(f"Warning: Progress callback failed: {e}")
+
+            # Checkpoint callback for saving checkpoints after each epoch
+            # Called with model, optimizer, scheduler, and trainer for state extraction
+            if self.checkpoint_callback:
+                try:
+                    self.checkpoint_callback(
+                        epoch=epoch,
+                        model=model,
+                        optimizer=optimizer,
+                        scheduler=scheduler,
+                        trainer=self,
+                    )
+                except Exception as e:
+                    print(f"Warning: Checkpoint callback failed: {e}")
 
         # Restore best model if available
         if self.best_model_state is not None:
