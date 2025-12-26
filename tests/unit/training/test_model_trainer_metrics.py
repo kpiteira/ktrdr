@@ -223,3 +223,92 @@ class TestModelTrainerMetricsEmission:
         metrics = epoch_callbacks[0]
 
         assert metrics["learning_rate"] == learning_rate
+
+
+class TestModelTrainerAnalyticsDetection:
+    """Test that ModelTrainer correctly detects analytics config from various paths."""
+
+    def test_analytics_enabled_via_full_config(self):
+        """Test analytics enabled when full_config contains model.training.analytics.enabled."""
+        # Given config with full_config containing analytics
+        config = {
+            "epochs": 1,
+            "batch_size": 16,
+            "learning_rate": 0.001,
+            "full_config": {
+                "name": "test_strategy",
+                "symbol": "EURUSD",
+                "model": {
+                    "training": {
+                        "analytics": {
+                            "enabled": True,
+                        }
+                    }
+                },
+            },
+        }
+
+        # When creating trainer
+        trainer = ModelTrainer(config=config)
+
+        # Then analytics should be enabled
+        assert trainer.analytics_enabled is True
+
+    def test_analytics_enabled_via_direct_config(self):
+        """Test analytics enabled when config is already at model.training level.
+
+        This covers the case in training_pipeline.py where:
+            training_config = strategy_config["model"]["training"]
+
+        The config passed is already at model.training level, so analytics
+        should be detected at config.analytics.enabled, not config.model.training.analytics.enabled.
+        """
+        # Given config at model.training level (as passed by training_pipeline)
+        config = {
+            "epochs": 1,
+            "batch_size": 16,
+            "learning_rate": 0.001,
+            "analytics": {
+                "enabled": True,
+                "export_csv": True,
+            },
+        }
+
+        # When creating trainer
+        trainer = ModelTrainer(config=config)
+
+        # Then analytics should be enabled
+        assert trainer.analytics_enabled is True
+
+    def test_analytics_disabled_by_default(self):
+        """Test analytics is disabled when not specified."""
+        # Given config without analytics
+        config = {
+            "epochs": 1,
+            "batch_size": 16,
+            "learning_rate": 0.001,
+        }
+
+        # When creating trainer
+        trainer = ModelTrainer(config=config)
+
+        # Then analytics should be disabled
+        assert trainer.analytics_enabled is False
+
+    def test_analytics_disabled_when_explicitly_false(self):
+        """Test analytics respects explicit false setting."""
+        # Given config with analytics.enabled = False
+        config = {
+            "epochs": 1,
+            "batch_size": 16,
+            "learning_rate": 0.001,
+            "analytics": {
+                "enabled": False,
+            },
+        }
+
+        # When creating trainer
+        trainer = ModelTrainer(config=config)
+
+        # Then analytics should be disabled
+        assert trainer.analytics_enabled is False
