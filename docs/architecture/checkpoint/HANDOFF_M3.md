@@ -661,11 +661,55 @@ All quality gates pass:
 - `make test-unit` — 2775 tests passed
 - `make quality` — All checks passed
 
-### Guidance for Task 3.11
+---
 
-E2E verification should now work:
-1. Start training/backtesting — No duplicate operation ID error
-2. Query operation status — Returns live progress via proxy
-3. Verify operation appears in DB — Created by worker, not backend
+## Task 3.11 Complete
+
+**Verified:** E2E verification test passed for all acceptance criteria.
+
+### E2E Test Results
+
+| Test                                       | Result                      |
+| ------------------------------------------ | --------------------------- |
+| Training starts (no duplicate ID error)    | ✅ PASS                     |
+| Backtesting starts (no duplicate ID error) | ✅ PASS                     |
+| Operation appears in database              | ✅ PASS                     |
+| Operation status queryable via proxy       | ✅ PASS                     |
+| Checkpoint on success                      | ✅ N/A (deleted by design)  |
+
+### Verified Commands
+
+```bash
+# Check workers registered
+curl -s http://localhost:8000/api/v1/workers | jq 'length'
+
+# Start training
+curl -s -X POST http://localhost:8000/api/v1/trainings/start \
+  -H "Content-Type: application/json" \
+  -d '{"strategy_name": "bollinger_squeeze", "symbols": ["AAPL"], "timeframes": ["1h"], "start_date": "2024-01-01", "end_date": "2024-06-30"}'
+
+# Start backtesting
+curl -s -X POST http://localhost:8000/api/v1/backtests/start \
+  -H "Content-Type: application/json" \
+  -d '{"strategy_name": "bollinger_squeeze", "symbol": "AAPL", "timeframe": "1h", "start_date": "2024-01-01", "end_date": "2024-03-31", "initial_capital": 100000, "commission": 0.001, "slippage": 0.001}'
+
+# Check operation in DB
+docker exec ktrdr2-db-1 psql -U ktrdr -d ktrdr -c "SELECT operation_id, status FROM operations WHERE operation_id = '<OP_ID>'"
+```
+
+---
+
+## Milestone 3 Complete
+
+All tasks completed and verified:
+
+- ✅ Task 3.1-3.9: Core checkpoint infrastructure
+- ✅ Task 3.10: Operations architecture fix (blocking bug)
+- ✅ Task 3.11: E2E verification
+
+Quality gates:
+
+- ✅ `make test-unit` — 2775 passed
+- ✅ `make quality` — All checks passed
 
 ---
