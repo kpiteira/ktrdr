@@ -770,6 +770,17 @@ class KtrdrApiClient:
             )
         return response
 
+    async def resume_operation(self, operation_id: str) -> dict[str, Any]:
+        """Resume a cancelled or failed operation from checkpoint."""
+        response = await self._make_request("POST", f"/operations/{operation_id}/resume")
+        if not response.get("success"):
+            raise DataError(
+                message=f"Failed to resume operation {operation_id}",
+                error_code="API-ResumeOperationError",
+                details={"response": response, "operation_id": operation_id},
+            )
+        return response
+
     # =============================================================================
     # Dummy Service Endpoints
     # =============================================================================
