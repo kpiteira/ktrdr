@@ -260,10 +260,72 @@ Location: [tests/unit/training/test_training_worker_resume_endpoint.py](tests/un
 
 ---
 
-### Notes for Task 4.5
+## Task 4.5 Complete
 
-Task 4.5 will integrate `resume_context` into `ModelTrainer`:
-- Add `resume_context` parameter to `LocalTrainingOrchestrator`
-- Load model weights from `resume_context.model_weights`
-- Load optimizer state from `resume_context.optimizer_state`
-- Set starting epoch to `resume_context.start_epoch`
+**Implemented:** ModelTrainer resume_context integration and full pipeline wiring
+
+### ModelTrainer Updates
+
+Location: [ktrdr/training/model_trainer.py:103-160](ktrdr/training/model_trainer.py#L103-L160)
+
+```python
+def __init__(
+    self,
+    config: dict[str, Any],
+    progress_callback=None,
+    cancellation_token: CancellationToken | None = None,
+    checkpoint_callback=None,
+    resume_context: Optional["TrainingResumeContext"] = None,  # NEW
+)
+```
+
+**Resume Logic in `train()` method:**
+1. After `model.to(device)`: Load model weights from `resume_context.model_weights`
+2. After creating optimizer: Load optimizer state from `resume_context.optimizer_state`
+3. After creating scheduler: Load scheduler state if provided
+4. Training loop: `for epoch in range(start_epoch, epochs)`
+5. Progress calculations: Adjusted for resumed training (relative to remaining epochs)
+
+### Pipeline Wiring
+
+**Call chain updated:**
+```
+TrainingWorker._execute_resumed_training(resume_context)
+    → LocalTrainingOrchestrator(resume_context=resume_context)
+        → TrainingPipeline.train_strategy(resume_context=resume_context)
+            → TrainingPipeline.train_model(resume_context=resume_context)
+                → ModelTrainer(resume_context=resume_context)
+```
+
+**Files modified:**
+- `ktrdr/api/services/training/local_orchestrator.py` - Added `resume_context` parameter
+- `ktrdr/training/training_pipeline.py` - Added `resume_context` to `train_strategy()` and `train_model()`
+- `ktrdr/training/training_worker.py` - Pass `resume_context` to orchestrator
+
+### Acceptance Criteria Verified
+
+- [x] ModelTrainer accepts resume context
+- [x] Model weights loaded from checkpoint
+- [x] Optimizer state loaded from checkpoint
+- [x] Training starts from correct epoch
+- [x] Training history merged correctly
+
+### Tests Added
+
+Location: [tests/unit/training/test_model_trainer_resume.py](tests/unit/training/test_model_trainer_resume.py)
+
+- 10 unit tests covering:
+  - resume_context parameter acceptance
+  - Model/optimizer/scheduler state restoration
+  - Correct start epoch (loop starts from `resume_context.start_epoch`)
+  - Training history merging
+  - Edge cases (epoch 0, final epoch, scheduler state, best_model_weights)
+
+---
+
+### Notes for Task 4.6
+
+Task 4.6 will add CLI command:
+- `ktrdr operations resume <operation_id>`
+- Call backend's resume endpoint
+- Display resumed_from info
