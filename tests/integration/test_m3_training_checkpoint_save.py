@@ -106,10 +106,10 @@ class IntegrationCheckpointService(CheckpointService):
     """
 
     def __init__(self, artifacts_dir: str):
-        # Create a mock session factory
+        # Create mock session factory first, then call super().__init__()
         self._mock_repo = MockCheckpointRepository()
-        self._artifacts_dir = Path(artifacts_dir)
-        self._session_factory = self._create_mock_factory()
+        mock_factory = self._create_mock_factory()
+        super().__init__(session_factory=mock_factory, artifacts_dir=artifacts_dir)
 
     def _create_mock_factory(self):
         """Create mock session factory that uses our in-memory repo."""

@@ -295,8 +295,6 @@ class TrainingWorker(WorkerAPIBase):
 
                             # Run async checkpoint save from sync context
                             # Since we're in a thread pool, we need to run in the event loop
-                            import asyncio
-
                             loop = asyncio.new_event_loop()
                             try:
                                 loop.run_until_complete(
