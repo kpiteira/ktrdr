@@ -685,6 +685,125 @@ class OperationsService:
                 "children_cancelled": children_cancelled,
             }
 
+    async def try_resume(self, operation_id: str) -> bool:
+        """
+        Atomically update status to RUNNING if currently resumable.
+
+        Uses optimistic locking: only updates if status is CANCELLED or FAILED.
+        This prevents race conditions when multiple resume requests are made.
+
+        Args:
+            operation_id: Operation identifier
+
+        Returns:
+            True if status was updated (operation is now RUNNING),
+            False if operation not found or not in resumable state.
+        """
+        async with self._lock:
+            # Check cache first
+            operation = self._cache.get(operation_id)
+
+            if operation is None and self._repository:
+                # Try to load from repository
+                db_op = await self._repository.get(operation_id)
+                if db_op:
+                    # Repository.get() returns OperationInfo directly
+                    operation = db_op
+                    self._cache[operation_id] = operation
+
+            if operation is None:
+                logger.warning(f"Cannot resume - operation not found: {operation_id}")
+                return False
+
+            # Check if operation is in a resumable state
+            if operation.status not in [
+                OperationStatus.CANCELLED,
+                OperationStatus.FAILED,
+            ]:
+                logger.warning(
+                    f"Cannot resume - operation not in resumable state: {operation_id} "
+                    f"(status: {operation.status})"
+                )
+                return False
+
+            # Update status to RUNNING
+            with create_service_span(
+                "operation.state_transition", operation_id=operation_id
+            ) as span:
+                span.set_attribute("operation.from_status", operation.status.value)
+                span.set_attribute("operation.to_status", OperationStatus.RUNNING.value)
+                span.set_attribute("operation.resumed", True)
+
+                old_status = operation.status
+                operation.status = OperationStatus.RUNNING
+                operation.started_at = datetime.now(timezone.utc)
+                operation.completed_at = None
+                operation.error_message = None
+
+            # Persist to repository
+            if self._repository:
+                await self._repository.update(
+                    operation_id,
+                    status=OperationStatus.RUNNING.value,
+                    started_at=operation.started_at,
+                    completed_at=None,
+                    error_message=None,
+                )
+
+            # Update Prometheus metrics
+            operations_active.inc()
+
+            logger.info(
+                f"Resumed operation: {operation_id} (from {old_status.value} to running)"
+            )
+
+            return True
+
+    async def update_status(self, operation_id: str, status: str) -> None:
+        """
+        Update operation status directly.
+
+        Used for cases where we need to set a specific status (e.g., marking
+        as FAILED when checkpoint is not available during resume).
+
+        Args:
+            operation_id: Operation identifier
+            status: New status string (will be converted to OperationStatus)
+        """
+        async with self._lock:
+            operation = self._cache.get(operation_id)
+
+            if operation is None:
+                logger.warning(
+                    f"Cannot update status - operation not found: {operation_id}"
+                )
+                return
+
+            new_status = OperationStatus(status.lower())
+            old_status = operation.status
+
+            # Update in-memory cache
+            operation.status = new_status
+            if new_status in [
+                OperationStatus.COMPLETED,
+                OperationStatus.FAILED,
+                OperationStatus.CANCELLED,
+            ]:
+                operation.completed_at = datetime.now(timezone.utc)
+
+            # Persist to repository
+            if self._repository:
+                await self._repository.update(
+                    operation_id,
+                    status=new_status.value,
+                    completed_at=operation.completed_at,
+                )
+
+            logger.info(
+                f"Updated operation status: {operation_id} "
+                f"({old_status.value} -> {new_status.value})"
+            )
+
     async def get_operation(
         self, operation_id: str, force_refresh: bool = False
     ) -> Optional[OperationInfo]:

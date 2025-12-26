@@ -319,6 +319,51 @@ class OperationCancelResponse(BaseModel):
     )
 
 
+class ResumedFromInfo(BaseModel):
+    """Information about the checkpoint from which operation was resumed."""
+
+    checkpoint_type: str = Field(
+        ...,
+        description="Type of checkpoint (periodic, cancellation, failure, shutdown)",
+    )
+    created_at: datetime = Field(..., description="When the checkpoint was created")
+    epoch: Optional[int] = Field(None, description="Epoch number (for training)")
+
+
+class ResumeOperationData(BaseModel):
+    """Data returned when an operation is resumed."""
+
+    operation_id: str = Field(..., description="The resumed operation ID")
+    status: str = Field(..., description="New status (running)")
+    resumed_from: ResumedFromInfo = Field(
+        ..., description="Information about the checkpoint"
+    )
+
+
+class ResumeOperationResponse(BaseModel):
+    """Response for operation resume."""
+
+    success: bool = Field(True, description="Whether the request was successful")
+    data: ResumeOperationData = Field(..., description="Resume result")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "success": True,
+                "data": {
+                    "operation_id": "op_training_20241201_123456",
+                    "status": "running",
+                    "resumed_from": {
+                        "checkpoint_type": "cancellation",
+                        "created_at": "2024-12-01T12:45:30Z",
+                        "epoch": 25,
+                    },
+                },
+            }
+        }
+    )
+
+
 class OperationStartResponse(BaseModel):
     """Response for operation start."""
 
