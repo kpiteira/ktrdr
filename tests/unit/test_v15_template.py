@@ -128,3 +128,221 @@ class TestV15Template:
         assert (
             include_price is False
         ), "include_price_context must be False for pure fuzzy"
+
+
+# =============================================================================
+# Tests for all 27 v1.5 strategies
+# =============================================================================
+
+# Expected strategy files (27 total)
+EXPECTED_STRATEGIES = [
+    # Single indicator (9)
+    "v15_rsi_only",
+    "v15_stochastic_only",
+    "v15_williams_only",
+    "v15_mfi_only",
+    "v15_adx_only",
+    "v15_aroon_only",
+    "v15_cmf_only",
+    "v15_rvi_only",
+    "v15_di_only",
+    # Two indicator (11)
+    "v15_rsi_adx",
+    "v15_rsi_stochastic",
+    "v15_rsi_williams",
+    "v15_rsi_mfi",
+    "v15_adx_aroon",
+    "v15_adx_di",
+    "v15_stochastic_williams",
+    "v15_mfi_cmf",
+    "v15_rsi_cmf",
+    "v15_adx_rsi",
+    "v15_aroon_rvi",
+    # Three indicator (3)
+    "v15_rsi_adx_stochastic",
+    "v15_mfi_adx_aroon",
+    "v15_williams_stochastic_cmf",
+    # Zigzag variations (4)
+    "v15_rsi_zigzag_1.5",
+    "v15_rsi_zigzag_2.0",
+    "v15_rsi_zigzag_3.0",
+    "v15_rsi_zigzag_3.5",
+]
+
+# Tier 2/3 indicators that must NOT appear
+FORBIDDEN_INDICATORS = [
+    "atr",
+    "macd",
+    "cci",
+    "obv",
+    "vwap",
+    "momentum",
+    "bollinger",
+    "keltner",
+    "ichimoku",
+    "supertrend",
+    "parabolic",
+]
+
+# Zigzag threshold expectations
+ZIGZAG_THRESHOLDS = {
+    "v15_rsi_zigzag_1.5": 0.015,
+    "v15_rsi_zigzag_2.0": 0.020,
+    "v15_rsi_zigzag_3.0": 0.030,
+    "v15_rsi_zigzag_3.5": 0.035,
+}
+
+# Fixed params for strategies (excludes zigzag_threshold which varies for Z01-Z04)
+FIXED_PARAMS_STRATEGIES = {
+    k: v for k, v in FIXED_PARAMS.items() if k != "training.labels.zigzag_threshold"
+}
+
+
+class TestV15Strategies:
+    """Tests for all 27 v1.5 experiment strategies."""
+
+    @pytest.fixture
+    def all_strategies(self) -> dict[str, dict]:
+        """Load all v15 strategy files."""
+        strategies = {}
+        for name in EXPECTED_STRATEGIES:
+            path = Path(f"strategies/{name}.yaml")
+            if path.exists():
+                with open(path) as f:
+                    strategies[name] = yaml.safe_load(f)
+        return strategies
+
+    def test_all_27_strategies_exist(self):
+        """All 27 strategy files must exist."""
+        missing = []
+        for name in EXPECTED_STRATEGIES:
+            path = Path(f"strategies/{name}.yaml")
+            if not path.exists():
+                missing.append(name)
+        assert not missing, f"Missing strategy files: {missing}"
+
+    def test_all_strategies_valid_yaml(self, all_strategies):
+        """All strategies must be valid YAML."""
+        assert (
+            len(all_strategies) == 27
+        ), f"Expected 27 strategies, found {len(all_strategies)}"
+        for name, config in all_strategies.items():
+            assert isinstance(config, dict), f"{name} must parse to a dictionary"
+
+    def test_all_strategies_have_v15_name(self, all_strategies):
+        """All strategy names must start with v15_."""
+        for name, config in all_strategies.items():
+            actual_name = config.get("name", "")
+            assert actual_name.startswith(
+                "v15_"
+            ), f"{name}: name should start with 'v15_', got '{actual_name}'"
+
+    def test_all_strategies_have_required_sections(self, all_strategies):
+        """All strategies must have required sections."""
+        required = [
+            "name",
+            "description",
+            "version",
+            "training_data",
+            "indicators",
+            "fuzzy_sets",
+            "model",
+            "training",
+        ]
+        for name, config in all_strategies.items():
+            for section in required:
+                assert section in config, f"{name}: missing section '{section}'"
+
+    def test_fixed_parameters_consistent(self, all_strategies):
+        """Fixed parameters must be identical across all strategies."""
+        for name, config in all_strategies.items():
+            for path, expected in FIXED_PARAMS_STRATEGIES.items():
+                actual = get_nested_value(config, path)
+                assert actual == expected, (
+                    f"{name}: fixed param '{path}' has wrong value. "
+                    f"Expected: {expected}, Got: {actual}"
+                )
+
+    def test_no_forbidden_indicators(self, all_strategies):
+        """No Tier 2/3 indicators should be used."""
+        for name, config in all_strategies.items():
+            indicators = config.get("indicators", [])
+            for ind in indicators:
+                ind_name = ind.get("name", "").lower()
+                for forbidden in FORBIDDEN_INDICATORS:
+                    assert (
+                        forbidden not in ind_name
+                    ), f"{name}: uses forbidden indicator '{ind_name}'"
+
+    def test_zigzag_thresholds_correct(self, all_strategies):
+        """Zigzag variations must have correct thresholds."""
+        for name, expected_threshold in ZIGZAG_THRESHOLDS.items():
+            if name in all_strategies:
+                config = all_strategies[name]
+                actual = get_nested_value(config, "training.labels.zigzag_threshold")
+                assert actual == expected_threshold, (
+                    f"{name}: zigzag_threshold should be {expected_threshold}, "
+                    f"got {actual}"
+                )
+
+    def test_baseline_strategies_use_default_zigzag(self, all_strategies):
+        """Non-zigzag-variation strategies must use 2.5% threshold."""
+        for name, config in all_strategies.items():
+            if name not in ZIGZAG_THRESHOLDS:
+                actual = get_nested_value(config, "training.labels.zigzag_threshold")
+                assert (
+                    actual == 0.025
+                ), f"{name}: should use default 2.5% threshold, got {actual}"
+
+    def test_all_strategies_have_indicators(self, all_strategies):
+        """All strategies must have at least one indicator."""
+        for name, config in all_strategies.items():
+            indicators = config.get("indicators", [])
+            assert len(indicators) >= 1, f"{name}: must have at least one indicator"
+
+    def test_all_strategies_have_fuzzy_sets(self, all_strategies):
+        """All strategies must have fuzzy sets matching their indicators."""
+        for name, config in all_strategies.items():
+            indicators = config.get("indicators", [])
+            fuzzy_sets = config.get("fuzzy_sets", {})
+            for ind in indicators:
+                feature_id = ind.get("feature_id")
+                if feature_id:
+                    # Handle indicators that produce multiple features
+                    # ADX produces: adx_14, plus_di_14, minus_di_14
+                    # Aroon produces: aroon_up_25, aroon_down_25
+                    if ind.get("name") == "adx":
+                        # v15_di_only uses ADX indicator but only wants DI outputs
+                        if name == "v15_di_only":
+                            assert (
+                                "plus_di_14" in fuzzy_sets
+                            ), f"{name}: missing fuzzy set for plus_di_14"
+                            assert (
+                                "minus_di_14" in fuzzy_sets
+                            ), f"{name}: missing fuzzy set for minus_di_14"
+                        else:
+                            # Other ADX strategies need adx_14
+                            assert (
+                                "adx_14" in fuzzy_sets
+                            ), f"{name}: missing fuzzy set for adx_14"
+                    elif ind.get("name") == "aroon":
+                        # Aroon indicator - check both up and down
+                        assert (
+                            "aroon_up_25" in fuzzy_sets
+                        ), f"{name}: missing fuzzy set for aroon_up_25"
+                        assert (
+                            "aroon_down_25" in fuzzy_sets
+                        ), f"{name}: missing fuzzy set for aroon_down_25"
+                    else:
+                        assert (
+                            feature_id in fuzzy_sets
+                        ), f"{name}: missing fuzzy set for {feature_id}"
+
+    def test_analytics_enabled_all_strategies(self, all_strategies):
+        """Analytics must be enabled for all strategies."""
+        for name, config in all_strategies.items():
+            analytics = get_nested_value(config, "model.training.analytics")
+            assert analytics is not None, f"{name}: analytics config missing"
+            assert (
+                analytics.get("enabled") is True
+            ), f"{name}: analytics.enabled must be True"
