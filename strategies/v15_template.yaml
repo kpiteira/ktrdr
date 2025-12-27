@@ -1,0 +1,143 @@
+# =============================================================================
+# v1.5 EXPERIMENTAL STRATEGY TEMPLATE
+# =============================================================================
+# This template defines the FIXED parameters for all v1.5 experiment strategies.
+# DO NOT modify the fixed parameters - consistency is critical for valid comparisons.
+#
+# Usage: Copy this template and fill in the VARIABLE sections for each strategy.
+#
+# Fixed Parameters (DO NOT VARY):
+#   - Symbol: EURUSD
+#   - Timeframe: 1h
+#   - Epochs: 100 (with early stopping)
+#   - Learning rate: 0.001
+#   - Batch size: 32
+#   - Train/val/test: 70/15/15
+#   - Date range: 2015-01-01 to 2023-12-31
+#   - Zigzag threshold: 2.5% (except Z01-Z04)
+#   - Hidden layers: [64, 32]
+#   - Lookback periods: 2
+#
+# Variable Parameters (modify per strategy):
+#   - name: Strategy identifier (v15_{indicator_name})
+#   - description: What this strategy tests
+#   - indicators: List of Tier 1 indicators only
+#   - fuzzy_sets: Exact values from DESIGN.md reference
+#   - zigzag_threshold: Only for Z01-Z04 variations
+# =============================================================================
+
+# === STRATEGY IDENTITY ===
+# VARIABLE: Change these for each strategy
+name: "v15_{indicator_name}"
+description: "v1.5 experiment: {description of what this strategy tests}"
+version: "1.0"
+
+# === TRAINING DATA CONFIG (FIXED) ===
+training_data:
+  symbols:
+    mode: "single_symbol"
+    list:
+      - "EURUSD"  # FIXED: Single forex pair for consistency
+  timeframes:
+    mode: "single_timeframe"
+    list:
+      - "1h"      # FIXED: 1-hour timeframe
+    base_timeframe: "1h"
+  history_required: 200  # FIXED: Sufficient history for indicators
+
+# === TECHNICAL INDICATORS ===
+# VARIABLE: Replace with strategy-specific indicators (Tier 1 only!)
+#
+# Available Tier 1 indicators and their feature_ids:
+#   - rsi (feature_id: rsi_14)
+#   - stochastic (feature_id: stochastic_14)
+#   - williams_r (feature_id: williams_14)
+#   - mfi (feature_id: mfi_14)
+#   - adx (feature_id: adx_14, also produces plus_di_14, minus_di_14)
+#   - aroon (feature_id: aroon_25, produces aroon_up_25, aroon_down_25)
+#   - cmf (feature_id: cmf_20)
+#   - rvi (feature_id: rvi_10)
+#
+indicators:
+  - name: "rsi"
+    feature_id: rsi_14
+    period: 14
+    source: "close"
+
+# === FUZZY LOGIC CONFIGURATION ===
+# VARIABLE: Replace with strategy-specific fuzzy sets
+# CRITICAL: Use EXACT values from DESIGN.md reference table!
+#
+# Reference fuzzy sets by indicator:
+#   RSI [0-100]:        oversold [0,30,40], neutral [35,50,65], overbought [60,70,100]
+#   Stochastic [0-100]: oversold [0,20,30], neutral [25,50,75], overbought [70,80,100]
+#   Williams %R [-100,0]: oversold [-100,-80,-60], neutral [-65,-50,-35], overbought [-40,-20,0]
+#   MFI [0-100]:        oversold [0,30,40], neutral [35,50,65], overbought [60,70,100]
+#   ADX [0-100]:        weak [0,15,25], moderate [20,35,50], strong [45,60,100]
+#   +DI/-DI [0-100]:    weak [0,15,25], moderate [20,35,50], strong [45,60,100]
+#   Aroon Up/Down [0-100]: weak [0,25,40], moderate [35,50,65], strong [60,75,100]
+#   CMF [-1,1]:         selling [-1,-0.3,-0.05], neutral [-0.1,0,0.1], buying [0.05,0.3,1]
+#   RVI [0-100]:        low [0,20,40], neutral [30,50,70], high [60,80,100]
+#
+fuzzy_sets:
+  rsi_14:
+    oversold:
+      type: "triangular"
+      parameters: [0, 30, 40]
+    neutral:
+      type: "triangular"
+      parameters: [35, 50, 65]
+    overbought:
+      type: "triangular"
+      parameters: [60, 70, 100]
+
+# === NEURAL NETWORK MODEL (FIXED) ===
+model:
+  type: "mlp"
+  architecture:
+    hidden_layers: [64, 32]      # FIXED: Standard complexity
+    activation: "relu"           # FIXED
+    output_activation: "softmax" # FIXED
+    dropout: 0.2                 # FIXED
+  features:
+    include_price_context: false  # FIXED: Pure fuzzy features only
+    lookback_periods: 2           # FIXED
+    scale_features: true          # FIXED
+  training:
+    learning_rate: 0.001          # FIXED
+    batch_size: 32                # FIXED
+    epochs: 100                   # FIXED: Allow full convergence
+    optimizer: "adam"             # FIXED
+    early_stopping:
+      enabled: true               # FIXED
+      patience: 15                # FIXED: Stop if no improvement for 15 epochs
+      min_delta: 0.001            # FIXED
+    analytics:
+      enabled: true               # FIXED: CRITICAL - must be enabled
+      export_csv: true            # FIXED
+      export_json: true           # FIXED
+      export_alerts: true         # FIXED
+
+# === DECISION LOGIC ===
+decisions:
+  output_format: "classification"
+  confidence_threshold: 0.6
+  position_awareness: true
+  filters:
+    min_signal_separation: 4
+    volume_filter: false
+
+# === TRAINING CONFIGURATION (FIXED) ===
+training:
+  method: "supervised"            # FIXED
+  labels:
+    source: "zigzag"              # FIXED
+    zigzag_threshold: 0.025       # FIXED: 2.5% (except Z01-Z04 variations)
+    label_lookahead: 20           # FIXED
+  data_split:
+    train: 0.7                    # FIXED
+    validation: 0.15              # FIXED
+    test: 0.15                    # FIXED
+  date_range:
+    start: "2015-01-01"           # FIXED: 8 years of data
+    end: "2023-12-31"             # FIXED
