@@ -2,7 +2,7 @@
 
 import time
 from dataclasses import dataclass
-from typing import Any, Optional, cast
+from typing import Any, Callable, Optional, cast
 
 import pandas as pd
 
@@ -112,12 +112,15 @@ class BacktestingEngine:
         self,
         bridge: Optional[ProgressBridge] = None,
         cancellation_token: Optional[CancellationToken] = None,
+        checkpoint_callback: Optional[Callable[..., None]] = None,
     ) -> BacktestResults:
         """Execute the backtest simulation.
 
         Args:
             bridge: Optional ProgressBridge for async operations progress tracking
             cancellation_token: Optional CancellationToken for operation cancellation
+            checkpoint_callback: Optional callback for periodic checkpoint saves.
+                Called with (bar_index, timestamp, engine) for building checkpoint state.
 
         Returns:
             Comprehensive results including trades, metrics, and analysis
@@ -630,6 +633,18 @@ class BacktestingEngine:
                     )
                 except Exception as e:
                     logger.warning(f"ProgressBridge update failed: {e}")
+
+            # Checkpoint callback (called periodically for checkpoint saves)
+            # The callback is responsible for deciding when to actually save
+            if checkpoint_callback and (idx - start_idx) % 100 == 0:
+                try:
+                    checkpoint_callback(
+                        bar_index=idx - start_idx,  # Processed bars (excluding warmup)
+                        timestamp=current_timestamp,
+                        engine=self,
+                    )
+                except Exception as e:
+                    logger.warning(f"Checkpoint callback failed: {e}")
 
             # NEW: Cancellation checks (every 100 bars)
             if cancellation_token and (idx - start_idx) % 100 == 0:

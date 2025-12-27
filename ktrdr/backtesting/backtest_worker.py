@@ -54,10 +54,14 @@ class BacktestStartRequest(WorkerOperationMixin):
 class BacktestWorker(WorkerAPIBase):
     """Backtest worker using WorkerAPIBase."""
 
+    # Default checkpoint interval (bars)
+    DEFAULT_CHECKPOINT_BAR_INTERVAL = 10000
+
     def __init__(
         self,
         worker_port: int = 5003,
         backend_url: str = "http://backend:8000",
+        checkpoint_bar_interval: int = DEFAULT_CHECKPOINT_BAR_INTERVAL,
     ):
         """Initialize backtest worker."""
         super().__init__(
@@ -66,6 +70,10 @@ class BacktestWorker(WorkerAPIBase):
             worker_port=worker_port,
             backend_url=backend_url,
         )
+
+        # Checkpoint configuration
+        self.checkpoint_bar_interval = checkpoint_bar_interval
+        self._checkpoint_service: Any | None = None  # Set lazily
 
         # Register domain-specific endpoint
         @self.app.post("/backtests/start")
@@ -90,6 +98,14 @@ class BacktestWorker(WorkerAPIBase):
                 "status": "started",
             }
 
+    def _get_checkpoint_service(self):
+        """Lazily initialize and return checkpoint service."""
+        if self._checkpoint_service is None:
+            from ktrdr.checkpoint import CheckpointService
+
+            self._checkpoint_service = CheckpointService()
+        return self._checkpoint_service
+
     async def _execute_backtest_work(
         self,
         operation_id: str,
@@ -103,6 +119,11 @@ class BacktestWorker(WorkerAPIBase):
         2. Create and register progress bridge
         3. Execute actual work (Engine, not Service!)
         4. Complete operation
+
+        Checkpoint integration (M5):
+        - Periodic checkpoint every N bars (configurable)
+        - Cancellation checkpoint on cancel
+        - Delete checkpoint on success
         """
 
         # Parse dates
@@ -111,6 +132,18 @@ class BacktestWorker(WorkerAPIBase):
 
         # Build strategy config path
         strategy_config_path = f"strategies/{request.strategy_name}.yaml"
+
+        # Build original request for checkpoint (needed for resume)
+        original_request = {
+            "strategy_name": request.strategy_name,
+            "symbol": request.symbol,
+            "timeframe": request.timeframe,
+            "start_date": request.start_date,
+            "end_date": request.end_date,
+            "initial_capital": request.initial_capital,
+            "commission": request.commission,
+            "slippage": request.slippage,
+        }
 
         # 1. Create operation in worker's OperationsService
         await self._operations_service.create_operation(
@@ -153,7 +186,68 @@ class BacktestWorker(WorkerAPIBase):
         await self._operations_service.start_operation(operation_id, dummy_task)
         logger.info(f"Marked operation {operation_id} as RUNNING")
 
-        # 3. Execute actual work (Engine, not Service!)
+        # 3. Setup checkpoint infrastructure
+        checkpoint_service = self._get_checkpoint_service()
+
+        from ktrdr.backtesting.checkpoint_builder import build_backtest_checkpoint_state
+        from ktrdr.checkpoint.checkpoint_policy import CheckpointPolicy
+
+        checkpoint_policy = CheckpointPolicy(
+            unit_interval=self.checkpoint_bar_interval,
+            time_interval_seconds=300,  # Also checkpoint every 5 minutes
+        )
+
+        # Track latest state for cancellation checkpoint
+        last_checkpoint_state: dict[str, Any] = {}
+
+        def checkpoint_callback(**kwargs):
+            """Called periodically from engine's bar loop.
+
+            Runs in thread pool, so we need to use a new event loop.
+            """
+            bar_index = kwargs["bar_index"]
+            timestamp = kwargs["timestamp"]
+            engine = kwargs["engine"]
+
+            # Always update last state for potential cancellation checkpoint
+            last_checkpoint_state["bar_index"] = bar_index
+            last_checkpoint_state["timestamp"] = timestamp
+            last_checkpoint_state["engine"] = engine
+
+            # Check if we should save a periodic checkpoint
+            if checkpoint_policy.should_checkpoint(bar_index):
+                try:
+                    # Build checkpoint state
+                    state = build_backtest_checkpoint_state(
+                        engine=engine,
+                        bar_index=bar_index,
+                        current_timestamp=timestamp,
+                        original_request=original_request,
+                    )
+
+                    # Run async checkpoint save from sync context
+                    # Since we're in a thread pool, we need to create a new event loop
+                    loop = asyncio.new_event_loop()
+                    try:
+                        loop.run_until_complete(
+                            checkpoint_service.save_checkpoint(
+                                operation_id=operation_id,
+                                checkpoint_type="periodic",
+                                state=state.to_dict(),
+                                artifacts=None,  # No artifacts for backtesting
+                            )
+                        )
+                        checkpoint_policy.record_checkpoint(bar_index)
+                        logger.info(
+                            f"Periodic checkpoint saved for {operation_id} at bar {bar_index}"
+                        )
+                    finally:
+                        loop.close()
+
+                except Exception as e:
+                    logger.warning(f"Failed to save periodic checkpoint: {e}")
+
+        # 4. Execute actual work (Engine, not Service!)
         try:
             # Build engine configuration
             engine_config = BacktestConfig(
@@ -176,19 +270,29 @@ class BacktestWorker(WorkerAPIBase):
                 operation_id
             )
 
-            # Run engine in thread pool (blocking operation)
+            # Run engine in thread pool (blocking operation) with checkpoint callback
             results = await asyncio.to_thread(
                 engine.run,
                 bridge=bridge,
                 cancellation_token=cancellation_token,
+                checkpoint_callback=checkpoint_callback,
             )
 
-            # 4. Complete operation
+            # 5. Complete operation - delete checkpoint on success
             results_dict = results.to_dict()
             await self._operations_service.complete_operation(
                 operation_id,
                 results_dict,
             )
+
+            # Delete checkpoint on successful completion
+            try:
+                await checkpoint_service.delete_checkpoint(operation_id)
+                logger.info(
+                    f"Checkpoint deleted after successful completion: {operation_id}"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to delete checkpoint on success: {e}")
 
             logger.info(
                 f"Backtest completed for {request.symbol} {request.timeframe}: "
@@ -201,6 +305,29 @@ class BacktestWorker(WorkerAPIBase):
 
         except CancellationError:
             logger.info(f"Backtest operation {operation_id} cancelled")
+
+            # Save cancellation checkpoint if we have state
+            if last_checkpoint_state:
+                try:
+                    state = build_backtest_checkpoint_state(
+                        engine=last_checkpoint_state["engine"],
+                        bar_index=last_checkpoint_state["bar_index"],
+                        current_timestamp=last_checkpoint_state["timestamp"],
+                        original_request=original_request,
+                    )
+                    await checkpoint_service.save_checkpoint(
+                        operation_id=operation_id,
+                        checkpoint_type="cancellation",
+                        state=state.to_dict(),
+                        artifacts=None,
+                    )
+                    logger.info(
+                        f"Cancellation checkpoint saved for {operation_id} "
+                        f"at bar {last_checkpoint_state['bar_index']}"
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to save cancellation checkpoint: {e}")
+
             if bridge:
                 bridge.on_cancellation("Backtest cancelled")
             return {
@@ -211,6 +338,29 @@ class BacktestWorker(WorkerAPIBase):
         except asyncio.CancelledError:
             # Handle standard asyncio cancellation if it occurs
             logger.info(f"Backtest operation {operation_id} cancelled (asyncio)")
+
+            # Save cancellation checkpoint if we have state
+            if last_checkpoint_state:
+                try:
+                    state = build_backtest_checkpoint_state(
+                        engine=last_checkpoint_state["engine"],
+                        bar_index=last_checkpoint_state["bar_index"],
+                        current_timestamp=last_checkpoint_state["timestamp"],
+                        original_request=original_request,
+                    )
+                    await checkpoint_service.save_checkpoint(
+                        operation_id=operation_id,
+                        checkpoint_type="cancellation",
+                        state=state.to_dict(),
+                        artifacts=None,
+                    )
+                    logger.info(
+                        f"Cancellation checkpoint saved for {operation_id} "
+                        f"at bar {last_checkpoint_state['bar_index']}"
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to save cancellation checkpoint: {e}")
+
             if bridge:
                 bridge.on_cancellation("Backtest cancelled")
             return {
