@@ -439,6 +439,52 @@ elif op_type == "backtesting":
 
 ---
 
+## Task 5.6 Complete
+
+**Implemented:** Backend resume endpoint integration for backtesting operations
+
+### Files Modified
+
+| File | Action | Purpose |
+|------|--------|---------|
+| [ktrdr/api/endpoints/operations.py](ktrdr/api/endpoints/operations.py) | Modified | Added backtesting dispatch in `resume_operation` endpoint |
+| [tests/unit/api/endpoints/test_resume_operation.py](tests/unit/api/endpoints/test_resume_operation.py) | Modified | Added 4 tests for backtesting resume dispatch |
+
+### Key Implementation Details
+
+**1. Backtesting dispatch follows training pattern**
+
+The existing resume endpoint checks `operation_type` from checkpoint state and dispatches to the appropriate worker. Added `elif op_type == "backtesting":` block:
+
+```python
+elif op_type == "backtesting":
+    worker = worker_registry.select_worker(WorkerType.BACKTESTING)
+    if worker is None:
+        await operations_service.update_status(operation_id, status="CANCELLED")
+        raise HTTPException(status_code=503, detail="No backtest worker available")
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            f"{worker.endpoint_url}/backtests/resume",
+            json={"operation_id": operation_id},
+            timeout=30.0,
+        )
+```
+
+**2. Error handling reverts status to CANCELLED**
+
+All error paths (no worker, HTTP error, connection error) revert status back to CANCELLED so the operation can be retried.
+
+### Acceptance Criteria Verified
+
+- [x] Resume endpoint handles `operation_type == "backtesting"`
+- [x] Selects backtesting worker from registry
+- [x] Dispatches to worker's `/backtests/resume` endpoint
+- [x] Reverts status to CANCELLED on dispatch failure
+- [x] Returns success with `status: "resuming"`
+
+---
+
 ## Tests Added
 
 - 7 tests in `tests/unit/checkpoint/test_schemas.py::TestBacktestCheckpointState`
@@ -446,6 +492,7 @@ elif op_type == "backtesting":
 - 14 tests in `tests/unit/backtesting/test_backtest_worker_checkpoint.py`
 - 17 tests in `tests/unit/backtesting/test_checkpoint_restore.py`
 - 14 tests in `tests/unit/backtesting/test_engine_resume.py`
-- 11 tests in `tests/unit/backtesting/test_backtest_worker_resume.py` (NEW)
+- 11 tests in `tests/unit/backtesting/test_backtest_worker_resume.py`
+- 4 tests in `tests/unit/api/endpoints/test_resume_operation.py::TestBacktestResumeDispatch` (NEW)
 
-All 78 tests passing.
+All 82 tests passing.

@@ -312,3 +312,199 @@ class TestResumeOperationOptimisticLocking:
         assert response.status_code == 409
         # Checkpoint should not have been loaded
         mock_checkpoint_service.load_checkpoint.assert_not_called()
+
+
+def make_backtest_checkpoint_data(
+    operation_id: str = "op_backtest_123",
+    bar_index: int = 5000,
+    checkpoint_type: str = "cancellation",
+) -> CheckpointData:
+    """Create a mock CheckpointData for backtesting tests."""
+    return CheckpointData(
+        operation_id=operation_id,
+        checkpoint_type=checkpoint_type,
+        created_at=datetime(2025, 1, 15, 10, 30, 0, tzinfo=timezone.utc),
+        state={
+            "operation_type": "backtesting",  # Key field that triggers backtest dispatch
+            "bar_index": bar_index,
+            "cash": 100000.0,
+            "positions": [],
+            "trades": [],
+        },
+        artifacts_path=None,  # Backtesting has no artifacts
+    )
+
+
+class TestBacktestResumeDispatch:
+    """Tests for backtesting resume dispatch via POST /operations/{id}/resume."""
+
+    def test_resume_backtest_success(
+        self, client, mock_operations_service, mock_checkpoint_service
+    ):
+        """Test resuming a cancelled backtest dispatches to backtest worker."""
+        operation_id = "op_backtest_123"
+        mock_operations_service.try_resume.return_value = True
+        mock_operations_service.get_operation.return_value = make_operation_info(
+            operation_id=operation_id,
+            status=OperationStatus.RESUMING,
+            operation_type=OperationType.BACKTESTING,
+        )
+        mock_checkpoint_service.load_checkpoint.return_value = (
+            make_backtest_checkpoint_data(operation_id=operation_id, bar_index=5000)
+        )
+
+        response = client.post(f"/api/v1/operations/{operation_id}/resume")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["data"]["operation_id"] == operation_id
+        assert data["data"]["status"] == "resuming"
+        # Note: bar_index is in state, not resumed_from - epoch field won't be present
+        assert data["data"]["resumed_from"]["checkpoint_type"] == "cancellation"
+
+    def test_resume_backtest_no_worker_available(
+        self, mock_operations_service, mock_checkpoint_service, mock_worker_registry
+    ):
+        """Test resuming backtest with no available worker returns 503."""
+        from unittest.mock import patch
+
+        from ktrdr.api.endpoints.operations import _get_checkpoint_service
+        from ktrdr.api.endpoints.workers import get_worker_registry
+        from ktrdr.api.services.operations_service import get_operations_service
+
+        operation_id = "op_backtest_456"
+        mock_operations_service.try_resume.return_value = True
+        mock_checkpoint_service.load_checkpoint.return_value = (
+            make_backtest_checkpoint_data(operation_id=operation_id)
+        )
+        # No worker available for backtesting
+        mock_worker_registry.select_worker.return_value = None
+
+        app.dependency_overrides[get_operations_service] = (
+            lambda: mock_operations_service
+        )
+        app.dependency_overrides[_get_checkpoint_service] = (
+            lambda: mock_checkpoint_service
+        )
+        app.dependency_overrides[get_worker_registry] = lambda: mock_worker_registry
+
+        try:
+            with patch("httpx.AsyncClient"):
+                client = TestClient(app)
+                response = client.post(f"/api/v1/operations/{operation_id}/resume")
+
+            assert response.status_code == 503
+            data = response.json()
+            assert "backtest worker" in data["detail"].lower()
+            # Status should be reverted to CANCELLED
+            mock_operations_service.update_status.assert_called_once_with(
+                operation_id, status="CANCELLED"
+            )
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_resume_backtest_worker_http_error(
+        self, mock_operations_service, mock_checkpoint_service, mock_worker_registry
+    ):
+        """Test backtest worker HTTP error returns 502 and reverts status."""
+        from unittest.mock import AsyncMock as AM
+        from unittest.mock import MagicMock, patch
+
+        import httpx
+
+        from ktrdr.api.endpoints.operations import _get_checkpoint_service
+        from ktrdr.api.endpoints.workers import get_worker_registry
+        from ktrdr.api.services.operations_service import get_operations_service
+
+        operation_id = "op_backtest_789"
+        mock_operations_service.try_resume.return_value = True
+        mock_checkpoint_service.load_checkpoint.return_value = (
+            make_backtest_checkpoint_data(operation_id=operation_id)
+        )
+
+        app.dependency_overrides[get_operations_service] = (
+            lambda: mock_operations_service
+        )
+        app.dependency_overrides[_get_checkpoint_service] = (
+            lambda: mock_checkpoint_service
+        )
+        app.dependency_overrides[get_worker_registry] = lambda: mock_worker_registry
+
+        try:
+            with patch("httpx.AsyncClient") as mock_client_class:
+                mock_client_instance = AM()
+                mock_client_instance.__aenter__.return_value = mock_client_instance
+                mock_client_instance.__aexit__.return_value = None
+
+                # Simulate HTTP error from worker
+                mock_response = MagicMock()
+                mock_response.status_code = 500
+                mock_response.text = "Internal Server Error"
+                mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+                    "Server Error", request=MagicMock(), response=mock_response
+                )
+                mock_client_instance.post.return_value = mock_response
+                mock_client_class.return_value = mock_client_instance
+
+                client = TestClient(app)
+                response = client.post(f"/api/v1/operations/{operation_id}/resume")
+
+            assert response.status_code == 502
+            # Status should be reverted to CANCELLED
+            mock_operations_service.update_status.assert_called_with(
+                operation_id, status="CANCELLED"
+            )
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_resume_backtest_worker_connection_error(
+        self, mock_operations_service, mock_checkpoint_service, mock_worker_registry
+    ):
+        """Test backtest worker connection error returns 503 and reverts status."""
+        from unittest.mock import AsyncMock as AM
+        from unittest.mock import patch
+
+        import httpx
+
+        from ktrdr.api.endpoints.operations import _get_checkpoint_service
+        from ktrdr.api.endpoints.workers import get_worker_registry
+        from ktrdr.api.services.operations_service import get_operations_service
+
+        operation_id = "op_backtest_conn_err"
+        mock_operations_service.try_resume.return_value = True
+        mock_checkpoint_service.load_checkpoint.return_value = (
+            make_backtest_checkpoint_data(operation_id=operation_id)
+        )
+
+        app.dependency_overrides[get_operations_service] = (
+            lambda: mock_operations_service
+        )
+        app.dependency_overrides[_get_checkpoint_service] = (
+            lambda: mock_checkpoint_service
+        )
+        app.dependency_overrides[get_worker_registry] = lambda: mock_worker_registry
+
+        try:
+            with patch("httpx.AsyncClient") as mock_client_class:
+                mock_client_instance = AM()
+                mock_client_instance.__aenter__.return_value = mock_client_instance
+                mock_client_instance.__aexit__.return_value = None
+
+                # Simulate connection error
+                mock_client_instance.post.side_effect = httpx.RequestError(
+                    "Connection refused"
+                )
+                mock_client_class.return_value = mock_client_instance
+
+                client = TestClient(app)
+                response = client.post(f"/api/v1/operations/{operation_id}/resume")
+
+            assert response.status_code == 503
+            assert "connect" in response.json()["detail"].lower()
+            # Status should be reverted to CANCELLED
+            mock_operations_service.update_status.assert_called_with(
+                operation_id, status="CANCELLED"
+            )
+        finally:
+            app.dependency_overrides.clear()
