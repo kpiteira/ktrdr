@@ -180,10 +180,89 @@ After successful completion, checkpoint is deleted to avoid orphans.
 
 ---
 
+## Task 5.3 Complete
+
+**Implemented:** Backtest checkpoint restore functionality
+
+### Files Created/Modified
+
+| File | Action | Purpose |
+|------|--------|---------|
+| [ktrdr/backtesting/checkpoint_restore.py](ktrdr/backtesting/checkpoint_restore.py) | Created | `BacktestResumeContext` dataclass and `restore_from_checkpoint` function |
+| [ktrdr/backtesting/backtest_worker.py](ktrdr/backtesting/backtest_worker.py) | Modified | Added `restore_from_checkpoint` method |
+
+### BacktestResumeContext Fields
+
+```python
+@dataclass
+class BacktestResumeContext:
+    start_bar: int                      # Bar to resume from (checkpoint bar + 1)
+    cash: float                         # Portfolio cash at checkpoint
+    original_request: dict[str, Any]    # For data reload
+    positions: list[dict[str, Any]] = []     # Open positions (optional)
+    trades: list[dict[str, Any]] = []        # Trade history (optional)
+    equity_samples: list[dict[str, Any]] = []  # Sampled equity (optional)
+```
+
+### Key Design Decisions
+
+**1. Resume from NEXT bar (Decision D7)**
+
+Resume from `bar_index + 1`, not `bar_index`. The checkpoint bar is already processed.
+
+```python
+start_bar = state.get("bar_index", 0) + 1
+```
+
+**2. No artifact validation needed**
+
+Unlike training restore which validates model.pt/optimizer.pt, backtesting has no artifacts:
+
+```python
+# Training: load_artifacts=True, validates model.pt exists
+checkpoint = await checkpoint_service.load_checkpoint(op_id, load_artifacts=True)
+
+# Backtesting: load_artifacts=False, no artifact validation
+checkpoint = await checkpoint_service.load_checkpoint(op_id, load_artifacts=False)
+```
+
+### Usage Pattern for Tasks 5.4/5.5
+
+```python
+from ktrdr.backtesting.checkpoint_restore import (
+    BacktestResumeContext,
+    CheckpointNotFoundError,
+    restore_from_checkpoint,
+)
+
+# In resume endpoint or worker
+try:
+    context = await worker.restore_from_checkpoint(operation_id)
+
+    # Resume backtest from context
+    # - Load data for full range (context.original_request)
+    # - Compute indicators
+    # - Restore portfolio: context.cash, context.positions, context.trades
+    # - Start from: context.start_bar
+except CheckpointNotFoundError:
+    # Handle no checkpoint case
+    pass
+```
+
+### Acceptance Criteria Verified
+
+- [x] Checkpoint loaded
+- [x] Portfolio state restored (cash, positions)
+- [x] Trade history restored
+- [x] Original request extracted for data reload
+
+---
+
 ## Tests Added
 
 - 7 tests in `tests/unit/checkpoint/test_schemas.py::TestBacktestCheckpointState`
 - 15 tests in `tests/unit/backtesting/test_checkpoint_builder.py`
 - 14 tests in `tests/unit/backtesting/test_backtest_worker_checkpoint.py`
+- 17 tests in `tests/unit/backtesting/test_checkpoint_restore.py`
 
-All 36 tests passing.
+All 53 tests passing.

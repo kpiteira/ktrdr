@@ -106,6 +106,26 @@ class BacktestWorker(WorkerAPIBase):
             self._checkpoint_service = CheckpointService()
         return self._checkpoint_service
 
+    async def restore_from_checkpoint(self, operation_id: str):
+        """Restore backtest context from a checkpoint.
+
+        Args:
+            operation_id: The operation ID to restore.
+
+        Returns:
+            BacktestResumeContext with all state needed to resume.
+
+        Raises:
+            CheckpointNotFoundError: If no checkpoint exists for the operation.
+        """
+        from ktrdr.backtesting.checkpoint_restore import restore_from_checkpoint
+
+        checkpoint_service = self._get_checkpoint_service()
+        return await restore_from_checkpoint(
+            checkpoint_service=checkpoint_service,
+            operation_id=operation_id,
+        )
+
     async def _execute_backtest_work(
         self,
         operation_id: str,
