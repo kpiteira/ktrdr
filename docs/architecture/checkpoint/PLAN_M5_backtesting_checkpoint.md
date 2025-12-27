@@ -7,7 +7,23 @@ architecture: docs/architecture/checkpoint/ARCHITECTURE.md
 
 **Branch:** `feature/checkpoint-m5-backtesting-checkpoint`
 **Depends On:** M4 (Training Resume)
-**Estimated Tasks:** 6
+**Estimated Tasks:** 7
+
+---
+
+## Important: RESUMING Status Pattern (from M4)
+
+M4 introduced a `RESUMING` transitional status to fix a race condition during resume.
+This pattern MUST be followed for backtest resume:
+
+1. **Backend** sets status to `RESUMING` (not `RUNNING`) when resume is requested
+2. **Backend** dispatches to backtest worker's `/backtests/resume` endpoint
+3. **Worker** updates status to `RUNNING` when it actually starts
+4. **Worker** updates status to `COMPLETED` when done
+5. `get_operation()` syncs status from worker for `RESUMING` operations
+
+The resume is initiated via the existing `POST /operations/{id}/resume` endpoint,
+which checks `operation_type` from checkpoint state to dispatch to the correct worker.
 
 ---
 
@@ -129,6 +145,9 @@ Define the data structure for backtesting checkpoint state.
 ```python
 @dataclass
 class BacktestCheckpointState:
+    # REQUIRED: Operation type for resume dispatch
+    operation_type: str = "backtesting"  # Backend uses this to select worker
+
     # Resume point
     bar_index: int
     current_date: str  # ISO format
@@ -148,12 +167,15 @@ class BacktestCheckpointState:
 ```
 
 **Notes:**
+
+- `operation_type` is REQUIRED - the backend resume endpoint uses this to dispatch to the correct worker
 - No filesystem artifacts for backtesting (all state fits in DB)
 - Equity curve is sampled, not full (to limit size)
 - Original request needed to reload data on resume
 
 **Acceptance Criteria:**
-- [ ] State dataclass defined
+
+- [ ] State dataclass defined with `operation_type: "backtesting"`
 - [ ] Builder can extract state from BacktestEngine
 - [ ] No artifacts (artifacts=None)
 - [ ] Equity sampled at reasonable intervals
@@ -332,18 +354,23 @@ async def resume_from_context(self, context: BacktestResumeContext):
 ### Task 5.5: Add Resume Endpoint to Backtest Worker API
 
 **File(s):**
+
 - `ktrdr/backtesting/remote_api.py` (modify)
 
 **Type:** CODING
 
 **Description:**
-Add endpoint for backend to dispatch backtest resume requests.
+Add worker endpoint that the backend's resume endpoint dispatches to.
 
 **Endpoint:**
 ```python
 @app.post("/backtests/resume")
 async def resume_backtest(request: BacktestResumeRequest):
-    """Resume backtest from checkpoint."""
+    """Resume backtest from checkpoint.
+
+    Called by backend's POST /operations/{id}/resume endpoint.
+    Worker must update status to RUNNING when starting.
+    """
     operation_id = request.operation_id
 
     context = await worker.restore_backtest_from_checkpoint(operation_id)
@@ -352,18 +379,87 @@ async def resume_backtest(request: BacktestResumeRequest):
         worker.run_resumed_backtest(operation_id, context)
     )
 
-    return {"success": True, "operation_id": operation_id}
+    return {"success": True, "operation_id": operation_id, "status": "started"}
+```
+
+**Worker Status Update:**
+```python
+async def run_resumed_backtest(self, operation_id: str, context: BacktestResumeContext):
+    # Update status to RUNNING (worker is responsible for this transition)
+    await self._operations_service.start_operation(operation_id, asyncio.current_task())
+
+    # ... run backtest ...
+
+    # On completion, update to COMPLETED
+    await self._operations_service.complete_operation(operation_id, result)
 ```
 
 **Acceptance Criteria:**
+
 - [ ] Endpoint accepts operation_id
 - [ ] Loads checkpoint
-- [ ] Starts resumed backtest
+- [ ] Worker calls `start_operation()` to set status to RUNNING
+- [ ] Starts resumed backtest in background
 - [ ] Returns success
 
 ---
 
-### Task 5.6: Integration Test for Backtest Resume
+### Task 5.6: Integrate Backtest Resume into Backend Endpoint
+
+**File(s):**
+
+- `ktrdr/api/endpoints/operations.py` (modify)
+
+**Type:** CODING
+
+**Description:**
+Extend the existing `POST /operations/{id}/resume` endpoint to handle backtest operations.
+
+**Implementation:**
+The resume endpoint already:
+
+1. Calls `try_resume()` to set status to RESUMING
+2. Loads checkpoint
+3. Checks `operation_type` from checkpoint state
+4. Dispatches to the appropriate worker
+
+Add backtest dispatch logic:
+
+```python
+# In resume_operation endpoint (after training dispatch)
+elif op_type == "backtesting":
+    from ktrdr.api.models.workers import WorkerType
+
+    worker = worker_registry.select_worker(WorkerType.BACKTESTING)
+    if worker is None:
+        logger.error(f"No backtest worker available for resume: {operation_id}")
+        await operations_service.update_status(operation_id, status="CANCELLED")
+        raise HTTPException(
+            status_code=503,
+            detail="No backtest worker available to resume operation",
+        )
+
+    # Dispatch to worker's /backtests/resume endpoint
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            f"{worker.endpoint_url}/backtests/resume",
+            json={"operation_id": operation_id},
+            timeout=30.0,
+        )
+        response.raise_for_status()
+```
+
+**Acceptance Criteria:**
+
+- [ ] Resume endpoint handles `operation_type == "backtesting"`
+- [ ] Selects backtesting worker from registry
+- [ ] Dispatches to worker's `/backtests/resume` endpoint
+- [ ] Reverts status to CANCELLED on dispatch failure
+- [ ] Returns success with `status: "resuming"`
+
+---
+
+### Task 5.7: Integration Test for Backtest Resume
 
 **File(s):**
 - `tests/integration/test_m5_backtesting_checkpoint.py` (new)
@@ -393,7 +489,7 @@ Integration test for backtest checkpoint and resume.
 
 Before marking M5 complete:
 
-- [ ] All 6 tasks complete
+- [ ] All 7 tasks complete
 - [ ] Unit tests pass: `make test-unit`
 - [ ] Integration tests pass: `make test-integration`
 - [ ] E2E test script passes
@@ -412,4 +508,5 @@ Before marking M5 complete:
 | `ktrdr/backtesting/checkpoint_restore.py` | Create | 5.3 |
 | `ktrdr/backtesting/engine.py` | Modify | 5.4 |
 | `ktrdr/backtesting/remote_api.py` | Modify | 5.5 |
-| `tests/integration/test_m5_backtesting_checkpoint.py` | Create | 5.6 |
+| `ktrdr/api/endpoints/operations.py` | Modify | 5.6 |
+| `tests/integration/test_m5_backtesting_checkpoint.py` | Create | 5.7 |
