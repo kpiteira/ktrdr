@@ -172,7 +172,8 @@ INDICATORS = {
     feature_id: adx_14
     period: 14
 ''',
-        "fuzzy_sets": '''  adx_14:
+        # Note: ADX indicator produces ADX_14 column name (uppercase)
+        "fuzzy_sets": '''  ADX_14:
     weak:
       type: "triangular"
       parameters: [0, 15, 25]
@@ -186,11 +187,12 @@ INDICATORS = {
     },
     "di": {
         # +DI and -DI come from the ADX indicator
+        # Note: ADX indicator produces DI_Plus_14 and DI_Minus_14 column names
         "config": '''  - name: "adx"
     feature_id: adx_14
     period: 14
 ''',
-        "fuzzy_sets": '''  plus_di_14:
+        "fuzzy_sets": '''  DI_Plus_14:
     weak:
       type: "triangular"
       parameters: [0, 15, 25]
@@ -200,7 +202,7 @@ INDICATORS = {
     strong:
       type: "triangular"
       parameters: [45, 60, 100]
-  minus_di_14:
+  DI_Minus_14:
     weak:
       type: "triangular"
       parameters: [0, 15, 25]

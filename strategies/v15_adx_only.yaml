@@ -31,7 +31,7 @@ indicators:
 
 # === FUZZY LOGIC CONFIGURATION ===
 fuzzy_sets:
-  adx_14:
+  ADX_14:
     weak:
       type: "triangular"
       parameters: [0, 15, 25]

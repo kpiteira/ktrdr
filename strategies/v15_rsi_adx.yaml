@@ -45,7 +45,7 @@ fuzzy_sets:
     overbought:
       type: "triangular"
       parameters: [60, 70, 100]
-  adx_14:
+  ADX_14:
     weak:
       type: "triangular"
       parameters: [0, 15, 25]
