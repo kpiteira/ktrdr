@@ -246,7 +246,6 @@ class TestResumeContextAcceptance:
 
         # Create fresh model with random weights
         fresh_model = nn.Linear(10, 3)
-        _initial_weight = fresh_model.weight.data.clone()  # noqa: F841
 
         # Prepare training data
         X_train = torch.randn(32, 10)
@@ -373,7 +372,7 @@ class TestResumeContextAcceptance:
         X_train = torch.randn(32, 10)
         y_train = torch.randint(0, 3, (32,))
 
-        _result = trainer.train(model, X_train, y_train)  # noqa: F841
+        trainer.train(model, X_train, y_train)
 
         # Trainer should have history from both prior epochs and new training
         assert hasattr(trainer, "history")

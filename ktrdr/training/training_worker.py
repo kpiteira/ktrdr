@@ -738,8 +738,6 @@ class TrainingWorker(WorkerAPIBase):
                         )
 
                         # Save checkpoint (synchronous call from callback)
-                        import asyncio
-
                         loop = asyncio.new_event_loop()
                         try:
                             loop.run_until_complete(
