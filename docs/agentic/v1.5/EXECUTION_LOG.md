@@ -86,9 +86,10 @@ Template for recording failures:
 ## Execution Notes
 
 ### Prerequisites Verified
-- [ ] Strategies copied to ktrdr2: `cp strategies/v15_*.yaml ../ktrdr2/strategies/`
-- [ ] Docker environment running: `docker compose up -d`
-- [ ] Backend healthy: `curl http://localhost:8000/api/v1/health`
+
+- [x] Strategies copied to ktrdr2: 29 v15_*.yaml files present (2024-12-26)
+- [x] Docker environment running: 2 training workers healthy (2024-12-26)
+- [x] Backend healthy: API responding OK (2024-12-26)
 
 ### Training Configuration
 | Parameter | Value |
