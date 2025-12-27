@@ -540,7 +540,7 @@ If an operation gets stuck in RUNNING but workers restarted, wait ~60 seconds fo
 
 ## Milestone 4 Status
 
-All 7 tasks completed, but **E2E test blocked** by Issue 4 (truncated strategy YAML).
+All 8 tasks completed.
 
 - Task 4.1: Resume API Endpoint ✅
 - Task 4.2: try_resume in OperationsService ✅
@@ -548,6 +548,50 @@ All 7 tasks completed, but **E2E test blocked** by Issue 4 (truncated strategy Y
 - Task 4.4: Resume Endpoint in Training Worker API ✅
 - Task 4.5: Resume Context in ModelTrainer ✅
 - Task 4.6: Resume CLI Command ✅
-- Task 4.7: Integration Tests ✅ (pytest passes, but not real E2E)
+- Task 4.7: Integration Tests ✅
+- Task 4.8: Fix Checkpoint Strategy Storage ✅
 
-**Next Step**: Fix checkpoint strategy storage (see TASK_fix_checkpoint_strategy_storage.md), then re-run E2E test.
+**Next Step**: Run full E2E test to verify resume flow works end-to-end.
+
+---
+
+## Task 4.8 Complete
+
+**Implemented:** Checkpoint stores `strategy_path` instead of `strategy_yaml` to avoid DB truncation
+
+### Root Cause
+
+Line 233 in training_worker.py was explicitly truncating strategy YAML:
+```python
+original_request = {
+    "strategy_yaml": request.strategy_yaml[:100],  # TRUNCATION BUG
+    ...
+}
+```
+
+### Fix Applied
+
+1. **TrainingStartRequest**: Added `strategy_path` field (optional)
+
+2. **training_service.py**: Sends `strategy_path` (relative format) in request payload
+
+3. **training_worker.py**:
+   - Stores `strategy_path` in checkpoint (not `strategy_yaml`)
+   - On resume, reads strategy from disk using path
+   - Backward compatible with old checkpoints that have `strategy_yaml`
+
+### Key Code Locations
+
+- [ktrdr/training/training_worker.py:50-54](ktrdr/training/training_worker.py#L50-L54) - `strategy_path` field
+- [ktrdr/training/training_worker.py:237-245](ktrdr/training/training_worker.py#L237-L245) - Checkpoint storage
+- [ktrdr/training/training_worker.py:596-641](ktrdr/training/training_worker.py#L596-L641) - Resume loading
+- [ktrdr/api/services/training_service.py:358-379](ktrdr/api/services/training_service.py#L358-L379) - Path in payload
+
+### Acceptance Criteria Verified
+
+- [x] Checkpoint state does NOT contain `strategy_yaml`
+- [x] Checkpoint state contains `strategy_path`
+- [x] Resume reads strategy from disk using `strategy_path`
+- [x] Resume fails gracefully if strategy file doesn't exist
+- [x] Unit tests pass (176 training tests, 7 new for Task 4.8)
+- [x] M4 integration tests pass (17/17)
