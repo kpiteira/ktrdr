@@ -356,12 +356,96 @@ results = engine.run(
 
 ---
 
+## Task 5.5 Complete
+
+**Implemented:** Resume endpoint for backtest worker API
+
+### Files Modified
+
+| File | Action | Purpose |
+|------|--------|---------|
+| [ktrdr/backtesting/backtest_worker.py](ktrdr/backtesting/backtest_worker.py) | Modified | Added `/backtests/resume` endpoint and `_execute_resumed_backtest_work` method |
+
+### New Endpoint
+
+**POST /backtests/resume**
+
+Called by backend's `POST /operations/{id}/resume` endpoint. Follows M4's RESUMING status pattern:
+
+```python
+@self.app.post("/backtests/resume")
+async def resume_backtest(request: BacktestResumeRequest):
+    # 1. Load checkpoint context
+    context = await self.restore_from_checkpoint(operation_id)
+
+    # 2. Start resumed backtest in background
+    asyncio.create_task(self._execute_resumed_backtest_work(operation_id, context))
+
+    # 3. Return immediately
+    return {"success": True, "operation_id": operation_id, "status": "started"}
+```
+
+### Key Implementation Details
+
+**1. BacktestResumeRequest model**
+
+```python
+class BacktestResumeRequest(WorkerOperationMixin):
+    operation_id: str
+```
+
+**2. Worker status transition (RESUMING → RUNNING)**
+
+The `_execute_resumed_backtest_work` method calls `start_operation()` to transition from RESUMING to RUNNING:
+
+```python
+await self._operations_service.start_operation(operation_id, dummy_task)
+logger.info(f"Marked resumed operation {operation_id} as RUNNING")
+```
+
+**3. CheckpointService initialization fix**
+
+Fixed `_get_checkpoint_service()` to properly initialize with `session_factory`:
+
+```python
+self._checkpoint_service = CheckpointService(
+    session_factory=get_session_factory(),
+    # Uses default artifacts_dir - backtesting doesn't use artifacts
+)
+```
+
+### Usage Pattern for Task 5.6
+
+The backend's resume endpoint should dispatch to this worker endpoint:
+
+```python
+elif op_type == "backtesting":
+    worker = worker_registry.select_worker(WorkerType.BACKTESTING)
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            f"{worker.endpoint_url}/backtests/resume",
+            json={"operation_id": operation_id},
+            timeout=30.0,
+        )
+```
+
+### Acceptance Criteria Verified
+
+- [x] Endpoint accepts operation_id
+- [x] Loads checkpoint via restore_from_checkpoint
+- [x] Worker calls start_operation() to set status to RUNNING
+- [x] Starts resumed backtest in background
+- [x] Returns success
+
+---
+
 ## Tests Added
 
 - 7 tests in `tests/unit/checkpoint/test_schemas.py::TestBacktestCheckpointState`
 - 15 tests in `tests/unit/backtesting/test_checkpoint_builder.py`
 - 14 tests in `tests/unit/backtesting/test_backtest_worker_checkpoint.py`
 - 17 tests in `tests/unit/backtesting/test_checkpoint_restore.py`
-- 14 tests in `tests/unit/backtesting/test_engine_resume.py` (NEW)
+- 14 tests in `tests/unit/backtesting/test_engine_resume.py`
+- 11 tests in `tests/unit/backtesting/test_backtest_worker_resume.py` (NEW)
 
-All 67 tests passing.
+All 78 tests passing.
