@@ -30,17 +30,65 @@ def mock_checkpoint_service():
 
 
 @pytest.fixture
-def client(mock_operations_service, mock_checkpoint_service):
+def mock_worker_registry():
+    """Create a mock WorkerRegistry for testing."""
+    from unittest.mock import MagicMock
+
+    mock_registry = AsyncMock()
+    # Mock a worker with endpoint_url
+    mock_worker = MagicMock()
+    mock_worker.worker_id = "test-worker-123"
+    mock_worker.endpoint_url = "http://test-worker:5005"
+    mock_registry.select_worker.return_value = mock_worker
+    return mock_registry
+
+
+@pytest.fixture
+def mock_httpx_client():
+    """Create a mock httpx client for worker dispatch."""
+    from unittest.mock import MagicMock
+
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "success": True,
+        "operation_id": "op_training_123",
+    }
+    mock_response.raise_for_status = MagicMock()
+
+    return mock_response
+
+
+@pytest.fixture
+def client(
+    mock_operations_service,
+    mock_checkpoint_service,
+    mock_worker_registry,
+    mock_httpx_client,
+):
     """Create a test client with dependency overrides."""
+    from unittest.mock import AsyncMock as AM
+    from unittest.mock import patch
+
     from ktrdr.api.endpoints.operations import _get_checkpoint_service
+    from ktrdr.api.endpoints.workers import get_worker_registry
     from ktrdr.api.services.operations_service import get_operations_service
 
     # Override dependencies
     app.dependency_overrides[get_operations_service] = lambda: mock_operations_service
     app.dependency_overrides[_get_checkpoint_service] = lambda: mock_checkpoint_service
+    app.dependency_overrides[get_worker_registry] = lambda: mock_worker_registry
 
-    client = TestClient(app)
-    yield client
+    # Patch httpx for worker dispatch
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client_instance = AM()
+        mock_client_instance.__aenter__.return_value = mock_client_instance
+        mock_client_instance.__aexit__.return_value = None
+        mock_client_instance.post.return_value = mock_httpx_client
+        mock_client_class.return_value = mock_client_instance
+
+        client = TestClient(app)
+        yield client
 
     # Clean up
     app.dependency_overrides.clear()

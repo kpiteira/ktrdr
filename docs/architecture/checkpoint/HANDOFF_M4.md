@@ -433,14 +433,121 @@ Uses in-memory mock services for fast feedback:
 
 ---
 
-## Milestone 4 Complete
+## E2E Testing Issues & Fixes (Session 2025-12-27)
 
-All 7 tasks completed:
+### Issue 1: Missing Dispatch in Resume Endpoint (FIXED)
 
-- Task 4.1: Resume API Endpoint
-- Task 4.2: try_resume in OperationsService
-- Task 4.3: Training Restore in Worker
-- Task 4.4: Resume Endpoint in Training Worker API
-- Task 4.5: Resume Context in ModelTrainer
-- Task 4.6: Resume CLI Command
-- Task 4.7: Integration Tests
+**Problem**: The resume endpoint at `ktrdr/api/endpoints/operations.py:629` had a TODO comment instead of actual dispatch logic. Status was updated to RUNNING but training never started.
+
+**Fix Applied**:
+- Added `worker_registry` dependency to resume endpoint
+- Added dispatch logic to call worker's `/training/resume` endpoint
+- Added error handling with status revert on dispatch failure
+
+**Key Code Added** (lines 639-683):
+```python
+from ktrdr.api.models.workers import WorkerType
+worker = worker_registry.select_worker(WorkerType.TRAINING)
+# ... dispatch via httpx to worker.endpoint_url/training/resume
+```
+
+### Issue 2: Enum vs String Type Errors (FIXED)
+
+**Problem**: `op.operation_type` and `op.status` sometimes returned Enum, sometimes string. Calling `.value` on a string caused `AttributeError`.
+
+**Fix Applied**: Added safe extraction pattern:
+```python
+op_type = op.operation_type.value if hasattr(op.operation_type, "value") else str(op.operation_type)
+status_value = op.status.value if hasattr(op.status, "value") else str(op.status)
+```
+
+### Issue 3: WorkerRegistry.select_worker Expects Enum (FIXED)
+
+**Problem**: Called `worker_registry.select_worker("training")` but function expects `WorkerType.TRAINING` enum.
+
+**Fix Applied**: Import and use enum:
+```python
+from ktrdr.api.models.workers import WorkerType
+worker = worker_registry.select_worker(WorkerType.TRAINING)
+```
+
+### Issue 4: Strategy YAML Truncated in Checkpoint (BLOCKING - NOT FIXED)
+
+**Problem**: Strategy YAML stored in checkpoint DB state is truncated, causing resume to fail with YAML parse error.
+
+**Root Cause**: The `original_request.strategy_yaml` field in checkpoint state is truncated, likely due to JSON column size limits.
+
+**Proposed Fix**: Don't store strategy YAML in checkpoint. Store `strategy_path` and read from disk on resume. See: `docs/architecture/checkpoint/TASK_fix_checkpoint_strategy_storage.md`
+
+---
+
+## E2E Test Execution Guide
+
+### Prerequisites
+
+1. **Backend must be restarted** after code changes (Docker mounts code but Python caches modules):
+   ```bash
+   docker compose restart backend
+   ```
+
+2. **Workers must re-register** after backend restart:
+   ```bash
+   docker compose restart training-worker-1 training-worker-2
+   sleep 20  # Wait for registration
+   curl http://localhost:8000/api/v1/workers  # Verify 2+ training workers
+   ```
+
+### API Endpoints (Correct Paths)
+
+| Action | Method | Endpoint |
+|--------|--------|----------|
+| Start training | POST | `/api/v1/trainings/start` (not `/training/start`) |
+| Check status | GET | `/api/v1/operations/{id}` |
+| Cancel | DELETE | `/api/v1/operations/{id}` (not `/cancel`) |
+| Resume | POST | `/api/v1/operations/{id}/resume` |
+| Check checkpoint | GET | `/api/v1/checkpoints/{id}` |
+
+### Training Request Schema
+
+```json
+{
+  "strategy_name": "test_e2e_local_pull",
+  "symbols": ["EURUSD"],
+  "timeframes": ["5m"]
+}
+```
+
+Note: `epochs` and `checkpoint_interval` come from strategy YAML, not API request.
+
+### Shell Scripting Gotchas
+
+The shell in this environment has issues with multi-line commands. Use separate Bash calls:
+```bash
+# BAD - newlines break
+sleep 5
+echo "done"
+
+# GOOD - separate calls
+Bash: sleep 5
+Bash: echo "done"
+```
+
+### Orphan Operations
+
+If an operation gets stuck in RUNNING but workers restarted, wait ~60 seconds for orphan detector to mark it FAILED, or start a fresh operation.
+
+---
+
+## Milestone 4 Status
+
+All 7 tasks completed, but **E2E test blocked** by Issue 4 (truncated strategy YAML).
+
+- Task 4.1: Resume API Endpoint ✅
+- Task 4.2: try_resume in OperationsService ✅
+- Task 4.3: Training Restore in Worker ✅
+- Task 4.4: Resume Endpoint in Training Worker API ✅
+- Task 4.5: Resume Context in ModelTrainer ✅
+- Task 4.6: Resume CLI Command ✅
+- Task 4.7: Integration Tests ✅ (pytest passes, but not real E2E)
+
+**Next Step**: Fix checkpoint strategy storage (see TASK_fix_checkpoint_strategy_storage.md), then re-run E2E test.

@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
 from ktrdr import get_logger
 from ktrdr.api.dependencies import get_operations_service
+from ktrdr.api.endpoints.workers import get_worker_registry
 from ktrdr.api.models.operations import (
     CancelOperationRequest,
     OperationCancelResponse,
@@ -550,6 +551,7 @@ async def resume_operation(
     operation_id: str = Path(..., description="Unique operation identifier to resume"),
     operations_service: OperationsService = Depends(get_operations_service),
     checkpoint_service=Depends(_get_checkpoint_service),
+    worker_registry=Depends(get_worker_registry),
 ) -> ResumeOperationResponse:
     """
     Resume a cancelled or failed operation from checkpoint.
@@ -626,21 +628,83 @@ async def resume_operation(
                 detail=f"No checkpoint available for operation {operation_id}",
             )
 
-        # 3. TODO (Task 4.4): Dispatch to worker
-        # For now, the operation is marked RUNNING and ready for worker dispatch
-        # Worker dispatch will be implemented in Task 4.4
-
+        # 3. Dispatch to worker
         op = await operations_service.get_operation(operation_id)
+        if op is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Operation not found after resume: {operation_id}",
+            )
+
+        # Only dispatch training operations (backtesting resume not yet implemented)
+        op_type = (
+            op.operation_type.value
+            if hasattr(op.operation_type, "value")
+            else str(op.operation_type)
+        )
+        if op_type == "training":
+            # Select a training worker
+            from ktrdr.api.models.workers import WorkerType
+
+            worker = worker_registry.select_worker(WorkerType.TRAINING)
+            if worker is None:
+                logger.error(f"No training worker available for resume: {operation_id}")
+                # Revert status back to cancelled since we can't dispatch
+                await operations_service.update_status(operation_id, status="CANCELLED")
+                raise HTTPException(
+                    status_code=503,
+                    detail="No training worker available to resume operation",
+                )
+
+            # Dispatch to worker's /training/resume endpoint
+            import httpx
+
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        f"{worker.endpoint_url}/training/resume",
+                        json={"operation_id": operation_id},
+                        timeout=30.0,
+                    )
+                    response.raise_for_status()
+                    worker_response = response.json()
+                    logger.info(
+                        f"Dispatched resume to worker {worker.worker_id}: {worker_response}"
+                    )
+            except httpx.HTTPStatusError as e:
+                logger.error(
+                    f"Worker rejected resume request: {e.response.status_code} - {e.response.text}"
+                )
+                # Revert status back to cancelled since dispatch failed
+                await operations_service.update_status(operation_id, status="CANCELLED")
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Worker failed to resume: {e.response.text}",
+                ) from e
+            except httpx.RequestError as e:
+                logger.error(f"Failed to connect to worker: {str(e)}")
+                await operations_service.update_status(operation_id, status="CANCELLED")
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Failed to connect to worker: {str(e)}",
+                ) from e
 
         logger.info(
             f"Successfully resumed operation: {operation_id} from epoch {checkpoint.state.get('epoch')}"
         )
 
+        # Get status value - handle both Enum and string cases
+        status_value = "running"
+        if op:
+            status_value = (
+                op.status.value if hasattr(op.status, "value") else str(op.status)
+            )
+
         return ResumeOperationResponse(
             success=True,
             data=ResumeOperationData(
                 operation_id=operation_id,
-                status=op.status.value if op else "running",
+                status=status_value,
                 resumed_from=ResumedFromInfo(
                     checkpoint_type=checkpoint.checkpoint_type,
                     created_at=checkpoint.created_at,
