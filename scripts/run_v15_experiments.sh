@@ -65,10 +65,10 @@ STRATEGIES=(
   "v15_mfi_adx_aroon"
   "v15_williams_stochastic_cmf"
   # Zigzag Threshold Variations (4)
-  "v15_rsi_zigzag_1.5"
-  "v15_rsi_zigzag_2.0"
-  "v15_rsi_zigzag_3.0"
-  "v15_rsi_zigzag_3.5"
+  "v15_rsi_zigzag_1_5"
+  "v15_rsi_zigzag_2_0"
+  "v15_rsi_zigzag_3_0"
+  "v15_rsi_zigzag_3_5"
 )
 
 API_URL="http://localhost:8000/api/v1"
@@ -113,10 +113,10 @@ run_training() {
   local start_time=$(date +%s)
   local start_timestamp=$(date '+%Y-%m-%d %H:%M')
 
-  # Start training
+  # Start training with explicit date range (2015-2023 as per v1.5 plan)
   local response=$(curl -s -X POST "$API_URL/trainings/start" \
     -H "Content-Type: application/json" \
-    -d "{\"strategy_name\": \"$strategy\", \"symbols\": [\"EURUSD\"], \"timeframes\": [\"1h\"], \"detailed_analytics\": true}")
+    -d "{\"strategy_name\": \"$strategy\", \"symbols\": [\"EURUSD\"], \"timeframes\": [\"1h\"], \"detailed_analytics\": true, \"start_date\": \"2015-01-01\", \"end_date\": \"2023-12-31\"}")
 
   local op_id=$(echo "$response" | jq -r '.task_id // empty')
 

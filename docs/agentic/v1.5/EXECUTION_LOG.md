@@ -60,10 +60,10 @@
 
 | Strategy | Started | Operation ID | Status | Duration | Notes |
 |----------|---------|--------------|--------|----------|-------|
-| v15_rsi_zigzag_1.5 | - | - | pending | - | - |
-| v15_rsi_zigzag_2.0 | - | - | pending | - | - |
-| v15_rsi_zigzag_3.0 | - | - | pending | - | - |
-| v15_rsi_zigzag_3.5 | - | - | pending | - | - |
+| v15_rsi_zigzag_1_5 | - | - | pending | - | - |
+| v15_rsi_zigzag_2_0 | - | - | pending | - | - |
+| v15_rsi_zigzag_3_0 | - | - | pending | - | - |
+| v15_rsi_zigzag_3_5 | - | - | pending | - | - |
 
 ---
 

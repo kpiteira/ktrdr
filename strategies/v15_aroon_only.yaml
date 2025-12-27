@@ -31,7 +31,7 @@ indicators:
 
 # === FUZZY LOGIC CONFIGURATION ===
 fuzzy_sets:
-  aroon_up_25:
+  aroon_up:
     weak:
       type: "triangular"
       parameters: [0, 25, 40]
@@ -41,7 +41,7 @@ fuzzy_sets:
     strong:
       type: "triangular"
       parameters: [60, 75, 100]
-  aroon_down_25:
+  aroon_down:
     weak:
       type: "triangular"
       parameters: [0, 25, 40]
