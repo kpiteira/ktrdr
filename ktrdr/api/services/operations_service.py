@@ -685,6 +685,157 @@ class OperationsService:
                 "children_cancelled": children_cancelled,
             }
 
+    async def try_resume(self, operation_id: str) -> bool:
+        """
+        Atomically update status to RUNNING if currently resumable.
+
+        Uses optimistic locking at the database level: the repository performs
+        an atomic UPDATE with a status check in the WHERE clause, ensuring that
+        concurrent resume requests result in exactly one success.
+
+        Args:
+            operation_id: Operation identifier
+
+        Returns:
+            True if status was updated (operation is now RUNNING),
+            False if operation not found or not in resumable state.
+        """
+        # First try atomic DB update via repository
+        if self._repository:
+            success = await self._repository.try_resume(operation_id)
+
+            if not success:
+                logger.warning(
+                    f"Cannot resume - operation not found or not in resumable state: "
+                    f"{operation_id}"
+                )
+                return False
+
+            # Atomic update succeeded - now update cache
+            old_status: OperationStatus = OperationStatus.FAILED  # Default
+
+            async with self._lock:
+                cached_op = self._cache.get(operation_id)
+                if cached_op is not None:
+                    old_status = cached_op.status
+                    cached_op.status = OperationStatus.RESUMING
+                    cached_op.started_at = datetime.now(timezone.utc)
+                    cached_op.completed_at = None
+                    cached_op.error_message = None
+                else:
+                    # Load from DB to populate cache
+                    db_op = await self._repository.get(operation_id)
+                    if db_op is not None:
+                        self._cache[operation_id] = db_op
+                        # DB state is already RESUMING after try_resume
+                        old_status = OperationStatus.CANCELLED  # Assume from context
+
+            # Tracing for state transition
+            with create_service_span(
+                "operation.state_transition", operation_id=operation_id
+            ) as span:
+                span.set_attribute("operation.from_status", old_status.value)
+                span.set_attribute(
+                    "operation.to_status", OperationStatus.RESUMING.value
+                )
+                span.set_attribute("operation.resumed", True)
+
+            # Update Prometheus metrics
+            operations_active.inc()
+
+            logger.info(
+                f"Resumed operation: {operation_id} (from {old_status.value} to resuming)"
+            )
+
+            return True
+
+        # Fallback for cache-only mode (no repository)
+        async with self._lock:
+            operation = self._cache.get(operation_id)
+
+            if operation is None:
+                logger.warning(f"Cannot resume - operation not found: {operation_id}")
+                return False
+
+            if operation.status not in [
+                OperationStatus.CANCELLED,
+                OperationStatus.FAILED,
+            ]:
+                logger.warning(
+                    f"Cannot resume - operation not in resumable state: {operation_id} "
+                    f"(status: {operation.status})"
+                )
+                return False
+
+            old_status = operation.status
+            operation.status = OperationStatus.RESUMING
+            operation.started_at = datetime.now(timezone.utc)
+            operation.completed_at = None
+            operation.error_message = None
+
+            # Tracing
+            with create_service_span(
+                "operation.state_transition", operation_id=operation_id
+            ) as span:
+                span.set_attribute("operation.from_status", old_status.value)
+                span.set_attribute(
+                    "operation.to_status", OperationStatus.RESUMING.value
+                )
+                span.set_attribute("operation.resumed", True)
+
+            operations_active.inc()
+
+            logger.info(
+                f"Resumed operation: {operation_id} (from {old_status.value} to resuming)"
+            )
+
+            return True
+
+    async def update_status(self, operation_id: str, status: str) -> None:
+        """
+        Update operation status directly.
+
+        Used for cases where we need to set a specific status (e.g., marking
+        as FAILED when checkpoint is not available during resume).
+
+        Args:
+            operation_id: Operation identifier
+            status: New status string (will be converted to OperationStatus)
+        """
+        async with self._lock:
+            operation = self._cache.get(operation_id)
+
+            if operation is None:
+                logger.warning(
+                    f"Cannot update status - operation not found: {operation_id}"
+                )
+                return
+
+            new_status = OperationStatus(status.lower())
+            old_status = operation.status
+
+            # Update in-memory cache
+            operation.status = new_status
+            if new_status in [
+                OperationStatus.COMPLETED,
+                OperationStatus.FAILED,
+                OperationStatus.CANCELLED,
+            ]:
+                operation.completed_at = datetime.now(timezone.utc)
+
+            # Persist to repository
+            if self._repository:
+                await self._repository.update(
+                    operation_id,
+                    status=new_status.value,
+                    completed_at=operation.completed_at,
+                )
+
+            logger.info(
+                f"Updated operation status: {operation_id} "
+                f"({old_status.value} -> {new_status.value})"
+            )
+
     async def get_operation(
         self, operation_id: str, force_refresh: bool = False
     ) -> Optional[OperationInfo]:
@@ -715,9 +866,10 @@ class OperationsService:
             if not operation:
                 return None
 
-            # TASK 1.3/1.4: Pull from local bridge if registered and operation still running
+            # TASK 1.3/1.4: Pull from local bridge if registered and operation is active
+            # (RUNNING or RESUMING - need to sync status transitions)
             if (
-                operation.status == OperationStatus.RUNNING
+                operation.status in (OperationStatus.RUNNING, OperationStatus.RESUMING)
                 and operation_id in self._local_bridges
             ):
                 # TASK 1.4: Force refresh bypasses cache
@@ -732,14 +884,20 @@ class OperationsService:
                 self._refresh_from_bridge(operation_id)
 
             # TASK 2.5: Pull from remote proxy if registered and:
-            # - Operation still running (to get progress updates), OR
+            # - Operation is running or resuming (to get progress updates), OR
             # - Operation completed but result_summary is missing (to sync final result)
+            # NOTE: RESUMING operations need proxy refresh to sync status transitions
+            # (RESUMING → RUNNING → COMPLETED) from the worker.
             needs_result_sync = (
                 operation.status == OperationStatus.COMPLETED
                 and operation.result_summary is None
             )
+            is_active = operation.status in (
+                OperationStatus.RUNNING,
+                OperationStatus.RESUMING,
+            )
             if self._get_remote_proxy(operation_id) and (
-                operation.status == OperationStatus.RUNNING or needs_result_sync
+                is_active or needs_result_sync
             ):
                 # Force refresh bypasses cache
                 if force_refresh or needs_result_sync:

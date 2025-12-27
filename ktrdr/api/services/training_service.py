@@ -355,9 +355,23 @@ class TrainingService(ServiceOrchestrator[None]):
         with open(context.strategy_path) as f:
             strategy_yaml = f.read()
 
+        # Task 4.8: Convert strategy path to relative format for checkpoint storage
+        # Workers mount strategies at /app/strategies, so we store relative path
+        strategy_path_str = str(context.strategy_path)
+        if "/app/" in strategy_path_str:
+            # Docker path: /app/strategies/foo.yaml -> strategies/foo.yaml
+            strategy_path_relative = strategy_path_str.split("/app/", 1)[1]
+        elif strategy_path_str.startswith("strategies/"):
+            # Already relative
+            strategy_path_relative = strategy_path_str
+        else:
+            # Use as-is (may be absolute path in dev)
+            strategy_path_relative = strategy_path_str
+
         request_payload = {
             "task_id": backend_operation_id,  # ← Operation ID sync (training-host pattern)
-            "strategy_yaml": strategy_yaml,  # ← Send YAML content (required)
+            "strategy_yaml": strategy_yaml,  # ← Send YAML content (required for training)
+            "strategy_path": strategy_path_relative,  # ← Path for checkpoint storage (Task 4.8)
             "symbols": context.symbols,
             "timeframes": context.timeframes,
             "start_date": start_date,

@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
 from ktrdr import get_logger
 from ktrdr.api.dependencies import get_operations_service
+from ktrdr.api.endpoints.workers import get_worker_registry
 from ktrdr.api.models.operations import (
     CancelOperationRequest,
     OperationCancelResponse,
@@ -23,6 +24,9 @@ from ktrdr.api.models.operations import (
     OperationStatusResponse,
     OperationSummary,
     OperationType,
+    ResumedFromInfo,
+    ResumeOperationData,
+    ResumeOperationResponse,
 )
 from ktrdr.api.services.operations_service import OperationsService
 from ktrdr.errors import DataError
@@ -511,6 +515,211 @@ async def retry_operation(
         raise DataError(
             message=f"Failed to retry operation {operation_id}",
             error_code="OPERATIONS-RetryError",
+            details={"operation_id": operation_id, "error": str(e)},
+        ) from e
+
+
+def _get_checkpoint_service():
+    """
+    Get checkpoint service as FastAPI dependency.
+
+    This wrapper allows proper dependency injection in tests.
+    """
+    from ktrdr.api.endpoints.checkpoints import get_checkpoint_service
+
+    return get_checkpoint_service()
+
+
+@router.post(
+    "/operations/{operation_id}/resume",
+    response_model=ResumeOperationResponse,
+    tags=["Operations"],
+    summary="Resume cancelled or failed operation",
+    description="""
+    Resume a cancelled or failed operation from its last checkpoint.
+
+    **Features:**
+    - Optimistic locking prevents race conditions
+    - Loads checkpoint to verify availability
+    - Training continues from checkpoint epoch
+    - Checkpoint deleted after successful completion
+
+    **Perfect for:** Resuming interrupted training, recovering from failures
+    """,
+)
+async def resume_operation(
+    operation_id: str = Path(..., description="Unique operation identifier to resume"),
+    operations_service: OperationsService = Depends(get_operations_service),
+    checkpoint_service=Depends(_get_checkpoint_service),
+    worker_registry=Depends(get_worker_registry),
+) -> ResumeOperationResponse:
+    """
+    Resume a cancelled or failed operation from checkpoint.
+
+    Uses optimistic locking to atomically update status from CANCELLED/FAILED
+    to RUNNING. Then verifies checkpoint exists before dispatching to worker.
+
+    Args:
+        operation_id: Unique identifier for the operation to resume
+
+    Returns:
+        ResumeOperationResponse: Resume result with checkpoint info
+
+    Raises:
+        404: Operation not found or no checkpoint available
+        409: Operation cannot be resumed (already running/completed)
+
+    Example:
+        POST /api/v1/operations/op_training_20241213_143022_abc123/resume
+    """
+
+    try:
+        logger.info(f"Resuming operation: {operation_id}")
+
+        # 1. Optimistic lock: Update status only if resumable
+        updated = await operations_service.try_resume(operation_id)
+
+        if not updated:
+            # try_resume failed, check why
+            op = await operations_service.get_operation(operation_id)
+
+            if op is None:
+                logger.warning(f"Cannot resume - operation not found: {operation_id}")
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Operation not found: {operation_id}",
+                )
+            if op.status == OperationStatus.RUNNING:
+                logger.warning(
+                    f"Cannot resume - operation already running: {operation_id}"
+                )
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Operation {operation_id} is already running",
+                )
+            if op.status == OperationStatus.RESUMING:
+                logger.warning(
+                    f"Cannot resume - operation already resuming: {operation_id}"
+                )
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Operation {operation_id} is already resuming",
+                )
+            if op.status == OperationStatus.COMPLETED:
+                logger.warning(
+                    f"Cannot resume - operation already completed: {operation_id}"
+                )
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Operation {operation_id} is already completed",
+                )
+            # Generic case for other non-resumable states
+            logger.warning(
+                f"Cannot resume - operation in non-resumable state: {operation_id} (status: {op.status})"
+            )
+            raise HTTPException(
+                status_code=409,
+                detail=f"Cannot resume operation {operation_id} from status {op.status.value}",
+            )
+
+        # 2. Load checkpoint to verify it exists
+        checkpoint = await checkpoint_service.load_checkpoint(
+            operation_id, load_artifacts=False
+        )
+
+        if checkpoint is None:
+            logger.warning(f"No checkpoint available for operation: {operation_id}")
+            # Mark as FAILED since we can't resume
+            await operations_service.update_status(operation_id, status="FAILED")
+            raise HTTPException(
+                status_code=404,
+                detail=f"No checkpoint available for operation {operation_id}",
+            )
+
+        # 3. Dispatch to worker
+        # NOTE: We get operation_type from checkpoint metadata to avoid calling
+        # get_operation() here. Calling get_operation() would trigger a proxy
+        # refresh which could overwrite the RESUMING status with stale data
+        # from the worker (which may still show CANCELLED before it starts).
+        op_type = checkpoint.state.get(
+            "operation_type", "training"
+        )  # Default to training
+
+        if op_type == "training":
+            # Select a training worker
+            from ktrdr.api.models.workers import WorkerType
+
+            worker = worker_registry.select_worker(WorkerType.TRAINING)
+            if worker is None:
+                logger.error(f"No training worker available for resume: {operation_id}")
+                # Revert status back to cancelled since we can't dispatch
+                await operations_service.update_status(operation_id, status="CANCELLED")
+                raise HTTPException(
+                    status_code=503,
+                    detail="No training worker available to resume operation",
+                )
+
+            # Dispatch to worker's /training/resume endpoint
+            import httpx
+
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        f"{worker.endpoint_url}/training/resume",
+                        json={"operation_id": operation_id},
+                        timeout=30.0,
+                    )
+                    response.raise_for_status()
+                    worker_response = response.json()
+                    logger.info(
+                        f"Dispatched resume to worker {worker.worker_id}: {worker_response}"
+                    )
+            except httpx.HTTPStatusError as e:
+                logger.error(
+                    f"Worker rejected resume request: {e.response.status_code} - {e.response.text}"
+                )
+                # Revert status back to cancelled since dispatch failed
+                await operations_service.update_status(operation_id, status="CANCELLED")
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Worker failed to resume: {e.response.text}",
+                ) from e
+            except httpx.RequestError as e:
+                logger.error(f"Failed to connect to worker: {str(e)}")
+                await operations_service.update_status(operation_id, status="CANCELLED")
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Failed to connect to worker: {str(e)}",
+                ) from e
+
+        logger.info(
+            f"Successfully resumed operation: {operation_id} from epoch {checkpoint.state.get('epoch')}"
+        )
+
+        # Return RESUMING status - we know try_resume succeeded and set this status.
+        # Don't query the worker as it may still show stale data (CANCELLED).
+        # The worker will update to RUNNING when it starts, and get_operation
+        # will sync that status on subsequent queries.
+        return ResumeOperationResponse(
+            success=True,
+            data=ResumeOperationData(
+                operation_id=operation_id,
+                status="resuming",
+                resumed_from=ResumedFromInfo(
+                    checkpoint_type=checkpoint.checkpoint_type,
+                    created_at=checkpoint.created_at,
+                    epoch=checkpoint.state.get("epoch"),
+                ),
+            ),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error resuming operation: {str(e)}")
+        raise DataError(
+            message=f"Failed to resume operation {operation_id}",
+            error_code="OPERATIONS-ResumeError",
             details={"operation_id": operation_id, "error": str(e)},
         ) from e
 

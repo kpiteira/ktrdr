@@ -467,11 +467,66 @@ Integration test that verifies full resume flow.
 
 ---
 
+### Task 4.8: Fix Checkpoint Strategy Storage
+
+**File(s):**
+- `ktrdr/training/training_worker.py` (modify)
+
+**Type:** CODING
+
+**Task Categories:** Persistence, Cross-Component
+
+**Description:**
+Remove strategy YAML from checkpoint DB state. The strategy YAML is currently stored in `original_request.strategy_yaml` but gets truncated due to JSON column size limits, causing resume to fail with YAML parse error.
+
+**Problem:**
+```
+ValidationError: Failed to parse strategy YAML: while scanning a quoted scalar
+  in "/tmp/tmpp47d3ylr/resumed_training.yaml", line 3, column 14
+found unexpected end of stream
+```
+
+The checkpoint state shows truncated content:
+```json
+"strategy_yaml": "# === STRATEGY IDENTITY ===\nname: \"test_e2e_local_pull\"\ndescription: \"Minimal strategy for E2E testi"
+```
+
+**Solution:**
+Don't store strategy YAML in checkpoint at all. The strategy file already exists on disk. On resume:
+1. Store only `strategy_path` in checkpoint metadata
+2. Read strategy from original file path on resume
+3. If strategy file was deleted/modified between checkpoint and resume, fail with clear error
+
+**Implementation:**
+
+1. In `_save_checkpoint_state()` (~line 400-450):
+   - Change `original_request` to store `strategy_path` instead of `strategy_yaml`
+
+2. In `_execute_resumed_training()` (~line 600-650):
+   - Read strategy from `checkpoint.state["original_request"]["strategy_path"]`
+   - Add error handling if strategy file doesn't exist
+
+**Acceptance Criteria:**
+- [ ] Checkpoint state does NOT contain `strategy_yaml`
+- [ ] Checkpoint state contains `strategy_path` (relative path like `strategies/xxx.yaml`)
+- [ ] Resume reads strategy from disk using `strategy_path`
+- [ ] Resume fails gracefully if strategy file doesn't exist
+- [ ] E2E test passes: start → cancel → resume → complete
+
+**Smoke Test:**
+```bash
+# After checkpoint save, verify no strategy_yaml in state:
+curl -s http://localhost:8000/api/v1/checkpoints/<op_id> | jq '.data.state.original_request | keys'
+# Should NOT include "strategy_yaml", SHOULD include "strategy_path"
+```
+
+---
+
 ## Milestone 4 Verification Checklist
 
 Before marking M4 complete:
 
-- [ ] All 7 tasks complete
+- [ ] All 8 tasks complete
 - [ ] Unit tests pass: `make test-unit`
 - [ ] Integration tests pass: `make test-integration`
 - [ ] E2E test script passes
@@ -493,3 +548,4 @@ Before marking M4 complete:
 | `ktrdr/training/model_trainer.py` | Modify | 4.5 |
 | `ktrdr/cli/operations_commands.py` | Modify | 4.6 |
 | `tests/integration/test_m4_training_resume.py` | Create | 4.7 |
+| `ktrdr/training/training_worker.py` | Modify | 4.8 |

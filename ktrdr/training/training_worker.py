@@ -8,9 +8,12 @@ WorkerAPIBase for common infrastructure.
 import asyncio
 import os
 import uuid
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from fastapi import FastAPI
+
+if TYPE_CHECKING:
+    from ktrdr.training.checkpoint_restore import TrainingResumeContext
 from opentelemetry import trace
 from pydantic import Field
 
@@ -44,6 +47,11 @@ class TrainingStartRequest(WorkerOperationMixin):
 
     # task_id inherited from WorkerOperationMixin
     strategy_yaml: str = Field(description="Strategy configuration as YAML string")
+    strategy_path: Optional[str] = Field(
+        default=None,
+        description="Path to strategy file (relative like 'strategies/test.yaml'). "
+        "Used for checkpoint storage instead of full YAML to avoid DB truncation.",
+    )
     # Runtime overrides (optional)
     symbols: Optional[list[str]] = Field(
         default=None, description="Override symbols from strategy"
@@ -57,6 +65,16 @@ class TrainingStartRequest(WorkerOperationMixin):
     end_date: Optional[str] = Field(
         default=None, description="Override end date (YYYY-MM-DD)"
     )
+
+
+class TrainingResumeRequest(WorkerOperationMixin):
+    """Request to resume training from checkpoint.
+
+    Unlike TrainingStartRequest, operation_id is required since we're
+    resuming an existing operation (not creating a new one).
+    """
+
+    operation_id: str = Field(description="Operation ID to resume")
 
 
 class TrainingWorker(WorkerAPIBase):
@@ -110,6 +128,52 @@ class TrainingWorker(WorkerAPIBase):
                 "operation_id": operation_id,  # Standard field (WorkerAPIBase pattern)
                 "status": "started",
             }
+
+        @self.app.post("/training/resume")
+        async def resume_training(request: TrainingResumeRequest):
+            """
+            Resume a training operation from checkpoint.
+
+            Follows same pattern as start_training:
+            - Loads checkpoint to get resume context
+            - Returns immediately with operation info
+            - Starts resumed training in background
+            """
+            from fastapi import HTTPException
+
+            from ktrdr.training.checkpoint_restore import (
+                CheckpointCorruptedError,
+                CheckpointNotFoundError,
+            )
+
+            operation_id = request.operation_id
+
+            try:
+                # Load checkpoint and create resume context
+                resume_context = await self.restore_from_checkpoint(operation_id)
+
+                # Start resumed training in background (non-blocking!)
+                asyncio.create_task(
+                    self._execute_resumed_training(operation_id, resume_context)
+                )
+
+                return {
+                    "success": True,
+                    "operation_id": operation_id,
+                    "status": "started",
+                    "resumed_from_epoch": resume_context.start_epoch
+                    - 1,  # Report checkpoint epoch
+                }
+            except CheckpointNotFoundError as e:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"No checkpoint found for operation {operation_id}",
+                ) from e
+            except CheckpointCorruptedError as e:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Checkpoint corrupted: {str(e)}",
+                ) from e
 
     async def _execute_training_work(
         self,
@@ -170,8 +234,10 @@ class TrainingWorker(WorkerAPIBase):
         # Initialize variables for checkpoint handling (accessible in except blocks)
         last_checkpoint_state: dict = {}
         checkpoint_service = self.get_checkpoint_service()
+        # Store strategy_path (not content) to avoid DB truncation issues (Task 4.8)
+        # On resume, we read the strategy from disk using this path
         original_request = {
-            "strategy_yaml": request.strategy_yaml[:100],  # Truncate
+            "strategy_path": request.strategy_path,  # Path to read from on resume
             "symbols": request.symbols,
             "timeframes": request.timeframes,
             "start_date": request.start_date,
@@ -450,6 +516,293 @@ class TrainingWorker(WorkerAPIBase):
             session_factory=get_session_factory(),
             artifacts_dir=self._checkpoint_dir,
         )
+
+    async def restore_from_checkpoint(
+        self, operation_id: str
+    ) -> "TrainingResumeContext":
+        """Restore training context from a checkpoint.
+
+        Loads the checkpoint for the given operation and creates a
+        TrainingResumeContext that can be used to resume training.
+
+        Args:
+            operation_id: The operation ID to restore.
+
+        Returns:
+            TrainingResumeContext with all state needed to resume.
+
+        Raises:
+            CheckpointNotFoundError: If no checkpoint exists for the operation.
+            CheckpointCorruptedError: If required artifacts are missing or invalid.
+        """
+        from ktrdr.training.checkpoint_restore import restore_from_checkpoint
+
+        checkpoint_service = self.get_checkpoint_service()
+        return await restore_from_checkpoint(
+            checkpoint_service=checkpoint_service,
+            operation_id=operation_id,
+        )
+
+    async def _execute_resumed_training(
+        self,
+        operation_id: str,
+        resume_context: "TrainingResumeContext",
+    ) -> dict[str, Any]:
+        """
+        Execute resumed training from checkpoint.
+
+        Similar to _execute_training_work but:
+        - Uses resume_context instead of creating new operation
+        - Starts from checkpoint epoch (not epoch 0)
+        - Restores model/optimizer state before training
+
+        Note: The actual model/optimizer restoration is handled in Task 4.5
+        (ModelTrainer integration). This method provides the worker-level
+        orchestration for resumed training.
+        """
+        import tempfile
+        from pathlib import Path
+
+        from ktrdr.api.services.training.context import build_training_context
+        from ktrdr.api.services.training.local_orchestrator import (
+            LocalTrainingOrchestrator,
+        )
+        from ktrdr.api.services.training.progress_bridge import (
+            TrainingProgressBridge,
+        )
+        from ktrdr.checkpoint import CheckpointPolicy
+        from ktrdr.training.model_storage import ModelStorage
+
+        # 1. Mark operation as RUNNING (it should already exist from original training)
+        # The backend's resume endpoint should have already transitioned status
+        dummy_task = asyncio.create_task(asyncio.sleep(0))
+        await self._operations_service.start_operation(operation_id, dummy_task)
+        logger.info(
+            f"Marked operation {operation_id} as RUNNING for resume "
+            f"(starting from epoch {resume_context.start_epoch})"
+        )
+
+        # Initialize checkpoint service for periodic saves during resumed training
+        checkpoint_service = self.get_checkpoint_service()
+
+        # Get cancellation token
+        cancellation_token = self._operations_service.get_cancellation_token(
+            operation_id
+        )
+
+        # Extract original request parameters from checkpoint
+        original_request = resume_context.original_request
+
+        # Task 4.8: Load strategy from disk using strategy_path (not from checkpoint)
+        # New checkpoints store strategy_path; old checkpoints have strategy_yaml
+        import yaml
+
+        strategy_path = original_request.get("strategy_path")
+        strategy_yaml_from_checkpoint = original_request.get("strategy_yaml")
+
+        strategy_yaml: str
+        strategy_name = "resumed_training"
+
+        if strategy_path:
+            # New format: Read strategy from disk using path
+            # Convert relative path to absolute (workers mount strategies at /app/strategies)
+            if not strategy_path.startswith("/"):
+                strategy_file = Path("/app") / strategy_path
+            else:
+                strategy_file = Path(strategy_path)
+
+            if not strategy_file.exists():
+                # Check alternate location (for local dev without /app prefix)
+                alt_path = Path(strategy_path)
+                if alt_path.exists():
+                    strategy_file = alt_path
+                else:
+                    raise FileNotFoundError(
+                        f"Strategy file not found: {strategy_path} "
+                        f"(checked {strategy_file} and {alt_path}). "
+                        "The strategy file may have been deleted since the checkpoint was created."
+                    )
+
+            logger.info(f"Reading strategy from disk: {strategy_file}")
+            with open(strategy_file) as f:
+                strategy_yaml = f.read()
+
+        elif strategy_yaml_from_checkpoint:
+            # Old format (backward compatibility): Use strategy_yaml from checkpoint
+            logger.warning(
+                "Using strategy_yaml from checkpoint (old format). "
+                "New checkpoints store strategy_path instead."
+            )
+            strategy_yaml = strategy_yaml_from_checkpoint
+
+        else:
+            raise ValueError(
+                "Checkpoint missing both strategy_path and strategy_yaml. "
+                "Cannot resume training without strategy configuration."
+            )
+
+        # Extract strategy name from YAML
+        try:
+            yaml_content = yaml.safe_load(strategy_yaml)
+            if yaml_content and "name" in yaml_content:
+                strategy_name = yaml_content["name"]
+        except yaml.YAMLError:
+            logger.warning("Failed to parse strategy YAML")
+
+        # 2. Execute resumed training
+        temp_dir = tempfile.mkdtemp()
+        temp_yaml_path = Path(temp_dir) / f"{strategy_name}.yaml"
+
+        # Track last checkpoint state for cancellation/failure
+        last_checkpoint_state: dict = {}
+
+        try:
+            # Write YAML to temp file (needed for build_training_context)
+            with open(temp_yaml_path, "w") as f:
+                f.write(strategy_yaml)
+
+            # Create training context from checkpoint's original request
+            symbols = original_request.get("symbols", ["BTCUSD"])
+            timeframes = original_request.get("timeframes", ["1h"])
+            start_date = original_request.get("start_date", "2020-01-01")
+            end_date = original_request.get("end_date")
+
+            context = build_training_context(
+                operation_id=operation_id,
+                strategy_name=strategy_name,
+                symbols=symbols,
+                timeframes=timeframes,
+                start_date=start_date,
+                end_date=end_date,
+                detailed_analytics=False,
+                use_host_service=False,  # Local execution on worker
+                strategy_search_paths=[Path(temp_dir)],
+            )
+
+            # Create progress bridge
+            def noop_callback(**kwargs):
+                pass
+
+            bridge = TrainingProgressBridge(
+                context=context,
+                update_progress_callback=noop_callback,
+                cancellation_token=cancellation_token,
+            )
+            self._operations_service.register_local_bridge(operation_id, bridge)
+            logger.info(
+                f"Registered training bridge for resumed operation {operation_id}"
+            )
+
+            # Create model storage
+            model_storage = ModelStorage()
+
+            # Create checkpoint policy for resumed training
+            checkpoint_policy = CheckpointPolicy(
+                unit_interval=self.checkpoint_epoch_interval,
+                time_interval_seconds=self.checkpoint_time_interval,
+            )
+
+            # Create checkpoint callback (runs in ModelTrainer's training loop)
+            def checkpoint_callback(**kwargs):
+                """Called after each epoch with model, optimizer, scheduler, trainer."""
+                from ktrdr.training.checkpoint_builder import (
+                    build_training_checkpoint_artifacts,
+                    build_training_checkpoint_state,
+                )
+
+                epoch = kwargs["epoch"]
+                model = kwargs["model"]
+                optimizer = kwargs["optimizer"]
+                scheduler = kwargs.get("scheduler")
+                trainer = kwargs["trainer"]
+
+                # Store latest state for potential cancellation/failure checkpoint
+                last_checkpoint_state["epoch"] = epoch
+                last_checkpoint_state["model"] = model
+                last_checkpoint_state["optimizer"] = optimizer
+                last_checkpoint_state["scheduler"] = scheduler
+                last_checkpoint_state["trainer"] = trainer
+
+                # Check if we should save a periodic checkpoint
+                if checkpoint_policy.should_checkpoint(epoch):
+                    try:
+                        # Build state and artifacts
+                        state = build_training_checkpoint_state(
+                            trainer, epoch, original_request
+                        )
+                        artifacts = build_training_checkpoint_artifacts(
+                            model,
+                            optimizer,
+                            scheduler,
+                            trainer,
+                        )
+
+                        # Save checkpoint (synchronous call from callback)
+                        loop = asyncio.new_event_loop()
+                        try:
+                            loop.run_until_complete(
+                                checkpoint_service.save_checkpoint(
+                                    operation_id=operation_id,
+                                    checkpoint_type="periodic",
+                                    state=state.to_dict(),
+                                    artifacts=artifacts,
+                                )
+                            )
+                            checkpoint_policy.record_checkpoint(epoch)
+                            logger.info(
+                                f"Periodic checkpoint saved for resumed {operation_id} at epoch {epoch}"
+                            )
+                        finally:
+                            loop.close()
+
+                    except Exception as e:
+                        logger.warning(f"Failed to save periodic checkpoint: {e}")
+
+            # Create orchestrator with resume_context for model/optimizer restoration
+            orchestrator = LocalTrainingOrchestrator(
+                context=context,
+                progress_bridge=bridge,
+                cancellation_token=cancellation_token,
+                model_storage=model_storage,
+                checkpoint_callback=checkpoint_callback,
+                resume_context=resume_context,
+            )
+
+            # Run training (async)
+            result = await orchestrator.run()
+
+        finally:
+            # Clean up temp directory
+            import shutil
+
+            if os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir)
+
+        # 3. Delete checkpoint on successful completion
+        try:
+            await checkpoint_service.delete_checkpoint(operation_id)
+            logger.info(
+                f"Checkpoint deleted after successful resumed completion: {operation_id}"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to delete checkpoint on success: {e}")
+
+        # 4. Complete operation
+        await self._operations_service.complete_operation(
+            operation_id,
+            result,
+        )
+
+        logger.info(
+            f"Resumed training completed for operation {operation_id}: "
+            f"model_path={result.get('model_path', 'unknown')}"
+        )
+
+        return {
+            "model_path": result.get("model_path"),
+            "training_metrics": result.get("training_metrics", {}),
+            "test_metrics": result.get("test_metrics", {}),
+        }
 
 
 # Create worker instance

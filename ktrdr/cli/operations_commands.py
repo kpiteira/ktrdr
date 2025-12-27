@@ -664,3 +664,119 @@ async def _retry_operation_async(operation_id: str, verbose: bool):
             error_code="CLI-RetryOperationError",
             details={"operation_id": operation_id, "error": str(e)},
         ) from e
+
+
+@operations_app.command("resume")
+@trace_cli_command("operations_resume")
+def resume_operation(
+    operation_id: str = typer.Argument(..., help="Operation ID to resume"),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show detailed information"
+    ),
+):
+    """
+    Resume a cancelled or failed operation from checkpoint.
+
+    Resumes training from the last saved checkpoint. The operation continues
+    from the epoch where it was interrupted.
+
+    Examples:
+        ktrdr operations resume op_training_20241201_123456
+        ktrdr operations resume op_training_20241201_123456 --verbose
+    """
+    try:
+        # Input validation
+        operation_id = InputValidator.validate_string(
+            operation_id, min_length=1, max_length=100
+        )
+
+        # Run async operation
+        asyncio.run(_resume_operation_async(operation_id, verbose))
+
+    except ValidationError as e:
+        error_console.print(f"[bold red]Validation error:[/bold red] {str(e)}")
+        if verbose:
+            logger.error(f"Validation error: {str(e)}")
+        sys.exit(1)
+    except Exception as e:
+        error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        if verbose:
+            logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+        sys.exit(1)
+
+
+async def _resume_operation_async(operation_id: str, verbose: bool):
+    """Async implementation of resume operation command."""
+    try:
+        # Check API connection
+        if not await check_api_connection():
+            error_console.print(
+                "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
+            )
+            error_console.print(
+                "Make sure the API server is running at http://localhost:8000"
+            )
+            sys.exit(1)
+
+        api_client = get_api_client()
+
+        if verbose:
+            console.print(f"🔄 Resuming operation: {operation_id}")
+
+        # Resume operation via API
+        try:
+            response = await api_client.resume_operation(operation_id)
+            result = response.get("data", {})
+        except DataError as e:
+            if "404" in str(e) or "not found" in str(e).lower():
+                error_console.print(f"❌ Operation not found: {operation_id}")
+                sys.exit(1)
+            elif "no checkpoint" in str(e).lower():
+                error_console.print(f"❌ No checkpoint available for: {operation_id}")
+                error_console.print(
+                    "The operation must have created a checkpoint before it can be resumed."
+                )
+                sys.exit(1)
+            elif "409" in str(e) or "already running" in str(e).lower():
+                error_console.print(f"❌ Operation cannot be resumed: {operation_id}")
+                error_console.print(
+                    "The operation may already be running or completed."
+                )
+                sys.exit(1)
+            elif "cannot resume" in str(e).lower():
+                error_console.print(f"❌ Operation cannot be resumed: {operation_id}")
+                error_console.print(
+                    "Only cancelled or failed operations can be resumed."
+                )
+                sys.exit(1)
+            else:
+                raise
+
+        # Display results
+        resumed_from = result.get("resumed_from", {})
+        epoch = resumed_from.get("epoch", "N/A")
+
+        console.print(
+            f"✅ [green]Successfully resumed operation: {operation_id}[/green]"
+        )
+        console.print(f"Status: {result.get('status', 'RUNNING')}")
+        console.print(f"Resumed from: epoch {epoch}")
+
+        if verbose and resumed_from.get("checkpoint_type"):
+            console.print(f"Checkpoint type: {resumed_from['checkpoint_type']}")
+        if verbose and resumed_from.get("created_at"):
+            console.print(f"Checkpoint created: {resumed_from['created_at']}")
+
+        console.print(
+            f"\n💡 Use 'ktrdr operations status {operation_id}' to monitor progress"
+        )
+
+        if verbose:
+            console.print("\n✅ Operation resume completed")
+
+    except Exception as e:
+        raise DataError(
+            message=f"Failed to resume operation {operation_id}",
+            error_code="CLI-ResumeOperationError",
+            details={"operation_id": operation_id, "error": str(e)},
+        ) from e
