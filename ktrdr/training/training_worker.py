@@ -47,6 +47,11 @@ class TrainingStartRequest(WorkerOperationMixin):
 
     # task_id inherited from WorkerOperationMixin
     strategy_yaml: str = Field(description="Strategy configuration as YAML string")
+    strategy_path: Optional[str] = Field(
+        default=None,
+        description="Path to strategy file (relative like 'strategies/test.yaml'). "
+        "Used for checkpoint storage instead of full YAML to avoid DB truncation.",
+    )
     # Runtime overrides (optional)
     symbols: Optional[list[str]] = Field(
         default=None, description="Override symbols from strategy"
@@ -229,8 +234,10 @@ class TrainingWorker(WorkerAPIBase):
         # Initialize variables for checkpoint handling (accessible in except blocks)
         last_checkpoint_state: dict = {}
         checkpoint_service = self.get_checkpoint_service()
+        # Store strategy_path (not content) to avoid DB truncation issues (Task 4.8)
+        # On resume, we read the strategy from disk using this path
         original_request = {
-            "strategy_yaml": request.strategy_yaml[:100],  # Truncate
+            "strategy_path": request.strategy_path,  # Path to read from on resume
             "symbols": request.symbols,
             "timeframes": request.timeframes,
             "start_date": request.start_date,
@@ -585,20 +592,62 @@ class TrainingWorker(WorkerAPIBase):
 
         # Extract original request parameters from checkpoint
         original_request = resume_context.original_request
-        strategy_yaml = original_request.get(
-            "strategy_yaml", "name: resumed\ntype: neuro"
-        )
 
-        # Extract strategy name from YAML
+        # Task 4.8: Load strategy from disk using strategy_path (not from checkpoint)
+        # New checkpoints store strategy_path; old checkpoints have strategy_yaml
         import yaml
 
+        strategy_path = original_request.get("strategy_path")
+        strategy_yaml_from_checkpoint = original_request.get("strategy_yaml")
+
+        strategy_yaml: str
         strategy_name = "resumed_training"
+
+        if strategy_path:
+            # New format: Read strategy from disk using path
+            # Convert relative path to absolute (workers mount strategies at /app/strategies)
+            if not strategy_path.startswith("/"):
+                strategy_file = Path("/app") / strategy_path
+            else:
+                strategy_file = Path(strategy_path)
+
+            if not strategy_file.exists():
+                # Check alternate location (for local dev without /app prefix)
+                alt_path = Path(strategy_path)
+                if alt_path.exists():
+                    strategy_file = alt_path
+                else:
+                    raise FileNotFoundError(
+                        f"Strategy file not found: {strategy_path} "
+                        f"(checked {strategy_file} and {alt_path}). "
+                        "The strategy file may have been deleted since the checkpoint was created."
+                    )
+
+            logger.info(f"Reading strategy from disk: {strategy_file}")
+            with open(strategy_file) as f:
+                strategy_yaml = f.read()
+
+        elif strategy_yaml_from_checkpoint:
+            # Old format (backward compatibility): Use strategy_yaml from checkpoint
+            logger.warning(
+                "Using strategy_yaml from checkpoint (old format). "
+                "New checkpoints store strategy_path instead."
+            )
+            strategy_yaml = strategy_yaml_from_checkpoint
+
+        else:
+            raise ValueError(
+                "Checkpoint missing both strategy_path and strategy_yaml. "
+                "Cannot resume training without strategy configuration."
+            )
+
+        # Extract strategy name from YAML
         try:
             yaml_content = yaml.safe_load(strategy_yaml)
             if yaml_content and "name" in yaml_content:
                 strategy_name = yaml_content["name"]
         except yaml.YAMLError:
-            logger.warning("Failed to parse strategy YAML from checkpoint")
+            logger.warning("Failed to parse strategy YAML")
 
         # 2. Execute resumed training
         temp_dir = tempfile.mkdtemp()
@@ -608,7 +657,7 @@ class TrainingWorker(WorkerAPIBase):
         last_checkpoint_state: dict = {}
 
         try:
-            # Write YAML to temp file with correct name
+            # Write YAML to temp file (needed for build_training_context)
             with open(temp_yaml_path, "w") as f:
                 f.write(strategy_yaml)
 
