@@ -718,7 +718,7 @@ class OperationsService:
                 cached_op = self._cache.get(operation_id)
                 if cached_op is not None:
                     old_status = cached_op.status
-                    cached_op.status = OperationStatus.RUNNING
+                    cached_op.status = OperationStatus.RESUMING
                     cached_op.started_at = datetime.now(timezone.utc)
                     cached_op.completed_at = None
                     cached_op.error_message = None
@@ -727,7 +727,7 @@ class OperationsService:
                     db_op = await self._repository.get(operation_id)
                     if db_op is not None:
                         self._cache[operation_id] = db_op
-                        # DB state is already RUNNING after try_resume
+                        # DB state is already RESUMING after try_resume
                         old_status = OperationStatus.CANCELLED  # Assume from context
 
             # Tracing for state transition
@@ -735,14 +735,16 @@ class OperationsService:
                 "operation.state_transition", operation_id=operation_id
             ) as span:
                 span.set_attribute("operation.from_status", old_status.value)
-                span.set_attribute("operation.to_status", OperationStatus.RUNNING.value)
+                span.set_attribute(
+                    "operation.to_status", OperationStatus.RESUMING.value
+                )
                 span.set_attribute("operation.resumed", True)
 
             # Update Prometheus metrics
             operations_active.inc()
 
             logger.info(
-                f"Resumed operation: {operation_id} (from {old_status.value} to running)"
+                f"Resumed operation: {operation_id} (from {old_status.value} to resuming)"
             )
 
             return True
@@ -766,7 +768,7 @@ class OperationsService:
                 return False
 
             old_status = operation.status
-            operation.status = OperationStatus.RUNNING
+            operation.status = OperationStatus.RESUMING
             operation.started_at = datetime.now(timezone.utc)
             operation.completed_at = None
             operation.error_message = None
@@ -776,13 +778,15 @@ class OperationsService:
                 "operation.state_transition", operation_id=operation_id
             ) as span:
                 span.set_attribute("operation.from_status", old_status.value)
-                span.set_attribute("operation.to_status", OperationStatus.RUNNING.value)
+                span.set_attribute(
+                    "operation.to_status", OperationStatus.RESUMING.value
+                )
                 span.set_attribute("operation.resumed", True)
 
             operations_active.inc()
 
             logger.info(
-                f"Resumed operation: {operation_id} (from {old_status.value} to running)"
+                f"Resumed operation: {operation_id} (from {old_status.value} to resuming)"
             )
 
             return True
@@ -862,9 +866,10 @@ class OperationsService:
             if not operation:
                 return None
 
-            # TASK 1.3/1.4: Pull from local bridge if registered and operation still running
+            # TASK 1.3/1.4: Pull from local bridge if registered and operation is active
+            # (RUNNING or RESUMING - need to sync status transitions)
             if (
-                operation.status == OperationStatus.RUNNING
+                operation.status in (OperationStatus.RUNNING, OperationStatus.RESUMING)
                 and operation_id in self._local_bridges
             ):
                 # TASK 1.4: Force refresh bypasses cache
@@ -879,14 +884,20 @@ class OperationsService:
                 self._refresh_from_bridge(operation_id)
 
             # TASK 2.5: Pull from remote proxy if registered and:
-            # - Operation still running (to get progress updates), OR
+            # - Operation is running or resuming (to get progress updates), OR
             # - Operation completed but result_summary is missing (to sync final result)
+            # NOTE: RESUMING operations need proxy refresh to sync status transitions
+            # (RESUMING → RUNNING → COMPLETED) from the worker.
             needs_result_sync = (
                 operation.status == OperationStatus.COMPLETED
                 and operation.result_summary is None
             )
+            is_active = operation.status in (
+                OperationStatus.RUNNING,
+                OperationStatus.RESUMING,
+            )
             if self._get_remote_proxy(operation_id) and (
-                operation.status == OperationStatus.RUNNING or needs_result_sync
+                is_active or needs_result_sync
             ):
                 # Force refresh bypasses cache
                 if force_refresh or needs_result_sync:

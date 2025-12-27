@@ -745,7 +745,9 @@ async def _resume_operation_async(operation_id: str, verbose: bool):
                 sys.exit(1)
             elif "cannot resume" in str(e).lower():
                 error_console.print(f"❌ Operation cannot be resumed: {operation_id}")
-                error_console.print("Only cancelled or failed operations can be resumed.")
+                error_console.print(
+                    "Only cancelled or failed operations can be resumed."
+                )
                 sys.exit(1)
             else:
                 raise
@@ -754,7 +756,9 @@ async def _resume_operation_async(operation_id: str, verbose: bool):
         resumed_from = result.get("resumed_from", {})
         epoch = resumed_from.get("epoch", "N/A")
 
-        console.print(f"✅ [green]Successfully resumed operation: {operation_id}[/green]")
+        console.print(
+            f"✅ [green]Successfully resumed operation: {operation_id}[/green]"
+        )
         console.print(f"Status: {result.get('status', 'RUNNING')}")
         console.print(f"Resumed from: epoch {epoch}")
 

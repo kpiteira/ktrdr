@@ -16,6 +16,7 @@ class OperationStatus(str, Enum):
     """Status of an operation."""
 
     PENDING = "pending"
+    RESUMING = "resuming"  # Transitional state: resume requested, worker starting
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"

@@ -150,9 +150,7 @@ class TestResumeReadsStrategyFromDisk:
         from ktrdr.training.checkpoint_restore import TrainingResumeContext
 
         # Create temp strategy file
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(sample_strategy_yaml)
             temp_path = f.name
 
@@ -199,9 +197,7 @@ class TestResumeReadsStrategyFromDisk:
                 ) as mock_token:
                     mock_token.return_value = MagicMock()
 
-                    with patch.object(
-                        mock_operations_service, "register_local_bridge"
-                    ):
+                    with patch.object(mock_operations_service, "register_local_bridge"):
                         with patch.object(
                             mock_operations_service,
                             "complete_operation",

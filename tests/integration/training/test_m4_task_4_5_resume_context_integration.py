@@ -23,14 +23,15 @@ import torch
 import torch.nn as nn
 import yaml
 
-from ktrdr.api.services.training.context import OperationMetadata, TrainingOperationContext
+from ktrdr.api.services.training.context import (
+    OperationMetadata,
+    TrainingOperationContext,
+)
 from ktrdr.api.services.training.local_orchestrator import LocalTrainingOrchestrator
 from ktrdr.api.services.training.progress_bridge import TrainingProgressBridge
-from ktrdr.async_infrastructure.cancellation import CancellationToken
 from ktrdr.training.checkpoint_restore import TrainingResumeContext
 from ktrdr.training.model_storage import ModelStorage
 from ktrdr.training.training_pipeline import TrainingPipeline
-
 
 # ============================================================================
 # TEST FIXTURES
@@ -245,7 +246,7 @@ class TestResumeContextAcceptance:
 
         # Create fresh model with random weights
         fresh_model = nn.Linear(10, 3)
-        initial_weight = fresh_model.weight.data.clone()
+        _initial_weight = fresh_model.weight.data.clone()  # noqa: F841
 
         # Prepare training data
         X_train = torch.randn(32, 10)
@@ -372,7 +373,7 @@ class TestResumeContextAcceptance:
         X_train = torch.randn(32, 10)
         y_train = torch.randint(0, 3, (32,))
 
-        result = trainer.train(model, X_train, y_train)
+        _result = trainer.train(model, X_train, y_train)  # noqa: F841
 
         # Trainer should have history from both prior epochs and new training
         assert hasattr(trainer, "history")
@@ -452,8 +453,6 @@ class TestResumeContextWiring:
 
         # Track what train_strategy is called with
         called_with = {}
-
-        original_train_strategy = TrainingPipeline.train_strategy
 
         def tracked_train_strategy(*args, **kwargs):
             called_with["resume_context"] = kwargs.get("resume_context")

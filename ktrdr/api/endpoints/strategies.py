@@ -459,6 +459,7 @@ def _validate_strategy_config(
                             indicator_feature_ids.append(indicator_config["feature_id"])
 
             # Expected derived metrics from complex indicators
+            # Multi-output indicators produce additional columns beyond the primary feature_id
             expected_derived = set()
             for name in indicator_names:
                 if name == "bollinger_bands":
@@ -472,6 +473,15 @@ def _validate_strategy_config(
                         and "keltner_channels" in indicator_names
                     ):
                         expected_derived.add("squeeze_intensity")
+                # ADX produces DI_Plus and DI_Minus as secondary outputs
+                elif name == "adx":
+                    expected_derived.add("ADX")
+                    expected_derived.add("DI_Plus")
+                    expected_derived.add("DI_Minus")
+                # Aroon produces aroon_up and aroon_down
+                elif name == "aroon":
+                    expected_derived.add("aroon_up")
+                    expected_derived.add("aroon_down")
 
             # Build set of all possible valid targets for fuzzy sets
             # Includes: feature_ids (primary), indicator names, derived metrics, and price data columns
@@ -496,16 +506,26 @@ def _validate_strategy_config(
             # Check if fuzzy sets reference valid indicators/metrics
             # Note: Fuzzy set names may have suffixes like _14, _standard, _fast to distinguish
             # between multiple instances of the same indicator with different parameters.
-            # Extract the base indicator name by splitting on _ and taking the first part.
             invalid_fuzzy_refs = []
             for fuzzy_name in fuzzy_configs.keys():
+                # Check direct match first
+                if fuzzy_name in all_possible_targets:
+                    continue
+
                 # Extract base indicator name (e.g., "rsi_14" -> "rsi", "macd_standard" -> "macd")
                 base_name = fuzzy_name.split("_")[0]
-                # Check both the full name and the base name
-                if (
-                    fuzzy_name not in all_possible_targets
-                    and base_name not in all_possible_targets
-                ):
+                if base_name in all_possible_targets:
+                    continue
+
+                # Check if fuzzy_name starts with any valid target prefix
+                # This handles multi-output indicators like ADX producing DI_Plus_14, DI_Minus_14
+                matched = False
+                for target in all_possible_targets:
+                    if fuzzy_name.startswith(f"{target}_"):
+                        matched = True
+                        break
+
+                if not matched:
                     invalid_fuzzy_refs.append(fuzzy_name)
 
             if invalid_fuzzy_refs:

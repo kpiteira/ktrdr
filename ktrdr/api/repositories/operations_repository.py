@@ -185,11 +185,15 @@ class OperationsRepository:
             return True
 
     async def try_resume(self, operation_id: str) -> bool:
-        """Atomically update status to RUNNING if currently resumable.
+        """Atomically update status to RESUMING if currently resumable.
 
         Uses an atomic UPDATE with a status check in the WHERE clause,
         ensuring that concurrent resume requests result in exactly one success.
         This is true optimistic locking at the database level.
+
+        The status is set to RESUMING (not RUNNING) to indicate that the resume
+        has been requested but the worker hasn't started yet. The worker will
+        update the status to RUNNING when it actually starts training.
 
         Args:
             operation_id: The operation's unique identifier.
@@ -207,7 +211,7 @@ class OperationsRepository:
                     OperationRecord.status.in_(["cancelled", "failed"]),
                 )
                 .values(
-                    status="running",
+                    status="resuming",  # Transitional state until worker starts
                     started_at=datetime.now(timezone.utc),
                     completed_at=None,
                     error_message=None,

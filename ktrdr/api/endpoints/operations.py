@@ -597,6 +597,14 @@ async def resume_operation(
                     status_code=409,
                     detail=f"Operation {operation_id} is already running",
                 )
+            if op.status == OperationStatus.RESUMING:
+                logger.warning(
+                    f"Cannot resume - operation already resuming: {operation_id}"
+                )
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Operation {operation_id} is already resuming",
+                )
             if op.status == OperationStatus.COMPLETED:
                 logger.warning(
                     f"Cannot resume - operation already completed: {operation_id}"
@@ -629,19 +637,14 @@ async def resume_operation(
             )
 
         # 3. Dispatch to worker
-        op = await operations_service.get_operation(operation_id)
-        if op is None:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Operation not found after resume: {operation_id}",
-            )
+        # NOTE: We get operation_type from checkpoint metadata to avoid calling
+        # get_operation() here. Calling get_operation() would trigger a proxy
+        # refresh which could overwrite the RESUMING status with stale data
+        # from the worker (which may still show CANCELLED before it starts).
+        op_type = checkpoint.state.get(
+            "operation_type", "training"
+        )  # Default to training
 
-        # Only dispatch training operations (backtesting resume not yet implemented)
-        op_type = (
-            op.operation_type.value
-            if hasattr(op.operation_type, "value")
-            else str(op.operation_type)
-        )
         if op_type == "training":
             # Select a training worker
             from ktrdr.api.models.workers import WorkerType
@@ -693,18 +696,15 @@ async def resume_operation(
             f"Successfully resumed operation: {operation_id} from epoch {checkpoint.state.get('epoch')}"
         )
 
-        # Get status value - handle both Enum and string cases
-        status_value = "running"
-        if op:
-            status_value = (
-                op.status.value if hasattr(op.status, "value") else str(op.status)
-            )
-
+        # Return RESUMING status - we know try_resume succeeded and set this status.
+        # Don't query the worker as it may still show stale data (CANCELLED).
+        # The worker will update to RUNNING when it starts, and get_operation
+        # will sync that status on subsequent queries.
         return ResumeOperationResponse(
             success=True,
             data=ResumeOperationData(
                 operation_id=operation_id,
-                status=status_value,
+                status="resuming",
                 resumed_from=ResumedFromInfo(
                     checkpoint_type=checkpoint.checkpoint_type,
                     created_at=checkpoint.created_at,

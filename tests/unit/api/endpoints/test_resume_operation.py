@@ -34,7 +34,8 @@ def mock_worker_registry():
     """Create a mock WorkerRegistry for testing."""
     from unittest.mock import MagicMock
 
-    mock_registry = AsyncMock()
+    # select_worker is synchronous, so use MagicMock not AsyncMock
+    mock_registry = MagicMock()
     # Mock a worker with endpoint_url
     mock_worker = MagicMock()
     mock_worker.worker_id = "test-worker-123"
@@ -130,12 +131,12 @@ class TestResumeOperationEndpoint:
     def test_resume_operation_success_cancelled(
         self, client, mock_operations_service, mock_checkpoint_service
     ):
-        """Test resuming a cancelled operation returns success."""
+        """Test resuming a cancelled operation returns success with RESUMING status."""
         operation_id = "op_training_123"
         mock_operations_service.try_resume.return_value = True
         mock_operations_service.get_operation.return_value = make_operation_info(
             operation_id=operation_id,
-            status=OperationStatus.RUNNING,  # After try_resume, status is RUNNING
+            status=OperationStatus.RESUMING,  # After try_resume, status is RESUMING
         )
         mock_checkpoint_service.load_checkpoint.return_value = make_checkpoint_data(
             operation_id=operation_id, epoch=25
@@ -147,19 +148,19 @@ class TestResumeOperationEndpoint:
         data = response.json()
         assert data["success"] is True
         assert data["data"]["operation_id"] == operation_id
-        assert data["data"]["status"] == "running"
+        assert data["data"]["status"] == "resuming"  # New transitional state
         assert data["data"]["resumed_from"]["epoch"] == 25
         assert data["data"]["resumed_from"]["checkpoint_type"] == "cancellation"
 
     def test_resume_operation_success_failed(
         self, client, mock_operations_service, mock_checkpoint_service
     ):
-        """Test resuming a failed operation returns success."""
+        """Test resuming a failed operation returns success with RESUMING status."""
         operation_id = "op_training_456"
         mock_operations_service.try_resume.return_value = True
         mock_operations_service.get_operation.return_value = make_operation_info(
             operation_id=operation_id,
-            status=OperationStatus.RUNNING,
+            status=OperationStatus.RESUMING,  # Transitional state
         )
         mock_checkpoint_service.load_checkpoint.return_value = make_checkpoint_data(
             operation_id=operation_id, epoch=10, checkpoint_type="failure"
@@ -170,6 +171,7 @@ class TestResumeOperationEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
+        assert data["data"]["status"] == "resuming"  # Transitional state
         assert data["data"]["resumed_from"]["checkpoint_type"] == "failure"
 
     def test_resume_operation_not_found(
@@ -224,6 +226,23 @@ class TestResumeOperationEndpoint:
         assert response.status_code == 409
         data = response.json()
         assert "already running" in data["detail"].lower()
+
+    def test_resume_operation_already_resuming(
+        self, client, mock_operations_service, mock_checkpoint_service
+    ):
+        """Test resuming operation that's already resuming returns 409."""
+        operation_id = "op_training_123"
+        mock_operations_service.try_resume.return_value = False
+        mock_operations_service.get_operation.return_value = make_operation_info(
+            operation_id=operation_id,
+            status=OperationStatus.RESUMING,
+        )
+
+        response = client.post(f"/api/v1/operations/{operation_id}/resume")
+
+        assert response.status_code == 409
+        data = response.json()
+        assert "already resuming" in data["detail"].lower()
 
     def test_resume_operation_already_completed(
         self, client, mock_operations_service, mock_checkpoint_service

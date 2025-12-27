@@ -772,7 +772,9 @@ class KtrdrApiClient:
 
     async def resume_operation(self, operation_id: str) -> dict[str, Any]:
         """Resume a cancelled or failed operation from checkpoint."""
-        response = await self._make_request("POST", f"/operations/{operation_id}/resume")
+        response = await self._make_request(
+            "POST", f"/operations/{operation_id}/resume"
+        )
         if not response.get("success"):
             raise DataError(
                 message=f"Failed to resume operation {operation_id}",
