@@ -114,14 +114,14 @@ run_training() {
   local start_timestamp=$(date '+%Y-%m-%d %H:%M')
 
   # Start training
-  local response=$(curl -s -X POST "$API_URL/training/start" \
+  local response=$(curl -s -X POST "$API_URL/trainings/start" \
     -H "Content-Type: application/json" \
-    -d "{\"strategy_name\": \"$strategy\", \"symbol\": \"EURUSD\", \"timeframe\": \"1h\"}")
+    -d "{\"strategy_name\": \"$strategy\", \"symbols\": [\"EURUSD\"], \"timeframes\": [\"1h\"], \"detailed_analytics\": true}")
 
-  local op_id=$(echo "$response" | jq -r '.operation_id // .data.operation_id // empty')
+  local op_id=$(echo "$response" | jq -r '.task_id // empty')
 
   if [ -z "$op_id" ]; then
-    local error=$(echo "$response" | jq -r '.detail // .message // "Unknown error"')
+    local error=$(echo "$response" | jq -r '.error.message // .detail // .message // "Unknown error"')
     log "${RED}FAILED to start $strategy: $error${NC}"
     log_result "$strategy" "failed" "-" "-" "Failed to start: $error"
     return 1
