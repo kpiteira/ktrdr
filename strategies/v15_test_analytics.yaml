@@ -46,12 +46,16 @@ fuzzy_sets:
 model:
   type: "mlp"
   architecture:
+    # Note: uses smaller hidden layers than M2 Task 2.1 template ([64, 32])
+    # to keep this a lightweight, minimal test strategy for analyzer validation.
     hidden_layers: [32, 16]
     activation: "relu"
     output_activation: "softmax"
     dropout: 0.2
   features:
     include_price_context: false
+    # Note: uses shorter lookback than M2 Task 2.1 template (2 periods)
+    # to minimize data requirements for this minimal analytics test.
     lookback_periods: 1
     scale_features: true
   training:

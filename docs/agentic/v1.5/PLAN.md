@@ -153,7 +153,7 @@ Note: Baseline strategies use 2.5% threshold.
   - Single timeframe: 1h
   - Zigzag labeling at 2.5%
 
-#### 2.2 Generate All 23 Strategies
+#### 2.2 Generate All 27 Strategies
 - Use template + indicator variations
 - Ensure fuzzy sets match reference table exactly
 - Name convention: `v15_{indicator_combo}.yaml`
@@ -313,5 +313,5 @@ The original approach added infrastructure. This approach answers the question d
 ---
 
 *Document Version: 2.0*
-*Created: December 2024*
+*Created: December 2025*
 *Approach: Lean experimentation over infrastructure*

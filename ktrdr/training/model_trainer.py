@@ -130,7 +130,7 @@ class ModelTrainer:
 
         # Analytics setup - check both direct config and full_config
         full_config = config.get("full_config", config)
-        # Check full path first (when full_config is provided)
+        # Check both paths: full_config.model.training.analytics.enabled and config.analytics.enabled
         analytics_enabled_full = (
             full_config.get("model", {})
             .get("training", {})

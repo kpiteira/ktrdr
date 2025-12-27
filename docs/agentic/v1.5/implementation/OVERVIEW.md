@@ -77,5 +77,5 @@ Previous strategies failed because of mechanical errors (wrong fuzzy ranges). Be
 
 ---
 
-*Created: December 2024*
+*Created: December 2025*
 *Approach: Lean experimentation over infrastructure*
