@@ -25,7 +25,7 @@ training_data:
 
 # === TECHNICAL INDICATORS ===
 indicators:
-  - name: "williams_r"
+  - name: "williamsr"
     feature_id: williams_14
     period: 14
     source: "close"
