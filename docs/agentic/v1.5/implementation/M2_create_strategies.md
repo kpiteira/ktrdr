@@ -12,6 +12,21 @@ plan: docs/agentic/v1.5/PLAN.md
 
 ---
 
+## Prerequisites
+
+**IMPORTANT:** The Docker environment mounts `strategies/` from `ktrdr2`, not `ktrdr2-spec-work`.
+
+To validate strategies via the API, copy them to the main repo:
+
+```bash
+# From ktrdr2-spec-work directory
+cp strategies/v15_*.yaml ../ktrdr2/strategies/
+```
+
+Alternatively, use local Python validation (see Task 2.3).
+
+---
+
 ## Questions This Milestone Must Answer
 
 | # | Question | How We'll Answer It | Success Criteria |

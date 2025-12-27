@@ -12,6 +12,21 @@ plan: docs/agentic/v1.5/PLAN.md
 
 ---
 
+## Prerequisites
+
+**IMPORTANT:** The Docker environment mounts `strategies/` from `ktrdr2`, not `ktrdr2-spec-work`.
+
+Before running experiments, copy strategies from spec-work to the main repo:
+
+```bash
+# From ktrdr2-spec-work directory
+cp strategies/v15_*.yaml ../ktrdr2/strategies/
+```
+
+This ensures the Docker containers can access the strategy files.
+
+---
+
 ## Questions This Milestone Must Answer
 
 | # | Question | How We'll Answer It | Success Criteria |
