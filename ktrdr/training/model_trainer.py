@@ -130,12 +130,16 @@ class ModelTrainer:
 
         # Analytics setup - check both direct config and full_config
         full_config = config.get("full_config", config)
-        self.analytics_enabled = (
+        # Check both paths: full_config.model.training.analytics.enabled and config.analytics.enabled
+        analytics_enabled_full = (
             full_config.get("model", {})
             .get("training", {})
             .get("analytics", {})
             .get("enabled", False)
         )
+        # Also check direct path (when config is already at model.training level)
+        analytics_enabled_direct = config.get("analytics", {}).get("enabled", False)
+        self.analytics_enabled = analytics_enabled_full or analytics_enabled_direct
         self.analyzer: Optional[TrainingAnalyzer] = None
         if self.analytics_enabled:
             self._setup_analytics(full_config)
