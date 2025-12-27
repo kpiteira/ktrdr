@@ -171,9 +171,7 @@ class TestRestoreFromCheckpoint:
         assert context.start_bar == 5001
 
     @pytest.mark.asyncio
-    async def test_cash_restored(
-        self, mock_checkpoint_service, sample_checkpoint_data
-    ):
+    async def test_cash_restored(self, mock_checkpoint_service, sample_checkpoint_data):
         """Should restore cash from checkpoint."""
         from ktrdr.backtesting.checkpoint_restore import restore_from_checkpoint
 

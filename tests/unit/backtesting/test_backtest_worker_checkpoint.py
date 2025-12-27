@@ -8,9 +8,7 @@ Tests verify:
 5. Portfolio state captured correctly
 """
 
-import asyncio
-from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -161,9 +159,9 @@ class TestBacktestEngineCheckpointCallback:
         params = list(sig.parameters.keys())
 
         # Verify checkpoint_callback is in the parameters
-        assert "checkpoint_callback" in params, (
-            "BacktestingEngine.run() should accept checkpoint_callback parameter"
-        )
+        assert (
+            "checkpoint_callback" in params
+        ), "BacktestingEngine.run() should accept checkpoint_callback parameter"
 
     def test_engine_calls_checkpoint_callback_periodically(self):
         """Engine should call checkpoint_callback during bar loop."""
@@ -206,9 +204,9 @@ class TestPortfolioStateCapture:
 
     def test_checkpoint_captures_cash(self, mock_engine):
         """Checkpoint should capture current cash value."""
-        from ktrdr.backtesting.checkpoint_builder import build_backtest_checkpoint_state
-
         import pandas as pd
+
+        from ktrdr.backtesting.checkpoint_builder import build_backtest_checkpoint_state
 
         state = build_backtest_checkpoint_state(
             engine=mock_engine,
@@ -220,9 +218,9 @@ class TestPortfolioStateCapture:
 
     def test_checkpoint_captures_bar_index(self, mock_engine):
         """Checkpoint should capture current bar index."""
-        from ktrdr.backtesting.checkpoint_builder import build_backtest_checkpoint_state
-
         import pandas as pd
+
+        from ktrdr.backtesting.checkpoint_builder import build_backtest_checkpoint_state
 
         state = build_backtest_checkpoint_state(
             engine=mock_engine,
@@ -234,9 +232,9 @@ class TestPortfolioStateCapture:
 
     def test_checkpoint_captures_positions(self, mock_engine):
         """Checkpoint should capture open positions."""
-        from ktrdr.backtesting.checkpoint_builder import build_backtest_checkpoint_state
-
         import pandas as pd
+
+        from ktrdr.backtesting.checkpoint_builder import build_backtest_checkpoint_state
 
         # Add a mock position
         position = MagicMock()
@@ -259,9 +257,9 @@ class TestPortfolioStateCapture:
 
     def test_checkpoint_captures_trades(self, mock_engine):
         """Checkpoint should capture trade history."""
-        from ktrdr.backtesting.checkpoint_builder import build_backtest_checkpoint_state
-
         import pandas as pd
+
+        from ktrdr.backtesting.checkpoint_builder import build_backtest_checkpoint_state
 
         # Add mock trades
         trade = MagicMock()

@@ -14,8 +14,9 @@ from ..async_infrastructure.cancellation import CancellationToken
 from ..async_infrastructure.progress_bridge import ProgressBridge
 from ..data.repository import DataRepository
 from ..decision.base import Signal
+from .checkpoint_restore import BacktestResumeContext
 from .performance import PerformanceMetrics, PerformanceTracker
-from .position_manager import PositionManager, Trade
+from .position_manager import Position, PositionManager, PositionStatus, Trade
 
 logger = get_logger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -108,11 +109,132 @@ class BacktestingEngine:
 
         self.strategy_name = self.orchestrator.strategy_name
 
+    def resume_from_context(self, context: BacktestResumeContext) -> pd.DataFrame:
+        """Resume backtesting engine state from a checkpoint context.
+
+        This method:
+        1. Loads data for the full original date range
+        2. Computes indicators for the full range (for lookback)
+        3. Restores portfolio state (cash, positions, trades)
+        4. Restores equity curve samples to performance tracker
+
+        After calling this method, call run() with resume_start_bar=context.start_bar.
+
+        Args:
+            context: BacktestResumeContext with checkpoint data.
+
+        Returns:
+            The loaded DataFrame for the full date range.
+        """
+        logger.info(f"🔄 Resuming backtest from bar {context.start_bar}")
+
+        # 1. Load data for full range
+        data = self._load_historical_data()
+
+        if data.empty:
+            raise ValueError(
+                f"No data loaded for {self.config.symbol} {self.config.timeframe}"
+            )
+
+        logger.info(
+            f"✅ Loaded {len(data):,} bars from {data.index[0]} to {data.index[-1]}"
+        )
+
+        # 2. Compute indicators for full range (needed for lookback)
+        logger.info("🚀 Pre-computing indicators for resume...")
+        self.orchestrator.prepare_feature_cache(data)
+        logger.info("✅ Feature cache ready")
+
+        # 3. Restore portfolio state
+        self._restore_portfolio_state(context)
+
+        # 4. Restore equity curve samples
+        if context.equity_samples:
+            self.performance_tracker.equity_curve = list(context.equity_samples)
+            logger.info(f"📊 Restored {len(context.equity_samples)} equity samples")
+
+        return data
+
+    def _restore_portfolio_state(self, context: BacktestResumeContext) -> None:
+        """Restore portfolio state from checkpoint context.
+
+        Args:
+            context: BacktestResumeContext with portfolio data.
+        """
+        # Restore cash
+        self.position_manager.current_capital = context.cash
+        logger.info(f"💰 Restored cash: ${context.cash:,.2f}")
+
+        # Restore position (if any)
+        if context.positions:
+            pos_data = context.positions[0]  # Single position for now
+            self.position_manager.current_position = Position(
+                status=PositionStatus(pos_data["status"]),
+                entry_price=pos_data["entry_price"],
+                entry_time=pd.Timestamp(pos_data["entry_date"]),
+                quantity=pos_data["quantity"],
+                current_price=pos_data.get("current_price", pos_data["entry_price"]),
+                last_update_time=pd.Timestamp(pos_data["entry_date"]),
+            )
+            logger.info(
+                f"📈 Restored {pos_data['status']} position: "
+                f"{pos_data['quantity']} @ ${pos_data['entry_price']:.4f}"
+            )
+        else:
+            self.position_manager.current_position = None
+            logger.info("📊 No open position to restore (FLAT)")
+
+        # Restore trade history
+        if context.trades:
+            self.position_manager.trade_history = [
+                self._dict_to_trade(trade_data) for trade_data in context.trades
+            ]
+            # Set next_trade_id based on restored trades
+            max_trade_id = max(t.trade_id for t in self.position_manager.trade_history)
+            self.position_manager.next_trade_id = max_trade_id + 1
+            logger.info(
+                f"📋 Restored {len(context.trades)} trades "
+                f"(next_trade_id={self.position_manager.next_trade_id})"
+            )
+        else:
+            self.position_manager.trade_history = []
+            self.position_manager.next_trade_id = 1
+            logger.info("📋 No trades to restore")
+
+    def _dict_to_trade(self, trade_data: dict) -> Trade:
+        """Convert a trade dictionary back to a Trade object.
+
+        Args:
+            trade_data: Dictionary with trade data.
+
+        Returns:
+            Trade object.
+        """
+        return Trade(
+            trade_id=trade_data["trade_id"],
+            symbol=trade_data["symbol"],
+            side=trade_data["side"],
+            entry_price=trade_data["entry_price"],
+            entry_time=pd.Timestamp(trade_data["entry_time"]),
+            exit_price=trade_data["exit_price"],
+            exit_time=pd.Timestamp(trade_data["exit_time"]),
+            quantity=trade_data["quantity"],
+            gross_pnl=trade_data["gross_pnl"],
+            commission=trade_data["commission"],
+            slippage=trade_data["slippage"],
+            net_pnl=trade_data["net_pnl"],
+            holding_period_hours=trade_data["holding_period_hours"],
+            max_favorable_excursion=trade_data["max_favorable_excursion"],
+            max_adverse_excursion=trade_data["max_adverse_excursion"],
+            decision_metadata=trade_data.get("decision_metadata", {}),
+        )
+
     def run(
         self,
         bridge: Optional[ProgressBridge] = None,
         cancellation_token: Optional[CancellationToken] = None,
         checkpoint_callback: Optional[Callable[..., None]] = None,
+        resume_start_bar: Optional[int] = None,
     ) -> BacktestResults:
         """Execute the backtest simulation.
 
@@ -121,6 +243,9 @@ class BacktestingEngine:
             cancellation_token: Optional CancellationToken for operation cancellation
             checkpoint_callback: Optional callback for periodic checkpoint saves.
                 Called with (bar_index, timestamp, engine) for building checkpoint state.
+            resume_start_bar: Optional bar index to resume from (processed bar index).
+                If provided, the simulation starts from this bar + 50 (accounting for warmup).
+                Previous bars are skipped since their trades are already in trade_history.
 
         Returns:
             Comprehensive results including trades, metrics, and analysis
@@ -224,7 +349,14 @@ class BacktestingEngine:
 
         # PERFORMANCE OPTIMIZATION: Start from bar 50 to align with FeatureCache
         # The first 50 bars are skipped because indicators need sufficient lookback data
-        start_idx = 50
+        # When resuming, start from resume_start_bar + 50 (resume_start_bar is in processed bar space)
+        if resume_start_bar is not None:
+            start_idx = resume_start_bar + 50
+            logger.info(
+                f"🔄 Resuming from bar {resume_start_bar} (raw index {start_idx})"
+            )
+        else:
+            start_idx = 50
 
         # Create telemetry span for simulation phase
         sim_span = tracer.start_span("backtest.simulation")
