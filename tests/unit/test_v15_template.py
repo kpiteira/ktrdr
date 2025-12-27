@@ -309,22 +309,24 @@ class TestV15Strategies:
                 feature_id = ind.get("feature_id")
                 if feature_id:
                     # Handle indicators that produce multiple features
-                    # ADX produces: adx_14, plus_di_14, minus_di_14
+                    # ADX produces: ADX_14, DI_Plus_14, DI_Minus_14
                     # Aroon produces: aroon_up_25, aroon_down_25
                     if ind.get("name") == "adx":
                         # v15_di_only uses ADX indicator but only wants DI outputs
+                        # ADX indicator produces DI_Plus_14 and DI_Minus_14 column names
                         if name == "v15_di_only":
                             assert (
-                                "plus_di_14" in fuzzy_sets
-                            ), f"{name}: missing fuzzy set for plus_di_14"
+                                "DI_Plus_14" in fuzzy_sets
+                            ), f"{name}: missing fuzzy set for DI_Plus_14"
                             assert (
-                                "minus_di_14" in fuzzy_sets
-                            ), f"{name}: missing fuzzy set for minus_di_14"
+                                "DI_Minus_14" in fuzzy_sets
+                            ), f"{name}: missing fuzzy set for DI_Minus_14"
                         else:
-                            # Other ADX strategies need adx_14
+                            # Other ADX strategies need adx_14 (lowercase in most strategy files)
+                            # Note: v15_adx_di uses ADX_14 but validator accepts both
                             assert (
-                                "adx_14" in fuzzy_sets
-                            ), f"{name}: missing fuzzy set for adx_14"
+                                "adx_14" in fuzzy_sets or "ADX_14" in fuzzy_sets
+                            ), f"{name}: missing fuzzy set for adx_14 or ADX_14"
                     elif ind.get("name") == "aroon":
                         # Aroon indicator - check both up and down
                         assert (
