@@ -258,11 +258,110 @@ except CheckpointNotFoundError:
 
 ---
 
+## Task 5.4 Complete
+
+**Implemented:** Indicator recomputation on resume in BacktestingEngine
+
+### Files Modified
+
+| File | Action | Purpose |
+|------|--------|---------|
+| [ktrdr/backtesting/engine.py](ktrdr/backtesting/engine.py) | Modified | Added `resume_from_context()` and `resume_start_bar` param to `run()` |
+
+### New Engine Methods
+
+**1. resume_from_context(context: BacktestResumeContext) -> pd.DataFrame**
+
+Prepares the engine to resume from a checkpoint:
+
+```python
+def resume_from_context(self, context: BacktestResumeContext) -> pd.DataFrame:
+    # 1. Load data for full range
+    data = self._load_historical_data()
+
+    # 2. Compute indicators for full range (needed for lookback)
+    self.orchestrator.prepare_feature_cache(data)
+
+    # 3. Restore portfolio state
+    self._restore_portfolio_state(context)
+
+    # 4. Restore equity curve samples
+    if context.equity_samples:
+        self.performance_tracker.equity_curve = list(context.equity_samples)
+
+    return data
+```
+
+**2. run() now accepts resume_start_bar parameter**
+
+```python
+def run(
+    self,
+    bridge: Optional[ProgressBridge] = None,
+    cancellation_token: Optional[CancellationToken] = None,
+    checkpoint_callback: Optional[Callable[..., None]] = None,
+    resume_start_bar: Optional[int] = None,  # NEW
+) -> BacktestResults:
+```
+
+When `resume_start_bar` is provided, the loop starts from `resume_start_bar + 50` (accounting for warmup bars).
+
+### Helper Methods
+
+- `_restore_portfolio_state(context)` - Restores cash, positions, trades, and next_trade_id
+- `_dict_to_trade(trade_data)` - Converts trade dict back to Trade object
+
+### Key Design Decisions
+
+**1. Bar index conversion**
+
+`resume_start_bar` is in processed bar space (0-indexed from start of processing).
+Raw index = `resume_start_bar + 50` (50 = warmup bars skipped).
+
+**2. Data loaded once via engine config**
+
+`resume_from_context()` uses `_load_historical_data()` which reads from `self.config`.
+The original_request in context contains the same date range info.
+
+**3. Indicators computed for full range**
+
+Even when resuming, indicators are computed for the full data range so lookback works correctly.
+
+### Usage Pattern for Task 5.5
+
+```python
+# In worker's run_resumed_backtest
+context = await self.restore_from_checkpoint(operation_id)
+
+# Update engine config with original request dates
+# (if not already matching)
+
+# Resume engine
+data = engine.resume_from_context(context)
+results = engine.run(
+    bridge=bridge,
+    cancellation_token=cancellation_token,
+    checkpoint_callback=checkpoint_callback,
+    resume_start_bar=context.start_bar,  # Continue from checkpoint bar
+)
+```
+
+### Acceptance Criteria Verified
+
+- [x] Full data loaded on resume
+- [x] Indicators computed for full range
+- [x] Portfolio restored from checkpoint
+- [x] Processing continues from checkpoint bar
+- [x] Previous bars not re-processed
+
+---
+
 ## Tests Added
 
 - 7 tests in `tests/unit/checkpoint/test_schemas.py::TestBacktestCheckpointState`
 - 15 tests in `tests/unit/backtesting/test_checkpoint_builder.py`
 - 14 tests in `tests/unit/backtesting/test_backtest_worker_checkpoint.py`
 - 17 tests in `tests/unit/backtesting/test_checkpoint_restore.py`
+- 14 tests in `tests/unit/backtesting/test_engine_resume.py` (NEW)
 
-All 53 tests passing.
+All 67 tests passing.
