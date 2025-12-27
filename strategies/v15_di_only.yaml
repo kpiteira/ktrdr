@@ -30,8 +30,9 @@ indicators:
     period: 14
 
 # === FUZZY LOGIC CONFIGURATION ===
+# Note: ADX indicator produces DI_Plus_14 and DI_Minus_14 column names
 fuzzy_sets:
-  plus_di_14:
+  DI_Plus_14:
     weak:
       type: "triangular"
       parameters: [0, 15, 25]
@@ -41,7 +42,7 @@ fuzzy_sets:
     strong:
       type: "triangular"
       parameters: [45, 60, 100]
-  minus_di_14:
+  DI_Minus_14:
     weak:
       type: "triangular"
       parameters: [0, 15, 25]
