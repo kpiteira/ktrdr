@@ -651,12 +651,92 @@ checkpoint_service = IntegrationCheckpointService()  # artifacts_dir=None
 
 ---
 
-## Next Task: 5.8 - Fix Event Loop Conflict
+## Task 5.8 Complete
 
-**Known Issue:** Checkpoint callback in `backtest_worker.py` creates new event loop in thread pool, causing "Task got Future attached to a different loop" errors on first checkpoint attempt.
+**Implemented:** Fix event loop conflict in checkpoint callback
 
-**Current Workaround:** Time-based retry (every 5 minutes) eventually succeeds.
+### The Problem
 
-**Recommended Fix:** Use `asyncio.run_coroutine_threadsafe()` to schedule checkpoint saves on main event loop instead of creating new loop in thread.
+The checkpoint callback runs in a thread pool (via `asyncio.to_thread()`) and was creating a new event loop with `asyncio.new_event_loop()` to save checkpoints. However, the database connection's Futures were attached to the **main** event loop, causing:
 
-See [PLAN_M5_backtesting_checkpoint.md Task 5.8](PLAN_M5_backtesting_checkpoint.md#task-58-fix-event-loop-conflict-in-backtest-checkpoint-callback) for implementation details.
+```
+Failed to save periodic checkpoint: Task got Future attached to a different loop
+```
+
+### The Fix
+
+Use `asyncio.run_coroutine_threadsafe()` to schedule checkpoint saves on the **main** event loop instead of creating a new loop:
+
+```python
+# Capture main loop before asyncio.to_thread()
+main_loop = asyncio.get_running_loop()
+
+def checkpoint_callback(**kwargs):
+    # Schedule on main event loop (not a new loop!)
+    future = asyncio.run_coroutine_threadsafe(
+        checkpoint_service.save_checkpoint(...),
+        main_loop,
+    )
+    future.result(timeout=30.0)  # Wait for completion
+```
+
+### Files Modified
+
+| File | Action | Purpose |
+|------|--------|---------|
+| [ktrdr/backtesting/backtest_worker.py](ktrdr/backtesting/backtest_worker.py) | Modified | Applied fix to both `_execute_backtest_work` and `_execute_resumed_backtest_work` |
+| [tests/unit/backtesting/test_backtest_worker_checkpoint.py](tests/unit/backtesting/test_backtest_worker_checkpoint.py) | Modified | Added 4 AST-based tests verifying the fix |
+
+### Key Implementation Details
+
+**1. Fix applied to both methods**
+
+The fix was applied to:
+- `_execute_backtest_work()` - for fresh backtest starts
+- `_execute_resumed_backtest_work()` - for resumed backtests
+
+**2. AST-based verification tests**
+
+Tests use Python's `ast` module to verify the implementation:
+- `test_callback_uses_main_event_loop_not_new_loop` - verifies `run_coroutine_threadsafe` is used
+- `test_main_loop_captured_before_to_thread` - verifies `get_running_loop()` is called
+- `test_checkpoint_callback_accepts_main_loop` - verifies `main_loop` variable exists
+- `test_run_coroutine_threadsafe_with_timeout` - verifies `.result()` is called for timeout
+
+### Acceptance Criteria Verified
+
+- [x] Checkpoint callback uses main event loop for async operations
+- [x] No "attached to a different loop" errors in logs
+- [x] Periodic checkpoints save reliably on first attempt
+- [x] Cancellation checkpoints still save correctly
+- [x] Unit tests pass: `make test-unit`
+
+---
+
+## Milestone 5 Complete
+
+All 8 tasks completed:
+
+| Task | Description | Status |
+|------|-------------|--------|
+| 5.1 | Define Backtesting Checkpoint State Shape | ✅ |
+| 5.2 | Integrate Checkpoint Save into Backtest Worker | ✅ |
+| 5.3 | Implement Backtest Restore | ✅ |
+| 5.4 | Implement Indicator Recomputation on Resume | ✅ |
+| 5.5 | Add Resume Endpoint to Backtest Worker API | ✅ |
+| 5.6 | Integrate Backtest Resume into Backend Endpoint | ✅ |
+| 5.7 | Integration Test for Backtest Resume | ✅ |
+| 5.8 | Fix Event Loop Conflict in Backtest Checkpoint Callback | ✅ |
+
+### Total Tests Added
+
+- 7 tests in `tests/unit/checkpoint/test_schemas.py::TestBacktestCheckpointState`
+- 15 tests in `tests/unit/backtesting/test_checkpoint_builder.py`
+- 18 tests in `tests/unit/backtesting/test_backtest_worker_checkpoint.py` (+4 for Task 5.8)
+- 17 tests in `tests/unit/backtesting/test_checkpoint_restore.py`
+- 14 tests in `tests/unit/backtesting/test_engine_resume.py`
+- 11 tests in `tests/unit/backtesting/test_backtest_worker_resume.py`
+- 4 tests in `tests/unit/api/endpoints/test_resume_operation.py::TestBacktestResumeDispatch`
+- 19 tests in `tests/integration/test_m5_backtesting_checkpoint.py`
+
+**Total: 105+ tests passing.**

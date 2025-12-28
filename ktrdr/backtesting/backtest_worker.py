@@ -285,10 +285,18 @@ class BacktestWorker(WorkerAPIBase):
         # Track latest state for cancellation checkpoint
         last_checkpoint_state: dict[str, Any] = {}
 
+        # Capture main event loop for use in checkpoint callback (Task 5.8 fix)
+        # The callback runs in a thread pool via asyncio.to_thread(), but database
+        # connections have Futures attached to this main loop. Using new_event_loop()
+        # in the callback causes "Task got Future attached to a different loop" errors.
+        main_loop = asyncio.get_running_loop()
+
         def checkpoint_callback(**kwargs):
             """Called periodically from engine's bar loop.
 
-            Runs in thread pool, so we need to use a new event loop.
+            Runs in thread pool (via asyncio.to_thread), so we use
+            run_coroutine_threadsafe() to schedule saves on the main event loop.
+            This avoids the "Future attached to different loop" error.
             """
             bar_index = kwargs["bar_index"]
             timestamp = kwargs["timestamp"]
@@ -310,24 +318,23 @@ class BacktestWorker(WorkerAPIBase):
                         original_request=original_request,
                     )
 
-                    # Run async checkpoint save from sync context
-                    # Since we're in a thread pool, we need to create a new event loop
-                    loop = asyncio.new_event_loop()
-                    try:
-                        loop.run_until_complete(
-                            checkpoint_service.save_checkpoint(
-                                operation_id=operation_id,
-                                checkpoint_type="periodic",
-                                state=state.to_dict(),
-                                artifacts=None,  # No artifacts for backtesting
-                            )
-                        )
-                        checkpoint_policy.record_checkpoint(bar_index)
-                        logger.info(
-                            f"Periodic checkpoint saved for {operation_id} at bar {bar_index}"
-                        )
-                    finally:
-                        loop.close()
+                    # Schedule checkpoint save on main event loop (Task 5.8 fix)
+                    # This ensures database operations use the correct event loop
+                    future = asyncio.run_coroutine_threadsafe(
+                        checkpoint_service.save_checkpoint(
+                            operation_id=operation_id,
+                            checkpoint_type="periodic",
+                            state=state.to_dict(),
+                            artifacts=None,  # No artifacts for backtesting
+                        ),
+                        main_loop,
+                    )
+                    # Wait for completion with timeout
+                    future.result(timeout=30.0)
+                    checkpoint_policy.record_checkpoint(bar_index)
+                    logger.info(
+                        f"Periodic checkpoint saved for {operation_id} at bar {bar_index}"
+                    )
 
                 except Exception as e:
                     logger.warning(f"Failed to save periodic checkpoint: {e}")
@@ -541,8 +548,17 @@ class BacktestWorker(WorkerAPIBase):
         # Track latest state for cancellation checkpoint
         last_checkpoint_state: dict[str, Any] = {}
 
+        # Capture main event loop for use in checkpoint callback (Task 5.8 fix)
+        # Same fix as in _execute_backtest_work - use run_coroutine_threadsafe
+        # to avoid "Future attached to different loop" errors
+        main_loop = asyncio.get_running_loop()
+
         def checkpoint_callback(**kwargs):
-            """Called periodically from engine's bar loop."""
+            """Called periodically from engine's bar loop.
+
+            Runs in thread pool (via asyncio.to_thread), so we use
+            run_coroutine_threadsafe() to schedule saves on the main event loop.
+            """
             bar_index = kwargs["bar_index"]
             timestamp = kwargs["timestamp"]
             engine = kwargs["engine"]
@@ -560,22 +576,22 @@ class BacktestWorker(WorkerAPIBase):
                         original_request=original_request,
                     )
 
-                    loop = asyncio.new_event_loop()
-                    try:
-                        loop.run_until_complete(
-                            checkpoint_service.save_checkpoint(
-                                operation_id=operation_id,
-                                checkpoint_type="periodic",
-                                state=state.to_dict(),
-                                artifacts=None,
-                            )
-                        )
-                        checkpoint_policy.record_checkpoint(bar_index)
-                        logger.info(
-                            f"Periodic checkpoint saved for resumed {operation_id} at bar {bar_index}"
-                        )
-                    finally:
-                        loop.close()
+                    # Schedule checkpoint save on main event loop (Task 5.8 fix)
+                    future = asyncio.run_coroutine_threadsafe(
+                        checkpoint_service.save_checkpoint(
+                            operation_id=operation_id,
+                            checkpoint_type="periodic",
+                            state=state.to_dict(),
+                            artifacts=None,
+                        ),
+                        main_loop,
+                    )
+                    # Wait for completion with timeout
+                    future.result(timeout=30.0)
+                    checkpoint_policy.record_checkpoint(bar_index)
+                    logger.info(
+                        f"Periodic checkpoint saved for resumed {operation_id} at bar {bar_index}"
+                    )
 
                 except Exception as e:
                     logger.warning(f"Failed to save periodic checkpoint: {e}")

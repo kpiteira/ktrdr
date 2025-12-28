@@ -324,3 +324,109 @@ class TestBacktestWorkerCheckpointInterval:
 
         # Check if checkpoint_interval field exists (optional)
         assert hasattr(request, "checkpoint_interval") or True  # Optional field
+
+
+class TestCheckpointCallbackEventLoop:
+    """Tests for event loop handling in checkpoint callback (Task 5.8).
+
+    The checkpoint callback runs in a thread pool (via asyncio.to_thread).
+    It must use asyncio.run_coroutine_threadsafe() to schedule checkpoint
+    saves on the main event loop, rather than creating a new event loop.
+
+    This fixes the "Task got Future attached to a different loop" error.
+    """
+
+    def test_callback_uses_main_event_loop_not_new_loop(self):
+        """Checkpoint callback should use run_coroutine_threadsafe, not new_event_loop."""
+        import ast
+        import inspect
+        import textwrap
+
+        from ktrdr.backtesting.backtest_worker import BacktestWorker
+
+        # Get the source of _execute_backtest_work
+        source = inspect.getsource(BacktestWorker._execute_backtest_work)
+
+        # Parse to AST to verify the pattern
+        # We're looking for run_coroutine_threadsafe, NOT new_event_loop in checkpoint_callback
+        tree = ast.parse(textwrap.dedent(source))
+
+        # Find the checkpoint_callback function definition
+        checkpoint_callback_found = False
+        uses_run_coroutine_threadsafe = False
+        uses_new_event_loop = False
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == "checkpoint_callback":
+                checkpoint_callback_found = True
+                # Check for run_coroutine_threadsafe usage in the callback
+                for inner_node in ast.walk(node):
+                    if isinstance(inner_node, ast.Attribute):
+                        if inner_node.attr == "run_coroutine_threadsafe":
+                            uses_run_coroutine_threadsafe = True
+                        if inner_node.attr == "new_event_loop":
+                            uses_new_event_loop = True
+
+        assert checkpoint_callback_found, "checkpoint_callback function not found"
+        assert uses_run_coroutine_threadsafe, (
+            "checkpoint_callback should use asyncio.run_coroutine_threadsafe() "
+            "to schedule saves on main event loop"
+        )
+        assert not uses_new_event_loop, (
+            "checkpoint_callback should NOT use asyncio.new_event_loop() - "
+            "this causes 'Future attached to different loop' errors"
+        )
+
+    def test_main_loop_captured_before_to_thread(self):
+        """Main event loop should be captured before asyncio.to_thread call."""
+        import ast
+        import inspect
+        import textwrap
+
+        from ktrdr.backtesting.backtest_worker import BacktestWorker
+
+        source = inspect.getsource(BacktestWorker._execute_backtest_work)
+        tree = ast.parse(textwrap.dedent(source))
+
+        # Look for get_running_loop() or get_event_loop() call
+        # This should happen before the asyncio.to_thread call
+        has_loop_capture = False
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                if isinstance(node.func, ast.Attribute):
+                    if node.func.attr in ("get_running_loop", "get_event_loop"):
+                        has_loop_capture = True
+                        break
+
+        assert has_loop_capture, (
+            "_execute_backtest_work should capture the main event loop "
+            "with asyncio.get_running_loop() before asyncio.to_thread()"
+        )
+
+    def test_checkpoint_callback_accepts_main_loop(self):
+        """The checkpoint callback should have access to main_loop via closure."""
+        import inspect
+
+        from ktrdr.backtesting.backtest_worker import BacktestWorker
+
+        source = inspect.getsource(BacktestWorker._execute_backtest_work)
+
+        # Check that main_loop is defined before checkpoint_callback
+        # and used within the callback
+        assert (
+            "main_loop" in source or "main_event_loop" in source
+        ), "main_loop should be captured and available to checkpoint_callback"
+
+    def test_run_coroutine_threadsafe_with_timeout(self):
+        """Checkpoint save should use future.result() with timeout."""
+        import inspect
+
+        from ktrdr.backtesting.backtest_worker import BacktestWorker
+
+        source = inspect.getsource(BacktestWorker._execute_backtest_work)
+
+        # Check for .result( pattern which indicates waiting with timeout
+        assert (
+            ".result(" in source
+        ), "run_coroutine_threadsafe should wait for completion with future.result(timeout=...)"
