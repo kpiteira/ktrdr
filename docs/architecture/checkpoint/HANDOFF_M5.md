@@ -713,9 +713,9 @@ Tests use Python's `ast` module to verify the implementation:
 
 ---
 
-## Milestone 5 Complete
+## Milestone 5 Status
 
-All 8 tasks completed:
+8 of 9 tasks completed. Task 5.9 discovered during E2E testing:
 
 | Task | Description | Status |
 |------|-------------|--------|
@@ -727,6 +727,76 @@ All 8 tasks completed:
 | 5.6 | Integrate Backtest Resume into Backend Endpoint | ✅ |
 | 5.7 | Integration Test for Backtest Resume | ✅ |
 | 5.8 | Fix Event Loop Conflict in Backtest Checkpoint Callback | ✅ |
+| 5.9 | Fix Resume to Different Worker Bug | ❌ PENDING |
+
+---
+
+## Task 5.9: Resume to Different Worker Bug
+
+**Discovered during E2E testing.** This bug affects both backtesting AND training resume.
+
+### Root Cause
+
+**Two separate bugs:**
+
+**1. Backtest Resume (fails on ANY worker):**
+- `_execute_resumed_backtest_work` incorrectly calls `create_operation`
+- `create_operation` checks the **shared database** for duplicates
+- Operation exists in DB → fails with "Operation ID already exists"
+- This fails even if resume goes to the SAME worker
+
+**2. Training Resume (fails on DIFFERENT worker):**
+- `_execute_resumed_training` correctly calls `start_operation` (no create)
+- But `start_operation` requires operation in **local in-memory cache**
+- Different worker → not in cache → would fail with "Operation not found"
+
+### Evidence from E2E Test
+
+```
+ktrdr-backtest-worker-2  |         "status_code": "ERROR",
+ktrdr-backtest-worker-2  |         "description": "DataError: Operation ID already exists: op_backtesting_20251228_153705_c9e7639a"
+```
+
+### Training Has Same Latent Bug
+
+Training's `_execute_resumed_training` calls `start_operation` without creating first:
+```python
+await self._operations_service.start_operation(operation_id, dummy_task)
+```
+This would fail with "Operation not found" if resume goes to a different worker.
+
+**Why training hasn't failed yet:** In testing, resume probably always went to the same worker.
+
+### Fix Required
+
+Modify `OperationsService.start_operation` to auto-load from database if operation not in local cache:
+
+```python
+async def start_operation(self, operation_id: str, task: asyncio.Task) -> None:
+    async with self._lock:
+        if operation_id not in self._cache:
+            # Auto-load from DB for resume-to-different-worker case
+            if self._repository:
+                op_data = await self._repository.get(operation_id)
+                if op_data:
+                    self._cache[operation_id] = Operation.from_db_model(op_data)
+                    logger.info(f"Loaded operation {operation_id} from DB for resume")
+
+            if operation_id not in self._cache:
+                raise DataError(...)
+
+        # Proceed with existing logic...
+```
+
+Then remove `create_operation` call from `_execute_resumed_backtest_work`.
+
+### Why This Wasn't Caught Earlier
+
+- Integration tests use mocked services where workers share in-memory state
+- E2E tests with multiple workers + load balancing needed to trigger this
+- **This is exactly why shared infrastructure between training/backtesting resume was proposed in Task 5.7 notes**
+
+See [PLAN_M5_backtesting_checkpoint.md Task 5.9](PLAN_M5_backtesting_checkpoint.md#task-59-fix-resume-to-different-worker-bug) for full implementation details.
 
 ### Total Tests Added
 
