@@ -485,6 +485,97 @@ All error paths (no worker, HTTP error, connection error) revert status back to 
 
 ---
 
+## Task 5.7 Complete
+
+**Implemented:** Integration test for backtest checkpoint and resume
+
+### Files Created
+
+| File | Action | Purpose |
+|------|--------|---------|
+| [tests/integration/test_m5_backtesting_checkpoint.py](tests/integration/test_m5_backtesting_checkpoint.py) | Created | Integration test suite for backtest resume flow |
+
+### Test Coverage (19 tests, all passing in 4.48s)
+
+**Full Resume Flow (1 test)**
+- Complete start → checkpoint → cancel → resume → complete flow
+- Verifies checkpoint exists, portfolio restored, resumed from correct bar
+
+**Resume From Correct Bar (3 tests)**
+- `test_resume_starts_from_checkpoint_bar_plus_one` - Validates resume from `bar_index + 1`
+- `test_resume_from_bar_zero_checkpoint` - Edge case: resume from bar 0
+- `test_equity_samples_preserved_on_resume` - Equity curve preservation
+
+**Portfolio Restoration (3 tests)**
+- `test_cash_restored_on_resume` - Cash balance restoration
+- `test_positions_restored_on_resume` - Open positions restoration
+- `test_trades_restored_on_resume` - Trade history restoration
+
+**Checkpoint Cleanup (3 tests)**
+- Checkpoint deleted after successful completion
+- Checkpoint preserved on resume failure (per design D6)
+- Delete non-existent checkpoint returns false
+
+**Edge Cases (5 tests)**
+- Resume already running operation (fails)
+- Resume completed operation (fails)
+- Resume cancelled operation (succeeds → RESUMING)
+- Resume failed operation (succeeds → RESUMING)
+- Resume without checkpoint (detectable)
+
+**Resume Context Integration (2 tests)**
+- Full context creation from checkpoint
+- Minimal context with empty optional fields
+
+**Operation Type Verification (2 tests)**
+- Checkpoint has `operation_type='backtesting'`
+- Operation type used for worker dispatch
+
+### Key Implementation Details
+
+**1. In-memory mock services (following M4 pattern)**
+
+```python
+class IntegrationCheckpointService:
+    """No artifacts for backtesting - all state in DB JSONB."""
+
+    async def save_checkpoint(..., artifacts: Optional[dict[str, bytes]] = None):
+        # Always artifacts=None for backtesting
+        await self._mock_repo.save(..., artifacts_path=None, artifacts_size_bytes=None)
+```
+
+**2. Portfolio state helpers**
+
+```python
+def create_portfolio_state(bar_index: int, ...) -> tuple[float, list[dict], list[dict]]:
+    """Generates realistic portfolio state with positions and trades."""
+
+def create_equity_samples(bar_index: int, ...) -> list[dict]:
+    """Generates sampled equity curve (every 100 bars)."""
+```
+
+**3. Status transition: RESUMING (not RUNNING)**
+
+Unlike M4 training tests, backtest resume sets status to `RESUMING`:
+
+```python
+async def try_resume(self, operation_id: str) -> bool:
+    if op and op["status"] in ("cancelled", "failed"):
+        op["status"] = "resuming"  # Not "running" - worker will transition
+        return True
+```
+
+This matches the M5 worker resume pattern where the worker calls `start_operation()` to transition RESUMING → RUNNING.
+
+### Acceptance Criteria Verified
+
+- [x] Test covers save and resume
+- [x] Test verifies correct resume bar (checkpoint_bar + 1)
+- [x] Test verifies portfolio restoration (cash, positions, trades)
+- [x] Tests pass: `pytest tests/integration/test_m5_backtesting_checkpoint.py` (19 tests, 4.48s)
+
+---
+
 ## Tests Added
 
 - 7 tests in `tests/unit/checkpoint/test_schemas.py::TestBacktestCheckpointState`
@@ -493,6 +584,7 @@ All error paths (no worker, HTTP error, connection error) revert status back to 
 - 17 tests in `tests/unit/backtesting/test_checkpoint_restore.py`
 - 14 tests in `tests/unit/backtesting/test_engine_resume.py`
 - 11 tests in `tests/unit/backtesting/test_backtest_worker_resume.py`
-- 4 tests in `tests/unit/api/endpoints/test_resume_operation.py::TestBacktestResumeDispatch` (NEW)
+- 4 tests in `tests/unit/api/endpoints/test_resume_operation.py::TestBacktestResumeDispatch`
+- **19 tests in `tests/integration/test_m5_backtesting_checkpoint.py`** (NEW)
 
-All 82 tests passing.
+**Total: 101 tests passing.**
