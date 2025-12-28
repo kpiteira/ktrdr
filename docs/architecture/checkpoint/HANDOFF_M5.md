@@ -588,3 +588,75 @@ This matches the M5 worker resume pattern where the worker calls `start_operatio
 - **19 tests in `tests/integration/test_m5_backtesting_checkpoint.py`** (NEW)
 
 **Total: 101 tests passing.**
+
+---
+
+## Post-Task 5.7 Refactoring: Shared Test Infrastructure
+
+**Refactored:** Extracted shared checkpoint mock infrastructure to eliminate duplication
+
+### Files Created/Modified
+
+| File | Action | Purpose |
+|------|--------|---------|
+| [tests/integration/fixtures/__init__.py](tests/integration/fixtures/__init__.py) | Created | Package marker for shared fixtures |
+| [tests/integration/fixtures/checkpoint_mocks.py](tests/integration/fixtures/checkpoint_mocks.py) | Created | Shared mock infrastructure (305 lines) |
+| [tests/integration/test_m4_training_resume.py](tests/integration/test_m4_training_resume.py) | Modified | Now imports from shared fixtures |
+| [tests/integration/test_m5_backtesting_checkpoint.py](tests/integration/test_m5_backtesting_checkpoint.py) | Modified | Now imports from shared fixtures |
+
+### What Was Duplicated
+
+Before refactoring, M4 and M5 integration tests each had:
+- `MockCheckpointRepository` (74 lines)
+- `MockOperationsRepository` (58 lines)
+- `IntegrationCheckpointService` (120+ lines)
+
+**Total duplication: ~250 lines**
+
+### Shared Infrastructure
+
+**`tests/integration/fixtures/checkpoint_mocks.py`** provides:
+
+1. **`MockCheckpointRepository`** - In-memory checkpoint storage
+2. **`MockOperationsRepository`** - Operation state management with correct status transitions
+3. **`IntegrationCheckpointService`** - **Configurable** for different operation types:
+
+```python
+# Training (with filesystem artifacts)
+checkpoint_service = IntegrationCheckpointService(artifacts_dir=temp_path)
+
+# Backtesting (no artifacts, all in DB JSONB)
+checkpoint_service = IntegrationCheckpointService()  # artifacts_dir=None
+```
+
+### Key Improvements
+
+**1. Single source of truth**
+- Changes to mock infrastructure automatically apply to both M4 and M5 tests
+- Follows `WorkerAPIBase` pattern: shared base with operation-specific customization
+
+**2. More accurate behavior**
+- Fixed `try_resume()` to set status to `"resuming"` (not `"running"`)
+- Matches real backend behavior where worker transitions RESUMING → RUNNING
+
+**3. Reduced maintenance burden**
+- Net code reduction: -100 lines (405 removed, 305 added)
+- Eliminates drift between training and backtesting test infrastructure
+
+### Test Results After Refactoring
+
+✅ All 17 M4 training tests passing (6.12s)
+✅ All 19 M5 backtesting tests passing (4.66s)
+✅ Quality checks passing
+
+---
+
+## Next Task: 5.8 - Fix Event Loop Conflict
+
+**Known Issue:** Checkpoint callback in `backtest_worker.py` creates new event loop in thread pool, causing "Task got Future attached to a different loop" errors on first checkpoint attempt.
+
+**Current Workaround:** Time-based retry (every 5 minutes) eventually succeeds.
+
+**Recommended Fix:** Use `asyncio.run_coroutine_threadsafe()` to schedule checkpoint saves on main event loop instead of creating new loop in thread.
+
+See [PLAN_M5_backtesting_checkpoint.md Task 5.8](PLAN_M5_backtesting_checkpoint.md#task-58-fix-event-loop-conflict-in-backtest-checkpoint-callback) for implementation details.
