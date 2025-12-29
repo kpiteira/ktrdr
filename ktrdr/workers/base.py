@@ -556,20 +556,44 @@ class WorkerAPIBase:
         status: str,
         error_message: Optional[str] = None,
     ) -> None:
-        """Update operation status in backend (M6 Task 6.2, implemented in 6.3).
+        """Update operation status in backend via HTTP call (M6 Task 6.3).
 
-        This is a stub method that Task 6.3 will implement with actual
-        HTTP calls to the backend.
+        Calls the backend's PATCH /operations/{operation_id}/status endpoint
+        to update the operation status. Used during graceful shutdown to mark
+        operations as CANCELLED before the worker exits.
 
         Args:
             operation_id: The operation ID to update.
             status: New status (e.g., "CANCELLED", "FAILED").
             error_message: Optional error message.
+
+        Note:
+            - Uses 5-second timeout to avoid blocking shutdown
+            - Failure is logged but doesn't raise (OrphanDetector handles missed updates)
         """
-        # Stub - Task 6.3 will implement with HTTP call to backend
-        logger.debug(
-            f"Base _update_operation_status: {operation_id} -> {status} ({error_message})"
-        )
+        import httpx
+
+        status_url = f"{self.backend_url}/api/v1/operations/{operation_id}/status"
+
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.patch(
+                    status_url,
+                    json={
+                        "status": status,
+                        "error_message": error_message,
+                    },
+                )
+                if response.status_code == 200:
+                    logger.info(f"Updated operation {operation_id} to {status}")
+                else:
+                    logger.warning(
+                        f"Failed to update operation status: {response.status_code}"
+                    )
+        except Exception as e:
+            logger.warning(f"Could not update operation status: {e}")
+            # Continue shutdown even if status update fails
+            # OrphanDetector will eventually mark it FAILED
 
     async def run_with_graceful_shutdown(
         self,

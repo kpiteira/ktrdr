@@ -27,6 +27,8 @@ from ktrdr.api.models.operations import (
     ResumedFromInfo,
     ResumeOperationData,
     ResumeOperationResponse,
+    StatusUpdateRequest,
+    StatusUpdateResponse,
 )
 from ktrdr.api.services.operations_service import OperationsService
 from ktrdr.errors import DataError
@@ -972,5 +974,98 @@ async def add_operation_metrics(
         raise DataError(
             message=f"Failed to add metrics for operation {operation_id}",
             error_code="OPERATIONS-AddMetricsError",
+            details={"operation_id": operation_id, "error": str(e)},
+        ) from e
+
+
+@router.patch(
+    "/operations/{operation_id}/status",
+    response_model=StatusUpdateResponse,
+    tags=["Operations"],
+    summary="Update operation status (M6: worker graceful shutdown)",
+    description="""
+    Update the status of an operation.
+
+    **Primary use case:** Workers calling this during graceful shutdown to
+    mark operations as CANCELLED before exiting.
+
+    For user-initiated cancellation, prefer DELETE /operations/{id} instead,
+    which handles cascade cancellation of children and cleanup.
+
+    **Perfect for:** Worker graceful shutdown, status synchronization
+    """,
+)
+async def update_operation_status(
+    request: StatusUpdateRequest,
+    operation_id: str = Path(..., description="Unique operation identifier"),
+    operations_service: OperationsService = Depends(get_operations_service),
+) -> StatusUpdateResponse:
+    """
+    Update operation status.
+
+    Used primarily by workers to report final status during graceful shutdown.
+    This is a simplified status update that doesn't perform cascade operations
+    like the cancel endpoint does.
+
+    Args:
+        operation_id: Unique identifier for the operation
+        request: Status update request with new status and optional message
+
+    Returns:
+        StatusUpdateResponse: Update result with previous and new status
+
+    Raises:
+        404: Operation not found
+
+    Example:
+        PATCH /api/v1/operations/op_training_20250128_120000/status
+        {
+            "status": "CANCELLED",
+            "error_message": "Graceful shutdown - checkpoint saved"
+        }
+    """
+    try:
+        logger.info(f"Updating operation status: {operation_id} -> {request.status}")
+
+        # Get current operation
+        operation = await operations_service.get_operation(operation_id)
+
+        if not operation:
+            logger.warning(f"Operation not found: {operation_id}")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Operation not found: {operation_id}",
+            )
+
+        previous_status = operation.status.value
+
+        # Update status
+        await operations_service.update_status(operation_id, request.status)
+
+        # If there's an error message, update that too (via repository if available)
+        if request.error_message and operations_service._repository:
+            await operations_service._repository.update(
+                operation_id,
+                error_message=request.error_message,
+            )
+
+        logger.info(
+            f"Updated operation {operation_id}: {previous_status} -> {request.status}"
+        )
+
+        return StatusUpdateResponse(
+            success=True,
+            operation_id=operation_id,
+            previous_status=previous_status,
+            new_status=request.status.lower(),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating operation status: {str(e)}")
+        raise DataError(
+            message=f"Failed to update status for operation {operation_id}",
+            error_code="OPERATIONS-StatusUpdateError",
             details={"operation_id": operation_id, "error": str(e)},
         ) from e

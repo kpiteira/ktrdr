@@ -240,6 +240,49 @@ class CancelOperationRequest(BaseModel):
     )
 
 
+class StatusUpdateRequest(BaseModel):
+    """Request to update operation status (used by workers during graceful shutdown).
+
+    This is a simplified status update mechanism for workers to report their
+    final status before exiting. For user-initiated cancellation, use the
+    DELETE /operations/{id} endpoint instead.
+    """
+
+    status: str = Field(..., description="New status (e.g., 'CANCELLED', 'FAILED')")
+    error_message: Optional[str] = Field(
+        None, description="Optional error/status message"
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "status": "CANCELLED",
+                "error_message": "Graceful shutdown - checkpoint saved",
+            }
+        }
+    )
+
+
+class StatusUpdateResponse(BaseModel):
+    """Response from status update operation."""
+
+    success: bool = Field(..., description="Whether the update was successful")
+    operation_id: str = Field(..., description="The operation ID that was updated")
+    previous_status: str = Field(..., description="The status before the update")
+    new_status: str = Field(..., description="The status after the update")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "success": True,
+                "operation_id": "op_training_20250128_120000",
+                "previous_status": "running",
+                "new_status": "cancelled",
+            }
+        }
+    )
+
+
 # Response models
 class OperationListResponse(BaseModel):
     """Response containing list of operations."""

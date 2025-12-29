@@ -1,0 +1,223 @@
+# Handoff: Milestone 6 (Graceful Shutdown)
+
+## Task 6.1 Complete
+
+**Implemented:** SIGTERM signal handler infrastructure in WorkerAPIBase
+
+### Key Components Added
+
+**Location:** [ktrdr/workers/base.py:158-161](ktrdr/workers/base.py#L158-L161) (initialization)
+**Location:** [ktrdr/workers/base.py:487-515](ktrdr/workers/base.py#L487-L515) (methods)
+
+```python
+# In __init__:
+self._shutdown_event = asyncio.Event()
+self._shutdown_timeout = 25  # seconds (Docker gives 30s)
+
+# Methods added:
+def _setup_signal_handlers(self) -> None:
+    """Registers SIGTERM handler that sets _shutdown_event."""
+
+async def wait_for_shutdown(self) -> bool:
+    """Wait for shutdown signal. Returns True if signaled, False on timeout."""
+```
+
+### Signal Handler Pattern
+
+The SIGTERM handler uses `call_soon_threadsafe` to bridge from the signal handler thread to the asyncio event loop:
+
+```python
+def handle_sigterm(signum, frame):
+    logger.info("SIGTERM received - initiating graceful shutdown")
+    asyncio.get_event_loop().call_soon_threadsafe(self._shutdown_event.set)
+```
+
+This is necessary because signal handlers run in the main thread, not the event loop thread.
+
+### Integration Point for Task 6.2
+
+Task 6.2 should use the `_shutdown_event` to race between operation completion and shutdown signal:
+
+```python
+async def run_with_graceful_shutdown(self, operation_id: str, operation_coro: Coroutine):
+    operation_task = asyncio.create_task(operation_coro)
+    shutdown_task = asyncio.create_task(self._shutdown_event.wait())
+
+    done, pending = await asyncio.wait(
+        [operation_task, shutdown_task],
+        return_when=asyncio.FIRST_COMPLETED
+    )
+
+    if shutdown_task in done:
+        # Handle graceful shutdown - cancel operation, save checkpoint
+        operation_task.cancel()
+        # ... save checkpoint, update status
+```
+
+### Tests Added
+
+Location: [tests/unit/workers/test_base_shutdown.py](tests/unit/workers/test_base_shutdown.py)
+
+- 13 unit tests covering initialization, signal handling, and wait_for_shutdown behavior
+
+### Acceptance Criteria Verified
+
+- [x] SIGTERM handler registered on startup
+- [x] Shutdown event set on SIGTERM
+- [x] Handler works correctly in async context
+- [x] Logged when SIGTERM received
+
+---
+
+## Task 6.2 Complete
+
+**Implemented:** Graceful shutdown operation execution with racing logic
+
+### Key Components Added
+
+**Location:** [ktrdr/workers/base.py:49-57](ktrdr/workers/base.py#L49-L57) (exception)
+**Location:** [ktrdr/workers/base.py:538-647](ktrdr/workers/base.py#L538-L647) (methods)
+
+```python
+class GracefulShutdownError(Exception):
+    """Raised when worker receives SIGTERM during operation."""
+
+async def run_with_graceful_shutdown(self, operation_id: str, operation_coro: Any) -> Any:
+    """Races operation against shutdown event."""
+
+async def _save_checkpoint(self, operation_id: str, checkpoint_type: str) -> None:
+    """Hook for subclasses to save checkpoints."""
+
+async def _update_operation_status(self, operation_id: str, status: str, ...) -> None:
+    """Stub for Task 6.3 to implement."""
+```
+
+### Racing Logic Pattern
+
+```python
+operation_task = asyncio.create_task(operation_coro)
+shutdown_task = asyncio.create_task(self._shutdown_event.wait())
+
+done, pending = await asyncio.wait(
+    [operation_task, shutdown_task],
+    return_when=asyncio.FIRST_COMPLETED,
+)
+
+if shutdown_task in done:
+    operation_task.cancel()
+    await self._save_checkpoint(operation_id, "shutdown")
+    await self._update_operation_status(operation_id, "CANCELLED", ...)
+    raise GracefulShutdownError("Worker shutdown requested")
+```
+
+### Integration Point for Task 6.3
+
+Task 6.3 should implement `_update_operation_status` with HTTP call to backend:
+
+```python
+async def _update_operation_status(self, operation_id: str, status: str, ...):
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        await client.patch(f"{self.backend_url}/api/v1/operations/{operation_id}", ...)
+```
+
+### Subclass Override Pattern
+
+Training/Backtest workers should override `_save_checkpoint`:
+
+```python
+class TrainingWorker(WorkerAPIBase):
+    async def _save_checkpoint(self, operation_id: str, checkpoint_type: str):
+        checkpoint_service = self._get_checkpoint_service()
+        await checkpoint_service.save_checkpoint(operation_id, checkpoint_type, ...)
+```
+
+### Tests Added
+
+Location: [tests/unit/workers/test_base_graceful_shutdown.py](tests/unit/workers/test_base_graceful_shutdown.py)
+
+- 18 unit tests covering:
+  - GracefulShutdownError exception
+  - _current_operation_id tracking
+  - Normal operation completion
+  - Shutdown detection and cancellation
+  - Checkpoint saving on shutdown/failure
+  - Hook method existence
+
+### Acceptance Criteria Verified
+
+- [x] Shutdown detected during operation
+- [x] Operation task cancelled cleanly
+- [x] Checkpoint saved with type="shutdown"
+- [x] Status updated to CANCELLED
+- [x] Completes within grace period
+
+---
+
+## Task 6.3 Complete
+
+**Implemented:** HTTP status update call from worker to backend
+
+### Key Components Added
+
+**Worker side:** [ktrdr/workers/base.py:552-591](ktrdr/workers/base.py#L552-L591)
+
+```python
+async def _update_operation_status(
+    self,
+    operation_id: str,
+    status: str,
+    error_message: Optional[str] = None,
+) -> None:
+    """Update operation status in backend via HTTP call."""
+    import httpx
+
+    status_url = f"{self.backend_url}/api/v1/operations/{operation_id}/status"
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.patch(status_url, json={...})
+            # Log success/failure
+    except Exception as e:
+        logger.warning(f"Could not update operation status: {e}")
+        # Continue shutdown - OrphanDetector handles missed updates
+```
+
+**Backend endpoint:** [ktrdr/api/endpoints/operations.py:981-1073](ktrdr/api/endpoints/operations.py#L981-L1073)
+
+```python
+@router.patch("/operations/{operation_id}/status")
+async def update_operation_status(request: StatusUpdateRequest, ...):
+    """Update operation status (simplified, for worker shutdown)."""
+```
+
+**New models:** [ktrdr/api/models/operations.py](ktrdr/api/models/operations.py)
+
+- `StatusUpdateRequest` - Request body with status and optional error_message
+- `StatusUpdateResponse` - Response with previous and new status
+
+### Resilience Pattern
+
+The implementation is designed to be resilient:
+
+- 5-second timeout prevents blocking shutdown
+- All exceptions caught and logged (doesn't raise)
+- Failure continues shutdown - OrphanDetector will eventually mark operation FAILED
+- Backend endpoint uses simplified `update_status()` (no cascade cancellation)
+
+### Tests Added
+
+Location: [tests/unit/workers/test_base_update_status.py](tests/unit/workers/test_base_update_status.py)
+
+- 9 unit tests covering:
+  - PATCH request to correct URL
+  - Timeout configuration (5.0 seconds)
+  - Success/failure handling
+  - Connection and timeout error handling
+  - Optional error_message parameter
+
+### Acceptance Criteria Verified
+
+- [x] Worker calls backend to update status
+- [x] Timeout prevents hanging (5-second timeout)
+- [x] Failure doesn't block shutdown (exceptions caught)
+- [x] Logged success/failure
