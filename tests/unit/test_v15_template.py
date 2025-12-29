@@ -131,10 +131,10 @@ class TestV15Template:
 
 
 # =============================================================================
-# Tests for all 27 v1.5 strategies
+# Tests for all 23 v1.5 strategies
 # =============================================================================
 
-# Expected strategy files (27 total)
+# Expected strategy files (23 total)
 EXPECTED_STRATEGIES = [
     # Single indicator (9)
     "v15_rsi_only",
@@ -162,11 +162,6 @@ EXPECTED_STRATEGIES = [
     "v15_rsi_adx_stochastic",
     "v15_mfi_adx_aroon",
     "v15_williams_stochastic_cmf",
-    # Zigzag variations (4)
-    "v15_rsi_zigzag_1.5",
-    "v15_rsi_zigzag_2.0",
-    "v15_rsi_zigzag_3.0",
-    "v15_rsi_zigzag_3.5",
 ]
 
 # Tier 2/3 indicators that must NOT appear
@@ -184,22 +179,12 @@ FORBIDDEN_INDICATORS = [
     "parabolic",
 ]
 
-# Zigzag threshold expectations
-ZIGZAG_THRESHOLDS = {
-    "v15_rsi_zigzag_1.5": 0.015,
-    "v15_rsi_zigzag_2.0": 0.020,
-    "v15_rsi_zigzag_3.0": 0.030,
-    "v15_rsi_zigzag_3.5": 0.035,
-}
-
-# Fixed params for strategies (excludes zigzag_threshold which varies for Z01-Z04)
-FIXED_PARAMS_STRATEGIES = {
-    k: v for k, v in FIXED_PARAMS.items() if k != "training.labels.zigzag_threshold"
-}
+# Fixed params for strategies
+FIXED_PARAMS_STRATEGIES = FIXED_PARAMS
 
 
 class TestV15Strategies:
-    """Tests for all 27 v1.5 experiment strategies."""
+    """Tests for all 23 v1.5 experiment strategies."""
 
     @pytest.fixture
     def all_strategies(self) -> dict[str, dict]:
@@ -212,8 +197,8 @@ class TestV15Strategies:
                     strategies[name] = yaml.safe_load(f)
         return strategies
 
-    def test_all_27_strategies_exist(self):
-        """All 27 strategy files must exist."""
+    def test_all_23_strategies_exist(self):
+        """All 23 strategy files must exist."""
         missing = []
         for name in EXPECTED_STRATEGIES:
             path = Path(f"strategies/{name}.yaml")
@@ -224,8 +209,8 @@ class TestV15Strategies:
     def test_all_strategies_valid_yaml(self, all_strategies):
         """All strategies must be valid YAML."""
         assert (
-            len(all_strategies) == 27
-        ), f"Expected 27 strategies, found {len(all_strategies)}"
+            len(all_strategies) == 23
+        ), f"Expected 23 strategies, found {len(all_strategies)}"
         for name, config in all_strategies.items():
             assert isinstance(config, dict), f"{name} must parse to a dictionary"
 
@@ -274,25 +259,13 @@ class TestV15Strategies:
                         forbidden not in ind_name
                     ), f"{name}: uses forbidden indicator '{ind_name}'"
 
-    def test_zigzag_thresholds_correct(self, all_strategies):
-        """Zigzag variations must have correct thresholds."""
-        for name, expected_threshold in ZIGZAG_THRESHOLDS.items():
-            if name in all_strategies:
-                config = all_strategies[name]
-                actual = get_nested_value(config, "training.labels.zigzag_threshold")
-                assert actual == expected_threshold, (
-                    f"{name}: zigzag_threshold should be {expected_threshold}, "
-                    f"got {actual}"
-                )
-
-    def test_baseline_strategies_use_default_zigzag(self, all_strategies):
-        """Non-zigzag-variation strategies must use 2.5% threshold."""
+    def test_all_strategies_use_default_zigzag(self, all_strategies):
+        """All strategies must use 2.5% zigzag threshold."""
         for name, config in all_strategies.items():
-            if name not in ZIGZAG_THRESHOLDS:
-                actual = get_nested_value(config, "training.labels.zigzag_threshold")
-                assert (
-                    actual == 0.025
-                ), f"{name}: should use default 2.5% threshold, got {actual}"
+            actual = get_nested_value(config, "training.labels.zigzag_threshold")
+            assert (
+                actual == 0.025
+            ), f"{name}: should use default 2.5% threshold, got {actual}"
 
     def test_all_strategies_have_indicators(self, all_strategies):
         """All strategies must have at least one indicator."""
