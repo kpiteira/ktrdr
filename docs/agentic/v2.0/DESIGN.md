@@ -474,13 +474,19 @@ def _format_single_experiment(self, exp: dict) -> str:
     return "\n".join(lines) + "\n"
 ```
 
-### Memory Module (NEW: `orchestrator/memory.py`)
+### Memory Module (NEW: `ktrdr/agents/memory.py`)
+
+The memory system has two parts:
+
+- **Python module**: `ktrdr/agents/memory.py` — API for loading/saving
+- **Data directory**: `memory/` at repo root — YAML files storing experiments and hypotheses
 
 ```python
 from pathlib import Path
 import yaml
 from datetime import datetime
 
+# Data lives at repo root, not in ktrdr/
 MEMORY_DIR = Path("memory")
 EXPERIMENTS_DIR = MEMORY_DIR / "experiments"
 HYPOTHESES_FILE = MEMORY_DIR / "hypotheses.yaml"

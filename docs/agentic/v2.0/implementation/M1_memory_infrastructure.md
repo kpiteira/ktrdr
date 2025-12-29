@@ -271,11 +271,18 @@ from ktrdr.agents.memory import (
 
 
 def parse_v15_results() -> dict[str, dict]:
-    """Parse results table from RESULTS.md."""
+    """Parse results table from RESULTS.md.
+
+    Note: raw_results.csv only contains validation accuracy.
+    Test accuracy (held-out data) was analyzed separately and is
+    documented in the RESULTS.md table. We parse the markdown table
+    to extract these test accuracy values.
+    """
     results_file = Path("docs/agentic/v1.5/RESULTS.md")
     content = results_file.read_text()
 
-    # Parse table rows
+    # Parse the "Detailed Results" table which has test accuracy
+    # Format: | Rank | Strategy | Test Acc | Val Acc | Gap | Signal |
     results = {}
     for match in re.finditer(
         r'\| \d+ \| \*?\*?(v15_\w+)\*?\*? \| \*?\*?(\d+\.\d+)%\*?\*? \|',

@@ -6,7 +6,7 @@
 
 **Answer:** YES, but modestly.
 
-**Evidence:** 12 out of 24 completed strategies achieved >60% **test** accuracy (generalizable signal). Best performer: v15_rsi_zigzag_1_5 at 64.2% test accuracy (+14pp above random baseline).
+**Evidence:** 12 out of 24 completed strategies achieved >60% **test** accuracy (generalizable signal). Best single-indicator result: v15_rsi_zigzag_1_5 at 64.2% test accuracy (+14pp above random baseline). Note: Earlier RSI+DI combination experiments (not part of this v1.5 run) achieved ~64.8%.
 
 **Key Finding:** RSI is the dominant signal source. All top 11 performers include RSI.
 
