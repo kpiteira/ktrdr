@@ -89,6 +89,8 @@ services:
   backtest-worker:
     image: ktrdr-backend:test
     container_name: ktrdr-backtest-worker-canary
+    # M6: Graceful shutdown - gives worker 30s to save checkpoint before SIGKILL
+    stop_grace_period: 30s
     ports:
       - "15003:5003"
     volumes:
@@ -132,6 +134,8 @@ services:
   training-worker:
     image: ktrdr-backend:test
     container_name: ktrdr-training-worker-canary
+    # M6: Graceful shutdown - gives worker 30s to save checkpoint before SIGKILL
+    stop_grace_period: 30s
     ports:
       - "15004:5004"
     volumes:

@@ -221,3 +221,36 @@ Location: [tests/unit/workers/test_base_update_status.py](tests/unit/workers/tes
 - [x] Timeout prevents hanging (5-second timeout)
 - [x] Failure doesn't block shutdown (exceptions caught)
 - [x] Logged success/failure
+
+---
+
+## Task 6.4 Complete
+
+**Implemented:** Docker grace period configuration for all workers
+
+### Files Modified
+
+- `deploy/environments/local/docker-compose.yml` — 4 workers
+- `deploy/environments/homelab/docker-compose.workers.yml` — 6 workers
+- `deploy/environments/homelab/docker-compose.gpu-worker.yml` — 1 GPU worker
+- `deploy/environments/canary/docker-compose.yml` — 2 workers
+
+### Configuration Added
+
+```yaml
+# M6: Graceful shutdown - gives worker 30s to save checkpoint before SIGKILL
+stop_grace_period: 30s
+```
+
+### Why 30s?
+
+- Worker's internal shutdown timeout is 25s (set in Task 6.1)
+- Gives 5s buffer for cleanup after checkpoint save
+- Docker sends SIGTERM first, waits grace period, then SIGKILL
+- Without this, Docker defaults to 10s which may not be enough for large checkpoints
+
+### Acceptance Criteria Verified
+
+- [x] Grace period configured in docker-compose (30s)
+- [x] Both worker types configured (backtest + training)
+- [x] Documented in comments (inline YAML comments)

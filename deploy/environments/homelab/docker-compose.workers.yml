@@ -23,6 +23,8 @@ services:
     image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     container_name: backtest-worker-1
     restart: unless-stopped
+    # M6: Graceful shutdown - gives worker 30s to save checkpoint before SIGKILL
+    stop_grace_period: 30s
     group_add:
       - "1500"  # ktrdr group for NFS access
     security_opt:
@@ -61,6 +63,8 @@ services:
     image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     container_name: backtest-worker-2
     restart: unless-stopped
+    # M6: Graceful shutdown - gives worker 30s to save checkpoint before SIGKILL
+    stop_grace_period: 30s
     group_add:
       - "1500"  # ktrdr group for NFS access
     security_opt:
@@ -100,6 +104,8 @@ services:
     image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     container_name: backtest-worker-3
     restart: unless-stopped
+    # M6: Graceful shutdown - gives worker 30s to save checkpoint before SIGKILL
+    stop_grace_period: 30s
     group_add:
       - "1500"  # ktrdr group for NFS access
     security_opt:
@@ -142,6 +148,8 @@ services:
     image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     container_name: training-worker-1
     restart: unless-stopped
+    # M6: Graceful shutdown - gives worker 30s to save checkpoint before SIGKILL
+    stop_grace_period: 30s
     group_add:
       - "1500"  # ktrdr group for NFS access
     security_opt:
@@ -179,6 +187,8 @@ services:
     image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     container_name: training-worker-2
     restart: unless-stopped
+    # M6: Graceful shutdown - gives worker 30s to save checkpoint before SIGKILL
+    stop_grace_period: 30s
     group_add:
       - "1500"  # ktrdr group for NFS access
     security_opt:
@@ -218,6 +228,8 @@ services:
     image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     container_name: training-worker-3
     restart: unless-stopped
+    # M6: Graceful shutdown - gives worker 30s to save checkpoint before SIGKILL
+    stop_grace_period: 30s
     group_add:
       - "1500"  # ktrdr group for NFS access
     security_opt:
