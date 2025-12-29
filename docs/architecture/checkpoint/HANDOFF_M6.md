@@ -254,3 +254,62 @@ stop_grace_period: 30s
 - [x] Grace period configured in docker-compose (30s)
 - [x] Both worker types configured (backtest + training)
 - [x] Documented in comments (inline YAML comments)
+
+---
+
+## Task 6.5 Complete
+
+**Implemented:** Integration tests for graceful shutdown
+
+### Test File
+
+Location: [tests/integration/test_m6_graceful_shutdown.py](tests/integration/test_m6_graceful_shutdown.py)
+
+### Test Infrastructure
+
+The tests use in-memory mocks following M4 patterns:
+- `GracefulShutdownTestWorker`: Worker with mock checkpoint/operations services
+- `IntegrationCheckpointService`: In-memory checkpoint storage with filesystem artifacts
+- `MockOperationsRepository`: In-memory operations storage
+
+### Test Coverage (10 tests)
+
+**Checkpoint saving:**
+- `test_shutdown_during_operation_saves_checkpoint` — verifies checkpoint saved with type="shutdown"
+- `test_shutdown_checkpoint_includes_artifacts` — verifies model artifacts saved
+
+**Status updates:**
+- `test_shutdown_sets_status_to_cancelled` — verifies status=CANCELLED
+- `test_shutdown_error_message_mentions_shutdown` — verifies error message
+
+**Resume flow:**
+- `test_can_resume_after_shutdown` — full shutdown→resume flow
+- `test_model_weights_valid_after_shutdown_resume` — model weights loadable
+
+**Edge cases:**
+- `test_shutdown_before_operation_starts` — immediate shutdown
+- `test_multiple_shutdown_signals` — idempotent shutdown events
+- `test_operation_completes_without_shutdown` — no checkpoint on normal completion
+- `test_checkpoint_preserved_on_resume_failure` — checkpoint survives failed resume
+
+### Testing Pattern
+
+Tests simulate SIGTERM via `worker._shutdown_event.set()` — the same event that the real SIGTERM handler sets. This tests the same code paths without requiring actual Docker stop.
+
+### Acceptance Criteria Verified
+
+- [x] Test simulates shutdown signal
+- [x] Test verifies checkpoint saved
+- [x] Test verifies status=CANCELLED
+- [x] Tests pass: `make test-integration`
+
+---
+
+## Milestone 6 Complete
+
+All tasks verified:
+- [x] Task 6.1: SIGTERM handler
+- [x] Task 6.2: Graceful shutdown operation execution
+- [x] Task 6.3: HTTP status update from worker
+- [x] Task 6.4: Docker grace period configuration
+- [x] Task 6.5: Integration tests
