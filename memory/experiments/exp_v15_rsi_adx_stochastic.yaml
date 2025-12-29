@@ -1,0 +1,31 @@
+id: exp_v15_rsi_adx_stochastic
+timestamp: '2025-12-27T00:00:00Z'
+strategy_name: v15_rsi_adx_stochastic
+context:
+  indicators:
+  - RSI
+  - ADX
+  - STOCHASTIC
+  composition: trio
+  timeframe: 1h
+  symbol: EURUSD
+  zigzag_threshold: 0.025
+  nn_architecture:
+  - 64
+  - 32
+  training_epochs: 100
+  data_range: 2015-01-01 to 2023-12-31
+results:
+  test_accuracy: 0.614
+  val_accuracy: 0.6459999999999999
+  val_test_gap: 0.032
+assessment:
+  verdict: strong_signal
+  observations:
+  - RSI + ADX + STOCHASTIC (trio) achieves 61.4% test accuracy on 1h EURUSD
+  hypotheses: []
+  limitations:
+  - Only tested on 1h EURUSD
+  - Only tested in trio configuration
+  capability_requests: []
+source: v1.5_bootstrap

@@ -1,0 +1,30 @@
+id: exp_v15_williams_only
+timestamp: '2025-12-27T00:00:00Z'
+strategy_name: v15_williams_only
+context:
+  indicators:
+  - WILLIAMSR
+  composition: solo
+  timeframe: 1h
+  symbol: EURUSD
+  zigzag_threshold: 0.025
+  nn_architecture:
+  - 64
+  - 32
+  training_epochs: 100
+  data_range: 2015-01-01 to 2023-12-31
+results:
+  test_accuracy: 0.591
+  val_accuracy: 0.61
+  val_test_gap: 0.019
+assessment:
+  verdict: weak_signal
+  observations:
+  - WILLIAMSR (solo) achieves 59.1% test accuracy on 1h EURUSD
+  - Small val-test gap (1.9%) indicates good generalization
+  hypotheses: []
+  limitations:
+  - Only tested on 1h EURUSD
+  - Only tested in solo configuration
+  capability_requests: []
+source: v1.5_bootstrap
