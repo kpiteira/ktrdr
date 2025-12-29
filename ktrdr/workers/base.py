@@ -13,6 +13,7 @@ Source: training-host-service/
 
 import asyncio
 import os
+import signal
 from datetime import datetime
 from typing import Any, Optional
 
@@ -153,6 +154,11 @@ class WorkerAPIBase:
 
         # Background task for monitoring health checks
         self._monitor_task: Optional[asyncio.Task] = None
+
+        # Graceful shutdown support (M6 Task 6.1)
+        # Used to detect SIGTERM and allow operations to save checkpoints
+        self._shutdown_event = asyncio.Event()
+        self._shutdown_timeout = 25  # seconds (Docker gives 30s grace period)
 
         # Register common endpoints
         self._register_operations_endpoints()
@@ -469,11 +475,44 @@ class WorkerAPIBase:
                 f"✅ OperationsService initialized (cache_ttl={self._operations_service._cache_ttl}s)"
             )
 
+            # Setup signal handlers for graceful shutdown (M6 Task 6.1)
+            self._setup_signal_handlers()
+
             # Self-register with backend
             await self.self_register()
 
             # Start re-registration monitor (Task 1.7)
             await self._start_reregistration_monitor()
+
+    def _setup_signal_handlers(self) -> None:
+        """Register signal handlers for graceful shutdown (M6 Task 6.1).
+
+        Registers SIGTERM handler that sets the shutdown event, allowing
+        running operations to save checkpoints before the worker exits.
+        """
+
+        def handle_sigterm(signum, frame):
+            logger.info("SIGTERM received - initiating graceful shutdown")
+            # Set event from signal handler context using thread-safe method
+            asyncio.get_event_loop().call_soon_threadsafe(self._shutdown_event.set)
+
+        signal.signal(signal.SIGTERM, handle_sigterm)
+        logger.info("SIGTERM handler registered")
+
+    async def wait_for_shutdown(self) -> bool:
+        """Wait for shutdown signal with timeout.
+
+        Returns:
+            True if shutdown was signaled, False if timeout expired.
+        """
+        try:
+            await asyncio.wait_for(
+                self._shutdown_event.wait(),
+                timeout=self._shutdown_timeout,
+            )
+            return True
+        except asyncio.TimeoutError:
+            return False
 
     async def self_register(self) -> None:
         """
