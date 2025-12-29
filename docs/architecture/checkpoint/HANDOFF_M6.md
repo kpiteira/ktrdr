@@ -305,6 +305,22 @@ Tests simulate SIGTERM via `worker._shutdown_event.set()` — the same event tha
 
 ---
 
+## E2E Container Tests
+
+Location: [tests/e2e/container/test_m6_graceful_shutdown.py](tests/e2e/container/test_m6_graceful_shutdown.py)
+
+**Test classes:**
+- `TestM6GracefulShutdown` — Core shutdown saves checkpoint test
+- `TestM6E2EScriptValidation` — Full E2E scenario from milestone plan
+- `TestM6WorkerStopSignal` — SIGTERM signal handling verification
+
+**Run with:**
+```bash
+pytest tests/e2e/container/test_m6_graceful_shutdown.py -v --run-container-e2e
+```
+
+---
+
 ## Milestone 6 Complete
 
 All tasks verified:
@@ -313,3 +329,4 @@ All tasks verified:
 - [x] Task 6.3: HTTP status update from worker
 - [x] Task 6.4: Docker grace period configuration
 - [x] Task 6.5: Integration tests
+- [x] E2E container tests (bonus)
