@@ -65,8 +65,9 @@ def check_training_worker_available() -> bool:
 def stop_training_worker(grace_period: int = 30) -> bool:
     """Stop the training worker gracefully using docker compose."""
     try:
+        # Use training-worker-1 as the service name (matches docker-compose.yml)
         result = subprocess.run(
-            ["docker", "compose", "stop", "-t", str(grace_period), "training-worker"],
+            ["docker", "compose", "stop", "-t", str(grace_period), "training-worker-1"],
             capture_output=True,
             text=True,
             timeout=grace_period + 10,
@@ -81,7 +82,7 @@ def start_training_worker() -> bool:
     """Start the training worker using docker compose."""
     try:
         result = subprocess.run(
-            ["docker", "compose", "start", "training-worker"],
+            ["docker", "compose", "start", "training-worker-1"],
             capture_output=True,
             text=True,
             timeout=30,
