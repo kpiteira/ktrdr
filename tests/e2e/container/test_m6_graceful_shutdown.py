@@ -146,11 +146,11 @@ class TestM6GracefulShutdown:
         # Step 1: Start a training operation
         print("\nStep 1: Starting training operation...")
         response = api_client.post(
-            "/training/start",
+            "/trainings/start",
             json={
                 "symbols": ["EURUSD"],
                 "timeframes": ["1h"],
-                "strategy_name": "test_graceful_shutdown",
+                "strategy_name": "bollinger_squeeze",
                 "start_date": "2024-01-01",
                 "end_date": "2024-06-01",
             },
@@ -161,22 +161,11 @@ class TestM6GracefulShutdown:
             pytest.skip(f"Could not start training: {response.text}")
 
         result = response.json()
-        task_id = result.get("task_id")
-        print(f"Started training task: {task_id}")
+        operation_id = result.get("task_id")
+        print(f"Started training operation: {operation_id}")
 
-        # Need to get the operation_id from operations list
-        time.sleep(2)  # Brief wait for operation to be created
-
-        # Find the operation
-        response = api_client.get("/operations", params={"operation_type": "training"})
-        operations = response.json().get("data", {}).get("operations", [])
-        running_ops = [op for op in operations if op.get("status") == "running"]
-
-        if not running_ops:
-            pytest.skip("No running training operation found")
-
-        operation_id = running_ops[0]["operation_id"]
-        print(f"Operation ID: {operation_id}")
+        # Brief wait for operation to be created in DB
+        time.sleep(2)
 
         # Step 2: Wait for some progress
         print("Step 2: Waiting for training progress...")
@@ -291,11 +280,11 @@ class TestM6E2EScriptValidation:
         # Step 1: Start training
         print("Step 1: Start training...")
         response = api_client.post(
-            "/training/start",
+            "/trainings/start",
             json={
                 "symbols": ["EURUSD"],
                 "timeframes": ["1h"],
-                "strategy_name": "test_m6_e2e",
+                "strategy_name": "bollinger_squeeze",
                 "start_date": "2024-01-01",
                 "end_date": "2024-03-01",
             },
@@ -304,20 +293,11 @@ class TestM6E2EScriptValidation:
         if response.status_code != 200:
             pytest.skip(f"Could not start training: {response.text}")
 
-        task_id = response.json().get("task_id")
-        print(f"Started operation: {task_id}")
+        operation_id = response.json().get("task_id")
+        print(f"Started operation: {operation_id}")
 
-        # Find operation_id
+        # Brief wait for operation to be created
         time.sleep(2)
-        response = api_client.get("/operations", params={"operation_type": "training"})
-        operations = response.json().get("data", {}).get("operations", [])
-        running_ops = [op for op in operations if op.get("status") == "running"]
-
-        if not running_ops:
-            pytest.skip("No running operation found")
-
-        operation_id = running_ops[0]["operation_id"]
-        print(f"Operation ID: {operation_id}")
 
         # Step 2: Wait for progress
         print("Step 2: Waiting for progress...")
