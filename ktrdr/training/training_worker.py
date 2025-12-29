@@ -207,7 +207,7 @@ class TrainingWorker(WorkerAPIBase):
             # Status already updated to CANCELLED
         except Exception as e:
             logger.error(f"Training {operation_id} failed: {e}")
-            # Let the exception propagate - _execute_training_work handles it
+            raise  # Re-raise to ensure caller knows training failed
 
     async def _run_resumed_training_with_graceful_shutdown(
         self,
@@ -230,6 +230,7 @@ class TrainingWorker(WorkerAPIBase):
             )
         except Exception as e:
             logger.error(f"Resumed training {operation_id} failed: {e}")
+            raise  # Re-raise to ensure caller knows training failed
 
     async def _save_checkpoint(self, operation_id: str, checkpoint_type: str) -> None:
         """

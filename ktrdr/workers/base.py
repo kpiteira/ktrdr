@@ -658,7 +658,8 @@ class WorkerAPIBase:
                 # Graceful shutdown requested
                 logger.info(f"Graceful shutdown - saving checkpoint for {operation_id}")
 
-                # Cancel the operation task
+                # Cancel and await the operation task first to ensure proper cleanup
+                # This MUST complete before checkpoint/status operations to avoid leaks
                 operation_task.cancel()
                 try:
                     await operation_task
@@ -667,10 +668,9 @@ class WorkerAPIBase:
                     # The await ensures task cleanup completes before we proceed.
                     pass
 
-                # Save shutdown checkpoint
+                # Now save checkpoint and update status (task is fully cleaned up)
+                # If these fail, the outer except block will handle it
                 await self._save_checkpoint(operation_id, "shutdown")
-
-                # Update status to CANCELLED
                 await self._update_operation_status(
                     operation_id,
                     "CANCELLED",
