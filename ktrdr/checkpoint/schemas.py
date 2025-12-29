@@ -67,6 +67,68 @@ class TrainingCheckpointState:
         )
 
 
+@dataclass
+class BacktestCheckpointState:
+    """State captured during backtesting for checkpoint/resume functionality.
+
+    This state is stored as JSONB in the database and must be JSON-serializable.
+    It captures everything needed to resume backtesting from this point.
+
+    Attributes:
+        operation_type: Always "backtesting" - used by backend to dispatch to correct worker.
+        bar_index: Current bar index in the simulation (resume point).
+        current_date: ISO format timestamp of the current bar.
+        cash: Current cash balance in portfolio.
+        positions: List of open positions (symbol, quantity, entry_price, entry_date).
+        trades: List of completed trades (trade history).
+        equity_samples: Sampled equity curve (every N bars to limit size).
+        original_request: Original backtest request for data reload on resume.
+    """
+
+    # Resume point
+    bar_index: int
+    current_date: str  # ISO format
+
+    # Portfolio state
+    cash: float
+
+    # REQUIRED: Operation type for resume dispatch (backend uses this to select worker)
+    operation_type: str = "backtesting"
+
+    # Positions (current open position, if any)
+    positions: list[dict[str, Any]] = field(default_factory=list)
+
+    # Trade history (completed trades)
+    trades: list[dict[str, Any]] = field(default_factory=list)
+
+    # Performance tracking (sampled equity curve)
+    equity_samples: list[dict[str, Any]] = field(default_factory=list)
+
+    # Original request for resume
+    original_request: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "BacktestCheckpointState":
+        """Create from dictionary (deserialization).
+
+        Handles missing optional fields gracefully by using defaults.
+        """
+        return cls(
+            bar_index=data["bar_index"],
+            current_date=data["current_date"],
+            cash=data["cash"],
+            operation_type=data.get("operation_type", "backtesting"),
+            positions=data.get("positions", []),
+            trades=data.get("trades", []),
+            equity_samples=data.get("equity_samples", []),
+            original_request=data.get("original_request", {}),
+        )
+
+
 # Artifact manifest for training checkpoints
 # Maps artifact filename to requirement level
 TRAINING_ARTIFACTS: dict[str, str] = {

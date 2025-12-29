@@ -847,3 +847,186 @@ class WorkerAPIBase:
                     )
         except Exception as e:
             logger.error(f"Error checking registration: {e}")
+
+    # ==========================================================================
+    # Checkpoint Infrastructure - Common patterns for all workers
+    # ==========================================================================
+
+    async def adopt_and_start_operation(self, operation_id: str) -> None:
+        """
+        Adopt an operation from database and transition to RUNNING.
+
+        This is the correct pattern for resume scenarios where a worker may be
+        resuming an operation it didn't originally create. The operation exists
+        in the database but may not be in this worker's local cache.
+
+        Pattern:
+        1. adopt_operation() - Load from DB into cache if not present
+        2. start_operation() - Transition to RUNNING and register task
+
+        Args:
+            operation_id: The operation to adopt and start
+
+        Raises:
+            DataError: If operation not found in database
+        """
+        # Adopt operation (loads from DB if not in cache)
+        await self._operations_service.adopt_operation(operation_id)
+
+        # Create dummy task and start operation
+        dummy_task = asyncio.create_task(asyncio.sleep(0))
+        await self._operations_service.start_operation(operation_id, dummy_task)
+        logger.info(f"Adopted and started operation {operation_id} for resume")
+
+    def create_checkpoint_callback(
+        self,
+        operation_id: str,
+        checkpoint_service: Any,
+        checkpoint_policy: Any,
+        state_builder: Any,
+        main_loop: asyncio.AbstractEventLoop,
+        last_checkpoint_state: dict[str, Any],
+        artifacts_builder: Any = None,
+    ) -> Any:
+        """
+        Create a checkpoint callback with proper event loop handling.
+
+        This factory creates checkpoint callbacks that correctly handle the
+        threading complexity of saving checkpoints from within worker loops
+        that may run in thread pools (via asyncio.to_thread).
+
+        The callback uses run_coroutine_threadsafe() to schedule checkpoint
+        saves on the main event loop, avoiding "Future attached to different
+        loop" errors that occur when creating new event loops in threads.
+
+        Args:
+            operation_id: Operation identifier for checkpoint
+            checkpoint_service: Service for saving checkpoints
+            checkpoint_policy: Policy determining when to checkpoint
+            state_builder: Callable that builds checkpoint state from kwargs
+            main_loop: The main asyncio event loop (capture before entering thread)
+            last_checkpoint_state: Dict to store latest state for cancellation checkpoints
+            artifacts_builder: Optional callable to build artifacts (for training)
+
+        Returns:
+            A callback function suitable for use in worker loops
+
+        Example:
+            main_loop = asyncio.get_running_loop()
+            last_state = {}
+
+            def my_state_builder(**kwargs):
+                return build_my_checkpoint_state(kwargs["engine"], kwargs["bar_index"])
+
+            callback = self.create_checkpoint_callback(
+                operation_id=operation_id,
+                checkpoint_service=checkpoint_service,
+                checkpoint_policy=checkpoint_policy,
+                state_builder=my_state_builder,
+                main_loop=main_loop,
+                last_checkpoint_state=last_state,
+            )
+
+            # Use in loop
+            engine.run(checkpoint_callback=callback)
+        """
+
+        def checkpoint_callback(**kwargs):
+            """Checkpoint callback with proper event loop handling."""
+            # Always update last state for potential cancellation checkpoint
+            last_checkpoint_state.update(kwargs)
+
+            # Get the unit value for checkpoint policy (epoch for training, bar_index for backtest)
+            unit_value = kwargs.get("epoch") or kwargs.get("bar_index")
+            if unit_value is None:
+                logger.warning("Checkpoint callback missing epoch or bar_index")
+                return
+
+            # Check if we should save a periodic checkpoint
+            if checkpoint_policy.should_checkpoint(unit_value):
+                try:
+                    # Build checkpoint state
+                    state = state_builder(**kwargs)
+
+                    # Build artifacts if builder provided (for training)
+                    artifacts = None
+                    if artifacts_builder:
+                        artifacts = artifacts_builder(**kwargs)
+
+                    # Schedule checkpoint save on main event loop
+                    # This avoids "Future attached to different loop" errors
+                    future = asyncio.run_coroutine_threadsafe(
+                        checkpoint_service.save_checkpoint(
+                            operation_id=operation_id,
+                            checkpoint_type="periodic",
+                            state=state.to_dict(),
+                            artifacts=artifacts,
+                        ),
+                        main_loop,
+                    )
+                    # Wait for completion with timeout
+                    future.result(timeout=30.0)
+                    checkpoint_policy.record_checkpoint(unit_value)
+                    logger.info(
+                        f"Periodic checkpoint saved for {operation_id} at unit {unit_value}"
+                    )
+
+                except Exception as e:
+                    logger.warning(f"Failed to save periodic checkpoint: {e}")
+
+        return checkpoint_callback
+
+    async def save_cancellation_checkpoint(
+        self,
+        operation_id: str,
+        checkpoint_service: Any,
+        last_checkpoint_state: dict[str, Any],
+        state_builder: Any,
+        artifacts_builder: Any = None,
+    ) -> bool:
+        """
+        Save a checkpoint when an operation is cancelled.
+
+        This is a common pattern for all workers: when cancellation occurs,
+        save the latest state so the operation can be resumed later.
+
+        Args:
+            operation_id: Operation identifier
+            checkpoint_service: Service for saving checkpoints
+            last_checkpoint_state: Dict containing the latest state from checkpoint callback
+            state_builder: Callable that builds checkpoint state from the stored state
+            artifacts_builder: Optional callable to build artifacts
+
+        Returns:
+            True if checkpoint was saved, False otherwise
+        """
+        if not last_checkpoint_state:
+            logger.warning(
+                f"No checkpoint state available for cancellation: {operation_id}"
+            )
+            return False
+
+        try:
+            state = state_builder(**last_checkpoint_state)
+            artifacts = None
+            if artifacts_builder:
+                artifacts = artifacts_builder(**last_checkpoint_state)
+
+            await checkpoint_service.save_checkpoint(
+                operation_id=operation_id,
+                checkpoint_type="cancellation",
+                state=state.to_dict(),
+                artifacts=artifacts,
+            )
+
+            unit_value = last_checkpoint_state.get(
+                "epoch"
+            ) or last_checkpoint_state.get("bar_index")
+            logger.info(
+                f"Cancellation checkpoint saved for {operation_id} at unit {unit_value}"
+            )
+            return True
+
+        except Exception as e:
+            logger.warning(f"Failed to save cancellation checkpoint: {e}")
+            return False

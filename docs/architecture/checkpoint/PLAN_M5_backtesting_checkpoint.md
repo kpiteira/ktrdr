@@ -7,7 +7,7 @@ architecture: docs/architecture/checkpoint/ARCHITECTURE.md
 
 **Branch:** `feature/checkpoint-m5-backtesting-checkpoint`
 **Depends On:** M4 (Training Resume)
-**Estimated Tasks:** 7
+**Estimated Tasks:** 8
 
 ---
 
@@ -485,11 +485,191 @@ Integration test for backtest checkpoint and resume.
 
 ---
 
+### Task 5.8: Fix Event Loop Conflict in Backtest Checkpoint Callback
+
+**File(s):**
+- `ktrdr/backtesting/backtest_worker.py` (modify)
+
+**Type:** CODING
+
+**Task Categories:** Cross-Component, Async Infrastructure
+
+**Description:**
+Fix the event loop conflict that causes intermittent checkpoint save failures during backtesting.
+
+**Problem:**
+The checkpoint callback runs in a thread pool (via `asyncio.to_thread`) and creates a new event loop
+to save checkpoints. However, the database connection's Future was created in the main event loop,
+causing the error:
+```
+Failed to save periodic checkpoint: Task got Future attached to a different loop
+```
+
+**Current Behavior:**
+- First checkpoint attempt often fails with event loop error
+- Time-based retry (every 5 minutes) eventually succeeds
+- Checkpoints are saved, but reliability is questionable
+
+**Solution Options:**
+
+1. **Use `asyncio.run_coroutine_threadsafe()`** - Pass main event loop reference to callback,
+   schedule checkpoint save on main loop instead of creating new loop
+
+2. **Thread-safe queue pattern** - Callback pushes state to queue, main async context polls
+   and saves checkpoints
+
+3. **Sync database wrapper** - Create synchronous checkpoint save using a separate
+   connection pool configured for thread access
+
+**Recommended Approach:** Option 1 (run_coroutine_threadsafe) as it's least invasive.
+
+**Implementation:**
+```python
+# In _execute_backtest_work, before creating callback:
+main_loop = asyncio.get_running_loop()
+
+def checkpoint_callback(**kwargs):
+    # ... build state ...
+
+    if checkpoint_policy.should_checkpoint(bar_index):
+        try:
+            # Schedule on main event loop instead of creating new one
+            future = asyncio.run_coroutine_threadsafe(
+                checkpoint_service.save_checkpoint(
+                    operation_id=operation_id,
+                    checkpoint_type="periodic",
+                    state=state.to_dict(),
+                    artifacts=None,
+                ),
+                main_loop,
+            )
+            # Wait for completion with timeout
+            future.result(timeout=30.0)
+            checkpoint_policy.record_checkpoint(bar_index)
+            logger.info(f"Periodic checkpoint saved for {operation_id} at bar {bar_index}")
+        except Exception as e:
+            logger.warning(f"Failed to save periodic checkpoint: {e}")
+```
+
+**Acceptance Criteria:**
+- [ ] Checkpoint callback uses main event loop for async operations
+- [ ] No "attached to a different loop" errors in logs
+- [ ] Periodic checkpoints save reliably on first attempt
+- [ ] Cancellation checkpoints still save correctly
+- [ ] Unit tests pass: `make test-unit`
+
+---
+
+### Task 5.9: Fix Resume to Different Worker Bug
+
+**File(s):**
+- `ktrdr/api/services/operations_service.py` (modify)
+- `ktrdr/backtesting/backtest_worker.py` (modify)
+- `ktrdr/training/training_worker.py` (modify - same fix needed)
+
+**Type:** CODING
+
+**Task Categories:** Cross-Component, Infrastructure
+
+**Description:**
+Fix the bug where resume fails if dispatched to a different worker than the original operation.
+
+**Root Cause:**
+`_execute_resumed_backtest_work` incorrectly calls `create_operation`, but the operation already exists in the **database**:
+
+1. Original backtest creates operation in DB
+2. Cancellation happens, operation stays in DB with status=CANCELLED
+3. Resume is dispatched (to any worker)
+4. `_execute_resumed_backtest_work` calls `create_operation`
+5. `create_operation` checks DB → finds existing operation → fails
+
+The `create_operation` method checks both local cache AND database:
+```python
+# In create_operation (line 151-158):
+if self._repository:
+    existing = await self._repository.get(operation_id)
+    if existing:
+        raise DataError("Operation ID already exists...")
+```
+
+**This fails regardless of which worker receives the resume** because the operation exists in the shared database.
+
+**Training's different issue:** Training calls `start_operation` (correct - doesn't create). But `start_operation` requires the operation to be in local cache, which fails if dispatched to a different worker
+
+**Evidence:**
+```
+DataError: Operation ID already exists: op_backtesting_20251228_153705_c9e7639a
+```
+
+**Training Has Same Latent Bug:**
+Training's `_execute_resumed_training` calls `start_operation` without ensuring the operation is in the local cache:
+```python
+# Training worker (line 576-577)
+await self._operations_service.start_operation(operation_id, dummy_task)
+```
+This would fail if resume goes to a different worker.
+
+**Solution Options:**
+
+1. **Add `ensure_in_cache()` method to OperationsService**
+   - Before `start_operation`, check if operation is in cache
+   - If not, load from database into cache
+   - Pros: Minimal changes, clear semantics
+   - Cons: Adds another method
+
+2. **Make `start_operation` auto-load from DB if not in cache**
+   - Modify `start_operation` to load from repository if not in cache
+   - Pros: Simplest fix, transparent
+   - Cons: Changes existing semantics
+
+3. **Use `get_or_create_operation` pattern for resume**
+   - Create operation if it doesn't exist locally, skip if it does
+   - Pros: Explicit handling
+   - Cons: More complex
+
+**Recommended Approach:** Option 2 - Auto-load from DB
+
+The resume pattern should be:
+```python
+# Modified start_operation (auto-loads from DB if not in cache)
+async def start_operation(self, operation_id: str, task: asyncio.Task) -> None:
+    async with self._lock:
+        if operation_id not in self._cache:
+            # Try to load from repository (for resume-to-different-worker case)
+            if self._repository:
+                op_data = await self._repository.get(operation_id)
+                if op_data:
+                    # Create Operation from DB data and add to cache
+                    self._cache[operation_id] = Operation.from_db_model(op_data)
+                    logger.info(f"Loaded operation {operation_id} from DB for resume")
+
+            # If still not in cache after DB check, it truly doesn't exist
+            if operation_id not in self._cache:
+                raise DataError(...)
+
+        # Proceed with existing logic...
+```
+
+**Why This Wasn't Caught:**
+- Integration tests use mock services where workers share in-memory state
+- E2E tests need multiple workers with load balancing to trigger this
+- The refactoring in Task 5.7 notes should have caught this pattern mismatch
+
+**Acceptance Criteria:**
+- [ ] `start_operation` auto-loads from DB if not in cache
+- [ ] Backtest resume works when dispatched to different worker
+- [ ] Training resume works when dispatched to different worker
+- [ ] Remove `create_operation` call from `_execute_resumed_backtest_work`
+- [ ] Unit tests verify the auto-load behavior
+- [ ] Integration test with explicit cross-worker resume
+
+---
+
 ## Milestone 5 Verification Checklist
 
 Before marking M5 complete:
 
-- [ ] All 7 tasks complete
+- [ ] All 9 tasks complete
 - [ ] Unit tests pass: `make test-unit`
 - [ ] Integration tests pass: `make test-integration`
 - [ ] E2E test script passes
@@ -504,9 +684,11 @@ Before marking M5 complete:
 |------|--------|------|
 | `ktrdr/checkpointing/schemas.py` | Modify | 5.1 |
 | `ktrdr/backtesting/checkpoint_builder.py` | Create | 5.1 |
-| `ktrdr/backtesting/backtest_worker.py` | Modify | 5.2, 5.3 |
+| `ktrdr/backtesting/backtest_worker.py` | Modify | 5.2, 5.3, 5.8, 5.9 |
 | `ktrdr/backtesting/checkpoint_restore.py` | Create | 5.3 |
 | `ktrdr/backtesting/engine.py` | Modify | 5.4 |
 | `ktrdr/backtesting/remote_api.py` | Modify | 5.5 |
 | `ktrdr/api/endpoints/operations.py` | Modify | 5.6 |
 | `tests/integration/test_m5_backtesting_checkpoint.py` | Create | 5.7 |
+| `ktrdr/api/services/operations_service.py` | Modify | 5.9 |
+| `ktrdr/training/training_worker.py` | Modify | 5.9 |

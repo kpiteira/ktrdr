@@ -428,72 +428,52 @@ class TrainingWorker(WorkerAPIBase):
                     time_interval_seconds=self.checkpoint_time_interval,
                 )
 
-                # Create checkpoint callback (runs in ModelTrainer's training loop)
-                def checkpoint_callback(**kwargs):
-                    """Called after each epoch with model, optimizer, scheduler, trainer."""
-                    from ktrdr.training.checkpoint_builder import (
-                        build_training_checkpoint_artifacts,
-                        build_training_checkpoint_state,
+                # Capture main event loop for checkpoint callback
+                main_loop = asyncio.get_running_loop()
+
+                # Import checkpoint builders
+                from ktrdr.training.checkpoint_builder import (
+                    build_training_checkpoint_artifacts,
+                    build_training_checkpoint_state,
+                )
+
+                # Create state builder closure that captures original_request
+                def training_state_builder(**kwargs):
+                    return build_training_checkpoint_state(
+                        kwargs["trainer"], kwargs["epoch"], original_request
                     )
 
-                    epoch = kwargs["epoch"]
-                    model = kwargs["model"]
-                    optimizer = kwargs["optimizer"]
-                    scheduler = kwargs.get("scheduler")
-                    trainer = kwargs["trainer"]
+                # Create artifacts builder closure
+                def training_artifacts_builder(**kwargs):
+                    return build_training_checkpoint_artifacts(
+                        kwargs["model"],
+                        kwargs["optimizer"],
+                        kwargs.get("scheduler"),
+                        kwargs["trainer"].best_model_state,
+                    )
 
-                    # Store latest state for potential cancellation/failure checkpoint
-                    last_checkpoint_state["epoch"] = epoch
-                    last_checkpoint_state["model"] = model
-                    last_checkpoint_state["optimizer"] = optimizer
-                    last_checkpoint_state["scheduler"] = scheduler
-                    last_checkpoint_state["trainer"] = trainer
+                # Use shared checkpoint callback infrastructure
+                # This fixes the "Future attached to different loop" bug by using
+                # run_coroutine_threadsafe instead of asyncio.new_event_loop()
+                base_callback = self.create_checkpoint_callback(
+                    operation_id=operation_id,
+                    checkpoint_service=checkpoint_service,
+                    checkpoint_policy=checkpoint_policy,
+                    state_builder=training_state_builder,
+                    main_loop=main_loop,
+                    last_checkpoint_state=last_checkpoint_state,
+                    artifacts_builder=training_artifacts_builder,
+                )
 
-                    # Also store to instance for graceful shutdown (M6)
+                # Wrap callback to also store to instance for graceful shutdown (M6)
+                def checkpoint_callback(**kwargs):
+                    # Store to instance for _save_checkpoint hook (M6 graceful shutdown)
                     self._last_checkpoint_state = {
-                        "epoch": epoch,
-                        "model": model,
-                        "optimizer": optimizer,
-                        "scheduler": scheduler,
-                        "trainer": trainer,
+                        **kwargs,
                         "original_request": original_request,
                     }
-
-                    # Check if we should save a periodic checkpoint
-                    if checkpoint_policy.should_checkpoint(epoch):
-                        try:
-                            # Build state and artifacts
-                            state = build_training_checkpoint_state(
-                                trainer, epoch, original_request
-                            )
-                            artifacts = build_training_checkpoint_artifacts(
-                                model,
-                                optimizer,
-                                scheduler,
-                                trainer.best_model_state,
-                            )
-
-                            # Run async checkpoint save from sync context
-                            # Since we're in a thread pool, we need to run in the event loop
-                            loop = asyncio.new_event_loop()
-                            try:
-                                loop.run_until_complete(
-                                    checkpoint_service.save_checkpoint(
-                                        operation_id=operation_id,
-                                        checkpoint_type="periodic",
-                                        state=state.to_dict(),
-                                        artifacts=artifacts,
-                                    )
-                                )
-                                checkpoint_policy.record_checkpoint(epoch)
-                                logger.info(
-                                    f"Periodic checkpoint saved for {operation_id} at epoch {epoch}"
-                                )
-                            finally:
-                                loop.close()
-
-                        except Exception as e:
-                            logger.warning(f"Failed to save periodic checkpoint: {e}")
+                    # Call base callback for periodic checkpoint logic
+                    base_callback(**kwargs)
 
                 # Create orchestrator with checkpoint callback
                 orchestrator = LocalTrainingOrchestrator(
@@ -670,6 +650,10 @@ class TrainingWorker(WorkerAPIBase):
         - Starts from checkpoint epoch (not epoch 0)
         - Restores model/optimizer state before training
 
+        Uses shared infrastructure from WorkerAPIBase:
+        - adopt_and_start_operation() for resume-to-different-worker support
+        - create_checkpoint_callback() for proper event loop handling
+
         Note: The actual model/optimizer restoration is handled in Task 4.5
         (ModelTrainer integration). This method provides the worker-level
         orchestration for resumed training.
@@ -687,12 +671,11 @@ class TrainingWorker(WorkerAPIBase):
         from ktrdr.checkpoint import CheckpointPolicy
         from ktrdr.training.model_storage import ModelStorage
 
-        # 1. Mark operation as RUNNING (it should already exist from original training)
-        # The backend's resume endpoint should have already transitioned status
-        dummy_task = asyncio.create_task(asyncio.sleep(0))
-        await self._operations_service.start_operation(operation_id, dummy_task)
+        # 1. Adopt operation and transition to RUNNING
+        # This handles resume-to-different-worker: loads from DB if not in cache
+        await self.adopt_and_start_operation(operation_id)
         logger.info(
-            f"Marked operation {operation_id} as RUNNING for resume "
+            f"Adopted and started operation {operation_id} for resume "
             f"(starting from epoch {resume_context.start_epoch})"
         )
 
@@ -816,71 +799,52 @@ class TrainingWorker(WorkerAPIBase):
                 time_interval_seconds=self.checkpoint_time_interval,
             )
 
-            # Create checkpoint callback (runs in ModelTrainer's training loop)
-            def checkpoint_callback(**kwargs):
-                """Called after each epoch with model, optimizer, scheduler, trainer."""
-                from ktrdr.training.checkpoint_builder import (
-                    build_training_checkpoint_artifacts,
-                    build_training_checkpoint_state,
+            # Capture main event loop for checkpoint callback
+            main_loop = asyncio.get_running_loop()
+
+            # Import checkpoint builders
+            from ktrdr.training.checkpoint_builder import (
+                build_training_checkpoint_artifacts,
+                build_training_checkpoint_state,
+            )
+
+            # Create state builder closure that captures original_request
+            def training_state_builder(**kwargs):
+                return build_training_checkpoint_state(
+                    kwargs["trainer"], kwargs["epoch"], original_request
                 )
 
-                epoch = kwargs["epoch"]
-                model = kwargs["model"]
-                optimizer = kwargs["optimizer"]
-                scheduler = kwargs.get("scheduler")
-                trainer = kwargs["trainer"]
+            # Create artifacts builder closure
+            def training_artifacts_builder(**kwargs):
+                return build_training_checkpoint_artifacts(
+                    kwargs["model"],
+                    kwargs["optimizer"],
+                    kwargs.get("scheduler"),
+                    kwargs["trainer"].best_model_state,  # Pass state dict, not trainer
+                )
 
-                # Store latest state for potential cancellation/failure checkpoint
-                last_checkpoint_state["epoch"] = epoch
-                last_checkpoint_state["model"] = model
-                last_checkpoint_state["optimizer"] = optimizer
-                last_checkpoint_state["scheduler"] = scheduler
-                last_checkpoint_state["trainer"] = trainer
+            # Use shared checkpoint callback infrastructure
+            # This fixes the "Future attached to different loop" bug by using
+            # run_coroutine_threadsafe instead of asyncio.new_event_loop()
+            base_callback = self.create_checkpoint_callback(
+                operation_id=operation_id,
+                checkpoint_service=checkpoint_service,
+                checkpoint_policy=checkpoint_policy,
+                state_builder=training_state_builder,
+                main_loop=main_loop,
+                last_checkpoint_state=last_checkpoint_state,
+                artifacts_builder=training_artifacts_builder,
+            )
 
-                # Also store to instance for graceful shutdown (M6)
+            # Wrap callback to also store to instance for graceful shutdown (M6)
+            def checkpoint_callback(**kwargs):
+                # Store to instance for _save_checkpoint hook (M6 graceful shutdown)
                 self._last_checkpoint_state = {
-                    "epoch": epoch,
-                    "model": model,
-                    "optimizer": optimizer,
-                    "scheduler": scheduler,
-                    "trainer": trainer,
+                    **kwargs,
                     "original_request": original_request,
                 }
-
-                # Check if we should save a periodic checkpoint
-                if checkpoint_policy.should_checkpoint(epoch):
-                    try:
-                        # Build state and artifacts
-                        state = build_training_checkpoint_state(
-                            trainer, epoch, original_request
-                        )
-                        artifacts = build_training_checkpoint_artifacts(
-                            model,
-                            optimizer,
-                            scheduler,
-                            trainer,
-                        )
-
-                        # Save checkpoint (synchronous call from callback)
-                        loop = asyncio.new_event_loop()
-                        try:
-                            loop.run_until_complete(
-                                checkpoint_service.save_checkpoint(
-                                    operation_id=operation_id,
-                                    checkpoint_type="periodic",
-                                    state=state.to_dict(),
-                                    artifacts=artifacts,
-                                )
-                            )
-                            checkpoint_policy.record_checkpoint(epoch)
-                            logger.info(
-                                f"Periodic checkpoint saved for resumed {operation_id} at epoch {epoch}"
-                            )
-                        finally:
-                            loop.close()
-
-                    except Exception as e:
-                        logger.warning(f"Failed to save periodic checkpoint: {e}")
+                # Call base callback for periodic checkpoint logic
+                base_callback(**kwargs)
 
             # Create orchestrator with resume_context for model/optimizer restoration
             orchestrator = LocalTrainingOrchestrator(

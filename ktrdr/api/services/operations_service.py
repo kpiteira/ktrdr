@@ -221,6 +221,60 @@ class OperationsService:
                 )
                 return operation
 
+    async def adopt_operation(self, operation_id: str) -> OperationInfo:
+        """
+        Adopt an existing operation for execution (used during resume).
+
+        When a worker resumes an operation it didn't originally create,
+        the operation exists in the database but not in the worker's local cache.
+        This method loads the operation from the database into the cache so that
+        subsequent calls to start_operation() and other methods work correctly.
+
+        This is the correct pattern for resume-to-different-worker scenarios:
+        1. Backend dispatches resume to any available worker
+        2. Worker calls adopt_operation() to load from DB into cache
+        3. Worker calls start_operation() to transition to RUNNING
+
+        Args:
+            operation_id: Operation identifier to adopt
+
+        Returns:
+            The adopted operation info
+
+        Raises:
+            DataError: If operation not found in database or no repository configured
+        """
+        async with self._lock:
+            # If already in cache, just return it
+            if operation_id in self._cache:
+                logger.debug(
+                    f"Operation {operation_id} already in cache, no adoption needed"
+                )
+                return self._cache[operation_id]
+
+            # Must have a repository to adopt from database
+            if not self._repository:
+                raise DataError(
+                    message=f"Cannot adopt operation without database repository: {operation_id}",
+                    error_code="OPERATIONS-NoRepository",
+                    details={"operation_id": operation_id},
+                )
+
+            # Load from database
+            operation = await self._repository.get(operation_id)
+            if not operation:
+                raise DataError(
+                    message=f"Operation not found in database: {operation_id}",
+                    error_code="OPERATIONS-NotFound",
+                    details={"operation_id": operation_id},
+                )
+
+            # Add to local cache
+            self._cache[operation_id] = operation
+            logger.info(f"Adopted operation {operation_id} from database for resume")
+
+            return operation
+
     async def start_operation(self, operation_id: str, task: asyncio.Task) -> None:
         """
         Mark an operation as started and register its task.
@@ -228,6 +282,10 @@ class OperationsService:
         Args:
             operation_id: Operation identifier
             task: Asyncio task for the operation
+
+        Note:
+            For resume scenarios, call adopt_operation() first to ensure
+            the operation is in the local cache.
         """
         async with self._lock:
             if operation_id not in self._cache:

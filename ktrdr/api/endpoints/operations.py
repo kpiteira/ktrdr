@@ -694,6 +694,53 @@ async def resume_operation(
                     detail=f"Failed to connect to worker: {str(e)}",
                 ) from e
 
+        elif op_type == "backtesting":
+            # Select a backtesting worker
+            from ktrdr.api.models.workers import WorkerType
+
+            worker = worker_registry.select_worker(WorkerType.BACKTESTING)
+            if worker is None:
+                logger.error(f"No backtest worker available for resume: {operation_id}")
+                # Revert status back to cancelled since we can't dispatch
+                await operations_service.update_status(operation_id, status="CANCELLED")
+                raise HTTPException(
+                    status_code=503,
+                    detail="No backtest worker available to resume operation",
+                )
+
+            # Dispatch to worker's /backtests/resume endpoint
+            import httpx
+
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        f"{worker.endpoint_url}/backtests/resume",
+                        json={"operation_id": operation_id},
+                        timeout=30.0,
+                    )
+                    response.raise_for_status()
+                    worker_response = response.json()
+                    logger.info(
+                        f"Dispatched backtest resume to worker {worker.worker_id}: {worker_response}"
+                    )
+            except httpx.HTTPStatusError as e:
+                logger.error(
+                    f"Backtest worker rejected resume request: {e.response.status_code} - {e.response.text}"
+                )
+                # Revert status back to cancelled since dispatch failed
+                await operations_service.update_status(operation_id, status="CANCELLED")
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Worker failed to resume: {e.response.text}",
+                ) from e
+            except httpx.RequestError as e:
+                logger.error(f"Failed to connect to backtest worker: {str(e)}")
+                await operations_service.update_status(operation_id, status="CANCELLED")
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Failed to connect to worker: {str(e)}",
+                ) from e
+
         logger.info(
             f"Successfully resumed operation: {operation_id} from epoch {checkpoint.state.get('epoch')}"
         )

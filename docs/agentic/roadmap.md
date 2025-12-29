@@ -2,164 +2,224 @@
 
 ## Document Purpose
 
-This document provides the **high-level roadmap** for building the Autonomous Trading Research Laboratory. It defines the major milestones from MVP through full multi-agent operation.
+This document provides the **high-level roadmap** for building the Autonomous Trading Research Laboratory. It defines the major milestones from validated learning through full autonomous operation.
 
 **Related Documents**:
+
 - `vision_north_star.md` - The dream we're building toward
-- `architecture_north_star.md` - How the full system works
-- `mvp/` - Detailed MVP implementation plans
+- `architecture_north_star.md` - How the system works (to be updated)
+- `v2.0/DESIGN.md` - Detailed v2 design
 
 ---
 
-## Roadmap Overview
+## The Learning Ladder
+
+Each version **enables** the next. We can't skip steps because later capabilities emerge from earlier ones.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                          AUTONOMOUS RESEARCH LABORATORY                      │
+│                        THE LEARNING LADDER                                   │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  MVP                    v2                  v3                 v4           │
-│  ────                   ──                  ──                 ──           │
-│  Single Agent           Learning            Knowledge          Multi-Agent  │
-│  Strategy Loop          & Memory            Base               Laboratory   │
-│                                                                             │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐  │
-│  │ • Design    │    │ • Remember  │    │ • Facts     │    │ • Researcher│  │
-│  │ • Train     │───▶│ • Learn     │───▶│ • Patterns  │───▶│ • Assistant │  │
-│  │ • Backtest  │    │ • Improve   │    │ • Hypotheses│    │ • Director  │  │
-│  │ • Assess    │    │             │    │             │    │ • Board     │  │
-│  └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘  │
-│                                                                             │
-│  Proves: Loop works   Proves: Gets       Proves: Learns    Proves: Scales  │
-│                       better over time   from history      with agents     │
-│                                                                             │
+│                                                                              │
+│  v1.5 ──────► v2.0 ──────► v2.x ──────► v3 ──────► v4+                      │
+│  Validated    Memory       Capability   Automated   Multi-Agent             │
+│  Learning     Foundation   Requests     Synthesis   Research                │
+│                                                                              │
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐            │
+│  │ NN can  │  │ Agent   │  │ Agent   │  │ System  │  │ Parallel│            │
+│  │ learn   │  │ remembers│  │ requests│  │ extracts│  │ research│            │
+│  │ (proof) │  │ & builds │  │ what it │  │ patterns│  │ streams │            │
+│  │         │  │ on past  │  │ needs   │  │ automat.│  │         │            │
+│  └─────────┘  └─────────┘  └─────────┘  └─────────┘  └─────────┘            │
+│       │            │            │            │            │                  │
+│       │            │            │            │            │                  │
+│  PROVES:      ENABLES:      ENABLES:     ENABLES:    ENABLES:               │
+│  Architecture  Informed     System       Learning    10x                    │
+│  can work      decisions    evolution    compounds   throughput             │
+│                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## MVP: Autonomous Strategy Design Loop
+## v1.5: Validated Learning (COMPLETE)
 
-**Goal**: Prove a single AI agent can autonomously design, train, backtest, and assess neuro-fuzzy strategies.
+**Goal**: Prove the neuro-fuzzy architecture can actually learn.
 
-**Key Capabilities**:
-- Deterministic trigger layer (zero-cost polling)
-- Quality gates (skip bad strategies early)
-- Full observability and cost tracking
-- Budget enforcement ($5/day)
+**What We Proved**:
 
-**Success Criteria**:
-- Cycle completion rate > 80%
-- Valid strategy generation 100%
-- Unattended operation for extended periods
-- Daily cost < $5
+- NN achieves 60-65% test accuracy (10-14pp above random)
+- RSI + DI combination works best (64.8% test accuracy)
+- Learnings compound: RSI + DI > RSI alone
+- Validation can lie: test accuracy is truth
+- Zigzag 1.5% generalizes best on 1h data
 
-**Duration**: ~10-14 days
+**What We Learned**:
 
-**Details**: See `mvp/roadmap.md` and `mvp/PLAN_phase*.md`
+- Some indicators have signal (RSI, DI), some don't (ADX solo)
+- Composition helps but plateaus (two indicators, not three)
+- Overfitting is detectable via val-test gap
+
+**Hypotheses Generated**:
+
+- H1: Multi-timeframe might break the 64.8% plateau
+- H2: LSTM might capture temporal patterns
+- H3: Cross-symbol training might improve generalization
+
+**Status**: COMPLETE. See `v1.5/RESULTS.md` and `v1.5/LEARNINGS_FOR_V2.md`
 
 ---
 
-## v2: Learning & Memory
+## v2.0: Memory Foundation (CURRENT)
 
-**Goal**: Agent gets measurably better over time.
+**Goal**: Agent remembers experiments and uses memory to design better strategies.
 
-**Key Capabilities**:
-- Simple memory: "Don't repeat strategies that failed"
-- Query past results before designing new strategies
+**The Problem**:
+
+The agent currently has zero memory. It:
+
+- Repeats the same strategies
+- Doesn't know what worked or why
+- Can't form or pursue hypotheses
+- Explores randomly instead of systematically
+
+**The Solution**:
+
+Memory injected as context. The agent sees:
+
+- Experiment records: what was tried, what happened
+- Hypotheses: ideas to test, with status
+- Learnings: synthesized patterns (initially curated)
+- Requests: capabilities the agent wishes it had
+
+**Key Components**:
+
+1. **Experiment records** — Stored after each cycle
+2. **Hypothesis tracking** — Agent generates, system tracks status
+3. **Research summary** — Curated learnings injected into prompt
+4. **Capability requests** — Agent can express what it needs
+
+**Success Criteria**:
+
+- Agent doesn't repeat identical experiments
+- Agent references past results when designing
+- Agent generates testable hypotheses
+- Strategy quality improves over time (not random variation)
+
+**What This Enables**:
+
+- Agent can notice ceilings ("I've hit 64.8% three times")
+- Agent can form hypotheses ("maybe I need multi-TF")
+- Agent can request capabilities ("I need 5m data")
+- System can evolve based on agent insights
+
+**Details**: See `v2.0/DESIGN.md`
+
+---
+
+## v2.x: Incremental Improvements
+
+These enhancements build on v2.0 as we learn what works:
+
+### v2.1: Richer Experiment Records
+
+- Store more context with each experiment
+- Better matching for "similar past experiments"
+- Agent sees relevant history, not just recent
+
+### v2.2: Capability Request System
+
+- Agent can formally request new indicators, data, architectures
+- Human reviews and prioritizes requests
+- Agent learns what capabilities exist
+
+### v2.3: Automated Hypothesis Updates
+
+- System automatically marks hypotheses tested/validated
+- Agent sees which hypotheses are worth pursuing
+- Reduces manual curation burden
+
+---
+
+## v3: Automated Synthesis
+
+**Goal**: Learning compounds without manual curation.
+
+**The Problem**:
+
+In v2, humans curate the research summary. This doesn't scale.
+
+**The Solution**:
+
+Periodic synthesis job that:
+
+- Analyzes experiment history for patterns
+- Generates/updates learnings automatically
+- Detects contradictions for investigation
+- Prioritizes hypotheses by expected value
+
+**Key Components**:
+
 - Pattern detection across experiments
-- Retry logic: Modify and retry failed strategies
-
-**New Components**:
-- Strategy history table with outcome tracking
-- Pattern detection queries
-- Agent context includes learned patterns
+- Automatic learning extraction
+- Contradiction detection
+- Hypothesis prioritization
 
 **Success Criteria**:
-- Average Sharpe ratio improves week-over-week
-- Fewer repeated failure patterns
-- Agent explains why it chose specific approaches
 
-**Prerequisites**: MVP complete and stable
+- Research summary updates automatically
+- Novel insights emerge without human synthesis
+- Agent discovers patterns humans might miss
+
+**Prerequisites**: v2 complete and proven valuable
 
 ---
 
-## v3: Knowledge Base
-
-**Goal**: Accumulated knowledge informs research direction.
-
-**Key Capabilities**:
-- **Facts**: Observations from experiments
-  - "RSI-14 strategies achieved avg Sharpe 0.72 on EURUSD"
-- **Patterns**: Synthesized insights across experiments
-  - "Momentum indicators outperform in trending markets"
-- **Hypotheses**: Testable ideas generated from patterns
-  - "Adaptive RSI period based on volatility may improve further"
-- **Contradictions**: Conflicting observations requiring investigation
-  - "Strategy A worked on EURUSD but failed on GBPUSD"
-
-**New Components**:
-- `knowledge_facts` table
-- `knowledge_patterns` table
-- `knowledge_hypotheses` table
-- `knowledge_contradictions` table
-- Knowledge query MCP tools
-
-**Success Criteria**:
-- Novel strategies emerge from knowledge synthesis
-- Contradictions trigger focused investigation
-- Knowledge base grows meaningfully over time
-
-**Prerequisites**: v2 complete (learning foundation)
-
----
-
-## v4: Multi-Agent Research Laboratory
+## v4: Multi-Agent Research
 
 **Goal**: Specialized agents collaborate on research.
 
-**Agent Roles**:
+**The Problem**:
+
+A single agent can only pursue one line of inquiry at a time.
+
+**The Solution**:
+
+Specialized roles:
 
 | Agent | Responsibility |
 |-------|---------------|
 | **Researcher** | Creative strategy generation, hypothesis formulation |
-| **Assistant** | Execution, monitoring, detailed analysis |
-| **Coordinator** | Workflow orchestration, quality gates, agent invocation |
-| **Director** | Resource allocation, budget management, stream prioritization |
-| **Board** | Strategic direction, human interface, discovery surfacing |
+| **Analyst** | Deep result analysis, pattern recognition |
+| **Director** | Resource allocation, research stream prioritization |
+| **Board** | Human interface, strategic direction |
 
 **Key Capabilities**:
-- Parallel experiments across multiple Assistants
-- Research streams with different focus areas
+
+- Parallel research streams
+- Different agents for different hypothesis areas
 - Strategic resource allocation
-- Natural language interaction via Board Agent
+- Natural language interaction
 
-**New Components**:
-- Multi-agent coordination layer
-- Research stream management
-- Agent communication protocol
-- Board interface (Claude Desktop MCP)
-
-**Success Criteria**:
-- Parallel experiments run efficiently
-- Faster discovery through specialization
-- Human can interact naturally with system
-
-**Prerequisites**: v3 complete (knowledge foundation)
+**Prerequisites**: v3 complete (shared knowledge foundation)
 
 ---
 
-## Future Considerations (v5+)
+## v5+: Future Possibilities
 
-**Potential Enhancements**:
-- **Message Queue**: Replace polling with Redis Streams for high-volume operation
-- **Vector Database**: Semantic search over knowledge base (pgvector or dedicated)
-- **Workflow Engine**: Temporal/Airflow for complex orchestration
-- **Multi-Region**: Distributed agents for resilience
-- **Paper Trading**: Connect to live market data for validation
-- **Strategy Evolution**: Agents that modify their own approaches
+**Meta-Learning**: Agent learns what kinds of experiments are fruitful
+- "Adding dimensions helps more than tuning parameters"
+- "Cross-validation catches overfitting earlier"
 
-These are not planned but architecture doesn't preclude them.
+**Architecture Evolution**: Agent proposes new architectures
+- "What if different NN regions for different regimes?"
+- "Attention mechanism might capture indicator interactions"
+
+**Cross-System Learning**: Transfer learning across symbols/timeframes
+- "EURUSD patterns apply to GBPUSD with modifications"
+- "1h learnings inform 5m strategy design"
+
+These emerge from the foundation—we don't pre-build them.
 
 ---
 
@@ -169,30 +229,42 @@ These are not planned but architecture doesn't preclude them.
 
 **Compute**: Leverage existing KTRDR workers for training/backtesting
 
-**Data**: Focus on forex pairs with comprehensive historical data (2005-2025)
+**Data**: Focus on forex pairs with comprehensive historical data
 
 **Architecture**: Stay within neuro-fuzzy paradigm (interpretable strategies)
 
----
-
-## Success Metrics by Phase
-
-| Metric | MVP | v2 | v3 | v4 |
-|--------|-----|----|----|-----|
-| Strategies tested/week | 50+ | 100+ | 150+ | 300+ |
-| Cycle completion rate | >80% | >85% | >90% | >90% |
-| Avg Sharpe of passing | >0 | >0.3 | >0.5 | >0.7 |
-| Unique insights discovered | - | - | 10+/week | 20+/week |
-| Human intervention required | Daily check | Weekly check | Exception only | Exception only |
+**Development Philosophy**: Memory-first. Don't add agent complexity until memory proves value.
 
 ---
 
-## Ultimate Goal
+## Success Metrics by Version
 
-> "A research partner that works while you don't, accumulates knowledge, discovers strategies, and engages in meaningful discussion about what it's learned."
-
-Not automation. **Augmentation**.
+| Metric | v1.5 | v2 | v3 | v4 |
+|--------|------|----|----|-----|
+| Strategies tested/week | 27 (manual) | 50+ | 100+ | 200+ |
+| Duplicate experiments | N/A | 0 | 0 | 0 |
+| Agent cites past results | N/A | >80% | >90% | >90% |
+| Hypotheses generated | Manual | 5+/week | 10+/week | 20+/week |
+| Human curation required | Full | Weekly | Monthly | Minimal |
+| Ceiling-breaking events | N/A | 1+ | 3+ | 5+ |
 
 ---
 
-*Document Version: 1.0*
+## The North Star
+
+> "A research partner that works while you don't, accumulates knowledge, discovers capabilities it needs, and engages in meaningful discussion about what it's learned."
+
+The path there:
+
+1. **v1.5** ✓ Proved: The architecture can learn
+2. **v2** ← Current: Memory enables directed research
+3. **v3** Next: Learning compounds automatically
+4. **v4** Future: Parallel research at scale
+
+Not automation. **Augmentation.**
+
+---
+
+*Document Version: 2.0*
+*Last Updated: December 2024*
+*Key Change: Consolidated v2/v3, added learning ladder, refined version progression*

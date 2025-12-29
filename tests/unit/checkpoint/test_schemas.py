@@ -129,3 +129,165 @@ class TestTrainingArtifacts:
         """Should have exactly 4 artifact types."""
         expected = {"model.pt", "optimizer.pt", "scheduler.pt", "best_model.pt"}
         assert set(TRAINING_ARTIFACTS.keys()) == expected
+
+
+class TestBacktestCheckpointState:
+    """Tests for BacktestCheckpointState dataclass."""
+
+    def test_required_fields(self):
+        """Should require operation_type, bar_index, current_date, cash."""
+        from ktrdr.checkpoint.schemas import BacktestCheckpointState
+
+        state = BacktestCheckpointState(
+            bar_index=1000,
+            current_date="2023-06-15T14:30:00",
+            cash=95000.0,
+        )
+        assert state.operation_type == "backtesting"
+        assert state.bar_index == 1000
+        assert state.current_date == "2023-06-15T14:30:00"
+        assert state.cash == 95000.0
+
+    def test_optional_fields_have_defaults(self):
+        """Optional fields should have sensible defaults."""
+        from ktrdr.checkpoint.schemas import BacktestCheckpointState
+
+        state = BacktestCheckpointState(
+            bar_index=1000,
+            current_date="2023-06-15T14:30:00",
+            cash=95000.0,
+        )
+        assert state.positions == []
+        assert state.trades == []
+        assert state.equity_samples == []
+        assert state.original_request == {}
+
+    def test_all_fields(self):
+        """Should accept all fields."""
+        from ktrdr.checkpoint.schemas import BacktestCheckpointState
+
+        positions = [
+            {
+                "symbol": "EURUSD",
+                "quantity": 100,
+                "entry_price": 1.0850,
+                "entry_date": "2023-06-10T10:00:00",
+            }
+        ]
+        trades = [
+            {
+                "trade_id": 1,
+                "symbol": "EURUSD",
+                "side": "BUY",
+                "quantity": 100,
+                "price": 1.0800,
+                "date": "2023-06-05T09:00:00",
+                "pnl": 150.0,
+            }
+        ]
+        equity_samples = [
+            {"bar_index": 0, "equity": 100000.0},
+            {"bar_index": 500, "equity": 102000.0},
+            {"bar_index": 1000, "equity": 105000.0},
+        ]
+        original_request = {
+            "symbol": "EURUSD",
+            "timeframe": "1h",
+            "start_date": "2023-01-01",
+            "end_date": "2023-12-31",
+        }
+
+        state = BacktestCheckpointState(
+            bar_index=1000,
+            current_date="2023-06-15T14:30:00",
+            cash=95000.0,
+            positions=positions,
+            trades=trades,
+            equity_samples=equity_samples,
+            original_request=original_request,
+        )
+
+        assert state.operation_type == "backtesting"
+        assert state.bar_index == 1000
+        assert state.current_date == "2023-06-15T14:30:00"
+        assert state.cash == 95000.0
+        assert state.positions == positions
+        assert state.trades == trades
+        assert state.equity_samples == equity_samples
+        assert state.original_request == original_request
+
+    def test_to_dict(self):
+        """Should be convertible to dict for JSON serialization."""
+        from ktrdr.checkpoint.schemas import BacktestCheckpointState
+
+        state = BacktestCheckpointState(
+            bar_index=1000,
+            current_date="2023-06-15T14:30:00",
+            cash=95000.0,
+        )
+
+        d = state.to_dict()
+
+        assert isinstance(d, dict)
+        assert d["operation_type"] == "backtesting"
+        assert d["bar_index"] == 1000
+        assert d["current_date"] == "2023-06-15T14:30:00"
+        assert d["cash"] == 95000.0
+        assert d["positions"] == []
+        assert d["trades"] == []
+        assert d["equity_samples"] == []
+
+    def test_from_dict(self):
+        """Should be creatable from dict (for deserialization)."""
+        from ktrdr.checkpoint.schemas import BacktestCheckpointState
+
+        data = {
+            "operation_type": "backtesting",
+            "bar_index": 1000,
+            "current_date": "2023-06-15T14:30:00",
+            "cash": 95000.0,
+            "positions": [{"symbol": "EURUSD", "quantity": 100}],
+            "trades": [{"trade_id": 1, "pnl": 150.0}],
+            "equity_samples": [{"bar_index": 0, "equity": 100000.0}],
+            "original_request": {"symbol": "EURUSD"},
+        }
+
+        state = BacktestCheckpointState.from_dict(data)
+
+        assert state.operation_type == "backtesting"
+        assert state.bar_index == 1000
+        assert state.cash == 95000.0
+        assert len(state.positions) == 1
+        assert len(state.trades) == 1
+        assert len(state.equity_samples) == 1
+
+    def test_from_dict_with_missing_optional_fields(self):
+        """from_dict should handle missing optional fields gracefully."""
+        from ktrdr.checkpoint.schemas import BacktestCheckpointState
+
+        data = {
+            "bar_index": 1000,
+            "current_date": "2023-06-15T14:30:00",
+            "cash": 95000.0,
+        }
+
+        state = BacktestCheckpointState.from_dict(data)
+
+        assert state.operation_type == "backtesting"
+        assert state.bar_index == 1000
+        assert state.positions == []
+        assert state.trades == []
+
+    def test_operation_type_is_always_backtesting(self):
+        """operation_type should always be 'backtesting' (hardcoded default)."""
+        from ktrdr.checkpoint.schemas import BacktestCheckpointState
+
+        state = BacktestCheckpointState(
+            bar_index=0,
+            current_date="2023-01-01T00:00:00",
+            cash=100000.0,
+        )
+        assert state.operation_type == "backtesting"
+
+        # Even if you try to override it, default should be backtesting
+        # (This tests the dataclass field default)

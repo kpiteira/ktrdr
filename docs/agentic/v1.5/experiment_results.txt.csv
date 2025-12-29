@@ -1,0 +1,28 @@
+strategy|status|duration|operation_id|notes
+v15_rsi_only|completed|1m 1s|op_training_20251227_161804_b7f85410|
+v15_stochastic_only|completed|0m 30s|op_training_20251227_161910_558eb102|
+v15_williams_only|completed|0m 30s|op_training_20251227_161945_8e8f5994|
+v15_mfi_only|completed|1m 0s|op_training_20251227_162020_f28b7690|
+v15_adx_only|completed|0m 30s|op_training_20251227_162125_23245c47|
+v15_aroon_only|failed|0m 30s|op_training_20251227_162200_8d9877b7|Unknown error
+v15_cmf_only|failed|0m 30s|op_training_20251227_162235_3878a8a8|Unknown error
+v15_rvi_only|completed|1m 0s|op_training_20251227_162311_ca957977|
+v15_di_only|completed|0m 30s|op_training_20251227_162416_1558c7d3|
+v15_rsi_adx|completed|0m 30s|op_training_20251227_162451_f5b3819a|
+v15_rsi_stochastic|completed|1m 0s|op_training_20251227_162526_18ac343b|
+v15_rsi_williams|completed|0m 30s|op_training_20251227_162631_9d99aafb|
+v15_rsi_mfi|completed|0m 30s|op_training_20251227_162707_ecd49a49|
+v15_rsi_cmf|completed|0m 30s|op_training_20251227_162742_17274447|
+v15_adx_aroon|completed|0m 30s|op_training_20251227_162817_12d6a8c1|
+v15_adx_di|completed|0m 30s|op_training_20251227_162852_f86af106|
+v15_adx_rsi|completed|1m 0s|op_training_20251227_162927_dd12a925|
+v15_stochastic_williams|completed|0m 31s|op_training_20251227_163032_4b127af9|
+v15_mfi_cmf|completed|0m 30s|op_training_20251227_163108_69c08fb4|
+v15_aroon_rvi|completed|1m 0s|op_training_20251227_163143_8e11df2f|
+v15_rsi_adx_stochastic|completed|1m 30s|op_training_20251227_163248_e6886a95|
+v15_mfi_adx_aroon|completed|1m 0s|op_training_20251227_163423_38efdd23|
+v15_williams_stochastic_cmf|completed|1m 31s|op_training_20251227_163528_3aa672b0|
+v15_rsi_zigzag_1_5|completed|1m 0s|op_training_20251227_163704_8b419d01|
+v15_rsi_zigzag_2_0|completed|1m 0s|op_training_20251227_163809_0a319e27|
+v15_rsi_zigzag_3_0|completed|1m 0s|op_training_20251227_163914_3b299238|
+v15_rsi_zigzag_3_5|completed|1m 0s|op_training_20251227_164019_69fe2b1d|
