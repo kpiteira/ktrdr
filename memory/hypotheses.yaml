@@ -1,0 +1,55 @@
+hypotheses:
+- id: H_001
+  text: Multi-timeframe (5m with 1h context) might break the 64.8% plateau
+  source_experiment: exp_v15_rsi_zigzag_1_5
+  rationale: Single timeframe seems to be a ceiling. Best result is 64.2% on 1h. Adding
+    context from a lower timeframe (5m) aligned with 1h bars might capture intra-bar
+    momentum that the 1h data misses.
+  status: untested
+  tested_by: []
+  created: '2025-12-27T00:00:00Z'
+- id: H_002
+  text: ADX might work as a trend filter when combined with RSI
+  source_experiment: exp_v15_adx_only
+  rationale: ADX solo showed no signal (50% test accuracy), but it measures trend
+    strength. RSI works well for reversals. ADX > 25 might filter RSI signals to only
+    take trades in trending markets.
+  status: untested
+  tested_by: []
+  created: '2025-12-27T00:00:00Z'
+- id: H_003
+  text: LSTM/attention architecture might capture RSI trajectories better than MLP
+  source_experiment: exp_v15_rsi_zigzag_1_5
+  rationale: Current MLP sees RSI values but not the trajectory (rising vs falling).
+    LSTM or attention could capture temporal patterns like 'RSI rising from oversold'
+    vs 'RSI falling into oversold', which may have different predictive value.
+  status: untested
+  tested_by: []
+  created: '2025-12-27T00:00:00Z'
+- id: H_004
+  text: Training on multiple symbols might improve generalization
+  source_experiment: exp_v15_rsi_zigzag_1_5
+  rationale: All v1.5 experiments were on EURUSD only. Training on a portfolio of
+    forex pairs (EURUSD, GBPUSD, USDJPY) might help the model learn more generalizable
+    patterns rather than EURUSD-specific quirks.
+  status: untested
+  tested_by: []
+  created: '2025-12-27T00:00:00Z'
+- id: H_005
+  text: Zigzag threshold should scale with timeframe
+  source_experiment: exp_v15_rsi_zigzag_3_5
+  rationale: Zigzag 3.5% on 1h caused severe overfitting (15.8pp gap), but 1.5% worked
+    well. On 1d data with larger moves, a higher threshold might be appropriate. The
+    optimal threshold may be proportional to typical bar range at each timeframe.
+  status: untested
+  tested_by: []
+  created: '2025-12-27T00:00:00Z'
+- id: H_006
+  text: Stochastic + Williams %R combination might match RSI performance
+  source_experiment: exp_v15_stochastic_only
+  rationale: 'Stochastic solo achieved 59.7% (weak signal). Williams %R solo: 59.1%.
+    Both measure momentum differently. Combining them might capture momentum confirmation
+    patterns that approach RSI''s 61-64% range.'
+  status: untested
+  tested_by: []
+  created: '2025-12-27T00:00:00Z'

@@ -5,12 +5,12 @@ This script seeds the memory system with v1.5 experiment data:
 1. Parses strategy YAML files for experiment context
 2. Parses RESULTS.md for test accuracy metrics
 3. Creates experiment records in memory/experiments/
-4. (Task 1.4 will add initial hypotheses)
+4. Creates initial hypotheses from v1.5 learnings
 
 Usage:
     uv run python scripts/bootstrap_v15_memory.py
 
-The script is idempotent - re-running clears and recreates v1.5 experiment records.
+The script is idempotent - re-running clears and recreates v1.5 data.
 """
 
 import re
@@ -20,8 +20,11 @@ import yaml
 
 from ktrdr.agents.memory import (
     EXPERIMENTS_DIR,
+    HYPOTHESES_FILE,
     ExperimentRecord,
+    Hypothesis,
     save_experiment,
+    save_hypothesis,
 )
 
 
@@ -212,6 +215,100 @@ def clear_v15_experiments():
             print(f"Removed: {f.name}")
 
 
+# Initial hypotheses derived from v1.5 learnings
+# These are the starting points for v2.0 research
+INITIAL_HYPOTHESES = [
+    Hypothesis(
+        id="H_001",
+        text="Multi-timeframe (5m with 1h context) might break the 64.8% plateau",
+        source_experiment="exp_v15_rsi_zigzag_1_5",
+        rationale=(
+            "Single timeframe seems to be a ceiling. Best result is 64.2% on 1h. "
+            "Adding context from a lower timeframe (5m) aligned with 1h bars might "
+            "capture intra-bar momentum that the 1h data misses."
+        ),
+        status="untested",
+        created="2025-12-27T00:00:00Z",
+    ),
+    Hypothesis(
+        id="H_002",
+        text="ADX might work as a trend filter when combined with RSI",
+        source_experiment="exp_v15_adx_only",
+        rationale=(
+            "ADX solo showed no signal (50% test accuracy), but it measures trend "
+            "strength. RSI works well for reversals. ADX > 25 might filter RSI "
+            "signals to only take trades in trending markets."
+        ),
+        status="untested",
+        created="2025-12-27T00:00:00Z",
+    ),
+    Hypothesis(
+        id="H_003",
+        text="LSTM/attention architecture might capture RSI trajectories better than MLP",
+        source_experiment="exp_v15_rsi_zigzag_1_5",
+        rationale=(
+            "Current MLP sees RSI values but not the trajectory (rising vs falling). "
+            "LSTM or attention could capture temporal patterns like 'RSI rising from "
+            "oversold' vs 'RSI falling into oversold', which may have different "
+            "predictive value."
+        ),
+        status="untested",
+        created="2025-12-27T00:00:00Z",
+    ),
+    Hypothesis(
+        id="H_004",
+        text="Training on multiple symbols might improve generalization",
+        source_experiment="exp_v15_rsi_zigzag_1_5",
+        rationale=(
+            "All v1.5 experiments were on EURUSD only. Training on a portfolio of "
+            "forex pairs (EURUSD, GBPUSD, USDJPY) might help the model learn more "
+            "generalizable patterns rather than EURUSD-specific quirks."
+        ),
+        status="untested",
+        created="2025-12-27T00:00:00Z",
+    ),
+    Hypothesis(
+        id="H_005",
+        text="Zigzag threshold should scale with timeframe",
+        source_experiment="exp_v15_rsi_zigzag_3_5",
+        rationale=(
+            "Zigzag 3.5% on 1h caused severe overfitting (15.8pp gap), but 1.5% "
+            "worked well. On 1d data with larger moves, a higher threshold might "
+            "be appropriate. The optimal threshold may be proportional to typical "
+            "bar range at each timeframe."
+        ),
+        status="untested",
+        created="2025-12-27T00:00:00Z",
+    ),
+    Hypothesis(
+        id="H_006",
+        text="Stochastic + Williams %R combination might match RSI performance",
+        source_experiment="exp_v15_stochastic_only",
+        rationale=(
+            "Stochastic solo achieved 59.7% (weak signal). Williams %R solo: 59.1%. "
+            "Both measure momentum differently. Combining them might capture "
+            "momentum confirmation patterns that approach RSI's 61-64% range."
+        ),
+        status="untested",
+        created="2025-12-27T00:00:00Z",
+    ),
+]
+
+
+def clear_hypotheses():
+    """Remove existing hypotheses file."""
+    if HYPOTHESES_FILE.exists():
+        HYPOTHESES_FILE.unlink()
+        print(f"Removed: {HYPOTHESES_FILE.name}")
+
+
+def create_initial_hypotheses():
+    """Create initial hypotheses from v1.5 learnings."""
+    for hypothesis in INITIAL_HYPOTHESES:
+        save_hypothesis(hypothesis)
+        print(f"   Created: {hypothesis.id} - {hypothesis.text[:50]}...")
+
+
 def main():
     """Bootstrap memory from v1.5 experiment results."""
     print("=" * 60)
@@ -219,8 +316,9 @@ def main():
     print("=" * 60)
 
     # Clear existing v1.5 data for idempotency
-    print("\n1. Clearing existing v1.5 experiments...")
+    print("\n1. Clearing existing v1.5 data...")
     clear_v15_experiments()
+    clear_hypotheses()
 
     # Parse results
     print("\n2. Parsing v1.5 results...")
@@ -283,10 +381,15 @@ def main():
         print(f"   Created: {record.id} (test: {test_acc:.1%}, verdict: {verdict})")
         created_count += 1
 
+    # Create initial hypotheses
+    print("\n4. Creating initial hypotheses...")
+    create_initial_hypotheses()
+
     # Summary
     print("\n" + "=" * 60)
-    print(f"Bootstrap complete: {created_count} experiment records created")
-    print(f"Location: {EXPERIMENTS_DIR}/")
+    print("Bootstrap complete:")
+    print(f"  - {created_count} experiment records in {EXPERIMENTS_DIR}/")
+    print(f"  - {len(INITIAL_HYPOTHESES)} hypotheses in {HYPOTHESES_FILE}")
     print("=" * 60)
 
 
