@@ -42,10 +42,10 @@ def _create_operation(
             symbol="EURUSD",
             timeframe="1h",
             parameters={
-                "is_backend_local": is_backend_local,
                 "worker_id": worker_id,
             },
         ),
+        is_backend_local=is_backend_local,
     )
 
 

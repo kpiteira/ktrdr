@@ -124,6 +124,7 @@ class OperationsService:
         metadata: OperationMetadata,
         operation_id: Optional[str] = None,
         parent_operation_id: Optional[str] = None,
+        is_backend_local: bool = False,
     ) -> OperationInfo:
         """
         Create a new operation in the registry.
@@ -133,6 +134,8 @@ class OperationsService:
             metadata: Operation metadata
             operation_id: Optional custom operation ID
             parent_operation_id: Optional parent operation ID for child operations
+            is_backend_local: True if operation runs in backend process (e.g., agent
+                sessions), False if runs via distributed worker (default)
 
         Returns:
             Created operation info
@@ -183,6 +186,7 @@ class OperationsService:
                 # Add operation-specific attributes
                 span.set_attribute("operation.type", operation_type.value)
                 span.set_attribute("operation.status", OperationStatus.PENDING.value)
+                span.set_attribute("operation.is_backend_local", is_backend_local)
                 if parent_operation_id:
                     span.set_attribute("operation.parent_id", parent_operation_id)
 
@@ -199,6 +203,7 @@ class OperationsService:
                     error_message=None,
                     result_summary=None,
                     metrics=None,  # NEW: M1 - initialize as None
+                    is_backend_local=is_backend_local,
                 )
 
                 # Persist to repository first (if available)

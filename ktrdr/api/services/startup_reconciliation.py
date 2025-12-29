@@ -129,9 +129,5 @@ class StartupReconciliation:
         Returns:
             True if the operation runs in the backend process (not on a worker).
         """
-        # Check metadata.parameters for is_backend_local flag
-        if operation.metadata and operation.metadata.parameters:
-            return operation.metadata.parameters.get("is_backend_local", False)
-
-        # Default: assume worker-based (most operations are)
-        return False
+        # Use the proper is_backend_local field from OperationInfo
+        return operation.is_backend_local

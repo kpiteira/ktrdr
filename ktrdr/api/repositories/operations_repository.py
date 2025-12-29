@@ -296,6 +296,7 @@ class OperationsRepository:
             error_message=cast(Optional[str], record.error_message),
             result_summary=cast(Optional[dict[str, Any]], record.result),
             metrics=None,  # Not stored in DB (yet)
+            is_backend_local=cast(bool, record.is_backend_local) or False,
         )
 
     @staticmethod
@@ -336,6 +337,7 @@ class OperationsRepository:
             metadata_=metadata_dict,
             result=info.result_summary,
             error_message=info.error_message,
+            is_backend_local=info.is_backend_local,
         )
 
 

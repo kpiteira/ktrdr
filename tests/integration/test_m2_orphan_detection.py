@@ -236,8 +236,8 @@ class TestM2OrphanDetectionIntegration:
             metadata=OperationMetadata(
                 symbol="EURUSD",
                 timeframe="1h",
-                parameters={"is_backend_local": True},
             ),
+            is_backend_local=True,
         )
         await mock_repository.update(
             operation.operation_id,
