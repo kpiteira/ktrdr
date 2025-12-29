@@ -74,16 +74,15 @@ class TestSigtermHandler:
         """Test that receiving SIGTERM sets the shutdown event."""
         worker = MockWorker()
 
-        # Get the handler that would be registered
-        with patch("signal.signal") as mock_signal:
-            worker._setup_signal_handlers()
-            handler = mock_signal.call_args[0][1]
-
-        # Mock the event loop for call_soon_threadsafe
+        # Mock the event loop - captured during _setup_signal_handlers
         mock_loop = MagicMock()
-        with patch("asyncio.get_event_loop", return_value=mock_loop):
-            # Call the handler (simulating SIGTERM)
-            handler(signal.SIGTERM, None)
+        with patch("asyncio.get_running_loop", return_value=mock_loop):
+            with patch("signal.signal") as mock_signal:
+                worker._setup_signal_handlers()
+                handler = mock_signal.call_args[0][1]
+
+        # Call the handler (simulating SIGTERM) - loop was captured during setup
+        handler(signal.SIGTERM, None)
 
         # Verify call_soon_threadsafe was called to set the event
         mock_loop.call_soon_threadsafe.assert_called_once()
@@ -97,15 +96,15 @@ class TestSigtermHandler:
         """Test that SIGTERM handler logs when signal received."""
         worker = MockWorker()
 
-        # Get the handler
-        with patch("signal.signal") as mock_signal:
-            worker._setup_signal_handlers()
-            handler = mock_signal.call_args[0][1]
-
-        # Mock the event loop
+        # Mock the event loop - captured during _setup_signal_handlers
         mock_loop = MagicMock()
-        with patch("asyncio.get_event_loop", return_value=mock_loop):
-            handler(signal.SIGTERM, None)
+        with patch("asyncio.get_running_loop", return_value=mock_loop):
+            with patch("signal.signal") as mock_signal:
+                worker._setup_signal_handlers()
+                handler = mock_signal.call_args[0][1]
+
+        # Call the handler
+        handler(signal.SIGTERM, None)
 
         # Verify logging
         mock_logger.info.assert_called()

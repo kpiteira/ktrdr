@@ -511,11 +511,22 @@ class WorkerAPIBase:
         Registers SIGTERM handler that sets the shutdown event, allowing
         running operations to save checkpoints before the worker exits.
         """
+        # Capture the running event loop at setup time (called from async on_startup)
+        # This avoids issues with asyncio.get_event_loop() in signal handler context
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
 
         def handle_sigterm(signum, frame):
             logger.info("SIGTERM received - initiating graceful shutdown")
             # Set event from signal handler context using thread-safe method
-            asyncio.get_event_loop().call_soon_threadsafe(self._shutdown_event.set)
+            if loop is not None:
+                loop.call_soon_threadsafe(self._shutdown_event.set)
+            else:
+                # Fallback if no loop was captured: set event directly
+                # (may not work correctly but better than silently failing)
+                self._shutdown_event.set()
 
         signal.signal(signal.SIGTERM, handle_sigterm)
         logger.info("SIGTERM handler registered")
@@ -602,20 +613,35 @@ class WorkerAPIBase:
     ) -> Any:
         """Run operation with graceful shutdown support (M6 Task 6.2).
 
-        Races the operation against the shutdown event. If shutdown is
-        detected, the operation is cancelled, a checkpoint is saved,
-        and GracefulShutdownError is raised.
+        Protected helper for subclasses to wrap long-running operations with
+        graceful shutdown support. This is NOT exposed as an HTTP endpoint;
+        subclasses should call this from their operation execution methods.
+
+        Races the operation against the shutdown event. If SIGTERM is received
+        while the operation is running, this method:
+        1. Cancels the operation coroutine
+        2. Calls _save_checkpoint() hook (subclasses should override)
+        3. Calls _update_operation_status() to mark as CANCELLED
+        4. Raises GracefulShutdownError
 
         Args:
             operation_id: The operation ID being executed.
             operation_coro: The operation coroutine to run.
 
         Returns:
-            The result of the operation coroutine.
+            The result of the operation coroutine (if completed normally).
 
         Raises:
             GracefulShutdownError: If shutdown was detected during operation.
             Exception: Any exception raised by the operation.
+
+        Example:
+            class MyWorker(WorkerAPIBase):
+                async def execute_work(self, op_id, params):
+                    await self.run_with_graceful_shutdown(
+                        op_id,
+                        self._do_actual_work(params),
+                    )
         """
         self._current_operation_id = operation_id
 
@@ -637,6 +663,8 @@ class WorkerAPIBase:
                 try:
                     await operation_task
                 except asyncio.CancelledError:
+                    # Expected: operation_task was cancelled by us above.
+                    # The await ensures task cleanup completes before we proceed.
                     pass
 
                 # Save shutdown checkpoint
@@ -656,6 +684,8 @@ class WorkerAPIBase:
             try:
                 await shutdown_task
             except asyncio.CancelledError:
+                # Expected: shutdown_task was cancelled because operation completed first.
+                # No further action needed.
                 pass
 
             return operation_task.result()

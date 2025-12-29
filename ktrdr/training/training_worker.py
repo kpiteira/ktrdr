@@ -106,6 +106,10 @@ class TrainingWorker(WorkerAPIBase):
         self.checkpoint_time_interval = checkpoint_settings.time_interval_seconds
         self._checkpoint_dir = checkpoint_settings.dir
 
+        # M6: Initialize last checkpoint state for graceful shutdown
+        # This is populated by epoch callbacks and used by _save_checkpoint on SIGTERM
+        self._last_checkpoint_state: dict | None = None
+
         # Register domain-specific endpoint
         @self.app.post("/training/start")
         async def start_training(request: TrainingStartRequest):
@@ -234,15 +238,14 @@ class TrainingWorker(WorkerAPIBase):
         Called by WorkerAPIBase.run_with_graceful_shutdown when SIGTERM received.
         Uses the last checkpoint state captured during training.
         """
-        if (
-            not hasattr(self, "_last_checkpoint_state")
-            or not self._last_checkpoint_state
-        ):
+        # _last_checkpoint_state is initialized to None in __init__ and populated
+        # by epoch callbacks during training
+        if not self._last_checkpoint_state:
             logger.warning(f"No checkpoint state available to save for {operation_id}")
             return
 
         state = self._last_checkpoint_state
-        if "trainer" not in state:
+        if state.get("trainer") is None:
             logger.warning(
                 f"Incomplete checkpoint state for {operation_id}, skipping save"
             )

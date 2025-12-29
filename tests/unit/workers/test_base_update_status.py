@@ -6,6 +6,7 @@ graceful shutdown (which is tested in test_base_graceful_shutdown.py).
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from ktrdr.api.models.operations import OperationType
@@ -141,8 +142,6 @@ class TestUpdateOperationStatusHTTP:
         """Test that connection errors don't block shutdown."""
         worker = _WorkerForStatusTesting()
 
-        import httpx
-
         with patch("httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.patch = AsyncMock(
@@ -160,8 +159,6 @@ class TestUpdateOperationStatusHTTP:
         """Test that timeout errors don't block shutdown."""
         worker = _WorkerForStatusTesting()
 
-        import httpx
-
         with patch("httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.patch = AsyncMock(side_effect=httpx.TimeoutException("Timeout"))
@@ -169,7 +166,7 @@ class TestUpdateOperationStatusHTTP:
             mock_client.__aexit__ = AsyncMock(return_value=None)
             mock_client_class.return_value = mock_client
 
-            # Should complete without raising (failure doesn't block shutdown)
+            # Should complete without raising: timeout errors are handled so shutdown can continue
             await worker._update_operation_status("op_123", "CANCELLED")
 
     @pytest.mark.asyncio
