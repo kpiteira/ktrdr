@@ -106,6 +106,10 @@ class TrainingWorker(WorkerAPIBase):
         self.checkpoint_time_interval = checkpoint_settings.time_interval_seconds
         self._checkpoint_dir = checkpoint_settings.dir
 
+        # M6: Initialize last checkpoint state for graceful shutdown
+        # This is populated by epoch callbacks and used by _save_checkpoint on SIGTERM
+        self._last_checkpoint_state: dict | None = None
+
         # Register domain-specific endpoint
         @self.app.post("/training/start")
         async def start_training(request: TrainingStartRequest):
@@ -120,8 +124,10 @@ class TrainingWorker(WorkerAPIBase):
             # Use backend's task_id if provided, generate if not
             operation_id = request.task_id or f"worker_training_{uuid.uuid4().hex[:12]}"
 
-            # Start work in background (non-blocking!) - training-host pattern
-            asyncio.create_task(self._execute_training_work(operation_id, request))
+            # Start work in background with graceful shutdown support (M6)
+            asyncio.create_task(
+                self._run_training_with_graceful_shutdown(operation_id, request)
+            )
 
             return {
                 "success": True,
@@ -152,9 +158,11 @@ class TrainingWorker(WorkerAPIBase):
                 # Load checkpoint and create resume context
                 resume_context = await self.restore_from_checkpoint(operation_id)
 
-                # Start resumed training in background (non-blocking!)
+                # Start resumed training in background with graceful shutdown support (M6)
                 asyncio.create_task(
-                    self._execute_resumed_training(operation_id, resume_context)
+                    self._run_resumed_training_with_graceful_shutdown(
+                        operation_id, resume_context
+                    )
                 )
 
                 return {
@@ -174,6 +182,106 @@ class TrainingWorker(WorkerAPIBase):
                     status_code=422,
                     detail=f"Checkpoint corrupted: {str(e)}",
                 ) from e
+
+    async def _run_training_with_graceful_shutdown(
+        self,
+        operation_id: str,
+        request: TrainingStartRequest,
+    ) -> None:
+        """
+        Wrapper that runs training with graceful shutdown support (M6).
+
+        Uses WorkerAPIBase.run_with_graceful_shutdown to race training
+        against SIGTERM. On shutdown, saves checkpoint and updates status.
+        """
+        from ktrdr.workers.base import GracefulShutdownError
+
+        try:
+            await self.run_with_graceful_shutdown(
+                operation_id,
+                self._execute_training_work(operation_id, request),
+            )
+        except GracefulShutdownError:
+            logger.info(f"Training {operation_id} interrupted by graceful shutdown")
+            # Checkpoint already saved by run_with_graceful_shutdown via _save_checkpoint
+            # Status already updated to CANCELLED
+        except Exception as e:
+            logger.error(f"Training {operation_id} failed: {e}")
+            raise  # Re-raise to ensure caller knows training failed
+
+    async def _run_resumed_training_with_graceful_shutdown(
+        self,
+        operation_id: str,
+        resume_context: "TrainingResumeContext",
+    ) -> None:
+        """
+        Wrapper that runs resumed training with graceful shutdown support (M6).
+        """
+        from ktrdr.workers.base import GracefulShutdownError
+
+        try:
+            await self.run_with_graceful_shutdown(
+                operation_id,
+                self._execute_resumed_training(operation_id, resume_context),
+            )
+        except GracefulShutdownError:
+            logger.info(
+                f"Resumed training {operation_id} interrupted by graceful shutdown"
+            )
+        except Exception as e:
+            logger.error(f"Resumed training {operation_id} failed: {e}")
+            raise  # Re-raise to ensure caller knows training failed
+
+    async def _save_checkpoint(self, operation_id: str, checkpoint_type: str) -> None:
+        """
+        Save checkpoint for graceful shutdown (M6 override).
+
+        Called by WorkerAPIBase.run_with_graceful_shutdown when SIGTERM received.
+        Uses the last checkpoint state captured during training.
+        """
+        # _last_checkpoint_state is initialized to None in __init__ and populated
+        # by epoch callbacks during training
+        if not self._last_checkpoint_state:
+            logger.warning(f"No checkpoint state available to save for {operation_id}")
+            return
+
+        state = self._last_checkpoint_state
+        if state.get("trainer") is None:
+            logger.warning(
+                f"Incomplete checkpoint state for {operation_id}, skipping save"
+            )
+            return
+
+        try:
+            from ktrdr.training.checkpoint_builder import (
+                build_training_checkpoint_artifacts,
+                build_training_checkpoint_state,
+            )
+
+            checkpoint_state = build_training_checkpoint_state(
+                state["trainer"],
+                state["epoch"],
+                state.get("original_request", {}),
+            )
+            artifacts = build_training_checkpoint_artifacts(
+                state["model"],
+                state["optimizer"],
+                state.get("scheduler"),
+                state["trainer"].best_model_state,
+            )
+
+            checkpoint_service = self.get_checkpoint_service()
+            await checkpoint_service.save_checkpoint(
+                operation_id=operation_id,
+                checkpoint_type=checkpoint_type,
+                state=checkpoint_state.to_dict(),
+                artifacts=artifacts,
+            )
+            logger.info(
+                f"Shutdown checkpoint saved for {operation_id} at epoch {state['epoch']}"
+            )
+        except Exception as e:
+            logger.error(f"Failed to save shutdown checkpoint: {e}")
 
     async def _execute_training_work(
         self,
@@ -351,7 +459,7 @@ class TrainingWorker(WorkerAPIBase):
                 # Use shared checkpoint callback infrastructure
                 # This fixes the "Future attached to different loop" bug by using
                 # run_coroutine_threadsafe instead of asyncio.new_event_loop()
-                checkpoint_callback = self.create_checkpoint_callback(
+                base_callback = self.create_checkpoint_callback(
                     operation_id=operation_id,
                     checkpoint_service=checkpoint_service,
                     checkpoint_policy=checkpoint_policy,
@@ -360,6 +468,16 @@ class TrainingWorker(WorkerAPIBase):
                     last_checkpoint_state=last_checkpoint_state,
                     artifacts_builder=training_artifacts_builder,
                 )
+
+                # Wrap callback to also store to instance for graceful shutdown (M6)
+                def checkpoint_callback(**kwargs):
+                    # Store to instance for _save_checkpoint hook (M6 graceful shutdown)
+                    self._last_checkpoint_state = {
+                        **kwargs,
+                        "original_request": original_request,
+                    }
+                    # Call base callback for periodic checkpoint logic
+                    base_callback(**kwargs)
 
                 # Create orchestrator with checkpoint callback
                 orchestrator = LocalTrainingOrchestrator(
@@ -712,7 +830,7 @@ class TrainingWorker(WorkerAPIBase):
             # Use shared checkpoint callback infrastructure
             # This fixes the "Future attached to different loop" bug by using
             # run_coroutine_threadsafe instead of asyncio.new_event_loop()
-            checkpoint_callback = self.create_checkpoint_callback(
+            base_callback = self.create_checkpoint_callback(
                 operation_id=operation_id,
                 checkpoint_service=checkpoint_service,
                 checkpoint_policy=checkpoint_policy,
@@ -721,6 +839,16 @@ class TrainingWorker(WorkerAPIBase):
                 last_checkpoint_state=last_checkpoint_state,
                 artifacts_builder=training_artifacts_builder,
             )
+
+            # Wrap callback to also store to instance for graceful shutdown (M6)
+            def checkpoint_callback(**kwargs):
+                # Store to instance for _save_checkpoint hook (M6 graceful shutdown)
+                self._last_checkpoint_state = {
+                    **kwargs,
+                    "original_request": original_request,
+                }
+                # Call base callback for periodic checkpoint logic
+                base_callback(**kwargs)
 
             # Create orchestrator with resume_context for model/optimizer restoration
             orchestrator = LocalTrainingOrchestrator(

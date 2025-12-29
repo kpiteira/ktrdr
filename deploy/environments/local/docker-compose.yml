@@ -200,6 +200,8 @@ services:
     # Image mode (uncomment to test with CI-built images)
     # image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    # M6: Graceful shutdown - gives worker 30s to save checkpoint before SIGKILL
+    stop_grace_period: 30s
     ports:
       - "5003:5003"
     volumes:
@@ -256,6 +258,8 @@ services:
     # Image mode (uncomment to test with CI-built images)
     # image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    # M6: Graceful shutdown - gives worker 30s to save checkpoint before SIGKILL
+    stop_grace_period: 30s
     ports:
       - "5004:5004"
     volumes:
@@ -311,6 +315,8 @@ services:
     # Image mode (uncomment to test with CI-built images)
     # image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    # M6: Graceful shutdown - gives worker 30s to save checkpoint before SIGKILL
+    stop_grace_period: 30s
     ports:
       - "5005:5005"
     volumes:
@@ -366,6 +372,8 @@ services:
     # Image mode (uncomment to test with CI-built images)
     # image: ghcr.io/kpiteira/ktrdr-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    # M6: Graceful shutdown - gives worker 30s to save checkpoint before SIGKILL
+    stop_grace_period: 30s
     ports:
       - "5006:5006"
     volumes:

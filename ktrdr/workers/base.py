@@ -13,6 +13,7 @@ Source: training-host-service/
 
 import asyncio
 import os
+import signal
 from datetime import datetime
 from typing import Any, Optional
 
@@ -38,6 +39,23 @@ from ktrdr.api.services.operations_service import (
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+# ==============================================================================
+# Graceful Shutdown Exception (M6 Task 6.2)
+# ==============================================================================
+
+
+class GracefulShutdownError(Exception):
+    """Raised when a worker receives SIGTERM and needs to shutdown gracefully.
+
+    This exception is raised by run_with_graceful_shutdown when the shutdown
+    event is detected. It signals that the operation was interrupted due to
+    worker shutdown (not a failure) and a checkpoint was saved.
+    """
+
+    pass
+
 
 # ==============================================================================
 # Worker Request Models - Operation ID Synchronization Pattern
@@ -153,6 +171,15 @@ class WorkerAPIBase:
 
         # Background task for monitoring health checks
         self._monitor_task: Optional[asyncio.Task] = None
+
+        # Graceful shutdown support (M6 Task 6.1)
+        # Used to detect SIGTERM and allow operations to save checkpoints
+        self._shutdown_event = asyncio.Event()
+        self._shutdown_timeout = 25  # seconds (Docker gives 30s grace period)
+
+        # Current operation tracking for graceful shutdown (M6 Task 6.2)
+        # Set by run_with_graceful_shutdown, cleared in finally block
+        self._current_operation_id: Optional[str] = None
 
         # Register common endpoints
         self._register_operations_endpoints()
@@ -469,11 +496,207 @@ class WorkerAPIBase:
                 f"✅ OperationsService initialized (cache_ttl={self._operations_service._cache_ttl}s)"
             )
 
+            # Setup signal handlers for graceful shutdown (M6 Task 6.1)
+            self._setup_signal_handlers()
+
             # Self-register with backend
             await self.self_register()
 
             # Start re-registration monitor (Task 1.7)
             await self._start_reregistration_monitor()
+
+    def _setup_signal_handlers(self) -> None:
+        """Register signal handlers for graceful shutdown (M6 Task 6.1).
+
+        Registers SIGTERM handler that sets the shutdown event, allowing
+        running operations to save checkpoints before the worker exits.
+        """
+        # Capture the running event loop at setup time (called from async on_startup)
+        # This avoids issues with asyncio.get_event_loop() in signal handler context
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        def handle_sigterm(signum, frame):
+            logger.info("SIGTERM received - initiating graceful shutdown")
+            # Set event from signal handler context using thread-safe method
+            if loop is not None:
+                loop.call_soon_threadsafe(self._shutdown_event.set)
+            else:
+                # Fallback if no loop was captured: set event directly
+                # (may not work correctly but better than silently failing)
+                self._shutdown_event.set()
+
+        signal.signal(signal.SIGTERM, handle_sigterm)
+        logger.info("SIGTERM handler registered")
+
+    async def wait_for_shutdown(self) -> bool:
+        """Wait for shutdown signal with timeout.
+
+        Returns:
+            True if shutdown was signaled, False if timeout expired.
+        """
+        try:
+            await asyncio.wait_for(
+                self._shutdown_event.wait(),
+                timeout=self._shutdown_timeout,
+            )
+            return True
+        except asyncio.TimeoutError:
+            return False
+
+    async def _save_checkpoint(self, operation_id: str, checkpoint_type: str) -> None:
+        """Save a checkpoint for the current operation (M6 Task 6.2).
+
+        This is a hook method that subclasses should override to implement
+        actual checkpoint saving. The base implementation is a no-op.
+
+        Args:
+            operation_id: The operation ID to save checkpoint for.
+            checkpoint_type: Type of checkpoint ("shutdown", "failure", "periodic").
+        """
+        # No-op in base class - subclasses override to save actual checkpoints
+        logger.debug(
+            f"Base _save_checkpoint called for {operation_id} (type={checkpoint_type})"
+        )
+
+    async def _update_operation_status(
+        self,
+        operation_id: str,
+        status: str,
+        error_message: Optional[str] = None,
+    ) -> None:
+        """Update operation status in backend via HTTP call (M6 Task 6.3).
+
+        Calls the backend's PATCH /operations/{operation_id}/status endpoint
+        to update the operation status. Used during graceful shutdown to mark
+        operations as CANCELLED before the worker exits.
+
+        Args:
+            operation_id: The operation ID to update.
+            status: New status (e.g., "CANCELLED", "FAILED").
+            error_message: Optional error message.
+
+        Note:
+            - Uses 5-second timeout to avoid blocking shutdown
+            - Failure is logged but doesn't raise (OrphanDetector handles missed updates)
+        """
+        import httpx
+
+        status_url = f"{self.backend_url}/api/v1/operations/{operation_id}/status"
+
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.patch(
+                    status_url,
+                    json={
+                        "status": status,
+                        "error_message": error_message,
+                    },
+                )
+                if response.status_code == 200:
+                    logger.info(f"Updated operation {operation_id} to {status}")
+                else:
+                    logger.warning(
+                        f"Failed to update operation status: {response.status_code}"
+                    )
+        except Exception as e:
+            logger.warning(f"Could not update operation status: {e}")
+            # Continue shutdown even if status update fails
+            # OrphanDetector will eventually mark it FAILED
+
+    async def run_with_graceful_shutdown(
+        self,
+        operation_id: str,
+        operation_coro: Any,
+    ) -> Any:
+        """Run operation with graceful shutdown support (M6 Task 6.2).
+
+        Protected helper for subclasses to wrap long-running operations with
+        graceful shutdown support. This is NOT exposed as an HTTP endpoint;
+        subclasses should call this from their operation execution methods.
+
+        Races the operation against the shutdown event. If SIGTERM is received
+        while the operation is running, this method:
+        1. Cancels the operation coroutine
+        2. Calls _save_checkpoint() hook (subclasses should override)
+        3. Calls _update_operation_status() to mark as CANCELLED
+        4. Raises GracefulShutdownError
+
+        Args:
+            operation_id: The operation ID being executed.
+            operation_coro: The operation coroutine to run.
+
+        Returns:
+            The result of the operation coroutine (if completed normally).
+
+        Raises:
+            GracefulShutdownError: If shutdown was detected during operation.
+            Exception: Any exception raised by the operation.
+
+        Example:
+            class MyWorker(WorkerAPIBase):
+                async def execute_work(self, op_id, params):
+                    await self.run_with_graceful_shutdown(
+                        op_id,
+                        self._do_actual_work(params),
+                    )
+        """
+        self._current_operation_id = operation_id
+
+        operation_task = asyncio.create_task(operation_coro)
+        shutdown_task = asyncio.create_task(self._shutdown_event.wait())
+
+        try:
+            done, pending = await asyncio.wait(
+                [operation_task, shutdown_task],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+
+            if shutdown_task in done:
+                # Graceful shutdown requested
+                logger.info(f"Graceful shutdown - saving checkpoint for {operation_id}")
+
+                # Cancel and await the operation task first to ensure proper cleanup
+                # This MUST complete before checkpoint/status operations to avoid leaks
+                operation_task.cancel()
+                try:
+                    await operation_task
+                except asyncio.CancelledError:
+                    # Expected: operation_task was cancelled by us above.
+                    # The await ensures task cleanup completes before we proceed.
+                    pass
+
+                # Now save checkpoint and update status (task is fully cleaned up)
+                # If these fail, the outer except block will handle it
+                await self._save_checkpoint(operation_id, "shutdown")
+                await self._update_operation_status(
+                    operation_id,
+                    "CANCELLED",
+                    error_message="Graceful shutdown - checkpoint saved",
+                )
+
+                raise GracefulShutdownError("Worker shutdown requested")
+
+            # Operation completed normally - cancel the unused shutdown task
+            shutdown_task.cancel()
+            try:
+                await shutdown_task
+            except asyncio.CancelledError:
+                # Expected: shutdown_task was cancelled because operation completed first.
+                # No further action needed.
+                pass
+
+            return operation_task.result()
+
+        except Exception as e:
+            if not isinstance(e, GracefulShutdownError):
+                # Save failure checkpoint for non-shutdown exceptions
+                await self._save_checkpoint(operation_id, "failure")
+            raise
+        finally:
+            self._current_operation_id = None
 
     async def self_register(self) -> None:
         """
