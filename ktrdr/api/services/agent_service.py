@@ -369,7 +369,13 @@ class AgentService:
             }
 
         # 2. Check if operation is in a resumable state
-        if op.status not in [OperationStatus.CANCELLED, OperationStatus.FAILED]:
+        # Note: RESUMING is allowed because the operations endpoint calls
+        # try_resume() before calling this method, which sets status to RESUMING
+        if op.status not in [
+            OperationStatus.CANCELLED,
+            OperationStatus.FAILED,
+            OperationStatus.RESUMING,
+        ]:
             status_name = op.status.value.lower()
             logger.warning(
                 f"Cannot resume - operation not resumable: {operation_id} "
