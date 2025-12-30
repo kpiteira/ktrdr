@@ -618,10 +618,10 @@ class TestMalformedAssessmentHandling:
         assert raw_output in content["assessment"]["raw_text"]
 
     @pytest.mark.asyncio
-    async def test_malformed_assessment_truncates_long_raw_text(
+    async def test_malformed_assessment_preserves_full_raw_text(
         self, mock_operations_service, tmp_path
     ):
-        """Long raw text is truncated to prevent huge files."""
+        """Full raw text is preserved for debugging (no truncation)."""
         from unittest.mock import patch
 
         import yaml
@@ -630,8 +630,8 @@ class TestMalformedAssessmentHandling:
 
         worker = AgentAssessmentWorker(mock_operations_service)
 
-        # Create very long raw text (over 1000 chars)
-        raw_output = "A" * 2000
+        # Create long raw text - should be preserved in full
+        raw_output = "A" * 5000
         parsed = ParsedAssessment.empty(raw_text=raw_output)
 
         with patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path):
@@ -646,8 +646,8 @@ class TestMalformedAssessmentHandling:
         files = list(tmp_path.glob("*.yaml"))
         content = yaml.safe_load(files[0].read_text())
 
-        # raw_text should be truncated to max 1000 chars
-        assert len(content["assessment"]["raw_text"]) <= 1000
+        # Full raw_text preserved - no truncation
+        assert len(content["assessment"]["raw_text"]) == 5000
 
     @pytest.mark.asyncio
     async def test_malformed_assessment_has_fallback_observations(

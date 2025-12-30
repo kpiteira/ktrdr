@@ -263,10 +263,8 @@ class AgentAssessmentWorker:
             if not observations and parsed_assessment.verdict == "unknown":
                 observations = ["Assessment could not be parsed"]
 
-            # Truncate raw_text to prevent huge files (max 1000 chars)
-            raw_text = (
-                parsed_assessment.raw_text[:1000] if parsed_assessment.raw_text else ""
-            )
+            # Preserve full raw_text for debugging malformed assessments
+            raw_text = parsed_assessment.raw_text or ""
 
             record = ExperimentRecord(
                 id=generate_experiment_id(),
