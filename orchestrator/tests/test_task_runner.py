@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from ktrdr.llm.haiku_brain import InterpretationResult
 from orchestrator.config import OrchestratorConfig
-from orchestrator.haiku_brain import InterpretationResult
 from orchestrator.models import ClaudeResult, Task
 
 
@@ -801,7 +801,7 @@ class TestRunTaskWithEscalation:
     @pytest.mark.asyncio
     async def test_first_failure_retries_with_haiku_guidance(self):
         """First failure should call HaikuBrain for retry decision and use guidance."""
-        from orchestrator.haiku_brain import RetryDecision
+        from ktrdr.llm.haiku_brain import RetryDecision
         from orchestrator.runner import run_task_with_escalation
 
         task = make_task(task_id="4.1")
@@ -859,7 +859,7 @@ class TestRunTaskWithEscalation:
     @pytest.mark.asyncio
     async def test_same_error_three_times_escalates(self):
         """Same error 3 times should trigger HaikuBrain escalation decision."""
-        from orchestrator.haiku_brain import RetryDecision
+        from ktrdr.llm.haiku_brain import RetryDecision
         from orchestrator.runner import run_task_with_escalation
 
         task = make_task(task_id="4.1")
@@ -937,7 +937,7 @@ class TestRunTaskWithEscalation:
     @pytest.mark.asyncio
     async def test_different_errors_continues_retrying(self):
         """Different errors each attempt should continue retrying (making progress)."""
-        from orchestrator.haiku_brain import RetryDecision
+        from ktrdr.llm.haiku_brain import RetryDecision
         from orchestrator.runner import run_task_with_escalation
 
         task = make_task(task_id="4.1")
@@ -993,7 +993,7 @@ class TestRunTaskWithEscalation:
     @pytest.mark.asyncio
     async def test_escalation_triggered_on_haiku_escalate_decision(self):
         """Escalation should be triggered when HaikuBrain returns escalate decision."""
-        from orchestrator.haiku_brain import RetryDecision
+        from ktrdr.llm.haiku_brain import RetryDecision
         from orchestrator.runner import run_task_with_escalation
 
         task = make_task(task_id="4.1")
@@ -1046,7 +1046,7 @@ class TestRunTaskWithEscalation:
     @pytest.mark.asyncio
     async def test_attempt_history_tracked_correctly(self):
         """Attempt history should accumulate across retries."""
-        from orchestrator.haiku_brain import RetryDecision
+        from ktrdr.llm.haiku_brain import RetryDecision
         from orchestrator.runner import run_task_with_escalation
 
         task = make_task(task_id="4.1")

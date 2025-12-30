@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from ktrdr.llm.haiku_brain import InterpretationResult
 from orchestrator.config import OrchestratorConfig
-from orchestrator.haiku_brain import InterpretationResult
 from orchestrator.models import ClaudeResult, Task
 
 
@@ -818,7 +818,7 @@ class TestGetBrainInRunner:
 
     def test_get_brain_returns_haiku_brain(self):
         """get_brain should return a HaikuBrain instance."""
-        from orchestrator.haiku_brain import HaikuBrain
+        from ktrdr.llm.haiku_brain import HaikuBrain
         from orchestrator.runner import get_brain
 
         brain = get_brain()

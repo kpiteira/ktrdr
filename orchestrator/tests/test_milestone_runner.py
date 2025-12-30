@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from orchestrator.haiku_brain import ExtractedTask
+from ktrdr.llm.haiku_brain import ExtractedTask
 from orchestrator.milestone_runner import MilestoneResult, run_milestone
 from orchestrator.models import Task, TaskResult
 from orchestrator.state import OrchestratorState

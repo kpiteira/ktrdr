@@ -96,6 +96,32 @@ class RetryDecision:
     guidance_for_retry: str | None  # Suggestion for next attempt
 
 
+@dataclass
+class ParsedAssessment:
+    """Structured data extracted from agent's assessment output."""
+
+    verdict: str  # "strong_signal" | "weak_signal" | "no_signal" | "overfit"
+    observations: list[str]
+    hypotheses: list[dict]  # [{"text": "...", "status": "untested"}]
+    limitations: list[str]
+    capability_requests: list[str]
+    tested_hypothesis_ids: list[str]  # H_001, H_002, etc. if mentioned
+    raw_text: str  # Original output for reference
+
+    @classmethod
+    def empty(cls, raw_text: str) -> "ParsedAssessment":
+        """Create empty result when parsing fails."""
+        return cls(
+            verdict="unknown",
+            observations=[],
+            hypotheses=[],
+            limitations=[],
+            capability_requests=[],
+            tested_hypothesis_ids=[],
+            raw_text=raw_text,
+        )
+
+
 # Prompt for extracting tasks from a milestone plan
 # From Architecture doc Appendix: Prompt 1
 EXTRACT_TASKS_PROMPT = """You are parsing a milestone plan to extract tasks for an orchestrator to execute.
@@ -185,6 +211,40 @@ Return a JSON object:
 }}
 
 Return ONLY the JSON, no other text.
+"""
+
+# Prompt for parsing agent assessment output
+PARSE_ASSESSMENT_PROMPT = """Extract structured assessment data from this agent output.
+
+The output may be structured (with headers like "### Verdict") or prose.
+Extract what you can, using reasonable defaults for missing fields.
+
+Return a JSON object:
+{{
+  "verdict": "strong_signal" | "weak_signal" | "no_signal" | "overfit",
+  "observations": ["observation 1", "observation 2", ...],
+  "hypotheses": [{{"text": "hypothesis text", "status": "untested"}}, ...],
+  "limitations": ["limitation 1", ...],
+  "capability_requests": ["request 1", ...],
+  "tested_hypothesis_ids": ["H_001", ...] // if existing hypotheses are mentioned
+}}
+
+Guidelines:
+- verdict: Classify based on test accuracy and generalization
+  - "strong_signal": test accuracy >= 60%, small val-test gap
+  - "weak_signal": test accuracy 55-60%
+  - "no_signal": test accuracy <= 55% or large val-test gap
+  - "overfit": high validation, low test (gap > 10pp)
+- observations: Key factual statements about results
+- hypotheses: New ideas generated for future testing
+- limitations: What wasn't tested, caveats
+- capability_requests: Things the agent wishes it could try
+- tested_hypothesis_ids: If agent mentions testing H_001 or similar
+
+Return ONLY the JSON, no other text.
+
+Agent output:
+{output}
 """
 
 
@@ -569,4 +629,61 @@ class HaikuBrain:
             decision=decision,
             reason=data.get("reason", ""),
             guidance_for_retry=data.get("guidance_for_retry"),
+        )
+
+    def parse_assessment(
+        self,
+        output: str,
+        context: dict,
+    ) -> ParsedAssessment:
+        """Extract structured assessment from any format using Haiku.
+
+        Uses Haiku to semantically understand the assessment output and
+        extract structured data regardless of whether the input is
+        structured markdown, prose, or mixed format.
+
+        Args:
+            output: The agent's assessment output text.
+            context: Optional context dict (e.g., strategy_config) for reference.
+
+        Returns:
+            ParsedAssessment with extracted fields, or empty result on failure.
+        """
+        prompt = PARSE_ASSESSMENT_PROMPT.format(output=output)
+
+        try:
+            response = self._invoke_haiku(prompt)
+        except (RuntimeError, subprocess.TimeoutExpired):
+            return ParsedAssessment.empty(output)
+
+        return self._parse_assessment_response(response, output)
+
+    def _parse_assessment_response(
+        self, response: str, raw_text: str
+    ) -> ParsedAssessment:
+        """Parse Haiku response into ParsedAssessment.
+
+        Handles JSON that may be wrapped in markdown code blocks.
+        Falls back to empty result when parsing fails.
+
+        Args:
+            response: The raw response from Haiku.
+            raw_text: The original output text for preservation.
+
+        Returns:
+            ParsedAssessment parsed from the response.
+        """
+        data = self._extract_json_object(response)
+
+        if data is None:
+            return ParsedAssessment.empty(raw_text)
+
+        return ParsedAssessment(
+            verdict=data.get("verdict", "unknown"),
+            observations=data.get("observations", []),
+            hypotheses=data.get("hypotheses", []),
+            limitations=data.get("limitations", []),
+            capability_requests=data.get("capability_requests", []),
+            tested_hypothesis_ids=data.get("tested_hypothesis_ids", []),
+            raw_text=raw_text,
         )

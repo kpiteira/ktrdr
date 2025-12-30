@@ -14,6 +14,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
 
+from ktrdr.llm.haiku_brain import HaikuBrain
 from orchestrator import telemetry
 from orchestrator.config import OrchestratorConfig
 from orchestrator.discord_notifier import (
@@ -23,7 +24,6 @@ from orchestrator.discord_notifier import (
     format_task_failed,
     send_discord_message,
 )
-from orchestrator.haiku_brain import HaikuBrain
 from orchestrator.models import ClaudeResult, Task, TaskResult
 from orchestrator.runner import (
     EscalationInfo,

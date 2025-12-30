@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from orchestrator.haiku_brain import HaikuBrain
+from ktrdr.llm.haiku_brain import HaikuBrain
 from orchestrator.milestone_runner import parse_e2e_scenario
 from orchestrator.models import Task
 

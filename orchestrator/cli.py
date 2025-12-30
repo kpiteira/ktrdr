@@ -12,10 +12,10 @@ import click
 from rich.console import Console
 from rich.table import Table
 
+from ktrdr.llm.haiku_brain import HaikuBrain
 from orchestrator import telemetry
 from orchestrator.config import OrchestratorConfig
 from orchestrator.discord_notifier import format_test_notification, send_discord_message
-from orchestrator.haiku_brain import HaikuBrain
 from orchestrator.health import CHECK_ORDER, get_health
 from orchestrator.lock import MilestoneLock
 from orchestrator.milestone_runner import (
