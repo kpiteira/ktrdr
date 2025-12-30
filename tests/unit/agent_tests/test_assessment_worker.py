@@ -310,3 +310,236 @@ model:
         config = worker._load_strategy_config(None)
 
         assert config == {}
+
+
+class TestExtractContext:
+    """Tests for Task 4.2: _extract_context method."""
+
+    def test_extract_context_from_config(self, mock_operations_service):
+        """Extract correct fields from strategy config."""
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        config = {
+            "indicators": [
+                {"name": "RSI", "period": 14},
+                {"name": "DI", "period": 14},
+            ],
+            "training_data": {
+                "timeframes": {"list": ["1h"]},
+                "symbols": {"list": ["EURUSD"]},
+            },
+            "training": {
+                "labels": {"zigzag_threshold": 0.015},
+            },
+            "model": {
+                "architecture": {"hidden_layers": [32, 16]},
+            },
+        }
+
+        context = worker._extract_context(config)
+
+        assert context["indicators"] == ["RSI", "DI"]
+        assert context["composition"] == "pair"
+        assert context["timeframe"] == "1h"
+        assert context["symbol"] == "EURUSD"
+        assert context["zigzag_threshold"] == 0.015
+        assert context["nn_architecture"] == [32, 16]
+
+    def test_extract_context_solo_composition(self, mock_operations_service):
+        """Detect solo composition with single indicator."""
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        config = {"indicators": [{"name": "RSI"}]}
+
+        context = worker._extract_context(config)
+
+        assert context["composition"] == "solo"
+
+    def test_extract_context_ensemble_composition(self, mock_operations_service):
+        """Detect ensemble composition with 3+ indicators."""
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        config = {
+            "indicators": [
+                {"name": "RSI"},
+                {"name": "ADX"},
+                {"name": "CCI"},
+            ]
+        }
+
+        context = worker._extract_context(config)
+
+        assert context["composition"] == "ensemble"
+
+    def test_extract_context_empty_config(self, mock_operations_service):
+        """Handle empty config with defaults."""
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        context = worker._extract_context({})
+
+        assert context["indicators"] == []
+        assert context["composition"] == "solo"  # empty == solo
+        assert context["timeframe"] == "1h"  # default
+        assert context["symbol"] == "EURUSD"  # default
+        assert context["zigzag_threshold"] == 0.02  # default
+
+
+class TestExtractResults:
+    """Tests for Task 4.2: _extract_results method."""
+
+    def test_extract_results_from_metrics(self, mock_operations_service):
+        """Extract correct fields from metrics."""
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        training = {
+            "accuracy": 0.648,
+            "val_accuracy": 0.665,
+        }
+        backtest = {
+            "sharpe_ratio": 1.5,
+            "total_trades": 847,
+            "win_rate": 0.52,
+        }
+
+        results = worker._extract_results(training, backtest)
+
+        assert results["test_accuracy"] == 0.648
+        assert results["val_accuracy"] == 0.665
+        assert results["val_test_gap"] == pytest.approx(0.017, abs=0.001)
+        assert results["sharpe_ratio"] == 1.5
+        assert results["total_trades"] == 847
+        assert results["win_rate"] == 0.52
+
+    def test_extract_results_empty_metrics(self, mock_operations_service):
+        """Handle empty metrics with defaults."""
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        results = worker._extract_results({}, {})
+
+        assert results["test_accuracy"] == 0
+        assert results["val_accuracy"] == 0
+        assert results["val_test_gap"] == 0
+        assert results["sharpe_ratio"] is None
+        assert results["total_trades"] is None
+        assert results["win_rate"] is None
+
+
+class TestSaveToMemory:
+    """Tests for Task 4.2: _save_to_memory method."""
+
+    @pytest.mark.asyncio
+    async def test_save_to_memory_creates_file(self, mock_operations_service, tmp_path):
+        """File exists after save."""
+        from unittest.mock import patch
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        parsed = ParsedAssessment(
+            verdict="strong_signal",
+            observations=["Test observation"],
+            hypotheses=[{"text": "Test hypothesis", "status": "untested"}],
+            limitations=["Test limitation"],
+            capability_requests=[],
+            tested_hypothesis_ids=[],
+            raw_text="Test raw output",
+        )
+
+        # Patch memory directory - need to patch where it's used (memory module)
+        with patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path):
+            await worker._save_to_memory(
+                strategy_name="test_strategy",
+                strategy_config={"indicators": [{"name": "RSI"}]},
+                training_metrics={"accuracy": 0.65},
+                backtest_metrics={"sharpe_ratio": 1.2},
+                parsed_assessment=parsed,
+            )
+
+        # Verify file was created
+        files = list(tmp_path.glob("*.yaml"))
+        assert len(files) == 1
+
+    @pytest.mark.asyncio
+    async def test_save_to_memory_correct_content(
+        self, mock_operations_service, tmp_path
+    ):
+        """All fields populated correctly."""
+        from unittest.mock import patch
+
+        import yaml
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        parsed = ParsedAssessment(
+            verdict="strong_signal",
+            observations=["Good accuracy"],
+            hypotheses=[{"text": "Try more indicators", "status": "untested"}],
+            limitations=["Only EURUSD tested"],
+            capability_requests=["LSTM support"],
+            tested_hypothesis_ids=["H_001"],
+            raw_text="Raw assessment text",
+        )
+
+        with patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path):
+            await worker._save_to_memory(
+                strategy_name="rsi_di_v1",
+                strategy_config={
+                    "indicators": [{"name": "RSI"}, {"name": "DI"}],
+                    "training_data": {
+                        "timeframes": {"list": ["1h"]},
+                        "symbols": {"list": ["EURUSD"]},
+                    },
+                    "training": {"labels": {"zigzag_threshold": 0.015}},
+                },
+                training_metrics={"accuracy": 0.65, "val_accuracy": 0.67},
+                backtest_metrics={"sharpe_ratio": 1.5, "total_trades": 100},
+                parsed_assessment=parsed,
+            )
+
+        # Load and verify content
+        files = list(tmp_path.glob("*.yaml"))
+        content = yaml.safe_load(files[0].read_text())
+
+        assert content["strategy_name"] == "rsi_di_v1"
+        assert content["source"] == "agent"
+        assert content["context"]["indicators"] == ["RSI", "DI"]
+        assert content["context"]["composition"] == "pair"
+        assert content["results"]["test_accuracy"] == 0.65
+        assert content["assessment"]["verdict"] == "strong_signal"
+        assert content["assessment"]["observations"] == ["Good accuracy"]
+
+    @pytest.mark.asyncio
+    async def test_save_to_memory_failure_continues(self, mock_operations_service):
+        """Memory save failure doesn't raise exception."""
+        from unittest.mock import patch
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        parsed = ParsedAssessment(
+            verdict="strong_signal",
+            observations=[],
+            hypotheses=[],
+            limitations=[],
+            capability_requests=[],
+            tested_hypothesis_ids=[],
+            raw_text="test",
+        )
+
+        # Patch to simulate failure
+        with patch(
+            "ktrdr.agents.workers.assessment_worker.save_experiment",
+            side_effect=Exception("Disk full"),
+        ):
+            # Should not raise - graceful degradation
+            await worker._save_to_memory(
+                strategy_name="test",
+                strategy_config={},
+                training_metrics={},
+                backtest_metrics={},
+                parsed_assessment=parsed,
+            )
