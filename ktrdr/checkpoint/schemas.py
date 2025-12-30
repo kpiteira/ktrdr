@@ -129,6 +129,75 @@ class BacktestCheckpointState:
         )
 
 
+@dataclass
+class AgentCheckpointState:
+    """State captured during agent operations for checkpoint/resume functionality.
+
+    This state is stored as JSONB in the database and must be JSON-serializable.
+    It captures everything needed to resume an agent session from a given phase.
+
+    Agent sessions progress through phases: idle → designing → training →
+    backtesting → assessing. The checkpoint captures which phase we're in
+    and any child operation IDs for training/backtest phases.
+
+    Attributes:
+        operation_type: Always "agent" - used by backend to dispatch to correct worker.
+        phase: Current agent phase (idle, designing, training, backtesting, assessing).
+        strategy_path: Path to saved strategy config (if design phase complete).
+        strategy_name: Name of the strategy being worked on.
+        training_operation_id: Operation ID if training phase started.
+        training_checkpoint_epoch: Checkpoint epoch if training has checkpointed.
+        backtest_operation_id: Operation ID if backtest phase started.
+        token_counts: Accumulated input/output tokens across phases.
+        original_request: Original trigger reason and parameters.
+    """
+
+    # Resume point - which phase are we in
+    phase: str
+
+    # Operation type for resume dispatch (backend uses this to select worker)
+    operation_type: str = "agent"
+
+    # Strategy state (populated after design phase)
+    strategy_path: Optional[str] = None
+    strategy_name: Optional[str] = None
+
+    # Training phase state
+    training_operation_id: Optional[str] = None
+    training_checkpoint_epoch: Optional[int] = None
+
+    # Backtesting phase state
+    backtest_operation_id: Optional[str] = None
+
+    # Token usage tracking
+    token_counts: dict[str, Any] = field(default_factory=dict)
+
+    # Original request for resume
+    original_request: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "AgentCheckpointState":
+        """Create from dictionary (deserialization).
+
+        Handles missing optional fields gracefully by using defaults.
+        """
+        return cls(
+            phase=data["phase"],
+            operation_type=data.get("operation_type", "agent"),
+            strategy_path=data.get("strategy_path"),
+            strategy_name=data.get("strategy_name"),
+            training_operation_id=data.get("training_operation_id"),
+            training_checkpoint_epoch=data.get("training_checkpoint_epoch"),
+            backtest_operation_id=data.get("backtest_operation_id"),
+            token_counts=data.get("token_counts", {}),
+            original_request=data.get("original_request", {}),
+        )
+
+
 # Artifact manifest for training checkpoints
 # Maps artifact filename to requirement level
 TRAINING_ARTIFACTS: dict[str, str] = {
