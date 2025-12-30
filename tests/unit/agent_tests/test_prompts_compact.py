@@ -10,6 +10,7 @@ Tests cover:
 """
 
 from ktrdr.agents.prompts import (
+    PromptContext,
     TriggerReason,
     format_indicators_compact,
     format_symbols_compact,
@@ -310,3 +311,92 @@ class TestDesignPromptIncludesContext:
         assert "RSI" in user_prompt
         assert "AAPL" in user_prompt
         assert "test_strat" in user_prompt
+
+
+class TestPromptContextWithMemory:
+    """Tests for PromptContext memory fields (Task 3.1).
+
+    These tests verify that PromptContext can hold experiment_history
+    and open_hypotheses fields for memory integration.
+    """
+
+    def test_prompt_context_with_memory(self):
+        """Can create PromptContext with memory fields populated."""
+        experiments = [
+            {
+                "id": "exp_v15_rsi_only",
+                "timestamp": "2025-12-27T00:00:00Z",
+                "context": {"indicators": ["RSI"], "timeframe": "1h"},
+                "results": {"test_accuracy": 0.642},
+                "assessment": {"verdict": "strong_signal"},
+            }
+        ]
+        hypotheses = [
+            {
+                "id": "H_001",
+                "text": "Multi-timeframe might break the plateau",
+                "status": "untested",
+            }
+        ]
+
+        ctx = PromptContext(
+            trigger_reason=TriggerReason.START_NEW_CYCLE,
+            operation_id="op_test_123",
+            phase="designing",
+            experiment_history=experiments,
+            open_hypotheses=hypotheses,
+        )
+
+        assert ctx.experiment_history == experiments
+        assert ctx.open_hypotheses == hypotheses
+        assert len(ctx.experiment_history) == 1
+        assert len(ctx.open_hypotheses) == 1
+        assert ctx.experiment_history[0]["id"] == "exp_v15_rsi_only"
+        assert ctx.open_hypotheses[0]["id"] == "H_001"
+
+    def test_prompt_context_without_memory(self):
+        """PromptContext works without memory fields (defaults to None)."""
+        ctx = PromptContext(
+            trigger_reason=TriggerReason.START_NEW_CYCLE,
+            operation_id="op_test_123",
+            phase="designing",
+        )
+
+        assert ctx.experiment_history is None
+        assert ctx.open_hypotheses is None
+        # Other fields still work
+        assert ctx.trigger_reason == TriggerReason.START_NEW_CYCLE
+        assert ctx.operation_id == "op_test_123"
+        assert ctx.phase == "designing"
+
+    def test_prompt_context_memory_fields_default_to_none(self):
+        """Memory fields default to None when not specified."""
+        # Create with only required fields
+        ctx = PromptContext(
+            trigger_reason=TriggerReason.TRAINING_COMPLETED,
+            operation_id="op_other_456",
+            phase="training",
+            training_results={"accuracy": 0.65},  # Non-memory optional field
+        )
+
+        # Memory fields should be None
+        assert ctx.experiment_history is None
+        assert ctx.open_hypotheses is None
+        # But training_results is set
+        assert ctx.training_results is not None
+
+    def test_prompt_context_with_empty_memory_lists(self):
+        """PromptContext accepts empty lists for memory fields."""
+        ctx = PromptContext(
+            trigger_reason=TriggerReason.START_NEW_CYCLE,
+            operation_id="op_test_789",
+            phase="designing",
+            experiment_history=[],
+            open_hypotheses=[],
+        )
+
+        # Empty lists are valid (not None)
+        assert ctx.experiment_history == []
+        assert ctx.open_hypotheses == []
+        assert ctx.experiment_history is not None
+        assert ctx.open_hypotheses is not None

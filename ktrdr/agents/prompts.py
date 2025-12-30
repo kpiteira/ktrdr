@@ -130,6 +130,8 @@ class PromptContext:
         training_results: Results from training (if trigger is training_completed).
         backtest_results: Results from backtesting (if trigger is backtest_completed).
         strategy_config: Current strategy configuration.
+        experiment_history: Past experiments from memory for contextual reasoning.
+        open_hypotheses: Untested hypotheses from memory for exploration guidance.
     """
 
     trigger_reason: TriggerReason
@@ -141,6 +143,10 @@ class PromptContext:
     training_results: dict[str, Any] | None = None
     backtest_results: dict[str, Any] | None = None
     strategy_config: dict[str, Any] | None = None
+
+    # Memory context (v2.0)
+    experiment_history: list[dict[str, Any]] | None = None
+    open_hypotheses: list[dict[str, Any]] | None = None
 
 
 # System prompt template - defines the agent's role and capabilities
