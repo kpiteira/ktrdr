@@ -131,6 +131,39 @@ Location: [tests/unit/agent_tests/test_agent_resume.py](tests/unit/agent_tests/t
 
 ---
 
+## Task 7.6 Complete
+
+**Implemented:** Integration tests for agent checkpoint
+
+### Test Location
+
+[tests/integration/test_m7_agent_checkpoint.py](tests/integration/test_m7_agent_checkpoint.py)
+
+### Test Classes (19 tests total)
+
+1. **TestM7AgentCheckpointSave** (3 tests): Checkpoint save on failure/cancellation
+2. **TestM7StartupReconciliation** (3 tests): Backend restart with checkpoint messages
+3. **TestM7AgentResume** (6 tests): Resume status transitions and checkpoint loading
+4. **TestM7FullAgentCheckpointFlow** (3 tests): End-to-end flow scenarios
+5. **TestM7PhaseSpecificResume** (4 tests): Phase-specific resume verification
+
+### Test Infrastructure
+
+Uses `AgentOperationsRepository` (extends `MockOperationsRepository`) with:
+
+- `is_backend_local` flag support
+- `OperationInfo` model compatibility for StartupReconciliation
+- Case-insensitive status handling
+
+### Key Test Scenarios
+
+- Full flow: start → failure → reconciliation → resume
+- Startup reconciliation marks backend-local ops FAILED with checkpoint message
+- Resume from different phases (designing, training, backtesting, assessing)
+- Checkpoint deleted on successful completion
+
+---
+
 ## Previous Tasks (7.1-7.4)
 
 Tasks 7.1, 7.2, 7.3, 7.4 were completed in earlier commits on this branch. See git log for details.
