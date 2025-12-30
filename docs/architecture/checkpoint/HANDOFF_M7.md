@@ -82,6 +82,55 @@ Location: [tests/unit/agent_tests/test_agent_checkpoint_integration.py](tests/un
 
 ---
 
-## Previous Tasks (7.1-7.3)
+## Task 7.5 Complete
 
-Tasks 7.1, 7.2, 7.3 were completed in earlier commits on this branch. See git log for details.
+**Implemented:** Agent resume from checkpoint in AgentService and operations endpoint
+
+### Resume Components
+
+**Location:** [ktrdr/api/services/agent_service.py:344-462](ktrdr/api/services/agent_service.py#L344-L462)
+
+```python
+async def resume(self, operation_id: str) -> dict[str, Any]:
+    """Resume a cancelled or failed research cycle from checkpoint."""
+```
+
+**Location:** [ktrdr/api/endpoints/operations.py:744-784](ktrdr/api/endpoints/operations.py#L744-L784)
+
+```python
+elif op_type == "agent":
+    # Agent operations are backend-local - call AgentService.resume() directly
+    agent_service = get_agent_service()
+    result = await agent_service.resume(operation_id)
+```
+
+### Resume Flow
+
+1. **Validation**: Check operation exists and is in resumable state (CANCELLED/FAILED)
+2. **Conflict check**: Ensure no active cycle is running
+3. **Load checkpoint**: Via `checkpoint_service.load_checkpoint()`
+4. **Deserialize state**: Using `AgentCheckpointState.from_dict()`
+5. **Update metadata**: Restore phase, strategy info, child operation IDs
+6. **Start worker**: Background task continues from checkpointed phase
+
+### Gotcha: Backend-Local Resume vs Worker Resume
+
+Agent resume is different from training/backtest resume:
+
+- **Training/Backtest**: Endpoint dispatches to external worker via HTTP
+- **Agent**: Endpoint calls `AgentService.resume()` directly (backend-local)
+
+This is because agent operations run in the backend process itself.
+
+### Resume Tests
+
+Location: [tests/unit/agent_tests/test_agent_resume.py](tests/unit/agent_tests/test_agent_resume.py)
+
+- 10 passing tests covering all resume scenarios
+- Tests for: basic flow, no checkpoint, not found, running, completed, active cycle conflict, phase handling
+
+---
+
+## Previous Tasks (7.1-7.4)
+
+Tasks 7.1, 7.2, 7.3, 7.4 were completed in earlier commits on this branch. See git log for details.

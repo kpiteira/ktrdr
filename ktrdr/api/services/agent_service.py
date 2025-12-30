@@ -341,6 +341,126 @@ class AgentService:
             "message": "Research cycle cancelled",
         }
 
+    @trace_service_method("agent.resume")
+    async def resume(self, operation_id: str) -> dict[str, Any]:
+        """Resume a cancelled or failed research cycle from checkpoint.
+
+        Loads checkpoint state, verifies the operation is resumable, and
+        restarts the worker from the checkpointed phase.
+
+        Args:
+            operation_id: The operation ID to resume.
+
+        Returns:
+            Dict with resume result including phase resumed from.
+        """
+        from ktrdr.checkpoint.schemas import AgentCheckpointState
+
+        # 1. Check if operation exists
+        op = await self.ops.get_operation(operation_id)
+        if op is None:
+            logger.warning(f"Cannot resume - operation not found: {operation_id}")
+            return {
+                "success": False,
+                "reason": "not_found",
+                "message": f"Operation not found: {operation_id}",
+            }
+
+        # 2. Check if operation is in a resumable state
+        if op.status not in [OperationStatus.CANCELLED, OperationStatus.FAILED]:
+            status_name = op.status.value.lower()
+            logger.warning(
+                f"Cannot resume - operation not resumable: {operation_id} "
+                f"(status: {status_name})"
+            )
+            return {
+                "success": False,
+                "reason": "not_resumable",
+                "message": f"Cannot resume operation that is {status_name}",
+            }
+
+        # 3. Check for active cycles (can't resume if one is already running)
+        active = await self._get_active_research_op()
+        if active:
+            logger.warning(
+                f"Cannot resume - active cycle exists: {active.operation_id}"
+            )
+            return {
+                "success": False,
+                "reason": "active_cycle_exists",
+                "active_operation_id": active.operation_id,
+                "message": f"Cannot resume while another cycle is active: {active.operation_id}",
+            }
+
+        # 4. Load checkpoint
+        checkpoint_service = self._get_checkpoint_service()
+        checkpoint = await checkpoint_service.load_checkpoint(
+            operation_id, load_artifacts=False
+        )
+
+        if checkpoint is None:
+            logger.warning(f"Cannot resume - no checkpoint: {operation_id}")
+            return {
+                "success": False,
+                "reason": "no_checkpoint",
+                "message": f"No checkpoint available for operation {operation_id}",
+            }
+
+        # 5. Deserialize checkpoint state
+        checkpoint_state = AgentCheckpointState.from_dict(checkpoint.state)
+        resumed_from_phase = checkpoint_state.phase
+
+        logger.info(
+            f"Resuming agent operation {operation_id} from phase: {resumed_from_phase}"
+        )
+
+        # 6. Update operation metadata with checkpoint state
+        # Merge checkpoint state back into operation metadata
+        updated_params = dict(op.metadata.parameters)
+        updated_params["phase"] = checkpoint_state.phase
+        if checkpoint_state.strategy_name:
+            updated_params["strategy_name"] = checkpoint_state.strategy_name
+        if checkpoint_state.strategy_path:
+            updated_params["strategy_path"] = checkpoint_state.strategy_path
+        if checkpoint_state.training_operation_id:
+            updated_params["training_op_id"] = checkpoint_state.training_operation_id
+        if checkpoint_state.backtest_operation_id:
+            updated_params["backtest_op_id"] = checkpoint_state.backtest_operation_id
+        if checkpoint_state.token_counts:
+            updated_params["token_counts"] = checkpoint_state.token_counts
+        if checkpoint_state.original_request:
+            for key, value in checkpoint_state.original_request.items():
+                if key not in updated_params:
+                    updated_params[key] = value
+
+        # Update operation metadata
+        op.metadata.parameters = updated_params
+
+        # 7. Start worker in background
+        worker = self._get_worker()
+        task = asyncio.create_task(self._run_worker(operation_id, worker))
+        await self.ops.start_operation(operation_id, task)
+
+        logger.info(
+            f"Research cycle resumed: {operation_id}, phase: {resumed_from_phase}"
+        )
+
+        # 8. Build response with resume info
+        result: dict[str, Any] = {
+            "success": True,
+            "operation_id": operation_id,
+            "resumed_from_phase": resumed_from_phase,
+            "message": f"Research cycle resumed from phase: {resumed_from_phase}",
+        }
+
+        # Include child operation info if available
+        if checkpoint_state.training_operation_id:
+            result["training_operation_id"] = checkpoint_state.training_operation_id
+        if checkpoint_state.backtest_operation_id:
+            result["backtest_operation_id"] = checkpoint_state.backtest_operation_id
+
+        return result
+
     async def _get_active_research_op(self):
         """Get active AGENT_RESEARCH operation if any.
 
