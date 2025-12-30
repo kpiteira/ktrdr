@@ -203,12 +203,14 @@ class AgentService:
             }
 
         # Create operation with model and bypass_gates in metadata
+        # Agent operations are backend-local (run in backend process, not workers)
         params: dict[str, Any] = {"phase": "idle", "model": resolved_model}
         if bypass_gates:
             params["bypass_gates"] = True
         op = await self.ops.create_operation(
             operation_type=OperationType.AGENT_RESEARCH,
             metadata=OperationMetadata(parameters=params),  # type: ignore[call-arg]
+            is_backend_local=True,  # M7 Task 7.1: Mark as backend-local for checkpoint handling
         )
 
         # Start worker in background

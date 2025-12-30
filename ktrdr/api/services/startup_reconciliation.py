@@ -81,7 +81,8 @@ class StartupReconciliation:
             ReconciliationResult with counts of processed operations.
         """
         # Get all RUNNING operations from database
-        running_ops = await self._repository.list(status="RUNNING")
+        # Note: Status values are lowercase in the database (e.g., "running", not "RUNNING")
+        running_ops = await self._repository.list(status="running")
 
         if not running_ops:
             logger.info("Startup reconciliation: No RUNNING operations to process")
@@ -105,7 +106,7 @@ class StartupReconciliation:
                 )
                 await self._repository.update(
                     op.operation_id,
-                    status="FAILED",
+                    status="failed",  # Lowercase to match OperationStatus enum values
                     error_message=error_message,
                 )
                 backend_ops_count += 1

@@ -337,10 +337,10 @@ class TestM7StartupReconciliation:
         assert result.backend_ops_failed == 1
         assert result.worker_ops_reconciled == 0
 
-        # Verify operation is now FAILED
+        # Verify operation is now failed
         op = operations_repo.get(operation_id)
         assert op is not None
-        assert op["status"] == "FAILED"
+        assert op["status"] == "failed"
 
         # Verify error message indicates checkpoint available
         assert op["error_message"] is not None
@@ -374,10 +374,10 @@ class TestM7StartupReconciliation:
         )
         await reconciliation.reconcile()
 
-        # Verify operation is FAILED with appropriate message
+        # Verify operation is failed with appropriate message
         op = operations_repo.get(operation_id)
         assert op is not None
-        assert op["status"] == "FAILED"
+        assert op["status"] == "failed"
         assert "no checkpoint available" in op["error_message"].lower()
 
     @pytest.mark.asyncio
@@ -644,10 +644,10 @@ class TestM7FullAgentCheckpointFlow:
         # Verify reconciliation handled the operation
         assert result.backend_ops_failed == 1
 
-        # Step 5: Verify operation marked FAILED with checkpoint message
+        # Step 5: Verify operation marked failed with checkpoint message
         op = operations_repo.get(operation_id)
         assert op is not None
-        assert op["status"] == "FAILED"
+        assert op["status"] == "failed"
         assert "checkpoint available" in op["error_message"].lower()
 
         # Step 6: Resume session
