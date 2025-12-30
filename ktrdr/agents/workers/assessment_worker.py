@@ -7,7 +7,10 @@ from __future__ import annotations
 
 import asyncio
 import re
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+import yaml
 
 from ktrdr import get_logger
 from ktrdr.agents.executor import ToolExecutor
@@ -147,6 +150,25 @@ class AgentAssessmentWorker:
         # Also keep self.invoker for backward compatibility with init tests
         self.invoker = invoker or AnthropicAgentInvoker()
         self.tool_executor = ToolExecutor()
+
+    def _load_strategy_config(self, strategy_path: str | None) -> dict:
+        """Load strategy configuration from YAML file.
+
+        Args:
+            strategy_path: Path to strategy YAML file. Can be None.
+
+        Returns:
+            Strategy configuration dict, or empty dict if loading fails.
+        """
+        if not strategy_path:
+            return {}
+        try:
+            path = Path(strategy_path)
+            if path.exists():
+                return yaml.safe_load(path.read_text()) or {}
+        except Exception as e:
+            logger.warning(f"Failed to load strategy config: {e}")
+        return {}
 
     async def run(
         self,

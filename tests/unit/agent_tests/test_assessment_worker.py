@@ -1,6 +1,7 @@
 """Unit tests for AgentAssessmentWorker.
 
 Tests for Task 5.3: Assessment worker using Claude.
+Tests for Task 4.1: Strategy config loading for memory.
 """
 
 import asyncio
@@ -245,3 +246,67 @@ class TestAgentAssessmentWorkerRun:
             await worker.run("op_agent_research_456", sample_results)
 
         mock_operations_service.fail_operation.assert_called_once()
+
+
+class TestLoadStrategyConfig:
+    """Tests for Task 4.1: _load_strategy_config method."""
+
+    def test_load_strategy_config_success(self, mock_operations_service, tmp_path):
+        """Load valid YAML strategy config."""
+        # Create a valid strategy YAML
+        strategy_file = tmp_path / "test_strategy.yaml"
+        strategy_file.write_text(
+            """
+name: test_strategy
+indicators:
+  - name: RSI
+    period: 14
+  - name: DI
+    period: 14
+training_data:
+  timeframes:
+    list: ["1h"]
+  symbols:
+    list: ["EURUSD"]
+training:
+  labels:
+    zigzag_threshold: 0.015
+model:
+  architecture:
+    hidden_layers: [32, 16]
+"""
+        )
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+        config = worker._load_strategy_config(str(strategy_file))
+
+        assert config["name"] == "test_strategy"
+        assert len(config["indicators"]) == 2
+        assert config["indicators"][0]["name"] == "RSI"
+        assert config["training"]["labels"]["zigzag_threshold"] == 0.015
+
+    def test_load_strategy_config_missing(self, mock_operations_service, tmp_path):
+        """Return empty dict for missing file."""
+        missing_path = tmp_path / "nonexistent.yaml"
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+        config = worker._load_strategy_config(str(missing_path))
+
+        assert config == {}
+
+    def test_load_strategy_config_invalid(self, mock_operations_service, tmp_path):
+        """Return empty dict for invalid YAML."""
+        invalid_file = tmp_path / "invalid.yaml"
+        invalid_file.write_text("{ invalid yaml: [unclosed")
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+        config = worker._load_strategy_config(str(invalid_file))
+
+        assert config == {}
+
+    def test_load_strategy_config_none_path(self, mock_operations_service):
+        """Return empty dict when path is None."""
+        worker = AgentAssessmentWorker(mock_operations_service)
+        config = worker._load_strategy_config(None)
+
+        assert config == {}
