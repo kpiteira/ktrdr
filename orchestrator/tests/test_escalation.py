@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from orchestrator.haiku_brain import InterpretationResult
+from ktrdr.llm.haiku_brain import InterpretationResult
 
 
 # Fixture to mock HaikuBrain for pattern tests
@@ -747,7 +747,7 @@ class TestHaikuBrainIntegration:
         """Output without explicit markers should use HaikuBrain interpretation."""
         from unittest.mock import MagicMock, patch
 
-        from orchestrator.haiku_brain import InterpretationResult
+        from ktrdr.llm.haiku_brain import InterpretationResult
         from orchestrator.runner import configure_interpreter, detect_needs_human
 
         configure_interpreter(llm_only=False)
@@ -777,7 +777,7 @@ class TestHaikuBrainIntegration:
         """HaikuBrain saying task completed should return False."""
         from unittest.mock import MagicMock, patch
 
-        from orchestrator.haiku_brain import InterpretationResult
+        from ktrdr.llm.haiku_brain import InterpretationResult
         from orchestrator.runner import configure_interpreter, detect_needs_human
 
         configure_interpreter(llm_only=False)
@@ -805,7 +805,7 @@ class TestHaikuBrainIntegration:
         """--llm-only mode should always use HaikuBrain, even with explicit markers."""
         from unittest.mock import MagicMock, patch
 
-        from orchestrator.haiku_brain import InterpretationResult
+        from ktrdr.llm.haiku_brain import InterpretationResult
         from orchestrator.runner import configure_interpreter, detect_needs_human
 
         # Enable LLM-only mode
@@ -841,7 +841,7 @@ class TestHaikuBrainIntegration:
         """--llm-only mode should skip fast-path check entirely."""
         from unittest.mock import MagicMock, patch
 
-        from orchestrator.haiku_brain import InterpretationResult
+        from ktrdr.llm.haiku_brain import InterpretationResult
         from orchestrator.runner import configure_interpreter, detect_needs_human
 
         configure_interpreter(llm_only=True)

@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from orchestrator.haiku_brain import (
+from ktrdr.llm.haiku_brain import (
     ExtractedTask,
     HaikuBrain,
     InterpretationResult,
@@ -207,7 +207,7 @@ class TestInvokeHaiku:
         mock_result.returncode = 0
         mock_result.stdout = '[]'
 
-        with patch("orchestrator.haiku_brain.find_claude_cli", return_value="/usr/local/bin/claude"):
+        with patch("ktrdr.llm.haiku_brain.find_claude_cli", return_value="/usr/local/bin/claude"):
             with patch("subprocess.run", return_value=mock_result) as mock_run:
                 brain._invoke_haiku("test prompt")
 
@@ -227,7 +227,7 @@ class TestInvokeHaiku:
         """_invoke_haiku should raise if Claude CLI is not found."""
         brain = HaikuBrain()
 
-        with patch("orchestrator.haiku_brain.find_claude_cli", return_value=None):
+        with patch("ktrdr.llm.haiku_brain.find_claude_cli", return_value=None):
             with pytest.raises(RuntimeError, match="Claude CLI not found"):
                 brain._invoke_haiku("test prompt")
 
@@ -240,7 +240,7 @@ class TestInvokeHaiku:
         mock_result.stdout = ""
         mock_result.stderr = "Authentication failed"
 
-        with patch("orchestrator.haiku_brain.find_claude_cli", return_value="/usr/local/bin/claude"):
+        with patch("ktrdr.llm.haiku_brain.find_claude_cli", return_value="/usr/local/bin/claude"):
             with patch("subprocess.run", return_value=mock_result):
                 with pytest.raises(RuntimeError, match="Claude CLI failed"):
                     brain._invoke_haiku("test prompt")
