@@ -228,5 +228,6 @@ def generate_hypothesis_id() -> str:
                 num = int(h["id"][2:])
                 max_num = max(max_num, num)
             except ValueError:
-                pass
+                # Skip malformed hypothesis IDs (e.g., "H_abc") when computing next ID
+                continue
     return f"H_{max_num + 1:03d}"

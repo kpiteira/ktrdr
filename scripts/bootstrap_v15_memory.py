@@ -79,8 +79,10 @@ def parse_strategy_file(path: Path) -> dict:
     """
     config = yaml.safe_load(path.read_text())
 
-    # Extract indicator names
-    indicators = [ind["name"].upper() for ind in config.get("indicators", [])]
+    # Extract indicator names (normalize variants to canonical form)
+    indicator_aliases = {"WILLIAMSR": "WILLIAMS_R"}  # Normalize naming variants
+    raw_indicators = [ind["name"].upper() for ind in config.get("indicators", [])]
+    indicators = [indicator_aliases.get(name, name) for name in raw_indicators]
 
     # Determine composition type
     n_indicators = len(indicators)
@@ -137,8 +139,10 @@ def determine_verdict(test_acc: float, val_test_gap: float) -> str:
     Returns:
         Verdict string: "strong_signal", "weak_signal", "overfit", or "no_signal"
     """
-    # Check for overfitting first (large gap with low test accuracy)
-    if val_test_gap > 0.10:  # Gap > 10pp suggests overfitting
+    # Check for overfitting first - a large val-test gap (>10pp) indicates the model
+    # memorized validation patterns that don't generalize. This takes priority over
+    # test accuracy because even 60%+ test acc with 15pp gap is unreliable.
+    if val_test_gap > 0.10:
         return "overfit"
 
     if test_acc >= 0.60:
@@ -220,7 +224,7 @@ def clear_v15_experiments():
 INITIAL_HYPOTHESES = [
     Hypothesis(
         id="H_001",
-        text="Multi-timeframe (5m with 1h context) might break the 64.8% plateau",
+        text="Multi-timeframe (5m with 1h context) might break the 64.2% plateau",
         source_experiment="exp_v15_rsi_zigzag_1_5",
         rationale=(
             "Single timeframe seems to be a ceiling. Best result is 64.2% on 1h. "
@@ -359,14 +363,14 @@ def main():
             strategy_name=strategy_name,
             context=context,
             results={
-                "test_accuracy": test_acc,
-                "val_accuracy": val_acc,
-                "val_test_gap": gap,
+                "test_accuracy": round(test_acc, 4),
+                "val_accuracy": round(val_acc, 4),
+                "val_test_gap": round(gap, 4),
             },
             assessment={
                 "verdict": verdict,
                 "observations": observations,
-                "hypotheses": [],  # Will be added in Task 1.4
+                "hypotheses": [],  # Per-experiment hypotheses not linked; global hypotheses in hypotheses.yaml
                 "limitations": [
                     f"Only tested on {context['timeframe']} {context['symbol']}",
                     f"Only tested in {context['composition']} configuration",

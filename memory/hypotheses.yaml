@@ -1,6 +1,6 @@
 hypotheses:
 - id: H_001
-  text: Multi-timeframe (5m with 1h context) might break the 64.8% plateau
+  text: Multi-timeframe (5m with 1h context) might break the 64.2% plateau
   source_experiment: exp_v15_rsi_zigzag_1_5
   rationale: Single timeframe seems to be a ceiling. Best result is 64.2% on 1h. Adding
     context from a lower timeframe (5m) aligned with 1h bars might capture intra-bar

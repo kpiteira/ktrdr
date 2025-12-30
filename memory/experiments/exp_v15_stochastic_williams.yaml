@@ -17,7 +17,7 @@ context:
 results:
   test_accuracy: 0.595
   val_accuracy: 0.617
-  val_test_gap: 0.022000000000000002
+  val_test_gap: 0.022
 assessment:
   verdict: weak_signal
   observations:

@@ -15,7 +15,7 @@ context:
   data_range: 2015-01-01 to 2023-12-31
 results:
   test_accuracy: 0.613
-  val_accuracy: 0.6509999999999999
+  val_accuracy: 0.651
   val_test_gap: 0.038
 assessment:
   verdict: strong_signal

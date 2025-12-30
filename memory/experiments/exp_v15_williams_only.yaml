@@ -3,7 +3,7 @@ timestamp: '2025-12-27T00:00:00Z'
 strategy_name: v15_williams_only
 context:
   indicators:
-  - WILLIAMSR
+  - WILLIAMS_R
   composition: solo
   timeframe: 1h
   symbol: EURUSD
@@ -20,7 +20,7 @@ results:
 assessment:
   verdict: weak_signal
   observations:
-  - WILLIAMSR (solo) achieves 59.1% test accuracy on 1h EURUSD
+  - WILLIAMS_R (solo) achieves 59.1% test accuracy on 1h EURUSD
   - Small val-test gap (1.9%) indicates good generalization
   hypotheses: []
   limitations:

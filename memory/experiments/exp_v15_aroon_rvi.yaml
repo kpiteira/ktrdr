@@ -15,7 +15,7 @@ context:
   training_epochs: 100
   data_range: 2015-01-01 to 2023-12-31
 results:
-  test_accuracy: 0.5589999999999999
+  test_accuracy: 0.559
   val_accuracy: 0.612
   val_test_gap: 0.053
 assessment:
