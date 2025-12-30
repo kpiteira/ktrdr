@@ -697,8 +697,16 @@ Then update your state with the assessment and mark the cycle as complete."""
         indicators_str = " + ".join(indicators) if indicators else "unknown"
         timeframe = ctx.get("timeframe", "?")
         symbol = ctx.get("symbol", "?")
-        zigzag = ctx.get("zigzag_threshold", "")
-        zigzag_str = f" | zigzag {zigzag}" if zigzag else ""
+        # Format zigzag threshold as percentage for consistency with accuracy display
+        zigzag = ctx.get("zigzag_threshold")
+        zigzag_str = ""
+        if isinstance(zigzag, (int, float)) and zigzag != 0:
+            # Values <= 1 are fractional (0.015 = 1.5%), convert to percentage
+            zigzag_pct = zigzag * 100 if zigzag <= 1 else zigzag
+            zigzag_str = f" | zigzag {zigzag_pct:.1f}%"
+        elif zigzag:
+            # Preserve non-numeric representations as-is
+            zigzag_str = f" | zigzag {zigzag}"
         context_str = f"{indicators_str} | {timeframe} | {symbol}{zigzag_str}"
 
         # Build results string - convert to percentage if needed
