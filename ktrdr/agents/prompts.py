@@ -130,6 +130,8 @@ class PromptContext:
         training_results: Results from training (if trigger is training_completed).
         backtest_results: Results from backtesting (if trigger is backtest_completed).
         strategy_config: Current strategy configuration.
+        experiment_history: Past experiments from memory for contextual reasoning.
+        open_hypotheses: Untested hypotheses from memory for exploration guidance.
     """
 
     trigger_reason: TriggerReason
@@ -141,6 +143,10 @@ class PromptContext:
     training_results: dict[str, Any] | None = None
     backtest_results: dict[str, Any] | None = None
     strategy_config: dict[str, Any] | None = None
+
+    # Memory context (v2.0)
+    experiment_history: list[dict[str, Any]] | None = None
+    open_hypotheses: list[dict[str, Any]] | None = None
 
 
 # System prompt template - defines the agent's role and capabilities
@@ -488,6 +494,19 @@ Current Phase: {context.phase}"""
                 f"### Recent Strategies (avoid repetition)\n\n{recent_text}"
             )
 
+        # Memory sections (v2.0)
+        if context.experiment_history:
+            experiment_text = self._format_experiment_history(
+                context.experiment_history
+            )
+            if experiment_text:
+                sections.append(experiment_text)
+
+        if context.open_hypotheses:
+            hypotheses_text = self._format_hypotheses(context.open_hypotheses)
+            if hypotheses_text:
+                sections.append(hypotheses_text)
+
         sections.append(
             """## Your Task
 
@@ -627,6 +646,134 @@ Then update your state with the assessment and mark the cycle as complete."""
             lines.append(f"- **{name}** ({strat_type}): {outcome}{sharpe_str}")
         return "\n".join(lines) if lines else "No recent strategies"
 
+    def _format_experiment_history(self, experiments: list[dict[str, Any]]) -> str:
+        """Format experiments as contextual observations for reasoning.
+
+        Produces markdown like:
+            ## Experiment History
+
+            ### Recent Experiments
+
+            **exp_v15_rsi_di** (2025-12-27)
+            - Context: RSI + DI | 1h | EURUSD | zigzag 1.5%
+            - Results: 64.8% test
+            - Verdict: strong_signal
+            - Observations:
+              - Combining RSI with DI improved by 0.6pp vs RSI solo
+
+        Args:
+            experiments: List of experiment records from memory.
+
+        Returns:
+            Formatted markdown string, or empty string if no experiments.
+        """
+        if not experiments:
+            return ""
+
+        lines = ["## Experiment History\n", "### Recent Experiments\n"]
+
+        for exp in experiments:
+            lines.append(self._format_single_experiment(exp))
+
+        return "\n".join(lines)
+
+    def _format_single_experiment(self, exp: dict[str, Any]) -> str:
+        """Format one experiment with full context.
+
+        Args:
+            exp: Single experiment record dict.
+
+        Returns:
+            Formatted markdown for one experiment.
+        """
+        exp_id = exp.get("id", "unknown")
+        timestamp = exp.get("timestamp", "")[:10] if exp.get("timestamp") else ""
+        ctx = exp.get("context", {})
+        res = exp.get("results", {})
+        assess = exp.get("assessment", {})
+
+        # Build context string
+        indicators = ctx.get("indicators", ["unknown"])
+        indicators_str = " + ".join(indicators) if indicators else "unknown"
+        timeframe = ctx.get("timeframe", "?")
+        symbol = ctx.get("symbol", "?")
+        # Format zigzag threshold as percentage for consistency with accuracy display
+        zigzag = ctx.get("zigzag_threshold")
+        zigzag_str = ""
+        if isinstance(zigzag, (int, float)) and zigzag != 0:
+            # Values <= 1 are fractional (0.015 = 1.5%), convert to percentage
+            zigzag_pct = zigzag * 100 if zigzag <= 1 else zigzag
+            zigzag_str = f" | zigzag {zigzag_pct:.1f}%"
+        elif zigzag:
+            # Preserve non-numeric representations as-is
+            zigzag_str = f" | zigzag {zigzag}"
+        context_str = f"{indicators_str} | {timeframe} | {symbol}{zigzag_str}"
+
+        # Build results string - convert to percentage if needed
+        test_acc = res.get("test_accuracy", 0)
+        if isinstance(test_acc, float) and test_acc <= 1:
+            test_acc = test_acc * 100
+        test_str = f"{test_acc:.1f}%"
+
+        # Build header
+        header = f"**{exp_id}**"
+        if timestamp:
+            header += f" ({timestamp})"
+
+        lines = [
+            header,
+            f"- Context: {context_str}",
+            f"- Results: {test_str} test",
+            f"- Verdict: {assess.get('verdict', 'unknown')}",
+        ]
+
+        # Add observations (limited to 3)
+        observations = assess.get("observations", [])
+        if observations:
+            lines.append("- Observations:")
+            for obs in observations[:3]:
+                lines.append(f"  - {obs}")
+
+        return "\n".join(lines) + "\n"
+
+    def _format_hypotheses(self, hypotheses: list[dict[str, Any]]) -> str:
+        """Format open hypotheses for the agent to consider.
+
+        Produces markdown like:
+            ## Open Hypotheses
+
+            Consider testing one of these hypotheses:
+
+            - **H_001**: Multi-timeframe might break the plateau
+              - Source: exp_v15_rsi_di
+              - Rationale: Best result so far, but hitting accuracy ceiling
+
+        Args:
+            hypotheses: List of hypothesis records from memory.
+
+        Returns:
+            Formatted markdown string, or empty string if no hypotheses.
+        """
+        if not hypotheses:
+            return ""
+
+        lines = ["## Open Hypotheses\n"]
+        lines.append("Consider testing one of these hypotheses:\n")
+
+        for h in hypotheses:
+            h_id = h.get("id", "?")
+            text = h.get("text", "")
+            source = h.get("source_experiment", "")
+            rationale = h.get("rationale", "")
+
+            lines.append(f"- **{h_id}**: {text}")
+            if source:
+                lines.append(f"  - Source: {source}")
+            if rationale:
+                lines.append(f"  - Rationale: {rationale}")
+
+        return "\n".join(lines)
+
 
 def get_strategy_designer_prompt(
     trigger_reason: TriggerReason | str,
@@ -638,6 +785,8 @@ def get_strategy_designer_prompt(
     training_results: dict[str, Any] | None = None,
     backtest_results: dict[str, Any] | None = None,
     strategy_config: dict[str, Any] | None = None,
+    experiment_history: list[dict[str, Any]] | None = None,
+    open_hypotheses: list[dict[str, Any]] | None = None,
 ) -> dict[str, str]:
     """Convenience function to build the strategy designer prompt.
 
@@ -654,6 +803,8 @@ def get_strategy_designer_prompt(
         training_results: Training results (if applicable).
         backtest_results: Backtest results (if applicable).
         strategy_config: Current strategy config.
+        experiment_history: Past experiments from memory for contextual reasoning.
+        open_hypotheses: Untested hypotheses from memory for exploration guidance.
 
     Returns:
         Dict with 'system' and 'user' keys containing the prompts.
@@ -672,6 +823,8 @@ def get_strategy_designer_prompt(
         training_results=training_results,
         backtest_results=backtest_results,
         strategy_config=strategy_config,
+        experiment_history=experiment_history,
+        open_hypotheses=open_hypotheses,
     )
 
     builder = StrategyDesignerPromptBuilder()

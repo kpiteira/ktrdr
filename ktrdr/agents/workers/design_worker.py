@@ -16,6 +16,7 @@ from ktrdr.agents.invoker import (
     AnthropicInvokerConfig,
     resolve_model,
 )
+from ktrdr.agents.memory import get_open_hypotheses, load_experiments
 from ktrdr.agents.prompts import TriggerReason, get_strategy_designer_prompt
 from ktrdr.agents.strategy_utils import get_recent_strategies
 from ktrdr.agents.tools import DESIGN_PHASE_TOOLS
@@ -153,6 +154,43 @@ Always validate your configuration before saving it."""
             logger.warning(f"Failed to get recent strategies: {e}")
             return []
 
+    def _load_experiment_history(self, n: int = 15) -> list[dict[str, Any]]:
+        """Load experiment history from memory.
+
+        Task 3.4: Load past experiments to give agent context about what
+        has been tried and what worked/didn't work.
+
+        Args:
+            n: Maximum number of experiments to load.
+
+        Returns:
+            List of experiment records, or empty list on failure.
+        """
+        try:
+            experiments = load_experiments(n=n)
+            logger.info(f"Loaded {len(experiments)} experiments from memory")
+            return experiments
+        except Exception as e:
+            logger.warning(f"Failed to load experiments: {e}")
+            return []
+
+    def _load_open_hypotheses(self) -> list[dict[str, Any]]:
+        """Load open hypotheses from memory.
+
+        Task 3.4: Load untested hypotheses to give agent ideas for
+        what to explore next.
+
+        Returns:
+            List of hypothesis records, or empty list on failure.
+        """
+        try:
+            hypotheses = get_open_hypotheses()
+            logger.info(f"Loaded {len(hypotheses)} open hypotheses")
+            return hypotheses
+        except Exception as e:
+            logger.warning(f"Failed to load hypotheses: {e}")
+            return []
+
     async def run(
         self, parent_operation_id: str, model: str | None = None
     ) -> dict[str, Any]:
@@ -200,10 +238,26 @@ Always validate your configuration before saving it."""
             available_indicators = await self._get_available_indicators()
             recent_strategies = await self._get_recent_strategies(limit=5)
 
+            # Task 3.4: Load memory (experiments + hypotheses)
+            # Extra try/except for robustness - memory is enhancement, not required
+            try:
+                experiment_history = self._load_experiment_history()
+            except Exception as e:
+                logger.warning(f"Failed to load experiment history: {e}")
+                experiment_history = []
+
+            try:
+                open_hypotheses = self._load_open_hypotheses()
+            except Exception as e:
+                logger.warning(f"Failed to load open hypotheses: {e}")
+                open_hypotheses = []
+
             logger.info(
                 f"Context gathered: {len(available_symbols)} symbols, "
                 f"{len(available_indicators)} indicators, "
-                f"{len(recent_strategies)} recent strategies"
+                f"{len(recent_strategies)} recent strategies, "
+                f"{len(experiment_history)} experiments, "
+                f"{len(open_hypotheses)} hypotheses"
             )
 
             # Build prompt with ALL context embedded
@@ -214,6 +268,8 @@ Always validate your configuration before saving it."""
                 available_symbols=available_symbols,
                 available_indicators=available_indicators,
                 recent_strategies=recent_strategies,
+                experiment_history=experiment_history,
+                open_hypotheses=open_hypotheses,
             )
 
             # Use injected invoker (for testing) or create new with resolved model
