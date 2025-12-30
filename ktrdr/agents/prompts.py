@@ -633,6 +633,88 @@ Then update your state with the assessment and mark the cycle as complete."""
             lines.append(f"- **{name}** ({strat_type}): {outcome}{sharpe_str}")
         return "\n".join(lines) if lines else "No recent strategies"
 
+    def _format_experiment_history(self, experiments: list[dict[str, Any]]) -> str:
+        """Format experiments as contextual observations for reasoning.
+
+        Produces markdown like:
+            ## Experiment History
+
+            ### Recent Experiments
+
+            **exp_v15_rsi_di** (2025-12-27)
+            - Context: RSI + DI | 1h | EURUSD | zigzag 1.5%
+            - Results: 64.8% test
+            - Verdict: strong_signal
+            - Observations:
+              - Combining RSI with DI improved by 0.6pp vs RSI solo
+
+        Args:
+            experiments: List of experiment records from memory.
+
+        Returns:
+            Formatted markdown string, or empty string if no experiments.
+        """
+        if not experiments:
+            return ""
+
+        lines = ["## Experiment History\n", "### Recent Experiments\n"]
+
+        for exp in experiments:
+            lines.append(self._format_single_experiment(exp))
+
+        return "\n".join(lines)
+
+    def _format_single_experiment(self, exp: dict[str, Any]) -> str:
+        """Format one experiment with full context.
+
+        Args:
+            exp: Single experiment record dict.
+
+        Returns:
+            Formatted markdown for one experiment.
+        """
+        exp_id = exp.get("id", "unknown")
+        timestamp = exp.get("timestamp", "")[:10] if exp.get("timestamp") else ""
+        ctx = exp.get("context", {})
+        res = exp.get("results", {})
+        assess = exp.get("assessment", {})
+
+        # Build context string
+        indicators = ctx.get("indicators", ["unknown"])
+        indicators_str = " + ".join(indicators) if indicators else "unknown"
+        timeframe = ctx.get("timeframe", "?")
+        symbol = ctx.get("symbol", "?")
+        zigzag = ctx.get("zigzag_threshold", "")
+        zigzag_str = f" | zigzag {zigzag}" if zigzag else ""
+        context_str = f"{indicators_str} | {timeframe} | {symbol}{zigzag_str}"
+
+        # Build results string - convert to percentage if needed
+        test_acc = res.get("test_accuracy", 0)
+        if isinstance(test_acc, float) and test_acc <= 1:
+            test_acc = test_acc * 100
+        test_str = f"{test_acc:.1f}%"
+
+        # Build header
+        header = f"**{exp_id}**"
+        if timestamp:
+            header += f" ({timestamp})"
+
+        lines = [
+            header,
+            f"- Context: {context_str}",
+            f"- Results: {test_str} test",
+            f"- Verdict: {assess.get('verdict', 'unknown')}",
+        ]
+
+        # Add observations (limited to 3)
+        observations = assess.get("observations", [])
+        if observations:
+            lines.append("- Observations:")
+            for obs in observations[:3]:
+                lines.append(f"  - {obs}")
+
+        return "\n".join(lines) + "\n"
+
 
 def get_strategy_designer_prompt(
     trigger_reason: TriggerReason | str,

@@ -11,6 +11,7 @@ Tests cover:
 
 from ktrdr.agents.prompts import (
     PromptContext,
+    StrategyDesignerPromptBuilder,
     TriggerReason,
     format_indicators_compact,
     format_symbols_compact,
@@ -400,3 +401,165 @@ class TestPromptContextWithMemory:
         assert ctx.open_hypotheses == []
         assert ctx.experiment_history is not None
         assert ctx.open_hypotheses is not None
+
+
+class TestFormatExperimentHistory:
+    """Tests for experiment history formatting (Task 3.2).
+
+    These tests verify that experiment history is formatted as readable
+    markdown matching the SCENARIOS.md contract.
+    """
+
+    def test_format_experiment_history_empty(self):
+        """Returns empty string for empty experiment list."""
+        builder = StrategyDesignerPromptBuilder()
+        result = builder._format_experiment_history([])
+
+        assert result == ""
+
+    def test_format_experiment_history_single(self):
+        """Formats a single experiment with all fields."""
+        builder = StrategyDesignerPromptBuilder()
+        experiments = [
+            {
+                "id": "exp_v15_rsi_only",
+                "timestamp": "2025-12-27T14:30:00Z",
+                "context": {
+                    "indicators": ["RSI"],
+                    "timeframe": "1h",
+                    "symbol": "EURUSD",
+                    "zigzag_threshold": 0.015,
+                },
+                "results": {
+                    "test_accuracy": 0.642,
+                    "val_accuracy": 0.654,
+                    "val_test_gap": 0.012,
+                },
+                "assessment": {
+                    "verdict": "strong_signal",
+                    "observations": [
+                        "RSI solo achieves 64.2% test accuracy",
+                        "Small val-test gap indicates good generalization",
+                    ],
+                },
+            }
+        ]
+
+        result = builder._format_experiment_history(experiments)
+
+        # Should have section header
+        assert "## Experiment History" in result
+        # Should have experiment ID and date
+        assert "exp_v15_rsi_only" in result
+        assert "2025-12-27" in result
+        # Should have context
+        assert "RSI" in result
+        assert "1h" in result
+        assert "EURUSD" in result
+        # Should have results (test accuracy as percentage)
+        assert "64.2%" in result or "64%" in result
+        # Should have verdict
+        assert "strong_signal" in result
+        # Should have observations
+        assert "RSI solo achieves" in result
+
+    def test_format_experiment_history_multiple(self):
+        """Formats multiple experiments."""
+        builder = StrategyDesignerPromptBuilder()
+        experiments = [
+            {
+                "id": "exp_001",
+                "timestamp": "2025-12-28T00:00:00Z",
+                "context": {"indicators": ["RSI", "DI"], "timeframe": "1h"},
+                "results": {"test_accuracy": 0.648},
+                "assessment": {"verdict": "strong_signal"},
+            },
+            {
+                "id": "exp_002",
+                "timestamp": "2025-12-27T00:00:00Z",
+                "context": {"indicators": ["ADX"], "timeframe": "1h"},
+                "results": {"test_accuracy": 0.50},
+                "assessment": {"verdict": "no_signal"},
+            },
+        ]
+
+        result = builder._format_experiment_history(experiments)
+
+        # Both experiments should be present
+        assert "exp_001" in result
+        assert "exp_002" in result
+        # Both verdicts
+        assert "strong_signal" in result
+        assert "no_signal" in result
+
+    def test_format_experiment_missing_fields(self):
+        """Handles experiments with missing optional fields gracefully."""
+        builder = StrategyDesignerPromptBuilder()
+        experiments = [
+            {
+                "id": "exp_minimal",
+                # Missing: timestamp, context details, results details
+                "context": {},
+                "results": {},
+                "assessment": {},
+            }
+        ]
+
+        # Should not crash
+        result = builder._format_experiment_history(experiments)
+
+        # Should still include the ID
+        assert "exp_minimal" in result
+        # Should have section header
+        assert "## Experiment History" in result
+
+    def test_format_experiment_limits_observations(self):
+        """Observations are limited to 3 per experiment."""
+        builder = StrategyDesignerPromptBuilder()
+        experiments = [
+            {
+                "id": "exp_many_obs",
+                "timestamp": "2025-12-28T00:00:00Z",
+                "context": {"indicators": ["RSI"]},
+                "results": {"test_accuracy": 0.65},
+                "assessment": {
+                    "verdict": "strong_signal",
+                    "observations": [
+                        "Observation 1",
+                        "Observation 2",
+                        "Observation 3",
+                        "Observation 4 - should not appear",
+                        "Observation 5 - should not appear",
+                    ],
+                },
+            }
+        ]
+
+        result = builder._format_experiment_history(experiments)
+
+        # First 3 observations should be present
+        assert "Observation 1" in result
+        assert "Observation 2" in result
+        assert "Observation 3" in result
+        # 4th and 5th should not be present
+        assert "Observation 4" not in result
+        assert "Observation 5" not in result
+
+    def test_format_experiment_accuracy_as_percentage(self):
+        """Test accuracy is formatted as percentage."""
+        builder = StrategyDesignerPromptBuilder()
+        experiments = [
+            {
+                "id": "exp_pct",
+                "context": {"indicators": ["RSI"]},
+                "results": {"test_accuracy": 0.648},  # Should become 64.8%
+                "assessment": {"verdict": "strong_signal"},
+            }
+        ]
+
+        result = builder._format_experiment_history(experiments)
+
+        # Should show as percentage, not decimal
+        assert "64.8%" in result or "64.8" in result
+        # Should not show raw decimal
+        assert "0.648" not in result
