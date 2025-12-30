@@ -1,0 +1,87 @@
+# Handoff: Milestone 7 (Backend-Local Operations)
+
+## Task 7.4 Complete
+
+**Implemented:** Agent checkpoint save on failure/cancellation in AgentService
+
+### Key Components Added
+
+**Location:** [ktrdr/api/services/agent_service.py:93-149](ktrdr/api/services/agent_service.py#L93-L149)
+
+```python
+def _get_checkpoint_service(self) -> "CheckpointService":
+    """Lazy initialization of checkpoint service."""
+
+async def _save_checkpoint(self, operation_id: str, checkpoint_type: str) -> None:
+    """Save checkpoint using build_agent_checkpoint_state."""
+```
+
+**Location:** [ktrdr/api/services/agent_service.py:230-260](ktrdr/api/services/agent_service.py#L230-L260) (`_run_worker`)
+
+### Checkpoint Integration Pattern
+
+Agent checkpoints are saved in `_run_worker`, not in the worker itself:
+
+```python
+async def _run_worker(self, operation_id, worker):
+    try:
+        result = await worker.run(operation_id)
+        # Delete checkpoint on success
+        await checkpoint_service.delete_checkpoint(operation_id)
+        await self.ops.complete_operation(operation_id, result)
+    except asyncio.CancelledError:
+        await self._save_checkpoint(operation_id, "cancellation")
+        await self.ops.cancel_operation(...)
+        raise
+    except Exception as e:
+        await self._save_checkpoint(operation_id, "failure")
+        await self.ops.fail_operation(...)
+        raise
+```
+
+### Why AgentService, Not AgentResearchWorker?
+
+Agent operations are **backend-local** (`is_backend_local=True`), meaning they run in the backend process, not a separate container. Unlike training/backtest workers that have their own checkpoint logic, the agent's checkpoint save is managed at the service level because:
+
+1. The service controls the operation lifecycle (complete/fail/cancel)
+2. Checkpoint state comes from operation metadata, not internal worker state
+3. No artifacts to save (agent checkpoints are state-only)
+
+### Gotcha: Checkpoint State Uses Operation Metadata
+
+The `build_agent_checkpoint_state` function (from Task 7.3) extracts state from `operation.metadata.parameters`:
+
+```python
+# Keys it looks for:
+- "phase" → current phase (idle, designing, training, backtesting, assessing)
+- "strategy_name" → strategy being designed
+- "strategy_path" → path to saved strategy config
+- "training_op_id" → child training operation ID
+- "backtest_op_id" → child backtest operation ID
+- "token_counts" → accumulated token usage
+- "trigger_reason" → original trigger
+- "model" → model being used
+```
+
+If the worker doesn't update these metadata fields, the checkpoint won't have the right state to resume from.
+
+### Integration Point for Task 7.5 (Resume)
+
+Resume logic should:
+1. Load checkpoint via `checkpoint_service.load_checkpoint(operation_id)`
+2. Use `AgentCheckpointState.from_dict(checkpoint.state)` to deserialize
+3. Check `state.phase` to determine where to resume from
+4. If training phase with `training_operation_id`, check if that operation has a checkpoint too
+
+### Tests Added
+
+Location: [tests/unit/agent_tests/test_agent_checkpoint_integration.py](tests/unit/agent_tests/test_agent_checkpoint_integration.py)
+
+- 8 passing tests (failure, cancellation, state shape, success cleanup)
+- Uses dependency injection: `AgentService(checkpoint_service=mock)`
+
+---
+
+## Previous Tasks (7.1-7.3)
+
+Tasks 7.1, 7.2, 7.3 were completed in earlier commits on this branch. See git log for details.
