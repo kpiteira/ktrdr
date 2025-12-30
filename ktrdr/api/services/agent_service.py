@@ -10,10 +10,11 @@ Environment Variables:
 
 import asyncio
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ktrdr import get_logger
 from ktrdr.agents.budget import get_budget_tracker
+from ktrdr.agents.checkpoint_builder import build_agent_checkpoint_state
 from ktrdr.agents.invoker import resolve_model
 from ktrdr.agents.workers.assessment_worker import AgentAssessmentWorker
 from ktrdr.agents.workers.design_worker import AgentDesignWorker
@@ -33,6 +34,9 @@ from ktrdr.api.services.operations_service import (
 )
 from ktrdr.monitoring.service_telemetry import trace_service_method
 
+if TYPE_CHECKING:
+    from ktrdr.checkpoint import CheckpointService
+
 logger = get_logger(__name__)
 
 
@@ -46,15 +50,24 @@ class AgentService:
 
     Manages research cycles through OperationsService. Each cycle runs as an
     AGENT_RESEARCH operation with child operations for each phase.
+
+    M7: Supports checkpoint save on failure/cancellation for resume capability.
     """
 
-    def __init__(self, operations_service: OperationsService | None = None):
+    def __init__(
+        self,
+        operations_service: OperationsService | None = None,
+        checkpoint_service: "CheckpointService | None" = None,
+    ):
         """Initialize the agent service.
 
         Args:
             operations_service: Optional OperationsService instance (for testing).
+            checkpoint_service: Optional CheckpointService instance (for testing).
+                               If not provided, lazily created when needed.
         """
         self.ops = operations_service or get_operations_service()
+        self._checkpoint_service = checkpoint_service
         self._worker: AgentResearchWorker | None = None
 
     def _get_worker(self) -> AgentResearchWorker:
@@ -89,6 +102,64 @@ class AgentService:
                     backtest_service=None,
                 )
         return self._worker
+
+    def _get_checkpoint_service(self) -> "CheckpointService":
+        """Get or create the checkpoint service.
+
+        Returns:
+            CheckpointService instance for checkpoint operations.
+        """
+        if self._checkpoint_service is None:
+            from ktrdr.api.database import get_session_factory
+            from ktrdr.checkpoint import CheckpointService
+
+            self._checkpoint_service = CheckpointService(
+                session_factory=get_session_factory(),
+            )
+        return self._checkpoint_service
+
+    async def _save_checkpoint(
+        self,
+        operation_id: str,
+        checkpoint_type: str,
+    ) -> None:
+        """Save checkpoint for agent operation.
+
+        Builds checkpoint state from the operation metadata and saves it.
+
+        Args:
+            operation_id: The operation ID to checkpoint.
+            checkpoint_type: Type of checkpoint (failure, cancellation, etc.).
+        """
+        try:
+            # Get the operation to build checkpoint state
+            op = await self.ops.get_operation(operation_id)
+            if op is None:
+                logger.warning(
+                    f"Cannot save checkpoint - operation not found: {operation_id}"
+                )
+                return
+
+            # Build checkpoint state using the builder function
+            checkpoint_state = build_agent_checkpoint_state(op)
+
+            # Save checkpoint (no artifacts for agent operations)
+            checkpoint_service = self._get_checkpoint_service()
+            await checkpoint_service.save_checkpoint(
+                operation_id=operation_id,
+                checkpoint_type=checkpoint_type,
+                state=checkpoint_state.to_dict(),
+                artifacts=None,
+            )
+
+            logger.info(
+                f"Agent checkpoint saved: {operation_id} "
+                f"(type={checkpoint_type}, phase={checkpoint_state.phase})"
+            )
+
+        except Exception as e:
+            # Don't fail the operation if checkpoint save fails
+            logger.warning(f"Failed to save agent checkpoint: {e}")
 
     @trace_service_method("agent.trigger")
     async def trigger(
@@ -159,19 +230,32 @@ class AgentService:
     async def _run_worker(self, operation_id: str, worker: AgentResearchWorker) -> None:
         """Run worker and handle completion/failure.
 
+        M7: Saves checkpoint on failure/cancellation for resume capability.
+        Deletes checkpoint on successful completion.
+
         Args:
             operation_id: The operation ID to run.
             worker: The worker instance to run.
         """
         try:
             result = await worker.run(operation_id)
+
+            # M7: Delete checkpoint on successful completion
+            checkpoint_service = self._get_checkpoint_service()
+            await checkpoint_service.delete_checkpoint(operation_id)
+
             await self.ops.complete_operation(operation_id, result)
             # Budget spend is recorded per-phase in the worker
 
         except asyncio.CancelledError:
+            # M7: Save checkpoint before marking cancelled
+            await self._save_checkpoint(operation_id, "cancellation")
             await self.ops.cancel_operation(operation_id, "Cancelled by user")
             raise
+
         except Exception as e:
+            # M7: Save checkpoint before marking failed
+            await self._save_checkpoint(operation_id, "failure")
             await self.ops.fail_operation(operation_id, str(e))
             raise
 
