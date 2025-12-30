@@ -485,3 +485,189 @@ class TestDesignWorkerContextGathering:
         prompt = call_kwargs["prompt"]
 
         assert "previous_momentum_v1" in prompt
+
+
+class TestDesignWorkerMemoryLoading:
+    """Task 3.4: Tests for memory loading in design worker.
+
+    These tests verify that the design worker loads experiment history
+    and hypotheses from memory and includes them in the prompt.
+    """
+
+    @pytest.fixture
+    def mock_ops(self):
+        """Create mock OperationsService."""
+        ops = MagicMock()
+        mock_op = MagicMock()
+        mock_op.operation_id = "op_agent_design_test_456"
+        ops.create_operation = AsyncMock(return_value=mock_op)
+        ops.complete_operation = AsyncMock()
+        ops.fail_operation = AsyncMock()
+
+        # Mock get_operation for parent metadata updates
+        mock_parent_op = MagicMock()
+        mock_parent_op.metadata.parameters = {}
+        ops.get_operation = AsyncMock(return_value=mock_parent_op)
+
+        return ops
+
+    @pytest.fixture
+    def mock_invoker(self):
+        """Create mock AnthropicAgentInvoker."""
+        invoker = MagicMock()
+        invoker.run = AsyncMock()
+        return invoker
+
+    @pytest.fixture
+    def mock_tool_executor(self):
+        """Create mock ToolExecutor with strategy info."""
+        executor = MagicMock()
+        executor.last_saved_strategy_name = "test_strategy_memory"
+        executor.last_saved_strategy_path = "/app/strategies/test_strategy_memory.yaml"
+        return executor
+
+    @pytest.mark.asyncio
+    async def test_design_worker_loads_memory(
+        self, mock_ops, mock_invoker, mock_tool_executor
+    ):
+        """Design worker calls memory loading functions."""
+        from ktrdr.agents.workers.design_worker import AgentDesignWorker
+
+        mock_invoker.run.return_value = AgentResult(
+            success=True,
+            output="Done",
+            input_tokens=1000,
+            output_tokens=500,
+            error=None,
+        )
+
+        worker = AgentDesignWorker(
+            operations_service=mock_ops,
+            invoker=mock_invoker,
+        )
+        worker.tool_executor = mock_tool_executor
+
+        # Mock context gathering methods
+        worker._get_available_indicators = AsyncMock(return_value=[])
+        worker._get_available_symbols = MagicMock(return_value=[])
+        worker._get_recent_strategies = AsyncMock(return_value=[])
+
+        # Mock memory loading methods
+        worker._load_experiment_history = MagicMock(
+            return_value=[
+                {
+                    "id": "exp_test",
+                    "context": {"indicators": ["RSI"]},
+                    "results": {"test_accuracy": 0.65},
+                    "assessment": {"verdict": "strong_signal"},
+                }
+            ]
+        )
+        worker._load_open_hypotheses = MagicMock(
+            return_value=[
+                {"id": "H_001", "text": "Test hypothesis", "status": "untested"}
+            ]
+        )
+
+        await worker.run("op_parent_123")
+
+        # Verify memory loading was called
+        worker._load_experiment_history.assert_called_once()
+        worker._load_open_hypotheses.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_design_worker_memory_failure(
+        self, mock_ops, mock_invoker, mock_tool_executor
+    ):
+        """Design worker continues with empty lists when memory fails."""
+        from ktrdr.agents.workers.design_worker import AgentDesignWorker
+
+        mock_invoker.run.return_value = AgentResult(
+            success=True,
+            output="Done",
+            input_tokens=1000,
+            output_tokens=500,
+            error=None,
+        )
+
+        worker = AgentDesignWorker(
+            operations_service=mock_ops,
+            invoker=mock_invoker,
+        )
+        worker.tool_executor = mock_tool_executor
+
+        # Mock context gathering
+        worker._get_available_indicators = AsyncMock(return_value=[])
+        worker._get_available_symbols = MagicMock(return_value=[])
+        worker._get_recent_strategies = AsyncMock(return_value=[])
+
+        # Mock memory loading to raise exceptions
+        worker._load_experiment_history = MagicMock(
+            side_effect=Exception("Memory failed")
+        )
+        worker._load_open_hypotheses = MagicMock(
+            side_effect=Exception("Hypotheses failed")
+        )
+
+        # Should NOT raise - graceful degradation
+        result = await worker.run("op_parent_123")
+
+        assert result["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_design_worker_prompt_includes_memory(
+        self, mock_ops, mock_invoker, mock_tool_executor
+    ):
+        """Design worker includes memory content in prompt."""
+        from ktrdr.agents.workers.design_worker import AgentDesignWorker
+
+        mock_invoker.run.return_value = AgentResult(
+            success=True,
+            output="Done",
+            input_tokens=1000,
+            output_tokens=500,
+            error=None,
+        )
+
+        worker = AgentDesignWorker(
+            operations_service=mock_ops,
+            invoker=mock_invoker,
+        )
+        worker.tool_executor = mock_tool_executor
+
+        # Mock context gathering
+        worker._get_available_indicators = AsyncMock(return_value=[])
+        worker._get_available_symbols = MagicMock(return_value=[])
+        worker._get_recent_strategies = AsyncMock(return_value=[])
+
+        # Mock memory with specific content we can verify
+        worker._load_experiment_history = MagicMock(
+            return_value=[
+                {
+                    "id": "exp_memory_test",
+                    "timestamp": "2025-12-28T00:00:00Z",
+                    "context": {"indicators": ["RSI"], "timeframe": "1h"},
+                    "results": {"test_accuracy": 0.648},
+                    "assessment": {"verdict": "strong_signal"},
+                }
+            ]
+        )
+        worker._load_open_hypotheses = MagicMock(
+            return_value=[
+                {
+                    "id": "H_memory_test",
+                    "text": "Memory hypothesis for testing",
+                    "status": "untested",
+                }
+            ]
+        )
+
+        await worker.run("op_parent_123")
+
+        # Check prompt includes memory content
+        call_kwargs = mock_invoker.run.call_args.kwargs
+        prompt = call_kwargs["prompt"]
+
+        assert "exp_memory_test" in prompt
+        assert "H_memory_test" in prompt
+        assert "Memory hypothesis for testing" in prompt
