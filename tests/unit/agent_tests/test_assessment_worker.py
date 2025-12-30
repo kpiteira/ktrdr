@@ -543,3 +543,169 @@ class TestSaveToMemory:
                 backtest_metrics={},
                 parsed_assessment=parsed,
             )
+
+
+class TestMalformedAssessmentHandling:
+    """Tests for Task 4.3: Handle malformed assessment gracefully."""
+
+    @pytest.mark.asyncio
+    async def test_malformed_assessment_still_saves(
+        self, mock_operations_service, tmp_path
+    ):
+        """Record created with unknown verdict when parsing fails."""
+        from unittest.mock import patch
+
+        import yaml
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        # Simulate malformed assessment - ParsedAssessment.empty() returns this
+        parsed = ParsedAssessment.empty(
+            raw_text="Malformed output that couldn't be parsed"
+        )
+
+        assert parsed.verdict == "unknown"  # Sanity check
+
+        with patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path):
+            await worker._save_to_memory(
+                strategy_name="test_strategy",
+                strategy_config={"indicators": [{"name": "RSI"}]},
+                training_metrics={"accuracy": 0.55},
+                backtest_metrics={"sharpe_ratio": 0.5},
+                parsed_assessment=parsed,
+            )
+
+        # Verify file was created
+        files = list(tmp_path.glob("*.yaml"))
+        assert len(files) == 1
+
+        # Verify content has unknown verdict
+        content = yaml.safe_load(files[0].read_text())
+        assert content["assessment"]["verdict"] == "unknown"
+
+    @pytest.mark.asyncio
+    async def test_malformed_assessment_has_raw_text(
+        self, mock_operations_service, tmp_path
+    ):
+        """Raw text preserved in the assessment for debugging."""
+        from unittest.mock import patch
+
+        import yaml
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        raw_output = "This is some malformed output\nthat couldn't be parsed correctly."
+        parsed = ParsedAssessment.empty(raw_text=raw_output)
+
+        with patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path):
+            await worker._save_to_memory(
+                strategy_name="test_strategy",
+                strategy_config={},
+                training_metrics={},
+                backtest_metrics={},
+                parsed_assessment=parsed,
+            )
+
+        files = list(tmp_path.glob("*.yaml"))
+        content = yaml.safe_load(files[0].read_text())
+
+        # raw_text should be preserved in the assessment
+        assert "raw_text" in content["assessment"]
+        assert raw_output in content["assessment"]["raw_text"]
+
+    @pytest.mark.asyncio
+    async def test_malformed_assessment_truncates_long_raw_text(
+        self, mock_operations_service, tmp_path
+    ):
+        """Long raw text is truncated to prevent huge files."""
+        from unittest.mock import patch
+
+        import yaml
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        # Create very long raw text (over 1000 chars)
+        raw_output = "A" * 2000
+        parsed = ParsedAssessment.empty(raw_text=raw_output)
+
+        with patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path):
+            await worker._save_to_memory(
+                strategy_name="test_strategy",
+                strategy_config={},
+                training_metrics={},
+                backtest_metrics={},
+                parsed_assessment=parsed,
+            )
+
+        files = list(tmp_path.glob("*.yaml"))
+        content = yaml.safe_load(files[0].read_text())
+
+        # raw_text should be truncated to max 1000 chars
+        assert len(content["assessment"]["raw_text"]) <= 1000
+
+    @pytest.mark.asyncio
+    async def test_malformed_assessment_has_fallback_observations(
+        self, mock_operations_service, tmp_path
+    ):
+        """Empty observations get a fallback when verdict is unknown."""
+        from unittest.mock import patch
+
+        import yaml
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        # Malformed assessment has empty observations
+        parsed = ParsedAssessment.empty(raw_text="Malformed output")
+        assert parsed.observations == []  # Sanity check
+
+        with patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path):
+            await worker._save_to_memory(
+                strategy_name="test_strategy",
+                strategy_config={},
+                training_metrics={},
+                backtest_metrics={},
+                parsed_assessment=parsed,
+            )
+
+        files = list(tmp_path.glob("*.yaml"))
+        content = yaml.safe_load(files[0].read_text())
+
+        # Should have fallback observation, not empty list
+        assert len(content["assessment"]["observations"]) > 0
+        assert "could not be parsed" in content["assessment"]["observations"][0].lower()
+
+    @pytest.mark.asyncio
+    async def test_malformed_assessment_logs_warning(
+        self, mock_operations_service, tmp_path, caplog
+    ):
+        """Warning logged for unknown verdict."""
+        import logging
+        from unittest.mock import patch
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+        parsed = ParsedAssessment.empty(raw_text="Malformed")
+
+        with patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path):
+            with caplog.at_level(logging.WARNING):
+                await worker._save_to_memory(
+                    strategy_name="test_strategy",
+                    strategy_config={},
+                    training_metrics={},
+                    backtest_metrics={},
+                    parsed_assessment=parsed,
+                )
+
+        # Check warning was logged
+        assert any(
+            "unknown verdict" in record.message.lower() for record in caplog.records
+        )

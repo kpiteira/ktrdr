@@ -258,6 +258,16 @@ class AgentAssessmentWorker:
             context = self._extract_context(strategy_config)
             results = self._extract_results(training_metrics, backtest_metrics)
 
+            # Handle malformed assessment - provide fallback observations
+            observations = parsed_assessment.observations
+            if not observations and parsed_assessment.verdict == "unknown":
+                observations = ["Assessment could not be parsed"]
+
+            # Truncate raw_text to prevent huge files (max 1000 chars)
+            raw_text = (
+                parsed_assessment.raw_text[:1000] if parsed_assessment.raw_text else ""
+            )
+
             record = ExperimentRecord(
                 id=generate_experiment_id(),
                 timestamp=datetime.now().isoformat(),
@@ -266,9 +276,10 @@ class AgentAssessmentWorker:
                 results=results,
                 assessment={
                     "verdict": parsed_assessment.verdict,
-                    "observations": parsed_assessment.observations,
+                    "observations": observations,
                     "hypotheses": parsed_assessment.hypotheses,
                     "limitations": parsed_assessment.limitations,
+                    "raw_text": raw_text,
                 },
                 source="agent",
             )
