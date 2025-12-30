@@ -234,3 +234,181 @@ class TestStartupReconciliation:
             reconciliation_status="PENDING_RECONCILIATION",
         )
         assert result.worker_ops_reconciled == 1
+
+
+class TestStartupReconciliationWithCheckpoint:
+    """Test StartupReconciliation with checkpoint service (Task 7.2)."""
+
+    @pytest.fixture
+    def mock_repository(self):
+        """Create a mock OperationsRepository."""
+        repo = AsyncMock()
+        repo.list = AsyncMock(return_value=[])
+        repo.update = AsyncMock()
+        return repo
+
+    @pytest.fixture
+    def mock_checkpoint_service(self):
+        """Create a mock CheckpointService."""
+        service = AsyncMock()
+        service.load_checkpoint = AsyncMock(return_value=None)
+        return service
+
+    @pytest.mark.asyncio
+    async def test_backend_local_with_checkpoint_available(
+        self, mock_repository, mock_checkpoint_service
+    ):
+        """Backend-local op with checkpoint should indicate resume is possible."""
+        # Create a mock checkpoint data object
+        mock_checkpoint = AsyncMock()
+        mock_checkpoint.operation_id = "op_local_with_cp"
+        mock_checkpoint_service.load_checkpoint.return_value = mock_checkpoint
+
+        backend_op = _create_operation(
+            "op_local_with_cp",
+            is_backend_local=True,
+            worker_id=None,
+        )
+        mock_repository.list.return_value = [backend_op]
+
+        reconciliation = StartupReconciliation(
+            repository=mock_repository,
+            checkpoint_service=mock_checkpoint_service,
+        )
+        result = await reconciliation.reconcile()
+
+        # Verify checkpoint was checked
+        mock_checkpoint_service.load_checkpoint.assert_called_once_with(
+            "op_local_with_cp", load_artifacts=False
+        )
+
+        # Verify error message indicates checkpoint is available
+        mock_repository.update.assert_called_once_with(
+            "op_local_with_cp",
+            status="FAILED",
+            error_message="Backend restarted - checkpoint available for resume",
+        )
+        assert result.backend_ops_failed == 1
+
+    @pytest.mark.asyncio
+    async def test_backend_local_without_checkpoint_available(
+        self, mock_repository, mock_checkpoint_service
+    ):
+        """Backend-local op without checkpoint should indicate no resume possible."""
+        mock_checkpoint_service.load_checkpoint.return_value = None
+
+        backend_op = _create_operation(
+            "op_local_no_cp",
+            is_backend_local=True,
+            worker_id=None,
+        )
+        mock_repository.list.return_value = [backend_op]
+
+        reconciliation = StartupReconciliation(
+            repository=mock_repository,
+            checkpoint_service=mock_checkpoint_service,
+        )
+        result = await reconciliation.reconcile()
+
+        # Verify checkpoint was checked
+        mock_checkpoint_service.load_checkpoint.assert_called_once_with(
+            "op_local_no_cp", load_artifacts=False
+        )
+
+        # Verify error message indicates no checkpoint
+        mock_repository.update.assert_called_once_with(
+            "op_local_no_cp",
+            status="FAILED",
+            error_message="Backend restarted - no checkpoint available",
+        )
+        assert result.backend_ops_failed == 1
+
+    @pytest.mark.asyncio
+    async def test_worker_ops_not_affected_by_checkpoint_service(
+        self, mock_repository, mock_checkpoint_service
+    ):
+        """Worker-based ops should not check for checkpoints."""
+        worker_op = _create_operation(
+            "op_worker_123",
+            is_backend_local=False,
+            worker_id="worker-abc",
+        )
+        mock_repository.list.return_value = [worker_op]
+
+        reconciliation = StartupReconciliation(
+            repository=mock_repository,
+            checkpoint_service=mock_checkpoint_service,
+        )
+        result = await reconciliation.reconcile()
+
+        # Checkpoint service should not be called for worker ops
+        mock_checkpoint_service.load_checkpoint.assert_not_called()
+
+        # Worker op should be marked as PENDING_RECONCILIATION
+        mock_repository.update.assert_called_once_with(
+            "op_worker_123",
+            reconciliation_status="PENDING_RECONCILIATION",
+        )
+        assert result.worker_ops_reconciled == 1
+
+    @pytest.mark.asyncio
+    async def test_without_checkpoint_service_uses_default_message(
+        self, mock_repository
+    ):
+        """Without checkpoint service, should use default error message."""
+        backend_op = _create_operation(
+            "op_local_default",
+            is_backend_local=True,
+            worker_id=None,
+        )
+        mock_repository.list.return_value = [backend_op]
+
+        # No checkpoint service provided
+        reconciliation = StartupReconciliation(repository=mock_repository)
+        result = await reconciliation.reconcile()
+
+        # Should use default error message (backward compatibility)
+        mock_repository.update.assert_called_once_with(
+            "op_local_default",
+            status="FAILED",
+            error_message="Backend restarted - operation was running in backend process",
+        )
+        assert result.backend_ops_failed == 1
+
+    @pytest.mark.asyncio
+    async def test_mixed_ops_with_checkpoint_service(
+        self, mock_repository, mock_checkpoint_service
+    ):
+        """Mixed operations should check checkpoints only for backend-local ops."""
+        # Setup: one op has checkpoint, one doesn't
+        mock_checkpoint = AsyncMock()
+        mock_checkpoint.operation_id = "op_backend_1"
+
+        async def mock_load(op_id, load_artifacts=True):
+            if op_id == "op_backend_1":
+                return mock_checkpoint
+            return None
+
+        mock_checkpoint_service.load_checkpoint.side_effect = mock_load
+
+        worker_op = _create_operation("op_worker", is_backend_local=False)
+        backend_op_1 = _create_operation(
+            "op_backend_1", is_backend_local=True, worker_id=None
+        )
+        backend_op_2 = _create_operation(
+            "op_backend_2", is_backend_local=True, worker_id=None
+        )
+        mock_repository.list.return_value = [worker_op, backend_op_1, backend_op_2]
+
+        reconciliation = StartupReconciliation(
+            repository=mock_repository,
+            checkpoint_service=mock_checkpoint_service,
+        )
+        result = await reconciliation.reconcile()
+
+        # Checkpoint service called twice (once per backend-local op)
+        assert mock_checkpoint_service.load_checkpoint.call_count == 2
+
+        # Verify correct operations processed
+        assert result.worker_ops_reconciled == 1
+        assert result.backend_ops_failed == 2

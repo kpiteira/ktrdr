@@ -63,10 +63,18 @@ async def _run_startup_reconciliation() -> None:
         from ktrdr.api.database import get_session_factory
         from ktrdr.api.repositories.operations_repository import OperationsRepository
         from ktrdr.api.services.startup_reconciliation import StartupReconciliation
+        from ktrdr.checkpoint.checkpoint_service import CheckpointService
 
         session_factory = get_session_factory()
         repository = OperationsRepository(session_factory)
-        reconciliation = StartupReconciliation(repository)
+
+        # M7: Create checkpoint service for checking checkpoint availability
+        checkpoint_service = CheckpointService(session_factory)
+
+        reconciliation = StartupReconciliation(
+            repository=repository,
+            checkpoint_service=checkpoint_service,
+        )
         result = await reconciliation.reconcile()
 
         if result.total_processed > 0:
