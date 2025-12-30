@@ -96,6 +96,32 @@ class RetryDecision:
     guidance_for_retry: str | None  # Suggestion for next attempt
 
 
+@dataclass
+class ParsedAssessment:
+    """Structured data extracted from agent's assessment output."""
+
+    verdict: str  # "strong_signal" | "weak_signal" | "no_signal" | "overfit"
+    observations: list[str]
+    hypotheses: list[dict]  # [{"text": "...", "status": "untested"}]
+    limitations: list[str]
+    capability_requests: list[str]
+    tested_hypothesis_ids: list[str]  # H_001, H_002, etc. if mentioned
+    raw_text: str  # Original output for reference
+
+    @classmethod
+    def empty(cls, raw_text: str) -> "ParsedAssessment":
+        """Create empty result when parsing fails."""
+        return cls(
+            verdict="unknown",
+            observations=[],
+            hypotheses=[],
+            limitations=[],
+            capability_requests=[],
+            tested_hypothesis_ids=[],
+            raw_text=raw_text,
+        )
+
+
 # Prompt for extracting tasks from a milestone plan
 # From Architecture doc Appendix: Prompt 1
 EXTRACT_TASKS_PROMPT = """You are parsing a milestone plan to extract tasks for an orchestrator to execute.

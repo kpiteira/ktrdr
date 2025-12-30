@@ -8,6 +8,7 @@ from ktrdr.llm.haiku_brain import (
     ExtractedTask,
     HaikuBrain,
     InterpretationResult,
+    ParsedAssessment,
     RetryDecision,
 )
 
@@ -16,5 +17,5 @@ __all__ = [
     "InterpretationResult",
     "RetryDecision",
     "ExtractedTask",
-    # ParsedAssessment will be added in Task 2.3
+    "ParsedAssessment",
 ]
