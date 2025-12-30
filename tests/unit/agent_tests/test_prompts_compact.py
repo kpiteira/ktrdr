@@ -563,3 +563,222 @@ class TestFormatExperimentHistory:
         assert "64.8%" in result or "64.8" in result
         # Should not show raw decimal
         assert "0.648" not in result
+
+
+class TestFormatHypotheses:
+    """Tests for hypothesis formatting (Task 3.3).
+
+    These tests verify that hypotheses are formatted with ID, text,
+    source, and rationale as specified in SCENARIOS.md.
+    """
+
+    def test_format_hypotheses_empty(self):
+        """Returns empty string for empty hypothesis list."""
+        builder = StrategyDesignerPromptBuilder()
+        result = builder._format_hypotheses([])
+
+        assert result == ""
+
+    def test_format_hypotheses_single(self):
+        """Formats a single hypothesis with all fields."""
+        builder = StrategyDesignerPromptBuilder()
+        hypotheses = [
+            {
+                "id": "H_001",
+                "text": "Multi-timeframe (5m with 1h context) might break the 64.8% plateau",
+                "source_experiment": "exp_v15_rsi_di",
+                "rationale": "Best result so far, but hitting accuracy ceiling",
+                "status": "untested",
+            }
+        ]
+
+        result = builder._format_hypotheses(hypotheses)
+
+        # Should have section header
+        assert "## Open Hypotheses" in result
+        # Should have hypothesis ID
+        assert "H_001" in result
+        # Should have text
+        assert "Multi-timeframe" in result
+        assert "64.8% plateau" in result
+        # Should have source experiment
+        assert "exp_v15_rsi_di" in result
+        # Should have rationale
+        assert "Best result so far" in result
+
+    def test_format_hypotheses_multiple(self):
+        """Formats multiple hypotheses."""
+        builder = StrategyDesignerPromptBuilder()
+        hypotheses = [
+            {
+                "id": "H_001",
+                "text": "Multi-timeframe might improve accuracy",
+                "source_experiment": "exp_001",
+                "status": "untested",
+            },
+            {
+                "id": "H_002",
+                "text": "ADX might work as filter with RSI",
+                "source_experiment": "exp_002",
+                "status": "untested",
+            },
+        ]
+
+        result = builder._format_hypotheses(hypotheses)
+
+        # Both hypotheses should be present
+        assert "H_001" in result
+        assert "H_002" in result
+        assert "Multi-timeframe" in result
+        assert "ADX might work" in result
+
+    def test_format_hypotheses_missing_optional_fields(self):
+        """Handles hypotheses with missing optional fields gracefully."""
+        builder = StrategyDesignerPromptBuilder()
+        hypotheses = [
+            {
+                "id": "H_003",
+                "text": "Minimal hypothesis with just ID and text",
+                # Missing: source_experiment, rationale
+            }
+        ]
+
+        # Should not crash
+        result = builder._format_hypotheses(hypotheses)
+
+        # Should still include ID and text
+        assert "H_003" in result
+        assert "Minimal hypothesis" in result
+
+
+class TestNewCycleMemoryIntegration:
+    """Tests for memory integration in new_cycle prompts (Task 3.3).
+
+    These tests verify that experiment history and hypotheses appear
+    in the final prompt when provided, and work correctly without.
+    """
+
+    def test_new_cycle_includes_memory(self):
+        """Memory sections appear in the final prompt."""
+        experiments = [
+            {
+                "id": "exp_test",
+                "timestamp": "2025-12-28T00:00:00Z",
+                "context": {"indicators": ["RSI"], "timeframe": "1h"},
+                "results": {"test_accuracy": 0.64},
+                "assessment": {"verdict": "strong_signal"},
+            }
+        ]
+        hypotheses = [
+            {
+                "id": "H_test",
+                "text": "Test hypothesis for integration",
+                "source_experiment": "exp_test",
+            }
+        ]
+
+        prompt = get_strategy_designer_prompt(
+            trigger_reason=TriggerReason.START_NEW_CYCLE,
+            operation_id="op_test_memory",
+            phase="designing",
+            experiment_history=experiments,
+            open_hypotheses=hypotheses,
+        )
+
+        user_prompt = prompt["user"]
+
+        # Should have experiment history section
+        assert "## Experiment History" in user_prompt
+        assert "exp_test" in user_prompt
+        # Should have hypotheses section
+        assert "## Open Hypotheses" in user_prompt
+        assert "H_test" in user_prompt
+        assert "Test hypothesis for integration" in user_prompt
+
+    def test_new_cycle_without_memory(self):
+        """Prompt works when memory fields are None."""
+        prompt = get_strategy_designer_prompt(
+            trigger_reason=TriggerReason.START_NEW_CYCLE,
+            operation_id="op_test_no_memory",
+            phase="designing",
+            experiment_history=None,
+            open_hypotheses=None,
+        )
+
+        user_prompt = prompt["user"]
+
+        # Should still have basic structure
+        assert "start_new_cycle" in user_prompt
+        assert "op_test_no_memory" in user_prompt
+        # Should NOT crash or have memory sections
+        # (empty strings from formatters when None/empty)
+
+    def test_new_cycle_with_empty_memory_lists(self):
+        """Prompt works with empty memory lists."""
+        prompt = get_strategy_designer_prompt(
+            trigger_reason=TriggerReason.START_NEW_CYCLE,
+            operation_id="op_test_empty",
+            phase="designing",
+            experiment_history=[],
+            open_hypotheses=[],
+        )
+
+        user_prompt = prompt["user"]
+
+        # Should work without crashing
+        assert "op_test_empty" in user_prompt
+        # Empty lists should not produce section headers
+        assert "## Experiment History" not in user_prompt
+        assert "## Open Hypotheses" not in user_prompt
+
+    def test_new_cycle_with_only_experiments(self):
+        """Prompt works with only experiments (no hypotheses)."""
+        experiments = [
+            {
+                "id": "exp_only",
+                "context": {"indicators": ["RSI"]},
+                "results": {"test_accuracy": 0.65},
+                "assessment": {"verdict": "strong_signal"},
+            }
+        ]
+
+        prompt = get_strategy_designer_prompt(
+            trigger_reason=TriggerReason.START_NEW_CYCLE,
+            operation_id="op_test_exp_only",
+            phase="designing",
+            experiment_history=experiments,
+            open_hypotheses=None,
+        )
+
+        user_prompt = prompt["user"]
+
+        # Should have experiment history
+        assert "## Experiment History" in user_prompt
+        assert "exp_only" in user_prompt
+        # Should NOT have hypotheses section
+        assert "## Open Hypotheses" not in user_prompt
+
+    def test_new_cycle_with_only_hypotheses(self):
+        """Prompt works with only hypotheses (no experiments)."""
+        hypotheses = [
+            {
+                "id": "H_only",
+                "text": "Standalone hypothesis",
+            }
+        ]
+
+        prompt = get_strategy_designer_prompt(
+            trigger_reason=TriggerReason.START_NEW_CYCLE,
+            operation_id="op_test_hyp_only",
+            phase="designing",
+            experiment_history=None,
+            open_hypotheses=hypotheses,
+        )
+
+        user_prompt = prompt["user"]
+
+        # Should have hypotheses section
+        assert "## Open Hypotheses" in user_prompt
+        assert "H_only" in user_prompt
+        # Should NOT have experiment history section
+        assert "## Experiment History" not in user_prompt

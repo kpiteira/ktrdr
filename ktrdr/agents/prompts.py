@@ -494,6 +494,19 @@ Current Phase: {context.phase}"""
                 f"### Recent Strategies (avoid repetition)\n\n{recent_text}"
             )
 
+        # Memory sections (v2.0)
+        if context.experiment_history:
+            experiment_text = self._format_experiment_history(
+                context.experiment_history
+            )
+            if experiment_text:
+                sections.append(experiment_text)
+
+        if context.open_hypotheses:
+            hypotheses_text = self._format_hypotheses(context.open_hypotheses)
+            if hypotheses_text:
+                sections.append(hypotheses_text)
+
         sections.append(
             """## Your Task
 
@@ -715,6 +728,44 @@ Then update your state with the assessment and mark the cycle as complete."""
 
         return "\n".join(lines) + "\n"
 
+    def _format_hypotheses(self, hypotheses: list[dict[str, Any]]) -> str:
+        """Format open hypotheses for the agent to consider.
+
+        Produces markdown like:
+            ## Open Hypotheses
+
+            Consider testing one of these hypotheses:
+
+            - **H_001**: Multi-timeframe might break the plateau
+              - Source: exp_v15_rsi_di
+              - Rationale: Best result so far, but hitting accuracy ceiling
+
+        Args:
+            hypotheses: List of hypothesis records from memory.
+
+        Returns:
+            Formatted markdown string, or empty string if no hypotheses.
+        """
+        if not hypotheses:
+            return ""
+
+        lines = ["## Open Hypotheses\n"]
+        lines.append("Consider testing one of these hypotheses:\n")
+
+        for h in hypotheses:
+            h_id = h.get("id", "?")
+            text = h.get("text", "")
+            source = h.get("source_experiment", "")
+            rationale = h.get("rationale", "")
+
+            lines.append(f"- **{h_id}**: {text}")
+            if source:
+                lines.append(f"  - Source: {source}")
+            if rationale:
+                lines.append(f"  - Rationale: {rationale}")
+
+        return "\n".join(lines)
+
 
 def get_strategy_designer_prompt(
     trigger_reason: TriggerReason | str,
@@ -726,6 +777,8 @@ def get_strategy_designer_prompt(
     training_results: dict[str, Any] | None = None,
     backtest_results: dict[str, Any] | None = None,
     strategy_config: dict[str, Any] | None = None,
+    experiment_history: list[dict[str, Any]] | None = None,
+    open_hypotheses: list[dict[str, Any]] | None = None,
 ) -> dict[str, str]:
     """Convenience function to build the strategy designer prompt.
 
@@ -742,6 +795,8 @@ def get_strategy_designer_prompt(
         training_results: Training results (if applicable).
         backtest_results: Backtest results (if applicable).
         strategy_config: Current strategy config.
+        experiment_history: Past experiments from memory for contextual reasoning.
+        open_hypotheses: Untested hypotheses from memory for exploration guidance.
 
     Returns:
         Dict with 'system' and 'user' keys containing the prompts.
@@ -760,6 +815,8 @@ def get_strategy_designer_prompt(
         training_results=training_results,
         backtest_results=backtest_results,
         strategy_config=strategy_config,
+        experiment_history=experiment_history,
+        open_hypotheses=open_hypotheses,
     )
 
     builder = StrategyDesignerPromptBuilder()
