@@ -57,6 +57,7 @@ services:
       - ./models:/app/models
       - ./output:/app/output
       - ./training_analytics:/app/training_analytics
+      - ./memory:/app/memory  # Agent memory (experiments, hypotheses)
       # Cache directories
       - pip-cache:/root/.cache/pip
       - uv-cache:/root/.cache/uv
@@ -64,8 +65,8 @@ services:
       - ENVIRONMENT=development
       - LOG_LEVEL=INFO
       # Agent model configuration (Task 8.3)
-      # Valid: claude-opus-4-5-20250514, claude-sonnet-4-20250514, claude-haiku-4-5-20250514
-      - AGENT_MODEL=${AGENT_MODEL:-claude-opus-4-5-20250514}
+      # Valid: claude-opus-4-5-20251101, claude-sonnet-4-5-20250929, claude-haiku-4-5-20251001
+      - AGENT_MODEL=${AGENT_MODEL:-claude-opus-4-5-20251101}
       - PYTHONPATH=/app
       # Agent E2E testing (comment out for real workers)
       - USE_STUB_WORKERS=${USE_STUB_WORKERS:-false}

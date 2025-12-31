@@ -741,6 +741,48 @@ async def resume_operation(
                     detail=f"Failed to connect to worker: {str(e)}",
                 ) from e
 
+        elif op_type == "agent":
+            # Agent operations are backend-local - call AgentService.resume() directly
+            from ktrdr.api.services.agent_service import get_agent_service
+
+            agent_service = get_agent_service()
+            result = await agent_service.resume(operation_id)
+
+            if not result.get("success"):
+                # Resume failed - revert status
+                await operations_service.update_status(operation_id, status="CANCELLED")
+                reason = result.get("reason", "unknown")
+                message = result.get("message", "Agent resume failed")
+
+                if reason == "no_checkpoint":
+                    raise HTTPException(
+                        status_code=404,
+                        detail=message,
+                    )
+                elif reason == "active_cycle_exists":
+                    raise HTTPException(
+                        status_code=409,
+                        detail=message,
+                    )
+                else:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=message,
+                    )
+
+            logger.info(
+                f"Agent operation resumed: {operation_id} from phase {result.get('resumed_from_phase')}"
+            )
+
+        else:
+            # Unknown operation type
+            logger.warning(f"Unknown operation type for resume: {op_type}")
+            await operations_service.update_status(operation_id, status="CANCELLED")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown operation type for resume: {op_type}",
+            )
+
         logger.info(
             f"Successfully resumed operation: {operation_id} from epoch {checkpoint.state.get('epoch')}"
         )

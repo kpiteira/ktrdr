@@ -291,3 +291,171 @@ class TestBacktestCheckpointState:
 
         # Even if you try to override it, default should be backtesting
         # (This tests the dataclass field default)
+
+
+class TestAgentCheckpointState:
+    """Tests for AgentCheckpointState dataclass."""
+
+    def test_required_fields(self):
+        """Should require operation_type and phase."""
+        from ktrdr.checkpoint.schemas import AgentCheckpointState
+
+        state = AgentCheckpointState(
+            phase="designing",
+        )
+        assert state.operation_type == "agent"
+        assert state.phase == "designing"
+
+    def test_optional_fields_have_defaults(self):
+        """Optional fields should have sensible defaults."""
+        from ktrdr.checkpoint.schemas import AgentCheckpointState
+
+        state = AgentCheckpointState(
+            phase="training",
+        )
+        assert state.strategy_path is None
+        assert state.strategy_name is None
+        assert state.training_operation_id is None
+        assert state.training_checkpoint_epoch is None
+        assert state.backtest_operation_id is None
+        assert state.token_counts == {}
+        assert state.original_request == {}
+
+    def test_all_fields(self):
+        """Should accept all fields."""
+        from ktrdr.checkpoint.schemas import AgentCheckpointState
+
+        token_counts = {"input_tokens": 5000, "output_tokens": 2000}
+        request = {"trigger_reason": "start_new_cycle"}
+
+        state = AgentCheckpointState(
+            phase="backtesting",
+            strategy_path="/path/to/strategy.yaml",
+            strategy_name="momentum_v1",
+            training_operation_id="op_training_123",
+            training_checkpoint_epoch=45,
+            backtest_operation_id="op_backtest_456",
+            token_counts=token_counts,
+            original_request=request,
+        )
+
+        assert state.operation_type == "agent"
+        assert state.phase == "backtesting"
+        assert state.strategy_path == "/path/to/strategy.yaml"
+        assert state.strategy_name == "momentum_v1"
+        assert state.training_operation_id == "op_training_123"
+        assert state.training_checkpoint_epoch == 45
+        assert state.backtest_operation_id == "op_backtest_456"
+        assert state.token_counts == token_counts
+        assert state.original_request == request
+
+    def test_to_dict(self):
+        """Should be convertible to dict for JSON serialization."""
+        from ktrdr.checkpoint.schemas import AgentCheckpointState
+
+        state = AgentCheckpointState(
+            phase="designing",
+            strategy_name="test_strategy",
+        )
+
+        d = state.to_dict()
+
+        assert isinstance(d, dict)
+        assert d["operation_type"] == "agent"
+        assert d["phase"] == "designing"
+        assert d["strategy_name"] == "test_strategy"
+        assert d["strategy_path"] is None
+        assert d["token_counts"] == {}
+
+    def test_from_dict(self):
+        """Should be creatable from dict (for deserialization)."""
+        from ktrdr.checkpoint.schemas import AgentCheckpointState
+
+        data = {
+            "operation_type": "agent",
+            "phase": "training",
+            "strategy_path": "/strategies/my_strategy.yaml",
+            "strategy_name": "my_strategy",
+            "training_operation_id": "op_train_789",
+            "training_checkpoint_epoch": 20,
+            "backtest_operation_id": None,
+            "token_counts": {"input_tokens": 10000, "output_tokens": 4000},
+            "original_request": {"trigger_reason": "resume"},
+        }
+
+        state = AgentCheckpointState.from_dict(data)
+
+        assert state.operation_type == "agent"
+        assert state.phase == "training"
+        assert state.strategy_path == "/strategies/my_strategy.yaml"
+        assert state.strategy_name == "my_strategy"
+        assert state.training_operation_id == "op_train_789"
+        assert state.training_checkpoint_epoch == 20
+        assert state.backtest_operation_id is None
+        assert state.token_counts == {"input_tokens": 10000, "output_tokens": 4000}
+        assert state.original_request == {"trigger_reason": "resume"}
+
+    def test_from_dict_with_missing_optional_fields(self):
+        """from_dict should handle missing optional fields gracefully."""
+        from ktrdr.checkpoint.schemas import AgentCheckpointState
+
+        data = {
+            "phase": "designing",
+        }
+
+        state = AgentCheckpointState.from_dict(data)
+
+        assert state.operation_type == "agent"
+        assert state.phase == "designing"
+        assert state.strategy_path is None
+        assert state.strategy_name is None
+        assert state.training_operation_id is None
+        assert state.training_checkpoint_epoch is None
+        assert state.backtest_operation_id is None
+        assert state.token_counts == {}
+        assert state.original_request == {}
+
+    def test_operation_type_is_always_agent(self):
+        """operation_type should always be 'agent' (hardcoded default)."""
+        from ktrdr.checkpoint.schemas import AgentCheckpointState
+
+        state = AgentCheckpointState(
+            phase="idle",
+        )
+        assert state.operation_type == "agent"
+
+    def test_valid_phases(self):
+        """Should accept all valid agent phases."""
+        from ktrdr.checkpoint.schemas import AgentCheckpointState
+
+        valid_phases = ["idle", "designing", "training", "backtesting", "assessing"]
+        for phase in valid_phases:
+            state = AgentCheckpointState(phase=phase)
+            assert state.phase == phase
+
+    def test_roundtrip_serialization(self):
+        """to_dict and from_dict should be inverse operations."""
+        from ktrdr.checkpoint.schemas import AgentCheckpointState
+
+        original = AgentCheckpointState(
+            phase="training",
+            strategy_path="/path/to/strategy.yaml",
+            strategy_name="test_strategy",
+            training_operation_id="op_123",
+            training_checkpoint_epoch=50,
+            token_counts={"input": 1000, "output": 500},
+            original_request={"reason": "test"},
+        )
+
+        # Roundtrip
+        data = original.to_dict()
+        restored = AgentCheckpointState.from_dict(data)
+
+        assert restored.operation_type == original.operation_type
+        assert restored.phase == original.phase
+        assert restored.strategy_path == original.strategy_path
+        assert restored.strategy_name == original.strategy_name
+        assert restored.training_operation_id == original.training_operation_id
+        assert restored.training_checkpoint_epoch == original.training_checkpoint_epoch
+        assert restored.token_counts == original.token_counts
+        assert restored.original_request == original.original_request

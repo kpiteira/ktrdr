@@ -524,6 +524,66 @@ class TestOperationsRepositoryDelete:
 class TestOperationsRepositoryConversion:
     """Tests for model conversion between OperationRecord and OperationInfo."""
 
+    def test_record_to_info_maps_is_backend_local_true(self):
+        """_record_to_info should map is_backend_local=True from record to info."""
+        record = OperationRecord(
+            operation_id="op_backend_local",
+            operation_type="training",
+            status="running",
+            is_backend_local=True,
+            created_at=datetime(2024, 12, 21, 10, 0, 0, tzinfo=timezone.utc),
+            progress_percent=0.0,
+            metadata_={},
+        )
+
+        info = OperationsRepository._record_to_info(record)
+
+        assert info.is_backend_local is True
+
+    def test_record_to_info_maps_is_backend_local_false(self):
+        """_record_to_info should map is_backend_local=False from record to info."""
+        record = OperationRecord(
+            operation_id="op_worker_based",
+            operation_type="training",
+            status="running",
+            is_backend_local=False,
+            created_at=datetime(2024, 12, 21, 10, 0, 0, tzinfo=timezone.utc),
+            progress_percent=0.0,
+            metadata_={},
+        )
+
+        info = OperationsRepository._record_to_info(record)
+
+        assert info.is_backend_local is False
+
+    def test_info_to_record_maps_is_backend_local_true(self):
+        """_info_to_record should map is_backend_local=True from info to record."""
+        info = OperationInfo(
+            operation_id="op_backend_local",
+            operation_type=OperationType.TRAINING,
+            status=OperationStatus.RUNNING,
+            created_at=datetime(2024, 12, 21, 10, 0, 0, tzinfo=timezone.utc),
+            is_backend_local=True,
+        )
+
+        record = OperationsRepository._info_to_record(info)
+
+        assert record.is_backend_local is True
+
+    def test_info_to_record_maps_is_backend_local_false(self):
+        """_info_to_record should map is_backend_local=False from info to record."""
+        info = OperationInfo(
+            operation_id="op_worker_based",
+            operation_type=OperationType.TRAINING,
+            status=OperationStatus.RUNNING,
+            created_at=datetime(2024, 12, 21, 10, 0, 0, tzinfo=timezone.utc),
+            is_backend_local=False,
+        )
+
+        record = OperationsRepository._info_to_record(info)
+
+        assert record.is_backend_local is False
+
     def test_record_to_info_converts_all_fields(self):
         """Conversion should map all fields from OperationRecord to OperationInfo."""
         record = OperationRecord(

@@ -222,9 +222,8 @@ class OrphanOperationDetector:
         Returns:
             True if the operation is backend-local.
         """
-        if operation.metadata and operation.metadata.parameters:
-            return operation.metadata.parameters.get("is_backend_local", False)
-        return False
+        # Use the proper is_backend_local field from OperationInfo
+        return operation.is_backend_local
 
     def get_status(self) -> dict:
         """Get current status of the orphan detector.

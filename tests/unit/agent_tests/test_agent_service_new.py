@@ -43,9 +43,11 @@ def mock_operations_service():
         return op
 
     async def async_create_operation(
-        operation_type, metadata=None, parent_operation_id=None
+        operation_type, metadata=None, parent_operation_id=None, is_backend_local=False
     ):
-        return create_op(operation_type, metadata, parent_operation_id)
+        op = create_op(operation_type, metadata, parent_operation_id)
+        op.is_backend_local = is_backend_local
+        return op
 
     async def async_get_operation(operation_id):
         return operations.get(operation_id)

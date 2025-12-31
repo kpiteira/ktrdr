@@ -10,10 +10,11 @@ Environment Variables:
 
 import asyncio
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ktrdr import get_logger
 from ktrdr.agents.budget import get_budget_tracker
+from ktrdr.agents.checkpoint_builder import build_agent_checkpoint_state
 from ktrdr.agents.invoker import resolve_model
 from ktrdr.agents.workers.assessment_worker import AgentAssessmentWorker
 from ktrdr.agents.workers.design_worker import AgentDesignWorker
@@ -33,6 +34,9 @@ from ktrdr.api.services.operations_service import (
 )
 from ktrdr.monitoring.service_telemetry import trace_service_method
 
+if TYPE_CHECKING:
+    from ktrdr.checkpoint import CheckpointService
+
 logger = get_logger(__name__)
 
 
@@ -46,15 +50,24 @@ class AgentService:
 
     Manages research cycles through OperationsService. Each cycle runs as an
     AGENT_RESEARCH operation with child operations for each phase.
+
+    M7: Supports checkpoint save on failure/cancellation for resume capability.
     """
 
-    def __init__(self, operations_service: OperationsService | None = None):
+    def __init__(
+        self,
+        operations_service: OperationsService | None = None,
+        checkpoint_service: "CheckpointService | None" = None,
+    ):
         """Initialize the agent service.
 
         Args:
             operations_service: Optional OperationsService instance (for testing).
+            checkpoint_service: Optional CheckpointService instance (for testing).
+                               If not provided, lazily created when needed.
         """
         self.ops = operations_service or get_operations_service()
+        self._checkpoint_service = checkpoint_service
         self._worker: AgentResearchWorker | None = None
 
     def _get_worker(self) -> AgentResearchWorker:
@@ -89,6 +102,70 @@ class AgentService:
                     backtest_service=None,
                 )
         return self._worker
+
+    def _get_checkpoint_service(self) -> "CheckpointService":
+        """Get or create the checkpoint service.
+
+        Returns:
+            CheckpointService instance for checkpoint operations.
+        """
+        if self._checkpoint_service is None:
+            from ktrdr.api.database import get_session_factory
+            from ktrdr.checkpoint import CheckpointService
+
+            self._checkpoint_service = CheckpointService(
+                session_factory=get_session_factory(),
+            )
+        return self._checkpoint_service
+
+    async def _save_checkpoint(
+        self,
+        operation_id: str,
+        checkpoint_type: str,
+    ) -> None:
+        """Save checkpoint for agent operation.
+
+        Builds checkpoint state from the operation metadata and saves it.
+
+        Args:
+            operation_id: The operation ID to checkpoint.
+            checkpoint_type: Type of checkpoint (failure, cancellation, etc.).
+        """
+        # Skip if checkpoint service not available (e.g., in unit tests)
+        if self._checkpoint_service is None:
+            logger.debug(
+                f"Checkpoint service not available, skipping checkpoint save: {operation_id}"
+            )
+            return
+
+        try:
+            # Get the operation to build checkpoint state
+            op = await self.ops.get_operation(operation_id)
+            if op is None:
+                logger.warning(
+                    f"Cannot save checkpoint - operation not found: {operation_id}"
+                )
+                return
+
+            # Build checkpoint state using the builder function
+            checkpoint_state = build_agent_checkpoint_state(op)
+
+            # Save checkpoint (no artifacts for agent operations)
+            await self._checkpoint_service.save_checkpoint(
+                operation_id=operation_id,
+                checkpoint_type=checkpoint_type,
+                state=checkpoint_state.to_dict(),
+                artifacts=None,
+            )
+
+            logger.info(
+                f"Agent checkpoint saved: {operation_id} "
+                f"(type={checkpoint_type}, phase={checkpoint_state.phase})"
+            )
+
+        except Exception as e:
+            # Don't fail the operation if checkpoint save fails
+            logger.warning(f"Failed to save agent checkpoint: {e}")
 
     @trace_service_method("agent.trigger")
     async def trigger(
@@ -132,12 +209,14 @@ class AgentService:
             }
 
         # Create operation with model and bypass_gates in metadata
+        # Agent operations are backend-local (run in backend process, not workers)
         params: dict[str, Any] = {"phase": "idle", "model": resolved_model}
         if bypass_gates:
             params["bypass_gates"] = True
         op = await self.ops.create_operation(
             operation_type=OperationType.AGENT_RESEARCH,
             metadata=OperationMetadata(parameters=params),  # type: ignore[call-arg]
+            is_backend_local=True,  # M7 Task 7.1: Mark as backend-local for checkpoint handling
         )
 
         # Start worker in background
@@ -159,19 +238,32 @@ class AgentService:
     async def _run_worker(self, operation_id: str, worker: AgentResearchWorker) -> None:
         """Run worker and handle completion/failure.
 
+        M7: Saves checkpoint on failure/cancellation for resume capability.
+        Deletes checkpoint on successful completion.
+
         Args:
             operation_id: The operation ID to run.
             worker: The worker instance to run.
         """
         try:
             result = await worker.run(operation_id)
+
+            # M7: Delete checkpoint on successful completion (if checkpoint service available)
+            if self._checkpoint_service is not None:
+                await self._checkpoint_service.delete_checkpoint(operation_id)
+
             await self.ops.complete_operation(operation_id, result)
             # Budget spend is recorded per-phase in the worker
 
         except asyncio.CancelledError:
+            # M7: Save checkpoint before marking cancelled
+            await self._save_checkpoint(operation_id, "cancellation")
             await self.ops.cancel_operation(operation_id, "Cancelled by user")
             raise
+
         except Exception as e:
+            # M7: Save checkpoint before marking failed
+            await self._save_checkpoint(operation_id, "failure")
             await self.ops.fail_operation(operation_id, str(e))
             raise
 
@@ -257,6 +349,132 @@ class AgentService:
             "message": "Research cycle cancelled",
         }
 
+    @trace_service_method("agent.resume")
+    async def resume(self, operation_id: str) -> dict[str, Any]:
+        """Resume a cancelled or failed research cycle from checkpoint.
+
+        Loads checkpoint state, verifies the operation is resumable, and
+        restarts the worker from the checkpointed phase.
+
+        Args:
+            operation_id: The operation ID to resume.
+
+        Returns:
+            Dict with resume result including phase resumed from.
+        """
+        from ktrdr.checkpoint.schemas import AgentCheckpointState
+
+        # 1. Check if operation exists
+        op = await self.ops.get_operation(operation_id)
+        if op is None:
+            logger.warning(f"Cannot resume - operation not found: {operation_id}")
+            return {
+                "success": False,
+                "reason": "not_found",
+                "message": f"Operation not found: {operation_id}",
+            }
+
+        # 2. Check if operation is in a resumable state
+        # Note: RESUMING is allowed because the operations endpoint calls
+        # try_resume() before calling this method, which sets status to RESUMING
+        if op.status not in [
+            OperationStatus.CANCELLED,
+            OperationStatus.FAILED,
+            OperationStatus.RESUMING,
+        ]:
+            status_name = op.status.value.lower()
+            logger.warning(
+                f"Cannot resume - operation not resumable: {operation_id} "
+                f"(status: {status_name})"
+            )
+            return {
+                "success": False,
+                "reason": "not_resumable",
+                "message": f"Cannot resume operation that is {status_name}",
+            }
+
+        # 3. Check for active cycles (can't resume if one is already running)
+        active = await self._get_active_research_op()
+        if active:
+            logger.warning(
+                f"Cannot resume - active cycle exists: {active.operation_id}"
+            )
+            return {
+                "success": False,
+                "reason": "active_cycle_exists",
+                "active_operation_id": active.operation_id,
+                "message": f"Cannot resume while another cycle is active: {active.operation_id}",
+            }
+
+        # 4. Load checkpoint
+        checkpoint_service = self._get_checkpoint_service()
+        checkpoint = await checkpoint_service.load_checkpoint(
+            operation_id, load_artifacts=False
+        )
+
+        if checkpoint is None:
+            logger.warning(f"Cannot resume - no checkpoint: {operation_id}")
+            return {
+                "success": False,
+                "reason": "no_checkpoint",
+                "message": f"No checkpoint available for operation {operation_id}",
+            }
+
+        # 5. Deserialize checkpoint state
+        checkpoint_state = AgentCheckpointState.from_dict(checkpoint.state)
+        resumed_from_phase = checkpoint_state.phase
+
+        logger.info(
+            f"Resuming agent operation {operation_id} from phase: {resumed_from_phase}"
+        )
+
+        # 6. Update operation metadata with checkpoint state
+        # Merge checkpoint state back into operation metadata
+        updated_params = dict(op.metadata.parameters)
+        updated_params["phase"] = checkpoint_state.phase
+        if checkpoint_state.strategy_name:
+            updated_params["strategy_name"] = checkpoint_state.strategy_name
+        if checkpoint_state.strategy_path:
+            updated_params["strategy_path"] = checkpoint_state.strategy_path
+        if checkpoint_state.training_operation_id:
+            updated_params["training_op_id"] = checkpoint_state.training_operation_id
+        if checkpoint_state.backtest_operation_id:
+            updated_params["backtest_op_id"] = checkpoint_state.backtest_operation_id
+        if checkpoint_state.token_counts:
+            updated_params["token_counts"] = checkpoint_state.token_counts
+        if checkpoint_state.original_request:
+            for key, value in checkpoint_state.original_request.items():
+                if key not in updated_params:
+                    updated_params[key] = value
+
+        # Update operation metadata
+        op.metadata.parameters = updated_params
+
+        # 7. Start worker in background
+        worker = self._get_worker()
+        task = asyncio.create_task(self._run_worker(operation_id, worker))
+        await self.ops.start_operation(operation_id, task)
+
+        logger.info(
+            f"Research cycle resumed: {operation_id}, phase: {resumed_from_phase}"
+        )
+
+        # 8. Build response with resume info
+        result: dict[str, Any] = {
+            "success": True,
+            "operation_id": operation_id,
+            "resumed_from_phase": resumed_from_phase,
+            "message": f"Research cycle resumed from phase: {resumed_from_phase}",
+        }
+
+        # Include child operation info if available
+        if checkpoint_state.training_operation_id:
+            result["training_operation_id"] = checkpoint_state.training_operation_id
+        if checkpoint_state.backtest_operation_id:
+            result["backtest_operation_id"] = checkpoint_state.backtest_operation_id
+
+        return result
+
     async def _get_active_research_op(self):
         """Get active AGENT_RESEARCH operation if any.
 
@@ -267,6 +485,15 @@ class AgentService:
         ops, _, _ = await self.ops.list_operations(
             operation_type=OperationType.AGENT_RESEARCH,
             status=OperationStatus.RUNNING,
+            limit=1,
+        )
+        if ops:
+            return ops[0]
+
+        # Check for RESUMING (resume in progress, prevents concurrent resumes)
+        ops, _, _ = await self.ops.list_operations(
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RESUMING,
             limit=1,
         )
         if ops:
@@ -325,10 +552,17 @@ _agent_service: AgentService | None = None
 def get_agent_service() -> AgentService:
     """Get the agent service singleton.
 
+    In production, initializes checkpoint service for checkpoint/resume support.
+
     Returns:
         AgentService singleton instance.
     """
     global _agent_service
     if _agent_service is None:
-        _agent_service = AgentService()
+        # Import here to avoid circular imports at module load time
+        from ktrdr.api.database import get_session_factory
+        from ktrdr.checkpoint import CheckpointService
+
+        checkpoint_service = CheckpointService(session_factory=get_session_factory())
+        _agent_service = AgentService(checkpoint_service=checkpoint_service)
     return _agent_service

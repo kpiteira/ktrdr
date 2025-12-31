@@ -12,10 +12,14 @@ This is part of Task 1.8 in Milestone 1 (Operations Persistence + Worker Re-Regi
 """
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from ktrdr.api.models.operations import OperationInfo
 from ktrdr.api.repositories.operations_repository import OperationsRepository
 from ktrdr.logging import get_logger
+
+if TYPE_CHECKING:
+    from ktrdr.checkpoint.checkpoint_service import CheckpointService
 
 logger = get_logger(__name__)
 
@@ -50,13 +54,21 @@ class StartupReconciliation:
         logger.info(f"Reconciled {result.total_processed} operations")
     """
 
-    def __init__(self, repository: OperationsRepository):
+    def __init__(
+        self,
+        repository: OperationsRepository,
+        checkpoint_service: "CheckpointService | None" = None,
+    ):
         """Initialize startup reconciliation service.
 
         Args:
             repository: Operations repository for database access.
+            checkpoint_service: Optional checkpoint service for checking
+                checkpoint availability. If provided, error messages for
+                backend-local operations will indicate whether resume is possible.
         """
         self._repository = repository
+        self._checkpoint_service = checkpoint_service
 
     async def reconcile(self) -> ReconciliationResult:
         """Reconcile all RUNNING operations on backend startup.
@@ -69,7 +81,8 @@ class StartupReconciliation:
             ReconciliationResult with counts of processed operations.
         """
         # Get all RUNNING operations from database
-        running_ops = await self._repository.list(status="RUNNING")
+        # Note: Status values are lowercase in the database (e.g., "running", not "RUNNING")
+        running_ops = await self._repository.list(status="running")
 
         if not running_ops:
             logger.info("Startup reconciliation: No RUNNING operations to process")
@@ -87,10 +100,14 @@ class StartupReconciliation:
 
             if is_backend_local:
                 # Backend-local: process died, mark failed
+                # Check for checkpoint availability to set appropriate error message
+                error_message = await self._get_backend_local_error_message(
+                    op.operation_id
+                )
                 await self._repository.update(
                     op.operation_id,
-                    status="FAILED",
-                    error_message="Backend restarted - operation was running in backend process",
+                    status="failed",  # Lowercase to match OperationStatus enum values
+                    error_message=error_message,
                 )
                 backend_ops_count += 1
                 logger.debug(
@@ -129,9 +146,31 @@ class StartupReconciliation:
         Returns:
             True if the operation runs in the backend process (not on a worker).
         """
-        # Check metadata.parameters for is_backend_local flag
-        if operation.metadata and operation.metadata.parameters:
-            return operation.metadata.parameters.get("is_backend_local", False)
+        # Use the proper is_backend_local field from OperationInfo
+        return operation.is_backend_local
 
-        # Default: assume worker-based (most operations are)
-        return False
+    async def _get_backend_local_error_message(self, operation_id: str) -> str:
+        """Get appropriate error message for a failed backend-local operation.
+
+        If a checkpoint service is configured, checks for checkpoint availability
+        and returns a message indicating whether resume is possible.
+
+        Args:
+            operation_id: The operation ID to check.
+
+        Returns:
+            Error message indicating restart and checkpoint status.
+        """
+        if self._checkpoint_service is None:
+            # No checkpoint service - use default message
+            return "Backend restarted - operation was running in backend process"
+
+        # Check for checkpoint availability (don't load artifacts, just check existence)
+        checkpoint = await self._checkpoint_service.load_checkpoint(
+            operation_id, load_artifacts=False
+        )
+
+        if checkpoint is not None:
+            return "Backend restarted - checkpoint available for resume"
+        else:
+            return "Backend restarted - no checkpoint available"

@@ -153,6 +153,12 @@ class OperationInfo(BaseModel):
         "For data operations: segment stats, cache info. "
         "For backtesting: trade stats, performance metrics.",
     )
+    # Backend-local flag: True if operation runs in backend process (not via worker)
+    is_backend_local: bool = Field(
+        default=False,
+        description="True if operation runs in backend process (e.g., agent sessions), "
+        "False if runs via distributed worker",
+    )
 
     @property
     def duration_seconds(self) -> Optional[float]:

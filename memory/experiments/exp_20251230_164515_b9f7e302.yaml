@@ -1,0 +1,38 @@
+id: exp_20251230_164515_b9f7e302
+timestamp: '2025-12-30T16:45:15.702073'
+strategy_name: e2e_real_test_rsi
+context:
+  indicators:
+  - RSI
+  composition: solo
+  timeframe: 1h
+  symbol: EURUSD
+  zigzag_threshold: 0.02
+  nn_architecture:
+  - 64
+  - 32
+results:
+  test_accuracy: 0.65
+  val_accuracy: 0.63
+  val_test_gap: 0.020000000000000018
+  sharpe_ratio: 1.2
+  total_trades: 150
+  win_rate: 0.55
+assessment:
+  verdict: strong_signal
+  observations:
+  - Test accuracy of 65% exceeds 60% threshold
+  - Validation accuracy of 63% shows good generalization
+  - Sharpe ratio of 1.2 indicates positive risk-adjusted returns
+  hypotheses:
+  - text: RSI at 14-period optimal for 1h timeframe
+    status: supported
+  - text: Adding ADX filter might improve win rate
+    status: untested
+  limitations:
+  - Only tested on EURUSD
+  - Single timeframe (1h) evaluation
+  raw_text: This is the full raw assessment output from Claude that would be preserved
+    for debugging purposes. It contains the complete agent output including any formatting,
+    analysis, and conclusions.
+source: agent
