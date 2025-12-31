@@ -22,8 +22,11 @@ from ktrdr.agents.invoker import (
 )
 from ktrdr.agents.memory import (
     ExperimentRecord,
+    Hypothesis,
     generate_experiment_id,
+    generate_hypothesis_id,
     save_experiment,
+    save_hypothesis,
 )
 from ktrdr.agents.prompts import (
     ASSESSMENT_SYSTEM_PROMPT,
@@ -293,9 +296,49 @@ class AgentAssessmentWorker:
             else:
                 logger.info(f"Saved experiment to memory: {path}")
 
+            # Save new hypotheses from assessment (Task 5.1)
+            await self._save_hypotheses(
+                parsed_assessment=parsed_assessment,
+                experiment_id=record.id,
+            )
+
         except Exception as e:
             # Memory save failure should not fail the assessment
             logger.error(f"Failed to save experiment to memory: {e}")
+
+    async def _save_hypotheses(
+        self,
+        parsed_assessment: ParsedAssessment,
+        experiment_id: str,
+    ) -> None:
+        """Extract and save new hypotheses from assessment.
+
+        This is a best-effort operation - failures are logged but don't
+        fail the assessment. Memory is enhancement, not requirement.
+
+        Args:
+            parsed_assessment: Structured assessment from HaikuBrain.
+            experiment_id: ID of the experiment that generated these hypotheses.
+        """
+        try:
+            for hyp_data in parsed_assessment.hypotheses:
+                text = hyp_data.get("text", "")
+                if not text:
+                    continue
+
+                hypothesis = Hypothesis(
+                    id=generate_hypothesis_id(),
+                    text=text,
+                    source_experiment=experiment_id,
+                    rationale=hyp_data.get("rationale", "Generated during assessment"),
+                    status="untested",
+                )
+
+                save_hypothesis(hypothesis)
+                logger.info(f"Saved new hypothesis: {hypothesis.id}")
+
+        except Exception as e:
+            logger.warning(f"Failed to save hypotheses: {e}")
 
     async def run(
         self,
