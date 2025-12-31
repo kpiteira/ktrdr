@@ -1368,3 +1368,59 @@ class TestUpdateTestedHypotheses:
 
         data = yaml.safe_load(hypotheses_file.read_text())
         assert data["hypotheses"][0]["status"] == "refuted"
+
+    @pytest.mark.asyncio
+    async def test_update_tested_hypotheses_flexible_pattern(
+        self, mock_operations_service, tmp_path
+    ):
+        """Status extracted even with words between ID and keyword.
+
+        Tests patterns like "H_001 was validated by this experiment"
+        where there are intervening words.
+        """
+        from unittest.mock import patch
+
+        import yaml
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        hypotheses_file = tmp_path / "hypotheses.yaml"
+        hypotheses_file.write_text(
+            yaml.dump(
+                {
+                    "hypotheses": [
+                        {
+                            "id": "H_001",
+                            "text": "Test hypothesis",
+                            "status": "untested",
+                            "source_experiment": "exp_old",
+                            "rationale": "Test",
+                            "tested_by": [],
+                        }
+                    ]
+                }
+            )
+        )
+
+        # Text has words between H_001 and "validated"
+        parsed = ParsedAssessment(
+            verdict="weak_signal",  # Would infer inconclusive, but explicit text wins
+            observations=["Good results"],
+            hypotheses=[],
+            limitations=[],
+            capability_requests=[],
+            tested_hypothesis_ids=["H_001"],
+            raw_text="Testing the approach. H_001 was clearly validated by this experiment.",
+        )
+
+        with patch("ktrdr.agents.memory.HYPOTHESES_FILE", hypotheses_file):
+            await worker._update_tested_hypotheses(
+                parsed_assessment=parsed,
+                experiment_id="exp_flexible",
+            )
+
+        data = yaml.safe_load(hypotheses_file.read_text())
+        # Should detect "validated" even with words in between
+        assert data["hypotheses"][0]["status"] == "validated"

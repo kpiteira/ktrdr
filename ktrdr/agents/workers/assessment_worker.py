@@ -367,21 +367,19 @@ class AgentAssessmentWorker:
         raw_text = parsed_assessment.raw_text.lower()
         hyp_id_lower = hyp_id.lower()
 
-        # Check for explicit statements
-        if (
-            f"{hyp_id_lower} validated" in raw_text
-            or f"{hyp_id_lower} confirmed" in raw_text
-        ):
+        # Check for explicit statements, allowing up to 5 words between ID and status
+        def matches_status(keywords: list[str]) -> bool:
+            """Check if hyp_id is followed by any keyword within ~5 words."""
+            keywords_pattern = "|".join(keywords)
+            # Match: hyp_id, then up to 5 words, then a status keyword
+            pattern = rf"{re.escape(hyp_id_lower)}\b(?:\W+\w+){{0,5}}?\W+(?:{keywords_pattern})\b"
+            return re.search(pattern, raw_text) is not None
+
+        if matches_status(["validated", "confirmed"]):
             return "validated"
-        elif (
-            f"{hyp_id_lower} refuted" in raw_text
-            or f"{hyp_id_lower} disproved" in raw_text
-        ):
+        elif matches_status(["refuted", "disproved"]):
             return "refuted"
-        elif (
-            f"{hyp_id_lower} inconclusive" in raw_text
-            or f"{hyp_id_lower} unclear" in raw_text
-        ):
+        elif matches_status(["inconclusive", "unclear"]):
             return "inconclusive"
 
         # Fall back to verdict-based inference
