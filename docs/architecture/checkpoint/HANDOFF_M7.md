@@ -164,6 +164,48 @@ Uses `AgentOperationsRepository` (extends `MockOperationsRepository`) with:
 
 ---
 
+## E2E Test Script
+
+**Location:** [scripts/test_m7_e2e.py](scripts/test_m7_e2e.py)
+
+### Run Command
+
+```bash
+uv run python scripts/test_m7_e2e.py
+```
+
+### What It Tests
+
+1. **Training Phase Cancellation + Resume**
+   - Trigger agent → wait for training phase
+   - Wait 20s for periodic checkpoints to be saved
+   - Cancel operation
+   - Verify checkpoint saved at training phase
+   - Resume and verify design phase is skipped
+   - Verify training resumes from checkpoint epoch (not epoch 0)
+
+2. **Backtesting Phase Cancellation + Resume** (if training passes gate)
+   - Same flow but for backtesting phase
+
+### Key Result (Verified)
+
+```text
+Training checkpoint exists at epoch 4
+Training resumed, current epoch: 4
+...
+Epoch before cancel: 4; Epoch after resume: 4
+Skipped phases: ['Designing']
+```
+
+### Important Findings
+
+1. **Design phase checkpoints are symbolic** - No real progress to save (LLM call is atomic)
+2. **Training checkpoints preserve epoch** - Can resume from mid-training
+3. **Periodic checkpoints deleted on completion** - Only available during training
+4. **Hard crash = no checkpoint** - Checkpoints only saved on failure/cancellation
+
+---
+
 ## Previous Tasks (7.1-7.4)
 
 Tasks 7.1, 7.2, 7.3, 7.4 were completed in earlier commits on this branch. See git log for details.
