@@ -11,6 +11,7 @@ Simplified startup:
 
 from __future__ import annotations
 
+import asyncio
 import os
 from contextlib import asynccontextmanager
 
@@ -107,23 +108,34 @@ async def _notify_workers_of_shutdown(registry) -> None:
         return
 
     logger.info(f"Notifying {len(workers)} workers of shutdown")
+    notified_count = 0
 
-    async with httpx.AsyncClient(timeout=2.0) as client:
-        for worker in workers:
-            try:
-                response = await client.post(
-                    f"{worker.endpoint_url}/backend-shutdown",
-                    json={"message": "Backend shutting down"},
-                )
-                if response.status_code == 200:
-                    logger.debug(f"Notified {worker.worker_id} of shutdown")
-                else:
-                    logger.debug(
-                        f"Worker {worker.worker_id} returned {response.status_code}"
+    try:
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            for worker in workers:
+                try:
+                    response = await client.post(
+                        f"{worker.endpoint_url}/backend-shutdown",
+                        json={"message": "Backend shutting down"},
                     )
-            except Exception as e:
-                # Best effort - worker might be dead or unreachable
-                logger.debug(f"Could not notify {worker.worker_id}: {e}")
+                    if response.status_code == 200:
+                        logger.debug(f"Notified {worker.worker_id} of shutdown")
+                        notified_count += 1
+                    else:
+                        logger.debug(
+                            f"Worker {worker.worker_id} returned {response.status_code}"
+                        )
+                except asyncio.CancelledError:
+                    # Re-raise to exit the loop - we're being cancelled
+                    raise
+                except Exception as e:
+                    # Best effort - worker might be dead or unreachable
+                    logger.debug(f"Could not notify {worker.worker_id}: {e}")
+    except asyncio.CancelledError:
+        logger.info(
+            f"Shutdown notification cancelled - notified {notified_count}/{len(workers)} workers"
+        )
+        raise
 
     logger.info("Worker shutdown notification complete")
 

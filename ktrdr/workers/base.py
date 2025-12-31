@@ -531,11 +531,19 @@ class WorkerAPIBase:
                 "Received backend shutdown notification - starting reconnection polling"
             )
 
-            # Start reconnection task if not already running
-            if self._reconnection_task is None or self._reconnection_task.done():
-                self._reconnection_task = asyncio.create_task(
-                    self._poll_for_backend_restart()
+            # Start reconnection task, cancelling any existing one to avoid leaks
+            if (
+                self._reconnection_task is not None
+                and not self._reconnection_task.done()
+            ):
+                logger.info(
+                    "Cancelling existing reconnection polling task before starting new one"
                 )
+                self._reconnection_task.cancel()
+
+            self._reconnection_task = asyncio.create_task(
+                self._poll_for_backend_restart()
+            )
 
             return {"acknowledged": True}
 
@@ -563,7 +571,6 @@ class WorkerAPIBase:
 
         while (datetime.utcnow() - start_time).total_seconds() < max_duration:
             attempt += 1
-            await asyncio.sleep(poll_interval)
 
             try:
                 # Try to register - will get 503 if still shutting down
@@ -577,6 +584,9 @@ class WorkerAPIBase:
 
             except Exception as e:
                 logger.debug(f"Reconnection attempt {attempt} failed: {e}")
+
+            # Sleep at end of loop so first attempt is immediate
+            await asyncio.sleep(poll_interval)
 
         logger.warning(
             f"Failed to reconnect after {max_duration}s - "

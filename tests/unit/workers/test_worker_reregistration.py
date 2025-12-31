@@ -62,7 +62,7 @@ class TestReregistrationMonitor:
             try:
                 await task
             except asyncio.CancelledError:
-                pass
+                pass  # Expected when cancelling the monitoring task
 
         await run_monitor_once()
 
@@ -86,7 +86,7 @@ class TestReregistrationMonitor:
             try:
                 await task
             except asyncio.CancelledError:
-                pass
+                pass  # Expected when cancelling the monitoring task
 
         await run_monitor_once()
 
@@ -108,7 +108,7 @@ class TestReregistrationMonitor:
             try:
                 await task
             except asyncio.CancelledError:
-                pass
+                pass  # Expected when cancelling the monitoring task
 
         await run_monitor_once()
 
@@ -129,7 +129,7 @@ class TestReregistrationMonitor:
             try:
                 await task
             except asyncio.CancelledError:
-                pass
+                pass  # Expected when cancelling the monitoring task
 
         await run_monitor_once()
 
@@ -153,7 +153,7 @@ class TestReregistrationMonitor:
             try:
                 await task
             except asyncio.CancelledError:
-                pass
+                pass  # Expected when cancelling the monitoring task
 
         # Should not raise
         await run_monitor_once()

@@ -152,11 +152,14 @@ async def self_register(
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.post(registration_url, json=payload)
 
-                # 503 means backend is shutting down - don't count as failure
+                # 503 means backend is shutting down - retry with backoff
                 if response.status_code == 503:
-                    logger.info("Backend is shutting down - will retry after restart")
-                    # Don't increment delay for expected shutdown
-                    await asyncio.sleep(2.0)
+                    logger.info(
+                        f"Backend is shutting down (attempt {attempt + 1}/{max_retries}) "
+                        f"- will retry in {delay:.1f}s"
+                    )
+                    await asyncio.sleep(delay)
+                    delay = min(delay * 2, max_delay)
                     continue
 
                 response.raise_for_status()
