@@ -125,3 +125,6 @@ ib-host-service/data/symbol_discovery_cache.json
 .claude/context_reflections.md
 .claude/archive/
 state/
+
+# Agent memory - experiments are generated, hypotheses is tracked
+memory/experiments/*.yaml

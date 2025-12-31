@@ -1,6 +1,7 @@
 """Unit tests for AgentAssessmentWorker.
 
 Tests for Task 5.3: Assessment worker using Claude.
+Tests for Task 4.1: Strategy config loading for memory.
 """
 
 import asyncio
@@ -245,3 +246,467 @@ class TestAgentAssessmentWorkerRun:
             await worker.run("op_agent_research_456", sample_results)
 
         mock_operations_service.fail_operation.assert_called_once()
+
+
+class TestLoadStrategyConfig:
+    """Tests for Task 4.1: _load_strategy_config method."""
+
+    def test_load_strategy_config_success(self, mock_operations_service, tmp_path):
+        """Load valid YAML strategy config."""
+        # Create a valid strategy YAML
+        strategy_file = tmp_path / "test_strategy.yaml"
+        strategy_file.write_text(
+            """
+name: test_strategy
+indicators:
+  - name: RSI
+    period: 14
+  - name: DI
+    period: 14
+training_data:
+  timeframes:
+    list: ["1h"]
+  symbols:
+    list: ["EURUSD"]
+training:
+  labels:
+    zigzag_threshold: 0.015
+model:
+  architecture:
+    hidden_layers: [32, 16]
+"""
+        )
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+        config = worker._load_strategy_config(str(strategy_file))
+
+        assert config["name"] == "test_strategy"
+        assert len(config["indicators"]) == 2
+        assert config["indicators"][0]["name"] == "RSI"
+        assert config["training"]["labels"]["zigzag_threshold"] == 0.015
+
+    def test_load_strategy_config_missing(self, mock_operations_service, tmp_path):
+        """Return empty dict for missing file."""
+        missing_path = tmp_path / "nonexistent.yaml"
+        assert not missing_path.exists()  # Verify file doesn't exist
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+        config = worker._load_strategy_config(str(missing_path))
+
+        assert config == {}
+
+    def test_load_strategy_config_invalid(self, mock_operations_service, tmp_path):
+        """Return empty dict for invalid YAML."""
+        invalid_file = tmp_path / "invalid.yaml"
+        invalid_file.write_text("{ invalid yaml: [unclosed")
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+        config = worker._load_strategy_config(str(invalid_file))
+
+        assert config == {}
+
+    def test_load_strategy_config_none_path(self, mock_operations_service):
+        """Return empty dict when path is None."""
+        worker = AgentAssessmentWorker(mock_operations_service)
+        config = worker._load_strategy_config(None)
+
+        assert config == {}
+
+
+class TestExtractContext:
+    """Tests for Task 4.2: _extract_context method."""
+
+    def test_extract_context_from_config(self, mock_operations_service):
+        """Extract correct fields from strategy config."""
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        config = {
+            "indicators": [
+                {"name": "RSI", "period": 14},
+                {"name": "DI", "period": 14},
+            ],
+            "training_data": {
+                "timeframes": {"list": ["1h"]},
+                "symbols": {"list": ["EURUSD"]},
+            },
+            "training": {
+                "labels": {"zigzag_threshold": 0.015},
+            },
+            "model": {
+                "architecture": {"hidden_layers": [32, 16]},
+            },
+        }
+
+        context = worker._extract_context(config)
+
+        assert context["indicators"] == ["RSI", "DI"]
+        assert context["composition"] == "pair"
+        assert context["timeframe"] == "1h"
+        assert context["symbol"] == "EURUSD"
+        assert context["zigzag_threshold"] == 0.015
+        assert context["nn_architecture"] == [32, 16]
+
+    def test_extract_context_solo_composition(self, mock_operations_service):
+        """Detect solo composition with single indicator."""
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        config = {"indicators": [{"name": "RSI"}]}
+
+        context = worker._extract_context(config)
+
+        assert context["composition"] == "solo"
+
+    def test_extract_context_ensemble_composition(self, mock_operations_service):
+        """Detect ensemble composition with 3+ indicators."""
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        config = {
+            "indicators": [
+                {"name": "RSI"},
+                {"name": "ADX"},
+                {"name": "CCI"},
+            ]
+        }
+
+        context = worker._extract_context(config)
+
+        assert context["composition"] == "ensemble"
+
+    def test_extract_context_empty_config(self, mock_operations_service):
+        """Handle empty config with defaults."""
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        context = worker._extract_context({})
+
+        assert context["indicators"] == []
+        assert context["composition"] == "solo"  # empty == solo
+        assert context["timeframe"] == "1h"  # default
+        assert context["symbol"] == "EURUSD"  # default
+        assert context["zigzag_threshold"] == 0.02  # default
+
+
+class TestExtractResults:
+    """Tests for Task 4.2: _extract_results method."""
+
+    def test_extract_results_from_metrics(self, mock_operations_service):
+        """Extract correct fields from metrics."""
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        training = {
+            "accuracy": 0.648,
+            "val_accuracy": 0.665,
+        }
+        backtest = {
+            "sharpe_ratio": 1.5,
+            "total_trades": 847,
+            "win_rate": 0.52,
+        }
+
+        results = worker._extract_results(training, backtest)
+
+        assert results["test_accuracy"] == 0.648
+        assert results["val_accuracy"] == 0.665
+        assert results["val_test_gap"] == pytest.approx(0.017, abs=0.001)
+        assert results["sharpe_ratio"] == 1.5
+        assert results["total_trades"] == 847
+        assert results["win_rate"] == 0.52
+
+    def test_extract_results_empty_metrics(self, mock_operations_service):
+        """Handle empty metrics with defaults."""
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        results = worker._extract_results({}, {})
+
+        assert results["test_accuracy"] == 0
+        assert results["val_accuracy"] == 0
+        assert results["val_test_gap"] == 0
+        assert results["sharpe_ratio"] is None
+        assert results["total_trades"] is None
+        assert results["win_rate"] is None
+
+
+class TestSaveToMemory:
+    """Tests for Task 4.2: _save_to_memory method."""
+
+    @pytest.mark.asyncio
+    async def test_save_to_memory_creates_file(self, mock_operations_service, tmp_path):
+        """File exists after save."""
+        from unittest.mock import patch
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        parsed = ParsedAssessment(
+            verdict="strong_signal",
+            observations=["Test observation"],
+            hypotheses=[{"text": "Test hypothesis", "status": "untested"}],
+            limitations=["Test limitation"],
+            capability_requests=[],
+            tested_hypothesis_ids=[],
+            raw_text="Test raw output",
+        )
+
+        # Patch the memory module's EXPERIMENTS_DIR so save_experiment writes to tmp_path
+        with patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path):
+            await worker._save_to_memory(
+                strategy_name="test_strategy",
+                strategy_config={"indicators": [{"name": "RSI"}]},
+                training_metrics={"accuracy": 0.65},
+                backtest_metrics={"sharpe_ratio": 1.2},
+                parsed_assessment=parsed,
+            )
+
+        # Verify file was created
+        files = list(tmp_path.glob("*.yaml"))
+        assert len(files) == 1
+
+    @pytest.mark.asyncio
+    async def test_save_to_memory_correct_content(
+        self, mock_operations_service, tmp_path
+    ):
+        """All fields populated correctly."""
+        from unittest.mock import patch
+
+        import yaml
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        parsed = ParsedAssessment(
+            verdict="strong_signal",
+            observations=["Good accuracy"],
+            hypotheses=[{"text": "Try more indicators", "status": "untested"}],
+            limitations=["Only EURUSD tested"],
+            capability_requests=["LSTM support"],
+            tested_hypothesis_ids=["H_001"],
+            raw_text="Raw assessment text",
+        )
+
+        with patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path):
+            await worker._save_to_memory(
+                strategy_name="rsi_di_v1",
+                strategy_config={
+                    "indicators": [{"name": "RSI"}, {"name": "DI"}],
+                    "training_data": {
+                        "timeframes": {"list": ["1h"]},
+                        "symbols": {"list": ["EURUSD"]},
+                    },
+                    "training": {"labels": {"zigzag_threshold": 0.015}},
+                },
+                training_metrics={"accuracy": 0.65, "val_accuracy": 0.67},
+                backtest_metrics={"sharpe_ratio": 1.5, "total_trades": 100},
+                parsed_assessment=parsed,
+            )
+
+        # Load and verify content
+        files = list(tmp_path.glob("*.yaml"))
+        content = yaml.safe_load(files[0].read_text())
+
+        assert content["strategy_name"] == "rsi_di_v1"
+        assert content["source"] == "agent"
+        assert content["context"]["indicators"] == ["RSI", "DI"]
+        assert content["context"]["composition"] == "pair"
+        assert content["results"]["test_accuracy"] == 0.65
+        assert content["assessment"]["verdict"] == "strong_signal"
+        assert content["assessment"]["observations"] == ["Good accuracy"]
+
+    @pytest.mark.asyncio
+    async def test_save_to_memory_failure_continues(self, mock_operations_service):
+        """Memory save failure doesn't raise exception."""
+        from unittest.mock import patch
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        parsed = ParsedAssessment(
+            verdict="strong_signal",
+            observations=[],
+            hypotheses=[],
+            limitations=[],
+            capability_requests=[],
+            tested_hypothesis_ids=[],
+            raw_text="test",
+        )
+
+        # Patch to simulate failure
+        with patch(
+            "ktrdr.agents.workers.assessment_worker.save_experiment",
+            side_effect=Exception("Disk full"),
+        ):
+            # Should not raise - graceful degradation
+            await worker._save_to_memory(
+                strategy_name="test",
+                strategy_config={},
+                training_metrics={},
+                backtest_metrics={},
+                parsed_assessment=parsed,
+            )
+
+
+class TestMalformedAssessmentHandling:
+    """Tests for Task 4.3: Handle malformed assessment gracefully."""
+
+    @pytest.mark.asyncio
+    async def test_malformed_assessment_still_saves(
+        self, mock_operations_service, tmp_path
+    ):
+        """Record created with unknown verdict when parsing fails."""
+        from unittest.mock import patch
+
+        import yaml
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        # Simulate malformed assessment - ParsedAssessment.empty() returns this
+        parsed = ParsedAssessment.empty(
+            raw_text="Malformed output that couldn't be parsed"
+        )
+
+        assert parsed.verdict == "unknown"  # Sanity check
+
+        with patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path):
+            await worker._save_to_memory(
+                strategy_name="test_strategy",
+                strategy_config={"indicators": [{"name": "RSI"}]},
+                training_metrics={"accuracy": 0.55},
+                backtest_metrics={"sharpe_ratio": 0.5},
+                parsed_assessment=parsed,
+            )
+
+        # Verify file was created
+        files = list(tmp_path.glob("*.yaml"))
+        assert len(files) == 1
+
+        # Verify content has unknown verdict
+        content = yaml.safe_load(files[0].read_text())
+        assert content["assessment"]["verdict"] == "unknown"
+
+    @pytest.mark.asyncio
+    async def test_malformed_assessment_has_raw_text(
+        self, mock_operations_service, tmp_path
+    ):
+        """Raw text preserved in the assessment for debugging."""
+        from unittest.mock import patch
+
+        import yaml
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        raw_output = "This is some malformed output\nthat couldn't be parsed correctly."
+        parsed = ParsedAssessment.empty(raw_text=raw_output)
+
+        with patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path):
+            await worker._save_to_memory(
+                strategy_name="test_strategy",
+                strategy_config={},
+                training_metrics={},
+                backtest_metrics={},
+                parsed_assessment=parsed,
+            )
+
+        files = list(tmp_path.glob("*.yaml"))
+        content = yaml.safe_load(files[0].read_text())
+
+        # raw_text should be preserved in the assessment
+        assert "raw_text" in content["assessment"]
+        assert raw_output in content["assessment"]["raw_text"]
+
+    @pytest.mark.asyncio
+    async def test_malformed_assessment_preserves_full_raw_text(
+        self, mock_operations_service, tmp_path
+    ):
+        """Full raw text is preserved for debugging (no truncation)."""
+        from unittest.mock import patch
+
+        import yaml
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        # Create long raw text - should be preserved in full
+        raw_output = "A" * 5000
+        parsed = ParsedAssessment.empty(raw_text=raw_output)
+
+        with patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path):
+            await worker._save_to_memory(
+                strategy_name="test_strategy",
+                strategy_config={},
+                training_metrics={},
+                backtest_metrics={},
+                parsed_assessment=parsed,
+            )
+
+        files = list(tmp_path.glob("*.yaml"))
+        content = yaml.safe_load(files[0].read_text())
+
+        # Full raw_text preserved - no truncation
+        assert len(content["assessment"]["raw_text"]) == 5000
+
+    @pytest.mark.asyncio
+    async def test_malformed_assessment_has_fallback_observations(
+        self, mock_operations_service, tmp_path
+    ):
+        """Empty observations get a fallback when verdict is unknown."""
+        from unittest.mock import patch
+
+        import yaml
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        # Malformed assessment has empty observations
+        parsed = ParsedAssessment.empty(raw_text="Malformed output")
+        assert parsed.observations == []  # Sanity check
+
+        with patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path):
+            await worker._save_to_memory(
+                strategy_name="test_strategy",
+                strategy_config={},
+                training_metrics={},
+                backtest_metrics={},
+                parsed_assessment=parsed,
+            )
+
+        files = list(tmp_path.glob("*.yaml"))
+        content = yaml.safe_load(files[0].read_text())
+
+        # Should have fallback observation, not empty list
+        assert len(content["assessment"]["observations"]) > 0
+        assert "could not be parsed" in content["assessment"]["observations"][0].lower()
+
+    @pytest.mark.asyncio
+    async def test_malformed_assessment_logs_warning(
+        self, mock_operations_service, tmp_path, caplog
+    ):
+        """Warning logged for unknown verdict."""
+        import logging
+        from unittest.mock import patch
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+        parsed = ParsedAssessment.empty(raw_text="Malformed")
+
+        with patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path):
+            with caplog.at_level(logging.WARNING):
+                await worker._save_to_memory(
+                    strategy_name="test_strategy",
+                    strategy_config={},
+                    training_metrics={},
+                    backtest_metrics={},
+                    parsed_assessment=parsed,
+                )
+
+        # Check warning was logged
+        assert any(
+            "unknown verdict" in record.message.lower() for record in caplog.records
+        )
