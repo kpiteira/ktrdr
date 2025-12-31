@@ -57,6 +57,7 @@ services:
       - ./models:/app/models
       - ./output:/app/output
       - ./training_analytics:/app/training_analytics
+      - ./memory:/app/memory  # Agent memory (experiments, hypotheses)
       # Cache directories
       - pip-cache:/root/.cache/pip
       - uv-cache:/root/.cache/uv

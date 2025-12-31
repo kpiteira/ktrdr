@@ -484,6 +484,15 @@ class AgentService:
         if ops:
             return ops[0]
 
+        # Check for RESUMING (resume in progress, prevents concurrent resumes)
+        ops, _, _ = await self.ops.list_operations(
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RESUMING,
+            limit=1,
+        )
+        if ops:
+            return ops[0]
+
         # Also check for PENDING (just created, not yet started)
         ops, _, _ = await self.ops.list_operations(
             operation_type=OperationType.AGENT_RESEARCH,

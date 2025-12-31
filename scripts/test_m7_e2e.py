@@ -94,6 +94,7 @@ class M7E2ETest:
                     self.log("Backend is healthy")
                     return True
             except Exception:
+                # Backend may not be up yet; ignore transient errors and retry
                 pass
             time.sleep(2)
         self.log("Backend health check timed out")
