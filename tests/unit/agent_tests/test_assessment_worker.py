@@ -288,6 +288,7 @@ model:
     def test_load_strategy_config_missing(self, mock_operations_service, tmp_path):
         """Return empty dict for missing file."""
         missing_path = tmp_path / "nonexistent.yaml"
+        assert not missing_path.exists()  # Verify file doesn't exist
 
         worker = AgentAssessmentWorker(mock_operations_service)
         config = worker._load_strategy_config(str(missing_path))
@@ -446,7 +447,7 @@ class TestSaveToMemory:
             raw_text="Test raw output",
         )
 
-        # Patch memory directory - need to patch where it's used (memory module)
+        # Patch the memory module's EXPERIMENTS_DIR so save_experiment writes to tmp_path
         with patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path):
             await worker._save_to_memory(
                 strategy_name="test_strategy",

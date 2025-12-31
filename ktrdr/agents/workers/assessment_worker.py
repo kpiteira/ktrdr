@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -199,11 +199,15 @@ class AgentAssessmentWorker:
         else:
             composition = "ensemble"
 
+        # Safely get timeframe and symbol with fallbacks for empty lists
+        timeframes_list = training_data.get("timeframes", {}).get("list") or []
+        symbols_list = training_data.get("symbols", {}).get("list") or []
+
         return {
             "indicators": indicators,
             "composition": composition,
-            "timeframe": training_data.get("timeframes", {}).get("list", ["1h"])[0],
-            "symbol": training_data.get("symbols", {}).get("list", ["EURUSD"])[0],
+            "timeframe": timeframes_list[0] if timeframes_list else "1h",
+            "symbol": symbols_list[0] if symbols_list else "EURUSD",
             "zigzag_threshold": training.get("labels", {}).get(
                 "zigzag_threshold", 0.02
             ),
@@ -268,7 +272,7 @@ class AgentAssessmentWorker:
 
             record = ExperimentRecord(
                 id=generate_experiment_id(),
-                timestamp=datetime.now().isoformat(),
+                timestamp=datetime.now(timezone.utc).isoformat(),
                 strategy_name=strategy_name or "unknown",
                 context=context,
                 results=results,
