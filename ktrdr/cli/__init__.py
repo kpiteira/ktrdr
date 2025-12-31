@@ -59,6 +59,7 @@ if not _is_testing:
 from ktrdr.cli.agent_commands import agent_app  # noqa: E402
 from ktrdr.cli.async_model_commands import async_models_app as models_app  # noqa: E402
 from ktrdr.cli.backtest_commands import backtest_app  # noqa: E402
+from ktrdr.cli.checkpoints_commands import checkpoints_app  # noqa: E402
 from ktrdr.cli.commands import cli_app  # noqa: E402
 from ktrdr.cli.data_commands import data_app  # noqa: E402
 from ktrdr.cli.deploy_commands import deploy_app  # noqa: E402
@@ -74,6 +75,9 @@ from ktrdr.cli.strategy_commands import strategies_app  # noqa: E402
 
 # Register command subgroups following industry best practices
 cli_app.add_typer(agent_app, name="agent", help="Research agent management commands")
+cli_app.add_typer(
+    checkpoints_app, name="checkpoints", help="Checkpoint management commands"
+)
 cli_app.add_typer(data_app, name="data", help="Data management commands")
 cli_app.add_typer(
     backtest_app, name="backtest", help="Backtesting commands for trading strategies"
