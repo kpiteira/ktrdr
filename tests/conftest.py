@@ -40,6 +40,18 @@ def disable_retries():
         yield
 
 
+@pytest.fixture(autouse=True, scope="session")
+def block_claude_cli():
+    """Block Claude CLI invocation during tests.
+
+    This is a safety net to ensure unit tests never accidentally invoke
+    the real Claude CLI. If a test needs to call Claude, it must mock
+    _invoke_haiku or find_claude_cli explicitly.
+    """
+    with patch("ktrdr.llm.haiku_brain.find_claude_cli", return_value=None):
+        yield
+
+
 @pytest.fixture
 def sample_ohlcv_data():
     """
