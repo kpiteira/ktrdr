@@ -296,6 +296,78 @@ class CheckpointService:
                 for record in records
             ]
 
+    async def cleanup_old_checkpoints(self, max_age_days: int = 30) -> int:
+        """Delete checkpoints older than max_age_days.
+
+        This is used by the automatic cleanup service to remove old checkpoints
+        that are no longer needed. Artifacts are also deleted.
+
+        Args:
+            max_age_days: Maximum age in days for checkpoints to keep.
+
+        Returns:
+            Number of checkpoints deleted.
+        """
+        old_checkpoints = await self.list_checkpoints(older_than_days=max_age_days)
+
+        deleted = 0
+        for checkpoint in old_checkpoints:
+            try:
+                if await self.delete_checkpoint(checkpoint.operation_id):
+                    deleted += 1
+                    logger.debug(
+                        f"Cleaned up old checkpoint: {checkpoint.operation_id} "
+                        f"(age: {max_age_days}+ days)"
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to delete checkpoint {checkpoint.operation_id}: {e}"
+                )
+
+        return deleted
+
+    async def cleanup_orphan_artifacts(self) -> int:
+        """Clean orphan artifact directories that have no matching DB record.
+
+        This handles edge cases where artifacts were written but DB write failed,
+        or where the DB record was deleted but artifacts weren't cleaned up.
+
+        Returns:
+            Number of orphan directories cleaned up.
+        """
+        if not self._artifacts_dir.exists():
+            return 0
+
+        # Get all operation IDs that have checkpoints in DB
+        all_checkpoints = await self.list_checkpoints()
+        valid_operation_ids = {cp.operation_id for cp in all_checkpoints}
+
+        # Scan artifacts directory for orphans
+        cleaned = 0
+
+        def _scan_and_clean() -> int:
+            nonlocal cleaned
+            for path in self._artifacts_dir.iterdir():
+                if path.is_dir():
+                    # Skip temp directories (ending in .tmp)
+                    if path.name.endswith(".tmp"):
+                        shutil.rmtree(path, ignore_errors=True)
+                        cleaned += 1
+                        logger.debug(f"Cleaned temp directory: {path}")
+                        continue
+
+                    # Check if this operation has a valid checkpoint
+                    operation_id = path.name
+                    if operation_id not in valid_operation_ids:
+                        shutil.rmtree(path, ignore_errors=True)
+                        cleaned += 1
+                        logger.debug(f"Cleaned orphan artifact: {path}")
+
+            return cleaned
+
+        await asyncio.to_thread(_scan_and_clean)
+        return cleaned
+
     async def _write_artifacts(
         self,
         operation_id: str,
