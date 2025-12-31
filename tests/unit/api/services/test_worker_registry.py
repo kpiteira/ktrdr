@@ -1361,3 +1361,29 @@ class TestReconciliation:
         assert worker.worker_id == "worker-1"
         # Should not have called operations service
         mock_operations_service.get_operation.assert_not_called()
+
+
+class TestShutdownMode:
+    """Tests for shutdown mode behavior (M7.5 Task 7.5.3)."""
+
+    def test_is_shutting_down_initially_false(self):
+        """Test that registry is not in shutdown mode initially."""
+        registry = WorkerRegistry()
+        assert registry.is_shutting_down() is False
+
+    def test_begin_shutdown_sets_flag(self):
+        """Test that begin_shutdown sets the shutdown flag."""
+        registry = WorkerRegistry()
+
+        registry.begin_shutdown()
+
+        assert registry.is_shutting_down() is True
+
+    def test_begin_shutdown_is_idempotent(self):
+        """Test that calling begin_shutdown multiple times is safe."""
+        registry = WorkerRegistry()
+
+        registry.begin_shutdown()
+        registry.begin_shutdown()
+
+        assert registry.is_shutting_down() is True

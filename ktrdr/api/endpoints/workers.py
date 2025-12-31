@@ -94,12 +94,18 @@ async def register_worker(
     ID, type, URL, and capabilities. Re-registering an existing worker
     updates its information (idempotent operation).
 
+    Returns 503 Service Unavailable if the backend is shutting down,
+    signaling workers to retry after the backend restarts.
+
     Args:
         request: Worker registration information
         registry: The worker registry (injected dependency)
 
     Returns:
         dict: The registered worker information
+
+    Raises:
+        HTTPException: 503 if backend is shutting down
 
     Example:
         ```json
@@ -111,6 +117,17 @@ async def register_worker(
         }
         ```
     """
+    # M7.5 Task 7.5.3: Reject registrations during shutdown
+    if registry.is_shutting_down():
+        logger.info(
+            f"Rejecting registration from {request.worker_id} - backend is shutting down"
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Backend is shutting down - retry after restart",
+            headers={"Retry-After": "5"},
+        )
+
     logger.info(
         f"Worker registration request: {request.worker_id} ({request.worker_type})"
     )

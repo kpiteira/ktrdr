@@ -181,12 +181,17 @@ class WorkerAPIBase:
         # Set by run_with_graceful_shutdown, cleared in finally block
         self._current_operation_id: Optional[str] = None
 
+        # M7.5 Task 7.5.4: Reconnection polling task
+        # Started when backend notifies us it's shutting down
+        self._reconnection_task: Optional[asyncio.Task] = None
+
         # Register common endpoints
         self._register_operations_endpoints()
         self._register_health_endpoint()
         self._register_metrics_endpoint()
         self._register_root_endpoint()
         self._register_startup_event()
+        self._register_shutdown_notification_endpoint()
 
     def get_operations_service(self) -> OperationsService:
         """Get OperationsService singleton."""
@@ -505,6 +510,89 @@ class WorkerAPIBase:
             # Start re-registration monitor (Task 1.7)
             await self._start_reregistration_monitor()
 
+    def _register_shutdown_notification_endpoint(self) -> None:
+        """
+        Register endpoint for backend shutdown notifications.
+
+        M7.5 Task 7.5.4: When backend is gracefully shutting down, it notifies
+        workers before stopping. Workers then poll for backend availability
+        and re-register immediately when it comes back up.
+        """
+
+        @self.app.post("/backend-shutdown")
+        async def backend_shutdown_notification():
+            """
+            Receive notification that backend is shutting down.
+
+            Triggers reconnection polling to quickly re-register
+            when backend comes back up.
+            """
+            logger.info(
+                "Received backend shutdown notification - starting reconnection polling"
+            )
+
+            # Start reconnection task, cancelling any existing one to avoid leaks
+            if (
+                self._reconnection_task is not None
+                and not self._reconnection_task.done()
+            ):
+                logger.info(
+                    "Cancelling existing reconnection polling task before starting new one"
+                )
+                self._reconnection_task.cancel()
+
+            self._reconnection_task = asyncio.create_task(
+                self._poll_for_backend_restart()
+            )
+
+            return {"acknowledged": True}
+
+    async def _poll_for_backend_restart(
+        self,
+        poll_interval: float = 2.0,
+        max_duration: float = 120.0,
+    ) -> None:
+        """
+        Poll for backend restart and re-register when available.
+
+        Called after receiving backend shutdown notification. Polls the
+        registration endpoint until backend is back up and accepts our
+        registration.
+
+        Args:
+            poll_interval: Seconds between poll attempts
+            max_duration: Maximum seconds to poll before giving up
+        """
+
+        start_time = datetime.utcnow()
+        attempt = 0
+
+        logger.info(f"Polling for backend restart (max {max_duration}s)")
+
+        while (datetime.utcnow() - start_time).total_seconds() < max_duration:
+            attempt += 1
+
+            try:
+                # Try to register - will get 503 if still shutting down
+                success = await self.self_register(max_retries=1, initial_delay=0)
+                if success:
+                    logger.info(
+                        f"✅ Re-registered after backend restart (attempt {attempt})"
+                    )
+                    self._last_health_check_received = datetime.utcnow()
+                    return
+
+            except Exception as e:
+                logger.debug(f"Reconnection attempt {attempt} failed: {e}")
+
+            # Sleep at end of loop so first attempt is immediate
+            await asyncio.sleep(poll_interval)
+
+        logger.warning(
+            f"Failed to reconnect after {max_duration}s - "
+            "falling back to health check detection"
+        )
+
     def _setup_signal_handlers(self) -> None:
         """Register signal handlers for graceful shutdown (M6 Task 6.1).
 
@@ -698,16 +786,88 @@ class WorkerAPIBase:
         finally:
             self._current_operation_id = None
 
-    async def self_register(self) -> None:
+    async def self_register(
+        self,
+        max_retries: int = 5,
+        initial_delay: float = 1.0,
+        max_delay: float = 30.0,
+    ) -> bool:
         """
         Register this worker with backend's WorkerRegistry.
 
-        Sends worker metadata to backend's POST /workers/register endpoint.
+        Retries with exponential backoff if registration fails.
+
+        Args:
+            max_retries: Maximum number of registration attempts
+            initial_delay: Initial delay between retries (seconds)
+            max_delay: Maximum delay between retries (seconds)
+
+        Returns:
+            True if registration succeeded, False otherwise
         """
         import httpx
 
         registration_url = f"{self.backend_url}/api/v1/workers/register"
+        payload = await self._build_registration_payload()
 
+        delay = initial_delay
+        for attempt in range(max_retries):
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.post(registration_url, json=payload)
+
+                    # 503 means backend is shutting down - retry without counting as failure
+                    if response.status_code == 503:
+                        logger.info(
+                            f"Backend is shutting down (attempt {attempt + 1}/{max_retries}) "
+                            f"- will retry in {delay:.1f}s"
+                        )
+                        await asyncio.sleep(delay)
+                        delay = min(delay * 2, max_delay)
+                        continue
+
+                    response.raise_for_status()
+                    logger.info(
+                        f"✅ Worker registered successfully: {self.worker_id} "
+                        f"(attempt {attempt + 1}/{max_retries})"
+                    )
+                    # Clear completed operations after successful registration
+                    self._completed_operations.clear()
+                    return True
+
+            except httpx.ConnectError:
+                logger.warning(
+                    f"Registration attempt {attempt + 1}/{max_retries} failed: "
+                    f"backend not reachable (retrying in {delay:.1f}s)"
+                )
+            except httpx.HTTPStatusError as e:
+                logger.warning(
+                    f"Registration attempt {attempt + 1}/{max_retries} failed: "
+                    f"HTTP {e.response.status_code} (retrying in {delay:.1f}s)"
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Registration attempt {attempt + 1}/{max_retries} failed: {e} "
+                    f"(retrying in {delay:.1f}s)"
+                )
+
+            if attempt < max_retries - 1:
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, max_delay)
+
+        logger.error(
+            f"❌ Worker registration failed after {max_retries} attempts - "
+            f"will retry via health check monitor"
+        )
+        return False
+
+    async def _build_registration_payload(self) -> dict[str, Any]:
+        """
+        Build the registration payload with current worker state.
+
+        Returns:
+            Dictionary containing worker registration data
+        """
         # Determine worker capabilities (GPU detection for training workers)
         capabilities: dict[str, Any] = {}
         if self.worker_type.value == "training":
@@ -733,13 +893,13 @@ class WorkerAPIBase:
         public_url = os.getenv("WORKER_PUBLIC_BASE_URL")
         if public_url:
             endpoint_url = public_url
-            logger.info(f"Using WORKER_PUBLIC_BASE_URL: {endpoint_url}")
+            logger.debug(f"Using WORKER_PUBLIC_BASE_URL: {endpoint_url}")
         else:
             import socket
 
             hostname = socket.gethostname()
             endpoint_url = f"http://{hostname}:{self.worker_port}"
-            logger.info(
+            logger.debug(
                 f"No WORKER_PUBLIC_BASE_URL set, using hostname: {endpoint_url}"
             )
 
@@ -754,7 +914,7 @@ class WorkerAPIBase:
         except Exception as e:
             logger.debug(f"Could not get current operation: {e}")
 
-        payload = {
+        return {
             "worker_id": self.worker_id,
             "worker_type": self.worker_type.value,
             "endpoint_url": endpoint_url,
@@ -765,21 +925,6 @@ class WorkerAPIBase:
                 op.model_dump() for op in self._completed_operations
             ],
         }
-
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.post(registration_url, json=payload)
-                response.raise_for_status()
-                logger.info(
-                    f"✅ Worker registered successfully: {self.worker_id} "
-                    f"(type: {self.worker_type.value}, capabilities: {capabilities})"
-                )
-                # Clear completed operations after successful registration
-                self._completed_operations.clear()
-        except Exception as e:
-            logger.warning(
-                f"⚠️  Worker self-registration failed (will retry via health checks): {e}"
-            )
 
     def record_operation_completed(
         self,
@@ -822,13 +967,21 @@ class WorkerAPIBase:
 
         If the backend hasn't health-checked this worker within the timeout
         period, we assume the backend restarted and check our registration.
+
+        Also checks registration if no health check has ever been received,
+        which handles the case where backend crashed before first health check.
         """
         while True:
             try:
                 await asyncio.sleep(self._reregistration_check_interval)
 
-                # Skip if no health check has been received yet
+                # If never received health check, still verify we're registered
+                # This handles the case where backend crashed before first health check
                 if self._last_health_check_received is None:
+                    logger.debug(
+                        "No health check received yet - verifying registration"
+                    )
+                    await self._ensure_registered()
                     continue
 
                 elapsed = (

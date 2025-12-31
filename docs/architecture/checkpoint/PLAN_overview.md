@@ -10,10 +10,11 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Milestones | 8 |
-| Estimated Tasks | ~56 |
+| Total Milestones | 9 |
+| Estimated Tasks | ~61 |
 | Core Milestones (M1-M6) | Unblocked, sequential |
 | Blocked Milestone | M7 (depends on agent work) |
+| Bug Fix Milestone | M7.5 (re-registration reliability) |
 
 ---
 
@@ -33,6 +34,8 @@ M1: Operations Persistence + Re-Registration
  │           ├──► M6: Graceful Shutdown (SIGTERM)
  │           │
  │           └──► M7: Backend-Local Operations [BLOCKED: needs agent work]
+ │
+ ├──► M7.5: Re-Registration Reliability (bug fixes + graceful shutdown notification)
  │
  └──► M8: Polish + Admin (after M1-M6)
 ```
@@ -132,6 +135,26 @@ M1: Operations Persistence + Re-Registration
 
 ---
 
+### M7.5: Re-Registration Reliability
+
+**Branch:** `feature/checkpoint-m7.5-reregistration`
+
+**Capability:** Bug fixes to M1 re-registration + graceful shutdown notification for fast re-registration.
+
+**Why:** Investigation revealed bugs in M1 re-registration (monitor never triggers without prior health check) and opportunity for faster re-registration on graceful backend shutdown (~5s vs ~30s).
+
+**Issues Fixed:**
+
+1. Monitor never triggers if no health check received (bug)
+2. No retry on initial registration failure (bug)
+3. Slow re-registration on graceful shutdown (enhancement)
+
+**E2E Test:** Graceful backend restart → workers re-register in < 15 seconds.
+
+**Plan:** [PLAN_M7.5_reregistration_reliability.md](PLAN_M7.5_reregistration_reliability.md)
+
+---
+
 ### M8: Polish + Admin
 **Branch:** `feature/checkpoint-m8-polish`
 
@@ -208,4 +231,5 @@ See [VALIDATION.md](VALIDATION.md) for full details.
 | [PLAN_M5_backtesting_checkpoint.md](PLAN_M5_backtesting_checkpoint.md) | M5 detailed tasks |
 | [PLAN_M6_graceful_shutdown.md](PLAN_M6_graceful_shutdown.md) | M6 detailed tasks |
 | [PLAN_M7_backend_local_ops.md](PLAN_M7_backend_local_ops.md) | M7 detailed tasks |
+| [PLAN_M7.5_reregistration_reliability.md](PLAN_M7.5_reregistration_reliability.md) | M7.5 detailed tasks |
 | [PLAN_M8_polish.md](PLAN_M8_polish.md) | M8 detailed tasks |

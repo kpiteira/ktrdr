@@ -384,3 +384,42 @@ class TestWorkerRegistrationWithResilience:
 
         # Should fail validation
         assert response.status_code == 422
+
+
+class TestShutdownModeEndpoint:
+    """Tests for registration rejection during shutdown (M7.5 Task 7.5.3)."""
+
+    def test_register_rejected_during_shutdown(self, client, worker_registry):
+        """Test that registration returns 503 when backend is shutting down."""
+        # Put registry in shutdown mode
+        worker_registry.begin_shutdown()
+
+        # Try to register a worker
+        response = client.post(
+            "/api/v1/workers/register",
+            json={
+                "worker_id": "backtest-1",
+                "worker_type": "backtesting",
+                "endpoint_url": "http://192.168.1.201:5003",
+            },
+        )
+
+        assert response.status_code == 503
+        assert "shutting down" in response.json()["detail"].lower()
+        assert response.headers.get("Retry-After") == "5"
+
+    def test_register_succeeds_before_shutdown(self, client, worker_registry):
+        """Test that registration works normally before shutdown mode."""
+        # Verify not in shutdown mode
+        assert not worker_registry.is_shutting_down()
+
+        response = client.post(
+            "/api/v1/workers/register",
+            json={
+                "worker_id": "backtest-1",
+                "worker_type": "backtesting",
+                "endpoint_url": "http://192.168.1.201:5003",
+            },
+        )
+
+        assert response.status_code == 200

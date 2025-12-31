@@ -11,6 +11,7 @@ Simplified startup:
 
 from __future__ import annotations
 
+import asyncio
 import os
 from contextlib import asynccontextmanager
 
@@ -88,6 +89,57 @@ async def _run_startup_reconciliation() -> None:
         logger.warning(f"Startup reconciliation skipped due to error: {e}")
 
 
+async def _notify_workers_of_shutdown(registry) -> None:
+    """
+    Notify all registered workers that backend is shutting down.
+
+    M7.5 Task 7.5.4: Best-effort notification - workers may be unreachable.
+    Workers that receive this notification will start polling for backend
+    availability and re-register immediately when it comes back up.
+
+    Args:
+        registry: The WorkerRegistry containing registered workers
+    """
+    import httpx
+
+    workers = registry.list_workers()
+    if not workers:
+        logger.info("No workers to notify of shutdown")
+        return
+
+    logger.info(f"Notifying {len(workers)} workers of shutdown")
+    notified_count = 0
+
+    try:
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            for worker in workers:
+                try:
+                    response = await client.post(
+                        f"{worker.endpoint_url}/backend-shutdown",
+                        json={"message": "Backend shutting down"},
+                    )
+                    if response.status_code == 200:
+                        logger.debug(f"Notified {worker.worker_id} of shutdown")
+                        notified_count += 1
+                    else:
+                        logger.debug(
+                            f"Worker {worker.worker_id} returned {response.status_code}"
+                        )
+                except asyncio.CancelledError:
+                    # Re-raise to exit the loop - we're being cancelled
+                    raise
+                except Exception as e:
+                    # Best effort - worker might be dead or unreachable
+                    logger.debug(f"Could not notify {worker.worker_id}: {e}")
+    except asyncio.CancelledError:
+        logger.info(
+            f"Shutdown notification cancelled - notified {notified_count}/{len(workers)} workers"
+        )
+        raise
+
+    logger.info("Worker shutdown notification complete")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI lifespan context manager for startup and shutdown.
@@ -150,6 +202,13 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down KTRDR API...")
+
+    # M7.5 Task 7.5.3: Enter shutdown mode first - reject new registrations
+    # This prevents race condition where worker re-registers to dying backend
+    registry.begin_shutdown()
+
+    # M7.5 Task 7.5.4: Notify workers before shutdown
+    await _notify_workers_of_shutdown(registry)
 
     # Stop orphan detector first (M2)
     if _orphan_detector:
