@@ -48,7 +48,20 @@ Each hypothesis dict has:
 - `ktrdr/agents/workers/assessment_worker.py` - Added `_save_hypotheses()` method
 - `tests/unit/agent_tests/test_assessment_worker.py` - Added TestSaveHypotheses class, fixed test isolation
 
-## Next Tasks (5.2, 5.3)
-Task 5.2 will need to detect and update tested hypotheses - uses `ParsedAssessment.tested_hypothesis_ids` which is already populated by HaikuBrain.
+## Files Modified in Task 5.2
+- `ktrdr/agents/workers/assessment_worker.py` - Added `_update_tested_hypotheses()` and `_infer_hypothesis_status()` methods
+- `tests/unit/agent_tests/test_assessment_worker.py` - Added TestUpdateTestedHypotheses class (8 tests)
 
-Task 5.3 will enhance HaikuBrain prompt to better extract H_XXX patterns from assessment text.
+## Status Inference Logic (Task 5.2)
+`_infer_hypothesis_status()` checks in this order:
+1. **Explicit statements in raw_text** (case-insensitive):
+   - "H_001 validated" or "H_001 confirmed" → "validated"
+   - "H_001 refuted" or "H_001 disproved" → "refuted"
+   - "H_001 inconclusive" or "H_001 unclear" → "inconclusive"
+2. **Fallback to verdict**:
+   - strong_signal → "validated"
+   - no_signal → "refuted"
+   - anything else → "inconclusive"
+
+## Next Task (5.3)
+Task 5.3 will enhance HaikuBrain prompt to better extract H_XXX patterns from assessment text, populating `tested_hypothesis_ids`.

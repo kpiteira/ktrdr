@@ -27,6 +27,7 @@ from ktrdr.agents.memory import (
     generate_hypothesis_id,
     save_experiment,
     save_hypothesis,
+    update_hypothesis_status,
 )
 from ktrdr.agents.prompts import (
     ASSESSMENT_SYSTEM_PROMPT,
@@ -302,6 +303,12 @@ class AgentAssessmentWorker:
                 experiment_id=record.id,
             )
 
+            # Update tested hypotheses (Task 5.2)
+            await self._update_tested_hypotheses(
+                parsed_assessment=parsed_assessment,
+                experiment_id=record.id,
+            )
+
         except Exception as e:
             # Memory save failure should not fail the assessment
             logger.error(f"Failed to save experiment to memory: {e}")
@@ -339,6 +346,80 @@ class AgentAssessmentWorker:
 
         except Exception as e:
             logger.warning(f"Failed to save hypotheses: {e}")
+
+    def _infer_hypothesis_status(
+        self,
+        parsed_assessment: ParsedAssessment,
+        hyp_id: str,
+    ) -> str:
+        """Infer hypothesis status from assessment.
+
+        Checks raw_text for explicit statements about the hypothesis,
+        then falls back to verdict-based inference.
+
+        Args:
+            parsed_assessment: Structured assessment from HaikuBrain.
+            hyp_id: Hypothesis ID being tested (e.g., "H_001").
+
+        Returns:
+            Status string: "validated", "refuted", or "inconclusive".
+        """
+        raw_text = parsed_assessment.raw_text.lower()
+        hyp_id_lower = hyp_id.lower()
+
+        # Check for explicit statements
+        if (
+            f"{hyp_id_lower} validated" in raw_text
+            or f"{hyp_id_lower} confirmed" in raw_text
+        ):
+            return "validated"
+        elif (
+            f"{hyp_id_lower} refuted" in raw_text
+            or f"{hyp_id_lower} disproved" in raw_text
+        ):
+            return "refuted"
+        elif (
+            f"{hyp_id_lower} inconclusive" in raw_text
+            or f"{hyp_id_lower} unclear" in raw_text
+        ):
+            return "inconclusive"
+
+        # Fall back to verdict-based inference
+        if parsed_assessment.verdict == "strong_signal":
+            return "validated"
+        elif parsed_assessment.verdict == "no_signal":
+            return "refuted"
+        else:
+            return "inconclusive"
+
+    async def _update_tested_hypotheses(
+        self,
+        parsed_assessment: ParsedAssessment,
+        experiment_id: str,
+    ) -> None:
+        """Update status of hypotheses that were tested in this experiment.
+
+        This is a best-effort operation - failures are logged but don't
+        fail the assessment. Memory is enhancement, not requirement.
+
+        Args:
+            parsed_assessment: Structured assessment from HaikuBrain.
+            experiment_id: ID of the experiment that tested these hypotheses.
+        """
+        try:
+            for hyp_id in parsed_assessment.tested_hypothesis_ids:
+                # Determine status from verdict and observations
+                status = self._infer_hypothesis_status(parsed_assessment, hyp_id)
+
+                update_hypothesis_status(
+                    hypothesis_id=hyp_id,
+                    status=status,
+                    tested_by_experiment=experiment_id,
+                )
+                logger.info(f"Updated hypothesis {hyp_id}: status={status}")
+
+        except Exception as e:
+            logger.warning(f"Failed to update hypotheses: {e}")
 
     async def run(
         self,
