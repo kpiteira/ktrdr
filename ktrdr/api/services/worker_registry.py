@@ -64,6 +64,9 @@ class WorkerRegistry:
         self._health_check_interval: int = 10  # seconds
         self._removal_threshold_seconds: int = 300  # 5 minutes
         self._operations_service: OperationsService | None = None
+        # Shutdown mode flag (M7.5 Task 7.5.3)
+        # When True, registration requests are rejected with 503
+        self._shutting_down: bool = False
 
     def set_operations_service(self, operations_service: OperationsService) -> None:
         """
@@ -76,6 +79,26 @@ class WorkerRegistry:
             operations_service: The OperationsService instance
         """
         self._operations_service = operations_service
+
+    def begin_shutdown(self) -> None:
+        """
+        Enter shutdown mode - reject new registrations.
+
+        Called during backend shutdown to prevent workers from registering
+        to a backend that's about to go away. Workers will receive 503
+        responses and retry after the backend restarts.
+        """
+        self._shutting_down = True
+        logger.info("Worker registry entering shutdown mode - rejecting registrations")
+
+    def is_shutting_down(self) -> bool:
+        """
+        Check if registry is in shutdown mode.
+
+        Returns:
+            True if registry is shutting down and rejecting registrations
+        """
+        return self._shutting_down
 
     async def register_worker(
         self,
