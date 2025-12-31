@@ -164,3 +164,111 @@ class TestParseAssessment:
 
         assert result.verdict == "unknown"
         assert result.raw_text == "Assessment text"
+
+    def test_parse_assessment_extracts_hypothesis_ids(self) -> None:
+        """parse_assessment should extract H_XXX patterns from assessment text."""
+        brain = HaikuBrain()
+
+        # Assessment text that references an existing hypothesis
+        assessment_text = """
+        Testing hypothesis H_001 about multi-timeframe analysis.
+        The results suggest this approach has merit.
+        H_001 validated by this experiment.
+        """
+
+        # Mock Haiku response that correctly extracted the hypothesis ID
+        mock_response = """{
+            "verdict": "strong_signal",
+            "observations": ["Multi-timeframe approach shows promise"],
+            "hypotheses": [],
+            "limitations": [],
+            "capability_requests": [],
+            "tested_hypothesis_ids": ["H_001"]
+        }"""
+
+        with patch.object(brain, "_invoke_haiku", return_value=mock_response):
+            result = brain.parse_assessment(assessment_text, {})
+
+        assert result.tested_hypothesis_ids == ["H_001"]
+        assert result.verdict == "strong_signal"
+
+    def test_parse_assessment_no_hypothesis_ids(self) -> None:
+        """parse_assessment should return empty list when no H_XXX patterns."""
+        brain = HaikuBrain()
+
+        # Assessment with no hypothesis references
+        assessment_text = """
+        This is a new experiment exploring RSI + MACD combination.
+        Results show 62% accuracy with good generalization.
+        """
+
+        mock_response = """{
+            "verdict": "weak_signal",
+            "observations": ["62% accuracy", "Good generalization"],
+            "hypotheses": [{"text": "Adding volume might help", "status": "untested"}],
+            "limitations": [],
+            "capability_requests": [],
+            "tested_hypothesis_ids": []
+        }"""
+
+        with patch.object(brain, "_invoke_haiku", return_value=mock_response):
+            result = brain.parse_assessment(assessment_text, {})
+
+        assert result.tested_hypothesis_ids == []
+        assert len(result.hypotheses) == 1
+
+    def test_parse_assessment_multiple_hypothesis_ids(self) -> None:
+        """parse_assessment should extract all H_XXX IDs when multiple referenced."""
+        brain = HaikuBrain()
+
+        # Assessment referencing multiple hypotheses
+        assessment_text = """
+        This experiment tests both H_001 (multi-timeframe) and H_003 (ADX as filter).
+        Results: H_001 validated with 65% accuracy improvement.
+        H_003 inconclusive - needs more data on trending markets.
+        """
+
+        mock_response = """{
+            "verdict": "strong_signal",
+            "observations": ["Multi-timeframe validated", "ADX filter inconclusive"],
+            "hypotheses": [],
+            "limitations": ["Only tested on ranging markets"],
+            "capability_requests": [],
+            "tested_hypothesis_ids": ["H_001", "H_003"]
+        }"""
+
+        with patch.object(brain, "_invoke_haiku", return_value=mock_response):
+            result = brain.parse_assessment(assessment_text, {})
+
+        assert result.tested_hypothesis_ids == ["H_001", "H_003"]
+        assert len(result.tested_hypothesis_ids) == 2
+
+
+class TestParseAssessmentPrompt:
+    """Tests for the PARSE_ASSESSMENT_PROMPT template."""
+
+    def test_prompt_includes_hypothesis_extraction_instructions(self) -> None:
+        """Prompt should include instructions for extracting H_XXX patterns."""
+        from ktrdr.llm.haiku_brain import PARSE_ASSESSMENT_PROMPT
+
+        # Verify prompt includes H_XXX extraction guidance
+        assert "H_" in PARSE_ASSESSMENT_PROMPT
+        assert "tested_hypothesis_ids" in PARSE_ASSESSMENT_PROMPT
+
+        # Verify prompt includes example patterns
+        assert "H_001" in PARSE_ASSESSMENT_PROMPT or "H_XXX" in PARSE_ASSESSMENT_PROMPT
+
+    def test_prompt_distinguishes_tested_from_new_hypotheses(self) -> None:
+        """Prompt should explain difference between testing existing vs generating new."""
+        from ktrdr.llm.haiku_brain import PARSE_ASSESSMENT_PROMPT
+
+        # Prompt should guide Haiku to distinguish
+        prompt_lower = PARSE_ASSESSMENT_PROMPT.lower()
+        # Should mention that tested_hypothesis_ids are for EXISTING hypotheses
+        assert "existing" in prompt_lower or "reference" in prompt_lower
+        # Should have guidance on what phrases indicate testing
+        assert (
+            "validat" in prompt_lower
+            or "refut" in prompt_lower
+            or "testing" in prompt_lower
+        )

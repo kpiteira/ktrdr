@@ -63,5 +63,22 @@ Each hypothesis dict has:
    - no_signal → "refuted"
    - anything else → "inconclusive"
 
-## Next Task (5.3)
-Task 5.3 will enhance HaikuBrain prompt to better extract H_XXX patterns from assessment text, populating `tested_hypothesis_ids`.
+## Files Modified in Task 5.3
+- `ktrdr/llm/haiku_brain.py` - Enhanced `PARSE_ASSESSMENT_PROMPT` with detailed H_XXX extraction instructions
+- `tests/unit/llm/test_haiku_brain.py` - Added 5 new tests: 3 for hypothesis ID extraction, 2 for prompt validation
+
+## Prompt Enhancement (Task 5.3)
+The `PARSE_ASSESSMENT_PROMPT` now includes explicit examples for extracting hypothesis references:
+- "Testing hypothesis H_001" → include "H_001"
+- "H_002 was validated by this experiment" → include "H_002"
+- "This refutes H_003" → include "H_003"
+- "H_004 inconclusive" → include "H_004"
+
+Key distinction: `tested_hypothesis_ids` is for EXISTING hypotheses being referenced, not new hypotheses being generated.
+
+## Milestone Complete
+All M5 tasks (5.1, 5.2, 5.3) are complete. The hypothesis lifecycle is now fully implemented:
+1. New hypotheses extracted from assessments → saved with status="untested"
+2. Existing hypotheses detected when referenced in assessment text
+3. Hypothesis status updated (validated/refuted/inconclusive) based on context
+4. `tested_by` list tracks which experiments tested each hypothesis
