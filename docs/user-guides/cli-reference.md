@@ -255,6 +255,67 @@ ktrdr models train strategies/test.yaml AAPL 1h \
    ktrdr data show AAPL --timeframe 1h --rows 5
    ```
 
+### 🔄 Operations Commands
+
+#### **List Operations**
+```bash
+# List all operations
+ktrdr operations list
+
+# Filter by status
+ktrdr operations list --status running
+ktrdr operations list --status cancelled
+ktrdr operations list --status failed
+
+# Show only resumable operations (with checkpoints)
+ktrdr operations list --resumable
+```
+
+#### **Check Operation Status**
+
+```bash
+# Get detailed status
+ktrdr operations status op_training_20241213_143022_abc123
+```
+
+#### **Cancel Operation**
+
+```bash
+# Cancel a running operation
+ktrdr operations cancel op_training_20241213_143022_abc123
+```
+
+#### **Resume Operation**
+
+```bash
+# Resume from checkpoint
+ktrdr operations resume op_training_20241213_143022_abc123
+```
+
+### 📦 Checkpoint Commands
+
+#### **View Checkpoint Details**
+
+```bash
+# Show checkpoint information before resuming
+ktrdr checkpoints show op_training_20241213_143022_abc123
+
+# With verbose output
+ktrdr checkpoints show op_training_20241213_143022_abc123 --verbose
+```
+
+#### **Delete Checkpoint**
+
+```bash
+# Delete with confirmation prompt
+ktrdr checkpoints delete op_training_20241213_143022_abc123
+
+# Skip confirmation (use with caution)
+ktrdr checkpoints delete op_training_20241213_143022_abc123 --force
+```
+
+For more details, see the [Checkpoint & Resume Guide](checkpoint-resume.md).
+
 ## 🎯 Quick Reference
 
 | Command | Purpose | Example |
