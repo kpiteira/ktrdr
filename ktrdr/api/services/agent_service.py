@@ -131,6 +131,13 @@ class AgentService:
             operation_id: The operation ID to checkpoint.
             checkpoint_type: Type of checkpoint (failure, cancellation, etc.).
         """
+        # Skip if checkpoint service not available (e.g., in unit tests)
+        if self._checkpoint_service is None:
+            logger.debug(
+                f"Checkpoint service not available, skipping checkpoint save: {operation_id}"
+            )
+            return
+
         try:
             # Get the operation to build checkpoint state
             op = await self.ops.get_operation(operation_id)
@@ -144,8 +151,7 @@ class AgentService:
             checkpoint_state = build_agent_checkpoint_state(op)
 
             # Save checkpoint (no artifacts for agent operations)
-            checkpoint_service = self._get_checkpoint_service()
-            await checkpoint_service.save_checkpoint(
+            await self._checkpoint_service.save_checkpoint(
                 operation_id=operation_id,
                 checkpoint_type=checkpoint_type,
                 state=checkpoint_state.to_dict(),
@@ -242,9 +248,9 @@ class AgentService:
         try:
             result = await worker.run(operation_id)
 
-            # M7: Delete checkpoint on successful completion
-            checkpoint_service = self._get_checkpoint_service()
-            await checkpoint_service.delete_checkpoint(operation_id)
+            # M7: Delete checkpoint on successful completion (if checkpoint service available)
+            if self._checkpoint_service is not None:
+                await self._checkpoint_service.delete_checkpoint(operation_id)
 
             await self.ops.complete_operation(operation_id, result)
             # Budget spend is recorded per-phase in the worker
@@ -546,10 +552,17 @@ _agent_service: AgentService | None = None
 def get_agent_service() -> AgentService:
     """Get the agent service singleton.
 
+    In production, initializes checkpoint service for checkpoint/resume support.
+
     Returns:
         AgentService singleton instance.
     """
     global _agent_service
     if _agent_service is None:
-        _agent_service = AgentService()
+        # Import here to avoid circular imports at module load time
+        from ktrdr.api.database import get_session_factory
+        from ktrdr.checkpoint import CheckpointService
+
+        checkpoint_service = CheckpointService(session_factory=get_session_factory())
+        _agent_service = AgentService(checkpoint_service=checkpoint_service)
     return _agent_service

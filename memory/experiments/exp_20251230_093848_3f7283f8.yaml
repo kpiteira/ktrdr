@@ -1,0 +1,31 @@
+id: exp_20251230_093848_3f7283f8
+timestamp: '2025-12-30T09:38:48.300550'
+strategy_name: test_strategy_v1
+context:
+  indicators: []
+  composition: solo
+  timeframe: 1h
+  symbol: EURUSD
+  zigzag_threshold: 0.02
+  nn_architecture: []
+results:
+  test_accuracy: 0.62
+  val_accuracy: 0
+  val_test_gap: 0.62
+  sharpe_ratio: 1.5
+  total_trades: 42
+  win_rate: 0.58
+assessment:
+  verdict: no_signal
+  observations:
+  - Agent output is a MagicMock object, not actual assessment data
+  - No test accuracy metrics available
+  - No validation-test comparison possible
+  - No structured assessment results found
+  hypotheses: []
+  limitations:
+  - Output is a mock object rather than real assessment results
+  - Cannot extract verdict, observations, or metrics from mock
+  - No test data available for analysis
+  - Unable to determine model performance
+source: agent

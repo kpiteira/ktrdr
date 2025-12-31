@@ -1,0 +1,29 @@
+id: exp_v15_adx_di
+timestamp: '2025-12-27T00:00:00Z'
+strategy_name: v15_adx_di
+context:
+  indicators:
+  - ADX
+  composition: solo
+  timeframe: 1h
+  symbol: EURUSD
+  zigzag_threshold: 0.025
+  nn_architecture:
+  - 64
+  - 32
+  training_epochs: 100
+  data_range: 2015-01-01 to 2023-12-31
+results:
+  test_accuracy: 0.611
+  val_accuracy: 0.652
+  val_test_gap: 0.041
+assessment:
+  verdict: strong_signal
+  observations:
+  - ADX (solo) achieves 61.1% test accuracy on 1h EURUSD
+  hypotheses: []
+  limitations:
+  - Only tested on 1h EURUSD
+  - Only tested in solo configuration
+  capability_requests: []
+source: v1.5_bootstrap
