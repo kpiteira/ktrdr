@@ -93,6 +93,36 @@ def _display_children_tree(children: list[dict]) -> None:
         console.print(line)
 
 
+def _format_checkpoint_summary(state: dict) -> str:
+    """
+    Format checkpoint state into a brief summary string.
+
+    Args:
+        state: Checkpoint state dictionary
+
+    Returns:
+        Brief summary like "epoch 29" or "bar 7000"
+    """
+    # Training checkpoint
+    if "epoch" in state:
+        return f"epoch {state['epoch']}"
+
+    # Backtesting checkpoint
+    if "bar_index" in state:
+        return f"bar {state['bar_index']}"
+
+    # Agent checkpoint
+    if "step" in state:
+        return f"step {state['step']}"
+
+    # Fallback to first numeric key
+    for key, value in state.items():
+        if isinstance(value, (int, float)) and not key.startswith("_"):
+            return f"{key} {value}"
+
+    return "saved"
+
+
 # Create the CLI app for operations commands
 operations_app = typer.Typer(
     name="operations",
@@ -122,6 +152,9 @@ def list_operations(
     active_only: bool = typer.Option(
         False, "--active", "-a", help="Show only active (running/pending) operations"
     ),
+    resumable: bool = typer.Option(
+        False, "--resumable", "-r", help="Show only operations with checkpoints"
+    ),
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Show detailed information"
     ),
@@ -136,12 +169,15 @@ def list_operations(
         ktrdr operations list
         ktrdr operations list --active
         ktrdr operations list --status running
+        ktrdr operations list --resumable
         ktrdr operations list --type data_load --limit 10
     """
     try:
         # Run async operation
         asyncio.run(
-            _list_operations_async(status, operation_type, limit, active_only, verbose)
+            _list_operations_async(
+                status, operation_type, limit, active_only, verbose, resumable
+            )
         )
 
     except Exception as e:
@@ -157,6 +193,7 @@ async def _list_operations_async(
     limit: int,
     active_only: bool,
     verbose: bool,
+    resumable: bool = False,
 ):
     """Async implementation of list operations command."""
     try:
@@ -174,7 +211,8 @@ async def _list_operations_async(
 
         if verbose:
             console.print(
-                f"🔍 Listing operations (status: {status}, type: {operation_type}, active_only: {active_only})"
+                f"🔍 Listing operations (status: {status}, type: {operation_type}, "
+                f"active_only: {active_only}, resumable: {resumable})"
             )
 
         # List operations via API
@@ -189,18 +227,47 @@ async def _list_operations_async(
         total_count = response.get("total_count", 0)
         active_count = response.get("active_count", 0)
 
+        # Fetch checkpoint info for each operation
+        resumable_count = 0
+        for op in operations:
+            try:
+                checkpoint_response = await api_client.get(
+                    f"/checkpoints/{op['operation_id']}"
+                )
+                op["has_checkpoint"] = checkpoint_response.get("success", False)
+                if op["has_checkpoint"]:
+                    checkpoint_data = checkpoint_response.get("data", {})
+                    op["checkpoint_summary"] = _format_checkpoint_summary(
+                        checkpoint_data.get("state", {})
+                    )
+                    resumable_count += 1
+                else:
+                    op["checkpoint_summary"] = None
+            except Exception:
+                # Checkpoint fetch failed - operation is not resumable
+                op["has_checkpoint"] = False
+                op["checkpoint_summary"] = None
+
+        # Filter to resumable only if requested
+        if resumable:
+            operations = [op for op in operations if op.get("has_checkpoint")]
+
         # Display results
         if not operations:
-            if active_only:
+            if resumable:
+                console.print("ℹ️  No resumable operations found")
+            elif active_only:
                 console.print("ℹ️  No active operations found")
             else:
                 console.print("ℹ️  No operations found")
             return
 
-        # Show summary
+        # Show summary with resumable count
         console.print("\n📋 [bold]Operations Summary[/bold]")
         console.print(f"Showing: {len(operations)} operations")
-        console.print(f"Total: {total_count} | Active: {active_count}")
+        console.print(
+            f"Total: {total_count} | Active: {active_count} | Resumable: {resumable_count}"
+        )
         console.print()
 
         # Create table
@@ -209,8 +276,9 @@ async def _list_operations_async(
         table.add_column("Type", style="green")
         table.add_column("Status", style="yellow")
         table.add_column("Progress", style="blue")
-        table.add_column("Symbol", style="magenta")
-        table.add_column("Duration", style="white")
+        table.add_column("Checkpoint", style="magenta")
+        table.add_column("Symbol", style="white")
+        table.add_column("Duration", style="dim")
 
         if verbose:
             table.add_column("Created", style="dim")
@@ -231,6 +299,9 @@ async def _list_operations_async(
             # Format progress
             progress = f"{op.get('progress_percentage', 0):.0f}%"
 
+            # Format checkpoint
+            checkpoint = op.get("checkpoint_summary") or "-"
+
             # Format duration
             duration = "N/A"
             if op.get("duration_seconds"):
@@ -242,6 +313,7 @@ async def _list_operations_async(
                 op["operation_type"],
                 status_display,
                 progress,
+                checkpoint,
                 op.get("symbol", "N/A"),
                 duration,
             ]
