@@ -69,8 +69,8 @@ class TestStartupReconciliation:
         reconciliation = StartupReconciliation(repository=mock_repository)
         result = await reconciliation.reconcile()
 
-        # Verify list was called with status filter
-        mock_repository.list.assert_called_once_with(status="RUNNING")
+        # Verify list was called with status filter (lowercase to match DB values)
+        mock_repository.list.assert_called_once_with(status="running")
         # No updates should happen
         mock_repository.update.assert_not_called()
         # Result should reflect no operations processed
@@ -115,10 +115,10 @@ class TestStartupReconciliation:
         reconciliation = StartupReconciliation(repository=mock_repository)
         result = await reconciliation.reconcile()
 
-        # Verify update was called with FAILED status
+        # Verify update was called with failed status (lowercase to match OperationStatus enum)
         mock_repository.update.assert_called_once_with(
             "op_local_456",
-            status="FAILED",
+            status="failed",
             error_message="Backend restarted - operation was running in backend process",
         )
         assert result.total_processed == 1
@@ -166,10 +166,10 @@ class TestStartupReconciliation:
         reconciliation = StartupReconciliation(repository=mock_repository)
         result = await reconciliation.reconcile()
 
-        # Should be marked as FAILED (backend-local)
+        # Should be marked as failed (backend-local)
         mock_repository.update.assert_called_once()
         call_kwargs = mock_repository.update.call_args.kwargs
-        assert call_kwargs.get("status") == "FAILED"
+        assert call_kwargs.get("status") == "failed"
         assert result.backend_ops_failed == 1
 
     @pytest.mark.asyncio
@@ -285,7 +285,7 @@ class TestStartupReconciliationWithCheckpoint:
         # Verify error message indicates checkpoint is available
         mock_repository.update.assert_called_once_with(
             "op_local_with_cp",
-            status="FAILED",
+            status="failed",
             error_message="Backend restarted - checkpoint available for resume",
         )
         assert result.backend_ops_failed == 1
@@ -318,7 +318,7 @@ class TestStartupReconciliationWithCheckpoint:
         # Verify error message indicates no checkpoint
         mock_repository.update.assert_called_once_with(
             "op_local_no_cp",
-            status="FAILED",
+            status="failed",
             error_message="Backend restarted - no checkpoint available",
         )
         assert result.backend_ops_failed == 1
@@ -370,7 +370,7 @@ class TestStartupReconciliationWithCheckpoint:
         # Should use default error message (backward compatibility)
         mock_repository.update.assert_called_once_with(
             "op_local_default",
-            status="FAILED",
+            status="failed",
             error_message="Backend restarted - operation was running in backend process",
         )
         assert result.backend_ops_failed == 1
