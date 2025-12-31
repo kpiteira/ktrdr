@@ -22,8 +22,12 @@ from ktrdr.agents.invoker import (
 )
 from ktrdr.agents.memory import (
     ExperimentRecord,
+    Hypothesis,
     generate_experiment_id,
+    generate_hypothesis_id,
     save_experiment,
+    save_hypothesis,
+    update_hypothesis_status,
 )
 from ktrdr.agents.prompts import (
     ASSESSMENT_SYSTEM_PROMPT,
@@ -293,9 +297,127 @@ class AgentAssessmentWorker:
             else:
                 logger.info(f"Saved experiment to memory: {path}")
 
+            # Save new hypotheses from assessment (Task 5.1)
+            await self._save_hypotheses(
+                parsed_assessment=parsed_assessment,
+                experiment_id=record.id,
+            )
+
+            # Update tested hypotheses (Task 5.2)
+            await self._update_tested_hypotheses(
+                parsed_assessment=parsed_assessment,
+                experiment_id=record.id,
+            )
+
         except Exception as e:
             # Memory save failure should not fail the assessment
             logger.error(f"Failed to save experiment to memory: {e}")
+
+    async def _save_hypotheses(
+        self,
+        parsed_assessment: ParsedAssessment,
+        experiment_id: str,
+    ) -> None:
+        """Extract and save new hypotheses from assessment.
+
+        This is a best-effort operation - failures are logged but don't
+        fail the assessment. Memory is enhancement, not requirement.
+
+        Args:
+            parsed_assessment: Structured assessment from HaikuBrain.
+            experiment_id: ID of the experiment that generated these hypotheses.
+        """
+        try:
+            for hyp_data in parsed_assessment.hypotheses:
+                text = hyp_data.get("text", "")
+                if not text:
+                    continue
+
+                hypothesis = Hypothesis(
+                    id=generate_hypothesis_id(),
+                    text=text,
+                    source_experiment=experiment_id,
+                    rationale=hyp_data.get("rationale", "Generated during assessment"),
+                    status="untested",
+                )
+
+                save_hypothesis(hypothesis)
+                logger.info(f"Saved new hypothesis: {hypothesis.id}")
+
+        except Exception as e:
+            logger.warning(f"Failed to save hypotheses: {e}")
+
+    def _infer_hypothesis_status(
+        self,
+        parsed_assessment: ParsedAssessment,
+        hyp_id: str,
+    ) -> str:
+        """Infer hypothesis status from assessment.
+
+        Checks raw_text for explicit statements about the hypothesis,
+        then falls back to verdict-based inference.
+
+        Args:
+            parsed_assessment: Structured assessment from HaikuBrain.
+            hyp_id: Hypothesis ID being tested (e.g., "H_001").
+
+        Returns:
+            Status string: "validated", "refuted", or "inconclusive".
+        """
+        raw_text = parsed_assessment.raw_text.lower()
+        hyp_id_lower = hyp_id.lower()
+
+        # Check for explicit statements, allowing up to 5 words between ID and status
+        def matches_status(keywords: list[str]) -> bool:
+            """Check if hyp_id is followed by any keyword within ~5 words."""
+            keywords_pattern = "|".join(keywords)
+            # Match: hyp_id, then up to 5 words, then a status keyword
+            pattern = rf"{re.escape(hyp_id_lower)}\b(?:\W+\w+){{0,5}}?\W+(?:{keywords_pattern})\b"
+            return re.search(pattern, raw_text) is not None
+
+        if matches_status(["validated", "confirmed"]):
+            return "validated"
+        elif matches_status(["refuted", "disproved"]):
+            return "refuted"
+        elif matches_status(["inconclusive", "unclear"]):
+            return "inconclusive"
+
+        # Fall back to verdict-based inference
+        if parsed_assessment.verdict == "strong_signal":
+            return "validated"
+        elif parsed_assessment.verdict == "no_signal":
+            return "refuted"
+        else:
+            return "inconclusive"
+
+    async def _update_tested_hypotheses(
+        self,
+        parsed_assessment: ParsedAssessment,
+        experiment_id: str,
+    ) -> None:
+        """Update status of hypotheses that were tested in this experiment.
+
+        This is a best-effort operation - failures are logged but don't
+        fail the assessment. Memory is enhancement, not requirement.
+
+        Args:
+            parsed_assessment: Structured assessment from HaikuBrain.
+            experiment_id: ID of the experiment that tested these hypotheses.
+        """
+        try:
+            for hyp_id in parsed_assessment.tested_hypothesis_ids:
+                # Determine status from verdict and observations
+                status = self._infer_hypothesis_status(parsed_assessment, hyp_id)
+
+                update_hypothesis_status(
+                    hypothesis_id=hyp_id,
+                    status=status,
+                    tested_by_experiment=experiment_id,
+                )
+                logger.info(f"Updated hypothesis {hyp_id}: status={status}")
+
+        except Exception as e:
+            logger.warning(f"Failed to update hypotheses: {e}")
 
     async def run(
         self,

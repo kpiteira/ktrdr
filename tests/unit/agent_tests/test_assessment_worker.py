@@ -447,8 +447,13 @@ class TestSaveToMemory:
             raw_text="Test raw output",
         )
 
-        # Patch the memory module's EXPERIMENTS_DIR so save_experiment writes to tmp_path
-        with patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path):
+        hypotheses_file = tmp_path / "hypotheses.yaml"
+
+        # Patch both EXPERIMENTS_DIR and HYPOTHESES_FILE to use tmp_path
+        with (
+            patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path / "experiments"),
+            patch("ktrdr.agents.memory.HYPOTHESES_FILE", hypotheses_file),
+        ):
             await worker._save_to_memory(
                 strategy_name="test_strategy",
                 strategy_config={"indicators": [{"name": "RSI"}]},
@@ -458,7 +463,7 @@ class TestSaveToMemory:
             )
 
         # Verify file was created
-        files = list(tmp_path.glob("*.yaml"))
+        files = list((tmp_path / "experiments").glob("*.yaml"))
         assert len(files) == 1
 
     @pytest.mark.asyncio
@@ -484,7 +489,12 @@ class TestSaveToMemory:
             raw_text="Raw assessment text",
         )
 
-        with patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path):
+        hypotheses_file = tmp_path / "hypotheses.yaml"
+
+        with (
+            patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path / "experiments"),
+            patch("ktrdr.agents.memory.HYPOTHESES_FILE", hypotheses_file),
+        ):
             await worker._save_to_memory(
                 strategy_name="rsi_di_v1",
                 strategy_config={
@@ -501,8 +511,8 @@ class TestSaveToMemory:
             )
 
         # Load and verify content
-        files = list(tmp_path.glob("*.yaml"))
-        content = yaml.safe_load(files[0].read_text())
+        exp_files = list((tmp_path / "experiments").glob("*.yaml"))
+        content = yaml.safe_load(exp_files[0].read_text())
 
         assert content["strategy_name"] == "rsi_di_v1"
         assert content["source"] == "agent"
@@ -569,7 +579,12 @@ class TestMalformedAssessmentHandling:
 
         assert parsed.verdict == "unknown"  # Sanity check
 
-        with patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path):
+        hypotheses_file = tmp_path / "hypotheses.yaml"
+
+        with (
+            patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path / "experiments"),
+            patch("ktrdr.agents.memory.HYPOTHESES_FILE", hypotheses_file),
+        ):
             await worker._save_to_memory(
                 strategy_name="test_strategy",
                 strategy_config={"indicators": [{"name": "RSI"}]},
@@ -579,7 +594,7 @@ class TestMalformedAssessmentHandling:
             )
 
         # Verify file was created
-        files = list(tmp_path.glob("*.yaml"))
+        files = list((tmp_path / "experiments").glob("*.yaml"))
         assert len(files) == 1
 
         # Verify content has unknown verdict
@@ -602,7 +617,12 @@ class TestMalformedAssessmentHandling:
         raw_output = "This is some malformed output\nthat couldn't be parsed correctly."
         parsed = ParsedAssessment.empty(raw_text=raw_output)
 
-        with patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path):
+        hypotheses_file = tmp_path / "hypotheses.yaml"
+
+        with (
+            patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path / "experiments"),
+            patch("ktrdr.agents.memory.HYPOTHESES_FILE", hypotheses_file),
+        ):
             await worker._save_to_memory(
                 strategy_name="test_strategy",
                 strategy_config={},
@@ -611,7 +631,7 @@ class TestMalformedAssessmentHandling:
                 parsed_assessment=parsed,
             )
 
-        files = list(tmp_path.glob("*.yaml"))
+        files = list((tmp_path / "experiments").glob("*.yaml"))
         content = yaml.safe_load(files[0].read_text())
 
         # raw_text should be preserved in the assessment
@@ -635,7 +655,12 @@ class TestMalformedAssessmentHandling:
         raw_output = "A" * 5000
         parsed = ParsedAssessment.empty(raw_text=raw_output)
 
-        with patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path):
+        hypotheses_file = tmp_path / "hypotheses.yaml"
+
+        with (
+            patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path / "experiments"),
+            patch("ktrdr.agents.memory.HYPOTHESES_FILE", hypotheses_file),
+        ):
             await worker._save_to_memory(
                 strategy_name="test_strategy",
                 strategy_config={},
@@ -644,7 +669,7 @@ class TestMalformedAssessmentHandling:
                 parsed_assessment=parsed,
             )
 
-        files = list(tmp_path.glob("*.yaml"))
+        files = list((tmp_path / "experiments").glob("*.yaml"))
         content = yaml.safe_load(files[0].read_text())
 
         # Full raw_text preserved - no truncation
@@ -667,7 +692,12 @@ class TestMalformedAssessmentHandling:
         parsed = ParsedAssessment.empty(raw_text="Malformed output")
         assert parsed.observations == []  # Sanity check
 
-        with patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path):
+        hypotheses_file = tmp_path / "hypotheses.yaml"
+
+        with (
+            patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path / "experiments"),
+            patch("ktrdr.agents.memory.HYPOTHESES_FILE", hypotheses_file),
+        ):
             await worker._save_to_memory(
                 strategy_name="test_strategy",
                 strategy_config={},
@@ -676,7 +706,7 @@ class TestMalformedAssessmentHandling:
                 parsed_assessment=parsed,
             )
 
-        files = list(tmp_path.glob("*.yaml"))
+        files = list((tmp_path / "experiments").glob("*.yaml"))
         content = yaml.safe_load(files[0].read_text())
 
         # Should have fallback observation, not empty list
@@ -696,7 +726,12 @@ class TestMalformedAssessmentHandling:
         worker = AgentAssessmentWorker(mock_operations_service)
         parsed = ParsedAssessment.empty(raw_text="Malformed")
 
-        with patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path):
+        hypotheses_file = tmp_path / "hypotheses.yaml"
+
+        with (
+            patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path / "experiments"),
+            patch("ktrdr.agents.memory.HYPOTHESES_FILE", hypotheses_file),
+        ):
             with caplog.at_level(logging.WARNING):
                 await worker._save_to_memory(
                     strategy_name="test_strategy",
@@ -710,3 +745,682 @@ class TestMalformedAssessmentHandling:
         assert any(
             "unknown verdict" in record.message.lower() for record in caplog.records
         )
+
+
+class TestSaveHypotheses:
+    """Tests for Task 5.1: _save_hypotheses method."""
+
+    @pytest.mark.asyncio
+    async def test_save_hypotheses_extracts_new(
+        self, mock_operations_service, tmp_path
+    ):
+        """New hypotheses are saved from ParsedAssessment."""
+        from unittest.mock import patch
+
+        import yaml
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        parsed = ParsedAssessment(
+            verdict="strong_signal",
+            observations=["Good accuracy"],
+            hypotheses=[
+                {"text": "Multi-timeframe might help", "status": "untested"},
+                {"text": "ADX as filter could work", "status": "untested"},
+            ],
+            limitations=[],
+            capability_requests=[],
+            tested_hypothesis_ids=[],
+            raw_text="Test output",
+        )
+
+        hypotheses_file = tmp_path / "hypotheses.yaml"
+
+        with (
+            patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path / "experiments"),
+            patch("ktrdr.agents.memory.HYPOTHESES_FILE", hypotheses_file),
+        ):
+            await worker._save_hypotheses(
+                parsed_assessment=parsed,
+                experiment_id="exp_20251230_001",
+            )
+
+        # Verify hypotheses were saved
+        assert hypotheses_file.exists()
+        data = yaml.safe_load(hypotheses_file.read_text())
+        assert len(data["hypotheses"]) == 2
+        assert data["hypotheses"][0]["text"] == "Multi-timeframe might help"
+        assert data["hypotheses"][1]["text"] == "ADX as filter could work"
+
+    @pytest.mark.asyncio
+    async def test_save_hypotheses_generates_id(
+        self, mock_operations_service, tmp_path
+    ):
+        """Unique IDs are assigned to new hypotheses."""
+        from unittest.mock import patch
+
+        import yaml
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        parsed = ParsedAssessment(
+            verdict="strong_signal",
+            observations=[],
+            hypotheses=[
+                {"text": "First hypothesis", "status": "untested"},
+                {"text": "Second hypothesis", "status": "untested"},
+            ],
+            limitations=[],
+            capability_requests=[],
+            tested_hypothesis_ids=[],
+            raw_text="Test",
+        )
+
+        hypotheses_file = tmp_path / "hypotheses.yaml"
+
+        with (
+            patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path / "experiments"),
+            patch("ktrdr.agents.memory.HYPOTHESES_FILE", hypotheses_file),
+        ):
+            await worker._save_hypotheses(
+                parsed_assessment=parsed,
+                experiment_id="exp_test_001",
+            )
+
+        data = yaml.safe_load(hypotheses_file.read_text())
+        ids = [h["id"] for h in data["hypotheses"]]
+
+        # IDs should be sequential and unique
+        assert ids[0] == "H_001"
+        assert ids[1] == "H_002"
+        assert ids[0] != ids[1]
+
+    @pytest.mark.asyncio
+    async def test_save_hypotheses_links_experiment(
+        self, mock_operations_service, tmp_path
+    ):
+        """Source experiment is linked to each hypothesis."""
+        from unittest.mock import patch
+
+        import yaml
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        parsed = ParsedAssessment(
+            verdict="weak_signal",
+            observations=[],
+            hypotheses=[{"text": "Test hypothesis", "status": "untested"}],
+            limitations=[],
+            capability_requests=[],
+            tested_hypothesis_ids=[],
+            raw_text="Test",
+        )
+
+        hypotheses_file = tmp_path / "hypotheses.yaml"
+
+        with (
+            patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path / "experiments"),
+            patch("ktrdr.agents.memory.HYPOTHESES_FILE", hypotheses_file),
+        ):
+            await worker._save_hypotheses(
+                parsed_assessment=parsed,
+                experiment_id="exp_source_123",
+            )
+
+        data = yaml.safe_load(hypotheses_file.read_text())
+        assert data["hypotheses"][0]["source_experiment"] == "exp_source_123"
+
+    @pytest.mark.asyncio
+    async def test_save_hypotheses_empty_list(self, mock_operations_service, tmp_path):
+        """No error when hypotheses list is empty."""
+        from unittest.mock import patch
+
+        import yaml
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        parsed = ParsedAssessment(
+            verdict="no_signal",
+            observations=["No patterns found"],
+            hypotheses=[],  # Empty list
+            limitations=[],
+            capability_requests=[],
+            tested_hypothesis_ids=[],
+            raw_text="Test",
+        )
+
+        hypotheses_file = tmp_path / "hypotheses.yaml"
+
+        with (
+            patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path / "experiments"),
+            patch("ktrdr.agents.memory.HYPOTHESES_FILE", hypotheses_file),
+        ):
+            # Should not raise
+            await worker._save_hypotheses(
+                parsed_assessment=parsed,
+                experiment_id="exp_test_002",
+            )
+
+        # File should not exist (or be empty) since no hypotheses
+        if hypotheses_file.exists():
+            data = yaml.safe_load(hypotheses_file.read_text())
+            assert len(data.get("hypotheses", [])) == 0
+
+    @pytest.mark.asyncio
+    async def test_save_hypotheses_failure_continues(
+        self, mock_operations_service, tmp_path, caplog
+    ):
+        """Hypothesis save failure doesn't raise exception."""
+        import logging
+        from unittest.mock import patch
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        parsed = ParsedAssessment(
+            verdict="strong_signal",
+            observations=[],
+            hypotheses=[{"text": "Test", "status": "untested"}],
+            limitations=[],
+            capability_requests=[],
+            tested_hypothesis_ids=[],
+            raw_text="Test",
+        )
+
+        # Patch to simulate failure
+        with patch(
+            "ktrdr.agents.workers.assessment_worker.save_hypothesis",
+            side_effect=Exception("Disk full"),
+        ):
+            with caplog.at_level(logging.WARNING):
+                # Should not raise - graceful degradation
+                await worker._save_hypotheses(
+                    parsed_assessment=parsed,
+                    experiment_id="exp_test_003",
+                )
+
+        # Should log warning about failure
+        assert any("hypotheses" in record.message.lower() for record in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_save_hypotheses_skips_empty_text(
+        self, mock_operations_service, tmp_path
+    ):
+        """Hypotheses with empty text are skipped."""
+        from unittest.mock import patch
+
+        import yaml
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        parsed = ParsedAssessment(
+            verdict="strong_signal",
+            observations=[],
+            hypotheses=[
+                {"text": "", "status": "untested"},  # Empty text - skip
+                {"text": "Valid hypothesis", "status": "untested"},
+                {"status": "untested"},  # Missing text - skip
+            ],
+            limitations=[],
+            capability_requests=[],
+            tested_hypothesis_ids=[],
+            raw_text="Test",
+        )
+
+        hypotheses_file = tmp_path / "hypotheses.yaml"
+
+        with (
+            patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path / "experiments"),
+            patch("ktrdr.agents.memory.HYPOTHESES_FILE", hypotheses_file),
+        ):
+            await worker._save_hypotheses(
+                parsed_assessment=parsed,
+                experiment_id="exp_test_004",
+            )
+
+        # Only valid hypothesis should be saved
+        data = yaml.safe_load(hypotheses_file.read_text())
+        assert len(data["hypotheses"]) == 1
+        assert data["hypotheses"][0]["text"] == "Valid hypothesis"
+
+
+class TestUpdateTestedHypotheses:
+    """Tests for Task 5.2: _update_tested_hypotheses method."""
+
+    @pytest.mark.asyncio
+    async def test_update_tested_hypotheses_validated(
+        self, mock_operations_service, tmp_path
+    ):
+        """Status set to validated when assessment says 'validated'."""
+        from unittest.mock import patch
+
+        import yaml
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        # Pre-populate hypotheses file with an untested hypothesis
+        hypotheses_file = tmp_path / "hypotheses.yaml"
+        hypotheses_file.write_text(
+            yaml.dump(
+                {
+                    "hypotheses": [
+                        {
+                            "id": "H_001",
+                            "text": "Multi-timeframe might help",
+                            "status": "untested",
+                            "source_experiment": "exp_old",
+                            "rationale": "Initial hypothesis",
+                            "tested_by": [],
+                        }
+                    ]
+                }
+            )
+        )
+
+        parsed = ParsedAssessment(
+            verdict="strong_signal",
+            observations=["Great results"],
+            hypotheses=[],
+            limitations=[],
+            capability_requests=[],
+            tested_hypothesis_ids=["H_001"],
+            raw_text="Testing H_001. The hypothesis H_001 validated - multi-timeframe improved accuracy.",
+        )
+
+        with patch("ktrdr.agents.memory.HYPOTHESES_FILE", hypotheses_file):
+            await worker._update_tested_hypotheses(
+                parsed_assessment=parsed,
+                experiment_id="exp_new_123",
+            )
+
+        # Verify status was updated
+        data = yaml.safe_load(hypotheses_file.read_text())
+        assert data["hypotheses"][0]["status"] == "validated"
+
+    @pytest.mark.asyncio
+    async def test_update_tested_hypotheses_refuted(
+        self, mock_operations_service, tmp_path
+    ):
+        """Status set to refuted when assessment says 'refuted'."""
+        from unittest.mock import patch
+
+        import yaml
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        hypotheses_file = tmp_path / "hypotheses.yaml"
+        hypotheses_file.write_text(
+            yaml.dump(
+                {
+                    "hypotheses": [
+                        {
+                            "id": "H_002",
+                            "text": "ADX as filter",
+                            "status": "untested",
+                            "source_experiment": "exp_old",
+                            "rationale": "Test",
+                            "tested_by": [],
+                        }
+                    ]
+                }
+            )
+        )
+
+        parsed = ParsedAssessment(
+            verdict="no_signal",
+            observations=["No improvement"],
+            hypotheses=[],
+            limitations=[],
+            capability_requests=[],
+            tested_hypothesis_ids=["H_002"],
+            raw_text="Testing ADX filter. H_002 refuted - no improvement with ADX filter.",
+        )
+
+        with patch("ktrdr.agents.memory.HYPOTHESES_FILE", hypotheses_file):
+            await worker._update_tested_hypotheses(
+                parsed_assessment=parsed,
+                experiment_id="exp_new_456",
+            )
+
+        data = yaml.safe_load(hypotheses_file.read_text())
+        assert data["hypotheses"][0]["status"] == "refuted"
+
+    @pytest.mark.asyncio
+    async def test_update_tested_hypotheses_inconclusive(
+        self, mock_operations_service, tmp_path
+    ):
+        """Status set to inconclusive when assessment is unclear."""
+        from unittest.mock import patch
+
+        import yaml
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        hypotheses_file = tmp_path / "hypotheses.yaml"
+        hypotheses_file.write_text(
+            yaml.dump(
+                {
+                    "hypotheses": [
+                        {
+                            "id": "H_003",
+                            "text": "LSTM might work",
+                            "status": "untested",
+                            "source_experiment": "exp_old",
+                            "rationale": "Test",
+                            "tested_by": [],
+                        }
+                    ]
+                }
+            )
+        )
+
+        parsed = ParsedAssessment(
+            verdict="weak_signal",
+            observations=["Mixed results"],
+            hypotheses=[],
+            limitations=[],
+            capability_requests=[],
+            tested_hypothesis_ids=["H_003"],
+            raw_text="Testing LSTM. H_003 inconclusive - need more data.",
+        )
+
+        with patch("ktrdr.agents.memory.HYPOTHESES_FILE", hypotheses_file):
+            await worker._update_tested_hypotheses(
+                parsed_assessment=parsed,
+                experiment_id="exp_new_789",
+            )
+
+        data = yaml.safe_load(hypotheses_file.read_text())
+        assert data["hypotheses"][0]["status"] == "inconclusive"
+
+    @pytest.mark.asyncio
+    async def test_update_tested_hypotheses_adds_experiment(
+        self, mock_operations_service, tmp_path
+    ):
+        """Experiment ID added to tested_by list."""
+        from unittest.mock import patch
+
+        import yaml
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        hypotheses_file = tmp_path / "hypotheses.yaml"
+        hypotheses_file.write_text(
+            yaml.dump(
+                {
+                    "hypotheses": [
+                        {
+                            "id": "H_001",
+                            "text": "Test hypothesis",
+                            "status": "untested",
+                            "source_experiment": "exp_old",
+                            "rationale": "Test",
+                            "tested_by": [],
+                        }
+                    ]
+                }
+            )
+        )
+
+        parsed = ParsedAssessment(
+            verdict="strong_signal",
+            observations=[],
+            hypotheses=[],
+            limitations=[],
+            capability_requests=[],
+            tested_hypothesis_ids=["H_001"],
+            raw_text="H_001 validated by this experiment.",
+        )
+
+        with patch("ktrdr.agents.memory.HYPOTHESES_FILE", hypotheses_file):
+            await worker._update_tested_hypotheses(
+                parsed_assessment=parsed,
+                experiment_id="exp_testing_abc",
+            )
+
+        data = yaml.safe_load(hypotheses_file.read_text())
+        assert "exp_testing_abc" in data["hypotheses"][0]["tested_by"]
+
+    @pytest.mark.asyncio
+    async def test_update_tested_hypotheses_no_ids(
+        self, mock_operations_service, tmp_path
+    ):
+        """No error when tested_hypothesis_ids is empty."""
+        from unittest.mock import patch
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        hypotheses_file = tmp_path / "hypotheses.yaml"
+
+        parsed = ParsedAssessment(
+            verdict="strong_signal",
+            observations=["Good results"],
+            hypotheses=[],
+            limitations=[],
+            capability_requests=[],
+            tested_hypothesis_ids=[],  # Empty
+            raw_text="No hypotheses referenced.",
+        )
+
+        with patch("ktrdr.agents.memory.HYPOTHESES_FILE", hypotheses_file):
+            # Should not raise
+            await worker._update_tested_hypotheses(
+                parsed_assessment=parsed,
+                experiment_id="exp_test_empty",
+            )
+
+    @pytest.mark.asyncio
+    async def test_update_tested_hypotheses_failure_continues(
+        self, mock_operations_service, tmp_path, caplog
+    ):
+        """Hypothesis update failure doesn't raise exception."""
+        import logging
+        from unittest.mock import patch
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        parsed = ParsedAssessment(
+            verdict="strong_signal",
+            observations=[],
+            hypotheses=[],
+            limitations=[],
+            capability_requests=[],
+            tested_hypothesis_ids=["H_001"],
+            raw_text="H_001 validated.",
+        )
+
+        # Patch to simulate failure
+        with patch(
+            "ktrdr.agents.workers.assessment_worker.update_hypothesis_status",
+            side_effect=Exception("File locked"),
+        ):
+            with caplog.at_level(logging.WARNING):
+                # Should not raise - graceful degradation
+                await worker._update_tested_hypotheses(
+                    parsed_assessment=parsed,
+                    experiment_id="exp_test_fail",
+                )
+
+        # Should log warning about failure
+        assert any("hypothes" in record.message.lower() for record in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_update_tested_hypotheses_infers_from_verdict(
+        self, mock_operations_service, tmp_path
+    ):
+        """Status inferred from verdict when no explicit statement."""
+        from unittest.mock import patch
+
+        import yaml
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        hypotheses_file = tmp_path / "hypotheses.yaml"
+        hypotheses_file.write_text(
+            yaml.dump(
+                {
+                    "hypotheses": [
+                        {
+                            "id": "H_001",
+                            "text": "Test hypothesis",
+                            "status": "untested",
+                            "source_experiment": "exp_old",
+                            "rationale": "Test",
+                            "tested_by": [],
+                        }
+                    ]
+                }
+            )
+        )
+
+        # No explicit "validated" or "refuted" in text, but strong_signal verdict
+        parsed = ParsedAssessment(
+            verdict="strong_signal",
+            observations=["Great accuracy"],
+            hypotheses=[],
+            limitations=[],
+            capability_requests=[],
+            tested_hypothesis_ids=["H_001"],
+            raw_text="Testing the hypothesis. Accuracy was 68%.",
+        )
+
+        with patch("ktrdr.agents.memory.HYPOTHESES_FILE", hypotheses_file):
+            await worker._update_tested_hypotheses(
+                parsed_assessment=parsed,
+                experiment_id="exp_infer",
+            )
+
+        data = yaml.safe_load(hypotheses_file.read_text())
+        # Should infer validated from strong_signal verdict
+        assert data["hypotheses"][0]["status"] == "validated"
+
+    @pytest.mark.asyncio
+    async def test_update_tested_hypotheses_no_signal_infers_refuted(
+        self, mock_operations_service, tmp_path
+    ):
+        """no_signal verdict infers refuted status."""
+        from unittest.mock import patch
+
+        import yaml
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        hypotheses_file = tmp_path / "hypotheses.yaml"
+        hypotheses_file.write_text(
+            yaml.dump(
+                {
+                    "hypotheses": [
+                        {
+                            "id": "H_001",
+                            "text": "Test hypothesis",
+                            "status": "untested",
+                            "source_experiment": "exp_old",
+                            "rationale": "Test",
+                            "tested_by": [],
+                        }
+                    ]
+                }
+            )
+        )
+
+        parsed = ParsedAssessment(
+            verdict="no_signal",
+            observations=["Random noise"],
+            hypotheses=[],
+            limitations=[],
+            capability_requests=[],
+            tested_hypothesis_ids=["H_001"],
+            raw_text="No predictive signal found.",
+        )
+
+        with patch("ktrdr.agents.memory.HYPOTHESES_FILE", hypotheses_file):
+            await worker._update_tested_hypotheses(
+                parsed_assessment=parsed,
+                experiment_id="exp_no_signal",
+            )
+
+        data = yaml.safe_load(hypotheses_file.read_text())
+        assert data["hypotheses"][0]["status"] == "refuted"
+
+    @pytest.mark.asyncio
+    async def test_update_tested_hypotheses_flexible_pattern(
+        self, mock_operations_service, tmp_path
+    ):
+        """Status extracted even with words between ID and keyword.
+
+        Tests patterns like "H_001 was validated by this experiment"
+        where there are intervening words.
+        """
+        from unittest.mock import patch
+
+        import yaml
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        hypotheses_file = tmp_path / "hypotheses.yaml"
+        hypotheses_file.write_text(
+            yaml.dump(
+                {
+                    "hypotheses": [
+                        {
+                            "id": "H_001",
+                            "text": "Test hypothesis",
+                            "status": "untested",
+                            "source_experiment": "exp_old",
+                            "rationale": "Test",
+                            "tested_by": [],
+                        }
+                    ]
+                }
+            )
+        )
+
+        # Text has words between H_001 and "validated"
+        parsed = ParsedAssessment(
+            verdict="weak_signal",  # Would infer inconclusive, but explicit text wins
+            observations=["Good results"],
+            hypotheses=[],
+            limitations=[],
+            capability_requests=[],
+            tested_hypothesis_ids=["H_001"],
+            raw_text="Testing the approach. H_001 was clearly validated by this experiment.",
+        )
+
+        with patch("ktrdr.agents.memory.HYPOTHESES_FILE", hypotheses_file):
+            await worker._update_tested_hypotheses(
+                parsed_assessment=parsed,
+                experiment_id="exp_flexible",
+            )
+
+        data = yaml.safe_load(hypotheses_file.read_text())
+        # Should detect "validated" even with words in between
+        assert data["hypotheses"][0]["status"] == "validated"

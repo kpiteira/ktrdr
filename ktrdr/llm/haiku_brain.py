@@ -226,7 +226,7 @@ Return a JSON object:
   "hypotheses": [{{"text": "hypothesis text", "status": "untested"}}, ...],
   "limitations": ["limitation 1", ...],
   "capability_requests": ["request 1", ...],
-  "tested_hypothesis_ids": ["H_001", ...] // if existing hypotheses are mentioned
+  "tested_hypothesis_ids": ["H_001", ...] // if existing hypotheses are referenced
 }}
 
 Guidelines:
@@ -239,7 +239,14 @@ Guidelines:
 - hypotheses: New ideas generated for future testing
 - limitations: What wasn't tested, caveats
 - capability_requests: Things the agent wishes it could try
-- tested_hypothesis_ids: If agent mentions testing H_001 or similar
+- tested_hypothesis_ids: Look for references to existing hypotheses like "H_001",
+  "H_002", etc. If the agent mentions testing or validating a specific hypothesis
+  ID, include it here. Examples:
+  - "Testing hypothesis H_001" → include "H_001"
+  - "H_002 was validated by this experiment" → include "H_002"
+  - "This refutes H_003" → include "H_003"
+  - "H_004 inconclusive" → include "H_004"
+  Only include IDs explicitly mentioned, not hypotheses from new ideas.
 
 Return ONLY the JSON, no other text.
 
