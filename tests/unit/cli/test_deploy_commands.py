@@ -21,7 +21,6 @@ class TestDeployCore:
             patch(
                 "ktrdr.cli.deploy_commands.fetch_secrets_from_1password"
             ) as mock_secrets,
-            patch("ktrdr.cli.deploy_commands.get_latest_sha_tag") as mock_sha,
             patch("ktrdr.cli.deploy_commands.docker_login_ghcr") as mock_docker,
             patch("ktrdr.cli.deploy_commands.ssh_exec_with_env") as mock_ssh,
         ):
@@ -33,7 +32,6 @@ class TestDeployCore:
                 "grafana_password": "grafana",
                 "ghcr_token": "ghp_xxx",
             }
-            mock_sha.return_value = "sha-abc1234"
             mock_docker.return_value = True
             mock_ssh.return_value = "output"
 
@@ -55,7 +53,6 @@ class TestDeployCore:
             patch(
                 "ktrdr.cli.deploy_commands.fetch_secrets_from_1password"
             ) as mock_secrets,
-            patch("ktrdr.cli.deploy_commands.get_latest_sha_tag") as mock_sha,
             patch("ktrdr.cli.deploy_commands.docker_login_ghcr") as mock_docker,
             patch("ktrdr.cli.deploy_commands.ssh_exec_with_env") as mock_ssh,
         ):
@@ -67,7 +64,6 @@ class TestDeployCore:
                 "grafana_password": "grafana",
                 "ghcr_token": "ghp_xxx",
             }
-            mock_sha.return_value = "sha-abc1234"
 
             result = runner.invoke(deploy_app, ["core", "--dry-run"])
 
@@ -103,12 +99,10 @@ class TestDeployCore:
             patch(
                 "ktrdr.cli.deploy_commands.fetch_secrets_from_1password"
             ) as mock_secrets,
-            patch("ktrdr.cli.deploy_commands.get_latest_sha_tag") as mock_sha,
             patch("ktrdr.cli.deploy_commands.docker_login_ghcr"),
             patch("ktrdr.cli.deploy_commands.ssh_exec_with_env"),
         ):
             mock_secrets.return_value = {"ghcr_token": "ghp_xxx"}
-            mock_sha.return_value = "sha-abc1234"
 
             result = runner.invoke(
                 deploy_app, ["core", "--skip-validation", "--dry-run"]
@@ -168,12 +162,10 @@ class TestDeployCore:
             patch(
                 "ktrdr.cli.deploy_commands.fetch_secrets_from_1password"
             ) as mock_secrets,
-            patch("ktrdr.cli.deploy_commands.get_latest_sha_tag") as mock_sha,
             patch("ktrdr.cli.deploy_commands.docker_login_ghcr") as mock_docker,
         ):
             mock_validate.return_value = (True, [])
             mock_secrets.return_value = {"ghcr_token": "ghp_xxx"}
-            mock_sha.return_value = "sha-abc1234"
             mock_docker.side_effect = Exception("Docker login failed: unauthorized")
 
             result = runner.invoke(deploy_app, ["core"])
@@ -190,13 +182,11 @@ class TestDeployCore:
             patch(
                 "ktrdr.cli.deploy_commands.fetch_secrets_from_1password"
             ) as mock_secrets,
-            patch("ktrdr.cli.deploy_commands.get_latest_sha_tag") as mock_sha,
             patch("ktrdr.cli.deploy_commands.docker_login_ghcr") as mock_docker,
             patch("ktrdr.cli.deploy_commands.ssh_exec_with_env") as mock_ssh,
         ):
             mock_validate.return_value = (True, [])
             mock_secrets.return_value = {"ghcr_token": "ghp_xxx"}
-            mock_sha.return_value = "sha-abc1234"
             mock_docker.return_value = True
             mock_ssh.side_effect = Exception("SSH command failed: connection refused")
 
@@ -218,20 +208,18 @@ class TestDeployWorkers:
             patch(
                 "ktrdr.cli.deploy_commands.fetch_secrets_from_1password"
             ) as mock_secrets,
-            patch("ktrdr.cli.deploy_commands.get_latest_sha_tag") as mock_sha,
             patch("ktrdr.cli.deploy_commands.docker_login_ghcr") as mock_docker,
             patch("ktrdr.cli.deploy_commands.ssh_exec_with_env") as mock_ssh,
         ):
             mock_validate.return_value = (True, [])
             mock_secrets.return_value = {"ghcr_token": "ghp_xxx"}
-            mock_sha.return_value = "sha-abc1234"
 
             result = runner.invoke(deploy_app, ["workers", "all", "--dry-run"])
 
             assert result.exit_code == 0
-            # Should deploy to 2 worker hosts (workers-b, workers-c)
-            assert mock_docker.call_count == 2
-            assert mock_ssh.call_count == 2
+            # Should deploy to 3 worker hosts (workers-b, workers-c, gpu)
+            assert mock_docker.call_count == 3
+            assert mock_ssh.call_count == 3
 
     def test_deploy_single_worker(self):
         """Test deploying to a specific worker."""
@@ -242,13 +230,11 @@ class TestDeployWorkers:
             patch(
                 "ktrdr.cli.deploy_commands.fetch_secrets_from_1password"
             ) as mock_secrets,
-            patch("ktrdr.cli.deploy_commands.get_latest_sha_tag") as mock_sha,
             patch("ktrdr.cli.deploy_commands.docker_login_ghcr") as mock_docker,
             patch("ktrdr.cli.deploy_commands.ssh_exec_with_env") as mock_ssh,
         ):
             mock_validate.return_value = (True, [])
             mock_secrets.return_value = {"ghcr_token": "ghp_xxx"}
-            mock_sha.return_value = "sha-abc1234"
 
             result = runner.invoke(deploy_app, ["workers", "workers-b", "--dry-run"])
 
@@ -272,21 +258,19 @@ class TestDeployWorkers:
             patch(
                 "ktrdr.cli.deploy_commands.fetch_secrets_from_1password"
             ) as mock_secrets,
-            patch("ktrdr.cli.deploy_commands.get_latest_sha_tag") as mock_sha,
             patch("ktrdr.cli.deploy_commands.docker_login_ghcr") as mock_docker,
             patch("ktrdr.cli.deploy_commands.ssh_exec_with_env") as mock_ssh,
         ):
             mock_validate.side_effect = validate_side_effect
             mock_secrets.return_value = {"ghcr_token": "ghp_xxx"}
-            mock_sha.return_value = "sha-abc1234"
 
             result = runner.invoke(deploy_app, ["workers", "all", "--dry-run"])
 
-            # Should still succeed overall (workers-c deployed, workers-b skipped)
+            # Should still succeed overall (workers-b skipped, workers-c and gpu deployed)
             assert result.exit_code == 0
-            # Should deploy to 1 worker host (skipped workers-b, deployed workers-c)
-            assert mock_docker.call_count == 1
-            assert mock_ssh.call_count == 1
+            # Should deploy to 2 worker hosts (skipped workers-b, deployed workers-c + gpu)
+            assert mock_docker.call_count == 2
+            assert mock_ssh.call_count == 2
 
     def test_invalid_target_aborts(self):
         """Test that invalid target aborts deployment."""
@@ -341,15 +325,13 @@ class TestDeployWorkers:
             patch(
                 "ktrdr.cli.deploy_commands.fetch_secrets_from_1password"
             ) as mock_secrets,
-            patch("ktrdr.cli.deploy_commands.get_latest_sha_tag") as mock_sha,
             patch("ktrdr.cli.deploy_commands.docker_login_ghcr") as mock_docker,
             patch("ktrdr.cli.deploy_commands.ssh_exec_with_env") as mock_ssh,
         ):
             mock_validate.return_value = (True, [])
             mock_secrets.return_value = {"ghcr_token": "ghp_xxx"}
-            mock_sha.return_value = "sha-abc1234"
 
-            # First worker docker login fails, second succeeds
+            # First worker docker login fails, others succeed
             def docker_side_effect(host, **kwargs):
                 if "workers-b" in host:
                     raise Exception("Docker login failed")
@@ -359,12 +341,12 @@ class TestDeployWorkers:
 
             result = runner.invoke(deploy_app, ["workers", "all", "--dry-run"])
 
-            # Should still succeed overall (workers-c deployed)
+            # Should still succeed overall (workers-c and gpu deployed)
             assert result.exit_code == 0
-            # Both workers attempted docker login
-            assert mock_docker.call_count == 2
-            # Only one worker got to SSH step (workers-c)
-            assert mock_ssh.call_count == 1
+            # All 3 workers attempted docker login
+            assert mock_docker.call_count == 3
+            # Only 2 workers got to SSH step (workers-c and gpu)
+            assert mock_ssh.call_count == 2
 
     def test_worker_ssh_failure_skips(self):
         """Test that SSH failure skips that worker."""
@@ -375,16 +357,14 @@ class TestDeployWorkers:
             patch(
                 "ktrdr.cli.deploy_commands.fetch_secrets_from_1password"
             ) as mock_secrets,
-            patch("ktrdr.cli.deploy_commands.get_latest_sha_tag") as mock_sha,
             patch("ktrdr.cli.deploy_commands.docker_login_ghcr") as mock_docker,
             patch("ktrdr.cli.deploy_commands.ssh_exec_with_env") as mock_ssh,
         ):
             mock_validate.return_value = (True, [])
             mock_secrets.return_value = {"ghcr_token": "ghp_xxx"}
-            mock_sha.return_value = "sha-abc1234"
             mock_docker.return_value = True
 
-            # First worker SSH fails, second succeeds
+            # First worker SSH fails, others succeed
             def ssh_side_effect(host, **kwargs):
                 if "workers-b" in host:
                     raise Exception("SSH command failed")
@@ -394,10 +374,10 @@ class TestDeployWorkers:
 
             result = runner.invoke(deploy_app, ["workers", "all", "--skip-validation"])
 
-            # Should still succeed overall (workers-c deployed)
+            # Should still succeed overall (workers-c and gpu deployed)
             assert result.exit_code == 0
-            # Both workers attempted SSH
-            assert mock_ssh.call_count == 2
+            # All 3 workers attempted SSH
+            assert mock_ssh.call_count == 3
 
     def test_successful_worker_deployment_non_dry_run(self):
         """Test successful non-dry-run worker deployment shows success message."""
@@ -408,13 +388,11 @@ class TestDeployWorkers:
             patch(
                 "ktrdr.cli.deploy_commands.fetch_secrets_from_1password"
             ) as mock_secrets,
-            patch("ktrdr.cli.deploy_commands.get_latest_sha_tag") as mock_sha,
             patch("ktrdr.cli.deploy_commands.docker_login_ghcr") as mock_docker,
             patch("ktrdr.cli.deploy_commands.ssh_exec_with_env") as mock_ssh,
         ):
             mock_validate.return_value = (True, [])
             mock_secrets.return_value = {"ghcr_token": "ghp_xxx"}
-            mock_sha.return_value = "sha-abc1234"
             mock_docker.return_value = True
             mock_ssh.return_value = "ok"
 
@@ -447,7 +425,7 @@ class TestDeployStatus:
             result = runner.invoke(deploy_app, ["status", "all"])
 
             assert result.exit_code == 0
-            # Should check backend + 3 workers (workers-b, workers-c, gpu) = 4 calls
+            # Should check core + 3 workers (workers-b, workers-c, gpu) = 4 calls
             assert mock_ssh.call_count == 4
 
     def test_status_workers_only(self):
@@ -458,7 +436,7 @@ class TestDeployStatus:
             result = runner.invoke(deploy_app, ["status", "workers"])
 
             assert result.exit_code == 0
-            # Should check 2 worker hosts only (workers-b, workers-c)
+            # Should check 2 worker hosts (workers-b, workers-c - GPU is separate target)
             assert mock_ssh.call_count == 2
 
     def test_status_invalid_target(self):
