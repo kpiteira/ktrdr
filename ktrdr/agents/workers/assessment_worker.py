@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from ktrdr import get_logger
+from ktrdr.agents.assessment_parser import ParsedAssessment, parse_assessment
 from ktrdr.agents.executor import ToolExecutor
 from ktrdr.agents.invoker import (
     AnthropicAgentInvoker,
@@ -36,7 +37,6 @@ from ktrdr.agents.prompts import (
 )
 from ktrdr.agents.tools import AGENT_TOOLS
 from ktrdr.api.models.operations import OperationMetadata, OperationType
-from ktrdr.llm.haiku_brain import HaikuBrain, ParsedAssessment
 
 if TYPE_CHECKING:
     from ktrdr.api.services.operations_service import OperationsService
@@ -260,7 +260,7 @@ class AgentAssessmentWorker:
             strategy_config: Full strategy configuration.
             training_metrics: Training results.
             backtest_metrics: Backtest results.
-            parsed_assessment: Structured assessment from HaikuBrain.
+            parsed_assessment: Structured assessment from parse_assessment().
         """
         try:
             context = self._extract_context(strategy_config)
@@ -324,7 +324,7 @@ class AgentAssessmentWorker:
         fail the assessment. Memory is enhancement, not requirement.
 
         Args:
-            parsed_assessment: Structured assessment from HaikuBrain.
+            parsed_assessment: Structured assessment from parse_assessment().
             experiment_id: ID of the experiment that generated these hypotheses.
         """
         try:
@@ -358,7 +358,7 @@ class AgentAssessmentWorker:
         then falls back to verdict-based inference.
 
         Args:
-            parsed_assessment: Structured assessment from HaikuBrain.
+            parsed_assessment: Structured assessment from parse_assessment().
             hyp_id: Hypothesis ID being tested (e.g., "H_001").
 
         Returns:
@@ -401,7 +401,7 @@ class AgentAssessmentWorker:
         fail the assessment. Memory is enhancement, not requirement.
 
         Args:
-            parsed_assessment: Structured assessment from HaikuBrain.
+            parsed_assessment: Structured assessment from parse_assessment().
             experiment_id: ID of the experiment that tested these hypotheses.
         """
         try:
@@ -537,14 +537,13 @@ class AgentAssessmentWorker:
                 raise WorkerError("Claude did not save an assessment")
 
             # Parse assessment for structured memory record (Task 4.2)
-            brain = HaikuBrain()
-            # Use Claude's text output if available, otherwise stringify the assessment dict
+            # Use API-based parsing (not CLI) for production reliability
             raw_output = (
                 result.output
                 if hasattr(result, "output") and result.output
                 else str(assessment)
             )
-            parsed_assessment = brain.parse_assessment(
+            parsed_assessment = parse_assessment(
                 output=raw_output,
                 context={
                     "strategy_config": strategy_config,
