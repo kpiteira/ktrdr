@@ -13,7 +13,6 @@ import typer
 from ktrdr.cli.helpers import (
     docker_login_ghcr,
     fetch_secrets_from_1password,
-    get_latest_sha_tag,
     scp_file,
     ssh_exec_with_env,
     validate_deployment_prerequisites,
@@ -162,6 +161,12 @@ def workers(
     tag: Annotated[
         str, typer.Option("--tag", "-t", help="Image tag to deploy (default: latest)")
     ] = "latest",
+    verbose: Annotated[
+        bool,
+        typer.Option(
+            "--verbose", "-v", help="Show detailed output from remote commands"
+        ),
+    ] = False,
 ):
     """Deploy CPU worker services."""
     # Validate target
@@ -241,6 +246,7 @@ def workers(
                 env_vars=env_vars,
                 command=f"docker compose -f {compose_file} pull && docker compose -f {compose_file} up -d",
                 dry_run=dry_run,
+                verbose=verbose,
             )
             typer.echo(f"   ✅ {worker_name} deployed")
         except Exception as e:
@@ -260,6 +266,15 @@ def gpu(
     ] = False,
     skip_validation: Annotated[
         bool, typer.Option("--skip-validation", help="Skip prerequisite checks")
+    ] = False,
+    tag: Annotated[
+        str, typer.Option("--tag", "-t", help="Image tag to deploy (default: latest)")
+    ] = "latest",
+    verbose: Annotated[
+        bool,
+        typer.Option(
+            "--verbose", "-v", help="Show detailed output from remote commands"
+        ),
     ] = False,
 ):
     """Deploy GPU worker service (training with GPU acceleration)."""
@@ -290,14 +305,9 @@ def gpu(
         raise typer.Abort() from None
     typer.echo(f"   ✅ Retrieved {len(secrets)} secrets")
 
-    # Get image tag
-    typer.echo("\n🏷️  Getting image tag...")
-    try:
-        image_tag = get_latest_sha_tag()
-    except Exception as e:
-        typer.echo(f"   ❌ {e}", err=True)
-        raise typer.Abort() from None
-    typer.echo(f"   ✅ Using tag: {image_tag}")
+    # Use provided tag or default to latest
+    image_tag = tag
+    typer.echo(f"\n🏷️  Using image tag: {image_tag}")
 
     # Docker login
     typer.echo("\n🐳 Logging in to GHCR...")
@@ -330,6 +340,7 @@ def gpu(
             env_vars=env_vars,
             command=f"docker compose -f {compose_file} pull && docker compose -f {compose_file} up -d",
             dry_run=dry_run,
+            verbose=verbose,
         )
     except Exception as e:
         typer.echo(f"   ❌ {e}", err=True)
