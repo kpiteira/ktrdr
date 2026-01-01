@@ -277,22 +277,52 @@ class TestEvaluateModel:
         assert isinstance(result["recall"], float)
         assert isinstance(result["f1_score"], float)
 
-    def test_evaluate_model_none_test_data(self):
-        """Test evaluation with no test data returns zero metrics."""
+    def test_evaluate_model_none_test_data_raises_exception(self):
+        """Test evaluation with no test data raises TrainingDataError.
+
+        This is a fail-loudly behavior: if the data pipeline fails to produce
+        test data, we should raise an exception rather than silently returning
+        zeros that mask the infrastructure error.
+        """
+        import pytest
+
+        from ktrdr.training.exceptions import TrainingDataError
+
         model = nn.Sequential(nn.Linear(10, 3))
 
-        result = TrainingPipeline.evaluate_model(
-            model=model,
-            X_test=None,
-            y_test=None,
-        )
+        with pytest.raises(TrainingDataError) as exc_info:
+            TrainingPipeline.evaluate_model(
+                model=model,
+                X_test=None,
+                y_test=None,
+            )
 
-        # Should return zero metrics
-        assert result["test_accuracy"] == 0.0
-        assert result["test_loss"] == 0.0
-        assert result["precision"] == 0.0
-        assert result["recall"] == 0.0
-        assert result["f1_score"] == 0.0
+        # Exception message should explain the issue
+        assert "test data" in str(exc_info.value).lower()
+
+    def test_evaluate_model_partial_none_raises_exception(self):
+        """Test that partial None (X_test or y_test) also raises."""
+        import pytest
+
+        from ktrdr.training.exceptions import TrainingDataError
+
+        model = nn.Sequential(nn.Linear(10, 3))
+
+        # X_test is None, y_test is not
+        with pytest.raises(TrainingDataError):
+            TrainingPipeline.evaluate_model(
+                model=model,
+                X_test=None,
+                y_test=torch.randint(0, 3, (30,)),
+            )
+
+        # X_test is not None, y_test is None
+        with pytest.raises(TrainingDataError):
+            TrainingPipeline.evaluate_model(
+                model=model,
+                X_test=torch.randn(30, 10),
+                y_test=None,
+            )
 
     def test_evaluate_model_multi_symbol(self):
         """
