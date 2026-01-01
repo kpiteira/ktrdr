@@ -18,6 +18,7 @@ Welcome to the KTRDR documentation. This documentation provides comprehensive in
 * [Strategy Development](user-guides/strategy-development.md)
 * [Backtesting](user-guides/backtesting.md)
 * [Neural Networks](user-guides/neural-networks.md)
+* [Checkpoint & Resume](user-guides/checkpoint-resume.md) - Resuming interrupted operations
 
 ## API Reference
 
@@ -64,6 +65,7 @@ Welcome to the KTRDR documentation. This documentation provides comprehensive in
 * [Development Insights](developer/development-insights-temp.md) - Key architectural learnings from development sessions
 * [Volume Handling Analysis](developer/volume-handling-analysis.md) - IB volume=-1 data handling and validation patterns
 * [Progress Tracking Implementation](developer/progress-tracking-implementation.md) - Real-time progress tracking system architecture
+* [Checkpoint System Architecture](architecture/checkpoint/README.md) - Checkpoint and resilience system for long-running operations
 * [Backtesting Issues](developer/backtesting-issues.md) - Critical analysis of backtesting realism issues
 * [Contributing Guide](developer/contributing.md)
 * [API Development](developer/api-development.md)

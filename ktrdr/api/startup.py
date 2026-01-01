@@ -18,6 +18,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from ktrdr.api.services.orphan_detector import OrphanOperationDetector
+from ktrdr.checkpoint.cleanup_service import CheckpointCleanupService
 from ktrdr.config.settings import get_orphan_detector_settings
 from ktrdr.logging import get_logger
 
@@ -25,6 +26,9 @@ logger = get_logger(__name__)
 
 # Module-level singleton for orphan detector (M2)
 _orphan_detector: OrphanOperationDetector | None = None
+
+# Module-level singleton for checkpoint cleanup (M8)
+_checkpoint_cleanup: CheckpointCleanupService | None = None
 
 
 def get_orphan_detector() -> OrphanOperationDetector:
@@ -42,6 +46,23 @@ def get_orphan_detector() -> OrphanOperationDetector:
             "This should only be called after API startup."
         )
     return _orphan_detector
+
+
+def get_checkpoint_cleanup_service() -> CheckpointCleanupService:
+    """Get the global CheckpointCleanupService instance.
+
+    Returns:
+        CheckpointCleanupService: The global cleanup service singleton.
+
+    Raises:
+        RuntimeError: If called before the service is initialized in lifespan.
+    """
+    if _checkpoint_cleanup is None:
+        raise RuntimeError(
+            "CheckpointCleanupService not initialized. "
+            "This should only be called after API startup."
+        )
+    return _checkpoint_cleanup
 
 
 async def _run_startup_reconciliation() -> None:
@@ -149,11 +170,12 @@ async def lifespan(app: FastAPI):
     - OrphanOperationDetector (M2: detects orphaned operations)
     - TrainingService (logs training mode)
     - WorkerRegistry (background health checks)
+    - CheckpointCleanupService (M8: automatic checkpoint cleanup)
 
     IB connections are created on-demand via DataManager.
     Agent system is triggered on-demand via POST /agent/trigger.
     """
-    global _orphan_detector
+    global _orphan_detector, _checkpoint_cleanup
 
     # Startup
     logger.info("Starting KTRDR API...")
@@ -196,6 +218,28 @@ async def lifespan(app: FastAPI):
     await registry.start()
     logger.info("Worker registry started")
 
+    # Start checkpoint cleanup service (M8: Automatic Cleanup)
+    db_host = os.getenv("DB_HOST")
+    if db_host:
+        try:
+            from ktrdr.api.database import get_session_factory
+            from ktrdr.checkpoint.checkpoint_service import CheckpointService
+
+            session_factory = get_session_factory()
+            checkpoint_service = CheckpointService(session_factory)
+
+            _checkpoint_cleanup = CheckpointCleanupService(
+                checkpoint_service=checkpoint_service,
+                max_age_days=30,
+                cleanup_interval_hours=24,
+            )
+            await _checkpoint_cleanup.start()
+            logger.info("Checkpoint cleanup service started (daily, max_age=30d)")
+        except Exception as e:
+            logger.warning(f"Checkpoint cleanup service not started: {e}")
+    else:
+        logger.info("Checkpoint cleanup skipped: DB_HOST not configured")
+
     logger.info("API startup completed")
 
     yield
@@ -210,7 +254,12 @@ async def lifespan(app: FastAPI):
     # M7.5 Task 7.5.4: Notify workers before shutdown
     await _notify_workers_of_shutdown(registry)
 
-    # Stop orphan detector first (M2)
+    # Stop checkpoint cleanup service (M8)
+    if _checkpoint_cleanup:
+        await _checkpoint_cleanup.stop()
+        logger.info("Checkpoint cleanup service stopped")
+
+    # Stop orphan detector (M2)
     if _orphan_detector:
         await _orphan_detector.stop()
         logger.info("Orphan detector stopped")

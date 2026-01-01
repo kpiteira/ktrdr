@@ -1,6 +1,6 @@
 """Unit tests for checkpoints API endpoint."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
 import pytest
@@ -184,3 +184,136 @@ class TestDeleteCheckpointEndpoint:
         mock_checkpoint_service.delete_checkpoint.assert_called_once_with(
             "op_training_123"
         )
+
+
+class TestCleanupCheckpointsEndpoint:
+    """Tests for POST /api/v1/checkpoints/cleanup endpoint."""
+
+    def test_cleanup_checkpoints_default_max_age(self, client, mock_checkpoint_service):
+        """Test cleanup with default max_age_days (30)."""
+        mock_checkpoint_service.cleanup_old_checkpoints.return_value = 5
+        mock_checkpoint_service.cleanup_orphan_artifacts.return_value = 2
+
+        response = client.post("/api/v1/checkpoints/cleanup")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["checkpoints_deleted"] == 5
+        assert data["orphan_artifacts_cleaned"] == 2
+        mock_checkpoint_service.cleanup_old_checkpoints.assert_called_once_with(
+            max_age_days=30
+        )
+
+    def test_cleanup_checkpoints_custom_max_age(self, client, mock_checkpoint_service):
+        """Test cleanup with custom max_age_days."""
+        mock_checkpoint_service.cleanup_old_checkpoints.return_value = 10
+        mock_checkpoint_service.cleanup_orphan_artifacts.return_value = 0
+
+        response = client.post("/api/v1/checkpoints/cleanup?max_age_days=7")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["checkpoints_deleted"] == 10
+        assert data["orphan_artifacts_cleaned"] == 0
+        mock_checkpoint_service.cleanup_old_checkpoints.assert_called_once_with(
+            max_age_days=7
+        )
+
+    def test_cleanup_checkpoints_nothing_to_clean(
+        self, client, mock_checkpoint_service
+    ):
+        """Test cleanup when nothing needs cleaning."""
+        mock_checkpoint_service.cleanup_old_checkpoints.return_value = 0
+        mock_checkpoint_service.cleanup_orphan_artifacts.return_value = 0
+
+        response = client.post("/api/v1/checkpoints/cleanup")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["checkpoints_deleted"] == 0
+        assert data["orphan_artifacts_cleaned"] == 0
+
+
+class TestCheckpointStatsEndpoint:
+    """Tests for GET /api/v1/checkpoints/stats endpoint."""
+
+    def test_get_stats_with_checkpoints(self, client, mock_checkpoint_service):
+        """Test getting stats when checkpoints exist."""
+        # Use relative dates for test maintainability
+        now = datetime.now(timezone.utc)
+        older_date = now - timedelta(days=10)
+        newer_date = now - timedelta(days=5)
+
+        mock_checkpoint_service.list_checkpoints.return_value = [
+            CheckpointSummary(
+                operation_id="op_training_123",
+                checkpoint_type="periodic",
+                created_at=older_date,
+                state_summary={"epoch": 10},
+                artifacts_size_bytes=1024000,
+            ),
+            CheckpointSummary(
+                operation_id="op_training_456",
+                checkpoint_type="cancellation",
+                created_at=newer_date,
+                state_summary={"epoch": 5},
+                artifacts_size_bytes=512000,
+            ),
+        ]
+
+        response = client.get("/api/v1/checkpoints/stats")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["total_checkpoints"] == 2
+        assert data["total_size_bytes"] == 1024000 + 512000
+        # Verify oldest checkpoint is the older date (formatted as ISO string)
+        # The API may include microseconds, so check prefix match
+        expected_prefix = older_date.strftime("%Y-%m-%dT%H:%M:%S")
+        assert data["oldest_checkpoint"].startswith(expected_prefix)
+
+    def test_get_stats_no_checkpoints(self, client, mock_checkpoint_service):
+        """Test getting stats when no checkpoints exist."""
+        mock_checkpoint_service.list_checkpoints.return_value = []
+
+        response = client.get("/api/v1/checkpoints/stats")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["total_checkpoints"] == 0
+        assert data["total_size_bytes"] == 0
+        assert data["oldest_checkpoint"] is None
+
+    def test_get_stats_with_null_artifact_sizes(self, client, mock_checkpoint_service):
+        """Test stats calculation handles None artifact sizes."""
+        # Use relative dates for test maintainability
+        now = datetime.now(timezone.utc)
+        checkpoint_date = now - timedelta(days=5)
+
+        mock_checkpoint_service.list_checkpoints.return_value = [
+            CheckpointSummary(
+                operation_id="op_training_123",
+                checkpoint_type="periodic",
+                created_at=checkpoint_date,
+                state_summary={"epoch": 10},
+                artifacts_size_bytes=None,  # No artifacts
+            ),
+            CheckpointSummary(
+                operation_id="op_training_456",
+                checkpoint_type="cancellation",
+                created_at=checkpoint_date + timedelta(hours=1),
+                state_summary={"epoch": 5},
+                artifacts_size_bytes=512000,
+            ),
+        ]
+
+        response = client.get("/api/v1/checkpoints/stats")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total_size_bytes"] == 512000  # Only counts non-None

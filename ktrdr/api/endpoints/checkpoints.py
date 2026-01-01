@@ -89,6 +89,31 @@ class DeleteCheckpointResponse(BaseModel):
     message: str = Field(..., description="Result message")
 
 
+class CleanupResponse(BaseModel):
+    """Response model for checkpoint cleanup operation."""
+
+    success: bool = Field(True, description="Whether the request was successful")
+    checkpoints_deleted: int = Field(
+        ..., description="Number of old checkpoints deleted"
+    )
+    orphan_artifacts_cleaned: int = Field(
+        ..., description="Number of orphan artifact directories cleaned"
+    )
+
+
+class CheckpointStatsResponse(BaseModel):
+    """Response model for checkpoint storage statistics."""
+
+    success: bool = Field(True, description="Whether the request was successful")
+    total_checkpoints: int = Field(..., description="Total number of checkpoints")
+    total_size_bytes: int = Field(
+        ..., description="Total size of all checkpoints in bytes"
+    )
+    oldest_checkpoint: Optional[datetime] = Field(
+        None, description="Timestamp of the oldest checkpoint"
+    )
+
+
 # ============================================================================
 # Dependencies
 # ============================================================================
@@ -189,6 +214,134 @@ async def list_checkpoints(
         raise DataError(
             message="Failed to list checkpoints",
             error_code="CHECKPOINTS-ListError",
+            details={"error": str(e)},
+        ) from e
+
+
+@router.post(
+    "/checkpoints/cleanup",
+    response_model=CleanupResponse,
+    tags=["Checkpoints"],
+    summary="Trigger checkpoint cleanup",
+    description="""
+    Manually trigger checkpoint cleanup.
+
+    **Features:**
+    - Deletes checkpoints older than max_age_days (default: 30)
+    - Cleans orphan artifact directories
+    - Returns count of items cleaned
+
+    **Perfect for:** Admin tasks, storage management, manual maintenance
+    """,
+)
+async def trigger_cleanup(
+    max_age_days: int = Query(
+        30, description="Delete checkpoints older than this many days", ge=1
+    ),
+    checkpoint_service: CheckpointService = Depends(get_checkpoint_service),
+) -> CleanupResponse:
+    """
+    Manually trigger checkpoint cleanup.
+
+    Deletes old checkpoints and cleans orphan artifact directories.
+
+    Args:
+        max_age_days: Delete checkpoints older than this (default: 30)
+
+    Returns:
+        CleanupResponse: Cleanup results with counts
+
+    Example:
+        POST /api/v1/checkpoints/cleanup
+        POST /api/v1/checkpoints/cleanup?max_age_days=7
+    """
+    try:
+        logger.info(f"Triggering checkpoint cleanup: max_age_days={max_age_days}")
+
+        # Delete old checkpoints
+        deleted = await checkpoint_service.cleanup_old_checkpoints(
+            max_age_days=max_age_days
+        )
+
+        # Clean orphan artifacts
+        orphans = await checkpoint_service.cleanup_orphan_artifacts()
+
+        logger.info(
+            f"Cleanup complete: {deleted} checkpoints deleted, "
+            f"{orphans} orphan artifacts cleaned"
+        )
+        return CleanupResponse(
+            success=True,
+            checkpoints_deleted=deleted,
+            orphan_artifacts_cleaned=orphans,
+        )
+
+    except Exception as e:
+        logger.error(f"Error during checkpoint cleanup: {str(e)}")
+        raise DataError(
+            message="Failed to cleanup checkpoints",
+            error_code="CHECKPOINTS-CleanupError",
+            details={"error": str(e)},
+        ) from e
+
+
+@router.get(
+    "/checkpoints/stats",
+    response_model=CheckpointStatsResponse,
+    tags=["Checkpoints"],
+    summary="Get checkpoint storage statistics",
+    description="""
+    Get checkpoint storage statistics.
+
+    **Features:**
+    - Total checkpoint count
+    - Total storage size (bytes)
+    - Oldest checkpoint timestamp
+
+    **Perfect for:** Monitoring, dashboards, capacity planning
+    """,
+)
+async def get_checkpoint_stats(
+    checkpoint_service: CheckpointService = Depends(get_checkpoint_service),
+) -> CheckpointStatsResponse:
+    """
+    Get checkpoint storage statistics.
+
+    Returns aggregate statistics about checkpoint storage.
+
+    Returns:
+        CheckpointStatsResponse: Storage statistics
+
+    Example:
+        GET /api/v1/checkpoints/stats
+    """
+    try:
+        logger.info("Getting checkpoint statistics")
+
+        # Get all checkpoints
+        checkpoints = await checkpoint_service.list_checkpoints()
+
+        # Calculate statistics
+        total_count = len(checkpoints)
+        total_size = sum(cp.artifacts_size_bytes or 0 for cp in checkpoints)
+        oldest = min((cp.created_at for cp in checkpoints), default=None)
+
+        logger.info(
+            f"Checkpoint stats: {total_count} checkpoints, "
+            f"{total_size} bytes, oldest={oldest}"
+        )
+        return CheckpointStatsResponse(
+            success=True,
+            total_checkpoints=total_count,
+            total_size_bytes=total_size,
+            oldest_checkpoint=oldest,
+        )
+
+    except Exception as e:
+        logger.error(f"Error getting checkpoint stats: {str(e)}")
+        raise DataError(
+            message="Failed to get checkpoint statistics",
+            error_code="CHECKPOINTS-StatsError",
             details={"error": str(e)},
         ) from e
 
