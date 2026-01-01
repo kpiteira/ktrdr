@@ -12,10 +12,22 @@ All specific commands have been migrated to dedicated subcommand modules:
 - fuzzy_commands.py - Fuzzy logic operations commands
 """
 
+from typing import Optional
+
 import typer
 from rich.console import Console
 
 from ktrdr import get_logger
+
+# Global CLI state for URL override
+# This allows --url at root level to affect all subcommands
+_cli_state: dict[str, Optional[str]] = {"api_url": None}
+
+
+def get_api_url_override() -> Optional[str]:
+    """Get the global API URL override if set via --url."""
+    return _cli_state["api_url"]
+
 
 # Create a Typer application with help text
 cli_app = typer.Typer(
@@ -30,6 +42,28 @@ logger = get_logger(__name__)
 # Create a rich console for formatted output
 console = Console()
 error_console = Console(stderr=True)
+
+
+@cli_app.callback()
+def main(
+    url: Optional[str] = typer.Option(
+        None,
+        "--url",
+        "-u",
+        help="API URL override (e.g., http://backend.ktrdr.home.mynerd.place:8000)",
+        envvar="KTRDR_API_URL",
+    ),
+):
+    """KTRDR - Trading analysis and automation tool."""
+    if url:
+        _cli_state["api_url"] = url
+
+        # Reconfigure telemetry to send traces to the same host as the API
+        # This enables distributed tracing when targeting remote servers
+        from ktrdr.cli import reconfigure_telemetry_for_url
+
+        reconfigure_telemetry_for_url(url)
+
 
 # All commands have been migrated to subcommand modules
 # This file now only contains the main CLI app definition

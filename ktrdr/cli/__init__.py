@@ -12,6 +12,66 @@ import os
 # PYTEST_CURRENT_TEST is set by pytest automatically
 _is_testing = os.environ.get("PYTEST_CURRENT_TEST") is not None
 
+# Track current OTLP endpoint for reconfiguration
+_current_otlp_endpoint: str | None = None
+
+
+def _derive_otlp_endpoint_from_url(api_url: str | None) -> str:
+    """Derive OTLP endpoint from API URL.
+
+    Args:
+        api_url: The API URL to derive from (e.g., http://backend.example.com:8000)
+
+    Returns:
+        OTLP endpoint URL (same host, port 4317)
+    """
+    # Explicit OTLP endpoint always takes priority
+    if otlp := os.getenv("OTLP_ENDPOINT"):
+        return otlp
+
+    # Derive from provided API URL
+    if api_url:
+        try:
+            from urllib.parse import urlparse
+
+            parsed = urlparse(api_url)
+            if parsed.hostname and parsed.hostname not in ("localhost", "127.0.0.1"):
+                return f"http://{parsed.hostname}:4317"
+        except Exception:
+            pass  # Best-effort derivation; fall back to localhost
+
+    return "http://localhost:4317"
+
+
+def reconfigure_telemetry_for_url(api_url: str) -> None:
+    """Reconfigure telemetry to send traces to the same host as the API.
+
+    Called when --url flag is used to target a remote server.
+    This ensures CLI traces appear in the remote Jaeger alongside backend traces.
+
+    Args:
+        api_url: The API URL being targeted
+    """
+    global _current_otlp_endpoint
+
+    if _is_testing:
+        return
+
+    new_endpoint = _derive_otlp_endpoint_from_url(api_url)
+
+    # Skip if endpoint hasn't changed
+    if new_endpoint == _current_otlp_endpoint:
+        return
+
+    try:
+        from ktrdr.monitoring.setup import reconfigure_otlp_endpoint
+
+        reconfigure_otlp_endpoint(new_endpoint)
+        _current_otlp_endpoint = new_endpoint
+    except Exception:
+        pass  # Telemetry reconfiguration is best-effort
+
+
 # Setup OpenTelemetry tracing for CLI (optional - graceful if Jaeger unavailable)
 # Skip in test mode to avoid slow imports
 if not _is_testing:
@@ -21,13 +81,14 @@ if not _is_testing:
 
         from ktrdr.monitoring.setup import setup_monitoring
 
-        # Setup monitoring for CLI
-        # Uses OTLP_ENDPOINT env var if set, otherwise defaults to localhost
-        # CLI doesn't spam console output
-        # Use SimpleSpanProcessor for immediate export (CLI is short-lived)
+        # Setup monitoring for CLI with initial endpoint
+        # Will be reconfigured if --url flag points to remote server
+        _current_otlp_endpoint = _derive_otlp_endpoint_from_url(
+            os.getenv("KTRDR_API_URL")
+        )
         setup_monitoring(
             service_name="ktrdr-cli",
-            otlp_endpoint=os.getenv("OTLP_ENDPOINT", "http://localhost:4317"),
+            otlp_endpoint=_current_otlp_endpoint,
             console_output=False,  # CLI shouldn't spam traces to console
             use_simple_processor=True,  # Immediate export for short-lived CLI process
         )

@@ -1,7 +1,7 @@
 """Integration tests for assessment → memory flow.
 
 Task 4.4: Verify assessments are parsed and saved to memory.
-Tests the full flow: assessment worker → HaikuBrain → memory.
+Tests the full flow: assessment worker → memory.
 """
 
 from datetime import datetime, timezone
@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import yaml
 
+from ktrdr.agents.assessment_parser import ParsedAssessment
 from ktrdr.agents.workers.assessment_worker import AgentAssessmentWorker
 from ktrdr.api.models.operations import (
     OperationInfo,
@@ -17,7 +18,6 @@ from ktrdr.api.models.operations import (
     OperationStatus,
     OperationType,
 )
-from ktrdr.llm.haiku_brain import ParsedAssessment
 
 
 class MockOperationsService:
@@ -140,7 +140,7 @@ class TestAssessmentMemoryIntegration:
         }
         worker.tool_executor.last_saved_assessment_path = "/app/assessment.json"
 
-        # Mock HaikuBrain to return structured assessment
+        # Mock parse_assessment to return structured assessment
         mock_parsed = ParsedAssessment(
             verdict="strong_signal",
             observations=["Test accuracy of 65% exceeds threshold"],
@@ -155,9 +155,9 @@ class TestAssessmentMemoryIntegration:
 
         with patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path):
             with patch(
-                "ktrdr.agents.workers.assessment_worker.HaikuBrain"
-            ) as MockBrain:
-                MockBrain.return_value.parse_assessment.return_value = mock_parsed
+                "ktrdr.agents.workers.assessment_worker.parse_assessment"
+            ) as mock_parse:
+                mock_parse.return_value = mock_parsed
 
                 await worker.run(parent_op.operation_id, sample_results)
 
@@ -196,9 +196,9 @@ class TestAssessmentMemoryIntegration:
 
         with patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path):
             with patch(
-                "ktrdr.agents.workers.assessment_worker.HaikuBrain"
-            ) as MockBrain:
-                MockBrain.return_value.parse_assessment.return_value = mock_parsed
+                "ktrdr.agents.workers.assessment_worker.parse_assessment"
+            ) as mock_parse:
+                mock_parse.return_value = mock_parsed
 
                 await worker.run(parent_op.operation_id, sample_results)
 
@@ -256,9 +256,9 @@ class TestAssessmentMemoryIntegration:
 
         with patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path):
             with patch(
-                "ktrdr.agents.workers.assessment_worker.HaikuBrain"
-            ) as MockBrain:
-                MockBrain.return_value.parse_assessment.return_value = mock_parsed
+                "ktrdr.agents.workers.assessment_worker.parse_assessment"
+            ) as mock_parse:
+                mock_parse.return_value = mock_parsed
 
                 await worker.run(parent_op.operation_id, sample_results)
 
@@ -304,9 +304,9 @@ class TestAssessmentMemoryIntegration:
             side_effect=Exception("Disk full"),
         ):
             with patch(
-                "ktrdr.agents.workers.assessment_worker.HaikuBrain"
-            ) as MockBrain:
-                MockBrain.return_value.parse_assessment.return_value = mock_parsed
+                "ktrdr.agents.workers.assessment_worker.parse_assessment"
+            ) as mock_parse:
+                mock_parse.return_value = mock_parsed
 
                 # Should NOT raise - assessment succeeds even if memory fails
                 result = await worker.run(parent_op.operation_id, sample_results)
@@ -372,9 +372,9 @@ model:
         exp_dir = tmp_path / "experiments"
         with patch("ktrdr.agents.memory.EXPERIMENTS_DIR", exp_dir):
             with patch(
-                "ktrdr.agents.workers.assessment_worker.HaikuBrain"
-            ) as MockBrain:
-                MockBrain.return_value.parse_assessment.return_value = mock_parsed
+                "ktrdr.agents.workers.assessment_worker.parse_assessment"
+            ) as mock_parse:
+                mock_parse.return_value = mock_parsed
 
                 await worker.run(parent_op.operation_id, sample_results)
 

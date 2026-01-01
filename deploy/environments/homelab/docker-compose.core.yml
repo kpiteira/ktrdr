@@ -29,7 +29,7 @@ services:
       - /mnt/ktrdr_data:/mnt/ktrdr_data
       - /mnt/ktrdr_data/strategies:/app/strategies:ro
       - /mnt/ktrdr_data/models:/app/models:ro
-      - /mnt/ktrdr_data/data:/app/data:ro
+      - /mnt/ktrdr_data/data:/app/data:rw  # RW for budget tracking
     environment:
       DB_HOST: db
       DB_PORT: 5432
