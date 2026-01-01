@@ -86,6 +86,8 @@ COPY --from=builder /app/ktrdr /app/ktrdr
 COPY --from=builder /app/mcp /app/mcp
 COPY --from=builder /app/config /app/config
 COPY --from=builder /app/strategies /app/strategies
+COPY --from=builder /app/alembic /app/alembic
+COPY --from=builder /app/alembic.ini /app/
 COPY --from=builder /app/pyproject.toml /app/
 
 # Change ownership of the app directory (after copying files)
