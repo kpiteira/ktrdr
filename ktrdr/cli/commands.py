@@ -58,6 +58,12 @@ def main(
     if url:
         _cli_state["api_url"] = url
 
+        # Reconfigure telemetry to send traces to the same host as the API
+        # This enables distributed tracing when targeting remote servers
+        from ktrdr.cli import reconfigure_telemetry_for_url
+
+        reconfigure_telemetry_for_url(url)
+
 
 # All commands have been migrated to subcommand modules
 # This file now only contains the main CLI app definition

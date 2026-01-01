@@ -147,3 +147,30 @@ def get_metrics_app():
         ASGI application that serves Prometheus metrics
     """
     return make_asgi_app()
+
+
+def reconfigure_otlp_endpoint(new_endpoint: str) -> None:
+    """
+    Reconfigure the OTLP exporter to use a new endpoint.
+
+    Used by CLI when --url flag points to a remote server, so traces
+    are sent to the same Jaeger instance as the backend.
+
+    Args:
+        new_endpoint: New OTLP gRPC endpoint (e.g., "http://remote-host:4317")
+    """
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+
+    provider = trace.get_tracer_provider()
+
+    # Only works with SDK TracerProvider, not the default no-op provider
+    if not isinstance(provider, TracerProvider):
+        return
+
+    # Create new exporter with new endpoint
+    otlp_exporter = OTLPSpanExporter(endpoint=new_endpoint, insecure=True)
+
+    # Add new processor (SimpleSpanProcessor for CLI)
+    provider.add_span_processor(SimpleSpanProcessor(otlp_exporter))
+
+    logger.info(f"✅ OTLP trace export reconfigured → {new_endpoint}")
