@@ -38,7 +38,7 @@ def _derive_otlp_endpoint_from_url(api_url: str | None) -> str:
             if parsed.hostname and parsed.hostname not in ("localhost", "127.0.0.1"):
                 return f"http://{parsed.hostname}:4317"
         except Exception:
-            pass
+            pass  # Best-effort derivation; fall back to localhost
 
     return "http://localhost:4317"
 

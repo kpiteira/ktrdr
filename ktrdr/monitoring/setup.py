@@ -149,6 +149,10 @@ def get_metrics_app():
     return make_asgi_app()
 
 
+# Track active CLI span processor for cleanup during reconfiguration
+_cli_span_processor: SimpleSpanProcessor | None = None
+
+
 def reconfigure_otlp_endpoint(new_endpoint: str) -> None:
     """
     Reconfigure the OTLP exporter to use a new endpoint.
@@ -156,9 +160,14 @@ def reconfigure_otlp_endpoint(new_endpoint: str) -> None:
     Used by CLI when --url flag points to a remote server, so traces
     are sent to the same Jaeger instance as the backend.
 
+    Note: The caller should check if the endpoint actually changed before calling
+    this function to avoid unnecessary processor churn.
+
     Args:
         new_endpoint: New OTLP gRPC endpoint (e.g., "http://remote-host:4317")
     """
+    global _cli_span_processor
+
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
     provider = trace.get_tracer_provider()
@@ -167,10 +176,19 @@ def reconfigure_otlp_endpoint(new_endpoint: str) -> None:
     if not isinstance(provider, TracerProvider):
         return
 
-    # Create new exporter with new endpoint
+    # Shutdown previous processor to prevent duplicate exports
+    # Note: The processor remains registered but stops exporting after shutdown
+    if _cli_span_processor is not None:
+        try:
+            _cli_span_processor.shutdown()
+        except Exception:
+            pass  # Best effort cleanup
+
+    # Create new exporter and processor
     otlp_exporter = OTLPSpanExporter(endpoint=new_endpoint, insecure=True)
+    _cli_span_processor = SimpleSpanProcessor(otlp_exporter)
 
     # Add new processor (SimpleSpanProcessor for CLI)
-    provider.add_span_processor(SimpleSpanProcessor(otlp_exporter))
+    provider.add_span_processor(_cli_span_processor)
 
     logger.info(f"✅ OTLP trace export reconfigured → {new_endpoint}")
