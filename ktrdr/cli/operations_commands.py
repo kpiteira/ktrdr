@@ -228,6 +228,9 @@ async def _list_operations_async(
         active_count = response.get("active_count", 0)
 
         # Fetch checkpoint info for each operation
+        # TODO: This is an N+1 query pattern - consider implementing a batch endpoint
+        # like GET /checkpoints?operation_ids=op1,op2,op3 or adding checkpoint info
+        # directly to the operations list response for better performance.
         resumable_count = 0
         for op in operations:
             try:

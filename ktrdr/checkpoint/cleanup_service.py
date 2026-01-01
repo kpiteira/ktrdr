@@ -83,7 +83,7 @@ class CheckpointCleanupService:
         try:
             await self._task
         except asyncio.CancelledError:
-            pass
+            logger.debug("Checkpoint cleanup task cancelled during service stop")
         finally:
             self._task = None
             logger.info("Checkpoint cleanup service stopped")

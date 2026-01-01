@@ -1,6 +1,6 @@
 """Unit tests for checkpoints API endpoint."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
 import pytest
@@ -242,18 +242,23 @@ class TestCheckpointStatsEndpoint:
 
     def test_get_stats_with_checkpoints(self, client, mock_checkpoint_service):
         """Test getting stats when checkpoints exist."""
+        # Use relative dates for test maintainability
+        now = datetime.now(timezone.utc)
+        older_date = now - timedelta(days=10)
+        newer_date = now - timedelta(days=5)
+
         mock_checkpoint_service.list_checkpoints.return_value = [
             CheckpointSummary(
                 operation_id="op_training_123",
                 checkpoint_type="periodic",
-                created_at=datetime(2025, 1, 10, 10, 0, 0, tzinfo=timezone.utc),
+                created_at=older_date,
                 state_summary={"epoch": 10},
                 artifacts_size_bytes=1024000,
             ),
             CheckpointSummary(
                 operation_id="op_training_456",
                 checkpoint_type="cancellation",
-                created_at=datetime(2025, 1, 15, 11, 0, 0, tzinfo=timezone.utc),
+                created_at=newer_date,
                 state_summary={"epoch": 5},
                 artifacts_size_bytes=512000,
             ),
@@ -266,7 +271,10 @@ class TestCheckpointStatsEndpoint:
         assert data["success"] is True
         assert data["total_checkpoints"] == 2
         assert data["total_size_bytes"] == 1024000 + 512000
-        assert data["oldest_checkpoint"] == "2025-01-10T10:00:00Z"
+        # Verify oldest checkpoint is the older date (formatted as ISO string)
+        # The API may include microseconds, so check prefix match
+        expected_prefix = older_date.strftime("%Y-%m-%dT%H:%M:%S")
+        assert data["oldest_checkpoint"].startswith(expected_prefix)
 
     def test_get_stats_no_checkpoints(self, client, mock_checkpoint_service):
         """Test getting stats when no checkpoints exist."""
@@ -283,18 +291,22 @@ class TestCheckpointStatsEndpoint:
 
     def test_get_stats_with_null_artifact_sizes(self, client, mock_checkpoint_service):
         """Test stats calculation handles None artifact sizes."""
+        # Use relative dates for test maintainability
+        now = datetime.now(timezone.utc)
+        checkpoint_date = now - timedelta(days=5)
+
         mock_checkpoint_service.list_checkpoints.return_value = [
             CheckpointSummary(
                 operation_id="op_training_123",
                 checkpoint_type="periodic",
-                created_at=datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc),
+                created_at=checkpoint_date,
                 state_summary={"epoch": 10},
                 artifacts_size_bytes=None,  # No artifacts
             ),
             CheckpointSummary(
                 operation_id="op_training_456",
                 checkpoint_type="cancellation",
-                created_at=datetime(2025, 1, 15, 11, 0, 0, tzinfo=timezone.utc),
+                created_at=checkpoint_date + timedelta(hours=1),
                 state_summary={"epoch": 5},
                 artifacts_size_bytes=512000,
             ),
