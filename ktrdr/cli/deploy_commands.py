@@ -13,7 +13,6 @@ import typer
 from ktrdr.cli.helpers import (
     docker_login_ghcr,
     fetch_secrets_from_1password,
-    get_latest_sha_tag,
     scp_file,
     ssh_exec_with_env,
     validate_deployment_prerequisites,
@@ -151,7 +150,7 @@ def core(
 def workers(
     target: Annotated[
         str,
-        typer.Argument(help="Target: 'all', 'workers-b', or 'workers-c'"),
+        typer.Argument(help="Target: 'all', 'workers-b', 'workers-c', or 'gpu'"),
     ],
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Show commands without executing")
@@ -162,10 +161,16 @@ def workers(
     tag: Annotated[
         str, typer.Option("--tag", "-t", help="Image tag to deploy (default: latest)")
     ] = "latest",
+    verbose: Annotated[
+        bool,
+        typer.Option(
+            "--verbose", "-v", help="Show detailed output from remote commands"
+        ),
+    ] = False,
 ):
-    """Deploy CPU worker services."""
+    """Deploy worker services (CPU and GPU)."""
     # Validate target
-    valid_targets = ["all", "workers-b", "workers-c"]
+    valid_targets = ["all", "workers-b", "workers-c", "gpu"]
     if target not in valid_targets:
         typer.echo(
             f"❌ Invalid target: {target}. Must be one of: {', '.join(valid_targets)}",
@@ -175,11 +180,11 @@ def workers(
 
     # Determine which workers to deploy
     if target == "all":
-        worker_hosts = ["workers-b", "workers-c"]
+        worker_hosts = ["workers-b", "workers-c", "gpu"]
     else:
         worker_hosts = [target]
 
-    typer.echo("🚀 Deploying KTRDR CPU Worker Services")
+    typer.echo("🚀 Deploying KTRDR Worker Services")
     typer.echo(f"   Targets: {', '.join(worker_hosts)}")
 
     # Fetch secrets once
@@ -241,6 +246,7 @@ def workers(
                 env_vars=env_vars,
                 command=f"docker compose -f {compose_file} pull && docker compose -f {compose_file} up -d",
                 dry_run=dry_run,
+                verbose=verbose,
             )
             typer.echo(f"   ✅ {worker_name} deployed")
         except Exception as e:
@@ -250,95 +256,7 @@ def workers(
     if dry_run:
         typer.echo("\n✅ Dry run complete - no changes made")
     else:
-        typer.echo("\n✅ CPU worker services deployed successfully!")
-
-
-@deploy_app.command()
-def gpu(
-    dry_run: Annotated[
-        bool, typer.Option("--dry-run", help="Show commands without executing")
-    ] = False,
-    skip_validation: Annotated[
-        bool, typer.Option("--skip-validation", help="Skip prerequisite checks")
-    ] = False,
-):
-    """Deploy GPU worker service (training with GPU acceleration)."""
-    host_config = HOSTS["gpu"]
-    host = host_config["host"]
-    workdir = host_config["workdir"]
-    compose_file = host_config["compose_file"]
-
-    typer.echo("🚀 Deploying KTRDR GPU Worker Service")
-    typer.echo(f"   Target: {host}")
-
-    # Validate prerequisites
-    if not skip_validation:
-        typer.echo("\n📋 Validating prerequisites...")
-        success, errors = validate_deployment_prerequisites(host)
-        if not success:
-            for error in errors:
-                typer.echo(f"   ❌ {error}", err=True)
-            raise typer.Abort() from None
-        typer.echo("   ✅ All prerequisites validated")
-
-    # Fetch secrets
-    typer.echo("\n🔐 Fetching secrets from 1Password...")
-    try:
-        secrets = fetch_secrets_from_1password(ONEPASSWORD_ITEM)
-    except Exception as e:
-        typer.echo(f"   ❌ {e}", err=True)
-        raise typer.Abort() from None
-    typer.echo(f"   ✅ Retrieved {len(secrets)} secrets")
-
-    # Get image tag
-    typer.echo("\n🏷️  Getting image tag...")
-    try:
-        image_tag = get_latest_sha_tag()
-    except Exception as e:
-        typer.echo(f"   ❌ {e}", err=True)
-        raise typer.Abort() from None
-    typer.echo(f"   ✅ Using tag: {image_tag}")
-
-    # Docker login
-    typer.echo("\n🐳 Logging in to GHCR...")
-    try:
-        docker_login_ghcr(
-            host=host,
-            username=GITHUB_USERNAME,
-            token=secrets.get("ghcr_token", ""),
-            dry_run=dry_run,
-        )
-    except Exception as e:
-        typer.echo(f"   ❌ {e}", err=True)
-        raise typer.Abort() from None
-    if not dry_run:
-        typer.echo("   ✅ Logged in to ghcr.io")
-
-    # Build environment variables
-    env_vars = {
-        "IMAGE_TAG": image_tag,
-        "DB_USER": secrets.get("db_username", ""),
-        "DB_PASSWORD": secrets.get("db_password", ""),
-    }
-
-    # Deploy
-    typer.echo("\n🚢 Deploying GPU worker...")
-    try:
-        ssh_exec_with_env(
-            host=host,
-            workdir=workdir,
-            env_vars=env_vars,
-            command=f"docker compose -f {compose_file} pull && docker compose -f {compose_file} up -d",
-            dry_run=dry_run,
-        )
-    except Exception as e:
-        typer.echo(f"   ❌ {e}", err=True)
-        raise typer.Abort() from None
-
-    if dry_run:
-        typer.echo("\n✅ Dry run complete - no changes made")
-    else:
-        typer.echo("\n✅ GPU worker deployed successfully!")
+        typer.echo("\n✅ Worker services deployed successfully!")
 
 
 @deploy_app.command()

@@ -7,6 +7,7 @@ from typing import Any, Optional
 import httpx
 
 from ..config.settings import get_cli_settings
+from .commands import get_api_url_override
 
 logger = logging.getLogger(__name__)
 
@@ -57,8 +58,16 @@ class AsyncCLIClient:
         # Load configuration
         cli_settings = get_cli_settings()
 
-        # Use provided values or fall back to configuration
-        self.base_url = (base_url or cli_settings.base_url).rstrip("/")
+        # Priority: explicit parameter > global --url override > config default
+        url_override = base_url or get_api_url_override()
+        if url_override:
+            # Auto-append /api/v1 if not present (user typically provides just host:port)
+            effective_url = url_override.rstrip("/")
+            if not effective_url.endswith("/api/v1"):
+                effective_url = f"{effective_url}/api/v1"
+        else:
+            effective_url = cli_settings.base_url
+        self.base_url = effective_url.rstrip("/")
         self.timeout = timeout if timeout is not None else cli_settings.timeout
         self.max_retries = (
             max_retries if max_retries is not None else cli_settings.max_retries
