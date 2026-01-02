@@ -53,18 +53,50 @@ await self._save_to_memory(
 
 ---
 
-## For Task 2.3 (Research Worker)
+## Tasks 2.3 & 2.4: Research Worker State Machine Updated
 
-When training gate rejects:
+Gate rejections now route to ASSESSING instead of raising GateError:
 
-1. **Don't raise GateError** - instead set instance variables
-2. **Skip backtest** - transition directly to ASSESSING
-3. **Call assessment with:**
+### Training Gate Rejection
 
-   ```python
-   await self.assessment_worker.run(
-       parent_operation_id,
-       results={"training": training_result, "backtest": None},
-       gate_rejection_reason=f"accuracy_too_low ({acc}% < {threshold}%)",
-   )
-   ```
+```python
+# In _handle_training_phase():
+if not passed:
+    # Skip backtest, go directly to assessment with partial results
+    await self._start_assessment(
+        operation_id,
+        gate_rejection_reason=f"Training gate: {reason}",
+    )
+    return
+```
+
+### Backtest Gate Rejection
+
+```python
+# In _handle_backtesting_phase():
+if not passed:
+    await self._start_assessment(
+        operation_id,
+        gate_rejection_reason=f"Backtest gate: {reason}",
+    )
+    return
+```
+
+### `_start_assessment` Signature
+
+```python
+async def _start_assessment(
+    self,
+    operation_id: str,
+    gate_rejection_reason: str | None = None,
+) -> None:
+```
+
+Builds results dict with `backtest: None` for training gate rejection.
+
+---
+
+## For Task 2.5 (E2E Test)
+
+All integration tests pass. The E2E test in the plan can be run once
+the full system is up with stub workers configured to produce low accuracy.
