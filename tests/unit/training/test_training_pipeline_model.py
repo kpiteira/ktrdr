@@ -12,6 +12,7 @@ import torch
 import torch.nn as nn
 
 from ktrdr.async_infrastructure.cancellation import CancellationToken
+from ktrdr.training.exceptions import TrainingDataError
 from ktrdr.training.training_pipeline import TrainingPipeline
 
 
@@ -284,10 +285,6 @@ class TestEvaluateModel:
         test data, we should raise an exception rather than silently returning
         zeros that mask the infrastructure error.
         """
-        import pytest
-
-        from ktrdr.training.exceptions import TrainingDataError
-
         model = nn.Sequential(nn.Linear(10, 3))
 
         with pytest.raises(TrainingDataError) as exc_info:
@@ -302,10 +299,6 @@ class TestEvaluateModel:
 
     def test_evaluate_model_partial_none_raises_exception(self):
         """Test that partial None (X_test or y_test) also raises."""
-        import pytest
-
-        from ktrdr.training.exceptions import TrainingDataError
-
         model = nn.Sequential(nn.Linear(10, 3))
 
         # X_test is None, y_test is not

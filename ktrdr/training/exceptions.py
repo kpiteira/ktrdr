@@ -24,8 +24,6 @@ class PipelineError(Exception):
     or when raising an error that doesn't fit a more specific subclass.
     """
 
-    pass
-
 
 class TrainingDataError(PipelineError):
     """Raised when training cannot produce valid data.
@@ -39,8 +37,6 @@ class TrainingDataError(PipelineError):
     This indicates the training pipeline has a bug or configuration issue,
     not that the experiment had poor results.
     """
-
-    pass
 
 
 class BacktestDataError(PipelineError):
@@ -56,8 +52,6 @@ class BacktestDataError(PipelineError):
     not that the strategy performed poorly.
     """
 
-    pass
-
 
 class ModelLoadError(PipelineError):
     """Raised when model cannot be loaded for backtest.
@@ -71,5 +65,3 @@ class ModelLoadError(PipelineError):
     This indicates model storage/loading has an issue,
     not that the model is bad.
     """
-
-    pass
