@@ -51,6 +51,13 @@ class ExperimentRecord:
 
     source: str = "agent"  # "agent" | "v1.5_bootstrap"
 
+    # Gate rejection tracking (added in v2.5)
+    # "completed" = full experiment with backtest
+    # "gate_rejected_training" = training gate rejected, no backtest
+    # "gate_rejected_backtest" = backtest gate rejected
+    status: str = "completed"
+    gate_rejection_reason: str | None = None  # e.g., "accuracy_too_low (5% < 10%)"
+
 
 @dataclass
 class Hypothesis:
