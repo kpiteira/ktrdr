@@ -25,6 +25,7 @@ from rich.progress import (
 from rich.table import Table
 
 from ktrdr.cli.api_client import check_api_connection, get_api_client
+from ktrdr.cli.commands import get_effective_api_url
 from ktrdr.cli.telemetry import trace_cli_command
 from ktrdr.config.strategy_loader import strategy_loader
 from ktrdr.config.strategy_validator import StrategyValidator
@@ -328,7 +329,7 @@ async def run_backtest_async(
                 "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
             )
             error_console.print(
-                "Make sure the API server is running at http://localhost:8000"
+                f"Make sure the API server is running at {get_effective_api_url()}"
             )
             sys.exit(1)
 
