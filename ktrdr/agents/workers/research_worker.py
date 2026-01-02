@@ -528,12 +528,18 @@ class AgentResearchWorker:
 
             record_gate_result("training", passed)
             if not passed:
-                logger.warning(f"Training gate failed: {operation_id}, reason={reason}")
-                raise GateError(
-                    message=f"Training gate failed: {reason}",
-                    gate="training",
-                    metrics=result,
+                # Gate rejection: route to ASSESSING instead of failing
+                # This allows the system to learn from failed experiments
+                logger.warning(
+                    f"Training gate rejected: {operation_id}, reason={reason}, "
+                    "routing to assessment"
                 )
+                # Skip backtest, go directly to assessment with partial results
+                await self._start_assessment(
+                    operation_id,
+                    gate_rejection_reason=f"Training gate: {reason}",
+                )
+                return
 
             # Start backtest via service
             await self._start_backtest(operation_id)
@@ -688,12 +694,17 @@ class AgentResearchWorker:
 
             record_gate_result("backtest", passed)
             if not passed:
-                logger.warning(f"Backtest gate failed: {operation_id}, reason={reason}")
-                raise GateError(
-                    message=f"Backtest gate failed: {reason}",
-                    gate="backtest",
-                    metrics=backtest_result,
+                # Gate rejection: route to ASSESSING with full results
+                # (both training and backtest results available)
+                logger.warning(
+                    f"Backtest gate rejected: {operation_id}, reason={reason}, "
+                    "routing to assessment"
                 )
+                await self._start_assessment(
+                    operation_id,
+                    gate_rejection_reason=f"Backtest gate: {reason}",
+                )
+                return
 
             # Start assessment with child worker
             await self._start_assessment(operation_id)
@@ -704,11 +715,18 @@ class AgentResearchWorker:
         elif child_op.status == OperationStatus.CANCELLED:
             raise asyncio.CancelledError("Backtest was cancelled")
 
-    async def _start_assessment(self, operation_id: str) -> None:
+    async def _start_assessment(
+        self,
+        operation_id: str,
+        gate_rejection_reason: str | None = None,
+    ) -> None:
         """Start the assessment phase with assessment worker.
 
         Args:
             operation_id: Parent operation ID.
+            gate_rejection_reason: If set, indicates a gate rejection scenario.
+                For training gate rejection, backtest_result will be None.
+                For backtest gate rejection, both results are present.
         """
         parent_op = await self.ops.get_operation(operation_id)
         # Get model from parent metadata (Task 8.3 runtime selection)
@@ -728,14 +746,22 @@ class AgentResearchWorker:
         # Get results for assessment from parent metadata
         params = parent_op.metadata.parameters if parent_op else {}
         training_result = params.get("training_result", {})
-        backtest_result = params.get("backtest_result", {})
+        # For training gate rejection, backtest_result is None (not empty dict)
+        backtest_result = params.get("backtest_result")
+        if backtest_result == {}:
+            backtest_result = None if gate_rejection_reason else {}
         results = {"training": training_result, "backtest": backtest_result}
 
         # Create task wrapper - worker owns its child operation
         async def run_child():
             # Pass parent operation_id - worker creates and manages its own child op
             # Worker stores child op ID in parent metadata (assessment_op_id) for tracking
-            await self.assessment_worker.run(operation_id, results, model=model)
+            await self.assessment_worker.run(
+                operation_id,
+                results,
+                model=model,
+                gate_rejection_reason=gate_rejection_reason,
+            )
 
         # Start as asyncio task
         task = asyncio.create_task(run_child())
