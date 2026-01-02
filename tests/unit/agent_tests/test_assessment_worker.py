@@ -247,6 +247,61 @@ class TestAgentAssessmentWorkerRun:
 
         mock_operations_service.fail_operation.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_run_with_gate_rejection_reason(
+        self, mock_operations_service, mock_invoker
+    ):
+        """run() accepts gate_rejection_reason for gate rejections."""
+        worker = AgentAssessmentWorker(mock_operations_service, invoker=mock_invoker)
+
+        worker.tool_executor.last_saved_assessment = {
+            "verdict": "mediocre",
+            "strengths": ["Some potential"],
+            "weaknesses": ["Low accuracy"],
+            "suggestions": ["Try different features"],
+        }
+        worker.tool_executor.last_saved_assessment_path = "/path/assessment.json"
+
+        # Training-only results (no backtest) with gate rejection
+        results = {
+            "training": {"accuracy": 0.05, "val_accuracy": 0.04},
+            "backtest": None,  # No backtest for training gate rejection
+        }
+
+        result = await worker.run(
+            "op_agent_research_456",
+            results,
+            gate_rejection_reason="accuracy_too_low (5% < 10%)",
+        )
+
+        assert result["success"]
+        assert result["verdict"] == "mediocre"
+
+    @pytest.mark.asyncio
+    async def test_run_with_none_backtest_in_results(
+        self, mock_operations_service, mock_invoker
+    ):
+        """run() handles results with backtest=None gracefully."""
+        worker = AgentAssessmentWorker(mock_operations_service, invoker=mock_invoker)
+
+        worker.tool_executor.last_saved_assessment = {
+            "verdict": "poor",
+            "strengths": [],
+            "weaknesses": ["Very low accuracy"],
+            "suggestions": ["Revisit approach"],
+        }
+        worker.tool_executor.last_saved_assessment_path = "/path/assessment.json"
+
+        results = {
+            "training": {"accuracy": 0.05},
+            "backtest": None,
+        }
+
+        # Should not raise
+        result = await worker.run("op_agent_research_456", results)
+
+        assert result["success"]
+
 
 class TestLoadStrategyConfig:
     """Tests for Task 4.1: _load_strategy_config method."""
@@ -424,6 +479,23 @@ class TestExtractResults:
         assert results["total_trades"] is None
         assert results["win_rate"] is None
 
+    def test_extract_results_none_backtest(self, mock_operations_service):
+        """Handle None backtest_metrics for gate rejection."""
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        training = {"accuracy": 0.05, "val_accuracy": 0.04}
+
+        # backtest_metrics is None for training gate rejection
+        results = worker._extract_results(training, None)
+
+        assert results["test_accuracy"] == 0.05
+        assert results["val_accuracy"] == 0.04
+        assert results["val_test_gap"] == pytest.approx(0.01, abs=0.001)
+        # Backtest fields should be None when backtest_metrics is None
+        assert results["sharpe_ratio"] is None
+        assert results["total_trades"] is None
+        assert results["win_rate"] is None
+
 
 class TestSaveToMemory:
     """Tests for Task 4.2: _save_to_memory method."""
@@ -554,6 +626,142 @@ class TestSaveToMemory:
                 backtest_metrics={},
                 parsed_assessment=parsed,
             )
+
+    @pytest.mark.asyncio
+    async def test_save_to_memory_gate_rejected_training(
+        self, mock_operations_service, tmp_path
+    ):
+        """Test gate_rejected_training status is saved correctly."""
+        from unittest.mock import patch
+
+        import yaml
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        parsed = ParsedAssessment(
+            verdict="weak_signal",
+            observations=["Low accuracy"],
+            hypotheses=[],
+            limitations=[],
+            capability_requests=[],
+            tested_hypothesis_ids=[],
+            raw_text="Test output",
+        )
+
+        hypotheses_file = tmp_path / "hypotheses.yaml"
+
+        with (
+            patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path / "experiments"),
+            patch("ktrdr.agents.memory.HYPOTHESES_FILE", hypotheses_file),
+        ):
+            await worker._save_to_memory(
+                strategy_name="test_strategy",
+                strategy_config={"indicators": [{"name": "RSI"}]},
+                training_metrics={"accuracy": 0.05},
+                backtest_metrics=None,  # No backtest for training gate rejection
+                parsed_assessment=parsed,
+                status="gate_rejected_training",
+                gate_rejection_reason="accuracy_too_low (5% < 10%)",
+            )
+
+        # Verify file was created with correct status
+        files = list((tmp_path / "experiments").glob("*.yaml"))
+        assert len(files) == 1
+
+        content = yaml.safe_load(files[0].read_text())
+        assert content["status"] == "gate_rejected_training"
+        assert content["gate_rejection_reason"] == "accuracy_too_low (5% < 10%)"
+
+    @pytest.mark.asyncio
+    async def test_save_to_memory_gate_rejected_backtest(
+        self, mock_operations_service, tmp_path
+    ):
+        """Test gate_rejected_backtest status is saved correctly."""
+        from unittest.mock import patch
+
+        import yaml
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        parsed = ParsedAssessment(
+            verdict="weak_signal",
+            observations=["Poor Sharpe ratio"],
+            hypotheses=[],
+            limitations=[],
+            capability_requests=[],
+            tested_hypothesis_ids=[],
+            raw_text="Test output",
+        )
+
+        hypotheses_file = tmp_path / "hypotheses.yaml"
+
+        with (
+            patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path / "experiments"),
+            patch("ktrdr.agents.memory.HYPOTHESES_FILE", hypotheses_file),
+        ):
+            await worker._save_to_memory(
+                strategy_name="test_strategy",
+                strategy_config={"indicators": [{"name": "RSI"}]},
+                training_metrics={"accuracy": 0.65},
+                backtest_metrics={"sharpe_ratio": -0.5, "total_trades": 10},
+                parsed_assessment=parsed,
+                status="gate_rejected_backtest",
+                gate_rejection_reason="sharpe_ratio_too_low (-0.5 < 0.0)",
+            )
+
+        files = list((tmp_path / "experiments").glob("*.yaml"))
+        content = yaml.safe_load(files[0].read_text())
+        assert content["status"] == "gate_rejected_backtest"
+        assert content["gate_rejection_reason"] == "sharpe_ratio_too_low (-0.5 < 0.0)"
+        # Backtest results should still be present
+        assert content["results"]["sharpe_ratio"] == -0.5
+
+    @pytest.mark.asyncio
+    async def test_save_to_memory_default_completed_status(
+        self, mock_operations_service, tmp_path
+    ):
+        """Test default status is 'completed' when not specified."""
+        from unittest.mock import patch
+
+        import yaml
+
+        from ktrdr.llm.haiku_brain import ParsedAssessment
+
+        worker = AgentAssessmentWorker(mock_operations_service)
+
+        parsed = ParsedAssessment(
+            verdict="strong_signal",
+            observations=["Good results"],
+            hypotheses=[],
+            limitations=[],
+            capability_requests=[],
+            tested_hypothesis_ids=[],
+            raw_text="Test output",
+        )
+
+        hypotheses_file = tmp_path / "hypotheses.yaml"
+
+        with (
+            patch("ktrdr.agents.memory.EXPERIMENTS_DIR", tmp_path / "experiments"),
+            patch("ktrdr.agents.memory.HYPOTHESES_FILE", hypotheses_file),
+        ):
+            # No status or gate_rejection_reason passed
+            await worker._save_to_memory(
+                strategy_name="test_strategy",
+                strategy_config={},
+                training_metrics={"accuracy": 0.65},
+                backtest_metrics={"sharpe_ratio": 1.5},
+                parsed_assessment=parsed,
+            )
+
+        files = list((tmp_path / "experiments").glob("*.yaml"))
+        content = yaml.safe_load(files[0].read_text())
+        assert content["status"] == "completed"
+        assert content["gate_rejection_reason"] is None
 
 
 class TestMalformedAssessmentHandling:

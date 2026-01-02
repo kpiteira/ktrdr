@@ -220,18 +220,25 @@ class AgentAssessmentWorker:
             .get("hidden_layers", []),
         }
 
-    def _extract_results(self, training_metrics: dict, backtest_metrics: dict) -> dict:
+    def _extract_results(
+        self, training_metrics: dict, backtest_metrics: dict | None
+    ) -> dict:
         """Extract results fields from metrics.
 
         Args:
             training_metrics: Training results (accuracy, val_accuracy, etc.)
             backtest_metrics: Backtest results (sharpe_ratio, total_trades, etc.)
+                              May be None for gate rejections.
 
         Returns:
             Results dict with standardized fields.
         """
         test_accuracy = training_metrics.get("accuracy", 0)
         val_accuracy = training_metrics.get("val_accuracy", 0)
+
+        # Handle None backtest_metrics for gate rejections
+        if backtest_metrics is None:
+            backtest_metrics = {}
 
         return {
             "test_accuracy": test_accuracy,
@@ -247,8 +254,10 @@ class AgentAssessmentWorker:
         strategy_name: str,
         strategy_config: dict,
         training_metrics: dict,
-        backtest_metrics: dict,
+        backtest_metrics: dict | None,
         parsed_assessment: ParsedAssessment,
+        status: str = "completed",
+        gate_rejection_reason: str | None = None,
     ) -> None:
         """Save experiment record to memory.
 
@@ -259,8 +268,12 @@ class AgentAssessmentWorker:
             strategy_name: Name of the strategy.
             strategy_config: Full strategy configuration.
             training_metrics: Training results.
-            backtest_metrics: Backtest results.
+            backtest_metrics: Backtest results. May be None for gate rejections.
             parsed_assessment: Structured assessment from parse_assessment().
+            status: Experiment status ("completed", "gate_rejected_training",
+                    "gate_rejected_backtest"). Defaults to "completed".
+            gate_rejection_reason: Reason for gate rejection, e.g.,
+                    "accuracy_too_low (5% < 10%)". None for completed experiments.
         """
         try:
             context = self._extract_context(strategy_config)
@@ -288,6 +301,8 @@ class AgentAssessmentWorker:
                     "raw_text": raw_text,
                 },
                 source="agent",
+                status=status,
+                gate_rejection_reason=gate_rejection_reason,
             )
 
             path = save_experiment(record)
@@ -424,14 +439,18 @@ class AgentAssessmentWorker:
         parent_operation_id: str,
         results: dict[str, Any],
         model: str | None = None,
+        gate_rejection_reason: str | None = None,
     ) -> dict[str, Any]:
         """Run assessment phase using Claude.
 
         Args:
             parent_operation_id: Parent AGENT_RESEARCH operation ID.
             results: Dict with 'training' and 'backtest' result dicts.
+                     'backtest' may be None for training gate rejections.
             model: Model to use ('opus', 'sonnet', 'haiku' or full ID).
                    If None, uses AGENT_MODEL env var or default.
+            gate_rejection_reason: Reason for gate rejection, e.g.,
+                   "accuracy_too_low (5% < 10%)". None for normal flow.
 
         Returns:
             Dict with verdict, assessment_path, and token counts.
@@ -473,12 +492,13 @@ class AgentAssessmentWorker:
 
         try:
             # Build context for prompt
+            # Note: use `or {}` because .get() returns None if key exists with None value
             context = AssessmentContext(
                 operation_id=op.operation_id,
                 strategy_name=strategy_name or "unknown",
                 strategy_path=strategy_path or "unknown",
-                training_metrics=results.get("training", {}),
-                backtest_metrics=results.get("backtest", {}),
+                training_metrics=results.get("training") or {},
+                backtest_metrics=results.get("backtest") or {},
             )
             prompt = get_assessment_prompt(context)
 
@@ -547,18 +567,29 @@ class AgentAssessmentWorker:
                 output=raw_output,
                 context={
                     "strategy_config": strategy_config,
-                    "training_results": results.get("training", {}),
-                    "backtest_results": results.get("backtest", {}),
+                    "training_results": results.get("training") or {},
+                    "backtest_results": results.get("backtest") or {},
                 },
             )
+
+            # Determine status for memory record
+            if gate_rejection_reason:
+                if results.get("backtest") is None:
+                    status = "gate_rejected_training"
+                else:
+                    status = "gate_rejected_backtest"
+            else:
+                status = "completed"
 
             # Save to memory (best-effort, failures don't fail assessment)
             await self._save_to_memory(
                 strategy_name=strategy_name or "unknown",
                 strategy_config=strategy_config,
                 training_metrics=results.get("training", {}),
-                backtest_metrics=results.get("backtest", {}),
+                backtest_metrics=results.get("backtest"),
                 parsed_assessment=parsed_assessment,
+                status=status,
+                gate_rejection_reason=gate_rejection_reason,
             )
 
             # Build result
