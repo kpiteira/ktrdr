@@ -664,16 +664,15 @@ class TrainingPipeline:
             "🔧 TrainingPipeline.evaluate_model() - Evaluating model on test set"
         )
 
-        # Handle no test data case
+        # Fail loudly if test data is missing - this indicates a data pipeline issue
         if X_test is None or y_test is None:
-            logger.warning("No test data provided - returning zero metrics")
-            return {
-                "test_accuracy": 0.0,
-                "test_loss": 0.0,
-                "precision": 0.0,
-                "recall": 0.0,
-                "f1_score": 0.0,
-            }
+            from ktrdr.training.exceptions import TrainingDataError
+
+            raise TrainingDataError(
+                "Training produced no test data. "
+                "This usually indicates a data pipeline issue with multi-symbol "
+                "or multi-timeframe configurations. Check data loading and splitting."
+            )
 
         # Move test data to the same device as the model
         device = next(model.parameters()).device
