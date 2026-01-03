@@ -755,17 +755,65 @@ class TrainingPipeline:
             Tuple of (combined_features, combined_labels)
             Note: No symbol_indices returned - strategies are symbol-agnostic
         """
+        from ktrdr.training.exceptions import TrainingDataError
+
         combined_features_list = []
         combined_labels_list = []
 
+        # DEBUG LOGGING: Log per-symbol sample counts to identify data loss
+        logger.info(f"🔗 Combining data from {len(symbols)} symbols:")
+        total_samples = 0
+
         for symbol in symbols:
+            features = all_symbols_features[symbol]
+            labels = all_symbols_labels[symbol]
+
+            # Validate feature/label size consistency per symbol
+            if features.shape[0] != labels.shape[0]:
+                error_msg = (
+                    f"Feature/label size mismatch for symbol {symbol}: "
+                    f"features={features.shape[0]}, labels={labels.shape[0]}. "
+                    f"This indicates a data alignment issue in the preprocessing pipeline."
+                )
+                logger.error(f"❌ {error_msg}")
+                raise TrainingDataError(error_msg)
+
+            # Validate non-empty data
+            if features.shape[0] == 0:
+                error_msg = f"Empty data for symbol {symbol}. Check data loading."
+                logger.error(f"❌ {error_msg}")
+                raise TrainingDataError(error_msg)
+
+            # Log per-symbol details
+            logger.info(
+                f"   {symbol}: {features.shape[0]} samples, "
+                f"{features.shape[1]} features"
+            )
+            total_samples += features.shape[0]
+
             # Concatenate sequentially - preserves temporal order
-            combined_features_list.append(all_symbols_features[symbol])
-            combined_labels_list.append(all_symbols_labels[symbol])
+            combined_features_list.append(features)
+            combined_labels_list.append(labels)
+
+        # Validate consistent feature dimensions across symbols
+        feature_dims = [f.shape[1] for f in combined_features_list]
+        if len(set(feature_dims)) > 1:
+            error_msg = (
+                f"Inconsistent feature dimensions across symbols: "
+                f"{dict(zip(symbols, feature_dims))}. "
+                f"All symbols must have the same number of features."
+            )
+            logger.error(f"❌ {error_msg}")
+            raise TrainingDataError(error_msg)
 
         # Concatenate all symbols (AAPL all data, then MSFT all data, etc.)
         combined_features = torch.cat(combined_features_list, dim=0)
         combined_labels = torch.cat(combined_labels_list, dim=0)
+
+        logger.info(
+            f"✅ Combined total: {combined_features.shape[0]} samples, "
+            f"{combined_features.shape[1]} features"
+        )
 
         # NO SHUFFLE - temporal order is critical for time series
         # NO SYMBOL_INDICES - strategies don't care about symbol names
@@ -956,6 +1004,37 @@ class TrainingPipeline:
             labels = TrainingPipeline.create_labels(
                 price_data, strategy_config["training"]["labels"]
             )
+
+            # DEBUG LOGGING: Trace data sizes through preprocessing pipeline
+            # This helps identify where data loss or size mismatch occurs
+            base_tf = list(price_data.keys())[0]
+            logger.info(
+                f"📊 [{symbol}] Preprocessing trace:\n"
+                f"   • price_data[{base_tf}]: {len(price_data[base_tf])} rows\n"
+                f"   • fuzzy_data[{base_tf}]: {len(fuzzy_data[base_tf])} rows\n"
+                f"   • features: {features.shape[0]} samples, {features.shape[1]} dims\n"
+                f"   • labels: {labels.shape[0]} samples"
+            )
+
+            # Validate feature/label alignment EARLY (before combining)
+            if features.shape[0] != labels.shape[0]:
+                from ktrdr.training.exceptions import TrainingDataError
+
+                # Log detailed debugging info
+                logger.error(
+                    f"❌ [{symbol}] Feature/label size mismatch detected!\n"
+                    f"   Features: {features.shape[0]} (from fuzzy_data)\n"
+                    f"   Labels: {labels.shape[0]} (from price_data)\n"
+                    f"   Difference: {abs(features.shape[0] - labels.shape[0])} rows\n"
+                    f"   Date ranges:\n"
+                    f"     - price_data[{base_tf}]: {price_data[base_tf].index[0]} to {price_data[base_tf].index[-1]}\n"
+                    f"     - fuzzy_data[{base_tf}]: {fuzzy_data[base_tf].index[0]} to {fuzzy_data[base_tf].index[-1]}"
+                )
+                raise TrainingDataError(
+                    f"Feature/label size mismatch for symbol {symbol}: "
+                    f"features={features.shape[0]}, labels={labels.shape[0]}. "
+                    f"Check indicator warmup period and data alignment."
+                )
 
             # Store for this symbol
             all_symbols_features[symbol] = features
