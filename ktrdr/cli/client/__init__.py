@@ -4,6 +4,7 @@ Provides unified HTTP clients for CLI commands with consistent
 error handling, retry logic, and URL resolution.
 """
 
+from ktrdr.cli.client.async_client import AsyncCLIClient
 from ktrdr.cli.client.errors import (
     APIError,
     CLIClientError,
@@ -13,6 +14,7 @@ from ktrdr.cli.client.errors import (
 from ktrdr.cli.client.sync_client import SyncCLIClient
 
 __all__ = [
+    "AsyncCLIClient",
     "SyncCLIClient",
     "CLIClientError",
     "ConnectionError",
