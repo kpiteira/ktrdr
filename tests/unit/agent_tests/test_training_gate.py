@@ -22,11 +22,11 @@ class TestTrainingGateConfig:
     """Tests for TrainingGateConfig."""
 
     def test_default_config(self):
-        """Test default configuration values from design doc."""
+        """Test default configuration values (Baby mode v2.5)."""
         config = TrainingGateConfig()
-        assert config.min_accuracy == 0.45
+        assert config.min_accuracy == 0.10  # Baby mode: lax for exploration
         assert config.max_loss == 0.8
-        assert config.min_loss_decrease == 0.2
+        assert config.min_loss_decrease == -0.5  # Baby mode: allows regression
 
     def test_config_from_env(self):
         """Test loading configuration from environment variables."""
@@ -44,12 +44,12 @@ class TestTrainingGateConfig:
             assert config.min_loss_decrease == 0.3
 
     def test_config_from_env_defaults(self):
-        """Test that missing env vars use defaults."""
+        """Test that missing env vars use defaults (Baby mode v2.5)."""
         with patch.dict("os.environ", {}, clear=True):
             config = TrainingGateConfig.from_env()
-            assert config.min_accuracy == 0.45
+            assert config.min_accuracy == 0.10  # Baby mode
             assert config.max_loss == 0.8
-            assert config.min_loss_decrease == 0.2
+            assert config.min_loss_decrease == -0.5  # Baby mode
 
     def test_config_from_env_partial(self):
         """Test that partial env vars work correctly."""
@@ -63,7 +63,7 @@ class TestTrainingGateConfig:
             config = TrainingGateConfig.from_env()
             assert config.min_accuracy == 0.7
             assert config.max_loss == 0.8  # default
-            assert config.min_loss_decrease == 0.2  # default
+            assert config.min_loss_decrease == -0.5  # default (Baby mode)
 
 
 class TestCheckTrainingGate:
@@ -105,9 +105,9 @@ class TestCheckTrainingGate:
     # === Accuracy Failure Tests ===
 
     def test_accuracy_below_threshold(self, default_config):
-        """Test that low accuracy fails the gate."""
+        """Test that low accuracy fails the gate (Baby mode: 10%)."""
         metrics = {
-            "accuracy": 0.40,  # below 0.45 threshold
+            "accuracy": 0.05,  # below 0.10 Baby threshold
             "final_loss": 0.3,
             "initial_loss": 1.0,
         }
@@ -116,9 +116,9 @@ class TestCheckTrainingGate:
         assert "accuracy_below_threshold" in reason
 
     def test_accuracy_just_below_threshold(self, default_config):
-        """Test edge case: accuracy just below threshold fails."""
+        """Test edge case: accuracy just below Baby threshold fails."""
         metrics = {
-            "accuracy": 0.4499,  # just below 0.45
+            "accuracy": 0.099,  # just below 0.10 Baby threshold
             "final_loss": 0.3,
             "initial_loss": 1.0,
         }
@@ -153,46 +153,47 @@ class TestCheckTrainingGate:
     # === Loss Decrease Failure Tests ===
 
     def test_insufficient_loss_decrease(self, default_config):
-        """Test that insufficient loss decrease fails the gate."""
+        """Test that severe loss regression fails the gate (Baby: -50% allowed)."""
         metrics = {
             "accuracy": 0.65,
             "final_loss": 0.7,
-            "initial_loss": 0.8,  # only 12.5% decrease (0.8-0.7)/0.8
+            "initial_loss": 0.4,  # 75% increase (beyond -50% Baby threshold)
         }
         passed, reason = check_training_gate(metrics, default_config)
         assert passed is False
         assert "insufficient_loss_decrease" in reason
 
     def test_no_loss_decrease(self, default_config):
-        """Test that no loss decrease fails the gate."""
+        """Test that 0% loss decrease passes Baby gate (allows regression)."""
         metrics = {
             "accuracy": 0.65,
             "final_loss": 0.5,  # Within max_loss threshold
             "initial_loss": 0.5,  # 0% decrease
         }
         passed, reason = check_training_gate(metrics, default_config)
-        assert passed is False
-        assert "loss_decrease" in reason
+        # Baby mode allows 0% decrease (threshold is -50%)
+        assert passed is True
+        assert reason == "passed"
 
     def test_negative_loss_decrease(self, default_config):
-        """Test that loss increase fails the gate."""
+        """Test that moderate loss increase passes Baby gate."""
         metrics = {
             "accuracy": 0.65,
-            "final_loss": 1.2,  # higher than initial!
-            "initial_loss": 1.0,  # -20% "decrease"
+            "final_loss": 0.6,  # 20% higher than initial
+            "initial_loss": 0.5,  # -20% "decrease" is within -50% Baby threshold
         }
         passed, reason = check_training_gate(metrics, default_config)
-        assert passed is False
-        # Should fail on loss or loss decrease
+        # Baby mode allows up to -50% regression, -20% is fine
+        assert passed is True
 
     # === Multiple Failure Tests ===
 
     def test_multiple_failures_first_wins(self, default_config):
         """Test that first failure encountered is reported."""
         metrics = {
-            "accuracy": 0.30,  # fails first
-            "final_loss": 0.9,  # also fails
-            "initial_loss": 1.0,  # also fails (10% decrease)
+            "accuracy": 0.05,  # fails Baby threshold (10%)
+            "final_loss": 0.9,  # also fails max_loss (0.8)
+            "initial_loss": 0.3,  # also fails (loss tripled, beyond -50%)
         }
         passed, reason = check_training_gate(metrics, default_config)
         assert passed is False

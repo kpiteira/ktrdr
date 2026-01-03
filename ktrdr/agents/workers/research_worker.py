@@ -317,10 +317,12 @@ class AgentResearchWorker:
             operation_id: Parent operation ID.
         """
         parent_op = await self.ops.get_operation(operation_id)
-        # Get model from parent metadata (Task 8.3 runtime selection)
+        # Get model and brief from parent metadata (Task 8.3 runtime selection, M3 brief)
         model = None
+        brief = None
         if parent_op:
             model = parent_op.metadata.parameters.get("model")
+            brief = parent_op.metadata.parameters.get("brief")
             parent_op.metadata.parameters["phase"] = "designing"
             parent_op.metadata.parameters["phase_start_time"] = time.time()
         logger.info(f"Phase started: {operation_id}, phase=designing, model={model}")
@@ -335,7 +337,7 @@ class AgentResearchWorker:
         async def run_child():
             # Pass parent operation_id - worker creates and manages its own child op
             # Worker stores child op ID in parent metadata (design_op_id) for tracking
-            await self.design_worker.run(operation_id, model=model)
+            await self.design_worker.run(operation_id, model=model, brief=brief)
 
         # Start as asyncio task
         task = asyncio.create_task(run_child())

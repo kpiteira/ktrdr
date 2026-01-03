@@ -192,7 +192,10 @@ Always validate your configuration before saving it."""
             return []
 
     async def run(
-        self, parent_operation_id: str, model: str | None = None
+        self,
+        parent_operation_id: str,
+        model: str | None = None,
+        brief: str | None = None,
     ) -> dict[str, Any]:
         """Run design phase using Claude.
 
@@ -203,6 +206,8 @@ Always validate your configuration before saving it."""
             parent_operation_id: The parent AGENT_RESEARCH operation ID.
             model: Model to use ('opus', 'sonnet', 'haiku' or full ID).
                    If None, uses AGENT_MODEL env var or default.
+            brief: Natural language guidance for strategy design.
+                   Injected into the prompt to guide design decisions.
 
         Returns:
             Dict with strategy_name, strategy_path, and token counts.
@@ -213,8 +218,10 @@ Always validate your configuration before saving it."""
         """
         # Resolve model (allows runtime switching via API/CLI)
         resolved_model = resolve_model(model)
+        brief_info = f", brief: {brief[:50]}..." if brief else ""
         logger.info(
-            f"Starting design phase: {parent_operation_id}, model: {resolved_model}"
+            f"Starting design phase: {parent_operation_id}, "
+            f"model: {resolved_model}{brief_info}"
         )
 
         # Create child operation for tracking
@@ -270,6 +277,7 @@ Always validate your configuration before saving it."""
                 recent_strategies=recent_strategies,
                 experiment_history=experiment_history,
                 open_hypotheses=open_hypotheses,
+                brief=brief,  # M3: Research brief for guided design
             )
 
             # Use injected invoker (for testing) or create new with resolved model
