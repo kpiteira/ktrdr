@@ -678,9 +678,9 @@ class TestSpanAttributes:
                 # Second call - get child (completed with bad accuracy)
                 if op_id == "op_training_test":
                     mock_op.status = OperationStatus.COMPLETED
-                    # Accuracy below threshold (0.45)
+                    # Accuracy below Baby mode threshold (0.10)
                     mock_op.result_summary = {
-                        "accuracy": 0.30,
+                        "accuracy": 0.05,
                         "final_loss": 0.3,
                         "initial_loss": 0.8,
                     }
