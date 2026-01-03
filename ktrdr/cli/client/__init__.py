@@ -10,8 +10,10 @@ from ktrdr.cli.client.errors import (
     ConnectionError,
     TimeoutError,
 )
+from ktrdr.cli.client.sync_client import SyncCLIClient
 
 __all__ = [
+    "SyncCLIClient",
     "CLIClientError",
     "ConnectionError",
     "TimeoutError",
