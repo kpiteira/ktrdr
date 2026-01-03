@@ -108,9 +108,9 @@ class TestGateRejectionRecordsExperiment:
                 f"{BACKEND_URL}/agent/trigger",
                 timeout=10.0,
             )
-            assert trigger_resp.status_code == 202, (
-                f"Trigger failed: {trigger_resp.text}"
-            )
+            assert (
+                trigger_resp.status_code == 202
+            ), f"Trigger failed: {trigger_resp.text}"
             trigger_data = trigger_resp.json()
             assert trigger_data["triggered"] is True
             op_id = trigger_data["operation_id"]
@@ -150,28 +150,28 @@ class TestGateRejectionRecordsExperiment:
 
         # Verify experiment was saved
         after_count = count_experiments()
-        assert after_count > before_count, (
-            f"No new experiment recorded. Before: {before_count}, After: {after_count}"
-        )
+        assert (
+            after_count > before_count
+        ), f"No new experiment recorded. Before: {before_count}, After: {after_count}"
 
         # Verify experiment content
         experiment = get_latest_experiment()
         assert experiment is not None, "Could not load latest experiment"
 
         # Verify gate rejection status
-        assert experiment.get("status") == "gate_rejected_training", (
-            f"Expected status 'gate_rejected_training', got: {experiment.get('status')}"
-        )
+        assert (
+            experiment.get("status") == "gate_rejected_training"
+        ), f"Expected status 'gate_rejected_training', got: {experiment.get('status')}"
 
         # Verify gate rejection reason is set
-        assert experiment.get("gate_rejection_reason") is not None, (
-            "gate_rejection_reason should be set"
-        )
+        assert (
+            experiment.get("gate_rejection_reason") is not None
+        ), "gate_rejection_reason should be set"
 
         # Verify training result is present
-        assert experiment.get("training_result") is not None, (
-            "training_result should be present even for gate rejection"
-        )
+        assert (
+            experiment.get("training_result") is not None
+        ), "training_result should be present even for gate rejection"
 
         # Verify backtest result is None (skipped due to gate rejection)
         assert experiment.get("backtest_result") is None, (
@@ -274,6 +274,6 @@ class TestGateRejectionReason:
         reason = experiment.get("gate_rejection_reason", "")
 
         # The reason should mention "Training gate" and include threshold info
-        assert "Training gate" in reason or "training" in reason.lower(), (
-            f"Reason should mention training gate: {reason}"
-        )
+        assert (
+            "Training gate" in reason or "training" in reason.lower()
+        ), f"Reason should mention training gate: {reason}"
