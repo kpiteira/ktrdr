@@ -4,6 +4,7 @@
 
 - [x] Task 1.1: Create errors module
 - [x] Task 1.2: Create core module
+- [x] Task 1.3: Create sync client
 
 ## Emergent Patterns
 
@@ -34,9 +35,63 @@ from ktrdr.cli.client.core import (
 )
 ```
 
+### SyncCLIClient Pattern
+
+The sync client follows this structure:
+
+```python
+class SyncCLIClient:
+    def __init__(self, base_url=None, timeout=30.0, max_retries=3, retry_delay=1.0):
+        effective_url = resolve_url(base_url)
+        self.config = ClientConfig(base_url=effective_url, ...)
+        self._client: Optional[httpx.Client] = None
+
+    def __enter__(self):
+        self._client = httpx.Client(timeout=self.config.timeout)
+        return self
+
+    def __exit__(self, ...):
+        if self._client:
+            self._client.close()
+            self._client = None
+```
+
+Key points:
+- `_client` is `None` outside context manager
+- URL resolution happens at `__init__`, not `__enter__`
+- Config is immutable (`ClientConfig` is frozen dataclass)
+
+### Retry Loop Pattern
+
+The `_make_request` method uses a while-True loop with explicit break points:
+
+```python
+while True:
+    try:
+        response = self._client.request(...)
+        if should_retry(response.status_code, attempt, retries):
+            time.sleep(calculate_backoff(attempt, self.config.retry_delay))
+            attempt += 1
+            continue
+        return parse_response(response)
+    except httpx.ConnectError:
+        if attempt < retries:
+            ...
+            continue
+        raise ConnectionError(...)
+```
+
+This pattern handles both HTTP-level retries (5xx) and connection-level retries uniformly.
+
 ### Test Organization
 
-Tests organized by class/function with `TestClassName` pattern.
+Tests organized by class/function with `TestClassName` pattern:
+- `TestSyncCLIClientContextManager`
+- `TestSyncCLIClientHTTPMethods`
+- `TestSyncCLIClientRetryBehavior`
+- `TestSyncCLIClientErrorHandling`
+- `TestSyncCLIClientHealthCheck`
+- `TestSyncCLIClientConfiguration`
 
 ## Gotchas
 
@@ -72,19 +127,24 @@ This differs from the existing `async_cli_client.py` which uses constant delay. 
 
 The enhanced dict gets an `ib_diagnosis` key with structured data.
 
+### health_check() Design
+
+`health_check()` is designed to never raise — it catches all exceptions and returns `bool`. Uses:
+- Short timeout (5s)
+- No retries (`max_retries=0`)
+- Calls `/health` endpoint
+
 ## Next Up
 
-Task 1.3: Create sync client (`ktrdr/cli/client/sync_client.py`) with:
+Task 1.4: Create async client (`ktrdr/cli/client/async_client.py`) with:
 
-- `SyncCLIClient` class
-- `__enter__` / `__exit__` — httpx.Client lifecycle
-- `get/post/delete` methods using core functions
-- `health_check()` method
+- `AsyncCLIClient` class
+- `__aenter__` / `__aexit__` — httpx.AsyncClient lifecycle
+- `async get/post/delete` methods using core functions
+- `async health_check()` method
+- `async execute_operation()` method (may be added in Task 1.5)
 
-Key integration points:
-
-- Use `ClientConfig` from core
-- Use `resolve_url()` for base URL
-- Use `parse_response()` for all responses
-- Use `should_retry()` + `calculate_backoff()` for retry logic
-- Raise errors from `errors.py`
+Mirror the sync client pattern but async:
+- Use `httpx.AsyncClient` instead of `httpx.Client`
+- Use `await` for all HTTP calls
+- Use `asyncio.sleep()` instead of `time.sleep()`
