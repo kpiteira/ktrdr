@@ -216,7 +216,7 @@ class AgentService:
         # Create operation with model, brief, and bypass_gates in metadata
         # Agent operations are backend-local (run in backend process, not workers)
         params: dict[str, Any] = {"phase": "idle", "model": resolved_model}
-        if brief:
+        if brief is not None:
             params["brief"] = brief
         if bypass_gates:
             params["bypass_gates"] = True

@@ -74,10 +74,11 @@ class TestDesignWorkerBriefParameter:
                     brief="Design a simple RSI strategy.",
                 )
 
-        # Assert - brief should be passed to prompt builder
+        # Assert - brief should be passed to prompt builder with correct value
         mock_prompt.assert_called_once()
         call_kwargs = mock_prompt.call_args[1]
-        assert "brief" in call_kwargs or len(mock_prompt.call_args[0]) > 0
+        assert "brief" in call_kwargs
+        assert call_kwargs["brief"] == "Design a simple RSI strategy."
 
     @pytest.mark.asyncio
     async def test_design_worker_runs_without_brief(

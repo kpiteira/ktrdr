@@ -67,9 +67,13 @@ class TestTrainingGateCatastrophicCheck:
         assert "accuracy" in reason.lower()
 
     def test_accuracy_at_baby_threshold_passes(self):
-        """10% accuracy should pass Baby gate."""
+        """10% accuracy should pass Baby gate with proper loss decrease."""
         metrics = {
             "test_metrics": {"test_accuracy": 0.10, "test_loss": 0.5},
+            "training_metrics": {
+                "history": {"train_loss": [1.0, 0.5]},  # 50% decrease
+                "final_train_loss": 0.5,
+            },
         }
         config = TrainingGateConfig(min_accuracy=0.10, min_loss_decrease=-0.5)
 
@@ -79,9 +83,13 @@ class TestTrainingGateCatastrophicCheck:
         assert reason == "passed"
 
     def test_15_percent_accuracy_passes_baby_gate(self):
-        """15% accuracy should pass Baby gate."""
+        """15% accuracy should pass Baby gate with proper loss decrease."""
         metrics = {
             "test_metrics": {"test_accuracy": 0.15, "test_loss": 0.5},
+            "training_metrics": {
+                "history": {"train_loss": [1.0, 0.5]},  # 50% decrease
+                "final_train_loss": 0.5,
+            },
         }
         config = TrainingGateConfig(min_accuracy=0.10, min_loss_decrease=-0.5)
 
@@ -93,6 +101,10 @@ class TestTrainingGateCatastrophicCheck:
         """30% accuracy should pass Baby gate (would fail old 45% threshold)."""
         metrics = {
             "test_metrics": {"test_accuracy": 0.30, "test_loss": 0.5},
+            "training_metrics": {
+                "history": {"train_loss": [1.0, 0.5]},  # 50% decrease
+                "final_train_loss": 0.5,
+            },
         }
         config = TrainingGateConfig(min_accuracy=0.10, min_loss_decrease=-0.5)
 
