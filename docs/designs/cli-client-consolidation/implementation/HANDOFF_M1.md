@@ -5,6 +5,7 @@
 - [x] Task 1.1: Create errors module
 - [x] Task 1.2: Create core module
 - [x] Task 1.3: Create sync client
+- [x] Task 1.4: Create async client
 
 ## Emergent Patterns
 
@@ -35,31 +36,30 @@ from ktrdr.cli.client.core import (
 )
 ```
 
-### SyncCLIClient Pattern
+### Client Pattern (Sync & Async)
 
-The sync client follows this structure:
+Both clients follow the same structure. The async version mirrors sync:
 
 ```python
+# Sync
 class SyncCLIClient:
-    def __init__(self, base_url=None, timeout=30.0, max_retries=3, retry_delay=1.0):
-        effective_url = resolve_url(base_url)
-        self.config = ClientConfig(base_url=effective_url, ...)
-        self._client: Optional[httpx.Client] = None
+    def __init__(...): ...
+    def __enter__(self): self._client = httpx.Client(...); return self
+    def __exit__(...): self._client.close(); self._client = None
 
-    def __enter__(self):
-        self._client = httpx.Client(timeout=self.config.timeout)
-        return self
-
-    def __exit__(self, ...):
-        if self._client:
-            self._client.close()
-            self._client = None
+# Async
+class AsyncCLIClient:
+    def __init__(...): ...  # Identical
+    async def __aenter__(self): self._client = httpx.AsyncClient(...); return self
+    async def __aexit__(...): await self._client.aclose(); self._client = None
 ```
 
-Key points:
-- `_client` is `None` outside context manager
-- URL resolution happens at `__init__`, not `__enter__`
-- Config is immutable (`ClientConfig` is frozen dataclass)
+Key differences:
+
+- `httpx.Client` vs `httpx.AsyncClient`
+- `close()` vs `await aclose()`
+- `time.sleep()` vs `await asyncio.sleep()`
+- Method calls: `self._client.request()` vs `await self._client.request()`
 
 ### Retry Loop Pattern
 
@@ -68,9 +68,9 @@ The `_make_request` method uses a while-True loop with explicit break points:
 ```python
 while True:
     try:
-        response = self._client.request(...)
+        response = self._client.request(...)  # or await for async
         if should_retry(response.status_code, attempt, retries):
-            time.sleep(calculate_backoff(attempt, self.config.retry_delay))
+            time.sleep(calculate_backoff(...))  # or await asyncio.sleep for async
             attempt += 1
             continue
         return parse_response(response)
@@ -86,12 +86,13 @@ This pattern handles both HTTP-level retries (5xx) and connection-level retries 
 ### Test Organization
 
 Tests organized by class/function with `TestClassName` pattern:
-- `TestSyncCLIClientContextManager`
-- `TestSyncCLIClientHTTPMethods`
-- `TestSyncCLIClientRetryBehavior`
-- `TestSyncCLIClientErrorHandling`
-- `TestSyncCLIClientHealthCheck`
-- `TestSyncCLIClientConfiguration`
+
+- `Test{Sync|Async}CLIClientContextManager`
+- `Test{Sync|Async}CLIClientHTTPMethods`
+- `Test{Sync|Async}CLIClientRetryBehavior`
+- `Test{Sync|Async}CLIClientErrorHandling`
+- `Test{Sync|Async}CLIClientHealthCheck`
+- `Test{Sync|Async}CLIClientConfiguration`
 
 ## Gotchas
 
@@ -130,21 +131,23 @@ The enhanced dict gets an `ib_diagnosis` key with structured data.
 ### health_check() Design
 
 `health_check()` is designed to never raise — it catches all exceptions and returns `bool`. Uses:
+
 - Short timeout (5s)
 - No retries (`max_retries=0`)
 - Calls `/health` endpoint
 
+### execute_operation() Placeholder
+
+`AsyncCLIClient.execute_operation()` exists with correct signature but raises `NotImplementedError`. It will be implemented in Task 1.5.
+
 ## Next Up
 
-Task 1.4: Create async client (`ktrdr/cli/client/async_client.py`) with:
+Task 1.5: Create operations module (`ktrdr/cli/client/operations.py`) with:
 
-- `AsyncCLIClient` class
-- `__aenter__` / `__aexit__` — httpx.AsyncClient lifecycle
-- `async get/post/delete` methods using core functions
-- `async health_check()` method
-- `async execute_operation()` method (may be added in Task 1.5)
+- Port operation execution from `AsyncOperationExecutor`
+- Start operation via adapter
+- Poll loop with progress callbacks
+- Cancellation handling
+- Return final result
 
-Mirror the sync client pattern but async:
-- Use `httpx.AsyncClient` instead of `httpx.Client`
-- Use `await` for all HTTP calls
-- Use `asyncio.sleep()` instead of `time.sleep()`
+Reference: `ktrdr/cli/operation_executor.py`
