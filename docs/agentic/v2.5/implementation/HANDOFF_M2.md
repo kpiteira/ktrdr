@@ -96,7 +96,42 @@ Builds results dict with `backtest: None` for training gate rejection.
 
 ---
 
-## For Task 2.5 (E2E Test)
+## Task 2.5: E2E Test Created
 
-All integration tests pass. The E2E test in the plan can be run once
-the full system is up with stub workers configured to produce low accuracy.
+E2E test file: `tests/e2e/agent/test_gate_rejection_e2e.py`
+
+### Running the E2E Test
+
+```bash
+# Start backend with stub workers and forced gate rejection
+USE_STUB_WORKERS=true TRAINING_GATE_MIN_ACCURACY=0.99 docker compose up -d
+
+# Run the E2E test
+pytest tests/e2e/agent/test_gate_rejection_e2e.py -v -m "e2e" --no-cov
+```
+
+### Test Coverage
+
+- `test_training_gate_rejection_records_experiment`: Full flow validation
+- `test_experiment_has_required_fields`: Verifies ExperimentRecord structure
+- `test_gate_rejection_reason_includes_threshold`: Verifies reason format
+
+### Configuration
+
+| Environment Variable | Purpose | Required Value |
+| -------------------- | ------- | -------------- |
+| `USE_STUB_WORKERS` | Use stubs for Design/Assessment | `true` |
+| `TRAINING_GATE_MIN_ACCURACY` | Force gate rejection | `0.99` |
+| `STUB_WORKER_FAST` | Speed up stub delays | `true` (optional) |
+
+---
+
+## M2 Milestone Complete
+
+All tasks verified:
+
+- ✅ Task 2.1: ExperimentRecord has status fields
+- ✅ Task 2.2: AssessmentWorker accepts partial results
+- ✅ Task 2.3: State machine routes gate rejection → ASSESSING
+- ✅ Task 2.4: _start_assessment method updated
+- ✅ Task 2.5: E2E test created
