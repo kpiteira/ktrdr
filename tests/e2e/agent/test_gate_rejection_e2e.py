@@ -41,6 +41,7 @@ async def backend_ready():
                     print("Backend healthy")
                     return True
         except Exception:
+            # Treat any error as "backend not ready yet" and retry
             pass
         await asyncio.sleep(1)
 
@@ -96,8 +97,8 @@ class TestGateRejectionRecordsExperiment:
         1. Experiment is saved to memory/experiments/
         2. status is "gate_rejected_training"
         3. gate_rejection_reason is set
-        4. training_result is present
-        5. backtest_result is None
+        4. results contains training metrics (test_accuracy, val_accuracy)
+        5. results has None for backtest metrics (sharpe_ratio, total_trades, win_rate)
         """
         # Count experiments before
         before_count = count_experiments()
@@ -168,16 +169,25 @@ class TestGateRejectionRecordsExperiment:
             experiment.get("gate_rejection_reason") is not None
         ), "gate_rejection_reason should be set"
 
-        # Verify training result is present
-        assert (
-            experiment.get("training_result") is not None
-        ), "training_result should be present even for gate rejection"
+        # Verify results field is present with training metrics
+        results = experiment.get("results")
+        assert results is not None, "results should be present even for gate rejection"
 
-        # Verify backtest result is None (skipped due to gate rejection)
-        assert experiment.get("backtest_result") is None, (
-            f"backtest_result should be None for training gate rejection, "
-            f"got: {experiment.get('backtest_result')}"
+        # Training metrics should be present (test_accuracy, val_accuracy)
+        assert "test_accuracy" in results, "test_accuracy should be in results"
+        assert "val_accuracy" in results, "val_accuracy should be in results"
+
+        # Backtest metrics should be None (skipped due to gate rejection)
+        assert results.get("sharpe_ratio") is None, (
+            f"sharpe_ratio should be None for training gate rejection, "
+            f"got: {results.get('sharpe_ratio')}"
         )
+        assert (
+            results.get("total_trades") is None
+        ), "total_trades should be None for training gate rejection"
+        assert (
+            results.get("win_rate") is None
+        ), "win_rate should be None for training gate rejection"
 
 
 class TestGateRejectionExperimentFields:
@@ -225,7 +235,8 @@ class TestGateRejectionExperimentFields:
             "timestamp",
             "strategy_name",
             "context",
-            "training_result",
+            "results",
+            "assessment",
             "source",
             "status",
         ]
@@ -236,7 +247,11 @@ class TestGateRejectionExperimentFields:
         # For gate rejection, these should be set
         if experiment.get("status") == "gate_rejected_training":
             assert experiment.get("gate_rejection_reason") is not None
-            assert experiment.get("backtest_result") is None
+            # Backtest metrics within results should be None
+            results = experiment.get("results", {}) or {}
+            assert results.get("sharpe_ratio") is None
+            assert results.get("total_trades") is None
+            assert results.get("win_rate") is None
 
 
 class TestGateRejectionReason:
