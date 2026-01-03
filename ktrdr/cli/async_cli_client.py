@@ -61,9 +61,9 @@ class AsyncCLIClient:
         # Priority: explicit parameter > global --url override > config default
         url_override = base_url or get_api_url_override()
         if url_override:
-            # Auto-append /api/v1 if not present (user typically provides just host:port)
+            # Auto-append /api/v1 if no API path present (user typically provides just host:port)
             effective_url = url_override.rstrip("/")
-            if not effective_url.endswith("/api/v1"):
+            if "/api/" not in effective_url:
                 effective_url = f"{effective_url}/api/v1"
         else:
             effective_url = cli_settings.base_url

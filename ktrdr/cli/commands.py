@@ -13,20 +13,62 @@ All specific commands have been migrated to dedicated subcommand modules:
 """
 
 from typing import Optional
+from urllib.parse import urlparse
 
 import typer
 from rich.console import Console
 
 from ktrdr import get_logger
 
+# Default API port
+DEFAULT_API_PORT = 8000
+
 # Global CLI state for URL override
 # This allows --url at root level to affect all subcommands
 _cli_state: dict[str, Optional[str]] = {"api_url": None}
 
 
+def normalize_api_url(url: str) -> str:
+    """
+    Normalize an API URL by adding protocol and port if missing.
+
+    Args:
+        url: Raw URL (e.g., "backend.example.com" or "http://backend.example.com:8000")
+
+    Returns:
+        Normalized URL with protocol and port (e.g., "http://backend.example.com:8000")
+    """
+    if not url:
+        return url
+
+    # Add http:// if no protocol specified
+    if not url.startswith(("http://", "https://")):
+        url = f"http://{url}"
+
+    # Parse and add default port if missing
+    parsed = urlparse(url)
+    if parsed.port is None:
+        # Reconstruct with default port
+        netloc = f"{parsed.hostname}:{DEFAULT_API_PORT}"
+        url = f"{parsed.scheme}://{netloc}{parsed.path}"
+
+    return url.rstrip("/")
+
+
 def get_api_url_override() -> Optional[str]:
-    """Get the global API URL override if set via --url."""
+    """Get the global API URL override if set via --url (already normalized)."""
     return _cli_state["api_url"]
+
+
+def get_effective_api_url() -> str:
+    """
+    Get the effective API URL for display in error messages.
+
+    Returns the --url override if set, otherwise the default localhost URL.
+    """
+    from ktrdr.config.host_services import get_api_base_url
+
+    return _cli_state["api_url"] or get_api_base_url()
 
 
 # Create a Typer application with help text
@@ -50,19 +92,21 @@ def main(
         None,
         "--url",
         "-u",
-        help="API URL override (e.g., http://backend.ktrdr.home.mynerd.place:8000)",
+        help="API URL override (e.g., backend.example.com or http://backend.example.com:8000)",
         envvar="KTRDR_API_URL",
     ),
 ):
     """KTRDR - Trading analysis and automation tool."""
     if url:
-        _cli_state["api_url"] = url
+        # Normalize URL: add http:// if missing, add default port if missing
+        normalized_url = normalize_api_url(url)
+        _cli_state["api_url"] = normalized_url
 
         # Reconfigure telemetry to send traces to the same host as the API
         # This enables distributed tracing when targeting remote servers
         from ktrdr.cli import reconfigure_telemetry_for_url
 
-        reconfigure_telemetry_for_url(url)
+        reconfigure_telemetry_for_url(normalized_url)
 
 
 # All commands have been migrated to subcommand modules

@@ -27,6 +27,7 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 
+from ktrdr.cli.commands import get_api_url_override
 from ktrdr.cli.operation_adapters import OperationAdapter
 from ktrdr.config.host_services import get_api_base_url
 from ktrdr.logging import get_logger
@@ -99,7 +100,16 @@ class AsyncOperationExecutor:
             poll_interval: Polling interval in seconds (default: 300ms for responsive UI)
             timeout: Default timeout for HTTP requests in seconds
         """
-        self.base_url = (base_url or get_api_base_url()).rstrip("/")
+        # Priority: explicit parameter > global --url override > config default
+        url_override = get_api_url_override()
+        effective_url = base_url or url_override or get_api_base_url()
+
+        # Auto-append /api/v1 if no API path present (for --url flag which provides just host:port)
+        effective_url = effective_url.rstrip("/")
+        if url_override and "/api/" not in effective_url:
+            effective_url = f"{effective_url}/api/v1"
+
+        self.base_url = effective_url
         self.poll_interval = poll_interval
         self.timeout = timeout
         self.cancelled = False

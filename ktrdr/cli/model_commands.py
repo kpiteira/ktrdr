@@ -28,6 +28,7 @@ from rich.table import Table
 
 from ktrdr.cli.api_client import check_api_connection, get_api_client
 from ktrdr.cli.async_cli_client import AsyncCLIClient, AsyncCLIClientError
+from ktrdr.cli.commands import get_effective_api_url
 from ktrdr.config.strategy_loader import strategy_loader
 from ktrdr.config.validation import InputValidator
 from ktrdr.errors import DataError, ValidationError
@@ -665,7 +666,7 @@ async def _list_models_async(
                 "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
             )
             error_console.print(
-                "Make sure the API server is running at http://localhost:8000"
+                f"Make sure the API server is running at {get_effective_api_url()}"
             )
             sys.exit(1)
 
@@ -832,7 +833,7 @@ async def _test_model_async(
                 "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
             )
             error_console.print(
-                "Make sure the API server is running at http://localhost:8000"
+                f"Make sure the API server is running at {get_effective_api_url()}"
             )
             sys.exit(1)
 
@@ -967,7 +968,7 @@ async def _make_prediction_async(
                 "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
             )
             error_console.print(
-                "Make sure the API server is running at http://localhost:8000"
+                f"Make sure the API server is running at {get_effective_api_url()}"
             )
             sys.exit(1)
 

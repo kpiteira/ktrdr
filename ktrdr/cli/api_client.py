@@ -12,6 +12,7 @@ from typing import Any, Optional
 import httpx
 from rich.console import Console
 
+from ktrdr.cli.commands import get_api_url_override
 from ktrdr.cli.ib_diagnosis import (
     detect_ib_issue_from_api_response,
     format_ib_diagnostic_message,
@@ -51,7 +52,16 @@ class KtrdrApiClient:
             max_retries: Maximum number of retry attempts for failed requests
             retry_delay: Delay between retry attempts in seconds
         """
-        self.base_url = (base_url or get_api_base_url()).rstrip("/")
+        # Priority: explicit parameter > global --url override > config default
+        url_override = get_api_url_override()
+        effective_url = base_url or url_override or get_api_base_url()
+
+        # Auto-append /api/v1 if no API path present (for --url flag which provides just host:port)
+        effective_url = effective_url.rstrip("/")
+        if url_override and "/api/" not in effective_url:
+            effective_url = f"{effective_url}/api/v1"
+
+        self.base_url = effective_url
         self.timeout = timeout
         self.max_retries = max_retries
         self.retry_delay = retry_delay
@@ -826,28 +836,24 @@ class KtrdrApiClient:
             return False
 
 
-# Singleton instance for CLI commands
-_api_client: Optional[KtrdrApiClient] = None
-
-
 def get_api_client(
     base_url: Optional[str] = None,
     timeout: float = 30.0,
 ) -> KtrdrApiClient:
     """
-    Get the singleton API client instance.
+    Get an API client instance configured with the effective URL.
+
+    The client respects the --url flag if set, otherwise uses config defaults.
+    A new client is created each call to ensure URL changes are picked up.
 
     Args:
-        base_url: Base URL of the KTRDR API server
+        base_url: Base URL of the KTRDR API server (overrides --url flag if set)
         timeout: Default timeout in seconds
 
     Returns:
         KtrdrApiClient instance
     """
-    global _api_client
-    if _api_client is None:
-        _api_client = KtrdrApiClient(base_url=base_url, timeout=timeout)
-    return _api_client
+    return KtrdrApiClient(base_url=base_url, timeout=timeout)
 
 
 async def check_api_connection(base_url: Optional[str] = None) -> bool:

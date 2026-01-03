@@ -17,6 +17,7 @@ from rich.console import Console
 from rich.table import Table
 
 from ktrdr.cli.api_client import check_api_connection, get_api_client
+from ktrdr.cli.commands import get_effective_api_url
 from ktrdr.cli.telemetry import trace_cli_command
 from ktrdr.config.validation import InputValidator
 from ktrdr.errors import DataError, ValidationError
@@ -203,7 +204,7 @@ async def _list_operations_async(
                 "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
             )
             error_console.print(
-                "Make sure the API server is running at http://localhost:8000"
+                f"Make sure the API server is running at {get_effective_api_url()}"
             )
             sys.exit(1)
 
@@ -392,7 +393,7 @@ async def _get_operation_status_async(operation_id: str, verbose: bool):
                 "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
             )
             error_console.print(
-                "Make sure the API server is running at http://localhost:8000"
+                f"Make sure the API server is running at {get_effective_api_url()}"
             )
             sys.exit(1)
 
@@ -579,7 +580,7 @@ async def _cancel_operation_async(
                 "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
             )
             error_console.print(
-                "Make sure the API server is running at http://localhost:8000"
+                f"Make sure the API server is running at {get_effective_api_url()}"
             )
             sys.exit(1)
 
@@ -695,7 +696,7 @@ async def _retry_operation_async(operation_id: str, verbose: bool):
                 "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
             )
             error_console.print(
-                "Make sure the API server is running at http://localhost:8000"
+                f"Make sure the API server is running at {get_effective_api_url()}"
             )
             sys.exit(1)
 
@@ -789,7 +790,7 @@ async def _resume_operation_async(operation_id: str, verbose: bool):
                 "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
             )
             error_console.print(
-                "Make sure the API server is running at http://localhost:8000"
+                f"Make sure the API server is running at {get_effective_api_url()}"
             )
             sys.exit(1)
 
