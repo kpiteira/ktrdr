@@ -6,6 +6,7 @@
 - [x] Task 1.2: Create core module
 - [x] Task 1.3: Create sync client
 - [x] Task 1.4: Create async client
+- [x] Task 1.5: Create operations module
 
 ## Emergent Patterns
 
@@ -83,6 +84,37 @@ while True:
 
 This pattern handles both HTTP-level retries (5xx) and connection-level retries uniformly.
 
+### Operations Module Pattern
+
+The operations module is a standalone function that takes the client as a parameter:
+
+```python
+from ktrdr.cli.client.operations import execute_operation, OperationAdapter
+
+# The function handles the poll loop
+result = await execute_operation(
+    client,      # AsyncCLIClient instance
+    adapter,     # OperationAdapter implementation
+    on_progress, # Optional callback (percentage, message)
+    poll_interval,
+)
+```
+
+`AsyncCLIClient.execute_operation()` delegates to this function.
+
+### OperationAdapter Protocol
+
+The adapter uses methods from `ktrdr.cli.operation_adapters`:
+
+```python
+class OperationAdapter(Protocol):
+    def get_start_endpoint(self) -> str: ...
+    def get_start_payload(self) -> dict: ...
+    def parse_start_response(self, response: dict) -> str: ...  # returns operation_id
+```
+
+Note: The actual adapters (`TrainingAdapter`, `BacktestAdapter`) also have `display_results()` which is used by the full executor, not by this low-level function.
+
 ### Test Organization
 
 Tests organized by class/function with `TestClassName` pattern:
@@ -93,6 +125,11 @@ Tests organized by class/function with `TestClassName` pattern:
 - `Test{Sync|Async}CLIClientErrorHandling`
 - `Test{Sync|Async}CLIClientHealthCheck`
 - `Test{Sync|Async}CLIClientConfiguration`
+- `TestExecuteOperationStartsAndPolls`
+- `TestExecuteOperationProgress`
+- `TestExecuteOperationCancellation`
+- `TestExecuteOperationFailure`
+- `TestExecuteOperationTerminalStates`
 
 ## Gotchas
 
@@ -136,18 +173,24 @@ The enhanced dict gets an `ib_diagnosis` key with structured data.
 - No retries (`max_retries=0`)
 - Calls `/health` endpoint
 
-### execute_operation() Placeholder
+### Cancellation via asyncio.CancelledError
 
-`AsyncCLIClient.execute_operation()` exists with correct signature but raises `NotImplementedError`. It will be implemented in Task 1.5.
+The operations module handles cancellation via `asyncio.CancelledError`:
+
+```python
+try:
+    while True:
+        # poll loop
+except asyncio.CancelledError:
+    await client.delete(status_endpoint)  # notify backend
+    return {"status": "cancelled", "operation_id": ...}
+```
+
+This means callers can cancel operations using standard asyncio task cancellation.
 
 ## Next Up
 
-Task 1.5: Create operations module (`ktrdr/cli/client/operations.py`) with:
+Task 1.6: Create package init (`ktrdr/cli/client/__init__.py`) with:
 
-- Port operation execution from `AsyncOperationExecutor`
-- Start operation via adapter
-- Poll loop with progress callbacks
-- Cancellation handling
-- Return final result
-
-Reference: `ktrdr/cli/operation_executor.py`
+- Export public API: `AsyncCLIClient`, `SyncCLIClient`, errors
+- Verify `from ktrdr.cli.client import SyncCLIClient` works

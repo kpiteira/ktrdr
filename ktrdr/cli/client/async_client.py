@@ -6,7 +6,7 @@ from async patterns, such as operation polling and connection reuse.
 """
 
 import asyncio
-from typing import Any, Callable, Optional, Protocol
+from typing import Any, Callable, Optional
 
 import httpx
 
@@ -18,34 +18,8 @@ from ktrdr.cli.client.core import (
     should_retry,
 )
 from ktrdr.cli.client.errors import ConnectionError, TimeoutError
-
-
-class OperationAdapter(Protocol):
-    """Protocol for operation adapters used by execute_operation.
-
-    This matches the existing adapter pattern used by TrainingAdapter
-    and BacktestAdapter.
-    """
-
-    def get_start_endpoint(self) -> str:
-        """Return endpoint to start the operation."""
-        ...
-
-    def get_start_payload(self) -> dict:
-        """Return payload for starting the operation."""
-        ...
-
-    def extract_operation_id(self, response: dict) -> str:
-        """Extract operation ID from start response."""
-        ...
-
-    def get_status_endpoint(self, operation_id: str) -> str:
-        """Return endpoint to check operation status."""
-        ...
-
-    def process_result(self, status: dict) -> dict:
-        """Process final result from operation status."""
-        ...
+from ktrdr.cli.client.operations import OperationAdapter
+from ktrdr.cli.client.operations import execute_operation as _execute_operation
 
 
 class AsyncCLIClient:
@@ -277,8 +251,7 @@ class AsyncCLIClient:
         """Execute a long-running operation with polling.
 
         This method starts an operation, polls for status, invokes progress
-        callbacks, and returns the final result. Actual implementation
-        is deferred to Task 1.5 (operations module).
+        callbacks, and returns the final result.
 
         Args:
             adapter: Operation adapter defining endpoints and payload
@@ -286,12 +259,16 @@ class AsyncCLIClient:
             poll_interval: Seconds between status polls
 
         Returns:
-            Final operation result from adapter.process_result()
+            Final operation result dict with status and any result data
 
-        Note:
-            This is a placeholder that will be implemented in Task 1.5.
-            Currently raises NotImplementedError.
+        Raises:
+            APIError: If the start request fails
+            ConnectionError: If cannot connect to server
+            TimeoutError: If requests time out
         """
-        raise NotImplementedError(
-            "execute_operation will be implemented in Task 1.5 (operations module)"
+        return await _execute_operation(
+            self,
+            adapter,
+            on_progress=on_progress,
+            poll_interval=poll_interval,
         )
