@@ -241,7 +241,9 @@ def display_ib_connection_required_message() -> None:
     error_console.print(
         "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
     )
-    error_console.print(f"Make sure the API server is running at {get_effective_api_url()}")
+    error_console.print(
+        f"Make sure the API server is running at {get_effective_api_url()}"
+    )
 
 
 def create_enhanced_exception_handler(verbose: bool = False, quiet: bool = False):
