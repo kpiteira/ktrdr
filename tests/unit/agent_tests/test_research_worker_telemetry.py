@@ -647,15 +647,18 @@ class TestSpanAttributes:
         mock_design_worker,
         mock_assessment_worker,
     ):
-        """Test that gate failure is recorded in span."""
-        from ktrdr.agents.workers.research_worker import (
-            AgentResearchWorker,
-            GateError,
-        )
+        """Test that gate failure is recorded in span.
+
+        Note: M2 changed behavior - gate failures now route to assessment
+        instead of raising GateError. This test verifies the span still
+        records gate.passed=False before transitioning to assessment.
+        """
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
 
         provider, exporter = tracer_provider
 
         call_count = [0]
+        assessment_called = [False]
 
         async def mock_get_operation(op_id):
             call_count[0] += 1
@@ -689,17 +692,33 @@ class TestSpanAttributes:
                     }
                     mock_op.status = OperationStatus.RUNNING
             else:
-                # Third call - get parent for metrics (before gate check raises)
+                # After gate check - return completed to end the cycle
                 mock_op.metadata.parameters = {
-                    "phase": "training",
-                    "training_op_id": "op_training_test",
-                    "phase_start_time": 1000.0,
+                    "phase": "assessing",
+                    "assessment_op_id": "op_assessment_test",
                 }
-                mock_op.status = OperationStatus.RUNNING
+                # End the cycle once assessment was called
+                if assessment_called[0]:
+                    mock_op.status = OperationStatus.COMPLETED
+                    mock_op.result_summary = {"verdict": "poor"}
+                else:
+                    mock_op.status = OperationStatus.RUNNING
 
             return mock_op
 
         mock_operations_service.get_operation.side_effect = mock_get_operation
+
+        # Track when assessment is called and complete the cycle
+        async def mock_assessment_run(*args, **kwargs):
+            assessment_called[0] = True
+            return {
+                "success": True,
+                "verdict": "poor",
+                "input_tokens": 100,
+                "output_tokens": 50,
+            }
+
+        mock_assessment_worker.run.side_effect = mock_assessment_run
 
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
@@ -708,8 +727,11 @@ class TestSpanAttributes:
         )
         worker.POLL_INTERVAL = 0
 
-        with pytest.raises(GateError):
-            await worker.run("op_test")
+        # M2: Gate failure routes to assessment, then completes
+        result = await worker.run("op_test")
+
+        # Verify cycle completed through assessment
+        assert result is not None
 
         spans = exporter.get_finished_spans()
         training_spans = [s for s in spans if s.name == "agent.phase.training"]

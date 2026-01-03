@@ -57,6 +57,58 @@ class TestExperimentRecord:
 
         assert record.source == "v1.5_bootstrap"
 
+    def test_experiment_record_status_default(self):
+        """Test ExperimentRecord status defaults to 'completed'."""
+        from ktrdr.agents.memory import ExperimentRecord
+
+        record = ExperimentRecord(
+            id="exp_test",
+            timestamp="2025-12-28T00:00:00Z",
+            strategy_name="test",
+            context={},
+            results={},
+            assessment={},
+        )
+
+        assert record.status == "completed"
+        assert record.gate_rejection_reason is None
+
+    def test_experiment_record_gate_rejected_training(self):
+        """Test ExperimentRecord with gate_rejected_training status."""
+        from ktrdr.agents.memory import ExperimentRecord
+
+        record = ExperimentRecord(
+            id="exp_rejected",
+            timestamp="2025-12-28T00:00:00Z",
+            strategy_name="test",
+            context={},
+            results={"test_accuracy": 0.05},
+            assessment={"verdict": "weak_signal"},
+            status="gate_rejected_training",
+            gate_rejection_reason="accuracy_too_low (5% < 10%)",
+        )
+
+        assert record.status == "gate_rejected_training"
+        assert record.gate_rejection_reason == "accuracy_too_low (5% < 10%)"
+
+    def test_experiment_record_gate_rejected_backtest(self):
+        """Test ExperimentRecord with gate_rejected_backtest status."""
+        from ktrdr.agents.memory import ExperimentRecord
+
+        record = ExperimentRecord(
+            id="exp_rejected",
+            timestamp="2025-12-28T00:00:00Z",
+            strategy_name="test",
+            context={},
+            results={"test_accuracy": 0.65, "sharpe_ratio": -0.5},
+            assessment={"verdict": "weak_signal"},
+            status="gate_rejected_backtest",
+            gate_rejection_reason="sharpe_ratio_too_low (-0.5 < 0.0)",
+        )
+
+        assert record.status == "gate_rejected_backtest"
+        assert record.gate_rejection_reason == "sharpe_ratio_too_low (-0.5 < 0.0)"
+
 
 class TestHypothesis:
     """Tests for Hypothesis dataclass."""
@@ -226,6 +278,33 @@ class TestLoadExperiments:
         result = load_experiments()
         assert len(result) == 15
 
+    def test_load_experiments_backward_compat_missing_status(self, temp_memory_dir):
+        """Test old experiments without status field default to 'completed'."""
+        from ktrdr.agents.memory import load_experiments
+
+        # Create an old-format experiment without status fields
+        old_file = temp_memory_dir / "exp_old_format.yaml"
+        old_file.write_text(
+            yaml.dump(
+                {
+                    "id": "exp_old_format",
+                    "timestamp": "2025-12-27T00:00:00Z",
+                    "strategy_name": "old_strategy",
+                    "context": {},
+                    "results": {"test_accuracy": 0.65},
+                    "assessment": {"verdict": "strong_signal"},
+                    "source": "agent",
+                    # Note: No 'status' or 'gate_rejection_reason' fields
+                }
+            )
+        )
+
+        result = load_experiments(n=1)
+        assert len(result) == 1
+        # Should default to "completed" for backward compatibility
+        assert result[0].get("status", "completed") == "completed"
+        assert result[0].get("gate_rejection_reason") is None
+
 
 class TestSaveExperiment:
     """Tests for save_experiment function."""
@@ -295,6 +374,47 @@ class TestSaveExperiment:
 
         assert path.exists()
         assert nested_dir.exists()
+
+    def test_save_experiment_with_status_field(self, temp_memory_dir):
+        """Test save_experiment serializes status field correctly."""
+        from ktrdr.agents.memory import ExperimentRecord, save_experiment
+
+        record = ExperimentRecord(
+            id="exp_gate_rejected",
+            timestamp="2025-12-28T14:30:00Z",
+            strategy_name="test_strategy",
+            context={"indicators": ["RSI"]},
+            results={"test_accuracy": 0.05},
+            assessment={"verdict": "weak_signal"},
+            status="gate_rejected_training",
+            gate_rejection_reason="accuracy_too_low (5% < 10%)",
+        )
+
+        path = save_experiment(record)
+
+        content = yaml.safe_load(path.read_text())
+        assert content["status"] == "gate_rejected_training"
+        assert content["gate_rejection_reason"] == "accuracy_too_low (5% < 10%)"
+
+    def test_save_experiment_with_none_gate_rejection_reason(self, temp_memory_dir):
+        """Test save_experiment serializes None gate_rejection_reason correctly."""
+        from ktrdr.agents.memory import ExperimentRecord, save_experiment
+
+        record = ExperimentRecord(
+            id="exp_completed",
+            timestamp="2025-12-28T14:30:00Z",
+            strategy_name="test_strategy",
+            context={},
+            results={"test_accuracy": 0.65},
+            assessment={"verdict": "strong_signal"},
+            # Default status and gate_rejection_reason
+        )
+
+        path = save_experiment(record)
+
+        content = yaml.safe_load(path.read_text())
+        assert content["status"] == "completed"
+        assert content["gate_rejection_reason"] is None
 
 
 class TestGenerateExperimentId:
