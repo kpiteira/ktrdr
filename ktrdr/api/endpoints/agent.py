@@ -30,10 +30,13 @@ async def trigger_agent(
 ):
     """Start a new research cycle.
 
-    Optionally specify model via request body:
+    Optionally specify model and brief via request body:
     - {"model": "haiku"} - Use Haiku for cheap testing
     - {"model": "opus"} - Use Opus for production quality
     - {} or no body - Use AGENT_MODEL env var or default (opus)
+
+    Use brief to guide the agent's strategy design:
+    - {"brief": "Design a simple RSI strategy for EURUSD 1h."}
 
     Use bypass_gates to skip quality gates (for testing):
     - {"bypass_gates": true} - Skip training and backtest gates
@@ -42,7 +45,9 @@ async def trigger_agent(
     """
     try:
         result = await service.trigger(
-            model=request.model, bypass_gates=request.bypass_gates
+            model=request.model,
+            brief=request.brief,
+            bypass_gates=request.bypass_gates,
         )
 
         if result["triggered"]:

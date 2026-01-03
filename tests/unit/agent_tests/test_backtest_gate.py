@@ -22,9 +22,9 @@ class TestBacktestGateConfig:
     """Tests for BacktestGateConfig."""
 
     def test_default_config(self):
-        """Test default configuration values from design doc."""
+        """Test default configuration values (Baby mode v2.5)."""
         config = BacktestGateConfig()
-        assert config.min_win_rate == 0.45
+        assert config.min_win_rate == 0.10  # Baby mode: lax for exploration
         assert config.max_drawdown == 0.4
         assert config.min_sharpe == -0.5
 
@@ -44,10 +44,10 @@ class TestBacktestGateConfig:
             assert config.min_sharpe == 0.0
 
     def test_config_from_env_defaults(self):
-        """Test that missing env vars use defaults."""
+        """Test that missing env vars use defaults (Baby mode v2.5)."""
         with patch.dict("os.environ", {}, clear=True):
             config = BacktestGateConfig.from_env()
-            assert config.min_win_rate == 0.45
+            assert config.min_win_rate == 0.10  # Baby mode
             assert config.max_drawdown == 0.4
             assert config.min_sharpe == -0.5
 
@@ -101,9 +101,9 @@ class TestCheckBacktestGate:
     # === Win Rate Failure Tests ===
 
     def test_win_rate_below_threshold(self, default_config):
-        """Test that low win rate fails the gate."""
+        """Test that low win rate fails the gate (Baby mode: 10%)."""
         metrics = {
-            "win_rate": 0.40,  # below 0.45 threshold
+            "win_rate": 0.05,  # below 0.10 Baby threshold
             "max_drawdown": 0.25,
             "sharpe_ratio": 1.0,
         }
@@ -112,9 +112,9 @@ class TestCheckBacktestGate:
         assert "win_rate_too_low" in reason
 
     def test_win_rate_just_below_threshold(self, default_config):
-        """Test edge case: win rate just below threshold fails."""
+        """Test edge case: win rate just below Baby threshold fails."""
         metrics = {
-            "win_rate": 0.449,  # just below 0.45
+            "win_rate": 0.099,  # just below 0.10 Baby threshold
             "max_drawdown": 0.25,
             "sharpe_ratio": 1.0,
         }
@@ -186,9 +186,9 @@ class TestCheckBacktestGate:
     def test_multiple_failures_first_wins(self, default_config):
         """Test that first failure encountered is reported."""
         metrics = {
-            "win_rate": 0.30,  # fails first
-            "max_drawdown": 0.60,  # also fails
-            "sharpe_ratio": -1.0,  # also fails
+            "win_rate": 0.05,  # fails Baby threshold (10%)
+            "max_drawdown": 0.60,  # also fails (> 40%)
+            "sharpe_ratio": -1.0,  # also fails (< -0.5)
         }
         passed, reason = check_backtest_gate(metrics, default_config)
         assert passed is False

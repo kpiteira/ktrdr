@@ -132,6 +132,7 @@ class PromptContext:
         strategy_config: Current strategy configuration.
         experiment_history: Past experiments from memory for contextual reasoning.
         open_hypotheses: Untested hypotheses from memory for exploration guidance.
+        brief: Natural language guidance for strategy design (v2.5 M3).
     """
 
     trigger_reason: TriggerReason
@@ -147,6 +148,9 @@ class PromptContext:
     # Memory context (v2.0)
     experiment_history: list[dict[str, Any]] | None = None
     open_hypotheses: list[dict[str, Any]] | None = None
+
+    # Research brief (v2.5 M3)
+    brief: str | None = None
 
 
 # System prompt template - defines the agent's role and capabilities
@@ -475,7 +479,21 @@ Current Phase: {context.phase}"""
 
     def _format_new_cycle_context(self, context: PromptContext) -> str:
         """Format context for starting a new design cycle."""
-        sections = ["## Available Resources"]
+        sections = []
+
+        # Research Brief (v2.5 M3) - shown first if provided
+        if context.brief:
+            sections.append(
+                f"""## Research Brief
+
+{context.brief}
+
+**Follow this brief carefully when designing your strategy.** The brief provides specific guidance for this research cycle.
+
+---"""
+            )
+
+        sections.append("## Available Resources")
 
         # Available indicators
         if context.available_indicators:
@@ -787,6 +805,7 @@ def get_strategy_designer_prompt(
     strategy_config: dict[str, Any] | None = None,
     experiment_history: list[dict[str, Any]] | None = None,
     open_hypotheses: list[dict[str, Any]] | None = None,
+    brief: str | None = None,
 ) -> dict[str, str]:
     """Convenience function to build the strategy designer prompt.
 
@@ -805,6 +824,7 @@ def get_strategy_designer_prompt(
         strategy_config: Current strategy config.
         experiment_history: Past experiments from memory for contextual reasoning.
         open_hypotheses: Untested hypotheses from memory for exploration guidance.
+        brief: Natural language guidance for strategy design (v2.5 M3).
 
     Returns:
         Dict with 'system' and 'user' keys containing the prompts.
@@ -825,6 +845,7 @@ def get_strategy_designer_prompt(
         strategy_config=strategy_config,
         experiment_history=experiment_history,
         open_hypotheses=open_hypotheses,
+        brief=brief if brief else None,  # Treat empty string as None
     )
 
     builder = StrategyDesignerPromptBuilder()

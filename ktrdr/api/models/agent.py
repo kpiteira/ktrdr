@@ -20,6 +20,11 @@ class AgentTriggerRequest(BaseModel):
     """Model to use: 'opus', 'sonnet', 'haiku', or full model ID.
     If None, uses AGENT_MODEL env var or defaults to opus."""
 
+    brief: Optional[str] = None
+    """Natural language guidance for the strategy designer.
+    Injected into the agent's prompt to guide design decisions.
+    Example: 'Design a simple RSI strategy for EURUSD 1h only.'"""
+
     bypass_gates: bool = False
     """If True, skip quality gates between phases (for testing)."""
 

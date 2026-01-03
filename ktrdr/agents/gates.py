@@ -18,33 +18,38 @@ from typing import Any
 class TrainingGateConfig:
     """Configuration for training quality gate.
 
+    Baby Stage Thresholds (v2.5):
+    These thresholds are intentionally lax for exploration. The goal is to
+    gather data and learn, not optimize. Gates should only catch obviously
+    broken training (< 10% accuracy, > 50% loss regression).
+
     Attributes:
-        min_accuracy: Minimum accuracy threshold (default: 0.45 = 45%)
+        min_accuracy: Minimum accuracy threshold (default: 0.10 = 10% Baby mode)
         max_loss: Maximum final loss threshold (default: 0.8)
-        min_loss_decrease: Minimum loss decrease ratio (default: 0.2 = 20%)
+        min_loss_decrease: Minimum loss decrease ratio (default: -0.5, allows regression)
     """
 
-    min_accuracy: float = 0.45
+    min_accuracy: float = 0.10  # Baby: only catch 0-10% (completely broken)
     max_loss: float = 0.8
-    min_loss_decrease: float = 0.2
+    min_loss_decrease: float = -0.5  # Baby: allow regression while exploring
 
     @classmethod
     def from_env(cls) -> "TrainingGateConfig":
         """Load configuration from environment variables.
 
         Environment variables:
-            TRAINING_GATE_MIN_ACCURACY: Minimum accuracy (default: 0.45)
+            TRAINING_GATE_MIN_ACCURACY: Minimum accuracy (default: 0.10)
             TRAINING_GATE_MAX_LOSS: Maximum final loss (default: 0.8)
-            TRAINING_GATE_MIN_LOSS_DECREASE: Minimum loss decrease (default: 0.2)
+            TRAINING_GATE_MIN_LOSS_DECREASE: Minimum loss decrease (default: -0.5)
 
         Returns:
             TrainingGateConfig instance with values from environment.
         """
         return cls(
-            min_accuracy=float(os.getenv("TRAINING_GATE_MIN_ACCURACY", "0.45")),
+            min_accuracy=float(os.getenv("TRAINING_GATE_MIN_ACCURACY", "0.10")),
             max_loss=float(os.getenv("TRAINING_GATE_MAX_LOSS", "0.8")),
             min_loss_decrease=float(
-                os.getenv("TRAINING_GATE_MIN_LOSS_DECREASE", "0.2")
+                os.getenv("TRAINING_GATE_MIN_LOSS_DECREASE", "-0.5")
             ),
         )
 
@@ -127,13 +132,16 @@ def check_training_gate(
 class BacktestGateConfig:
     """Configuration for backtest quality gate.
 
+    Baby Stage Thresholds (v2.5):
+    Lax thresholds for exploration. Only catch catastrophic backtest failures.
+
     Attributes:
-        min_win_rate: Minimum win rate threshold (default: 0.45 = 45%)
+        min_win_rate: Minimum win rate threshold (default: 0.10 = 10% Baby mode)
         max_drawdown: Maximum drawdown threshold (default: 0.4 = 40%)
         min_sharpe: Minimum Sharpe ratio threshold (default: -0.5)
     """
 
-    min_win_rate: float = 0.45
+    min_win_rate: float = 0.10  # Baby: only catch catastrophic backtest
     max_drawdown: float = 0.4
     min_sharpe: float = -0.5
 
@@ -142,7 +150,7 @@ class BacktestGateConfig:
         """Load configuration from environment variables.
 
         Environment variables:
-            BACKTEST_GATE_MIN_WIN_RATE: Minimum win rate (default: 0.45)
+            BACKTEST_GATE_MIN_WIN_RATE: Minimum win rate (default: 0.10)
             BACKTEST_GATE_MAX_DRAWDOWN: Maximum drawdown (default: 0.4)
             BACKTEST_GATE_MIN_SHARPE: Minimum Sharpe ratio (default: -0.5)
 
@@ -150,7 +158,7 @@ class BacktestGateConfig:
             BacktestGateConfig instance with values from environment.
         """
         return cls(
-            min_win_rate=float(os.getenv("BACKTEST_GATE_MIN_WIN_RATE", "0.45")),
+            min_win_rate=float(os.getenv("BACKTEST_GATE_MIN_WIN_RATE", "0.10")),
             max_drawdown=float(os.getenv("BACKTEST_GATE_MAX_DRAWDOWN", "0.4")),
             min_sharpe=float(os.getenv("BACKTEST_GATE_MIN_SHARPE", "-0.5")),
         )

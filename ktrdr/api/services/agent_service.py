@@ -169,13 +169,18 @@ class AgentService:
 
     @trace_service_method("agent.trigger")
     async def trigger(
-        self, model: str | None = None, bypass_gates: bool = False
+        self,
+        model: str | None = None,
+        brief: str | None = None,
+        bypass_gates: bool = False,
     ) -> dict[str, Any]:
         """Start a new research cycle.
 
         Args:
             model: Model to use ('opus', 'sonnet', 'haiku' or full ID).
                    If None, uses AGENT_MODEL env var or default (opus).
+            brief: Natural language guidance for the strategy designer.
+                   Injected into the agent's prompt to guide design decisions.
             bypass_gates: If True, skip quality gates between phases (for testing).
 
         Returns:
@@ -208,9 +213,11 @@ class AgentService:
                 "message": f"Active cycle exists: {active.operation_id}",
             }
 
-        # Create operation with model and bypass_gates in metadata
+        # Create operation with model, brief, and bypass_gates in metadata
         # Agent operations are backend-local (run in backend process, not workers)
         params: dict[str, Any] = {"phase": "idle", "model": resolved_model}
+        if brief:
+            params["brief"] = brief
         if bypass_gates:
             params["bypass_gates"] = True
         op = await self.ops.create_operation(
