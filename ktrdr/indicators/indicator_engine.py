@@ -214,6 +214,41 @@ class IndicatorEngine:
 
         return data
 
+    def _prefix_indicator_columns(
+        self, data: pd.DataFrame, timeframe: str
+    ) -> pd.DataFrame:
+        """
+        Prefix indicator columns with timeframe to prevent collisions.
+
+        OHLCV columns (open, high, low, close, volume) are NOT prefixed.
+        All other columns (indicator outputs) are prefixed with '{timeframe}_'.
+
+        This enables combining data from multiple timeframes without column
+        name collisions (e.g., both 5m and 1h having 'rsi_14' would collide).
+
+        Args:
+            data: DataFrame with OHLCV and indicator columns
+            timeframe: Timeframe string to use as prefix (e.g., '1h', '5m')
+
+        Returns:
+            DataFrame with indicator columns prefixed
+        """
+        ohlcv_columns = {"open", "high", "low", "close", "volume"}
+
+        # Build rename mapping: only rename non-OHLCV columns
+        rename_map = {}
+        for col in data.columns:
+            if col.lower() not in ohlcv_columns:
+                rename_map[col] = f"{timeframe}_{col}"
+
+        if rename_map:
+            data = data.rename(columns=rename_map)
+            logger.debug(
+                f"Prefixed {len(rename_map)} indicator columns with '{timeframe}_'"
+            )
+
+        return data
+
     def apply(self, data: pd.DataFrame) -> pd.DataFrame:
         """
         Apply all configured indicators to the input data.
@@ -329,6 +364,7 @@ class IndicatorEngine:
         self,
         multi_timeframe_ohlcv: dict[str, pd.DataFrame],
         indicator_configs: Optional[list[dict]] = None,
+        prefix_columns: bool = True,
     ) -> dict[str, pd.DataFrame]:
         """
         Apply indicators across multiple timeframes using the same configuration.
@@ -337,15 +373,23 @@ class IndicatorEngine:
         applying the same set of indicators to each timeframe's OHLCV data.
         It leverages the existing apply() method for consistency and reuse.
 
+        By default, indicator columns are prefixed with the timeframe name to prevent
+        collisions when the same indicator is computed on multiple timeframes
+        (e.g., 'rsi_14' becomes '1h_rsi_14' and '5m_rsi_14').
+
         Args:
             multi_timeframe_ohlcv: Dictionary mapping timeframes to OHLCV DataFrames
                                  Format: {timeframe: ohlcv_dataframe}
             indicator_configs: Optional list of indicator configurations. If None,
                              uses the indicators configured in this engine instance.
+            prefix_columns: If True (default), prefix indicator column names with
+                          timeframe to prevent collisions. OHLCV columns are not
+                          prefixed. Set to False for backward compatibility.
 
         Returns:
             Dictionary mapping timeframes to DataFrames with computed indicators
             Format: {timeframe: indicators_dataframe}
+            With prefix_columns=True, indicator columns will be named like '1h_rsi_14'.
 
         Raises:
             ConfigurationError: If no timeframe data or indicator configs provided
@@ -356,7 +400,7 @@ class IndicatorEngine:
             >>> multi_data = {'1h': ohlcv_1h, '4h': ohlcv_4h}
             >>> configs = [{'name': 'rsi', 'period': 14}]
             >>> results = engine.apply_multi_timeframe(multi_data, configs)
-            >>> # results = {'1h': indicators_1h, '4h': indicators_4h}
+            >>> # results = {'1h': df with '1h_rsi_14', '4h': df with '4h_rsi_14'}
         """
         # Validate inputs
         if not multi_timeframe_ohlcv:
@@ -411,6 +455,12 @@ class IndicatorEngine:
 
                 # Apply indicators using existing apply() method
                 timeframe_result = processing_engine.apply(ohlcv_data)
+
+                # Prefix indicator columns with timeframe if requested (default)
+                if prefix_columns:
+                    timeframe_result = self._prefix_indicator_columns(
+                        timeframe_result, timeframe
+                    )
 
                 results[timeframe] = timeframe_result
 

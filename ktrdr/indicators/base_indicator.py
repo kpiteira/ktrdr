@@ -54,6 +54,9 @@ class BaseIndicator(ABC):
         self.params = self._validate_params(params)
         self.display_as_overlay = display_as_overlay
         self._feature_id: Optional[str] = None  # Set by IndicatorFactory from config
+        self._timeframe: Optional[str] = (
+            None  # Set by IndicatorFactory for multi-TF strategies
+        )
 
         logger.info(f"Initialized {self.name} indicator with parameters: {self.params}")
 
@@ -195,6 +198,10 @@ class BaseIndicator(ABC):
         """
         Generate a standardized column name for the indicator output.
 
+        If this indicator has a timeframe config (for multi-timeframe strategies),
+        the timeframe is prefixed to prevent column name collisions when the same
+        indicator (e.g., RSI) is used on multiple timeframes.
+
         Args:
             suffix (Optional[str]): Optional suffix to append to the name
 
@@ -224,7 +231,16 @@ class BaseIndicator(ABC):
         # Add suffix if provided
         suffix_str = f"_{suffix}" if suffix else ""
 
-        return f"{base_name}{param_str}{suffix_str}"
+        # Construct base column name
+        column_name = f"{base_name}{param_str}{suffix_str}"
+
+        # CRITICAL FIX: Prefix with timeframe if set (multi-timeframe strategies)
+        # This prevents collisions when same indicator is used on multiple timeframes
+        # e.g., "rsi_14" becomes "5m_rsi_14" and "1h_rsi_14"
+        if self._timeframe:
+            column_name = f"{self._timeframe}_{column_name}"
+
+        return column_name
 
     def get_feature_id(self) -> str:
         """

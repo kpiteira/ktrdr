@@ -580,6 +580,17 @@ class WorkerAPIBase:
                         f"✅ Re-registered after backend restart (attempt {attempt})"
                     )
                     self._last_health_check_received = datetime.utcnow()
+
+                    # CRITICAL FIX: Clear shutdown event after successful re-registration
+                    # When backend restarts, workers may receive SIGTERM but survive.
+                    # The _shutdown_event gets set but never cleared, causing all
+                    # subsequent operations to immediately cancel.
+                    if self._shutdown_event.is_set():
+                        logger.info(
+                            "Clearing shutdown event after successful re-registration"
+                        )
+                        self._shutdown_event.clear()
+
                     return
 
             except Exception as e:
