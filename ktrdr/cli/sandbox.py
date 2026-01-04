@@ -631,6 +631,7 @@ def status() -> None:
                         try:
                             containers.append(json.loads(line))
                         except json.JSONDecodeError:
+                            # Intentionally ignore malformed JSON lines from docker compose output
                             pass
 
         running = sum(1 for c in containers if c.get("State") == "running")

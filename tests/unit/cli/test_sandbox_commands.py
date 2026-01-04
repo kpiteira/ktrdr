@@ -285,7 +285,8 @@ class TestUpCommand:
         result = runner.invoke(cli_app, ["sandbox", "up", "--help"])
 
         assert result.exit_code == 0
-        assert "--timeout" in result.output
+        # Strip ANSI codes for consistent assertions across local/CI
+        assert "--timeout" in strip_ansi(result.output)
 
     def test_up_runs_gate_by_default(self, runner, tmp_path):
         """Verify gate runs when up is called without --no-wait."""
