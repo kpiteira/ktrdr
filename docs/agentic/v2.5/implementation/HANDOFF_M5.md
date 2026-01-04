@@ -127,6 +127,36 @@ DEGENERATE INPUTS: Feature variance 0.00e+00
   - Feature ID aliases prefixed
   - `prefix_columns=False` backward compatibility
 
+### Additional Fix: Single-Timeframe apply() Path
+
+The first fix only worked for `apply_multi_timeframe()`. The backtest path uses single-timeframe `apply()` via `FeatureCache`, which still had collisions.
+
+**Root cause:** Strategy configs can define indicators with a `timeframe` field:
+```yaml
+indicators:
+- name: RSI
+  feature_id: rsi_5m
+  timeframe: 5m  # ← This was ignored!
+- name: RSI
+  feature_id: rsi_1h
+  timeframe: 1h
+```
+
+When both were processed by `apply()`, both produced `rsi_14` → collision.
+
+**Additional fix:**
+
+1. **`indicator_factory.py`** — Store `timeframe` from config on indicator (`indicator._timeframe = config.timeframe`)
+2. **`base_indicator.py`** — `get_column_name()` now prefixes with timeframe if `_timeframe` is set
+
+Result: `5m_rsi_14` and `1h_rsi_14` — no collision.
+
+### Worker Graceful Shutdown Bug Fix
+
+**Root cause:** When backend restarts (e.g., file watcher reload), workers receive SIGTERM and set `_shutdown_event`. After successful re-registration, the event was never cleared, causing all subsequent operations to immediately cancel.
+
+**Fix:** `workers/base.py` — Clear `_shutdown_event` after successful re-registration in `_poll_for_backend_restart()`
+
 ## Tasks Status
 
 - **Task 5.1** ✅ Complete — Added logging, confirmed multi-TF alignment works via unit tests AND E2E
