@@ -104,9 +104,9 @@ class TestMultiTimeframeAlignment:
 
         # All names should have timeframe prefix
         for name in names:
-            assert name.startswith("5m_") or name.startswith("1h_"), (
-                f"Feature name '{name}' missing timeframe prefix"
-            )
+            assert name.startswith("5m_") or name.startswith(
+                "1h_"
+            ), f"Feature name '{name}' missing timeframe prefix"
 
         # Should have no duplicates
         assert len(names) == len(set(names)), "Feature names should be unique"
@@ -170,15 +170,15 @@ class TestMultiTimeframeAlignment:
 
         # First 12 5m bars (0:00-0:55) should have 1h value 0.1
         for i in range(12):
-            assert features[i, rsi_low_1h_idx].item() == pytest.approx(0.1, abs=0.01), (
-                f"Row {i} should have forward-filled value 0.1"
-            )
+            assert features[i, rsi_low_1h_idx].item() == pytest.approx(
+                0.1, abs=0.01
+            ), f"Row {i} should have forward-filled value 0.1"
 
         # Next 12 5m bars (1:00-1:55) should have 1h value 0.9
         for i in range(12, 24):
-            assert features[i, rsi_low_1h_idx].item() == pytest.approx(0.9, abs=0.01), (
-                f"Row {i} should have forward-filled value 0.9"
-            )
+            assert features[i, rsi_low_1h_idx].item() == pytest.approx(
+                0.9, abs=0.01
+            ), f"Row {i} should have forward-filled value 0.9"
 
     def test_5m_at_1h_boundary_uses_correct_1h_bar(
         self,
