@@ -133,6 +133,46 @@ python script.py
 
 ---
 
+## Sandbox Awareness (Check This First!)
+
+**At the start of each session, check if you're in a sandbox:**
+
+```bash
+# Quick check - if .env.sandbox exists, you're in a sandbox
+ls .env.sandbox 2>/dev/null && echo "SANDBOX" || echo "MAIN ENV"
+```
+
+### What is a Sandbox?
+
+Sandboxes are isolated KTRDR development environments that run in parallel. Each has its own Docker containers on different ports. The directory name tells you which one: `ktrdr--<name>` (e.g., `ktrdr--indicator-work`).
+
+### Port Differences
+
+| Environment      | API  | Grafana | Jaeger | DB   |
+| ---------------- | ---- | ------- | ------ | ---- |
+| Main (`ktrdr2`)  | 8000 | 3000    | 16686  | 5432 |
+| Sandbox slot 1   | 8001 | 3001    | 16687  | 5433 |
+| Sandbox slot 2   | 8002 | 3002    | 16688  | 5434 |
+
+### Sandbox Commands
+
+```bash
+uv run ktrdr sandbox status    # Current instance details
+uv run ktrdr sandbox list      # All instances
+uv run ktrdr sandbox up        # Start this sandbox
+uv run ktrdr sandbox down      # Stop this sandbox
+```
+
+### Why This Matters
+
+- **curl/API calls** must use the correct port (read from `.env.sandbox`)
+- **Docker commands** target project-specific containers (e.g., `ktrdr--indicator-work-backend-1`)
+- **The CLI auto-detects** the correct backend from `.env.sandbox`
+
+If you're in a sandbox, run `uv run ktrdr sandbox status` to see the full configuration.
+
+---
+
 ## Essential Commands
 
 ```bash
