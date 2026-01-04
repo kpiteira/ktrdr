@@ -72,10 +72,10 @@ def get_effective_api_url() -> str:
     return _cli_state["api_url"] or get_api_base_url()
 
 
-# Create a Typer application with help text
+# Create a Typer application
+# The help text is provided by the main() callback docstring
 cli_app = typer.Typer(
     name="ktrdr",
-    help="KTRDR - Trading analysis and automation tool",
     add_completion=False,
 )
 
@@ -103,12 +103,19 @@ def main(
         help="API port on localhost. Overrides auto-detection. (e.g., -p 8001)",
     ),
 ):
-    """KTRDR - Trading analysis and automation tool."""
-    # Use resolve_api_url for priority-based resolution:
-    # 1. --url flag (explicit full URL)
-    # 2. --port flag (localhost with specified port)
-    # 3. .env.sandbox file (auto-detect from current directory tree)
-    # 4. Default: http://localhost:8000
+    """
+    KTRDR - Trading analysis and automation tool.
+
+    Target API Resolution (highest to lowest priority):
+
+      1. --url flag: Explicit full URL
+
+      2. --port flag: Localhost with specified port
+
+      3. .env.sandbox: Auto-detected in current directory tree
+
+      4. Default: http://localhost:8000
+    """
     resolved_url = resolve_api_url(
         explicit_url=url,
         explicit_port=port,

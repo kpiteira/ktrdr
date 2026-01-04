@@ -254,6 +254,18 @@ class TestMainCliCallback:
         assert "--url" in result.stdout or "-u" in result.stdout
         assert "Overrides auto-detection" in result.stdout
 
+    def test_help_shows_api_resolution_priority(self, runner: "CliRunner") -> None:
+        """Help output explains API URL resolution priority order."""
+        result = runner.invoke(cli_app, ["--help"])
+
+        assert result.exit_code == 0
+        # Check that priority order is documented in docstring
+        assert "Target API Resolution" in result.stdout
+        assert "--url flag" in result.stdout
+        assert "--port flag" in result.stdout
+        assert ".env.sandbox" in result.stdout
+        assert "Default" in result.stdout
+
     def test_existing_url_flag_accepted(self, runner: "CliRunner") -> None:
         """Existing --url flag behavior is preserved."""
         result = runner.invoke(cli_app, ["--url", "backend.example.com", "--help"])
