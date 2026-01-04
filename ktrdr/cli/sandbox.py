@@ -110,6 +110,30 @@ def branch_exists(branch: str) -> bool:
     return bool(result.stdout.strip())
 
 
+def is_ktrdr_repo(path: Path) -> bool:
+    """Check if path is a KTRDR repository by checking git remote.
+
+    Args:
+        path: The path to check.
+
+    Returns:
+        True if the git remote contains 'ktrdr', False otherwise.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            capture_output=True,
+            text=True,
+            cwd=path,
+        )
+        if result.returncode != 0:
+            return False
+        # Check if remote contains "ktrdr" (case-insensitive)
+        return "ktrdr" in result.stdout.lower()
+    except Exception:
+        return False
+
+
 @sandbox_app.command()
 def create(
     name: str = typer.Argument(
@@ -194,6 +218,107 @@ def create(
     console.print(f"  API: http://localhost:{ports.backend}")
     console.print(f"  Grafana: http://localhost:{ports.grafana}")
     console.print(f"\nRun 'cd {worktree_path} && ktrdr sandbox up' to start")
+
+
+@sandbox_app.command()
+def init(
+    slot: int = typer.Option(
+        None, "--slot", "-s", help="Force specific port slot (1-10)"
+    ),
+    name: str = typer.Option(None, "--name", "-n", help="Override instance name"),
+) -> None:
+    """Initialize current directory as a sandbox instance.
+
+    This command initializes an existing KTRDR repository (clone or worktree)
+    as a sandbox instance. It validates the directory is a KTRDR repo,
+    allocates a port slot, and creates the .env.sandbox configuration file.
+
+    Use this when you have an existing clone or worktree that you want to
+    run as an isolated sandbox instance.
+    """
+    cwd = Path.cwd()
+
+    # Check if already initialized
+    if (cwd / ".env.sandbox").exists():
+        error_console.print("[red]Error:[/red] Already initialized as sandbox")
+        error_console.print(f"  .env.sandbox exists at {cwd / '.env.sandbox'}")
+        raise typer.Exit(1)
+
+    # Validate this is a KTRDR repo
+    if not is_ktrdr_repo(cwd):
+        error_console.print("[red]Error:[/red] Not a KTRDR repository")
+        error_console.print("  Git remote should contain 'ktrdr'")
+        raise typer.Exit(2)
+
+    # Derive instance ID
+    instance_id = name if name else derive_instance_id(cwd)
+
+    # Check for ID collision
+    if get_instance(instance_id):
+        error_console.print(
+            f"[red]Error:[/red] Instance ID '{instance_id}' already exists"
+        )
+        error_console.print("  Use --name to specify a different name")
+        raise typer.Exit(1)
+
+    # Allocate slot
+    if slot is not None:
+        if slot < 1 or slot > 10:
+            error_console.print("[red]Error:[/red] Slot must be 1-10")
+            raise typer.Exit(1)
+        if slot in get_allocated_slots():
+            error_console.print(f"[red]Error:[/red] Slot {slot} already in use")
+            raise typer.Exit(1)
+    else:
+        try:
+            slot = allocate_next_slot()
+        except RuntimeError as e:
+            error_console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1) from e
+
+    # Check port conflicts
+    conflicts = check_ports_available(slot)
+    if conflicts:
+        error_console.print(f"[red]Error:[/red] Ports in use: {conflicts}")
+        raise typer.Exit(3)
+
+    # Generate .env.sandbox
+    generate_env_file(cwd, instance_id, slot)
+
+    # Detect if this is a worktree
+    is_worktree = (cwd / ".git").is_file()  # Worktrees have .git as file, not dir
+    parent_repo = None
+    if is_worktree:
+        # Read parent from .git file
+        with open(cwd / ".git", encoding="utf-8") as f:
+            content = f.read()
+            # Format: gitdir: /path/to/.git/worktrees/name
+            if "gitdir:" in content:
+                gitdir_path = Path(content.split("gitdir:")[1].strip())
+                # Walk up to find actual repo, but only accept if valid
+                candidate_parent = gitdir_path.parent.parent.parent
+                if candidate_parent.exists() and (candidate_parent / ".git").exists():
+                    parent_repo = str(candidate_parent.resolve())
+
+    # Register instance
+    add_instance(
+        InstanceInfo(
+            instance_id=instance_id,
+            slot=slot,
+            path=str(cwd),
+            created_at=datetime.now(timezone.utc).isoformat(),
+            is_worktree=is_worktree,
+            parent_repo=parent_repo,
+        )
+    )
+
+    # Report success
+    ports = get_ports(slot)
+    console.print(f"\n[green]Initialized sandbox:[/green] {instance_id}")
+    console.print(f"  Port slot: {slot}")
+    console.print(f"  API: http://localhost:{ports.backend}")
+    console.print(f"  Grafana: http://localhost:{ports.grafana}")
+    console.print("\nRun 'ktrdr sandbox up' to start")
 
 
 def load_env_sandbox(path: Optional[Path] = None) -> dict[str, str]:

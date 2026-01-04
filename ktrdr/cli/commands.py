@@ -19,6 +19,7 @@ import typer
 from rich.console import Console
 
 from ktrdr import get_logger
+from ktrdr.cli.sandbox_detect import resolve_api_url
 
 # Default API port
 DEFAULT_API_PORT = 8000
@@ -71,10 +72,10 @@ def get_effective_api_url() -> str:
     return _cli_state["api_url"] or get_api_base_url()
 
 
-# Create a Typer application with help text
+# Create a Typer application
+# The help text is provided by the main() callback docstring
 cli_app = typer.Typer(
     name="ktrdr",
-    help="KTRDR - Trading analysis and automation tool",
     add_completion=False,
 )
 
@@ -92,14 +93,37 @@ def main(
         None,
         "--url",
         "-u",
-        help="API URL override (e.g., backend.example.com or http://backend.example.com:8000)",
+        help="API URL (e.g., http://backend.example.com:8000). Overrides auto-detection.",
         envvar="KTRDR_API_URL",
     ),
+    port: Optional[int] = typer.Option(
+        None,
+        "--port",
+        "-p",
+        help="API port on localhost. Overrides auto-detection. (e.g., -p 8001)",
+    ),
 ):
-    """KTRDR - Trading analysis and automation tool."""
-    if url:
-        # Normalize URL: add http:// if missing, add default port if missing
-        normalized_url = normalize_api_url(url)
+    """
+    KTRDR - Trading analysis and automation tool.
+
+    Target API Resolution (highest to lowest priority):
+
+      1. --url flag: Explicit full URL
+
+      2. --port flag: Localhost with specified port
+
+      3. .env.sandbox: Auto-detected in current directory tree
+
+      4. Default: http://localhost:8000
+    """
+    resolved_url = resolve_api_url(
+        explicit_url=url,
+        explicit_port=port,
+    )
+
+    # Only set state if different from default (to avoid unnecessary reconfiguration)
+    if resolved_url != "http://localhost:8000":
+        normalized_url = normalize_api_url(resolved_url)
         _cli_state["api_url"] = normalized_url
 
         # Reconfigure telemetry to send traces to the same host as the API

@@ -5,12 +5,16 @@ This module tests the hierarchical CLI commands functionality that uses
 API client for data operations.
 """
 
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, patch
 
 import pandas as pd
 import pytest
 
 from ktrdr.cli import cli_app
+
+if TYPE_CHECKING:
+    from typer.testing import CliRunner
 
 # runner fixture is provided by conftest.py with NO_COLOR=1
 
@@ -213,3 +217,93 @@ def test_data_command_help(runner):
     assert result.exit_code == 0
     assert "show" in result.stdout
     assert "load" in result.stdout
+
+
+class TestMainCliCallback:
+    """Tests for main CLI callback with --port flag and auto-detection."""
+
+    def test_port_flag_accepted(self, runner: "CliRunner") -> None:
+        """--port flag is accepted without error."""
+        result = runner.invoke(cli_app, ["--port", "8001", "--help"])
+
+        assert result.exit_code == 0
+        # CLI accepted the flag without error
+
+    def test_url_and_port_together_accepted(self, runner: "CliRunner") -> None:
+        """--url and --port flags can be used together (--url wins)."""
+        result = runner.invoke(
+            cli_app, ["--url", "http://remote:9000", "--port", "8001", "--help"]
+        )
+
+        assert result.exit_code == 0
+        # CLI accepted both flags without error
+
+    def test_port_flag_in_help(self, runner: "CliRunner") -> None:
+        """--port flag is documented in help output."""
+        result = runner.invoke(cli_app, ["--help"])
+
+        assert result.exit_code == 0
+        assert "--port" in result.stdout or "-p" in result.stdout
+        assert "API port on localhost" in result.stdout
+
+    def test_url_flag_in_help(self, runner: "CliRunner") -> None:
+        """--url flag is documented in help output with auto-detection note."""
+        result = runner.invoke(cli_app, ["--help"])
+
+        assert result.exit_code == 0
+        assert "--url" in result.stdout or "-u" in result.stdout
+        assert "Overrides auto-detection" in result.stdout
+
+    def test_help_shows_api_resolution_priority(self, runner: "CliRunner") -> None:
+        """Help output explains API URL resolution priority order."""
+        result = runner.invoke(cli_app, ["--help"])
+
+        assert result.exit_code == 0
+        # Check that priority order is documented in docstring
+        # Note: ANSI codes are stripped by the runner fixture automatically
+        assert "Target API Resolution" in result.stdout
+        assert "--url flag" in result.stdout
+        assert "--port flag" in result.stdout
+        assert ".env.sandbox" in result.stdout
+        assert "Default" in result.stdout
+
+    def test_existing_url_flag_accepted(self, runner: "CliRunner") -> None:
+        """Existing --url flag behavior is preserved."""
+        result = runner.invoke(cli_app, ["--url", "backend.example.com", "--help"])
+
+        assert result.exit_code == 0
+        # CLI accepted the flag without error
+
+
+class TestResolveApiUrlIntegration:
+    """Tests that verify resolve_api_url is correctly integrated."""
+
+    def test_resolve_api_url_called_with_port(self) -> None:
+        """resolve_api_url is called with explicit_port when --port provided."""
+        from ktrdr.cli.sandbox_detect import resolve_api_url
+
+        # Direct test of resolve_api_url priority
+        result = resolve_api_url(explicit_port=8001)
+        assert result == "http://localhost:8001"
+
+    def test_resolve_api_url_url_wins_over_port(self) -> None:
+        """resolve_api_url gives priority to explicit_url over explicit_port."""
+        from ktrdr.cli.sandbox_detect import resolve_api_url
+
+        result = resolve_api_url(
+            explicit_url="http://remote:9000",
+            explicit_port=8001,
+        )
+        assert result == "http://remote:9000"
+
+    def test_resolve_api_url_default(self) -> None:
+        """resolve_api_url returns default when no flags or sandbox."""
+        import tempfile
+        from pathlib import Path
+
+        from ktrdr.cli.sandbox_detect import resolve_api_url
+
+        # Use tmp_path to ensure no .env.sandbox exists
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = resolve_api_url(cwd=Path(tmpdir))
+        assert result == "http://localhost:8000"

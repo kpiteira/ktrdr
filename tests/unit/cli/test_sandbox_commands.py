@@ -886,3 +886,273 @@ class TestGetInstanceStatus:
             status = get_instance_status("test", compose_file, {})
 
         assert status == "stopped"
+
+
+class TestIsKtrdrRepo:
+    """Tests for the is_ktrdr_repo helper function (Task 4.3)."""
+
+    def test_is_ktrdr_repo_true_for_ktrdr_remote(self, tmp_path):
+        """Verify is_ktrdr_repo returns True for ktrdr remote."""
+        from ktrdr.cli.sandbox import is_ktrdr_repo
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = "git@github.com:kpiteira/ktrdr.git\n"
+
+            result = is_ktrdr_repo(tmp_path)
+
+        assert result is True
+
+    def test_is_ktrdr_repo_false_for_other_remote(self, tmp_path):
+        """Verify is_ktrdr_repo returns False for non-ktrdr remote."""
+        from ktrdr.cli.sandbox import is_ktrdr_repo
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = "git@github.com:other/repo.git\n"
+
+            result = is_ktrdr_repo(tmp_path)
+
+        assert result is False
+
+    def test_is_ktrdr_repo_false_for_no_remote(self, tmp_path):
+        """Verify is_ktrdr_repo returns False when no remote exists."""
+        from ktrdr.cli.sandbox import is_ktrdr_repo
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 1
+            mock_run.return_value.stdout = ""
+
+            result = is_ktrdr_repo(tmp_path)
+
+        assert result is False
+
+    def test_is_ktrdr_repo_false_on_exception(self, tmp_path):
+        """Verify is_ktrdr_repo returns False on exception."""
+        from ktrdr.cli.sandbox import is_ktrdr_repo
+
+        with patch("subprocess.run", side_effect=Exception("Command failed")):
+            result = is_ktrdr_repo(tmp_path)
+
+        assert result is False
+
+    def test_is_ktrdr_repo_case_insensitive(self, tmp_path):
+        """Verify is_ktrdr_repo is case-insensitive."""
+        from ktrdr.cli.sandbox import is_ktrdr_repo
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = "git@github.com:user/KTRDR.git\n"
+
+            result = is_ktrdr_repo(tmp_path)
+
+        assert result is True
+
+
+class TestInitCommand:
+    """Tests for the init command (Task 4.3)."""
+
+    @pytest.fixture
+    def mock_registry_path(self, tmp_path):
+        """Mock registry to use temp directory."""
+        registry_dir = tmp_path / ".ktrdr" / "sandbox"
+        registry_dir.mkdir(parents=True)
+        registry_file = registry_dir / "instances.json"
+        with patch("ktrdr.cli.sandbox_registry.REGISTRY_DIR", registry_dir):
+            with patch("ktrdr.cli.sandbox_registry.REGISTRY_FILE", registry_file):
+                yield registry_file
+
+    def test_init_help_displays(self, runner):
+        """Verify init command has help text."""
+        result = runner.invoke(cli_app, ["sandbox", "init", "--help"])
+
+        assert result.exit_code == 0
+        assert "init" in result.output.lower()
+        assert "initialize" in result.output.lower()
+
+    def test_init_creates_env_sandbox(self, runner, tmp_path, mock_registry_path):
+        """Verify init creates .env.sandbox file."""
+        # Mock as a ktrdr repo
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            with patch("ktrdr.cli.sandbox.is_ktrdr_repo", return_value=True):
+                with patch("ktrdr.cli.sandbox.check_ports_available", return_value=[]):
+                    result = runner.invoke(cli_app, ["sandbox", "init"])
+
+        assert result.exit_code == 0
+        env_file = tmp_path / ".env.sandbox"
+        assert env_file.exists()
+
+        # Verify content
+        content = env_file.read_text()
+        assert "KTRDR_API_PORT=" in content
+        assert "INSTANCE_ID=" in content
+
+    def test_init_registers_instance(self, runner, tmp_path, mock_registry_path):
+        """Verify init adds instance to registry."""
+        import json
+
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            with patch("ktrdr.cli.sandbox.is_ktrdr_repo", return_value=True):
+                with patch("ktrdr.cli.sandbox.check_ports_available", return_value=[]):
+                    result = runner.invoke(cli_app, ["sandbox", "init"])
+
+        assert result.exit_code == 0
+
+        # Check registry
+        registry_data = json.loads(mock_registry_path.read_text())
+        instances = registry_data.get("instances", {})
+        # Instance ID is derived from directory name
+        assert len(instances) == 1
+
+    def test_init_rejects_non_ktrdr_repo(self, runner, tmp_path, mock_registry_path):
+        """Verify init fails on non-ktrdr repo with exit code 2."""
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            with patch("ktrdr.cli.sandbox.is_ktrdr_repo", return_value=False):
+                result = runner.invoke(cli_app, ["sandbox", "init"])
+
+        assert result.exit_code == 2
+        assert "not a ktrdr" in result.output.lower()
+
+    def test_init_rejects_already_initialized(
+        self, runner, tmp_path, mock_registry_path
+    ):
+        """Verify init fails if .env.sandbox already exists."""
+        # Create .env.sandbox
+        env_file = tmp_path / ".env.sandbox"
+        env_file.write_text("INSTANCE_ID=existing\n")
+
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            result = runner.invoke(cli_app, ["sandbox", "init"])
+
+        assert result.exit_code == 1
+        assert "already initialized" in result.output.lower()
+
+    def test_init_name_override(self, runner, tmp_path, mock_registry_path):
+        """Verify --name flag sets custom instance ID."""
+        import json
+
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            with patch("ktrdr.cli.sandbox.is_ktrdr_repo", return_value=True):
+                with patch("ktrdr.cli.sandbox.check_ports_available", return_value=[]):
+                    result = runner.invoke(
+                        cli_app, ["sandbox", "init", "--name", "my-custom-name"]
+                    )
+
+        assert result.exit_code == 0
+        assert "my-custom-name" in result.output
+
+        # Check registry has custom name
+        registry_data = json.loads(mock_registry_path.read_text())
+        instances = registry_data.get("instances", {})
+        assert "my-custom-name" in instances
+
+    def test_init_slot_option(self, runner, tmp_path, mock_registry_path):
+        """Verify --slot flag forces specific port slot."""
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            with patch("ktrdr.cli.sandbox.is_ktrdr_repo", return_value=True):
+                with patch("ktrdr.cli.sandbox.check_ports_available", return_value=[]):
+                    result = runner.invoke(cli_app, ["sandbox", "init", "--slot", "5"])
+
+        assert result.exit_code == 0
+        assert (
+            "slot: 5" in result.output.lower()
+            or "port slot: 5" in result.output.lower()
+        )
+
+        # Verify .env.sandbox has slot 5 ports
+        env_file = tmp_path / ".env.sandbox"
+        content = env_file.read_text()
+        assert "KTRDR_API_PORT=8005" in content
+
+    def test_init_rejects_invalid_slot(self, runner, tmp_path, mock_registry_path):
+        """Verify init rejects slot outside 1-10 range."""
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            with patch("ktrdr.cli.sandbox.is_ktrdr_repo", return_value=True):
+                result = runner.invoke(cli_app, ["sandbox", "init", "--slot", "15"])
+
+        assert result.exit_code == 1
+        assert "1-10" in result.output
+
+    def test_init_detects_worktree(self, runner, tmp_path, mock_registry_path):
+        """Verify init detects worktree vs regular clone."""
+        import json
+
+        # Simulate worktree by creating .git as file
+        git_file = tmp_path / ".git"
+        git_file.write_text("gitdir: /path/to/main/.git/worktrees/feature")
+
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            with patch("ktrdr.cli.sandbox.is_ktrdr_repo", return_value=True):
+                with patch("ktrdr.cli.sandbox.check_ports_available", return_value=[]):
+                    result = runner.invoke(cli_app, ["sandbox", "init"])
+
+        assert result.exit_code == 0
+
+        # Check registry has is_worktree=True
+        registry_data = json.loads(mock_registry_path.read_text())
+        instances = registry_data.get("instances", {})
+        instance = list(instances.values())[0]
+        assert instance["is_worktree"] is True
+
+    def test_init_detects_clone(self, runner, tmp_path, mock_registry_path):
+        """Verify init detects regular clone (not worktree)."""
+        import json
+
+        # Simulate clone by creating .git as directory
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            with patch("ktrdr.cli.sandbox.is_ktrdr_repo", return_value=True):
+                with patch("ktrdr.cli.sandbox.check_ports_available", return_value=[]):
+                    result = runner.invoke(cli_app, ["sandbox", "init"])
+
+        assert result.exit_code == 0
+
+        # Check registry has is_worktree=False
+        registry_data = json.loads(mock_registry_path.read_text())
+        instances = registry_data.get("instances", {})
+        instance = list(instances.values())[0]
+        assert instance["is_worktree"] is False
+
+    def test_init_rejects_id_collision(self, runner, tmp_path, mock_registry_path):
+        """Verify init fails if instance ID already exists in registry."""
+        import json
+
+        # Pre-populate registry with same instance ID
+        instance_id = tmp_path.name
+        registry_data = {
+            "version": 1,
+            "instances": {
+                instance_id: {
+                    "instance_id": instance_id,
+                    "slot": 1,
+                    "path": "/other/path",
+                    "created_at": "2024-01-01T00:00:00Z",
+                    "is_worktree": False,
+                    "parent_repo": None,
+                }
+            },
+        }
+        mock_registry_path.write_text(json.dumps(registry_data))
+
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            with patch("ktrdr.cli.sandbox.is_ktrdr_repo", return_value=True):
+                result = runner.invoke(cli_app, ["sandbox", "init"])
+
+        assert result.exit_code == 1
+        assert "already exists" in result.output.lower()
+        assert "--name" in result.output
+
+    def test_init_checks_port_conflicts(self, runner, tmp_path, mock_registry_path):
+        """Verify init fails when ports are in use."""
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            with patch("ktrdr.cli.sandbox.is_ktrdr_repo", return_value=True):
+                with patch(
+                    "ktrdr.cli.sandbox.check_ports_available",
+                    return_value=[8001, 5433],
+                ):
+                    result = runner.invoke(cli_app, ["sandbox", "init"])
+
+        assert result.exit_code == 3
+        assert "port" in result.output.lower() or "8001" in result.output
