@@ -280,6 +280,142 @@ class TestUpCommand:
         assert result.exit_code == 1
         assert "compose" in result.output.lower() or "docker" in result.output.lower()
 
+    def test_up_has_timeout_option(self, runner):
+        """Verify up command has --timeout option."""
+        result = runner.invoke(cli_app, ["sandbox", "up", "--help"])
+
+        assert result.exit_code == 0
+        assert "--timeout" in result.output
+
+    def test_up_runs_gate_by_default(self, runner, tmp_path):
+        """Verify gate runs when up is called without --no-wait."""
+        # Setup sandbox environment
+        env_file = tmp_path / ".env.sandbox"
+        env_file.write_text(
+            "INSTANCE_ID=test\nSLOT_NUMBER=1\nKTRDR_API_PORT=8001\nKTRDR_DB_PORT=5433\n"
+        )
+        compose_file = tmp_path / "docker-compose.sandbox.yml"
+        compose_file.touch()
+
+        # Mock run_gate to return a passing result
+        from ktrdr.cli.sandbox_gate import CheckResult, CheckStatus, GateResult
+
+        mock_gate_result = GateResult(
+            passed=True,
+            checks=[
+                CheckResult(name="Database", status=CheckStatus.PASSED),
+                CheckResult(name="Backend", status=CheckStatus.PASSED),
+                CheckResult(name="Workers", status=CheckStatus.PASSED),
+                CheckResult(name="Observability", status=CheckStatus.PASSED),
+            ],
+            duration_seconds=5.0,
+        )
+
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            with patch("subprocess.run"):  # Mock docker compose up
+                with patch(
+                    "ktrdr.cli.sandbox.run_gate", return_value=mock_gate_result
+                ) as mock_run_gate:
+                    result = runner.invoke(cli_app, ["sandbox", "up"])
+
+        # Gate should have been called
+        mock_run_gate.assert_called_once()
+        assert result.exit_code == 0
+        # Should show gate results
+        assert "startability gate" in result.output.lower()
+        assert "passed" in result.output.lower()
+
+    def test_up_no_wait_skips_gate(self, runner, tmp_path):
+        """Verify gate is skipped with --no-wait flag."""
+        # Setup sandbox environment
+        env_file = tmp_path / ".env.sandbox"
+        env_file.write_text("INSTANCE_ID=test\nSLOT_NUMBER=1\n")
+        compose_file = tmp_path / "docker-compose.sandbox.yml"
+        compose_file.touch()
+
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            with patch("subprocess.run"):  # Mock docker compose up
+                with patch("ktrdr.cli.sandbox.run_gate") as mock_run_gate:
+                    result = runner.invoke(cli_app, ["sandbox", "up", "--no-wait"])
+
+        # Gate should NOT have been called
+        mock_run_gate.assert_not_called()
+        assert result.exit_code == 0
+        # Should show "starting" message instead of gate results
+        assert "starting" in result.output.lower()
+
+    def test_up_exits_on_gate_failure(self, runner, tmp_path):
+        """Verify exit code 2 when gate fails."""
+        # Setup sandbox environment
+        env_file = tmp_path / ".env.sandbox"
+        env_file.write_text(
+            "INSTANCE_ID=test\nSLOT_NUMBER=1\nKTRDR_API_PORT=8001\nKTRDR_DB_PORT=5433\n"
+        )
+        compose_file = tmp_path / "docker-compose.sandbox.yml"
+        compose_file.touch()
+
+        # Mock run_gate to return a failing result
+        from ktrdr.cli.sandbox_gate import CheckResult, CheckStatus, GateResult
+
+        mock_gate_result = GateResult(
+            passed=False,
+            checks=[
+                CheckResult(name="Database", status=CheckStatus.PASSED),
+                CheckResult(
+                    name="Backend",
+                    status=CheckStatus.FAILED,
+                    message="Connection refused",
+                ),
+                CheckResult(name="Workers", status=CheckStatus.SKIPPED),
+                CheckResult(name="Observability", status=CheckStatus.PASSED),
+            ],
+            duration_seconds=10.0,
+        )
+
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            with patch("subprocess.run"):  # Mock docker compose up
+                with patch("ktrdr.cli.sandbox.run_gate", return_value=mock_gate_result):
+                    result = runner.invoke(cli_app, ["sandbox", "up"])
+
+        # Should exit with code 2 on gate failure
+        assert result.exit_code == 2
+        assert "failed" in result.output.lower()
+
+    def test_up_shows_check_results(self, runner, tmp_path):
+        """Verify up shows individual check results with symbols."""
+        # Setup sandbox environment
+        env_file = tmp_path / ".env.sandbox"
+        env_file.write_text(
+            "INSTANCE_ID=test\nSLOT_NUMBER=1\nKTRDR_API_PORT=8001\nKTRDR_DB_PORT=5433\n"
+            "KTRDR_GRAFANA_PORT=3001\nKTRDR_JAEGER_UI_PORT=16687\n"
+        )
+        compose_file = tmp_path / "docker-compose.sandbox.yml"
+        compose_file.touch()
+
+        from ktrdr.cli.sandbox_gate import CheckResult, CheckStatus, GateResult
+
+        mock_gate_result = GateResult(
+            passed=True,
+            checks=[
+                CheckResult(name="Database", status=CheckStatus.PASSED),
+                CheckResult(name="Backend", status=CheckStatus.PASSED),
+                CheckResult(name="Workers", status=CheckStatus.PASSED),
+                CheckResult(name="Observability", status=CheckStatus.PASSED),
+            ],
+            duration_seconds=5.0,
+        )
+
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            with patch("subprocess.run"):
+                with patch("ktrdr.cli.sandbox.run_gate", return_value=mock_gate_result):
+                    result = runner.invoke(cli_app, ["sandbox", "up"])
+
+        # Check that results show check names
+        assert "database" in result.output.lower()
+        assert "backend" in result.output.lower()
+        # Should show service URLs on success
+        assert "http://localhost:8001" in result.output
+
 
 class TestDownCommand:
     """Tests for the down command."""

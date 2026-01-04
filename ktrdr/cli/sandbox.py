@@ -15,6 +15,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from ktrdr.cli.sandbox_gate import CheckStatus, run_gate
 from ktrdr.cli.sandbox_ports import check_ports_available, get_ports
 from ktrdr.cli.sandbox_registry import (
     InstanceInfo,
@@ -251,6 +252,7 @@ def up(
         False, "--no-wait", help="Don't wait for Startability Gate"
     ),
     build: bool = typer.Option(False, "--build", help="Force rebuild images"),
+    timeout: int = typer.Option(120, "--timeout", help="Gate timeout in seconds"),
 ) -> None:
     """Start the sandbox stack."""
     cwd = Path.cwd()
@@ -295,9 +297,44 @@ def up(
 
     if no_wait:
         console.print("\nInstance starting... (use 'ktrdr sandbox status' to check)")
+        return
+
+    # Run Startability Gate
+    console.print("\nRunning Startability Gate...")
+    api_port = int(env.get("KTRDR_API_PORT", 8000))
+    db_port = int(env.get("KTRDR_DB_PORT", 5432))
+
+    result = run_gate(api_port, db_port, timeout=float(timeout))
+
+    # Display results
+    for check in result.checks:
+        if check.status == CheckStatus.PASSED:
+            console.print(f"  [green]✓[/green] {check.name} ready")
+        elif check.status == CheckStatus.SKIPPED:
+            console.print(f"  [dim]○[/dim] {check.name} skipped")
+        else:
+            console.print(f"  [red]✗[/red] {check.name} failed")
+            if check.message:
+                console.print(f"    → {check.message}")
+            if check.details:
+                console.print(f"    → {check.details}")
+
+    console.print()
+
+    if result.passed:
+        console.print("[green]Startability Gate: PASSED[/green]")
+        console.print(f"\nInstance ready ({result.duration_seconds:.1f}s):")
+        console.print(f"  API: http://localhost:{api_port}/api/v1/docs")
+        console.print(
+            f"  Grafana: http://localhost:{env.get('KTRDR_GRAFANA_PORT', 3000)}"
+        )
+        console.print(
+            f"  Jaeger: http://localhost:{env.get('KTRDR_JAEGER_UI_PORT', 16686)}"
+        )
     else:
-        # Startability Gate will be added in M3
-        console.print("\nInstance starting... (Startability Gate coming in M3)")
+        error_console.print("[red]Startability Gate: FAILED[/red]")
+        error_console.print("\nCheck logs with: ktrdr sandbox logs")
+        raise typer.Exit(2)
 
 
 @sandbox_app.command()
