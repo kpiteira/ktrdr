@@ -156,6 +156,27 @@ The destroy command:
 5. Removes from registry
 6. Removes worktree/directory (unless --keep-worktree)
 
-## For Next Tasks
+### List Command and Status Helper
 
-- **Task 2.7 (List):** Use `load_env_sandbox()` to get port info for display
+Task 2.7 added the list command and status helper:
+
+```python
+from ktrdr.cli.sandbox import get_instance_status
+
+# Query container status
+status = get_instance_status(instance_id, compose_file, env)
+# Returns: "running", "stopped", "partial (x/y)", "unknown"
+```
+
+## M2 Complete
+
+All 7 tasks implemented:
+- Task 2.1: Port allocator module
+- Task 2.2: Instance registry module
+- Task 2.3: CLI subcommand module
+- Task 2.4: Create command
+- Task 2.5: Up/Down commands
+- Task 2.6: Destroy command
+- Task 2.7: List command
+
+Ready for M3: Startability Gate + status command
