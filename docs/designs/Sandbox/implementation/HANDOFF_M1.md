@@ -49,4 +49,4 @@ MCP services are dev tooling for Claude Code integration. They don't expose port
 
 - ~~Task 1.2 creates `scripts/init-shared-data-dir.sh`~~ — ✅ Complete
 - ~~Task 1.3 documents the manual multi-instance process~~ — ✅ Complete (see `docs/designs/Sandbox/MANUAL_TESTING.md`)
-- Task 1.4 verifies main compose unchanged — run `docker compose up` from `../ktrdr2` to confirm
+- ~~Task 1.4 verifies main compose unchanged~~ — ✅ Complete (docker-compose.yml unchanged, main stack healthy on default ports)
