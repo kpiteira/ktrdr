@@ -51,7 +51,7 @@ Training result:
 Model saved: models/rsi_multitimeframe_5m_1h_convergence_v3/5m_v1
 ```
 
-Backtest failed (0 trades) due to overly restrictive strategy design, NOT multi-TF pipeline issues.
+Backtest failed (0 trades) due to **indicator column name collision in backtest path** (see Bug #3 below).
 
 ## What Was Added
 
@@ -92,6 +92,27 @@ test_accuracy: 0
 
 **This is tracked as a separate issue — not a multi-timeframe pipeline problem.**
 
+### 3. Backtest Indicator Column Name Collision (Critical)
+
+**Symptom:** Model achieves 47.53% training accuracy, but backtest produces 0 trades.
+
+**Error in backtest logs:**
+```text
+[CRITICAL BUG] Column 'rsi_14' already exists in result_df!
+DEGENERATE INPUTS: Feature variance 0.00e+00
+```
+
+**Root cause:** The backtest path computes indicators separately from training. When a multi-timeframe strategy defines RSI for both 5m and 1h:
+
+- Training path: Features correctly prefixed (`5m_rsi_low`, `1h_rsi_low`)
+- Backtest path: Indicator engine outputs both as `rsi_14` → collision → one overwrites the other → degenerate inputs (all zeros) → decision system never triggers → 0 trades
+
+**This is the REAL root cause of 0 backtest trades for multi-timeframe strategies.**
+
+**File:** `ktrdr/indicators/indicator_engine.py:271` — needs to prefix indicator columns with timeframe (or symbol for multi-symbol), matching the training path.
+
+**Note:** This same issue likely affects multi-symbol backtests if indicators collide across symbols (e.g., `EURUSD.rsi_14` vs `GBPUSD.rsi_14`).
+
 ## Tasks Status
 
 - **Task 5.1** ✅ Complete — Added logging, confirmed multi-TF alignment works via unit tests AND E2E
@@ -108,11 +129,17 @@ The multi-timeframe pipeline validates at these levels:
 
 ## Conclusion
 
-**Multi-timeframe pipeline works correctly.** The E2E test proved:
+**Multi-timeframe training pipeline works correctly.** The E2E test proved:
 
 1. Training returns valid metrics (test_accuracy = 0.4753) ✅
 2. Experiment file does NOT correctly capture these metrics ❌ (same bug as M4)
+3. Backtest fails with 0 trades due to indicator column collision ❌ (Bug #3)
 
-**No fix needed for multi-timeframe alignment.** The issue is in the experiment saving code path, which is the same bug M4 identified. Task 5.2 can be skipped.
+**No fix needed for multi-timeframe alignment.** The training path works.
 
-**Next step:** Fix the experiment saving bug (affects both multi-symbol and multi-timeframe).
+**Bugs that need fixing:**
+
+1. **Experiment saving bug** — Training metrics not saved correctly (affects multi-symbol AND multi-timeframe)
+2. **Backtest indicator collision** — Indicator columns not prefixed with timeframe in backtest path (affects multi-timeframe, likely also multi-symbol)
+
+**Next step:** Fix the backtest indicator collision bug, then experiment saving bug.

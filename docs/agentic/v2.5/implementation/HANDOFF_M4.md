@@ -57,6 +57,20 @@ test_accuracy: 0
 
 **This is a bug in the research worker's experiment saving code**, not in the training pipeline. Should be tracked as a separate issue.
 
+## Likely Backtest Bug (Found During M5)
+
+M5 investigation discovered a **backtest indicator column collision bug** that causes 0 trades for multi-timeframe strategies. The same bug likely affects multi-symbol backtests:
+
+- Training path prefixes features correctly (e.g., `5m_rsi_low`, `1h_rsi_low`)
+- Backtest path does NOT prefix indicators → column collision → degenerate inputs → 0 trades
+
+For multi-symbol, the backtest may have the same issue:
+
+- If all symbols use `rsi_14`, the backtest indicator engine may not prefix with symbol
+- Columns collide → only one symbol's values retained → incorrect decisions
+
+**See [HANDOFF_M5.md](HANDOFF_M5.md) Bug #3 for details.**
+
 ## Tasks Status
 
 - **Task 4.1** ✅ Complete - Added logging, confirmed multi-symbol works
