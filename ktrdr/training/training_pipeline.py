@@ -284,9 +284,10 @@ class TrainingPipeline:
 
             # Apply to all timeframes (single-timeframe is just a 1-item dict)
             # CRITICAL: Don't pass indicator_configs to prevent duplicate engine creation!
-            # NOTE: prefix_columns=False because training handles prefixing later
-            # in FuzzyNeuralProcessor.prepare_multi_timeframe_input(). Backtesting
-            # uses prefix_columns=True (default) to prevent indicator collisions.
+            # NOTE: prefix_columns=False because training handles prefixing later in
+            # FuzzyNeuralProcessor.prepare_multi_timeframe_input(), where the actual
+            # column prefixing is performed by its _align_multi_timeframe_features helper.
+            # Backtesting uses prefix_columns=True (default) to prevent indicator collisions.
             indicator_results = indicator_engine.apply_multi_timeframe(
                 price_data, prefix_columns=False
             )

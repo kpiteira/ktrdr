@@ -131,21 +131,20 @@ class TestMultiTimeframePrefixing:
                 "1h_"
             ), f"MACD column '{col}' should be prefixed with '1h_'"
 
-    def test_feature_id_alias_also_prefixed(
+    def test_all_indicator_columns_prefixed(
         self, sample_ohlcv: pd.DataFrame, indicator_configs: list[dict]
     ):
-        """Test that feature_id aliases are also prefixed with timeframe.
+        """Test that all indicator columns are prefixed with timeframe.
 
-        If the indicator has a feature_id that creates an alias column,
-        that alias should also be prefixed.
+        Verifies that apply_multi_timeframe prefixes all non-OHLCV columns
+        with the timeframe identifier to prevent collisions.
         """
         multi_data = {"1h": sample_ohlcv.copy()}
 
         engine = IndicatorEngine(indicators=indicator_configs)
         result = engine.apply_multi_timeframe(multi_data)
 
-        # The feature_id alias should be prefixed
-        # Original feature_id is 'rsi_14', should become '1h_rsi_14'
+        # All indicator columns should be prefixed with timeframe
         ohlcv_cols = {"open", "high", "low", "close", "volume"}
         non_ohlcv = [c for c in result["1h"].columns if c not in ohlcv_cols]
 
