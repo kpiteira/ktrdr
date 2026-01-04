@@ -78,9 +78,44 @@ def main(
 
 The key insight: only reconfigure when URL differs from default to avoid unnecessary overhead.
 
+### Repository Validation
+
+Task 4.3 added `is_ktrdr_repo()` in `ktrdr/cli/sandbox.py`:
+
+```python
+from ktrdr.cli.sandbox import is_ktrdr_repo
+
+# Returns True if git remote contains 'ktrdr' (case-insensitive)
+if not is_ktrdr_repo(cwd):
+    # Not a KTRDR repo - exit code 2
+```
+
+### Worktree Detection
+
+Task 4.3 detects worktree vs clone:
+
+```python
+# Worktrees have .git as file, clones have .git as directory
+is_worktree = (cwd / ".git").is_file()
+
+if is_worktree:
+    # Parse gitdir path from .git file
+    with open(cwd / ".git") as f:
+        content = f.read()
+        # Format: gitdir: /path/to/.git/worktrees/name
+        gitdir = content.split("gitdir:")[1].strip()
+        parent_repo = str(Path(gitdir).parent.parent.parent)
+```
+
+### Init Command Exit Codes
+
+- Exit 1: Already initialized (`.env.sandbox` exists) or ID collision
+- Exit 2: Not a KTRDR repository
+- Exit 3: Port conflicts
+
 ## M4 Progress
 
 - [x] Task 4.1: Implement URL Resolution Logic
 - [x] Task 4.2: Add `--port` Flag to Main CLI
-- [ ] Task 4.3: Implement `ktrdr sandbox init` Command
+- [x] Task 4.3: Implement `ktrdr sandbox init` Command
 - [ ] Task 4.4: Update CLI Help Text
