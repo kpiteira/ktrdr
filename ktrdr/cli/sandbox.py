@@ -140,8 +140,12 @@ def generate_env_file(path: Path, instance_id: str, slot: int) -> None:
     env_vars["INSTANCE_ID"] = instance_id
     env_vars["COMPOSE_PROJECT_NAME"] = instance_id
 
-    # Add shared data dir
-    env_vars["KTRDR_SHARED_DIR"] = str(Path.home() / ".ktrdr" / "shared")
+    # Add shared data directories (matches docker-compose.sandbox.yml volume mounts)
+    shared_dir = Path.home() / ".ktrdr" / "shared"
+    env_vars["KTRDR_SHARED_DIR"] = str(shared_dir)
+    env_vars["KTRDR_DATA_DIR"] = str(shared_dir / "data")
+    env_vars["KTRDR_MODELS_DIR"] = str(shared_dir / "models")
+    env_vars["KTRDR_STRATEGIES_DIR"] = str(shared_dir / "strategies")
 
     # Add metadata
     env_vars["CREATED_AT"] = datetime.now(timezone.utc).isoformat()
