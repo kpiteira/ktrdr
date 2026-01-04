@@ -82,10 +82,10 @@
 
 ## Reference Documents
 
-- **Design:** [docs/designs/strategy-grammar-v3/DESIGN.md](../../designs/strategy-grammar-v3/DESIGN.md)
-- **Architecture:** [docs/designs/strategy-grammar-v3/ARCHITECTURE.md](../../designs/strategy-grammar-v3/ARCHITECTURE.md)
-- **Validation Scenarios:** [docs/designs/strategy-grammar-v3/SCENARIOS.md](../../designs/strategy-grammar-v3/SCENARIOS.md)
-- **Prerequisite:** [docs/designs/indicator-standardization/DESIGN.md](../../designs/indicator-standardization/DESIGN.md)
+- **Design:** [DESIGN.md](../DESIGN.md)
+- **Architecture:** [ARCHITECTURE.md](../ARCHITECTURE.md)
+- **Validation Scenarios:** [SCENARIOS.md](../SCENARIOS.md)
+- **Prerequisite:** [Indicator Standardization](../../indicator-standardization/DESIGN.md)
 
 ---
 

@@ -1,6 +1,6 @@
 ---
-design: docs/designs/strategy-grammar-v3/DESIGN.md
-architecture: docs/designs/strategy-grammar-v3/ARCHITECTURE.md
+design: ../DESIGN.md
+architecture: ../ARCHITECTURE.md
 ---
 
 # Milestone 7: Agent Integration
