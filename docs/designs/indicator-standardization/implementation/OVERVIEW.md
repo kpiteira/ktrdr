@@ -80,14 +80,6 @@ uv run ktrdr backtest run mean_reversion_momentum_v1 EURUSD 1h \
 
 **Note:** Uses `mean_reversion_momentum_v1.yaml` which validates successfully (unlike `rsi_mean_reversion.yaml` which has missing fuzzy_sets for MACD).
 
-**Prerequisite:** Training infrastructure must be working. There's currently a bug where training operations aren't persisted to the database (backend logs show "Operation not found" immediately after dispatch). This needs to be fixed before full E2E smoke tests can run.
-
-**Fallback test (if training infrastructure is broken):**
-```bash
-# Quick validation that indicators load correctly
-uv run ktrdr strategies validate strategies/mean_reversion_momentum_v1.yaml
-```
-
 **The smoke test must pass at every milestone (M1-M5).**
 
 ## Architecture Alignment
