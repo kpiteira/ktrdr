@@ -13,20 +13,19 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from typer.testing import CliRunner
 
 from ktrdr.cli import cli_app
 
+# runner fixture is provided by conftest.py with NO_COLOR=1
+
 
 def strip_ansi(text: str) -> str:
-    """Remove ANSI escape codes from text for consistent assertions."""
+    """Remove ANSI escape codes from text for consistent assertions.
+
+    Note: With NO_COLOR=1 in conftest.py, this is rarely needed but kept
+    as a safety net for edge cases.
+    """
     return re.sub(r"\x1b\[[0-9;]*m", "", text)
-
-
-@pytest.fixture
-def runner():
-    """Create a Typer CLI runner for testing."""
-    return CliRunner()
 
 
 class TestSandboxCLIRegistration:
