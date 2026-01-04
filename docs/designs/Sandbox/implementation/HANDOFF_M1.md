@@ -47,5 +47,6 @@ MCP services are dev tooling for Claude Code integration. They don't expose port
 
 ## For Next Tasks
 
-- Task 1.2 creates `scripts/init-shared-data-dir.sh` — should create the three directories that match the variable pattern above
+- ~~Task 1.2 creates `scripts/init-shared-data-dir.sh`~~ — ✅ Complete
 - Task 1.3 documents the manual multi-instance process — use the variable names established here
+- Task 1.4 verifies main compose unchanged — run `docker compose up` from `../ktrdr2` to confirm
