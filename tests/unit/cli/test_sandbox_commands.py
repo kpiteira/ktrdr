@@ -8,6 +8,7 @@ Task 2.6: Test the destroy command.
 Task 2.7: Test the list command.
 """
 
+import re
 from pathlib import Path
 from unittest.mock import patch
 
@@ -17,14 +18,15 @@ from typer.testing import CliRunner
 from ktrdr.cli import cli_app
 
 
+def strip_ansi(text: str) -> str:
+    """Remove ANSI escape codes from text for consistent assertions."""
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+
+
 @pytest.fixture
 def runner():
-    """Create a Typer CLI runner for testing.
-
-    NO_COLOR=1 ensures consistent output across local/CI environments
-    by disabling ANSI escape codes that can split option names.
-    """
-    return CliRunner(env={"NO_COLOR": "1"})
+    """Create a Typer CLI runner for testing."""
+    return CliRunner()
 
 
 class TestSandboxCLIRegistration:
@@ -337,7 +339,8 @@ class TestDestroyCommand:
         result = runner.invoke(cli_app, ["sandbox", "destroy", "--help"])
 
         assert result.exit_code == 0
-        assert "--keep-worktree" in result.output
+        # Strip ANSI codes for consistent assertions across local/CI
+        assert "--keep-worktree" in strip_ansi(result.output)
 
     def test_destroy_requires_confirmation(self, runner, tmp_path):
         """Verify destroy asks for confirmation without --force."""
