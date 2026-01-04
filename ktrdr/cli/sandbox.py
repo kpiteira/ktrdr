@@ -7,6 +7,7 @@ Each sandbox runs in its own git worktree with isolated Docker containers.
 import json
 import os
 import re
+import shutil
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -37,6 +38,78 @@ sandbox_app = typer.Typer(
 
 console = Console()
 error_console = Console(stderr=True)
+
+# Shared data directory configuration
+SHARED_DIR = Path.home() / ".ktrdr" / "shared"
+SHARED_SUBDIRS = ["data", "models", "strategies"]
+
+
+def get_dir_stats(path: Path) -> tuple[int, str]:
+    """Get file count and human-readable size for a directory.
+
+    Args:
+        path: The directory to analyze.
+
+    Returns:
+        Tuple of (file_count, human_readable_size).
+    """
+    if not path.exists():
+        return 0, "0 B"
+
+    total_size = 0
+    file_count = 0
+
+    for f in path.rglob("*"):
+        if f.is_file():
+            try:
+                total_size += f.stat().st_size
+                file_count += 1
+            except (OSError, PermissionError):
+                # Skip files that cannot be accessed
+                continue
+
+    if file_count == 0:
+        return 0, "0 B"
+
+    # Human-readable size
+    size = float(total_size)
+    for unit in ["B", "KB", "MB", "GB"]:
+        if size < 1024:
+            return file_count, f"{size:.1f} {unit}"
+        size /= 1024
+
+    return file_count, f"{size:.1f} TB"
+
+
+def copy_with_progress(src: Path, dst: Path) -> None:
+    """Copy directory with progress indication.
+
+    Args:
+        src: Source directory to copy from.
+        dst: Destination directory to copy to.
+    """
+    if not src.exists():
+        console.print(f"  [dim]Skipping {src.name}/ (not found)[/dim]")
+        return
+
+    file_count, size = get_dir_stats(src)
+    console.print(f"  Copying {src.name}/ ... {size} ({file_count} files)")
+
+    # Remove existing destination if present
+    if dst.exists():
+        try:
+            shutil.rmtree(dst)
+        except OSError as exc:
+            error_console.print(
+                f"[red]Error:[/red] Failed to remove existing {dst}: {exc}"
+            )
+            raise typer.Exit(1) from exc
+
+    try:
+        shutil.copytree(src, dst)
+    except (OSError, shutil.Error) as exc:
+        error_console.print(f"[red]Error:[/red] Failed to copy {src} to {dst}: {exc}")
+        raise typer.Exit(1) from exc
 
 
 def slugify(name: str) -> str:
@@ -81,8 +154,12 @@ def generate_env_file(path: Path, instance_id: str, slot: int) -> None:
     env_vars["INSTANCE_ID"] = instance_id
     env_vars["COMPOSE_PROJECT_NAME"] = instance_id
 
-    # Add shared data dir
-    env_vars["KTRDR_SHARED_DIR"] = str(Path.home() / ".ktrdr" / "shared")
+    # Add shared data directories (matches docker-compose.sandbox.yml volume mounts)
+    shared_dir = Path.home() / ".ktrdr" / "shared"
+    env_vars["KTRDR_SHARED_DIR"] = str(shared_dir)
+    env_vars["KTRDR_DATA_DIR"] = str(shared_dir / "data")
+    env_vars["KTRDR_MODELS_DIR"] = str(shared_dir / "models")
+    env_vars["KTRDR_STRATEGIES_DIR"] = str(shared_dir / "strategies")
 
     # Add metadata
     env_vars["CREATED_AT"] = datetime.now(timezone.utc).isoformat()
@@ -518,8 +595,6 @@ def destroy(
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
 ) -> None:
     """Completely remove the sandbox instance."""
-    import shutil
-
     cwd = Path.cwd()
     env = load_env_sandbox(cwd)
 
@@ -802,6 +877,21 @@ def status() -> None:
         port = env.get(f"KTRDR_WORKER_PORT_{i}", "?")
         console.print(f"  Worker {i}:   http://localhost:{port}")
 
+    # Shared data section
+    console.print()
+    console.print("[bold]Shared Data:[/bold]")
+    if SHARED_DIR.exists():
+        for subdir in SHARED_SUBDIRS:
+            path = SHARED_DIR / subdir
+            if path.exists():
+                file_count, size = get_dir_stats(path)
+                console.print(f"  {subdir}/: {size} ({file_count} files)")
+            else:
+                console.print(f"  {subdir}/: [dim]not found[/dim]")
+    else:
+        console.print("  [yellow]Not initialized[/yellow]")
+        console.print("  Run: ktrdr sandbox init-shared")
+
 
 @sandbox_app.command()
 def logs(
@@ -839,3 +929,100 @@ def logs(
         subprocess.run(cmd, env=compose_env)
     except KeyboardInterrupt:
         pass  # Normal exit from follow mode
+
+
+@sandbox_app.command("init-shared")
+def init_shared(
+    from_path: Optional[Path] = typer.Option(
+        None,
+        "--from",
+        "-f",
+        help="Copy data from existing KTRDR environment",
+    ),
+    minimal: bool = typer.Option(
+        False,
+        "--minimal",
+        "-m",
+        help="Create empty structure only (no data copied)",
+    ),
+) -> None:
+    """Initialize the shared data directory (~/.ktrdr/shared/).
+
+    This sets up the shared data directory used by all sandbox instances.
+    Use --minimal for empty structure or --from to copy from an existing environment.
+    """
+    console.print(f"Initializing shared data directory: {SHARED_DIR}")
+
+    # Create base directory
+    SHARED_DIR.mkdir(parents=True, exist_ok=True)
+
+    if minimal:
+        # Just create empty directories
+        console.print("  Creating empty structure...")
+        for subdir in SHARED_SUBDIRS:
+            (SHARED_DIR / subdir).mkdir(exist_ok=True)
+
+        console.print("\n[green]Shared data initialized (minimal):[/green]")
+        for subdir in SHARED_SUBDIRS:
+            console.print(f"  {SHARED_DIR / subdir}/")
+        console.print(
+            "\n[dim]Note: No data copied. Download data after starting sandbox.[/dim]"
+        )
+        return
+
+    if from_path:
+        # Validate source
+        if not from_path.exists():
+            error_console.print(f"[red]Error:[/red] Source not found: {from_path}")
+            raise typer.Exit(1)
+
+        # Copy each subdirectory
+        for subdir in SHARED_SUBDIRS:
+            src = from_path / subdir
+            dst = SHARED_DIR / subdir
+            copy_with_progress(src, dst)
+
+        console.print("\n[green]Shared data initialized:[/green]")
+        for subdir in SHARED_SUBDIRS:
+            path = SHARED_DIR / subdir
+            if path.exists():
+                file_count, size = get_dir_stats(path)
+                console.print(f"  {path}/ ({size}, {file_count} files)")
+            else:
+                console.print(f"  {path}/ (empty)")
+        return
+
+    # No --from and no --minimal: check if shared dir already has content
+    def has_content(path: Path) -> bool:
+        if not path.exists():
+            return False
+        try:
+            return any(path.iterdir())
+        except (PermissionError, OSError):
+            # If unreadable, assume it has content to avoid overwriting
+            return True
+
+    existing_content = any(
+        has_content(SHARED_DIR / subdir) for subdir in SHARED_SUBDIRS
+    )
+
+    if existing_content:
+        console.print("\n[yellow]Shared data already exists:[/yellow]")
+        for subdir in SHARED_SUBDIRS:
+            path = SHARED_DIR / subdir
+            if path.exists():
+                file_count, size = get_dir_stats(path)
+                console.print(f"  {path}/ ({size}, {file_count} files)")
+        console.print("\nUse --from to overwrite or --minimal to reset to empty.")
+        return
+
+    # Empty and no flags: create minimal structure
+    console.print("  Creating empty structure...")
+    for subdir in SHARED_SUBDIRS:
+        (SHARED_DIR / subdir).mkdir(exist_ok=True)
+
+    console.print("\n[green]Shared data initialized (empty):[/green]")
+    for subdir in SHARED_SUBDIRS:
+        console.print(f"  {SHARED_DIR / subdir}/")
+    console.print("\nPopulate with:")
+    console.print("  ktrdr sandbox init-shared --from /path/to/existing/ktrdr")

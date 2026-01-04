@@ -759,6 +759,86 @@ class TestStatusCommand:
         # Should indicate stopped state
         assert "stopped" in result.output.lower() or "0" in result.output
 
+    def test_status_shows_shared_data_section(self, runner, tmp_path):
+        """Verify status shows Shared Data section (Task 5.2)."""
+        env_file = tmp_path / ".env.sandbox"
+        env_file.write_text("INSTANCE_ID=test\nSLOT_NUMBER=1\nKTRDR_API_PORT=8001\n")
+        compose_file = tmp_path / "docker-compose.sandbox.yml"
+        compose_file.touch()
+
+        # Create shared dir with some data
+        shared_dir = tmp_path / ".ktrdr" / "shared"
+        shared_dir.mkdir(parents=True)
+        (shared_dir / "data").mkdir()
+        (shared_dir / "data" / "test.csv").write_text("test")
+        (shared_dir / "models").mkdir()
+        (shared_dir / "strategies").mkdir()
+
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            with patch("ktrdr.cli.sandbox.SHARED_DIR", shared_dir):
+                with patch("subprocess.run") as mock_run:
+                    mock_run.return_value.returncode = 0
+                    mock_run.return_value.stdout = "[]"
+                    result = runner.invoke(cli_app, ["sandbox", "status"])
+
+        assert result.exit_code == 0
+        assert "shared data" in result.output.lower()
+        assert "data/" in result.output.lower() or "data:" in result.output.lower()
+
+    def test_status_shows_shared_data_not_initialized(self, runner, tmp_path):
+        """Verify status shows message when shared data not initialized (Task 5.2)."""
+        env_file = tmp_path / ".env.sandbox"
+        env_file.write_text("INSTANCE_ID=test\nSLOT_NUMBER=1\nKTRDR_API_PORT=8001\n")
+        compose_file = tmp_path / "docker-compose.sandbox.yml"
+        compose_file.touch()
+
+        # Point to non-existent shared dir
+        shared_dir = tmp_path / ".ktrdr" / "shared-nonexistent"
+
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            with patch("ktrdr.cli.sandbox.SHARED_DIR", shared_dir):
+                with patch("subprocess.run") as mock_run:
+                    mock_run.return_value.returncode = 0
+                    mock_run.return_value.stdout = "[]"
+                    result = runner.invoke(cli_app, ["sandbox", "status"])
+
+        assert result.exit_code == 0
+        assert "shared data" in result.output.lower()
+        # Should show not initialized message
+        assert (
+            "not initialized" in result.output.lower()
+            or "init-shared" in result.output.lower()
+        )
+
+    def test_status_shows_shared_data_file_counts(self, runner, tmp_path):
+        """Verify status shows file counts and sizes for shared data (Task 5.2)."""
+        env_file = tmp_path / ".env.sandbox"
+        env_file.write_text("INSTANCE_ID=test\nSLOT_NUMBER=1\nKTRDR_API_PORT=8001\n")
+        compose_file = tmp_path / "docker-compose.sandbox.yml"
+        compose_file.touch()
+
+        # Create shared dir with multiple files
+        shared_dir = tmp_path / ".ktrdr" / "shared"
+        shared_dir.mkdir(parents=True)
+        (shared_dir / "data").mkdir()
+        (shared_dir / "data" / "file1.csv").write_text("a" * 100)
+        (shared_dir / "data" / "file2.csv").write_text("b" * 200)
+        (shared_dir / "models").mkdir()
+        (shared_dir / "models" / "model.pt").write_bytes(b"x" * 500)
+        (shared_dir / "strategies").mkdir()
+
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            with patch("ktrdr.cli.sandbox.SHARED_DIR", shared_dir):
+                with patch("subprocess.run") as mock_run:
+                    mock_run.return_value.returncode = 0
+                    mock_run.return_value.stdout = "[]"
+                    result = runner.invoke(cli_app, ["sandbox", "status"])
+
+        assert result.exit_code == 0
+        # Should show file counts
+        assert "2" in result.output  # 2 files in data/
+        assert "1" in result.output  # 1 file in models/
+
 
 class TestLogsCommand:
     """Tests for the logs command (Task 3.5)."""
