@@ -21,6 +21,24 @@ mock_response = AsyncMock()
 mock_response.json.return_value = {"workers": [...]}
 ```
 
+### ANSI Codes Breaking CLI Test Assertions
+
+**Problem:** Rich outputs ANSI escape codes for colors, which can break string assertions in CI (but pass locally).
+
+**Symptom:** `assert '--timeout' in result.output` fails because output contains `\x1b[1;36m-\x1b[0m\x1b[1;36m-timeout\x1b[0m`.
+
+**Solution:** Use shared `conftest.py` with `NO_COLOR=1` environment:
+
+```python
+# tests/unit/cli/conftest.py
+@pytest.fixture
+def runner():
+    """CLI runner with colors disabled for consistent test output."""
+    return CliRunner(env={"NO_COLOR": "1"})
+```
+
+This prevents ANSI codes at the source. See [no-color.org](https://no-color.org/).
+
 ## Patterns Established
 
 ### Startability Gate API
