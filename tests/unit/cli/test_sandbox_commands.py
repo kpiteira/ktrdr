@@ -416,6 +416,64 @@ class TestUpCommand:
         # Should show service URLs on success
         assert "http://localhost:8001" in result.output
 
+    def test_up_detects_port_conflict(self, runner, tmp_path):
+        """Verify up fails with exit code 3 when ports are in use (Task 3.4)."""
+        # Setup sandbox environment
+        env_file = tmp_path / ".env.sandbox"
+        env_file.write_text("INSTANCE_ID=test\nSLOT_NUMBER=1\n")
+        compose_file = tmp_path / "docker-compose.sandbox.yml"
+        compose_file.touch()
+
+        # Mock check_ports_available to return conflicting ports
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            with patch(
+                "ktrdr.cli.sandbox.check_ports_available", return_value=[8001, 5433]
+            ):
+                result = runner.invoke(cli_app, ["sandbox", "up"])
+
+        # Should exit with code 3 on port conflict
+        assert result.exit_code == 3
+        # Should show which ports are in use
+        assert "8001" in result.output or "port" in result.output.lower()
+        # Should suggest diagnostic command
+        assert "lsof" in result.output.lower()
+
+    def test_up_proceeds_when_ports_free(self, runner, tmp_path):
+        """Verify up proceeds normally when no port conflicts (Task 3.4)."""
+        # Setup sandbox environment
+        env_file = tmp_path / ".env.sandbox"
+        env_file.write_text(
+            "INSTANCE_ID=test\nSLOT_NUMBER=1\nKTRDR_API_PORT=8001\nKTRDR_DB_PORT=5433\n"
+        )
+        compose_file = tmp_path / "docker-compose.sandbox.yml"
+        compose_file.touch()
+
+        from ktrdr.cli.sandbox_gate import CheckResult, CheckStatus, GateResult
+
+        mock_gate_result = GateResult(
+            passed=True,
+            checks=[
+                CheckResult(name="Database", status=CheckStatus.PASSED),
+                CheckResult(name="Backend", status=CheckStatus.PASSED),
+                CheckResult(name="Workers", status=CheckStatus.PASSED),
+                CheckResult(name="Observability", status=CheckStatus.PASSED),
+            ],
+            duration_seconds=5.0,
+        )
+
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            # Mock ports as free (empty list = no conflicts)
+            with patch("ktrdr.cli.sandbox.check_ports_available", return_value=[]):
+                with patch("subprocess.run"):  # Mock docker compose up
+                    with patch(
+                        "ktrdr.cli.sandbox.run_gate", return_value=mock_gate_result
+                    ):
+                        result = runner.invoke(cli_app, ["sandbox", "up"])
+
+        # Should succeed when ports are free
+        assert result.exit_code == 0
+        assert "passed" in result.output.lower()
+
 
 class TestDownCommand:
     """Tests for the down command."""

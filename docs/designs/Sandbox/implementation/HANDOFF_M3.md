@@ -108,12 +108,25 @@ Workers:
   Worker 4:   http://localhost:<worker_port_4>
 ```
 
+### Port Conflict Detection Exit Codes
+
+Task 3.4 added port conflict detection with exit code 3:
+
+```python
+# Exit codes for `sandbox up`:
+# 1 = Not in sandbox directory / no compose file / docker compose failure
+# 2 = Startability Gate failed
+# 3 = Port conflict detected
+```
+
+The check happens before docker compose starts, using `check_ports_available(slot)`.
+
 ## M3 Progress
 
 - [x] Task 3.1: Create Startability Gate Module
 - [x] Task 3.2: Integrate Gate into `sandbox up`
 - [x] Task 3.3: Implement `ktrdr sandbox status` Command
-- [ ] Task 3.4: Add Port Conflict Detection to `up`
+- [x] Task 3.4: Add Port Conflict Detection to `up`
 - [ ] Task 3.5: Implement `ktrdr sandbox logs` Command
 
-Ready for Task 3.4: Add port conflict detection to `up` command.
+Ready for Task 3.5: Implement `logs` command.

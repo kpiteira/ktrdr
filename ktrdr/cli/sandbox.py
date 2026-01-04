@@ -269,9 +269,20 @@ def up(
         raise typer.Exit(1)
 
     instance_id = env.get("INSTANCE_ID", "unknown")
-    slot = env.get("SLOT_NUMBER", "?")
+    slot_str = env.get("SLOT_NUMBER", "0")
+    slot = int(slot_str) if slot_str.isdigit() else 0
 
     console.print(f"Starting instance: {instance_id} (slot {slot})")
+
+    # Check for port conflicts before starting
+    conflicts = check_ports_available(slot)
+    if conflicts:
+        error_console.print(f"[red]Error:[/red] Ports already in use: {conflicts}")
+        error_console.print("\nThis could be:")
+        error_console.print("  - Another sandbox running on the same slot")
+        error_console.print("  - External process using these ports")
+        error_console.print("\nUse 'lsof -i :<port>' to identify the process.")
+        raise typer.Exit(3)
 
     # Build compose command
     try:
