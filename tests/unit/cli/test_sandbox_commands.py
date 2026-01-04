@@ -19,8 +19,12 @@ from ktrdr.cli import cli_app
 
 @pytest.fixture
 def runner():
-    """Create a Typer CLI runner for testing."""
-    return CliRunner()
+    """Create a Typer CLI runner for testing.
+
+    NO_COLOR=1 ensures consistent output across local/CI environments
+    by disabling ANSI escape codes that can split option names.
+    """
+    return CliRunner(env={"NO_COLOR": "1"})
 
 
 class TestSandboxCLIRegistration:
@@ -333,8 +337,7 @@ class TestDestroyCommand:
         result = runner.invoke(cli_app, ["sandbox", "destroy", "--help"])
 
         assert result.exit_code == 0
-        # Rich inserts ANSI codes that split the option name, check for unique part
-        assert "worktree" in result.output
+        assert "--keep-worktree" in result.output
 
     def test_destroy_requires_confirmation(self, runner, tmp_path):
         """Verify destroy asks for confirmation without --force."""
