@@ -1,5 +1,10 @@
 # Strategy Grammar v3: Design
 
+> **⚠️ STRICT PREREQUISITE:** This design depends on [Indicator Standardization](../indicator-standardization/DESIGN.md)
+> being completed first. The v3 dot notation (`bbands_20_2.upper`) and feature naming require
+> standardized indicator outputs with `get_output_names()`. **Do not begin v3 implementation
+> until indicator standardization is merged and verified.**
+
 ## Problem Statement
 
 The current strategy grammar conflates three distinct concepts:
@@ -470,3 +475,86 @@ nn_inputs:
 3. **Unused indicator validation?**
    **Decision: Warn.** If an indicator is defined but never referenced in any fuzzy set,
    emit a warning during validation. This catches copy-paste errors without blocking.
+
+4. **When is shorthand expanded?**
+   **Decision: During Pydantic parsing.** The `[0, 20, 35]` shorthand is expanded to
+   `{type: "triangular", parameters: [0, 20, 35]}` via a `@model_validator`. This keeps
+   the Pydantic model self-consistent — all downstream code sees the full form.
+
+5. **Feature ordering?**
+   **Decision: Explicit from nn_inputs.** Feature order is determined by:
+   1. `nn_inputs` list order (YAML order preserved)
+   2. Within each nn_input: timeframes order × membership function order
+
+   This order is stored in `ModelMetadataV3.resolved_features` and validated at backtest.
+   This prevents subtle bugs from alphabetical sorting assumptions.
+
+6. **Existing v2 models and strategies?**
+   **Decision: Delete all.** No production models or strategies exist. Clean break
+   with no backward compatibility needed. All existing test artifacts will be deleted
+   as part of the migration.
+
+7. **Same indicator, multiple fuzzy sets?**
+   **Decision: Supported.** Multiple fuzzy sets can reference the same indicator_id.
+   The indicator is computed once per timeframe, then each fuzzy set interprets it.
+
+   Example: `rsi_fast` and `rsi_slow` both reference `rsi_14`, but with different
+   membership function parameters. This enables timeframe-adapted interpretations.
+
+8. **Multi-output indicator references?**
+   **Decision: Dot notation.** Use `indicator_id.output_name` syntax:
+
+   ```yaml
+   fuzzy_sets:
+     bbands_upper_distance:
+       indicator: bbands_20_2.upper    # Specific output
+
+     macd_histogram:
+       indicator: macd_12_26_9.histogram
+   ```
+
+   If no dot, use primary output (defined by indicator's `get_primary_output_suffix()`).
+
+   **Implementation requirement:** Multi-output indicators must implement:
+
+   ```python
+   @classmethod
+   def get_output_names(cls) -> list[str]:
+       """Return logical output names in canonical order."""
+       return ["upper", "middle", "lower"]  # For bbands
+   ```
+
+   This enables:
+   - Strategy validation (verify `.upper` is valid for bbands)
+   - Agent discoverability (list available outputs when designing strategies)
+   - Consistent naming across codebase
+
+   **Standardized output names:**
+
+   | Indicator    | Outputs                       |
+   | ------------ | ----------------------------- |
+   | `bbands`     | `upper`, `middle`, `lower`    |
+   | `macd`       | `line`, `signal`, `histogram` |
+   | `adx`        | `adx`, `plus_di`, `minus_di`  |
+   | `stochastic` | `k`, `d`                      |
+   | `aroon`      | `up`, `down`                  |
+
+   **Note:** Current indicator implementations use inconsistent naming (e.g., MACD uses
+   `MACD_signal_12_26_9` not `signal`). Part of v3 implementation must normalize these
+   to use the logical names above, with parameters handled separately.
+
+---
+
+## Example Strategy
+
+See [example_v3_strategy.yaml](example_v3_strategy.yaml) for a comprehensive example
+demonstrating all v3 features including edge cases.
+
+---
+
+## Related Documents
+
+- [ARCHITECTURE.md](ARCHITECTURE.md) — Technical implementation details and component changes
+- [SCENARIOS.md](SCENARIOS.md) — Validation scenarios and interface contracts
+- [example_v3_strategy.yaml](example_v3_strategy.yaml) — Comprehensive example with edge cases
+- **[../indicator-standardization/DESIGN.md](../indicator-standardization/DESIGN.md)** — **PREREQUISITE** - Must be completed first

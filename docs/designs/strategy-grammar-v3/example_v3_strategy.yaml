@@ -1,0 +1,232 @@
+# Strategy Grammar v3 Example
+#
+# This example demonstrates all v3 features including edge cases:
+# - Multiple indicators with different parameter sets
+# - Same indicator with multiple fuzzy interpretations
+# - Different fuzzy sets applied to different timeframes
+# - The "all" timeframes shorthand
+# - Both shorthand [a,b,c] and full notation for membership functions
+# - Multi-output indicator (bbands)
+
+name: "mtf_adaptive_momentum"
+description: "Multi-timeframe strategy with timeframe-adapted indicator interpretations"
+version: "3.0"
+
+# === DATA SCOPE ===
+training_data:
+  symbols:
+    mode: multi_symbol
+    list: [EURUSD, GBPUSD, USDJPY]
+  timeframes:
+    mode: multi_timeframe
+    list: [5m, 1h, 1d]
+    base_timeframe: 1h
+  history_required: 300
+
+deployment:
+  target_symbols:
+    mode: group_restricted
+  target_timeframes:
+    mode: multi_timeframe
+    supported: [5m, 1h, 1d]
+
+# === INDICATORS ===
+# Pure calculation definitions. Each key is the indicator_id.
+# No timeframe here - timeframes are specified in nn_inputs.
+
+indicators:
+  # RSI with standard period - will be interpreted differently per timeframe
+  rsi_14:
+    type: rsi
+    period: 14
+    source: close
+
+  # MACD for trend/momentum
+  macd_12_26_9:
+    type: macd
+    fast_period: 12
+    slow_period: 26
+    signal_period: 9
+    source: close
+
+  # ATR for volatility context
+  atr_14:
+    type: atr
+    period: 14
+
+  # Bollinger Bands - multi-output indicator
+  bbands_20_2:
+    type: bbands
+    period: 20
+    multiplier: 2.0
+    source: close
+
+# === FUZZY SETS ===
+# Interpretations of indicator values. Each key is the fuzzy_set_id.
+# The `indicator` field links to an indicator_id above.
+
+fuzzy_sets:
+  # Fast RSI interpretation - for short timeframes (more reactive)
+  rsi_fast:
+    indicator: rsi_14
+    # Shorthand notation: [left, peak, right] for triangular
+    oversold: [0, 25, 40]
+    neutral: [35, 50, 65]
+    overbought: [60, 75, 100]
+
+  # Slow RSI interpretation - for longer timeframes (more extreme thresholds)
+  rsi_slow:
+    indicator: rsi_14
+    # Full notation (equivalent to shorthand, shown for documentation)
+    oversold:
+      type: triangular
+      parameters: [0, 15, 25]
+    neutral:
+      type: triangular
+      parameters: [20, 50, 80]
+    overbought:
+      type: triangular
+      parameters: [75, 85, 100]
+
+  # MACD momentum interpretation
+  macd_momentum:
+    indicator: macd_12_26_9
+    bearish: [-50, -10, 0]
+    neutral: [-5, 0, 5]
+    bullish: [0, 10, 50]
+
+  # Volatility regime based on ATR
+  volatility_regime:
+    indicator: atr_14
+    low: [0, 0.001, 0.003]
+    moderate: [0.002, 0.005, 0.010]
+    high: [0.008, 0.015, 0.030]
+
+  # Bollinger Band width - uses middle band (explicit dot notation)
+  # Measures price position relative to middle band
+  bbands_middle_position:
+    indicator: bbands_20_2.middle  # Explicit output selection
+    below: [0.95, 0.97, 0.99]
+    at: [0.98, 1.00, 1.02]
+    above: [1.01, 1.03, 1.05]
+
+  # Bollinger Band squeeze detection - uses upper and lower bands
+  # Multiple fuzzy sets can reference different outputs of same indicator
+  bbands_squeeze:
+    indicator: bbands_20_2.upper  # Upper band for squeeze detection
+    tight: [0, 0.01, 0.02]        # Band width as % of price
+    normal: [0.015, 0.03, 0.05]
+    wide: [0.04, 0.06, 0.10]
+
+# === NEURAL NETWORK INPUTS ===
+# Explicit definition of what the model sees.
+# Order matters: this determines feature order in the model.
+
+nn_inputs:
+  # Fast RSI for scalping timeframe only
+  - fuzzy_set: rsi_fast
+    timeframes: [5m]
+
+  # Slow RSI for trend timeframes
+  - fuzzy_set: rsi_slow
+    timeframes: [1h, 1d]
+
+  # MACD only on intermediate timeframe (where it's most useful)
+  - fuzzy_set: macd_momentum
+    timeframes: [1h]
+
+  # Volatility context on ALL timeframes
+  - fuzzy_set: volatility_regime
+    timeframes: all  # Expands to [5m, 1h, 1d]
+
+  # Bollinger middle position on daily for mean reversion context
+  - fuzzy_set: bbands_middle_position
+    timeframes: [1d]
+
+  # Bollinger squeeze on daily for breakout detection
+  - fuzzy_set: bbands_squeeze
+    timeframes: [1d]
+
+# === GENERATED FEATURES ===
+# Based on the above nn_inputs, the model will receive these features
+# (in this exact order):
+#
+# From rsi_fast @ 5m:
+#   5m_rsi_fast_oversold
+#   5m_rsi_fast_neutral
+#   5m_rsi_fast_overbought
+#
+# From rsi_slow @ 1h, 1d:
+#   1h_rsi_slow_oversold
+#   1h_rsi_slow_neutral
+#   1h_rsi_slow_overbought
+#   1d_rsi_slow_oversold
+#   1d_rsi_slow_neutral
+#   1d_rsi_slow_overbought
+#
+# From macd_momentum @ 1h:
+#   1h_macd_momentum_bearish
+#   1h_macd_momentum_neutral
+#   1h_macd_momentum_bullish
+#
+# From volatility_regime @ all (5m, 1h, 1d):
+#   5m_volatility_regime_low
+#   5m_volatility_regime_moderate
+#   5m_volatility_regime_high
+#   1h_volatility_regime_low
+#   1h_volatility_regime_moderate
+#   1h_volatility_regime_high
+#   1d_volatility_regime_low
+#   1d_volatility_regime_moderate
+#   1d_volatility_regime_high
+#
+# From bbands_middle_position @ 1d (references bbands_20_2.middle):
+#   1d_bbands_middle_position_below
+#   1d_bbands_middle_position_at
+#   1d_bbands_middle_position_above
+#
+# From bbands_squeeze @ 1d (references bbands_20_2.upper):
+#   1d_bbands_squeeze_tight
+#   1d_bbands_squeeze_normal
+#   1d_bbands_squeeze_wide
+#
+# Total: 27 features
+
+# === MODEL CONFIGURATION ===
+model:
+  type: mlp
+  architecture:
+    hidden_layers: [64, 32]
+    activation: relu
+    output_activation: softmax
+    dropout: 0.25
+  features:
+    include_price_context: false
+    lookback_periods: 2
+    scale_features: false  # Fuzzy values already 0-1
+  training:
+    learning_rate: 0.001
+    batch_size: 32
+    epochs: 100
+    optimizer: adam
+
+# === DECISION LOGIC ===
+decisions:
+  output_format: classification
+  confidence_threshold: 0.65
+  position_awareness: true
+  filters:
+    min_signal_separation: 4
+    volume_filter: false
+
+# === TRAINING CONFIGURATION ===
+training:
+  method: supervised
+  labels:
+    source: zigzag
+    zigzag_threshold: 0.025
+    label_lookahead: 20
+  data_split:
+    train: 0.7
+    validation: 0.15
+    test: 0.15
