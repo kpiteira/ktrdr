@@ -227,12 +227,12 @@ Example: `/Users/karl/Documents/dev/ktrdr--feat-operation-metrics` → `ktrdr--f
 
 **Choice:** Implement sandbox commands as a subcommand group of the existing `ktrdr` CLI, not as a separate binary.
 
-**What is Click?** Click is the CLI library we already use for the `ktrdr` command (see `ktrdr/cli/main.py`). It handles argument parsing, help text, and subcommands. No new dependency.
+**What is Typer?** Typer is the CLI library we already use for the `ktrdr` command (see `ktrdr/cli/main.py`). It handles argument parsing, help text, and subcommands, and is built on top of Click. No new dependency.
 
 **Implementation:**
 
 - New file: `ktrdr/cli/sandbox.py`
-- Registered in `ktrdr/cli/main.py` as `cli.add_command(sandbox)`
+- Registered in `ktrdr/cli/__init__.py` via `cli_app.add_typer(sandbox_app)`
 - Commands: `ktrdr sandbox create`, `ktrdr sandbox up`, etc.
 
 **Alternatives considered:**

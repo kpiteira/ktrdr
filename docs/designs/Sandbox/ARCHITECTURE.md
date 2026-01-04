@@ -4,7 +4,7 @@
 
 The sandbox system consists of four main parts:
 
-1. **`ktrdr sandbox` CLI** — A Python Click subcommand that manages instance lifecycle (create, up, down, destroy)
+1. **`ktrdr sandbox` CLI** — A Python Typer subcommand that manages instance lifecycle (create, up, down, destroy)
 2. **Modified Docker Compose** — The existing compose file updated for multi-instance support (no container names, parameterized ports, shared data mounts)
 3. **Instance State** — A simple registry tracking active instances and their port slots
 4. **Shared Data Package** — A standardized way to initialize `~/.ktrdr/shared/` with required data
@@ -21,7 +21,7 @@ The CLI wraps standard Docker Compose operations, adding instance identity, port
 
 **Dependencies:**
 
-- Click (already used by `ktrdr` CLI)
+- Typer (already used by `ktrdr` CLI)
 - Docker SDK for Python (container inspection, health checks)
 - Git (worktree management via subprocess)
 - Existing compose file
