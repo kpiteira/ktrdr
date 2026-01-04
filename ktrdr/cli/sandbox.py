@@ -859,6 +859,21 @@ def status() -> None:
         port = env.get(f"KTRDR_WORKER_PORT_{i}", "?")
         console.print(f"  Worker {i}:   http://localhost:{port}")
 
+    # Shared data section
+    console.print()
+    console.print("[bold]Shared Data:[/bold]")
+    if SHARED_DIR.exists():
+        for subdir in SHARED_SUBDIRS:
+            path = SHARED_DIR / subdir
+            if path.exists():
+                file_count, size = get_dir_stats(path)
+                console.print(f"  {subdir}/: {size} ({file_count} files)")
+            else:
+                console.print(f"  {subdir}/: [dim]not found[/dim]")
+    else:
+        console.print("  [yellow]Not initialized[/yellow]")
+        console.print("  Run: ktrdr sandbox init-shared")
+
 
 @sandbox_app.command()
 def logs(
