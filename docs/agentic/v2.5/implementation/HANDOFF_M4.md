@@ -1,65 +1,71 @@
 # Handoff: M4 Fix Multi-Symbol Pipeline
 
-## Root Cause Identified
+## Finding: Multi-Symbol Training Works Correctly
 
-**The multi-symbol training failure is caused by feature/label size mismatch per symbol.**
+**After E2E testing, multi-symbol training works correctly.** The original concern about `X_test = None` for multi-symbol strategies is NOT occurring.
 
-The issue occurs when:
-1. `create_features()` uses `fuzzy_data` (may have fewer rows due to indicator warmup)
-2. `create_labels()` uses `price_data` (has original row count)
-3. If row counts differ, tensors cannot be properly combined → leads to `X_test = None`
+### E2E Test Results (2026-01-04)
 
-**Example scenario:**
-```
-price_data[1d]: 1000 rows
-fuzzy_data[1d]: 986 rows (14 rows lost to indicator warmup)
-features: 986 samples
-labels: 1000 samples
-→ Size mismatch detected!
-```
-
-## Gotchas
-
-### Early Validation Now Catches Mismatches
-- **Problem:** Previously, size mismatches propagated to train/test split causing `X_test = None`
-- **New behavior:** `TrainingDataError` raised immediately with detailed diagnostics
-- **Symptom:** If you see `Feature/label size mismatch for symbol X`, check indicator warmup period
-
-### Debug Logging in Production
-The preprocessing trace logs show row counts at each step:
-```
+```text
 📊 [EURUSD] Preprocessing trace:
-   • price_data[1d]: 1000 rows
-   • fuzzy_data[1d]: 986 rows
-   • features: 986 samples, 36 dims
-   • labels: 1000 samples
+   • price_data[1d]: 1288 rows
+   • fuzzy_data[1d]: 1288 rows
+   • features: 1288 samples, 9 dims
+   • labels: 1288 samples
+
+📊 [GBPUSD] Preprocessing trace:
+   • price_data[1d]: 1288 rows
+   • fuzzy_data[1d]: 1288 rows
+   • features: 1288 samples, 9 dims
+   • labels: 1288 samples
+
+📊 [USDJPY] Preprocessing trace:
+   • price_data[1d]: 1288 rows
+   • fuzzy_data[1d]: 1288 rows
+   • features: 1288 samples, 9 dims
+   • labels: 1288 samples
+
+🔗 Combining data from 3 symbols:
+   EURUSD: 1288 samples, 9 features
+   GBPUSD: 1288 samples, 9 features
+   USDJPY: 1288 samples, 9 features
+✅ Combined total: 3864 samples, 9 features
 ```
-This helps identify exactly where data is lost.
 
-## Emergent Patterns
+**Training result:** `test_accuracy = 0.4935` (49.35%)
 
-### Validation Sequence
+## What Was Added
+
+1. **Preprocessing trace logging** - Shows row counts at each step per symbol
+2. **Early validation** - Raises `TrainingDataError` if feature/label sizes don't match
+3. **Combination validation** - Checks for empty data, dimension mismatches
+4. **Unit tests** - `test_multi_symbol_data_alignment.py` (7 tests)
+
+## Separate Bug Discovered
+
+The training operation returns correct metrics:
+
+```json
+"test_metrics": {"test_accuracy": 0.4935...}
+```
+
+But the experiment file shows:
+
+```yaml
+test_accuracy: 0
+```
+
+**This is a bug in the research worker's experiment saving code**, not in the training pipeline. Should be tracked as a separate issue.
+
+## Tasks Status
+
+- **Task 4.1** ✅ Complete - Added logging, confirmed multi-symbol works
+- **Task 4.2** ⏭️ Skip - No bug to fix in training pipeline
+- **Task 4.3** 📋 Optional - E2E test could serve as regression guard
+
+## Validation Sequence (For Future Reference)
+
 The validation now happens at two levels:
-1. **Per-symbol validation** (in `train_strategy()`) - catches feature/label mismatch early
-2. **Combination validation** (in `combine_multi_symbol_data()`) - catches cross-symbol issues
 
-### The Fix Path
-
-To actually fix the multi-symbol bug (Task 4.2), likely solutions:
-1. **Align features and labels to same index** - Use fuzzy_data's index for labels too
-2. **Drop warmup rows from price_data before labeling** - Match fuzzy_data row count
-3. **Forward-fill missing fuzzy values** - Instead of dropping rows
-
-## Notes for Task 4.2
-
-The logging added in Task 4.1 will show exactly which symbols have mismatches and why. Run a real multi-symbol training to see the actual values:
-
-```bash
-# Trigger multi-symbol research
-curl -X POST http://localhost:8000/api/v1/agent/trigger \
-  -H "Content-Type: application/json" \
-  -d '{"brief": "Train on EURUSD, GBPUSD, USDJPY with RSI", "model": "haiku"}'
-
-# Check backend logs for the preprocessing trace
-docker logs ktrdr-backend --since 5m | grep -E "Preprocessing trace|mismatch"
-```
+1. **Per-symbol** (in `train_strategy()`) - catches feature/label mismatch early
+2. **Combination** (in `combine_multi_symbol_data()`) - catches cross-symbol issues
