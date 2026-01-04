@@ -84,12 +84,36 @@ result = run_gate(api_port, db_port, timeout=float(timeout))
 # Exit with code 2 on failure
 ```
 
+### Status Command Output Format
+
+Task 3.3 implemented the `status` command with this output structure:
+
+```text
+Instance: ktrdr--<name> (slot N)
+Status: running|stopped|partial|not started
+Containers: X/Y healthy
+
+Services:
+  Backend:    http://localhost:<api_port>
+  API Docs:   http://localhost:<api_port>/api/v1/docs
+  Database:   localhost:<db_port>
+  Grafana:    http://localhost:<grafana_port>
+  Jaeger:     http://localhost:<jaeger_port>
+  Prometheus: http://localhost:<prometheus_port>
+
+Workers:
+  Worker 1:   http://localhost:<worker_port_1>
+  Worker 2:   http://localhost:<worker_port_2>
+  Worker 3:   http://localhost:<worker_port_3>
+  Worker 4:   http://localhost:<worker_port_4>
+```
+
 ## M3 Progress
 
 - [x] Task 3.1: Create Startability Gate Module
 - [x] Task 3.2: Integrate Gate into `sandbox up`
-- [ ] Task 3.3: Implement `ktrdr sandbox status` Command
+- [x] Task 3.3: Implement `ktrdr sandbox status` Command
 - [ ] Task 3.4: Add Port Conflict Detection to `up`
 - [ ] Task 3.5: Implement `ktrdr sandbox logs` Command
 
-Ready for Task 3.3: Implement `status` command.
+Ready for Task 3.4: Add port conflict detection to `up` command.

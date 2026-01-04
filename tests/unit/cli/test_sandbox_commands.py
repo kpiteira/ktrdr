@@ -571,6 +571,137 @@ class TestListCommand:
         assert "8001" in result.output
 
 
+class TestStatusCommand:
+    """Tests for the status command (Task 3.3)."""
+
+    def test_status_help_displays(self, runner):
+        """Verify status command has help text."""
+        result = runner.invoke(cli_app, ["sandbox", "status", "--help"])
+
+        assert result.exit_code == 0
+        assert "status" in result.output.lower()
+
+    def test_status_requires_env_sandbox(self, runner, tmp_path):
+        """Verify status fails if not in sandbox directory."""
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            result = runner.invoke(cli_app, ["sandbox", "status"])
+
+        assert result.exit_code == 1
+        assert "not in a sandbox" in result.output.lower()
+
+    def test_status_shows_instance_info(self, runner, tmp_path):
+        """Verify status shows instance ID and slot."""
+        # Setup sandbox environment
+        env_file = tmp_path / ".env.sandbox"
+        env_file.write_text(
+            "INSTANCE_ID=ktrdr--test-feature\n"
+            "SLOT_NUMBER=1\n"
+            "KTRDR_API_PORT=8001\n"
+            "KTRDR_DB_PORT=5433\n"
+        )
+        compose_file = tmp_path / "docker-compose.sandbox.yml"
+        compose_file.touch()
+
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            with patch("subprocess.run") as mock_run:
+                mock_run.return_value.returncode = 0
+                mock_run.return_value.stdout = "[]"
+                result = runner.invoke(cli_app, ["sandbox", "status"])
+
+        assert result.exit_code == 0
+        # Should show instance ID and slot
+        assert "ktrdr--test-feature" in result.output
+        assert "slot 1" in result.output.lower() or "(slot 1)" in result.output
+
+    def test_status_shows_container_counts(self, runner, tmp_path):
+        """Verify status shows running/total container counts."""
+        import json
+
+        # Setup sandbox environment
+        env_file = tmp_path / ".env.sandbox"
+        env_file.write_text(
+            "INSTANCE_ID=ktrdr--test\n" "SLOT_NUMBER=1\n" "KTRDR_API_PORT=8001\n"
+        )
+        compose_file = tmp_path / "docker-compose.sandbox.yml"
+        compose_file.touch()
+
+        # Mock docker compose ps output with running containers
+        containers = [
+            {"Name": "backend", "State": "running"},
+            {"Name": "db", "State": "running"},
+            {"Name": "worker-1", "State": "running"},
+        ]
+
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            with patch("subprocess.run") as mock_run:
+                mock_run.return_value.returncode = 0
+                mock_run.return_value.stdout = json.dumps(containers)
+                result = runner.invoke(cli_app, ["sandbox", "status"])
+
+        assert result.exit_code == 0
+        # Should show container count (3/3 or 3 of 3)
+        assert "3" in result.output
+
+    def test_status_shows_urls(self, runner, tmp_path):
+        """Verify status shows all service URLs."""
+        # Setup sandbox environment with all ports
+        env_file = tmp_path / ".env.sandbox"
+        env_file.write_text(
+            "INSTANCE_ID=ktrdr--test\n"
+            "SLOT_NUMBER=1\n"
+            "KTRDR_API_PORT=8001\n"
+            "KTRDR_DB_PORT=5433\n"
+            "KTRDR_GRAFANA_PORT=3001\n"
+            "KTRDR_JAEGER_UI_PORT=16687\n"
+            "KTRDR_PROMETHEUS_PORT=9091\n"
+            "KTRDR_WORKER_PORT_1=5010\n"
+            "KTRDR_WORKER_PORT_2=5011\n"
+            "KTRDR_WORKER_PORT_3=5012\n"
+            "KTRDR_WORKER_PORT_4=5013\n"
+        )
+        compose_file = tmp_path / "docker-compose.sandbox.yml"
+        compose_file.touch()
+
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            with patch("subprocess.run") as mock_run:
+                mock_run.return_value.returncode = 0
+                mock_run.return_value.stdout = "[]"
+                result = runner.invoke(cli_app, ["sandbox", "status"])
+
+        assert result.exit_code == 0
+        # Should show all service URLs
+        assert "8001" in result.output  # Backend/API
+        assert "5433" in result.output  # Database
+        assert "3001" in result.output  # Grafana
+        assert "16687" in result.output  # Jaeger
+        assert "9091" in result.output  # Prometheus
+        # Should show worker ports
+        assert "5010" in result.output
+        assert "5011" in result.output
+        assert "5012" in result.output
+        assert "5013" in result.output
+
+    def test_status_works_when_stopped(self, runner, tmp_path):
+        """Verify status works even when containers are stopped."""
+        env_file = tmp_path / ".env.sandbox"
+        env_file.write_text(
+            "INSTANCE_ID=ktrdr--stopped\n" "SLOT_NUMBER=2\n" "KTRDR_API_PORT=8002\n"
+        )
+        compose_file = tmp_path / "docker-compose.sandbox.yml"
+        compose_file.touch()
+
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            with patch("subprocess.run") as mock_run:
+                mock_run.return_value.returncode = 0
+                mock_run.return_value.stdout = "[]"
+                result = runner.invoke(cli_app, ["sandbox", "status"])
+
+        assert result.exit_code == 0
+        assert "ktrdr--stopped" in result.output
+        # Should indicate stopped state
+        assert "stopped" in result.output.lower() or "0" in result.output
+
+
 class TestGetInstanceStatus:
     """Tests for get_instance_status helper."""
 

@@ -4,6 +4,7 @@ This module provides commands for managing isolated development sandbox instance
 Each sandbox runs in its own git worktree with isolated Docker containers.
 """
 
+import json
 import os
 import re
 import subprocess
@@ -467,8 +468,6 @@ def get_instance_status(
         Status string: "running", "stopped", "partial (x/y)", or "unknown".
     """
     try:
-        import json
-
         compose_env = os.environ.copy()
         compose_env.update(env)
 
@@ -572,3 +571,96 @@ def list_instances() -> None:
         )
 
     console.print(table)
+
+
+@sandbox_app.command()
+def status() -> None:
+    """Show detailed status of current sandbox instance."""
+    cwd = Path.cwd()
+    env = load_env_sandbox(cwd)
+
+    if not env:
+        error_console.print("[red]Error:[/red] Not in a sandbox directory")
+        raise typer.Exit(1)
+
+    instance_id = env.get("INSTANCE_ID", "unknown")
+    slot = env.get("SLOT_NUMBER", "?")
+
+    console.print(f"[bold]Instance:[/bold] {instance_id} (slot {slot})")
+
+    # Get container status
+    try:
+        compose_file = find_compose_file(cwd)
+        compose_env = os.environ.copy()
+        compose_env.update(env)
+
+        result = subprocess.run(
+            ["docker", "compose", "-f", str(compose_file), "ps", "--format", "json"],
+            capture_output=True,
+            text=True,
+            env=compose_env,
+        )
+
+        # Parse JSON output - may be array or line-delimited objects
+        stdout = result.stdout.strip()
+        if not stdout:
+            containers: list[dict] = []
+        else:
+            try:
+                parsed = json.loads(stdout)
+                if isinstance(parsed, list):
+                    containers = parsed
+                else:
+                    containers = [parsed]
+            except json.JSONDecodeError:
+                # Handle line-delimited JSON
+                containers = []
+                for line in stdout.split("\n"):
+                    if line.strip():
+                        try:
+                            containers.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            pass
+
+        running = sum(1 for c in containers if c.get("State") == "running")
+        total = len(containers)
+
+        if running == total and total > 0:
+            status_str = "[green]running[/green]"
+        elif running > 0:
+            status_str = f"[yellow]partial ({running}/{total})[/yellow]"
+        elif total > 0:
+            status_str = "[red]stopped[/red]"
+        else:
+            status_str = "[dim]not started[/dim]"
+
+        console.print(f"[bold]Status:[/bold] {status_str}")
+        console.print(f"[bold]Containers:[/bold] {running}/{total} healthy")
+
+    except FileNotFoundError:
+        console.print("[bold]Status:[/bold] [dim]no compose file[/dim]")
+    except Exception as e:
+        console.print(f"[bold]Status:[/bold] [red]error ({e})[/red]")
+
+    console.print()
+
+    # Service URLs
+    api_port = env.get("KTRDR_API_PORT", "8000")
+    db_port = env.get("KTRDR_DB_PORT", "5432")
+    grafana_port = env.get("KTRDR_GRAFANA_PORT", "3000")
+    jaeger_port = env.get("KTRDR_JAEGER_UI_PORT", "16686")
+    prometheus_port = env.get("KTRDR_PROMETHEUS_PORT", "9090")
+
+    console.print("[bold]Services:[/bold]")
+    console.print(f"  Backend:    http://localhost:{api_port}")
+    console.print(f"  API Docs:   http://localhost:{api_port}/api/v1/docs")
+    console.print(f"  Database:   localhost:{db_port}")
+    console.print(f"  Grafana:    http://localhost:{grafana_port}")
+    console.print(f"  Jaeger:     http://localhost:{jaeger_port}")
+    console.print(f"  Prometheus: http://localhost:{prometheus_port}")
+
+    console.print()
+    console.print("[bold]Workers:[/bold]")
+    for i in range(1, 5):
+        port = env.get(f"KTRDR_WORKER_PORT_{i}", "?")
+        console.print(f"  Worker {i}:   http://localhost:{port}")
