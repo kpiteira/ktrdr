@@ -232,7 +232,8 @@ class StartabilityGate:
                     )
 
                 data = resp.json()
-                workers = data.get("workers", [])
+                # API returns list directly, not {"workers": [...]}
+                workers = data if isinstance(data, list) else data.get("workers", [])
                 count = len(workers)
 
                 if count >= 4:
