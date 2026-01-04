@@ -61,8 +61,12 @@ def get_dir_stats(path: Path) -> tuple[int, str]:
 
     for f in path.rglob("*"):
         if f.is_file():
-            file_count += 1
-            total_size += f.stat().st_size
+            try:
+                total_size += f.stat().st_size
+                file_count += 1
+            except (OSError, PermissionError):
+                # Skip files that cannot be accessed
+                continue
 
     if file_count == 0:
         return 0, "0 B"
@@ -93,9 +97,19 @@ def copy_with_progress(src: Path, dst: Path) -> None:
 
     # Remove existing destination if present
     if dst.exists():
-        shutil.rmtree(dst)
+        try:
+            shutil.rmtree(dst)
+        except OSError as exc:
+            error_console.print(
+                f"[red]Error:[/red] Failed to remove existing {dst}: {exc}"
+            )
+            raise typer.Exit(1) from exc
 
-    shutil.copytree(src, dst)
+    try:
+        shutil.copytree(src, dst)
+    except (OSError, shutil.Error) as exc:
+        error_console.print(f"[red]Error:[/red] Failed to copy {src} to {dst}: {exc}")
+        raise typer.Exit(1) from exc
 
 
 def slugify(name: str) -> str:
@@ -979,9 +993,17 @@ def init_shared(
         return
 
     # No --from and no --minimal: check if shared dir already has content
+    def has_content(path: Path) -> bool:
+        if not path.exists():
+            return False
+        try:
+            return any(path.iterdir())
+        except (PermissionError, OSError):
+            # If unreadable, assume it has content to avoid overwriting
+            return True
+
     existing_content = any(
-        (SHARED_DIR / subdir).exists() and list((SHARED_DIR / subdir).iterdir())
-        for subdir in SHARED_SUBDIRS
+        has_content(SHARED_DIR / subdir) for subdir in SHARED_SUBDIRS
     )
 
     if existing_content:
