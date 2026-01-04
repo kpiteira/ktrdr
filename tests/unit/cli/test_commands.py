@@ -256,23 +256,16 @@ class TestMainCliCallback:
 
     def test_help_shows_api_resolution_priority(self, runner: "CliRunner") -> None:
         """Help output explains API URL resolution priority order."""
-        import re
-
         result = runner.invoke(cli_app, ["--help"])
 
         assert result.exit_code == 0
-
-        # Strip ANSI codes for reliable string matching
-        # Rich/Typer may add styling even with NO_COLOR in some environments
-        ansi_escape = re.compile(r"\x1b\[[0-9;]*m")
-        clean_output = ansi_escape.sub("", result.stdout)
-
         # Check that priority order is documented in docstring
-        assert "Target API Resolution" in clean_output
-        assert "--url flag" in clean_output
-        assert "--port flag" in clean_output
-        assert ".env.sandbox" in clean_output
-        assert "Default" in clean_output
+        # Note: ANSI codes are stripped by the runner fixture automatically
+        assert "Target API Resolution" in result.stdout
+        assert "--url flag" in result.stdout
+        assert "--port flag" in result.stdout
+        assert ".env.sandbox" in result.stdout
+        assert "Default" in result.stdout
 
     def test_existing_url_flag_accepted(self, runner: "CliRunner") -> None:
         """Existing --url flag behavior is preserved."""
