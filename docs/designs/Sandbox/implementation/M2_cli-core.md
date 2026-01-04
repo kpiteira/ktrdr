@@ -176,8 +176,8 @@ def get_ports(slot: int) -> PortAllocation:
         db=5432 + slot,
         grafana=3000 + slot,
         jaeger_ui=16686 + slot,
-        jaeger_otlp_grpc=4317 + slot,
-        jaeger_otlp_http=4318 + slot,
+        jaeger_otlp_grpc=4317 + slot * 10,  # 4327, 4337, ... (10-slot offset)
+        jaeger_otlp_http=4318 + slot * 10,  # 4328, 4338, ...
         prometheus=9090 + slot,
         worker_ports=[
             5010 + (slot - 1) * 10,      # 5010, 5020, 5030, ...
