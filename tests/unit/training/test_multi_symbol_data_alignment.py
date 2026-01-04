@@ -219,20 +219,15 @@ class TestMultiSymbolDebugLogging:
         # Act
         TrainingPipeline.combine_multi_symbol_data(all_features, all_labels, symbols)
 
-        # Assert - Check for logging (will fail until we add logging)
-        # This test is intentionally checking for logging that doesn't exist yet
-        # to drive the implementation
-        pass  # Logging assertion would go here once implemented
+        # Assert - Verify logging is present
+        log_text = caplog.text
 
+        # Check for combining header
+        assert "Combining data from 2 symbols" in log_text
 
-class TestTrainStrategyMultiSymbolValidation:
-    """Integration-level tests for multi-symbol train_strategy validation."""
+        # Check for per-symbol sample counts
+        assert "AAPL: 100 samples" in log_text
+        assert "MSFT: 120 samples" in log_text
 
-    def test_train_strategy_validates_feature_label_consistency(self):
-        """train_strategy should validate feature/label sizes before combining.
-
-        This is the key validation that must be added to catch the root cause.
-        """
-        # This test documents the expected behavior
-        # Implementation will add validation in train_strategy() before combine step
-        pass  # Will be implemented in Task 4.2 after root cause is identified
+        # Check for combined total
+        assert "Combined total: 220 samples" in log_text
