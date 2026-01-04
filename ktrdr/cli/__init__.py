@@ -129,6 +129,7 @@ from ktrdr.cli.fuzzy_commands import fuzzy_app  # noqa: E402
 from ktrdr.cli.ib_commands import ib_app  # noqa: E402
 from ktrdr.cli.indicator_commands import indicators_app  # noqa: E402
 from ktrdr.cli.operations_commands import operations_app  # noqa: E402
+from ktrdr.cli.sandbox import sandbox_app  # noqa: E402
 from ktrdr.cli.strategy_commands import strategies_app  # noqa: E402
 
 # Temporarily disabled while updating multi-timeframe for pure fuzzy
@@ -162,6 +163,9 @@ cli_app.add_typer(
 cli_app.add_typer(fuzzy_app, name="fuzzy", help="Fuzzy logic operations commands")
 cli_app.add_typer(
     deploy_app, name="deploy", help="Deploy KTRDR services to pre-production"
+)
+cli_app.add_typer(
+    sandbox_app, name="sandbox", help="Manage isolated development sandbox instances"
 )
 # Temporarily disabled while updating multi-timeframe for pure fuzzy
 # cli_app.add_typer(
