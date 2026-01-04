@@ -280,13 +280,16 @@ class OperationsService:
 
             return operation
 
-    async def start_operation(self, operation_id: str, task: asyncio.Task) -> None:
+    async def start_operation(
+        self, operation_id: str, task: Optional[asyncio.Task] = None
+    ) -> None:
         """
-        Mark an operation as started and register its task.
+        Mark an operation as started and optionally register its task.
 
         Args:
             operation_id: Operation identifier
-            task: Asyncio task for the operation
+            task: Asyncio task for the operation (optional for distributed ops
+                  where cancellation goes via remote proxy)
 
         Note:
             For resume scenarios, call adopt_operation() first to ensure
@@ -319,8 +322,9 @@ class OperationsService:
                     started_at=operation.started_at,
                 )
 
-            # Register task for cancellation
-            self._operation_tasks[operation_id] = task
+            # Register task for cancellation (only if provided - distributed ops use proxy)
+            if task is not None:
+                self._operation_tasks[operation_id] = task
 
             logger.info(f"Started operation: {operation_id}")
 
@@ -927,7 +931,20 @@ class OperationsService:
                     self._cache[operation_id] = operation
 
             if not operation:
-                return None
+                # Check if there's a remote proxy for this operation (distributed worker case)
+                # The worker creates/owns the operation - backend just proxies
+                remote_proxy_info = self._get_remote_proxy(operation_id)
+                if remote_proxy_info:
+                    # Query proxy to get operation from worker
+                    operation = await self._fetch_operation_from_proxy(
+                        operation_id, remote_proxy_info
+                    )
+                    if operation:
+                        # Cache for future reads
+                        self._cache[operation_id] = operation
+
+                if not operation:
+                    return None
 
             # TASK 1.3/1.4: Pull from local bridge if registered and operation is active
             # (RUNNING or RESUMING - need to sync status transitions)
@@ -1413,6 +1430,122 @@ class OperationsService:
                 f"Refreshed operation {operation_id} from bridge "
                 f"(cursor {cursor} → {new_cursor}, {len(new_metrics)} new metrics)"
             )
+
+    async def _fetch_operation_from_proxy(
+        self, operation_id: str, remote_proxy_info: tuple[Any, str]
+    ) -> Optional[OperationInfo]:
+        """
+        Fetch operation from remote worker via proxy (for distributed worker case).
+
+        This is called when the backend doesn't have the operation locally but has
+        a proxy registered. The worker creates and owns the operation - backend
+        just proxies queries to it.
+
+        Args:
+            operation_id: Backend operation identifier
+            remote_proxy_info: Tuple of (proxy, host_operation_id)
+
+        Returns:
+            OperationInfo constructed from proxy response, or None on error
+        """
+        proxy, host_operation_id = remote_proxy_info
+
+        try:
+            # Query host service for operation
+            host_data = await proxy.get_operation(host_operation_id)
+
+            if not host_data:
+                logger.warning(
+                    f"Proxy returned no data for operation {host_operation_id}"
+                )
+                return None
+
+            # Parse timestamps
+            created_at = None
+            started_at = None
+            completed_at = None
+
+            if "created_at" in host_data and host_data["created_at"]:
+                if isinstance(host_data["created_at"], str):
+                    created_at = datetime.fromisoformat(
+                        host_data["created_at"].replace("Z", "+00:00")
+                    )
+                else:
+                    created_at = host_data["created_at"]
+
+            if "started_at" in host_data and host_data["started_at"]:
+                if isinstance(host_data["started_at"], str):
+                    started_at = datetime.fromisoformat(
+                        host_data["started_at"].replace("Z", "+00:00")
+                    )
+                else:
+                    started_at = host_data["started_at"]
+
+            if "completed_at" in host_data and host_data["completed_at"]:
+                if isinstance(host_data["completed_at"], str):
+                    completed_at = datetime.fromisoformat(
+                        host_data["completed_at"].replace("Z", "+00:00")
+                    )
+                else:
+                    completed_at = host_data["completed_at"]
+
+            # Parse progress
+            progress = OperationProgress()
+            if "progress" in host_data and host_data["progress"]:
+                host_progress = host_data["progress"]
+                progress = OperationProgress(
+                    percentage=host_progress.get("percentage", 0.0),
+                    current_step=host_progress.get("current_step", ""),
+                    steps_completed=host_progress.get("steps_completed", 0),
+                    steps_total=host_progress.get("steps_total", 0),
+                    items_processed=host_progress.get("items_processed", 0),
+                    items_total=host_progress.get("items_total"),
+                    current_item=host_progress.get("current_item"),
+                )
+
+            # Parse metadata
+            metadata = OperationMetadata()
+            if "metadata" in host_data and host_data["metadata"]:
+                host_meta = host_data["metadata"]
+                metadata = OperationMetadata(
+                    symbol=host_meta.get("symbol"),
+                    timeframe=host_meta.get("timeframe"),
+                    mode=host_meta.get("mode"),
+                    parameters=host_meta.get("parameters", {}),
+                )
+
+            # Construct OperationInfo
+            operation = OperationInfo(
+                operation_id=operation_id,  # Use backend's ID
+                parent_operation_id=host_data.get("parent_operation_id"),
+                operation_type=OperationType(host_data.get("operation_type", "training")),
+                status=OperationStatus(host_data.get("status", "pending")),
+                created_at=created_at or datetime.now(timezone.utc),
+                started_at=started_at,
+                completed_at=completed_at,
+                metadata=metadata,
+                progress=progress,
+                error_message=host_data.get("error_message"),
+                result_summary=host_data.get("result_summary"),
+                metrics=host_data.get("metrics"),
+                is_backend_local=False,  # This is a distributed operation
+            )
+
+            # Update cache timestamp
+            self._last_refresh[operation_id] = time.time()
+
+            logger.info(
+                f"Fetched operation {operation_id} from proxy "
+                f"(status={operation.status.value}, progress={progress.percentage:.1f}%)"
+            )
+
+            return operation
+
+        except Exception as e:
+            logger.error(
+                f"Failed to fetch operation {operation_id} from proxy: {e}"
+            )
+            return None
 
     async def _refresh_from_remote_proxy(self, operation_id: str) -> None:
         """
