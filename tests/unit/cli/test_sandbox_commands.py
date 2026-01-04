@@ -5,6 +5,7 @@ Task 2.3: Verify the sandbox CLI module is properly registered and provides help
 Task 2.4: Test the create command functionality.
 Task 2.5: Test the up and down commands.
 Task 2.6: Test the destroy command.
+Task 2.7: Test the list command.
 """
 
 from pathlib import Path
@@ -363,3 +364,96 @@ class TestDestroyCommand:
 
         # Should not prompt for confirmation
         assert "confirm" not in result.output.lower() or result.exit_code == 0
+
+
+class TestListCommand:
+    """Tests for the list command."""
+
+    def test_list_help_displays(self, runner):
+        """Verify list command has help text."""
+        result = runner.invoke(cli_app, ["sandbox", "list", "--help"])
+
+        assert result.exit_code == 0
+        assert "list" in result.output.lower()
+
+    def test_list_empty_registry(self, runner, tmp_path):
+        """Verify list shows message when no instances exist."""
+        registry_dir = tmp_path / ".ktrdr" / "sandbox"
+        registry_dir.mkdir(parents=True)
+        registry_file = registry_dir / "instances.json"
+
+        with patch("ktrdr.cli.sandbox_registry.REGISTRY_DIR", registry_dir):
+            with patch("ktrdr.cli.sandbox_registry.REGISTRY_FILE", registry_file):
+                result = runner.invoke(cli_app, ["sandbox", "list"])
+
+        assert result.exit_code == 0
+        assert "no sandbox instances" in result.output.lower()
+
+    def test_list_shows_instances(self, runner, tmp_path):
+        """Verify list shows registered instances."""
+        import json
+
+        # Create registry with an instance
+        registry_dir = tmp_path / ".ktrdr" / "sandbox"
+        registry_dir.mkdir(parents=True)
+        registry_file = registry_dir / "instances.json"
+
+        # Create instance directory with .env.sandbox
+        instance_dir = tmp_path / "ktrdr--test-instance"
+        instance_dir.mkdir()
+        env_file = instance_dir / ".env.sandbox"
+        env_file.write_text("INSTANCE_ID=ktrdr--test-instance\nKTRDR_API_PORT=8001\n")
+
+        registry_data = {
+            "version": 1,
+            "instances": {
+                "ktrdr--test-instance": {
+                    "instance_id": "ktrdr--test-instance",
+                    "slot": 1,
+                    "path": str(instance_dir),
+                    "created_at": "2024-01-01T00:00:00Z",
+                    "is_worktree": True,
+                    "parent_repo": str(tmp_path),
+                }
+            },
+        }
+        registry_file.write_text(json.dumps(registry_data))
+
+        with patch("ktrdr.cli.sandbox_registry.REGISTRY_DIR", registry_dir):
+            with patch("ktrdr.cli.sandbox_registry.REGISTRY_FILE", registry_file):
+                result = runner.invoke(cli_app, ["sandbox", "list"])
+
+        assert result.exit_code == 0
+        assert "ktrdr--test-instance" in result.output
+        assert "8001" in result.output
+
+
+class TestGetInstanceStatus:
+    """Tests for get_instance_status helper."""
+
+    def test_get_instance_status_returns_unknown_on_error(self, tmp_path):
+        """Verify unknown status on docker compose error."""
+        from ktrdr.cli.sandbox import get_instance_status
+
+        compose_file = tmp_path / "docker-compose.yml"
+        compose_file.touch()
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 1
+            status = get_instance_status("test", compose_file, {})
+
+        assert status == "unknown"
+
+    def test_get_instance_status_returns_stopped_on_empty(self, tmp_path):
+        """Verify stopped status when no containers found."""
+        from ktrdr.cli.sandbox import get_instance_status
+
+        compose_file = tmp_path / "docker-compose.yml"
+        compose_file.touch()
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = "[]"
+            status = get_instance_status("test", compose_file, {})
+
+        assert status == "stopped"

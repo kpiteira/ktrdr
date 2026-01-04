@@ -13,14 +13,17 @@ from typing import Optional
 
 import typer
 from rich.console import Console
+from rich.table import Table
 
 from ktrdr.cli.sandbox_ports import check_ports_available, get_ports
 from ktrdr.cli.sandbox_registry import (
     InstanceInfo,
     add_instance,
     allocate_next_slot,
+    clean_stale_entries,
     get_allocated_slots,
     get_instance,
+    load_registry,
     remove_instance,
 )
 
@@ -410,3 +413,123 @@ def destroy(
             console.print("  ✓ Directory removed")
 
     console.print(f"\n[green]Instance '{instance_id}' destroyed[/green]")
+
+
+def get_instance_status(
+    instance_id: str, compose_file: Path, env: dict[str, str]
+) -> str:
+    """Check if instance containers are running.
+
+    Args:
+        instance_id: The instance identifier (unused but kept for API consistency).
+        compose_file: Path to the compose file.
+        env: Environment variables for Docker Compose.
+
+    Returns:
+        Status string: "running", "stopped", "partial (x/y)", or "unknown".
+    """
+    try:
+        import json
+
+        compose_env = os.environ.copy()
+        compose_env.update(env)
+
+        result = subprocess.run(
+            ["docker", "compose", "-f", str(compose_file), "ps", "--format", "json"],
+            capture_output=True,
+            text=True,
+            env=compose_env,
+        )
+        if result.returncode != 0:
+            return "unknown"
+
+        # Parse JSON output - may be array or line-delimited objects
+        stdout = result.stdout.strip()
+        if not stdout:
+            return "stopped"
+
+        # Try parsing as JSON array first
+        try:
+            containers = json.loads(stdout)
+            if not isinstance(containers, list):
+                containers = [containers]
+        except json.JSONDecodeError:
+            # Handle line-delimited JSON (docker compose v2.21+)
+            containers = []
+            for line in stdout.split("\n"):
+                if line.strip():
+                    try:
+                        containers.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        pass
+
+        if not containers:
+            return "stopped"
+
+        running = sum(1 for c in containers if c.get("State") == "running")
+        total = len(containers)
+
+        if running == total:
+            return "running"
+        elif running > 0:
+            return f"partial ({running}/{total})"
+        else:
+            return "stopped"
+    except Exception:
+        return "unknown"
+
+
+@sandbox_app.command("list")
+def list_instances() -> None:
+    """List all sandbox instances."""
+    # Clean stale entries first
+    stale = clean_stale_entries()
+    if stale:
+        console.print(f"[dim]Cleaned {len(stale)} stale entries[/dim]")
+
+    registry = load_registry()
+
+    if not registry.instances:
+        console.print("No sandbox instances found.")
+        console.print("Create one with: ktrdr sandbox create <name>")
+        return
+
+    table = Table(title="Sandbox Instances")
+    table.add_column("Instance", style="cyan")
+    table.add_column("Slot", justify="center")
+    table.add_column("Status", justify="center")
+    table.add_column("API Port", justify="center")
+    table.add_column("Path")
+
+    for instance_id, info in sorted(registry.instances.items()):
+        path = Path(info.path)
+        env = load_env_sandbox(path) if path.exists() else {}
+
+        # Check status
+        status = "missing"
+        if path.exists():
+            try:
+                compose_file = find_compose_file(path)
+                status = get_instance_status(instance_id, compose_file, env)
+            except FileNotFoundError:
+                status = "no compose"
+
+        # Color status
+        if status == "running":
+            status_display = "[green]running[/green]"
+        elif status == "stopped":
+            status_display = "[yellow]stopped[/yellow]"
+        elif status.startswith("partial"):
+            status_display = f"[yellow]{status}[/yellow]"
+        else:
+            status_display = f"[red]{status}[/red]"
+
+        table.add_row(
+            instance_id,
+            str(info.slot),
+            status_display,
+            env.get("KTRDR_API_PORT", "?"),
+            str(path),
+        )
+
+    console.print(table)
