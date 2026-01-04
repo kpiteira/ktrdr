@@ -113,9 +113,34 @@ if is_worktree:
 - Exit 2: Not a KTRDR repository
 - Exit 3: Port conflicts
 
+## Patterns Established (Task 4.4)
+
+### Help Text via Callback Docstring
+
+The CLI app help comes from the `main()` callback docstring, not the `Typer()` constructor:
+
+```python
+# Typer constructor has no help= (uses callback docstring)
+cli_app = typer.Typer(name="ktrdr", add_completion=False)
+
+@cli_app.callback()
+def main(...):
+    """
+    KTRDR - Trading analysis and automation tool.
+
+    Target API Resolution (highest to lowest priority):
+      1. --url flag: Explicit full URL
+      2. --port flag: Localhost with specified port
+      3. .env.sandbox: Auto-detected in current directory tree
+      4. Default: http://localhost:8000
+    """
+```
+
+This ensures multiline help is shown in `ktrdr --help`.
+
 ## M4 Progress
 
 - [x] Task 4.1: Implement URL Resolution Logic
 - [x] Task 4.2: Add `--port` Flag to Main CLI
 - [x] Task 4.3: Implement `ktrdr sandbox init` Command
-- [ ] Task 4.4: Update CLI Help Text
+- [x] Task 4.4: Update CLI Help Text
