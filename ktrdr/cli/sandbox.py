@@ -675,3 +675,41 @@ def status() -> None:
     for i in range(1, 5):
         port = env.get(f"KTRDR_WORKER_PORT_{i}", "?")
         console.print(f"  Worker {i}:   http://localhost:{port}")
+
+
+@sandbox_app.command()
+def logs(
+    service: Optional[str] = typer.Argument(
+        None, help="Service name (e.g., backend, db)"
+    ),
+    follow: bool = typer.Option(False, "--follow", "-f", help="Follow log output"),
+    tail: int = typer.Option(100, "--tail", "-n", help="Number of lines to show"),
+) -> None:
+    """View logs for sandbox services."""
+    cwd = Path.cwd()
+    env = load_env_sandbox(cwd)
+
+    if not env:
+        error_console.print("[red]Error:[/red] Not in a sandbox directory")
+        raise typer.Exit(1)
+
+    try:
+        compose_file = find_compose_file(cwd)
+    except FileNotFoundError as e:
+        error_console.print("[red]Error:[/red] No docker-compose file found")
+        raise typer.Exit(1) from e
+
+    compose_env = os.environ.copy()
+    compose_env.update(env)
+
+    cmd = ["docker", "compose", "-f", str(compose_file), "logs"]
+    cmd.extend(["--tail", str(tail)])
+    if follow:
+        cmd.append("-f")
+    if service:
+        cmd.append(service)
+
+    try:
+        subprocess.run(cmd, env=compose_env)
+    except KeyboardInterrupt:
+        pass  # Normal exit from follow mode

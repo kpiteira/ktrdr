@@ -760,6 +760,103 @@ class TestStatusCommand:
         assert "stopped" in result.output.lower() or "0" in result.output
 
 
+class TestLogsCommand:
+    """Tests for the logs command (Task 3.5)."""
+
+    def test_logs_help_displays(self, runner):
+        """Verify logs command has help text."""
+        result = runner.invoke(cli_app, ["sandbox", "logs", "--help"])
+
+        assert result.exit_code == 0
+        assert "logs" in result.output.lower()
+        assert "--follow" in result.output or "-f" in result.output
+
+    def test_logs_requires_env_sandbox(self, runner, tmp_path):
+        """Verify logs fails if not in sandbox directory."""
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            result = runner.invoke(cli_app, ["sandbox", "logs"])
+
+        assert result.exit_code == 1
+        assert "not in a sandbox" in result.output.lower()
+
+    def test_logs_requires_compose_file(self, runner, tmp_path):
+        """Verify logs fails if no compose file exists."""
+        env_file = tmp_path / ".env.sandbox"
+        env_file.write_text("INSTANCE_ID=test\nSLOT_NUMBER=1\n")
+
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            result = runner.invoke(cli_app, ["sandbox", "logs"])
+
+        assert result.exit_code == 1
+        assert "compose" in result.output.lower()
+
+    def test_logs_calls_docker_compose(self, runner, tmp_path):
+        """Verify logs calls docker compose logs with correct args."""
+        env_file = tmp_path / ".env.sandbox"
+        env_file.write_text("INSTANCE_ID=test\nSLOT_NUMBER=1\n")
+        compose_file = tmp_path / "docker-compose.sandbox.yml"
+        compose_file.touch()
+
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            with patch("subprocess.run") as mock_run:
+                result = runner.invoke(cli_app, ["sandbox", "logs"])
+
+        assert result.exit_code == 0
+        # Should have called docker compose logs
+        mock_run.assert_called_once()
+        call_args = mock_run.call_args[0][0]
+        assert "docker" in call_args
+        assert "compose" in call_args
+        assert "logs" in call_args
+        assert "--tail" in call_args
+
+    def test_logs_with_service_filter(self, runner, tmp_path):
+        """Verify logs can filter to specific service."""
+        env_file = tmp_path / ".env.sandbox"
+        env_file.write_text("INSTANCE_ID=test\nSLOT_NUMBER=1\n")
+        compose_file = tmp_path / "docker-compose.sandbox.yml"
+        compose_file.touch()
+
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            with patch("subprocess.run") as mock_run:
+                result = runner.invoke(cli_app, ["sandbox", "logs", "backend"])
+
+        assert result.exit_code == 0
+        call_args = mock_run.call_args[0][0]
+        assert "backend" in call_args
+
+    def test_logs_with_follow_option(self, runner, tmp_path):
+        """Verify --follow/-f option is passed to docker compose."""
+        env_file = tmp_path / ".env.sandbox"
+        env_file.write_text("INSTANCE_ID=test\nSLOT_NUMBER=1\n")
+        compose_file = tmp_path / "docker-compose.sandbox.yml"
+        compose_file.touch()
+
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            with patch("subprocess.run") as mock_run:
+                result = runner.invoke(cli_app, ["sandbox", "logs", "-f"])
+
+        assert result.exit_code == 0
+        call_args = mock_run.call_args[0][0]
+        assert "-f" in call_args
+
+    def test_logs_with_tail_option(self, runner, tmp_path):
+        """Verify --tail/-n option controls line count."""
+        env_file = tmp_path / ".env.sandbox"
+        env_file.write_text("INSTANCE_ID=test\nSLOT_NUMBER=1\n")
+        compose_file = tmp_path / "docker-compose.sandbox.yml"
+        compose_file.touch()
+
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            with patch("subprocess.run") as mock_run:
+                result = runner.invoke(cli_app, ["sandbox", "logs", "--tail", "50"])
+
+        assert result.exit_code == 0
+        call_args = mock_run.call_args[0][0]
+        assert "--tail" in call_args
+        assert "50" in call_args
+
+
 class TestGetInstanceStatus:
     """Tests for get_instance_status helper."""
 

@@ -121,12 +121,23 @@ Task 3.4 added port conflict detection with exit code 3:
 
 The check happens before docker compose starts, using `check_ports_available(slot)`.
 
+### Logs Command
+
+Task 3.5 implemented `logs` command with options:
+
+```bash
+ktrdr sandbox logs              # All services, last 100 lines
+ktrdr sandbox logs backend      # Single service
+ktrdr sandbox logs -f           # Follow mode (Ctrl+C to exit)
+ktrdr sandbox logs --tail 50    # Control line count
+```
+
 ## M3 Progress
 
 - [x] Task 3.1: Create Startability Gate Module
 - [x] Task 3.2: Integrate Gate into `sandbox up`
 - [x] Task 3.3: Implement `ktrdr sandbox status` Command
 - [x] Task 3.4: Add Port Conflict Detection to `up`
-- [ ] Task 3.5: Implement `ktrdr sandbox logs` Command
+- [x] Task 3.5: Implement `ktrdr sandbox logs` Command
 
-Ready for Task 3.5: Implement `logs` command.
+**M3 COMPLETE** — All 5 tasks done. Ready for M4: CLI Auto-Detection.
