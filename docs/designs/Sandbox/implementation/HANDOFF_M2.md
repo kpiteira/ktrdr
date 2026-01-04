@@ -47,6 +47,55 @@ with patch("ktrdr.cli.sandbox_ports.is_port_free", side_effect=mock_is_port_free
     # conflicts will contain ports.backend
 ```
 
+### Instance Registry API
+
+Task 2.2 created `ktrdr/cli/sandbox_registry.py` with:
+
+```python
+from ktrdr.cli.sandbox_registry import (
+    add_instance, get_instance, remove_instance,
+    allocate_next_slot, get_allocated_slots, clean_stale_entries,
+    load_registry, InstanceInfo
+)
+
+# Allocate next available slot (fills gaps)
+slot = allocate_next_slot()  # Returns 1-10, raises if exhausted
+
+# Create and register an instance
+info = InstanceInfo(
+    instance_id="ktrdr--my-feature",
+    slot=slot,
+    path="/path/to/ktrdr--my-feature",
+    created_at="2024-01-15T10:30:00Z",
+    is_worktree=True,
+    parent_repo="/path/to/ktrdr"
+)
+add_instance(info)
+
+# Query instances
+instance = get_instance("ktrdr--my-feature")
+allocated = get_allocated_slots()  # Returns set[int]
+
+# Cleanup
+remove_instance("ktrdr--my-feature")
+stale = clean_stale_entries()  # Removes entries with missing directories
+```
+
+### Testing Registry Operations
+
+For tests, mock the registry path to use a temp directory:
+
+```python
+@pytest.fixture
+def mock_registry_path(tmp_path):
+    registry_dir = tmp_path / ".ktrdr" / "sandbox"
+    registry_dir.mkdir(parents=True)
+    registry_file = registry_dir / "instances.json"
+    with patch("ktrdr.cli.sandbox_registry.REGISTRY_DIR", registry_dir):
+        with patch("ktrdr.cli.sandbox_registry.REGISTRY_FILE", registry_file):
+            yield registry_file
+```
+
 ## For Next Tasks
 
 - **Task 2.2 (Registry):** Use `get_ports(slot).to_env_dict()` when generating `.env.sandbox`
