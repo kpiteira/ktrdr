@@ -479,7 +479,7 @@ class FuzzyService(BaseService):
                         indicator_name, indicator_values.tolist(), dates
                     )
                     if hasattr(fuzzy_perf, "__getitem__"):  # It's dict-like
-                        fuzzy_perf["end_tracking"]()  # type: ignore[index]
+                        fuzzy_perf["end_tracking"]()
                     else:
                         # Handle non-dict return case
                         pass

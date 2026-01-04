@@ -121,6 +121,28 @@ class TestShutdownDetection:
     """Tests for shutdown detection during operation (Task 6.2)."""
 
     @pytest.mark.asyncio
+    async def test_stale_shutdown_event_cleared_at_operation_start(self):
+        """Test that a stale shutdown event from a previous operation is cleared.
+
+        This prevents the bug where a SIGTERM during one operation would cause
+        all subsequent operations to immediately cancel.
+        """
+        worker = MockWorker()
+
+        # Simulate stale shutdown event from previous operation
+        worker._shutdown_event.set()
+
+        # New operation should complete normally (event cleared at start)
+        async def quick_operation():
+            return "completed"
+
+        result = await worker.run_with_graceful_shutdown("op_new", quick_operation())
+        assert result == "completed"
+
+        # Event should have been cleared
+        assert not worker._shutdown_event.is_set()
+
+    @pytest.mark.asyncio
     async def test_shutdown_detected_during_operation(self):
         """Test shutdown is detected when signal received during operation."""
         worker = MockWorker()
@@ -155,15 +177,23 @@ class TestShutdownDetection:
     async def test_checkpoint_saved_on_shutdown(self):
         """Test checkpoint is saved with type='shutdown' when shutdown detected."""
         worker = MockWorker()
+        operation_started = asyncio.Event()
 
         async def long_operation():
+            operation_started.set()
             await asyncio.sleep(10)
 
-        # Set shutdown immediately
-        worker._shutdown_event.set()
+        async def trigger_shutdown():
+            await operation_started.wait()
+            await asyncio.sleep(0.01)  # Small delay to ensure operation is running
+            worker._shutdown_event.set()
+
+        shutdown_task = asyncio.create_task(trigger_shutdown())
 
         with pytest.raises(GracefulShutdownError):
             await worker.run_with_graceful_shutdown("op_ckpt", long_operation())
+
+        await shutdown_task
 
         # Verify checkpoint was saved with correct type
         assert len(worker.save_checkpoint_calls) == 1
@@ -173,14 +203,23 @@ class TestShutdownDetection:
     async def test_status_updated_to_cancelled_on_shutdown(self):
         """Test operation status is updated to CANCELLED on shutdown."""
         worker = MockWorker()
+        operation_started = asyncio.Event()
 
         async def long_operation():
+            operation_started.set()
             await asyncio.sleep(10)
 
-        worker._shutdown_event.set()
+        async def trigger_shutdown():
+            await operation_started.wait()
+            await asyncio.sleep(0.01)
+            worker._shutdown_event.set()
+
+        shutdown_task = asyncio.create_task(trigger_shutdown())
 
         with pytest.raises(GracefulShutdownError):
             await worker.run_with_graceful_shutdown("op_cancel", long_operation())
+
+        await shutdown_task
 
         # Verify status was updated
         assert len(worker.update_status_calls) == 1
@@ -193,14 +232,23 @@ class TestShutdownDetection:
     async def test_graceful_shutdown_error_raised(self):
         """Test GracefulShutdownError is raised when shutdown detected."""
         worker = MockWorker()
+        operation_started = asyncio.Event()
 
         async def long_operation():
+            operation_started.set()
             await asyncio.sleep(10)
 
-        worker._shutdown_event.set()
+        async def trigger_shutdown():
+            await operation_started.wait()
+            await asyncio.sleep(0.01)
+            worker._shutdown_event.set()
+
+        shutdown_task = asyncio.create_task(trigger_shutdown())
 
         with pytest.raises(GracefulShutdownError, match="shutdown"):
             await worker.run_with_graceful_shutdown("op_err", long_operation())
+
+        await shutdown_task
 
 
 class TestFailureCheckpoint:
@@ -225,14 +273,23 @@ class TestFailureCheckpoint:
     async def test_no_failure_checkpoint_on_graceful_shutdown(self):
         """Test failure checkpoint is NOT saved when GracefulShutdownError occurs."""
         worker = MockWorker()
+        operation_started = asyncio.Event()
 
         async def long_operation():
+            operation_started.set()
             await asyncio.sleep(10)
 
-        worker._shutdown_event.set()
+        async def trigger_shutdown():
+            await operation_started.wait()
+            await asyncio.sleep(0.01)
+            worker._shutdown_event.set()
+
+        shutdown_task = asyncio.create_task(trigger_shutdown())
 
         with pytest.raises(GracefulShutdownError):
             await worker.run_with_graceful_shutdown("op_no_fail", long_operation())
+
+        await shutdown_task
 
         # Should only have shutdown checkpoint, not failure
         assert len(worker.save_checkpoint_calls) == 1

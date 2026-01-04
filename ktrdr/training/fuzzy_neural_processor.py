@@ -74,7 +74,7 @@ class FuzzyNeuralProcessor:
         if not features:
             raise ValueError("No fuzzy features found in input data")
 
-        feature_matrix = np.column_stack(features) if len(features) > 1 else features[0]  # type: ignore
+        feature_matrix = np.column_stack(features) if len(features) > 1 else features[0]
 
         # Validate fuzzy range (should be 0-1)
         self._validate_fuzzy_range(feature_matrix, feature_names)

@@ -1,5 +1,15 @@
 # Strategy Grammar v3: Architecture
 
+> **⚠️ TIGHTLY COUPLED WITH INDICATOR STANDARDIZATION**
+>
+> This architecture and [Indicator Standardization](../indicator-standardization/DESIGN.md) are **interdependent**:
+>
+> 1. **Indicator Standardization M1-M5** — Must complete **BEFORE** v3 implementation starts
+> 2. **Strategy Grammar v3** (all phases below) — Depends on standardized indicator outputs
+> 3. **Indicator Standardization M6** — Cleanup happens **AFTER** v3 is complete and verified
+>
+> See [Milestone 0](#milestone-0-indicator-standardization-prerequisite) for details.
+
 ## Overview
 
 This document describes the technical changes required to implement Strategy Grammar v3.
@@ -7,6 +17,8 @@ The migration touches every component that interacts with strategy configuration
 parsing through training, backtesting, and model storage.
 
 **Scope:** Complete replacement of v2 grammar. No backward compatibility.
+
+**Dependency:** Indicator Standardization (see prerequisite above).
 
 ---
 
@@ -90,6 +102,21 @@ class FuzzySetDefinition(BaseModel):
 
     model_config = {"extra": "allow"}
 
+    @model_validator(mode='before')
+    @classmethod
+    def expand_shorthand(cls, data: dict) -> dict:
+        """Convert [a,b,c] shorthand to {type: triangular, parameters: [a,b,c]}."""
+        result = {}
+        for key, value in data.items():
+            if key == 'indicator':
+                result[key] = value
+            elif isinstance(value, list):
+                # Shorthand: [0, 20, 35] -> FuzzyMembership
+                result[key] = {'type': 'triangular', 'parameters': value}
+            else:
+                result[key] = value
+        return result
+
 
 class NNInputSpec(BaseModel):
     """Specification for neural network inputs."""
@@ -147,17 +174,25 @@ class FeatureResolver:
     def resolve(
         self,
         config: StrategyConfigurationV3,
-        training_timeframes: list[str]
     ) -> list[ResolvedFeature]:
         """
         Resolve nn_inputs to concrete features.
 
+        IMPORTANT: The returned list order IS the canonical feature order.
+        This order must be:
+        1. Stored in ModelMetadataV3.resolved_features during training
+        2. Used by FeatureCache during backtest
+        3. Validated at backtest time
+
+        Order is determined by:
+        1. nn_inputs list order (YAML order preserved)
+        2. Within each nn_input: timeframes order × membership function order
+
         Args:
             config: The v3 strategy configuration
-            training_timeframes: Available timeframes from training_data
 
         Returns:
-            List of ResolvedFeature, one per NN input
+            Ordered list of ResolvedFeature (order is source of truth)
         """
         features = []
 
@@ -166,6 +201,7 @@ class FeatureResolver:
             indicator_id = fuzzy_set.indicator
 
             # Resolve timeframes
+            training_timeframes = config.training_data.timeframes.list
             if input_spec.timeframes == "all":
                 timeframes = training_timeframes
             else:
@@ -187,6 +223,22 @@ class FeatureResolver:
                     ))
 
         return features
+
+    def get_indicators_for_timeframe(
+        self,
+        resolved: list[ResolvedFeature],
+        timeframe: str,
+    ) -> set[str]:
+        """Get indicator_ids needed for a specific timeframe."""
+        return {f.indicator_id for f in resolved if f.timeframe == timeframe}
+
+    def get_fuzzy_sets_for_timeframe(
+        self,
+        resolved: list[ResolvedFeature],
+        timeframe: str,
+    ) -> set[str]:
+        """Get fuzzy_set_ids needed for a specific timeframe."""
+        return {f.fuzzy_set_id for f in resolved if f.timeframe == timeframe}
 ```
 
 ---
@@ -254,10 +306,9 @@ class IndicatorEngine:
                 indicator_id, definition
             )
 
-    def compute_for_timeframe(
+    def compute(
         self,
         data: pd.DataFrame,
-        timeframe: str,
         indicator_ids: set[str]
     ) -> pd.DataFrame:
         """
@@ -265,11 +316,11 @@ class IndicatorEngine:
 
         Args:
             data: OHLCV DataFrame
-            timeframe: Timeframe string (for column prefixing)
             indicator_ids: Which indicators to compute
 
         Returns:
-            DataFrame with indicator columns prefixed by timeframe
+            DataFrame with indicator columns named by indicator_id
+            Note: NO timeframe prefix - caller adds that for consistency
         """
         result = data.copy()
         for indicator_id in indicator_ids:
@@ -279,11 +330,48 @@ class IndicatorEngine:
             indicator = self._indicators[indicator_id]
             output = indicator.calculate(data)
 
-            # Column name: {timeframe}_{indicator_id}
-            col_name = f"{timeframe}_{indicator_id}"
-            result[col_name] = output
+            # Column name is just indicator_id (e.g., "rsi_14")
+            result[indicator_id] = output
 
         return result
+```
+
+#### `ktrdr/indicators/base_indicator.py`
+
+**New requirement:** Multi-output indicators must implement `get_output_names()`:
+
+```python
+class BaseIndicator(ABC):
+    # ... existing methods ...
+
+    @classmethod
+    def get_output_names(cls) -> list[str]:
+        """
+        Return logical output names for multi-output indicators.
+
+        Single-output indicators return empty list (default).
+        Multi-output indicators override to return their outputs.
+
+        Used for:
+        - Validating dot notation references (e.g., bbands_20_2.middle)
+        - Agent discoverability when designing strategies
+        - Documentation generation
+
+        Returns:
+            List of output names in canonical order
+        """
+        return []  # Single-output default
+
+# Example implementations:
+class BollingerBandsIndicator(BaseIndicator):
+    @classmethod
+    def get_output_names(cls) -> list[str]:
+        return ["upper", "middle", "lower"]
+
+class MACDIndicator(BaseIndicator):
+    @classmethod
+    def get_output_names(cls) -> list[str]:
+        return ["line", "signal", "histogram"]
 ```
 
 ### 3. Fuzzy Layer
@@ -301,16 +389,21 @@ class FuzzyEngine:
             fuzzy_sets: Dict mapping fuzzy_set_id to definition
         """
         self._fuzzy_sets = {}
+        self._indicator_map = {}  # fuzzy_set_id -> indicator_id
         for fuzzy_set_id, definition in fuzzy_sets.items():
             self._fuzzy_sets[fuzzy_set_id] = self._build_membership_functions(
                 definition
             )
+            self._indicator_map[fuzzy_set_id] = definition.indicator
+
+    def get_indicator_for_fuzzy_set(self, fuzzy_set_id: str) -> str:
+        """Get the indicator_id that a fuzzy_set references."""
+        return self._indicator_map[fuzzy_set_id]
 
     def fuzzify(
         self,
         fuzzy_set_id: str,
         indicator_values: pd.Series,
-        timeframe: str
     ) -> pd.DataFrame:
         """
         Apply fuzzy set to indicator values.
@@ -318,19 +411,23 @@ class FuzzyEngine:
         Args:
             fuzzy_set_id: Which fuzzy set to apply
             indicator_values: Raw indicator values
-            timeframe: For feature naming
 
         Returns:
-            DataFrame with columns: {timeframe}_{fuzzy_set_id}_{membership}
+            DataFrame with columns: {fuzzy_set_id}_{membership}
+            Note: NO timeframe prefix - caller adds that for consistency
         """
         fuzzy_set = self._fuzzy_sets[fuzzy_set_id]
         result = {}
 
         for membership_name, mf in fuzzy_set.items():
-            feature_id = f"{timeframe}_{fuzzy_set_id}_{membership_name}"
-            result[feature_id] = mf.evaluate(indicator_values)
+            col_name = f"{fuzzy_set_id}_{membership_name}"
+            result[col_name] = mf.evaluate(indicator_values)
 
         return pd.DataFrame(result)
+
+    def get_membership_names(self, fuzzy_set_id: str) -> list[str]:
+        """Get ordered list of membership function names for a fuzzy set."""
+        return list(self._fuzzy_sets[fuzzy_set_id].keys())
 ```
 
 ### 4. Training Pipeline
@@ -404,31 +501,41 @@ class TrainingPipeline:
 
 ```python
 class FeatureCache:
-    def __init__(self, config: StrategyConfigurationV3, model_metadata: ModelMetadata):
+    def __init__(self, config: StrategyConfigurationV3, model_metadata: ModelMetadataV3):
         self.config = config
         self.feature_resolver = FeatureResolver()
         self.indicator_engine = IndicatorEngine(config.indicators)
         self.fuzzy_engine = FuzzyEngine(config.fuzzy_sets)
 
-        # Expected features from model
-        self.expected_features = model_metadata.feature_names
+        # Expected features from model (ORDERED list - order matters!)
+        self.expected_features = model_metadata.resolved_features
 
     def compute_features(self, data: dict[str, pd.DataFrame]) -> pd.DataFrame:
         """
         Compute features for backtesting.
 
-        MUST produce same feature_ids as training.
+        MUST produce same feature_ids AND same order as training.
         """
         # Same logic as training pipeline
         ...
 
-        # Validate we produced all expected features
+        # Validate feature names match
         produced = set(result.columns)
         expected = set(self.expected_features)
 
         missing = expected - produced
         if missing:
             raise ValueError(f"Missing features: {missing}")
+
+        extra = produced - expected
+        if extra:
+            logger.warning(f"Extra features will be ignored: {extra}")
+
+        # CRITICAL: Reorder columns to match expected order
+        # This ensures model sees features in the same order as training
+        result = result[self.expected_features]
+
+        return result
 ```
 
 ### 6. Model Metadata
@@ -440,14 +547,27 @@ class FeatureCache:
 ```python
 @dataclass
 class ModelMetadataV3:
-    # Existing fields...
+    # Identity
+    model_name: str
+    strategy_name: str
+    created_at: datetime
 
-    # V3-specific
-    strategy_version: str = "3.0"
-    indicators: dict[str, dict]      # Indicator definitions
-    fuzzy_sets: dict[str, dict]      # Fuzzy set definitions
-    nn_inputs: list[dict]            # NN input specs
-    resolved_features: list[str]     # Ordered list of feature_ids
+    # Version info
+    strategy_version: str  # "3.0"
+
+    # V3-specific: full strategy config for reproducibility
+    indicators: dict[str, dict]      # Serialized IndicatorDefinition
+    fuzzy_sets: dict[str, dict]      # Serialized FuzzySetDefinition
+    nn_inputs: list[dict]            # Serialized NNInputSpec
+
+    # CRITICAL: ordered feature list (source of truth for backtest)
+    # This list defines the exact order features must appear in
+    resolved_features: list[str]     # ["5m_rsi_fast_oversold", ...]
+
+    # Training context
+    training_symbols: list[str]
+    training_timeframes: list[str]
+    training_metrics: dict[str, float]  # loss, accuracy, etc.
 ```
 
 ### 7. Agent Strategy Generation
@@ -574,6 +694,37 @@ ktrdr train strategies/v3_example.yaml --dry-run
 
 ## Implementation Order
 
+### Milestone 0: Indicator Standardization (PREREQUISITE)
+
+**Indicator Standardization M1-M5 must be completed before v3 work begins.**
+
+See [../indicator-standardization/DESIGN.md](../indicator-standardization/DESIGN.md) for full details.
+
+**Summary (M1-M5):**
+
+- Standardize all 29 indicators to consistent naming
+- Add `get_output_names()` to BaseIndicator for multi-output discovery
+- Single-output: `compute()` returns unnamed Series
+- Multi-output: `compute()` returns DataFrame with semantic column names (`upper`, `signal`, `k`)
+- IndicatorEngine handles prefixing with indicator_id
+
+**Why M1-M5 first:**
+
+- v3 dot notation (`bbands_20_2.upper`) depends on discoverable output names
+- v3 feature naming assumes consistent indicator output format
+- Removes technical debt that would complicate v3 implementation
+- Can be tested independently before v3 changes
+
+**M6 (Cleanup) comes AFTER v3:**
+
+- M6 removes v2 compatibility code from indicator standardization
+- This can only happen after v3 strategies replace all v2 strategies
+- See [../indicator-standardization/implementation/M6_cleanup.md](../indicator-standardization/implementation/M6_cleanup.md)
+
+**Scope:** ~29 indicators + engine updates + consumer updates (M1-M5), then cleanup (M6 post-v3)
+
+---
+
 ### Phase 1: Core Models (Foundation)
 1. `ktrdr/config/models.py` — Add v3 Pydantic models
 2. `ktrdr/config/feature_resolver.py` — NEW: Feature resolution logic
@@ -630,3 +781,30 @@ ktrdr train strategies/v3_example.yaml --dry-run
    Each phase must pass tests before moving to next.
 
 4. **Host service sync** — Training host service updated as part of Phase 3 (Pipelines).
+
+5. **Shorthand expansion timing** — During Pydantic parsing via `@model_validator`.
+
+6. **Feature ordering** — Determined by nn_inputs list order × membership order.
+   Stored in `ModelMetadataV3.resolved_features`. Validated at backtest.
+
+7. **Interface changes** — Clean break on IndicatorEngine and FuzzyEngine.
+   Neither adds timeframe prefix; caller handles that for consistency.
+
+8. **Multi-output indicator references** — Use dot notation: `bbands_20_2.middle`.
+   Multi-output indicators must implement `get_output_names() -> list[str]`.
+   Current indicator naming (e.g., `MACD_signal_12_26_9`) must be normalized
+   to logical names (`signal`) with parameters handled separately.
+
+9. **Indicator standardization is prerequisite** — Before starting v3 implementation,
+   all 29 indicators must be standardized to consistent naming. This removes technical
+   debt and establishes the foundation v3 depends on.
+   See [../indicator-standardization/DESIGN.md](../indicator-standardization/DESIGN.md).
+
+---
+
+## Related Documents
+
+- [DESIGN.md](DESIGN.md) — Grammar specification and rationale
+- [SCENARIOS.md](SCENARIOS.md) — Validation scenarios and interface contracts
+- [example_v3_strategy.yaml](example_v3_strategy.yaml) — Comprehensive example with edge cases
+- [../indicator-standardization/DESIGN.md](../indicator-standardization/DESIGN.md) — Milestone 0 prerequisite

@@ -245,7 +245,7 @@ class IbDataProvider(ExternalDataProvider, AsyncServiceAdapter):
                     f"Validation error: {str(e)}", provider="IB"
                 ) from e
 
-    async def fetch_historical_data(  # type: ignore[return]
+    async def fetch_historical_data(
         self,
         symbol: str,
         timeframe: str,

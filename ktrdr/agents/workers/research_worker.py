@@ -330,7 +330,7 @@ class AgentResearchWorker:
         # Update progress for CLI monitoring (M9)
         await self.ops.update_progress(
             operation_id,
-            OperationProgress(percentage=5.0, current_step="Designing strategy..."),  # type: ignore[call-arg]
+            OperationProgress(percentage=5.0, current_step="Designing strategy..."),
         )
 
         # Create task wrapper - worker owns its child operation
@@ -470,7 +470,7 @@ class AgentResearchWorker:
         # Update progress for CLI monitoring (M9)
         await self.ops.update_progress(
             operation_id,
-            OperationProgress(percentage=20.0, current_step="Training model..."),  # type: ignore[call-arg]
+            OperationProgress(percentage=20.0, current_step="Training model..."),
         )
 
     async def _handle_training_phase(self, operation_id: str, child_op: Any) -> None:
@@ -622,7 +622,7 @@ class AgentResearchWorker:
         # Update progress for CLI monitoring (M9)
         await self.ops.update_progress(
             operation_id,
-            OperationProgress(percentage=65.0, current_step="Running backtest..."),  # type: ignore[call-arg]
+            OperationProgress(percentage=65.0, current_step="Running backtest..."),
         )
 
     async def _handle_backtesting_phase(self, operation_id: str, child_op: Any) -> None:
@@ -742,7 +742,7 @@ class AgentResearchWorker:
         # Update progress for CLI monitoring (M9)
         await self.ops.update_progress(
             operation_id,
-            OperationProgress(percentage=90.0, current_step="Assessing results..."),  # type: ignore[call-arg]
+            OperationProgress(percentage=90.0, current_step="Assessing results..."),
         )
 
         # Get results for assessment from parent metadata
@@ -841,7 +841,7 @@ class AgentResearchWorker:
             # Update progress to 100% on completion (M9)
             await self.ops.update_progress(
                 operation_id,
-                OperationProgress(percentage=100.0, current_step="Complete"),  # type: ignore[call-arg]
+                OperationProgress(percentage=100.0, current_step="Complete"),
             )
 
             return {

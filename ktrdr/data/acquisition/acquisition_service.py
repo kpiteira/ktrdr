@@ -641,7 +641,7 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
 
             try:
                 # Convert mode string to DataLoadingMode enum
-                from ktrdr.data.loading_modes import DataLoadingMode  # type: ignore
+                from ktrdr.data.loading_modes import DataLoadingMode
 
                 mode_enum = {
                     "tail": DataLoadingMode.TAIL,
