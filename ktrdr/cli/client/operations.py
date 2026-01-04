@@ -17,6 +17,12 @@ logger = get_logger(__name__)
 # Terminal states that end the poll loop
 TERMINAL_STATES = frozenset({"completed", "failed", "cancelled"})
 
+# Known valid in-progress states
+VALID_STATES = TERMINAL_STATES | frozenset({"pending", "running", "starting"})
+
+# Maximum consecutive unexpected statuses before giving up
+MAX_UNEXPECTED_STATUSES = 10
+
 
 class OperationAdapter(Protocol):
     """Protocol for operation adapters.
@@ -74,6 +80,7 @@ async def execute_operation(
 
     # Poll until terminal state
     status_endpoint = f"/operations/{operation_id}"
+    unexpected_status_count = 0
 
     try:
         while True:
@@ -89,6 +96,30 @@ async def execute_operation(
             status = operation_data.get("status")
 
             logger.debug(f"Operation {operation_id} status: {status}")
+
+            # Guard against missing or unexpected status values
+            if status is None or status not in VALID_STATES:
+                unexpected_status_count += 1
+                logger.warning(
+                    f"Operation {operation_id} returned unexpected status: {status!r} "
+                    f"(count: {unexpected_status_count}/{MAX_UNEXPECTED_STATUSES})"
+                )
+                if unexpected_status_count >= MAX_UNEXPECTED_STATUSES:
+                    logger.error(
+                        f"Operation {operation_id} exceeded max unexpected statuses, "
+                        "treating as failed"
+                    )
+                    return {
+                        "status": "failed",
+                        "operation_id": operation_id,
+                        "error": f"Polling failed: received {unexpected_status_count} "
+                        f"unexpected status values (last: {status!r})",
+                    }
+                await asyncio.sleep(poll_interval)
+                continue
+
+            # Reset counter on valid status
+            unexpected_status_count = 0
 
             # Invoke progress callback if provided
             if on_progress and status not in TERMINAL_STATES:

@@ -423,3 +423,92 @@ class TestExecuteOperationTerminalStates:
 
         assert result["status"] == "cancelled"
         assert mock_client.get.call_count == 1
+
+
+class TestExecuteOperationUnexpectedStatus:
+    """Tests for handling unexpected or missing status values."""
+
+    @pytest.mark.asyncio
+    async def test_handles_missing_status(self):
+        """Operation fails after too many missing status responses."""
+        from ktrdr.cli.client.operations import (
+            MAX_UNEXPECTED_STATUSES,
+            execute_operation,
+        )
+
+        mock_client = AsyncMock()
+        mock_client.post.return_value = {
+            "success": True,
+            "data": {"operation_id": "op_abc123"},
+        }
+        # Return response with missing status field
+        mock_client.get.return_value = {
+            "success": True,
+            "data": {},  # No status field
+        }
+        mock_client.config = MagicMock()
+        mock_client.config.base_url = "http://localhost:8000/api/v1"
+
+        adapter = MockAdapter()
+
+        result = await execute_operation(mock_client, adapter, poll_interval=0.001)
+
+        assert result["status"] == "failed"
+        assert "unexpected status" in result["error"].lower()
+        assert mock_client.get.call_count == MAX_UNEXPECTED_STATUSES
+
+    @pytest.mark.asyncio
+    async def test_handles_unexpected_status_value(self):
+        """Operation fails after too many unexpected status values."""
+        from ktrdr.cli.client.operations import (
+            MAX_UNEXPECTED_STATUSES,
+            execute_operation,
+        )
+
+        mock_client = AsyncMock()
+        mock_client.post.return_value = {
+            "success": True,
+            "data": {"operation_id": "op_abc123"},
+        }
+        # Return response with unexpected status
+        mock_client.get.return_value = {
+            "success": True,
+            "data": {"status": "unknown_state"},
+        }
+        mock_client.config = MagicMock()
+        mock_client.config.base_url = "http://localhost:8000/api/v1"
+
+        adapter = MockAdapter()
+
+        result = await execute_operation(mock_client, adapter, poll_interval=0.001)
+
+        assert result["status"] == "failed"
+        assert "unknown_state" in result["error"]
+        assert mock_client.get.call_count == MAX_UNEXPECTED_STATUSES
+
+    @pytest.mark.asyncio
+    async def test_recovers_from_intermittent_unexpected_status(self):
+        """Operation recovers if valid status returns after unexpected ones."""
+        from ktrdr.cli.client.operations import execute_operation
+
+        mock_client = AsyncMock()
+        mock_client.post.return_value = {
+            "success": True,
+            "data": {"operation_id": "op_abc123"},
+        }
+        # Return unexpected status twice, then valid running, then completed
+        mock_client.get.side_effect = [
+            {"success": True, "data": {"status": None}},
+            {"success": True, "data": {"status": "weird"}},
+            {"success": True, "data": {"status": "running"}},
+            {"success": True, "data": {"status": "completed", "result": "done"}},
+        ]
+        mock_client.config = MagicMock()
+        mock_client.config.base_url = "http://localhost:8000/api/v1"
+
+        adapter = MockAdapter()
+
+        result = await execute_operation(mock_client, adapter, poll_interval=0.001)
+
+        assert result["status"] == "completed"
+        assert mock_client.get.call_count == 4
