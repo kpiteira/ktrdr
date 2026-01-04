@@ -478,6 +478,7 @@ class TestPollForBackendRestart:
             worker.worker_id = "test-worker-1"
             worker._last_health_check_received = None
             worker._completed_operations = []
+            worker._shutdown_event = asyncio.Event()  # Add shutdown event for fix
             worker._build_registration_payload = AsyncMock(
                 return_value={
                     "worker_id": "test-worker-1",

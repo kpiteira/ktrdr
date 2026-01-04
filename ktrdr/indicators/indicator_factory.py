@@ -293,6 +293,12 @@ class IndicatorFactory:
             if hasattr(config, "feature_id") and config.feature_id:
                 indicator._feature_id = config.feature_id
 
+            # Store timeframe if specified in config (for multi-timeframe strategies)
+            # This enables column name prefixing to prevent collisions when same
+            # indicator is used on multiple timeframes
+            if hasattr(config, "timeframe") and config.timeframe:
+                indicator._timeframe = config.timeframe
+
             return indicator
 
         except Exception as e:
