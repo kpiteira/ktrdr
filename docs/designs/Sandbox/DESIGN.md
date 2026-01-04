@@ -54,7 +54,7 @@ This is exactly how `../ktrdr2` works today — a persistent environment with ho
 
 ```bash
 # From any directory
-ktrdr-sandbox create feat-operation-metrics
+ktrdr sandbox create feat-operation-metrics
 
 # What happens:
 # 1. Creates git worktree at ../ktrdr--feat-operation-metrics
@@ -72,14 +72,14 @@ Created instance: feat-operation-metrics
   Grafana: http://localhost:3002
   Jaeger: http://localhost:16688
 
-Run 'cd ../ktrdr--feat-operation-metrics && ktrdr-sandbox up' to start
+Run 'cd ../ktrdr--feat-operation-metrics && ktrdr sandbox up' to start
 ```
 
 ### Starting an Instance
 
 ```bash
 cd ../ktrdr--feat-operation-metrics
-ktrdr-sandbox up
+ktrdr sandbox up
 
 # What happens:
 # 1. Validates .env.sandbox exists
@@ -122,7 +122,7 @@ For E2E tests specifically, the stack must be running. The tests hit the instanc
 ### Checking Status
 
 ```bash
-ktrdr-sandbox list
+ktrdr sandbox list
 
 # Output:
 # INSTANCE                    SLOT  STATUS   API PORT  CREATED
@@ -132,7 +132,7 @@ ktrdr-sandbox list
 ```
 
 ```bash
-ktrdr-sandbox status  # From within an instance directory
+ktrdr sandbox status  # From within an instance directory
 
 # Output:
 # Instance: feat-operation-metrics (slot 2)
@@ -145,9 +145,9 @@ ktrdr-sandbox status  # From within an instance directory
 ### Stopping and Cleanup
 
 ```bash
-ktrdr-sandbox down           # Stop containers, keep volumes
-ktrdr-sandbox destroy        # Stop containers, remove volumes, delete worktree
-ktrdr-sandbox destroy --all  # Clean up all instances
+ktrdr sandbox down           # Stop containers, keep volumes
+ktrdr sandbox destroy        # Stop containers, remove volumes, delete worktree
+ktrdr sandbox destroy --all  # Clean up all instances
 ```
 
 ### Working with an Existing Clone
@@ -156,8 +156,8 @@ If you already have a clone (not a worktree):
 
 ```bash
 cd /path/to/my-ktrdr-clone
-ktrdr-sandbox init           # Initialize as sandbox instance
-ktrdr-sandbox up
+ktrdr sandbox init           # Initialize as sandbox instance
+ktrdr sandbox up
 ```
 
 ## Key Decisions
@@ -223,19 +223,25 @@ Example: `/Users/karl/Documents/dev/ktrdr--feat-operation-metrics` → `ktrdr--f
 
 **Rationale:** No port conflicts. Tests are reproducible. Same approach works in CI. Container can be `docker compose run --rm e2e-tests`.
 
-### Decision 6: CLI Tool in Python with Click
+### Decision 6: CLI as Subcommand of Existing ktrdr
 
-**Choice:** Implement `ktrdr-sandbox` as a Python CLI using Click, exposed as a subcommand of the existing `ktrdr` CLI.
+**Choice:** Implement sandbox commands as a subcommand group of the existing `ktrdr` CLI, not as a separate binary.
 
 **What is Click?** Click is the CLI library we already use for the `ktrdr` command (see `ktrdr/cli/main.py`). It handles argument parsing, help text, and subcommands. No new dependency.
 
+**Implementation:**
+
+- New file: `ktrdr/cli/sandbox.py`
+- Registered in `ktrdr/cli/main.py` as `cli.add_command(sandbox)`
+- Commands: `ktrdr sandbox create`, `ktrdr sandbox up`, etc.
+
 **Alternatives considered:**
 
+- Separate `ktrdr-sandbox` binary — two entry points, PATH complexity
 - Shell scripts — harder to maintain, less portable
 - Makefile targets — limited expressiveness
-- Separate Go/Rust binary — overkill, different toolchain
 
-**Rationale:** Python is already the project language. Click is already our CLI framework. The sandbox commands become `ktrdr sandbox create`, `ktrdr sandbox up`, etc.
+**Rationale:** Single entry point for all KTRDR commands. Shared CLI infrastructure. The `--port` flag naturally applies to all existing commands. No installation complexity.
 
 ### Decision 7: Shared Data Directory
 
@@ -276,38 +282,90 @@ Example: `/Users/karl/Documents/dev/ktrdr--feat-operation-metrics` → `ktrdr--f
 
 **Rationale:** Instances should be immediately usable with schema ready.
 
-### Decision 10: CLI Instance Targeting
+### Decision 10: CLI Instance Targeting via Directory Detection
 
-**Choice:** The `ktrdr` CLI gains a `--port` / `-p` flag (in addition to existing `--url` / `-u`) for convenience when targeting sandbox instances.
+**Choice:** The `ktrdr` CLI gains a `--port` / `-p` flag and auto-detects the target based on the current directory's `.env.sandbox` file.
 
 **Usage:**
 
 ```bash
-# Existing: full URL
+# Explicit: full URL
 ktrdr -u http://localhost:8002 operations list
 
-# New: just the port (assumes localhost)
+# Explicit: just the port (assumes localhost)
 ktrdr -p 8002 operations list
 
-# Or via environment variable (set by .env.sandbox)
-export KTRDR_API_PORT=8002
-ktrdr operations list
+# Automatic: CLI detects .env.sandbox in current/parent directory
+cd ../ktrdr--feat-a
+ktrdr operations list  # Auto-targets port 8001
 ```
 
-**How it works:**
+**How it works (priority order):**
 
-- `-p 8002` expands to `-u http://localhost:8002`
-- If both `-p` and `-u` are provided, `-u` takes precedence
-- Environment variable `KTRDR_API_PORT` provides default if no flag given
-- The `.env.sandbox` file sets this variable, so CLI "just works" in instance directories
+1. `--url` flag — explicit full URL, always wins
+2. `--port` flag — convenience shorthand for localhost
+3. `.env.sandbox` file — auto-detect from current directory tree
+4. Default — `http://localhost:8000`
 
-**Rationale:** Typing `-p 8002` is faster than `-u http://localhost:8002`. Environment variable means you don't need flags at all when working in an instance directory.
+**Critical design choice:** The CLI reads the `.env.sandbox` FILE directly, NOT environment variables. This avoids env var pollution between terminal sessions.
+
+```python
+# We do this:
+config = parse_dotenv_file(".env.sandbox")
+port = config.get("KTRDR_API_PORT")
+
+# NOT this (env vars leak between shells):
+port = os.environ.get("KTRDR_API_PORT")
+```
+
+**Rationale:** Directory-based detection is predictable — behavior depends on where you are in the filesystem, not on shell state. No need for `source .env.sandbox` or manual exports.
+
+### Decision 11: Two-File Development Strategy with Merge
+
+**Choice:** During development, use a separate `docker-compose.sandbox.yml` file. Merge into main `docker-compose.yml` only when confident.
+
+**Why:**
+
+- Protects existing `../ktrdr2` workflow throughout development
+- Allows iteration without risk
+- Merge only happens when fully tested
+
+**Merge requirements:**
+
+- Git tag before merge (rollback point)
+- Backup of original compose file
+- Automated verification script
+- Rollback script that restores in seconds
+
+**Rationale:** The existing dev environment is critical infrastructure. We don't touch it until the new system is proven.
+
+### Decision 12: Internal Ports Fixed, External Ports Parameterized
+
+**Choice:** Only parameterize the host-side (left) of port mappings. Internal container ports stay fixed.
+
+**Example:**
+
+```yaml
+# Correct: external varies, internal fixed
+ports:
+  - "${KTRDR_API_PORT:-8000}:8000"
+
+# Wrong: unnecessary complexity
+ports:
+  - "${KTRDR_API_PORT:-8000}:${KTRDR_API_PORT:-8000}"
+```
+
+**Rationale:** Each sandbox has its own Docker network, so internal ports don't conflict. Services always listen on their standard ports (backend on 8000, db on 5432). Only the host-published ports need to differ.
 
 ## Open Questions
 
-Issues to resolve during architecture or implementation:
+Issues to resolve during implementation:
 
-1. **Slot persistence mechanism** — Where exactly do we track which slots are allocated? Current proposal is `~/.ktrdr/sandbox/instances.json`. Need to handle stale entries (instance deleted but registry not updated). *To be resolved during implementation.*
+1. **Compose file location** — `docker-compose.sandbox.yml` at root, or under `deploy/environments/parallel/`? Leaning toward root for simplicity.
+
+2. **Registry cleanup frequency** — Clean stale entries on every `list`, or require explicit command?
+
+3. **Worker count per instance** — Always 4 workers, or make configurable via `.env.sandbox`?
 
 ## Resolved Questions
 
@@ -326,3 +384,13 @@ Decisions made during design review:
 6. **Shared data initialization** — Create a "shared data package" as part of this feature. When setting up a new dev machine, there should be a clear, documented way to initialize `~/.ktrdr/shared/` with the required data (symbol data, strategies, models). This makes onboarding new machines straightforward.
 
 7. **Port conflict detection** — If a slot's ports are in use by something external (not a tracked sandbox), blacklist that slot entirely. The CLI should detect this during `ktrdr sandbox up` and refuse to start, suggesting the user pick a different slot or resolve the conflict.
+
+8. **Slot persistence mechanism** — Use `~/.ktrdr/sandbox/instances.json`. Clean stale entries (instance directory doesn't exist) during `list` command.
+
+9. **Shared data concurrent writes** — Accept the risk. Models and strategies are written infrequently, collision probability is low. The convenience of sharing outweighs the risk.
+
+10. **Repo validation for init** — Check git remote to verify it's a KTRDR repository, not just presence of specific files.
+
+11. **Instance ID collision** — If two directories have the same basename, error with helpful message asking user to rename or use `--name` flag.
+
+12. **Backward compatibility approach** — Use separate `docker-compose.sandbox.yml` during development. Merge only when confident, with rollback script and verification checklist.

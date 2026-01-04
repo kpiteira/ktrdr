@@ -59,32 +59,44 @@ def generate_env(instance: Instance) -> None
 **Port Mapping:**
 
 ```python
-BASE_PORTS = {
-    "backend": 8000,
-    "db": 5432,
-    "grafana": 3000,
-    "jaeger_ui": 16686,
-    "jaeger_otlp": 4317,
-    "prometheus": 9090,
-    "worker_base": 5000,
-}
-
 def get_ports(slot: int) -> dict[str, int]:
     """
-    Slot 0: reserved for main dev (uses base ports)
-    Slot 1-10: sandbox instances
+    Slot 0: reserved for main dev (uses standard ports)
+    Slot 1-10: sandbox instances with offset ports
+
+    Workers use slot-based ranges for debugging access:
+    - Slot 0: 5003, 5004, 5005, 5006 (current)
+    - Slot 1: 5010, 5011, 5012, 5013
+    - Slot 2: 5020, 5021, 5022, 5023
+    - etc.
     """
     if slot == 0:
-        return BASE_PORTS
+        return {
+            "backend": 8000,
+            "db": 5432,
+            "grafana": 3000,
+            "jaeger_ui": 16686,
+            "jaeger_otlp_grpc": 4317,
+            "jaeger_otlp_http": 4318,
+            "prometheus": 9090,
+            "worker_1": 5003,
+            "worker_2": 5004,
+            "worker_3": 5005,
+            "worker_4": 5006,
+        }
 
     return {
-        "backend": 8000 + slot,        # 8001, 8002, ...
-        "db": 5432 + slot,             # 5433, 5434, ...
-        "grafana": 3000 + slot,        # 3001, 3002, ...
-        "jaeger_ui": 16686 + slot,     # 16687, 16688, ...
-        "jaeger_otlp": 4317 + slot,    # 4318, 4319, ...
-        "prometheus": 9090 + slot,     # 9091, 9092, ...
-        "worker_base": 5000 + (slot * 10),  # 5010, 5020, ...
+        "backend": 8000 + slot,           # 8001, 8002, ...
+        "db": 5432 + slot,                # 5433, 5434, ...
+        "grafana": 3000 + slot,           # 3001, 3002, ...
+        "jaeger_ui": 16686 + slot,        # 16687, 16688, ...
+        "jaeger_otlp_grpc": 4317 + slot,  # 4318, 4319, ...
+        "jaeger_otlp_http": 4318 + slot,  # 4319, 4320, ...
+        "prometheus": 9090 + slot,        # 9091, 9092, ...
+        "worker_1": 5010 + (slot-1)*10,   # 5010, 5020, ...
+        "worker_2": 5011 + (slot-1)*10,   # 5011, 5021, ...
+        "worker_3": 5012 + (slot-1)*10,   # 5012, 5022, ...
+        "worker_4": 5013 + (slot-1)*10,   # 5013, 5023, ...
     }
 
 def check_ports_available(slot: int) -> list[int]:
@@ -146,30 +158,50 @@ def is_port_free(port: int) -> bool:
 
 **Responsibility:** Define services in a way that supports multiple concurrent instances with shared data.
 
-**Location:** `deploy/environments/local/docker-compose.yml` (modified)
+**Location:** `docker-compose.sandbox.yml` (new file during development, merged into main later)
+
+**Development Strategy:**
+
+During development, we use a separate `docker-compose.sandbox.yml` to avoid breaking the existing workflow. Once confident, we merge into the main `docker-compose.yml` with verified backward compatibility.
 
 **Changes Required:**
 
 1. **Remove all `container_name:` fields** — Enables Compose project isolation
-2. **Parameterize all published ports** — `${KTRDR_API_PORT:-8000}:8000`
+2. **Parameterize all published ports** — `${KTRDR_API_PORT:-8000}:8000` (defaults match current values!)
 3. **Use project-scoped volumes** — No `external: true`, let Compose namespace them
 4. **Add instance_id to environment variables** — For telemetry labeling
-5. **Mount shared data directory** — `~/.ktrdr/shared/` for data, models, strategies
+5. **Mount shared data directory with fallback** — Defaults to `./data` for backward compatibility
 
-**Shared Data Mounts:**
+#### Internal vs External Ports
+
+Only the HOST-SIDE (left) of port mappings is parameterized. Internal ports stay fixed:
+
+```yaml
+# Correct: external varies, internal fixed
+ports:
+  - "${KTRDR_API_PORT:-8000}:8000"
+
+# Wrong: unnecessary complexity
+ports:
+  - "${KTRDR_API_PORT:-8000}:${KTRDR_API_PORT:-8000}"
+```
+
+**Shared Data Mounts (with backward-compatible defaults):**
 
 ```yaml
 services:
   backend:
     volumes:
-      # Shared across all instances (read-mostly)
-      - ${KTRDR_SHARED_DIR:-~/.ktrdr/shared}/data:/app/data
-      - ${KTRDR_SHARED_DIR:-~/.ktrdr/shared}/models:/app/models
-      - ${KTRDR_SHARED_DIR:-~/.ktrdr/shared}/strategies:/app/strategies
+      # Shared data with fallback to local (backward compatible)
+      - ${KTRDR_SHARED_DIR:-./data}:/app/data
+      - ${KTRDR_SHARED_DIR:+${KTRDR_SHARED_DIR}/models}${KTRDR_SHARED_DIR:-./models}:/app/models
+      - ${KTRDR_SHARED_DIR:+${KTRDR_SHARED_DIR}/strategies}${KTRDR_SHARED_DIR:-./strategies}:/app/strategies
       # Instance-specific (hot reload)
       - ./ktrdr:/app/ktrdr
       - ./tests:/app/tests
 ```
+
+**Note:** When `KTRDR_SHARED_DIR` is not set, uses local `./data`, `./models`, `./strategies` (current behavior). When set to `~/.ktrdr/shared`, uses shared directories.
 
 ### Component: Shared Data Package
 
@@ -243,43 +275,61 @@ class StartabilityGate:
         """pg_isready or SELECT 1 succeeds"""
 ```
 
-### Component: CLI Port Flag Extension
+### Component: CLI URL Resolution
 
-**Responsibility:** Adds `--port` / `-p` flag to the existing `ktrdr` CLI for easy instance targeting.
+**Responsibility:** Determines which backend to target based on flags and current directory.
 
 **Location:** `ktrdr/cli/main.py` (modified)
+
+**Key Design Decision:** We read the `.env.sandbox` FILE directly, NOT environment variables. This avoids env var pollution between terminal sessions.
 
 **Implementation:**
 
 ```python
-@click.option(
-    "--port", "-p",
-    type=int,
-    envvar="KTRDR_API_PORT",
-    help="Backend port (expands to http://localhost:PORT)"
-)
-@click.option(
-    "--url", "-u",
-    envvar="KTRDR_API_URL",
-    help="Full backend URL"
-)
-def cli(port: int | None, url: str | None):
-    if url:
-        api_url = url
-    elif port:
-        api_url = f"http://localhost:{port}"
-    else:
-        api_url = "http://localhost:8000"  # Default
+def resolve_api_url(
+    explicit_url: str | None,
+    explicit_port: int | None,
+    cwd: Path
+) -> str:
+    """
+    Determine which KTRDR backend to target.
+
+    Priority order (highest to lowest):
+    1. --url flag: Explicit full URL, always wins
+    2. --port flag: Convenience shorthand for localhost
+    3. .env.sandbox file: Auto-detect from current directory tree
+    4. Default: http://localhost:8000
+
+    IMPORTANT: We read the .env.sandbox FILE directly, not environment
+    variables. This avoids "env var pollution" between terminal sessions.
+    """
+    # Priority 1: Explicit --url flag
+    if explicit_url:
+        return explicit_url
+
+    # Priority 2: Explicit --port flag
+    if explicit_port:
+        return f"http://localhost:{explicit_port}"
+
+    # Priority 3: Auto-detect from .env.sandbox in directory tree
+    env_file = find_file_upward(cwd, ".env.sandbox")
+    if env_file:
+        config = parse_dotenv_file(env_file)
+        if port := config.get("KTRDR_API_PORT"):
+            return f"http://localhost:{port}"
+
+    # Priority 4: Default
+    return "http://localhost:8000"
 ```
 
-**Usage:** When working in a sandbox instance, `.env.sandbox` sets `KTRDR_API_PORT`, so the CLI automatically targets the correct backend without flags.
+**Usage:** When working in a sandbox directory, the CLI automatically detects `.env.sandbox` and targets the correct backend. No need for `source .env.sandbox` or manual exports.
 
 ## Data Flow
 
 ### Instance Creation Flow
 
 ```
-User: ktrdr-sandbox create feat-metrics
+User: ktrdr sandbox create feat-metrics
                 │
                 ▼
         ┌───────────────┐
@@ -308,7 +358,7 @@ User: ktrdr-sandbox create feat-metrics
 ### Instance Startup Flow
 
 ```
-User: ktrdr-sandbox up
+User: ktrdr sandbox up
         │
         ▼
 ┌───────────────────┐
@@ -518,7 +568,7 @@ SANDBOX_VERSION=1
 
 **When:** All 10 slots are allocated
 **Response:** Error with message listing allocated slots and their instances
-**User experience:** "All 10 sandbox slots are in use. Run 'ktrdr-sandbox list' to see instances. Destroy unused instances with 'ktrdr-sandbox destroy'."
+**User experience:** "All 10 sandbox slots are in use. Run 'ktrdr sandbox list' to see instances. Destroy unused instances with 'ktrdr sandbox destroy'."
 
 ### Error Category: Port Conflict
 
@@ -555,7 +605,7 @@ Startability Gate: FAILED
 
 **When:** Running `up`, `down`, `status` outside an instance
 **Response:** Guide user to correct directory or create instance
-**User experience:** "Not in a sandbox instance directory. Run 'ktrdr-sandbox list' to see instances, or 'ktrdr-sandbox create <name>' to create one."
+**User experience:** "Not in a sandbox instance directory. Run 'ktrdr sandbox list' to see instances, or 'ktrdr sandbox create <name>' to create one."
 
 ## Integration Points
 
@@ -598,46 +648,114 @@ ktrdr -p 8002 operations list
 The new sandbox infrastructure is additive, not replacement. We build new capabilities while preserving the working system:
 
 - Existing `docker compose up` in `../ktrdr2` continues to work (uses default ports)
-- No breaking changes to compose file — only additions (parameterized ports with defaults)
+- During development, we use a SEPARATE `docker-compose.sandbox.yml` file
+- Only after validation do we merge changes into the main compose file
 - Slot 0 (default ports) is reserved for the main dev environment
 - New sandbox instances use slots 1-10 with offset ports
 
-**Transition Strategy:**
+**Two-File Development Strategy:**
 
-1. Make compose changes backward-compatible first (test existing workflow still works)
-2. Only then add CLI commands
-3. Validate each phase before proceeding
-4. Keep escape hatch: if sandbox CLI breaks, raw `docker compose up` always works
+```text
+docker-compose.yml          # Untouched during development
+docker-compose.sandbox.yml  # New file for sandbox instances
+```
 
-### Phase 1: Compose Modifications (Backward-Compatible)
+Merge only happens in the final milestone, with verified backward compatibility and rollback capability.
 
-1. Remove all `container_name:` fields from compose
-2. Parameterize all ports with `${KTRDR_*_PORT:-default}` — **defaults match current values**
-3. Add shared data mounts (`~/.ktrdr/shared/`)
-4. **Test that existing `docker compose up` still works exactly as before**
+### Milestone 1: Compose File + Shared Data Setup
 
-### Phase 2: CLI Tool - Core Commands
+1. Create `docker-compose.sandbox.yml` with parameterized ports
+2. Set up `~/.ktrdr/shared/` directory structure
+3. Verify manual multi-instance works
+4. **Main compose file untouched — ktrdr2 workflow unchanged**
+
+### Milestone 2: CLI Core Commands
 
 1. Implement `ktrdr sandbox create` with worktree support
 2. Implement `ktrdr sandbox init` for existing clones
-3. Implement `ktrdr sandbox up` with Startability Gate
+3. Implement `ktrdr sandbox up` with compose file selection
 4. Implement `ktrdr sandbox down` and `destroy`
 5. Implement port allocator with conflict detection
 6. Implement instance registry
 
-### Phase 3: Shared Data & Status
+### Milestone 3: Startability Gate + Status
+
+1. Implement Startability Gate health checks
+2. Implement `ktrdr sandbox status` with service URLs
+3. Implement `ktrdr sandbox list`
+4. Add port conflict detection before `up`
+
+### Milestone 4: CLI Auto-Detection + Init
+
+1. Implement directory-based `.env.sandbox` detection
+2. Implement `ktrdr sandbox init` for existing clones
+3. Add `ktrdr --port` / `-p` flag
+4. Implement `ktrdr sandbox logs`
+
+### Milestone 5: Shared Data + Init-Shared
 
 1. Implement `ktrdr sandbox init-shared`
-2. Implement `ktrdr sandbox list` and `status`
-3. Implement `ktrdr sandbox logs`
-4. Add CLI `--port` / `-p` flag
+2. Add `--from` and `--minimal` options
+3. Document new dev machine setup workflow
 
-### Phase 4: Documentation & Polish
+### Milestone 6: Backward-Compatible Merge
+
+**This milestone merges sandbox changes into the main compose file with guaranteed rollback.**
+
+**Pre-merge setup:**
+
+```bash
+# Create rollback point
+git tag sandbox-merge-rollback-point
+cp docker-compose.yml docker-compose.yml.pre-sandbox-backup
+```
+
+**Verification checklist (automated script):**
+
+```bash
+# scripts/verify-sandbox-merge.sh
+# MUST pass before merge is considered complete
+
+# Test 1: Default ports work (no env vars)
+cd ../ktrdr2
+docker compose down -v
+unset KTRDR_API_PORT KTRDR_DB_PORT  # etc
+docker compose up -d
+curl http://localhost:8000/api/v1/health || exit 1
+curl http://localhost:3000/api/health || exit 1
+
+# Test 2: Sandbox still works
+cd ../ktrdr--test-sandbox
+ktrdr sandbox up
+curl http://localhost:8001/api/v1/health || exit 1
+
+echo "✓ All checks passed. Merge is safe."
+```
+
+**Rollback script:**
+
+```bash
+# scripts/sandbox-rollback.sh
+# Emergency rollback if merge breaks main dev workflow
+
+echo "Rolling back sandbox merge..."
+git checkout sandbox-merge-rollback-point -- docker-compose.yml
+# OR: cp docker-compose.yml.pre-sandbox-backup docker-compose.yml
+echo "Rollback complete. Run 'docker compose up' to verify."
+```
+
+**Merge is NOT complete until:**
+
+1. Verification script passes
+2. Karl manually confirms `docker compose up` works in ktrdr2
+3. Rollback script is tested (run it, then undo)
+
+### Milestone 7: Documentation & Polish
 
 1. Update README with sandbox workflow
 2. Document new dev machine setup
-3. Handle edge cases (stale registry, orphaned containers, port conflicts)
-4. Update Makefile to source `.env.sandbox` if present
+3. Delete `docker-compose.sandbox.yml` (now merged)
+4. Handle edge cases (stale registry, orphaned containers)
 
 ## Verification Strategy
 
