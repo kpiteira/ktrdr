@@ -4,10 +4,12 @@ This module provides commands for managing isolated development sandbox instance
 Each sandbox runs in its own git worktree with isolated Docker containers.
 """
 
+import os
 import re
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 import typer
 from rich.console import Console
@@ -185,3 +187,146 @@ def create(
     console.print(f"  API: http://localhost:{ports.backend}")
     console.print(f"  Grafana: http://localhost:{ports.grafana}")
     console.print(f"\nRun 'cd {worktree_path} && ktrdr sandbox up' to start")
+
+
+def load_env_sandbox(path: Optional[Path] = None) -> dict[str, str]:
+    """Load .env.sandbox from current or specified directory.
+
+    Args:
+        path: Directory containing .env.sandbox. Defaults to cwd.
+
+    Returns:
+        Dictionary of environment variables, empty if file doesn't exist.
+    """
+    if path is None:
+        path = Path.cwd()
+
+    env_file = path / ".env.sandbox"
+    if not env_file.exists():
+        return {}
+
+    env: dict[str, str] = {}
+    with open(env_file) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, value = line.split("=", 1)
+                env[key] = value
+    return env
+
+
+def find_compose_file(path: Path) -> Path:
+    """Find the sandbox compose file.
+
+    Args:
+        path: Directory to search for compose file.
+
+    Returns:
+        Path to the compose file.
+
+    Raises:
+        FileNotFoundError: If no compose file is found.
+    """
+    # First check for sandbox-specific file
+    sandbox_compose = path / "docker-compose.sandbox.yml"
+    if sandbox_compose.exists():
+        return sandbox_compose
+
+    # Fall back to main compose (for merged scenario)
+    main_compose = path / "docker-compose.yml"
+    if main_compose.exists():
+        return main_compose
+
+    raise FileNotFoundError("No docker-compose file found")
+
+
+@sandbox_app.command()
+def up(
+    no_wait: bool = typer.Option(
+        False, "--no-wait", help="Don't wait for Startability Gate"
+    ),
+    build: bool = typer.Option(False, "--build", help="Force rebuild images"),
+) -> None:
+    """Start the sandbox stack."""
+    cwd = Path.cwd()
+    env = load_env_sandbox(cwd)
+
+    if not env:
+        error_console.print(
+            "[red]Error:[/red] Not in a sandbox directory (.env.sandbox not found)"
+        )
+        error_console.print(
+            "Run 'ktrdr sandbox create <name>' to create one, "
+            "or 'ktrdr sandbox init' to initialize this directory."
+        )
+        raise typer.Exit(1)
+
+    instance_id = env.get("INSTANCE_ID", "unknown")
+    slot = env.get("SLOT_NUMBER", "?")
+
+    console.print(f"Starting instance: {instance_id} (slot {slot})")
+
+    # Build compose command
+    try:
+        compose_file = find_compose_file(cwd)
+    except FileNotFoundError as e:
+        error_console.print("[red]Error:[/red] No docker-compose.sandbox.yml found")
+        raise typer.Exit(1) from e
+
+    cmd = ["docker", "compose", "-f", str(compose_file), "up", "-d"]
+    if build:
+        cmd.append("--build")
+
+    # Set environment for compose
+    compose_env = os.environ.copy()
+    compose_env.update(env)
+
+    console.print(f"Running: docker compose -f {compose_file.name} up -d")
+
+    try:
+        subprocess.run(cmd, check=True, env=compose_env)
+    except subprocess.CalledProcessError as e:
+        error_console.print(f"[red]Error starting stack:[/red] {e}")
+        raise typer.Exit(1) from e
+
+    if no_wait:
+        console.print("\nInstance starting... (use 'ktrdr sandbox status' to check)")
+    else:
+        # Startability Gate will be added in M3
+        console.print("\nInstance starting... (Startability Gate coming in M3)")
+
+
+@sandbox_app.command()
+def down(
+    volumes: bool = typer.Option(False, "--volumes", "-v", help="Also remove volumes"),
+) -> None:
+    """Stop the sandbox stack."""
+    cwd = Path.cwd()
+    env = load_env_sandbox(cwd)
+
+    if not env:
+        error_console.print("[red]Error:[/red] Not in a sandbox directory")
+        raise typer.Exit(1)
+
+    instance_id = env.get("INSTANCE_ID", "unknown")
+    console.print(f"Stopping instance: {instance_id}")
+
+    try:
+        compose_file = find_compose_file(cwd)
+    except FileNotFoundError as e:
+        error_console.print("[red]Error:[/red] No docker-compose file found")
+        raise typer.Exit(1) from e
+
+    cmd = ["docker", "compose", "-f", str(compose_file), "down"]
+    if volumes:
+        cmd.append("-v")
+
+    compose_env = os.environ.copy()
+    compose_env.update(env)
+
+    try:
+        subprocess.run(cmd, check=True, env=compose_env)
+        console.print("[green]Instance stopped[/green]")
+    except subprocess.CalledProcessError as e:
+        error_console.print(f"[red]Error stopping stack:[/red] {e}")
+        raise typer.Exit(1) from e
