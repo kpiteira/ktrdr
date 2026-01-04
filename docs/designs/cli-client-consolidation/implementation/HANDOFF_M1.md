@@ -7,6 +7,7 @@
 - [x] Task 1.3: Create sync client
 - [x] Task 1.4: Create async client
 - [x] Task 1.5: Create operations module
+- [x] Task 1.6: Create package init
 
 ## Emergent Patterns
 
@@ -188,9 +189,21 @@ except asyncio.CancelledError:
 
 This means callers can cancel operations using standard asyncio task cancellation.
 
-## Next Up
+## Milestone 1 Complete
 
-Task 1.6: Create package init (`ktrdr/cli/client/__init__.py`) with:
+All tasks finished. The `ktrdr/cli/client/` module is ready for use:
 
-- Export public API: `AsyncCLIClient`, `SyncCLIClient`, errors
-- Verify `from ktrdr.cli.client import SyncCLIClient` works
+```python
+from ktrdr.cli.client import (
+    SyncCLIClient,      # Sync HTTP client with context manager
+    AsyncCLIClient,     # Async HTTP client with context manager
+    CLIClientError,     # Base exception for all client errors
+    ConnectionError,    # Failed to connect
+    TimeoutError,       # Request timed out
+    APIError,           # API returned error response
+)
+```
+
+**Test summary:** 115 unit tests pass, quality checks pass.
+
+**Next milestone:** M2 — Migrate commands to use new client module.
