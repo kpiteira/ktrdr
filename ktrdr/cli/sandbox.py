@@ -261,8 +261,7 @@ def up(
             "[red]Error:[/red] Not in a sandbox directory (.env.sandbox not found)"
         )
         error_console.print(
-            "Run 'ktrdr sandbox create <name>' to create one, "
-            "or 'ktrdr sandbox init' to initialize this directory."
+            "Run 'ktrdr sandbox create <name>' to create a new sandbox directory."
         )
         raise typer.Exit(1)
 
@@ -275,7 +274,7 @@ def up(
     try:
         compose_file = find_compose_file(cwd)
     except FileNotFoundError as e:
-        error_console.print("[red]Error:[/red] No docker-compose.sandbox.yml found")
+        error_console.print("[red]Error:[/red] No docker-compose file found")
         raise typer.Exit(1) from e
 
     cmd = ["docker", "compose", "-f", str(compose_file), "up", "-d"]
@@ -413,6 +412,8 @@ def destroy(
             console.print("  ✓ Directory removed")
 
     console.print(f"\n[green]Instance '{instance_id}' destroyed[/green]")
+    if not keep_worktree:
+        console.print("[dim]Note: Run 'cd ..' to leave the deleted directory[/dim]")
 
 
 def get_instance_status(
@@ -461,6 +462,7 @@ def get_instance_status(
                     try:
                         containers.append(json.loads(line))
                     except json.JSONDecodeError:
+                        # Skip lines that aren't valid JSON (e.g., empty or malformed)
                         pass
 
         if not containers:

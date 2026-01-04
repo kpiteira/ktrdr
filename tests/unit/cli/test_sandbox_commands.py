@@ -333,7 +333,8 @@ class TestDestroyCommand:
         result = runner.invoke(cli_app, ["sandbox", "destroy", "--help"])
 
         assert result.exit_code == 0
-        assert "--keep-worktree" in result.output
+        # Rich may insert ANSI codes between -- and keep-worktree, check for the option name
+        assert "keep-worktree" in result.output
 
     def test_destroy_requires_confirmation(self, runner, tmp_path):
         """Verify destroy asks for confirmation without --force."""
