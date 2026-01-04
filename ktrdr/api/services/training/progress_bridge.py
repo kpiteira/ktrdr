@@ -773,7 +773,7 @@ class TrainingProgressBridge(ProgressBridge):
 
         if self._progress_manager is not None:
             manager = self._progress_manager
-            with manager._lock:  # type: ignore[attr-defined]
+            with manager._lock:
                 state = manager._state
                 if state is not None:
                     state.current_step = self._last_epoch_step
@@ -796,4 +796,4 @@ class TrainingProgressBridge(ProgressBridge):
             try:
                 self._update_callback(**payload)
             except TypeError:
-                self._update_callback(payload)  # type: ignore[misc]
+                self._update_callback(payload)

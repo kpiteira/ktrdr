@@ -222,7 +222,7 @@ class AgentService:
             params["bypass_gates"] = True
         op = await self.ops.create_operation(
             operation_type=OperationType.AGENT_RESEARCH,
-            metadata=OperationMetadata(parameters=params),  # type: ignore[call-arg]
+            metadata=OperationMetadata(parameters=params),
             is_backend_local=True,  # M7 Task 7.1: Mark as backend-local for checkpoint handling
         )
 

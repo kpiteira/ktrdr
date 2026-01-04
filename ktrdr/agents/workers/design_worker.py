@@ -227,7 +227,7 @@ Always validate your configuration before saving it."""
         # Create child operation for tracking
         op = await self.ops.create_operation(
             operation_type=OperationType.AGENT_DESIGN,
-            metadata=OperationMetadata(  # type: ignore[call-arg]
+            metadata=OperationMetadata(
                 parameters={"parent_operation_id": parent_operation_id}
             ),
             parent_operation_id=parent_operation_id,

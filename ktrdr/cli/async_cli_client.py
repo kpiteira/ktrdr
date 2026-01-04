@@ -160,7 +160,7 @@ class AsyncCLIClient:
                 if 200 <= response.status_code < 300:
                     # Success
                     try:
-                        return response.json()  # type: ignore[no-any-return]
+                        return response.json()
                     except Exception as e:
                         raise AsyncCLIClientError(
                             "Invalid JSON response from API",

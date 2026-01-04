@@ -481,7 +481,7 @@ class AgentAssessmentWorker:
         # Create child operation
         op = await self.ops.create_operation(
             operation_type=OperationType.AGENT_ASSESSMENT,
-            metadata=OperationMetadata(  # type: ignore[call-arg]
+            metadata=OperationMetadata(
                 parameters={"parent_operation_id": parent_operation_id}
             ),
             parent_operation_id=parent_operation_id,

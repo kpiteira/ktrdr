@@ -293,7 +293,7 @@ class ModelTrainer:
         if self._resume_context is not None and self._resume_context.scheduler_state:
             if scheduler is not None and hasattr(scheduler, "load_state_dict"):
                 buffer = BytesIO(self._resume_context.scheduler_state)
-                scheduler.load_state_dict(torch.load(buffer, weights_only=False))  # type: ignore[union-attr]
+                scheduler.load_state_dict(torch.load(buffer, weights_only=False))
                 print("🔄 Restored scheduler state from checkpoint")
 
         # Setup early stopping
@@ -570,7 +570,7 @@ class ModelTrainer:
                 if isinstance(scheduler, optim.lr_scheduler.ReduceLROnPlateau):
                     scheduler.step(val_loss if val_loss else avg_train_loss)
                 else:
-                    scheduler.step()  # type: ignore[attr-defined]
+                    scheduler.step()
 
             # Early stopping check
             if early_stopping and early_stopping(metrics):
@@ -952,7 +952,7 @@ class ModelTrainer:
                 if isinstance(scheduler, optim.lr_scheduler.ReduceLROnPlateau):
                     scheduler.step(val_loss if val_loss is not None else avg_train_loss)
                 else:
-                    scheduler.step()  # type: ignore[attr-defined]
+                    scheduler.step()
 
             # Check early stopping
             if early_stopping and early_stopping(metrics):

@@ -153,3 +153,13 @@ exclude_lines = [
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+
+[tool.mypy]
+plugins = ["pydantic.mypy"]
+python_version = "3.12"
+warn_unused_ignores = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true

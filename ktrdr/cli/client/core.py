@@ -129,7 +129,7 @@ def parse_response(response: httpx.Response) -> dict[str, Any]:
     # Success response
     if 200 <= response.status_code < 300:
         try:
-            return response.json()  # type: ignore[no-any-return]
+            return response.json()
         except Exception as e:
             raise APIError(
                 message="Invalid JSON response from API",
