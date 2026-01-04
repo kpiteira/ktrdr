@@ -106,7 +106,24 @@ from ktrdr.cli.sandbox import sandbox_app, console, error_console
 
 Add commands using the `@sandbox_app.command()` decorator. Use `console` for output and `error_console` for errors with Rich formatting.
 
+### Create Command Helpers
+
+Task 2.4 added utility functions to `ktrdr/cli/sandbox.py`:
+
+```python
+from ktrdr.cli.sandbox import slugify, derive_instance_id, generate_env_file
+
+# Slugify names for Docker/filesystem
+slugify("My Feature!") # -> "my-feature"
+
+# Get instance ID from path
+derive_instance_id(Path("/path/ktrdr--my-feature")) # -> "ktrdr--my-feature"
+
+# Generate .env.sandbox
+generate_env_file(path, instance_id, slot)
+```
+
 ## For Next Tasks
 
-- **Task 2.4 (Create):** Import from `ktrdr.cli.sandbox_ports` for port allocation
 - **Task 2.5 (Up/Down):** Load port info from `.env.sandbox`, not from `get_ports()`
+- **Task 2.6 (Destroy):** Use registry's `get_instance()` to find parent repo for worktree removal
