@@ -744,6 +744,15 @@ class WorkerAPIBase:
         """
         self._current_operation_id = operation_id
 
+        # Clear any stale shutdown event from previous operations
+        # This prevents a stuck event from immediately cancelling new operations
+        # A new SIGTERM during this operation will still trigger shutdown
+        if self._shutdown_event.is_set():
+            logger.info(
+                f"Clearing stale shutdown event before starting operation {operation_id}"
+            )
+            self._shutdown_event.clear()
+
         operation_task = asyncio.create_task(operation_coro)
         shutdown_task = asyncio.create_task(self._shutdown_event.wait())
 
