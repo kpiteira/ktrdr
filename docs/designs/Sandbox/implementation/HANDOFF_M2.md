@@ -137,7 +137,25 @@ env = load_env_sandbox(Path("/path/to/sandbox"))  # Returns dict or {}
 compose_file = find_compose_file(Path("/path/to/sandbox"))  # Raises FileNotFoundError if missing
 ```
 
+### Destroy Command Pattern
+
+Task 2.6 implemented destroy with proper ordering:
+
+```python
+# IMPORTANT: Get instance info BEFORE removing from registry
+instance_info = get_instance(instance_id)
+# ... do cleanup ...
+remove_instance(instance_id)
+```
+
+The destroy command:
+1. Loads `.env.sandbox` for instance_id
+2. Gets instance info (for parent_repo path)
+3. Confirms with user (unless --force)
+4. Stops containers + removes volumes
+5. Removes from registry
+6. Removes worktree/directory (unless --keep-worktree)
+
 ## For Next Tasks
 
-- **Task 2.6 (Destroy):** Use registry's `get_instance()` to find parent repo for worktree removal
 - **Task 2.7 (List):** Use `load_env_sandbox()` to get port info for display
