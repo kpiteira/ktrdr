@@ -6,7 +6,8 @@ from typer.testing import CliRunner
 
 from ktrdr.cli.deploy_commands import deploy_app
 
-runner = CliRunner()
+# Use NO_COLOR to prevent ANSI codes in test output
+runner = CliRunner(env={"NO_COLOR": "1"})
 
 
 class TestDeployCore:

@@ -9,15 +9,10 @@ from unittest.mock import AsyncMock, patch
 
 import pandas as pd
 import pytest
-from typer.testing import CliRunner
 
 from ktrdr.cli import cli_app
 
-
-@pytest.fixture
-def runner():
-    """Create a Typer CLI runner for testing."""
-    return CliRunner()  # No mix_stderr parameter in current version
+# runner fixture is provided by conftest.py with NO_COLOR=1
 
 
 @pytest.fixture

@@ -4,6 +4,7 @@ This module provides commands for managing isolated development sandbox instance
 Each sandbox runs in its own git worktree with isolated Docker containers.
 """
 
+import json
 import os
 import re
 import subprocess
@@ -15,6 +16,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from ktrdr.cli.sandbox_gate import CheckStatus, run_gate
 from ktrdr.cli.sandbox_ports import check_ports_available, get_ports
 from ktrdr.cli.sandbox_registry import (
     InstanceInfo,
@@ -251,6 +253,7 @@ def up(
         False, "--no-wait", help="Don't wait for Startability Gate"
     ),
     build: bool = typer.Option(False, "--build", help="Force rebuild images"),
+    timeout: int = typer.Option(120, "--timeout", help="Gate timeout in seconds"),
 ) -> None:
     """Start the sandbox stack."""
     cwd = Path.cwd()
@@ -266,9 +269,20 @@ def up(
         raise typer.Exit(1)
 
     instance_id = env.get("INSTANCE_ID", "unknown")
-    slot = env.get("SLOT_NUMBER", "?")
+    slot_str = env.get("SLOT_NUMBER", "0")
+    slot = int(slot_str) if slot_str.isdigit() else 0
 
     console.print(f"Starting instance: {instance_id} (slot {slot})")
+
+    # Check for port conflicts before starting
+    conflicts = check_ports_available(slot)
+    if conflicts:
+        error_console.print(f"[red]Error:[/red] Ports already in use: {conflicts}")
+        error_console.print("\nThis could be:")
+        error_console.print("  - Another sandbox running on the same slot")
+        error_console.print("  - External process using these ports")
+        error_console.print("\nUse 'lsof -i :<port>' to identify the process.")
+        raise typer.Exit(3)
 
     # Build compose command
     try:
@@ -295,9 +309,44 @@ def up(
 
     if no_wait:
         console.print("\nInstance starting... (use 'ktrdr sandbox status' to check)")
+        return
+
+    # Run Startability Gate
+    console.print("\nRunning Startability Gate...")
+    api_port = int(env.get("KTRDR_API_PORT", 8000))
+    db_port = int(env.get("KTRDR_DB_PORT", 5432))
+
+    result = run_gate(api_port, db_port, timeout=float(timeout))
+
+    # Display results
+    for check in result.checks:
+        if check.status == CheckStatus.PASSED:
+            console.print(f"  [green]✓[/green] {check.name} ready")
+        elif check.status == CheckStatus.SKIPPED:
+            console.print(f"  [dim]○[/dim] {check.name} skipped")
+        else:
+            console.print(f"  [red]✗[/red] {check.name} failed")
+            if check.message:
+                console.print(f"    → {check.message}")
+            if check.details:
+                console.print(f"    → {check.details}")
+
+    console.print()
+
+    if result.passed:
+        console.print("[green]Startability Gate: PASSED[/green]")
+        console.print(f"\nInstance ready ({result.duration_seconds:.1f}s):")
+        console.print(f"  API: http://localhost:{api_port}/api/v1/docs")
+        console.print(
+            f"  Grafana: http://localhost:{env.get('KTRDR_GRAFANA_PORT', 3000)}"
+        )
+        console.print(
+            f"  Jaeger: http://localhost:{env.get('KTRDR_JAEGER_UI_PORT', 16686)}"
+        )
     else:
-        # Startability Gate will be added in M3
-        console.print("\nInstance starting... (Startability Gate coming in M3)")
+        error_console.print("[red]Startability Gate: FAILED[/red]")
+        error_console.print("\nCheck logs with: ktrdr sandbox logs")
+        raise typer.Exit(2)
 
 
 @sandbox_app.command()
@@ -430,8 +479,6 @@ def get_instance_status(
         Status string: "running", "stopped", "partial (x/y)", or "unknown".
     """
     try:
-        import json
-
         compose_env = os.environ.copy()
         compose_env.update(env)
 
@@ -535,3 +582,135 @@ def list_instances() -> None:
         )
 
     console.print(table)
+
+
+@sandbox_app.command()
+def status() -> None:
+    """Show detailed status of current sandbox instance."""
+    cwd = Path.cwd()
+    env = load_env_sandbox(cwd)
+
+    if not env:
+        error_console.print("[red]Error:[/red] Not in a sandbox directory")
+        raise typer.Exit(1)
+
+    instance_id = env.get("INSTANCE_ID", "unknown")
+    slot = env.get("SLOT_NUMBER", "?")
+
+    console.print(f"[bold]Instance:[/bold] {instance_id} (slot {slot})")
+
+    # Get container status
+    try:
+        compose_file = find_compose_file(cwd)
+        compose_env = os.environ.copy()
+        compose_env.update(env)
+
+        result = subprocess.run(
+            ["docker", "compose", "-f", str(compose_file), "ps", "--format", "json"],
+            capture_output=True,
+            text=True,
+            env=compose_env,
+        )
+
+        # Parse JSON output - may be array or line-delimited objects
+        stdout = result.stdout.strip()
+        if not stdout:
+            containers: list[dict] = []
+        else:
+            try:
+                parsed = json.loads(stdout)
+                if isinstance(parsed, list):
+                    containers = parsed
+                else:
+                    containers = [parsed]
+            except json.JSONDecodeError:
+                # Handle line-delimited JSON
+                containers = []
+                for line in stdout.split("\n"):
+                    if line.strip():
+                        try:
+                            containers.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            # Intentionally ignore malformed JSON lines from docker compose output
+                            pass
+
+        running = sum(1 for c in containers if c.get("State") == "running")
+        total = len(containers)
+
+        if running == total and total > 0:
+            status_str = "[green]running[/green]"
+        elif running > 0:
+            status_str = f"[yellow]partial ({running}/{total})[/yellow]"
+        elif total > 0:
+            status_str = "[red]stopped[/red]"
+        else:
+            status_str = "[dim]not started[/dim]"
+
+        console.print(f"[bold]Status:[/bold] {status_str}")
+        console.print(f"[bold]Containers:[/bold] {running}/{total} healthy")
+
+    except FileNotFoundError:
+        console.print("[bold]Status:[/bold] [dim]no compose file[/dim]")
+    except Exception as e:
+        console.print(f"[bold]Status:[/bold] [red]error ({e})[/red]")
+
+    console.print()
+
+    # Service URLs
+    api_port = env.get("KTRDR_API_PORT", "8000")
+    db_port = env.get("KTRDR_DB_PORT", "5432")
+    grafana_port = env.get("KTRDR_GRAFANA_PORT", "3000")
+    jaeger_port = env.get("KTRDR_JAEGER_UI_PORT", "16686")
+    prometheus_port = env.get("KTRDR_PROMETHEUS_PORT", "9090")
+
+    console.print("[bold]Services:[/bold]")
+    console.print(f"  Backend:    http://localhost:{api_port}")
+    console.print(f"  API Docs:   http://localhost:{api_port}/api/v1/docs")
+    console.print(f"  Database:   localhost:{db_port}")
+    console.print(f"  Grafana:    http://localhost:{grafana_port}")
+    console.print(f"  Jaeger:     http://localhost:{jaeger_port}")
+    console.print(f"  Prometheus: http://localhost:{prometheus_port}")
+
+    console.print()
+    console.print("[bold]Workers:[/bold]")
+    for i in range(1, 5):
+        port = env.get(f"KTRDR_WORKER_PORT_{i}", "?")
+        console.print(f"  Worker {i}:   http://localhost:{port}")
+
+
+@sandbox_app.command()
+def logs(
+    service: Optional[str] = typer.Argument(
+        None, help="Service name (e.g., backend, db)"
+    ),
+    follow: bool = typer.Option(False, "--follow", "-f", help="Follow log output"),
+    tail: int = typer.Option(100, "--tail", "-n", help="Number of lines to show"),
+) -> None:
+    """View logs for sandbox services."""
+    cwd = Path.cwd()
+    env = load_env_sandbox(cwd)
+
+    if not env:
+        error_console.print("[red]Error:[/red] Not in a sandbox directory")
+        raise typer.Exit(1)
+
+    try:
+        compose_file = find_compose_file(cwd)
+    except FileNotFoundError as e:
+        error_console.print("[red]Error:[/red] No docker-compose file found")
+        raise typer.Exit(1) from e
+
+    compose_env = os.environ.copy()
+    compose_env.update(env)
+
+    cmd = ["docker", "compose", "-f", str(compose_file), "logs"]
+    cmd.extend(["--tail", str(tail)])
+    if follow:
+        cmd.append("-f")
+    if service:
+        cmd.append(service)
+
+    try:
+        subprocess.run(cmd, env=compose_env)
+    except KeyboardInterrupt:
+        pass  # Normal exit from follow mode
