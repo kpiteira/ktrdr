@@ -61,17 +61,35 @@ jaeger_port = 16686 + (api_port - 8000)
 ### Check Dependencies
 
 Checks run sequentially with dependencies:
+
 1. Database (independent)
 2. Backend (depends on database being up)
 3. Workers (SKIPPED if backend fails)
 4. Observability (independent)
 
+### Gate Integration in `up` Command
+
+Task 3.2 integrated the gate into `sandbox.py`:
+
+```python
+from ktrdr.cli.sandbox_gate import CheckStatus, run_gate
+
+# In up command, after docker compose up:
+if no_wait:
+    console.print("Instance starting...")
+    return
+
+result = run_gate(api_port, db_port, timeout=float(timeout))
+# Display results with ✓/✗ symbols
+# Exit with code 2 on failure
+```
+
 ## M3 Progress
 
 - [x] Task 3.1: Create Startability Gate Module
-- [ ] Task 3.2: Integrate Gate into `sandbox up`
+- [x] Task 3.2: Integrate Gate into `sandbox up`
 - [ ] Task 3.3: Implement `ktrdr sandbox status` Command
 - [ ] Task 3.4: Add Port Conflict Detection to `up`
 - [ ] Task 3.5: Implement `ktrdr sandbox logs` Command
 
-Ready for Task 3.2: Integrate gate into `up` command.
+Ready for Task 3.3: Implement `status` command.
