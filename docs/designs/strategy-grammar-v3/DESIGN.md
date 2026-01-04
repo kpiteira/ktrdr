@@ -1,9 +1,20 @@
 # Strategy Grammar v3: Design
 
-> **⚠️ STRICT PREREQUISITE:** This design depends on [Indicator Standardization](../indicator-standardization/DESIGN.md)
-> being completed first. The v3 dot notation (`bbands_20_2.upper`) and feature naming require
-> standardized indicator outputs with `get_output_names()`. **Do not begin v3 implementation
-> until indicator standardization is merged and verified.**
+> **⚠️ TIGHTLY COUPLED WITH INDICATOR STANDARDIZATION**
+>
+> This design and [Indicator Standardization](../indicator-standardization/DESIGN.md) are **interdependent**:
+>
+> 1. **Indicator Standardization M1-M5** — Add interface, migrate indicators → **BEFORE** v3 starts
+> 2. **Strategy Grammar v3** (all phases) — This document → After M1-M5 complete
+> 3. **Indicator Standardization M6** — Remove v2 compatibility code → **AFTER** v3 complete
+>
+> **Why this order:**
+>
+> - v3 dot notation (`bbands_20_2.upper`) requires `get_output_names()` from M1
+> - v3 feature naming assumes standardized indicator output format from M3a/M3b
+> - M6 cleanup removes v2 compatibility code that v3 strategies no longer need
+>
+> **Do not begin v3 implementation until indicator standardization M1-M5 is merged and verified.**
 
 ## Problem Statement
 

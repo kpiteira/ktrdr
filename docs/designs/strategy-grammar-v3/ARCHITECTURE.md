@@ -1,7 +1,13 @@
 # Strategy Grammar v3: Architecture
 
-> **⚠️ STRICT PREREQUISITE:** Before implementing ANY milestone in this document,
-> [Indicator Standardization](../indicator-standardization/DESIGN.md) must be completed and merged.
+> **⚠️ TIGHTLY COUPLED WITH INDICATOR STANDARDIZATION**
+>
+> This architecture and [Indicator Standardization](../indicator-standardization/DESIGN.md) are **interdependent**:
+>
+> 1. **Indicator Standardization M1-M5** — Must complete **BEFORE** v3 implementation starts
+> 2. **Strategy Grammar v3** (all phases below) — Depends on standardized indicator outputs
+> 3. **Indicator Standardization M6** — Cleanup happens **AFTER** v3 is complete and verified
+>
 > See [Milestone 0](#milestone-0-indicator-standardization-prerequisite) for details.
 
 ## Overview
@@ -690,25 +696,32 @@ ktrdr train strategies/v3_example.yaml --dry-run
 
 ### Milestone 0: Indicator Standardization (PREREQUISITE)
 
-**Must be completed before v3 work begins.**
+**Indicator Standardization M1-M5 must be completed before v3 work begins.**
 
 See [../indicator-standardization/DESIGN.md](../indicator-standardization/DESIGN.md) for full details.
 
-**Summary:**
+**Summary (M1-M5):**
+
 - Standardize all 29 indicators to consistent naming
 - Add `get_output_names()` to BaseIndicator for multi-output discovery
 - Single-output: `compute()` returns unnamed Series
 - Multi-output: `compute()` returns DataFrame with semantic column names (`upper`, `signal`, `k`)
 - IndicatorEngine handles prefixing with indicator_id
 
-**Why first:**
+**Why M1-M5 first:**
 
 - v3 dot notation (`bbands_20_2.upper`) depends on discoverable output names
 - v3 feature naming assumes consistent indicator output format
 - Removes technical debt that would complicate v3 implementation
 - Can be tested independently before v3 changes
 
-**Scope:** ~29 indicators + engine updates + consumer updates
+**M6 (Cleanup) comes AFTER v3:**
+
+- M6 removes v2 compatibility code from indicator standardization
+- This can only happen after v3 strategies replace all v2 strategies
+- See [../indicator-standardization/implementation/M6_cleanup.md](../indicator-standardization/implementation/M6_cleanup.md)
+
+**Scope:** ~29 indicators + engine updates + consumer updates (M1-M5), then cleanup (M6 post-v3)
 
 ---
 
