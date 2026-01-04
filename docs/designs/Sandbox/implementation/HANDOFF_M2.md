@@ -123,7 +123,21 @@ derive_instance_id(Path("/path/ktrdr--my-feature")) # -> "ktrdr--my-feature"
 generate_env_file(path, instance_id, slot)
 ```
 
+### Up/Down Command Helpers
+
+Task 2.5 added utility functions for Docker Compose control:
+
+```python
+from ktrdr.cli.sandbox import load_env_sandbox, find_compose_file
+
+# Load environment from .env.sandbox
+env = load_env_sandbox(Path("/path/to/sandbox"))  # Returns dict or {}
+
+# Find compose file (prefers docker-compose.sandbox.yml)
+compose_file = find_compose_file(Path("/path/to/sandbox"))  # Raises FileNotFoundError if missing
+```
+
 ## For Next Tasks
 
-- **Task 2.5 (Up/Down):** Load port info from `.env.sandbox`, not from `get_ports()`
 - **Task 2.6 (Destroy):** Use registry's `get_instance()` to find parent repo for worktree removal
+- **Task 2.7 (List):** Use `load_env_sandbox()` to get port info for display
