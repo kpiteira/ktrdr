@@ -70,9 +70,9 @@ export KTRDR_WORKER_PORT_3=5012
 export KTRDR_WORKER_PORT_4=5013
 
 # Set shared data directories
-export KTRDR_DATA_DIR=~/.ktrdr/shared/data
-export KTRDR_MODELS_DIR=~/.ktrdr/shared/models
-export KTRDR_STRATEGIES_DIR=~/.ktrdr/shared/strategies
+export KTRDR_DATA_DIR=${HOME}/.ktrdr/shared/data
+export KTRDR_MODELS_DIR=${HOME}/.ktrdr/shared/models
+export KTRDR_STRATEGIES_DIR=${HOME}/.ktrdr/shared/strategies
 
 # Start the stack
 docker compose -f docker-compose.sandbox.yml up -d
@@ -111,9 +111,9 @@ export KTRDR_WORKER_PORT_3=5022
 export KTRDR_WORKER_PORT_4=5023
 
 # Set shared data directories
-export KTRDR_DATA_DIR=~/.ktrdr/shared/data
-export KTRDR_MODELS_DIR=~/.ktrdr/shared/models
-export KTRDR_STRATEGIES_DIR=~/.ktrdr/shared/strategies
+export KTRDR_DATA_DIR=${HOME}/.ktrdr/shared/data
+export KTRDR_MODELS_DIR=${HOME}/.ktrdr/shared/models
+export KTRDR_STRATEGIES_DIR=${HOME}/.ktrdr/shared/strategies
 
 # Start the stack
 docker compose -f docker-compose.sandbox.yml up -d

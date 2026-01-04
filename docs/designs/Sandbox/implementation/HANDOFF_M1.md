@@ -16,9 +16,9 @@
 
 The `.env.sandbox` should set:
 ```bash
-KTRDR_DATA_DIR=~/.ktrdr/shared/data
-KTRDR_MODELS_DIR=~/.ktrdr/shared/models
-KTRDR_STRATEGIES_DIR=~/.ktrdr/shared/strategies
+KTRDR_DATA_DIR=${HOME}/.ktrdr/shared/data
+KTRDR_MODELS_DIR=${HOME}/.ktrdr/shared/models
+KTRDR_STRATEGIES_DIR=${HOME}/.ktrdr/shared/strategies
 ```
 
 ### Worker Port Parameterization
