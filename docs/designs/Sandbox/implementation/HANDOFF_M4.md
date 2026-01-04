@@ -50,13 +50,37 @@ url = resolve_api_url(
 ### Directory Tree Walk
 
 `find_env_sandbox()` walks up from cwd looking for `.env.sandbox`:
+
 - Max 10 levels (safety limit)
 - Returns `Path` to file or `None`
 - Used by both `resolve_api_url()` and `get_sandbox_context()`
 
+### CLI Callback Integration
+
+Task 4.2 modified `ktrdr/cli/commands.py` to integrate auto-detection:
+
+```python
+from ktrdr.cli.sandbox_detect import resolve_api_url
+
+@cli_app.callback()
+def main(
+    url: Optional[str] = typer.Option(...),
+    port: Optional[int] = typer.Option(...),
+):
+    resolved_url = resolve_api_url(
+        explicit_url=url,
+        explicit_port=port,
+    )
+    if resolved_url != "http://localhost:8000":
+        # Reconfigure telemetry, set _cli_state
+        ...
+```
+
+The key insight: only reconfigure when URL differs from default to avoid unnecessary overhead.
+
 ## M4 Progress
 
 - [x] Task 4.1: Implement URL Resolution Logic
-- [ ] Task 4.2: Add `--port` Flag to Main CLI
+- [x] Task 4.2: Add `--port` Flag to Main CLI
 - [ ] Task 4.3: Implement `ktrdr sandbox init` Command
 - [ ] Task 4.4: Update CLI Help Text
