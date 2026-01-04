@@ -20,6 +20,8 @@ from ktrdr.cli.sandbox_registry import (
     add_instance,
     allocate_next_slot,
     get_allocated_slots,
+    get_instance,
+    remove_instance,
 )
 
 sandbox_app = typer.Typer(
@@ -330,3 +332,81 @@ def down(
     except subprocess.CalledProcessError as e:
         error_console.print(f"[red]Error stopping stack:[/red] {e}")
         raise typer.Exit(1) from e
+
+
+@sandbox_app.command()
+def destroy(
+    keep_worktree: bool = typer.Option(
+        False, "--keep-worktree", help="Don't delete the git worktree"
+    ),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
+) -> None:
+    """Completely remove the sandbox instance."""
+    import shutil
+
+    cwd = Path.cwd()
+    env = load_env_sandbox(cwd)
+
+    if not env:
+        error_console.print("[red]Error:[/red] Not in a sandbox directory")
+        raise typer.Exit(1)
+
+    instance_id = env.get("INSTANCE_ID", "unknown")
+
+    # Get instance info BEFORE removing from registry
+    instance_info = get_instance(instance_id)
+
+    # Confirm unless forced
+    if not force:
+        confirm = typer.confirm(
+            f"Destroy instance '{instance_id}'? This cannot be undone."
+        )
+        if not confirm:
+            raise typer.Abort()
+
+    console.print(f"Destroying instance: {instance_id}")
+
+    # Stop containers and remove volumes
+    try:
+        compose_file = find_compose_file(cwd)
+        compose_env = os.environ.copy()
+        compose_env.update(env)
+
+        subprocess.run(
+            ["docker", "compose", "-f", str(compose_file), "down", "-v"],
+            check=True,
+            env=compose_env,
+            capture_output=True,
+        )
+        console.print("  ✓ Containers stopped and volumes removed")
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        console.print("  ⚠ Could not stop containers (may already be stopped)")
+
+    # Remove from registry
+    if remove_instance(instance_id):
+        console.print("  ✓ Registry updated")
+    else:
+        console.print("  ⚠ Instance not found in registry")
+
+    # Remove worktree/directory
+    if not keep_worktree:
+        if instance_info and instance_info.is_worktree and instance_info.parent_repo:
+            try:
+                # Must run from parent repo to remove worktree
+                subprocess.run(
+                    ["git", "worktree", "remove", "--force", str(cwd)],
+                    check=True,
+                    capture_output=True,
+                    cwd=instance_info.parent_repo,
+                )
+                console.print("  ✓ Worktree removed")
+            except subprocess.CalledProcessError:
+                # Fallback: just delete the directory
+                shutil.rmtree(cwd, ignore_errors=True)
+                console.print("  ✓ Directory removed (worktree cleanup failed)")
+        else:
+            # Not a worktree or no info, just remove directory
+            shutil.rmtree(cwd, ignore_errors=True)
+            console.print("  ✓ Directory removed")
+
+    console.print(f"\n[green]Instance '{instance_id}' destroyed[/green]")

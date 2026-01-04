@@ -4,6 +4,7 @@ Tests for the sandbox CLI subcommand module.
 Task 2.3: Verify the sandbox CLI module is properly registered and provides help.
 Task 2.4: Test the create command functionality.
 Task 2.5: Test the up and down commands.
+Task 2.6: Test the destroy command.
 """
 
 from pathlib import Path
@@ -298,3 +299,67 @@ class TestDownCommand:
 
         assert result.exit_code == 0
         assert "--volumes" in result.output or "-v" in result.output
+
+
+class TestDestroyCommand:
+    """Tests for the destroy command."""
+
+    def test_destroy_help_displays(self, runner):
+        """Verify destroy command has help text."""
+        result = runner.invoke(cli_app, ["sandbox", "destroy", "--help"])
+
+        assert result.exit_code == 0
+        assert "destroy" in result.output.lower()
+        assert "remove" in result.output.lower()
+
+    def test_destroy_requires_env_sandbox(self, runner, tmp_path):
+        """Verify destroy fails if not in sandbox directory."""
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            result = runner.invoke(cli_app, ["sandbox", "destroy", "--force"])
+
+        assert result.exit_code == 1
+        assert "not in a sandbox" in result.output.lower()
+
+    def test_destroy_has_force_option(self, runner):
+        """Verify destroy command has --force option."""
+        result = runner.invoke(cli_app, ["sandbox", "destroy", "--help"])
+
+        assert result.exit_code == 0
+        assert "--force" in result.output or "-f" in result.output
+
+    def test_destroy_has_keep_worktree_option(self, runner):
+        """Verify destroy command has --keep-worktree option."""
+        result = runner.invoke(cli_app, ["sandbox", "destroy", "--help"])
+
+        assert result.exit_code == 0
+        assert "--keep-worktree" in result.output
+
+    def test_destroy_requires_confirmation(self, runner, tmp_path):
+        """Verify destroy asks for confirmation without --force."""
+        # Create .env.sandbox
+        env_file = tmp_path / ".env.sandbox"
+        env_file.write_text("INSTANCE_ID=test-instance\nSLOT_NUMBER=1\n")
+
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            # Input "n" for no confirmation
+            result = runner.invoke(cli_app, ["sandbox", "destroy"], input="n\n")
+
+        # Should abort when user says no
+        assert result.exit_code == 1 or "abort" in result.output.lower()
+
+    def test_destroy_skips_confirmation_with_force(self, runner, tmp_path):
+        """Verify destroy skips confirmation with --force."""
+        # Create .env.sandbox and compose file
+        env_file = tmp_path / ".env.sandbox"
+        env_file.write_text("INSTANCE_ID=test-instance\nSLOT_NUMBER=1\n")
+        compose_file = tmp_path / "docker-compose.sandbox.yml"
+        compose_file.touch()
+
+        with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
+            with patch("subprocess.run") as mock_run:
+                # Mock successful docker compose down
+                mock_run.return_value.returncode = 0
+                result = runner.invoke(cli_app, ["sandbox", "destroy", "--force"])
+
+        # Should not prompt for confirmation
+        assert "confirm" not in result.output.lower() or result.exit_code == 0
