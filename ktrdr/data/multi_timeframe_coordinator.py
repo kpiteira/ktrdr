@@ -89,6 +89,14 @@ class MultiTimeframeCoordinator:
             DataError: If loading fails for critical timeframes
             DataValidationError: If base_timeframe not in timeframes list
         """
+        # === MULTI-TIMEFRAME PREPROCESSING TRACE ===
+        logger.info(
+            f"📊 [{symbol}] Multi-timeframe load request:\n"
+            f"   • timeframes: {timeframes}\n"
+            f"   • base_timeframe: {base_timeframe}\n"
+            f"   • date_range: {start_date} to {end_date}"
+        )
+
         if not timeframes:
             raise DataValidationError(
                 "At least one timeframe must be specified",
@@ -151,11 +159,15 @@ class MultiTimeframeCoordinator:
 
                 if tf_data is not None and not tf_data.empty:
                     timeframe_data[timeframe] = tf_data
-                    logger.debug(
-                        f"Successfully loaded {len(tf_data)} rows for {symbol} {timeframe}"
+                    # Preprocessing trace for this timeframe
+                    logger.info(
+                        f"📊 [{symbol}] {timeframe} preprocessing trace:\n"
+                        f"   • rows: {len(tf_data)}\n"
+                        f"   • range: {tf_data.index.min()} to {tf_data.index.max()}\n"
+                        f"   • columns: {list(tf_data.columns)}"
                     )
                 else:
-                    logger.warning(f"No data loaded for {symbol} {timeframe}")
+                    logger.warning(f"⚠️ No data loaded for {symbol} {timeframe}")
                     loading_errors[timeframe] = "No data returned"
 
             except Exception as e:
@@ -186,6 +198,15 @@ class MultiTimeframeCoordinator:
                     "errors": loading_errors,
                 },
             )
+
+        # Summary after loading all timeframes
+        logger.info(
+            f"🔗 [{symbol}] Loaded {len(timeframe_data)}/{len(timeframes)} timeframes:\n"
+            + "\n".join(
+                f"   {tf}: {len(df)} rows, {df.index.min()} to {df.index.max()}"
+                for tf, df in timeframe_data.items()
+            )
+        )
 
         # Step 1.5: Find common data coverage intersection across all loaded timeframes
         if len(timeframe_data) > 1:
@@ -275,8 +296,12 @@ class MultiTimeframeCoordinator:
                 for tf, error in loading_errors.items():
                     logger.warning(f"Failed to load {tf}: {error}")
 
+            # Final preprocessing trace
             logger.info(
-                f"Successfully loaded and synchronized {len(aligned_data)} timeframes for {symbol}"
+                f"✅ [{symbol}] Multi-timeframe load complete:\n"
+                + "\n".join(
+                    f"   {tf}: {len(df)} rows" for tf, df in aligned_data.items()
+                )
             )
 
             return aligned_data
