@@ -10,15 +10,17 @@
 
 | # | Name | Tasks | E2E Test | Status |
 |---|------|-------|----------|--------|
-| M1 | Add Interface | 4 | v2 smoke test (no behavior change) | ⏳ |
-| M2 | IndicatorEngine Adapter | 3 | v2 smoke test (adapter handles both formats) | ⏳ |
-| M3a | Migrate Single-Output | 3 | v2 smoke test (columns now use feature_id) | ⏳ |
-| M3b | Migrate Multi-Output | 3 | v2 smoke test (columns now use indicator_id.output) | ⏳ |
-| M4 | Update Consumers | 4 | v2 smoke test (full E2E training works) | ⏳ |
-| M5 | v3 Ready Checkpoint | 1 | All tests pass, ready for v3 Grammar | ⏳ |
-| M6 | Cleanup | 3 | No v2 compatibility code remains | ⏳ DEFERRED |
+| M1 | Add Interface | 4 | ✅ Train + Backtest (no behavior change) | ⏳ |
+| M2 | IndicatorEngine Adapter | 3 | ✅ Train + Backtest (adapter handles both formats) | ⏳ |
+| M3a | Migrate Single-Output | 3 | ✅ Train + Backtest (columns now use feature_id) | ⏳ |
+| M3b | Migrate Multi-Output | 3 | ✅ Train + Backtest (columns use indicator_id.output) | ⏳ |
+| M4 | Update Consumers | 4 | ✅ Train + Backtest (full E2E pipeline works) | ⏳ |
+| M5 | v3 Ready Checkpoint | 1 | ✅ Train + Backtest + comprehensive verification | ⏳ |
+| M6 | Cleanup | 3 | v3-only verification (DEFERRED) | ⏳ DEFERRED |
 
 **Total:** 21 tasks across 7 milestones
+
+**E2E Test = Train + Backtest:** Every milestone (M1-M5) must pass the v2 smoke test which runs both training AND backtesting. This catches issues that training alone would miss (model metadata, feature name mismatches on load).
 
 ## Dependency Graph
 
@@ -42,7 +44,7 @@ M6 (Cleanup) ← Only after v3 complete
 
 ## v2 Smoke Test (Run at Every Milestone)
 
-**Strategy:** `strategies/rsi_mean_reversion.yaml`
+**Strategy:** `strategies/mean_reversion_momentum_v1.yaml`
 
 This strategy uses:
 - Single-output: RSI
@@ -77,8 +79,6 @@ uv run ktrdr backtest run mean_reversion_momentum_v1 EURUSD 1h \
 ```
 
 **Duration:** ~60-90 seconds total
-
-**Note:** Uses `mean_reversion_momentum_v1.yaml` which validates successfully (unlike `rsi_mean_reversion.yaml` which has missing fuzzy_sets for MACD).
 
 **The smoke test must pass at every milestone (M1-M5).**
 

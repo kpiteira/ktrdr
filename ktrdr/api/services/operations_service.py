@@ -964,15 +964,18 @@ class OperationsService:
                 self._refresh_from_bridge(operation_id)
 
             # TASK 2.5: Pull from remote proxy if registered and:
-            # - Operation is running or resuming (to get progress updates), OR
+            # - Operation is pending/running/resuming (to get progress updates), OR
             # - Operation completed but result_summary is missing (to sync final result)
-            # NOTE: RESUMING operations need proxy refresh to sync status transitions
+            # NOTE: PENDING operations with remote proxy need refresh because the backend
+            # creates a local PENDING entry, but the worker owns the real operation state.
+            # RESUMING operations need proxy refresh to sync status transitions
             # (RESUMING → RUNNING → COMPLETED) from the worker.
             needs_result_sync = (
                 operation.status == OperationStatus.COMPLETED
                 and operation.result_summary is None
             )
             is_active = operation.status in (
+                OperationStatus.PENDING,
                 OperationStatus.RUNNING,
                 OperationStatus.RESUMING,
             )
