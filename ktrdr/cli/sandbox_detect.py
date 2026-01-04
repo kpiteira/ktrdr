@@ -39,7 +39,7 @@ def parse_dotenv_file(path: Path) -> dict[str, str]:
         return {}
 
     env: dict[str, str] = {}
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             # Skip empty lines and comments

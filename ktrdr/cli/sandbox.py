@@ -290,13 +290,15 @@ def init(
     parent_repo = None
     if is_worktree:
         # Read parent from .git file
-        with open(cwd / ".git") as f:
+        with open(cwd / ".git", encoding="utf-8") as f:
             content = f.read()
             # Format: gitdir: /path/to/.git/worktrees/name
             if "gitdir:" in content:
-                gitdir = content.split("gitdir:")[1].strip()
-                # Walk up to find actual repo
-                parent_repo = str(Path(gitdir).parent.parent.parent)
+                gitdir_path = Path(content.split("gitdir:")[1].strip())
+                # Walk up to find actual repo, but only accept if valid
+                candidate_parent = gitdir_path.parent.parent.parent
+                if candidate_parent.exists() and (candidate_parent / ".git").exists():
+                    parent_repo = str(candidate_parent.resolve())
 
     # Register instance
     add_instance(
