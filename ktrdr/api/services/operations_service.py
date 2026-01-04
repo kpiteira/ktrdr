@@ -1521,7 +1521,9 @@ class OperationsService:
             operation = OperationInfo(
                 operation_id=operation_id,  # Use backend's ID
                 parent_operation_id=host_data.get("parent_operation_id"),
-                operation_type=OperationType(host_data.get("operation_type", "training")),
+                operation_type=OperationType(
+                    host_data.get("operation_type", "training")
+                ),
                 status=OperationStatus(host_data.get("status", "pending")),
                 created_at=created_at or datetime.now(timezone.utc),
                 started_at=started_at,
@@ -1545,9 +1547,7 @@ class OperationsService:
             return operation
 
         except Exception as e:
-            logger.error(
-                f"Failed to fetch operation {operation_id} from proxy: {e}"
-            )
+            logger.error(f"Failed to fetch operation {operation_id} from proxy: {e}")
             return None
 
     async def _refresh_from_remote_proxy(self, operation_id: str) -> None:
