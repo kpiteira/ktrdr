@@ -96,9 +96,17 @@ def mock_registry_path(tmp_path):
             yield registry_file
 ```
 
+### CLI Module Pattern
+
+Task 2.3 created `ktrdr/cli/sandbox.py` with the Typer app structure:
+
+```python
+from ktrdr.cli.sandbox import sandbox_app, console, error_console
+```
+
+Add commands using the `@sandbox_app.command()` decorator. Use `console` for output and `error_console` for errors with Rich formatting.
+
 ## For Next Tasks
 
-- **Task 2.2 (Registry):** Use `get_ports(slot).to_env_dict()` when generating `.env.sandbox`
-- **Task 2.3 (CLI Module):** Register sandbox_app in `ktrdr/cli/__init__.py`
 - **Task 2.4 (Create):** Import from `ktrdr.cli.sandbox_ports` for port allocation
 - **Task 2.5 (Up/Down):** Load port info from `.env.sandbox`, not from `get_ports()`
