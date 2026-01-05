@@ -149,9 +149,10 @@ class TestAroonIndicator:
         indicator = AroonIndicator(period=10)
         result = indicator.compute(data)
 
-        # Should return DataFrame with 2 columns (Up and Down)
+        # M3b: Should always return DataFrame with 3 columns (Up, Down, Oscillator)
+        # to match get_output_names()
         assert isinstance(result, pd.DataFrame)
-        assert len(result.columns) == 2
+        assert len(result.columns) == 3
 
         # Should have same length as input
         assert len(result) == len(data)
@@ -160,6 +161,7 @@ class TestAroonIndicator:
         # M3b: Now returns semantic column names
         assert "up" in result.columns
         assert "down" in result.columns
+        assert "oscillator" in result.columns
 
     def test_aroon_with_oscillator(self):
         """Test Aroon calculation with oscillator included."""

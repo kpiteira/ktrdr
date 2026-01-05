@@ -208,11 +208,9 @@ class AroonIndicator(BaseIndicator):
         self._validate_data(data)
 
         period = self.params["period"]
-        include_oscillator = self.params["include_oscillator"]
+        # M3b: Always compute oscillator to match get_output_names()
 
-        logger.debug(
-            f"Computing Aroon with period={period}, include_oscillator={include_oscillator}"
-        )
+        logger.debug(f"Computing Aroon with period={period}")
 
         # Initialize result arrays
         aroon_up = pd.Series(index=data.index, dtype=float)
@@ -245,14 +243,17 @@ class AroonIndicator(BaseIndicator):
             aroon_down.iloc[i] = aroon_down_value
 
         # M3b: Return semantic column names only (engine handles prefixing)
-        result = pd.DataFrame(index=data.index)
-        result["up"] = aroon_up
-        result["down"] = aroon_down
+        # Always include oscillator to match get_output_names() (M3b requirement)
+        aroon_oscillator = aroon_up - aroon_down
 
-        # Add Aroon Oscillator if requested
-        if include_oscillator:
-            aroon_oscillator = aroon_up - aroon_down
-            result["oscillator"] = aroon_oscillator
+        result = pd.DataFrame(
+            {
+                "up": aroon_up,
+                "down": aroon_down,
+                "oscillator": aroon_oscillator,
+            },
+            index=data.index,
+        )
 
         logger.debug(
             f"Aroon computation completed. Valid Aroon Up values: {(~pd.isna(aroon_up)).sum()}"
