@@ -94,9 +94,49 @@ class BaseIndicator(ABC):
         return False
 
     @classmethod
+    def get_output_names(cls) -> list[str]:
+        """
+        Return semantic output names for multi-output indicators.
+
+        Single-output indicators return empty list.
+        Multi-output indicators return ordered list of output names.
+        First item is the primary output (used for bare indicator_id references).
+
+        Returns:
+            list[str]: List of output names, or empty list for single-output
+
+        Examples:
+            RSI: []
+            BollingerBands: ["upper", "middle", "lower"]
+            MACD: ["line", "signal", "histogram"]
+        """
+        return []
+
+    @classmethod
+    def get_primary_output(cls) -> Optional[str]:
+        """
+        Return the primary output name for multi-output indicators.
+
+        Convenience method - returns get_output_names()[0] or None.
+
+        Returns:
+            Optional[str]: Primary output name, or None for single-output
+
+        Examples:
+            RSI.get_primary_output() -> None
+            BollingerBands.get_primary_output() -> "upper"
+            MACD.get_primary_output() -> "line"
+        """
+        outputs = cls.get_output_names()
+        return outputs[0] if outputs else None
+
+    @classmethod
     def get_primary_output_suffix(cls) -> Optional[str]:
         """
         Get the suffix for the primary output column of multi-output indicators.
+
+        DEPRECATED: Use get_primary_output() instead.
+        This method is kept for backward compatibility and will be removed in M6.
 
         For multi-output indicators, this defines which column is considered
         the "primary" output for feature_id mapping. Returns None for
@@ -112,7 +152,8 @@ class BaseIndicator(ABC):
             For BollingerBands which produces "upper_20_2.0", "middle_20_2.0", "lower_20_2.0",
             the primary output is "upper_20_2.0", so return "upper".
         """
-        return None
+        # CLEANUP(v3): Remove after v3 migration complete
+        return cls.get_primary_output()
 
     @abstractmethod
     def compute(self, df: pd.DataFrame) -> Union[pd.Series, pd.DataFrame]:

@@ -57,6 +57,11 @@ class SuperTrendIndicator(BaseIndicator):
         return True
 
     @classmethod
+    def get_output_names(cls) -> list[str]:
+        """Return semantic output names for SuperTrend."""
+        return ["trend", "direction"]
+
+    @classmethod
     def get_primary_output_suffix(cls) -> None:
         """Primary output is SuperTrend with no suffix."""
         return None

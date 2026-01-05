@@ -52,6 +52,11 @@ class KeltnerChannelsIndicator(BaseIndicator):
         return True
 
     @classmethod
+    def get_output_names(cls) -> list[str]:
+        """Return semantic output names for Keltner Channels."""
+        return ["upper", "middle", "lower"]
+
+    @classmethod
     def get_primary_output_suffix(cls) -> str:
         """Primary output is the Middle line (EMA)."""
         return "Middle"

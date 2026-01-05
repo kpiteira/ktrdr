@@ -49,6 +49,11 @@ class MACDIndicator(BaseIndicator):
         return True
 
     @classmethod
+    def get_output_names(cls) -> list[str]:
+        """Return semantic output names for MACD."""
+        return ["line", "signal", "histogram"]
+
+    @classmethod
     def get_primary_output_suffix(cls) -> None:
         """
         Primary output is the MACD line with no suffix.

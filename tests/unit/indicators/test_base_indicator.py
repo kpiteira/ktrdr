@@ -38,6 +38,36 @@ class DummyIndicator(BaseIndicator):
         return df[self.params["source"]]
 
 
+class DummyMultiOutputIndicator(BaseIndicator):
+    """A multi-output indicator for testing the new interface."""
+
+    def __init__(self, name="DummyMulti", period=14, **kwargs):
+        """Initialize the dummy multi-output indicator."""
+        all_params = {"period": period}
+        all_params.update(kwargs)
+        super().__init__(name=name, **all_params)
+
+    @classmethod
+    def is_multi_output(cls) -> bool:
+        """This indicator returns a DataFrame."""
+        return True
+
+    @classmethod
+    def get_output_names(cls) -> list[str]:
+        """Return semantic output names."""
+        return ["upper", "middle", "lower"]
+
+    def compute(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Compute dummy multi-output values."""
+        return pd.DataFrame(
+            {
+                "upper": df["close"] * 1.1,
+                "middle": df["close"],
+                "lower": df["close"] * 0.9,
+            }
+        )
+
+
 class TestBaseIndicator:
     """Test cases for the BaseIndicator abstract class."""
 
@@ -121,3 +151,37 @@ class TestBaseIndicator:
         with pytest.raises(ValidationError) as excinfo:
             DummyIndicator(name="Invalid-Name!")
         assert "String does not match required pattern" in str(excinfo.value)
+
+    def test_get_output_names_default(self):
+        """Test that default get_output_names() returns empty list."""
+        # Single-output indicator should return empty list
+        assert DummyIndicator.get_output_names() == []
+
+    def test_get_primary_output_default(self):
+        """Test that default get_primary_output() returns None."""
+        # Single-output indicator should return None
+        assert DummyIndicator.get_primary_output() is None
+
+    def test_get_primary_output_suffix_backward_compat(self):
+        """Test that get_primary_output_suffix() still works for backward compatibility."""
+        # Should delegate to get_primary_output()
+        assert DummyIndicator.get_primary_output_suffix() is None
+
+    def test_multi_output_get_output_names(self):
+        """Test that multi-output indicators return correct output names."""
+        # Multi-output indicator should return list of semantic names
+        assert DummyMultiOutputIndicator.get_output_names() == [
+            "upper",
+            "middle",
+            "lower",
+        ]
+
+    def test_multi_output_get_primary_output(self):
+        """Test that multi-output indicators return first output as primary."""
+        # Primary output should be first in the list
+        assert DummyMultiOutputIndicator.get_primary_output() == "upper"
+
+    def test_multi_output_get_primary_output_suffix_backward_compat(self):
+        """Test backward compatibility for multi-output indicators."""
+        # Should delegate to get_primary_output()
+        assert DummyMultiOutputIndicator.get_primary_output_suffix() == "upper"

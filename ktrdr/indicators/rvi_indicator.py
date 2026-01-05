@@ -44,8 +44,23 @@ class RVIIndicator(BaseIndicator):
         return True
 
     @classmethod
+    def get_output_names(cls) -> list[str]:
+        """Return semantic output names for RVI indicator."""
+        return ["rvi", "signal"]
+
+    @classmethod
     def get_primary_output_suffix(cls) -> str:
-        """Primary output is the RVI line."""
+        """
+        DEPRECATED: Use get_primary_output() instead.
+
+        Note:
+            This returns the legacy uppercase suffix "RVI" used in v2 column names
+            (e.g., "RVI_{period}_{signal_period}_RVI"). The newer get_output_names()
+            API returns lowercase semantic names ["rvi", "signal"] following the v3
+            naming standard. The casing intentionally differs during the migration
+            period to maintain backward compatibility with existing column-dependent code.
+        """
+        # CLEANUP(v3): Remove after v3 migration complete
         return "RVI"
 
     def get_column_name(self, suffix: Optional[str] = None) -> str:

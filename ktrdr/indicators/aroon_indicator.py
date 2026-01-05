@@ -47,6 +47,11 @@ class AroonIndicator(BaseIndicator):
         return True
 
     @classmethod
+    def get_output_names(cls) -> list[str]:
+        """Return semantic output names for Aroon."""
+        return ["up", "down", "oscillator"]
+
+    @classmethod
     def get_primary_output_suffix(cls) -> str:
         """Primary output is the Aroon Up line."""
         return "Up"

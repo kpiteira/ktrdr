@@ -46,6 +46,25 @@ class CMFIndicator(BaseIndicator):
     - period: 21 (most common), 10, 14, 20
     """
 
+    @classmethod
+    def is_multi_output(cls) -> bool:
+        """CMF produces multiple output columns."""
+        return True
+
+    @classmethod
+    def get_output_names(cls) -> list[str]:
+        """Return semantic output names for CMF indicator."""
+        return [
+            "cmf",
+            "mf_multiplier",
+            "mf_volume",
+            "momentum",
+            "signal",
+            "histogram",
+            "above_zero",
+            "below_zero",
+        ]
+
     def __init__(self, period: int = 21):
         """
         Initialize CMF indicator.
