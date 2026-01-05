@@ -454,3 +454,281 @@ class TestSuperTrendMigration:
         assert (
             actual_columns == expected_columns
         ), f"Expected prefixed columns {expected_columns}, got {actual_columns}"
+
+
+class TestIchimokuMigration:
+    """Test Task 3b.3: Ichimoku returns semantic column names only."""
+
+    def test_compute_returns_semantic_columns(self, sample_ohlcv_data):
+        """Ichimoku compute() returns DataFrame with semantic names only."""
+        from ktrdr.indicators.ichimoku_indicator import IchimokuIndicator
+
+        indicator = IchimokuIndicator(
+            tenkan_period=9, kijun_period=26, senkou_b_period=52, displacement=26
+        )
+        result = indicator.compute(sample_ohlcv_data)
+
+        # Should return DataFrame (not Series)
+        assert isinstance(result, pd.DataFrame), "Multi-output should return DataFrame"
+
+        # Column names should match get_output_names() exactly
+        expected_columns = {"tenkan", "kijun", "senkou_a", "senkou_b", "chikou"}
+        actual_columns = set(result.columns)
+
+        assert (
+            actual_columns == expected_columns
+        ), f"Expected {expected_columns}, got {actual_columns}"
+
+        # No parameter embedding or old format
+        for col in result.columns:
+            assert (
+                "_9_" not in col and "_26_" not in col
+            ), f"Column '{col}' should not contain parameter suffix"
+            assert (
+                "Ichimoku" not in col
+            ), f"Column '{col}' should not contain 'Ichimoku' prefix"
+            assert (
+                "_sen" not in col and "Span" not in col
+            ), f"Column '{col}' should be semantic name, not old format"
+
+    def test_columns_match_get_output_names(self, sample_ohlcv_data):
+        """Column names match get_output_names() exactly."""
+        from ktrdr.indicators.ichimoku_indicator import IchimokuIndicator
+
+        indicator = IchimokuIndicator()
+        result = indicator.compute(sample_ohlcv_data)
+
+        expected = indicator.get_output_names()
+        actual = list(result.columns)
+
+        # Sort for comparison (order doesn't matter for this test)
+        assert sorted(actual) == sorted(
+            expected
+        ), f"Columns {actual} should match get_output_names() {expected}"
+
+    def test_adapter_prefixes_columns(self, sample_ohlcv_data):
+        """Adapter prefixes semantic columns with indicator_id."""
+        from ktrdr.indicators.ichimoku_indicator import IchimokuIndicator
+
+        engine = IndicatorEngine()
+        indicator = IchimokuIndicator()
+        indicator_id = "ichimoku_9_26_52_26"
+
+        result = engine.compute_indicator(sample_ohlcv_data, indicator, indicator_id)
+
+        # Should have prefixed columns
+        expected_columns = {
+            f"{indicator_id}.tenkan",
+            f"{indicator_id}.kijun",
+            f"{indicator_id}.senkou_a",
+            f"{indicator_id}.senkou_b",
+            f"{indicator_id}.chikou",
+            indicator_id,  # Alias for primary output
+        }
+        actual_columns = set(result.columns)
+
+        assert (
+            actual_columns == expected_columns
+        ), f"Expected prefixed columns {expected_columns}, got {actual_columns}"
+
+
+class TestDonchianChannelsMigration:
+    """Test Task 3b.3: Donchian Channels returns semantic column names only."""
+
+    def test_compute_returns_semantic_columns(self, sample_ohlcv_data):
+        """Donchian Channels compute() returns DataFrame with semantic names only."""
+        from ktrdr.indicators.donchian_channels import DonchianChannelsIndicator
+
+        indicator = DonchianChannelsIndicator(period=20, include_middle=True)
+        result = indicator.compute(sample_ohlcv_data)
+
+        # Should return DataFrame (not Series)
+        assert isinstance(result, pd.DataFrame), "Multi-output should return DataFrame"
+
+        # Column names should match get_output_names() exactly
+        expected_columns = {"upper", "middle", "lower"}
+        actual_columns = set(result.columns)
+
+        assert (
+            actual_columns == expected_columns
+        ), f"Expected {expected_columns}, got {actual_columns}"
+
+        # No parameter embedding in column names
+        for col in result.columns:
+            assert (
+                "_20" not in col
+            ), f"Column '{col}' should not contain parameter suffix"
+            assert "DC_" not in col, f"Column '{col}' should not contain 'DC_' prefix"
+
+    def test_columns_match_get_output_names(self, sample_ohlcv_data):
+        """Column names match get_output_names() exactly."""
+        from ktrdr.indicators.donchian_channels import DonchianChannelsIndicator
+
+        indicator = DonchianChannelsIndicator(period=20)
+        result = indicator.compute(sample_ohlcv_data)
+
+        expected = indicator.get_output_names()
+        actual = list(result.columns)
+
+        # Sort for comparison (order doesn't matter for this test)
+        assert sorted(actual) == sorted(
+            expected
+        ), f"Columns {actual} should match get_output_names() {expected}"
+
+    def test_adapter_prefixes_columns(self, sample_ohlcv_data):
+        """Adapter prefixes semantic columns with indicator_id."""
+        from ktrdr.indicators.donchian_channels import DonchianChannelsIndicator
+
+        engine = IndicatorEngine()
+        indicator = DonchianChannelsIndicator(period=20)
+        indicator_id = "donchian_20"
+
+        result = engine.compute_indicator(sample_ohlcv_data, indicator, indicator_id)
+
+        # Should have prefixed columns
+        expected_columns = {
+            f"{indicator_id}.upper",
+            f"{indicator_id}.middle",
+            f"{indicator_id}.lower",
+            indicator_id,  # Alias for primary output
+        }
+        actual_columns = set(result.columns)
+
+        assert (
+            actual_columns == expected_columns
+        ), f"Expected prefixed columns {expected_columns}, got {actual_columns}"
+
+
+class TestKeltnerChannelsMigration:
+    """Test Task 3b.3: Keltner Channels returns semantic column names only."""
+
+    def test_compute_returns_semantic_columns(self, sample_ohlcv_data):
+        """Keltner Channels compute() returns DataFrame with semantic names only."""
+        from ktrdr.indicators.keltner_channels import KeltnerChannelsIndicator
+
+        indicator = KeltnerChannelsIndicator(period=20, atr_period=10, multiplier=2.0)
+        result = indicator.compute(sample_ohlcv_data)
+
+        # Should return DataFrame (not Series)
+        assert isinstance(result, pd.DataFrame), "Multi-output should return DataFrame"
+
+        # Column names should match get_output_names() exactly
+        expected_columns = {"upper", "middle", "lower"}
+        actual_columns = set(result.columns)
+
+        assert (
+            actual_columns == expected_columns
+        ), f"Expected {expected_columns}, got {actual_columns}"
+
+        # No parameter embedding in column names
+        for col in result.columns:
+            assert (
+                "_20" not in col and "_10" not in col
+            ), f"Column '{col}' should not contain parameter suffix"
+            assert "KC_" not in col, f"Column '{col}' should not contain 'KC_' prefix"
+
+    def test_columns_match_get_output_names(self, sample_ohlcv_data):
+        """Column names match get_output_names() exactly."""
+        from ktrdr.indicators.keltner_channels import KeltnerChannelsIndicator
+
+        indicator = KeltnerChannelsIndicator(period=20)
+        result = indicator.compute(sample_ohlcv_data)
+
+        expected = indicator.get_output_names()
+        actual = list(result.columns)
+
+        # Sort for comparison (order doesn't matter for this test)
+        assert sorted(actual) == sorted(
+            expected
+        ), f"Columns {actual} should match get_output_names() {expected}"
+
+    def test_adapter_prefixes_columns(self, sample_ohlcv_data):
+        """Adapter prefixes semantic columns with indicator_id."""
+        from ktrdr.indicators.keltner_channels import KeltnerChannelsIndicator
+
+        engine = IndicatorEngine()
+        indicator = KeltnerChannelsIndicator(period=20)
+        indicator_id = "keltner_20"
+
+        result = engine.compute_indicator(sample_ohlcv_data, indicator, indicator_id)
+
+        # Should have prefixed columns
+        expected_columns = {
+            f"{indicator_id}.upper",
+            f"{indicator_id}.middle",
+            f"{indicator_id}.lower",
+            indicator_id,  # Alias for primary output
+        }
+        actual_columns = set(result.columns)
+
+        assert (
+            actual_columns == expected_columns
+        ), f"Expected prefixed columns {expected_columns}, got {actual_columns}"
+
+
+class TestFisherTransformMigration:
+    """Test Task 3b.3: Fisher Transform returns semantic column names only."""
+
+    def test_compute_returns_semantic_columns(self, sample_ohlcv_data):
+        """Fisher Transform compute() returns DataFrame with semantic names only."""
+        from ktrdr.indicators.fisher_transform import FisherTransformIndicator
+
+        indicator = FisherTransformIndicator(period=10, smoothing=3)
+        result = indicator.compute(sample_ohlcv_data)
+
+        # Should return DataFrame (not Series)
+        assert isinstance(result, pd.DataFrame), "Multi-output should return DataFrame"
+
+        # Column names should match get_output_names() exactly
+        expected_columns = {"fisher", "signal"}
+        actual_columns = set(result.columns)
+
+        assert (
+            actual_columns == expected_columns
+        ), f"Expected {expected_columns}, got {actual_columns}"
+
+        # No parameter embedding in column names
+        for col in result.columns:
+            assert (
+                "_10" not in col and "_3" not in col
+            ), f"Column '{col}' should not contain parameter suffix"
+            assert (
+                "Fisher_" not in col
+            ), f"Column '{col}' should not contain 'Fisher_' prefix"
+
+    def test_columns_match_get_output_names(self, sample_ohlcv_data):
+        """Column names match get_output_names() exactly."""
+        from ktrdr.indicators.fisher_transform import FisherTransformIndicator
+
+        indicator = FisherTransformIndicator(period=10, smoothing=3)
+        result = indicator.compute(sample_ohlcv_data)
+
+        expected = indicator.get_output_names()
+        actual = list(result.columns)
+
+        # Sort for comparison (order doesn't matter for this test)
+        assert sorted(actual) == sorted(
+            expected
+        ), f"Columns {actual} should match get_output_names() {expected}"
+
+    def test_adapter_prefixes_columns(self, sample_ohlcv_data):
+        """Adapter prefixes semantic columns with indicator_id."""
+        from ktrdr.indicators.fisher_transform import FisherTransformIndicator
+
+        engine = IndicatorEngine()
+        indicator = FisherTransformIndicator(period=10, smoothing=3)
+        indicator_id = "fisher_10_3"
+
+        result = engine.compute_indicator(sample_ohlcv_data, indicator, indicator_id)
+
+        # Should have prefixed columns
+        expected_columns = {
+            f"{indicator_id}.fisher",
+            f"{indicator_id}.signal",
+            indicator_id,  # Alias for primary output
+        }
+        actual_columns = set(result.columns)
+
+        assert (
+            actual_columns == expected_columns
+        ), f"Expected prefixed columns {expected_columns}, got {actual_columns}"

@@ -88,6 +88,7 @@ class TestNoInitComputation:
             assert engine.feature_id_map["rsi_14"] == "rsi_14"
 
             # MACD: multi-output -> maps primary column to feature_id
+            # NOTE: This test uses class methods (old API), so still uses old format names
             # Primary column should be "MACD_12_26" (uppercase, no suffix)
             assert "MACD_12_26" in engine.feature_id_map
             assert engine.feature_id_map["MACD_12_26"] == "macd_std"
@@ -233,15 +234,15 @@ class TestComputeStillWorks:
         # Verify RSI column exists (technical name)
         assert "rsi_14" in result.columns
 
-        # Verify MACD technical columns exist
-        assert "MACD_12_26" in result.columns
-        assert "MACD_signal_12_26_9" in result.columns
-        assert "MACD_hist_12_26_9" in result.columns
+        # M3b: Verify MACD semantic columns exist (engine-prefixed)
+        assert "macd_std.line" in result.columns
+        assert "macd_std.signal" in result.columns
+        assert "macd_std.histogram" in result.columns
 
         # Verify feature_id alias exists for MACD
         assert "macd_std" in result.columns  # feature_id alias for primary column
 
-        # Verify the alias has the same values as the technical column
+        # Verify the alias has the same values as the primary technical column
         pd.testing.assert_series_equal(
-            result["MACD_12_26"], result["macd_std"], check_names=False
+            result["macd_std.line"], result["macd_std"], check_names=False
         )

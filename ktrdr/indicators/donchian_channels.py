@@ -132,7 +132,7 @@ class DonchianChannelsIndicator(BaseIndicator):
         """
         # Get parameters from self.params
         period = self.params.get("period", 20)
-        include_middle = self.params.get("include_middle", True)
+        # M3b: include_middle ignored, always include middle in core outputs
 
         # Check required columns
         required_columns = ["high", "low", "close"]
@@ -166,28 +166,19 @@ class DonchianChannelsIndicator(BaseIndicator):
         # Calculate lower channel (lowest low)
         lower_channel = data["low"].rolling(window=period, min_periods=period).min()
 
-        # Create result DataFrame with original data
+        # Calculate middle line
+        middle_line = (upper_channel + lower_channel) / 2
+
+        # M3b: Return semantic column names only (no parameter embedding)
+        # Engine will handle prefixing with indicator_id
         result = pd.DataFrame(
-            index=data.index
-        )  # CRITICAL FIX: Only return computed columns
-        result[f"DC_Upper_{period}"] = upper_channel
-        result[f"DC_Lower_{period}"] = lower_channel
-
-        # Calculate middle line if requested
-        if include_middle:
-            middle_line = (upper_channel + lower_channel) / 2
-            result[f"DC_Middle_{period}"] = middle_line
-
-        # Calculate channel width (useful for volatility analysis)
-        channel_width = upper_channel - lower_channel
-        result[f"DC_Width_{period}"] = channel_width
-
-        # Calculate position within channel (0 = at lower channel, 1 = at upper channel)
-        # This helps identify where price is relative to the channel
-        channel_position = (data["close"] - lower_channel) / (
-            upper_channel - lower_channel
+            {
+                "upper": upper_channel,
+                "middle": middle_line,
+                "lower": lower_channel,
+            },
+            index=data.index,
         )
-        result[f"DC_Position_{period}"] = channel_position
 
         logger.debug(f"Computed Donchian Channels with period={period}")
 

@@ -212,29 +212,16 @@ class KeltnerChannelsIndicator(BaseIndicator):
         upper_channel = ema + band_width
         lower_channel = ema - band_width
 
-        # Create result DataFrame
+        # M3b: Return semantic column names only (no parameter embedding)
+        # Engine will handle prefixing with indicator_id
         result = pd.DataFrame(
-            index=data.index
-        )  # CRITICAL FIX: Only return computed columns
-        result[f"KC_Middle_{period}"] = ema
-        result[f"KC_Upper_{period}_{atr_period}_{multiplier}"] = upper_channel
-        result[f"KC_Lower_{period}_{atr_period}_{multiplier}"] = lower_channel
-        result[f"KC_ATR_{atr_period}"] = atr
-
-        # Calculate channel width for volatility analysis
-        channel_width = upper_channel - lower_channel
-        result[f"KC_Width_{period}_{atr_period}_{multiplier}"] = channel_width
-
-        # Calculate position within channel (0 = at lower band, 1 = at upper band)
-        channel_position = (data["close"] - lower_channel) / (
-            upper_channel - lower_channel
+            {
+                "upper": upper_channel,
+                "middle": ema,
+                "lower": lower_channel,
+            },
+            index=data.index,
         )
-        result[f"KC_Position_{period}_{atr_period}_{multiplier}"] = channel_position
-
-        # Calculate squeeze indicator (price range relative to band width)
-        price_range = high - low
-        squeeze_ratio = price_range / channel_width
-        result[f"KC_Squeeze_{period}_{atr_period}_{multiplier}"] = squeeze_ratio
 
         logger.debug(
             f"Computed Keltner Channels with period={period}, atr_period={atr_period}, multiplier={multiplier}"

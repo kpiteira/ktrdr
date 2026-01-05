@@ -119,14 +119,8 @@ class TestIchimokuIndicator:
         # Should have same length as input
         assert len(result) == len(data)
 
-        # All components should be present
-        expected_columns = [
-            "Ichimoku_9_26_52_26_Tenkan_sen",
-            "Ichimoku_9_26_52_26_Kijun_sen",
-            "Ichimoku_9_26_52_26_Senkou_Span_A",
-            "Ichimoku_9_26_52_26_Senkou_Span_B",
-            "Ichimoku_9_26_52_26_Chikou_Span",
-        ]
+        # M3b: All components should use semantic column names
+        expected_columns = ["tenkan", "kijun", "senkou_a", "senkou_b", "chikou"]
         for col in expected_columns:
             assert col in result.columns
 
@@ -149,8 +143,8 @@ class TestIchimokuIndicator:
         )
         result = indicator.compute(data)
 
-        # Tenkan-sen should be (9-period high + 9-period low) / 2
-        tenkan_col = "Ichimoku_9_26_52_26_Tenkan_sen"
+        # M3b: Tenkan-sen should use semantic column name
+        tenkan_col = "tenkan"
 
         # First valid Tenkan-sen at position 8 (9th element, 0-indexed)
         # For extended data, just verify that Tenkan-sen calculation works
@@ -175,8 +169,8 @@ class TestIchimokuIndicator:
         indicator = IchimokuIndicator()
         result = indicator.compute(data)
 
-        # Kijun-sen should be (26-period high + 26-period low) / 2
-        kijun_col = "Ichimoku_9_26_52_26_Kijun_sen"
+        # M3b: Kijun-sen should use semantic column name
+        kijun_col = "kijun"
 
         # First valid Kijun-sen at position 25 (26th element, 0-indexed)
         # 26-period high from position 0-25: max([100...125]) = 125
@@ -200,8 +194,9 @@ class TestIchimokuIndicator:
         indicator = IchimokuIndicator()
         result = indicator.compute(data)
 
-        span_a_col = "Ichimoku_9_26_52_26_Senkou_Span_A"
-        span_b_col = "Ichimoku_9_26_52_26_Senkou_Span_B"
+        # M3b: Senkou Spans should use semantic column names
+        span_a_col = "senkou_a"
+        span_b_col = "senkou_b"
 
         # Senkou Span A should be present from position 25 onward (when both Tenkan and Kijun are available)
         assert not pd.isna(result[span_a_col].iloc[25])
@@ -222,10 +217,10 @@ class TestIchimokuIndicator:
         indicator = IchimokuIndicator()
         result = indicator.compute(data)
 
-        # Chikou Span should equal the close price (no displacement in current implementation)
-        chikou_col = "Ichimoku_9_26_52_26_Chikou_Span"
+        # M3b: Chikou Span should use semantic column name
+        chikou_col = "chikou"
 
-        # Should have same values as close price
+        # Should have same values as close price (no displacement in current implementation)
         for i in range(len(data)):
             assert abs(result[chikou_col].iloc[i] - data["close"].iloc[i]) < 0.001
 
@@ -272,8 +267,8 @@ class TestIchimokuIndicator:
         # Should work with exactly minimum data
         assert len(result) == 52
 
-        # Senkou Span B should be valid at the last position
-        span_b_col = "Ichimoku_9_26_52_26_Senkou_Span_B"
+        # M3b: Senkou Span B should use semantic column name
+        span_b_col = "senkou_b"
         assert not pd.isna(result[span_b_col].iloc[51])
 
     def test_custom_parameters(self):
@@ -468,9 +463,10 @@ class TestIchimokuIndicator:
         # In strong uptrend, components should generally follow expected relationships
         # This is a complex test, so we just verify basic mathematical consistency
 
-        tenkan_col = "Ichimoku_9_26_52_26_Tenkan_sen"
-        kijun_col = "Ichimoku_9_26_52_26_Kijun_sen"
-        span_a_col = "Ichimoku_9_26_52_26_Senkou_Span_A"
+        # M3b: Use semantic column names
+        tenkan_col = "tenkan"
+        kijun_col = "kijun"
+        span_a_col = "senkou_a"
 
         # Senkou Span A should be average of Tenkan and Kijun where both are available
         for i in range(25, len(result)):  # After both Tenkan and Kijun are available
