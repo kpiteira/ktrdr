@@ -132,11 +132,10 @@ class OBVIndicator(BaseIndicator):
                 # Price unchanged: OBV remains the same
                 obv.iloc[i] = prev_obv
 
-        # Create result Series with appropriate name
+        # M3a: Return unnamed Series (engine handles naming)
         result_series = pd.Series(
             obv,
             index=data.index,
-            name="OBV",
         )
 
         logger.debug("Computed OBV indicator")

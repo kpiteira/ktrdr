@@ -116,7 +116,8 @@ class TestWilliamsRIndicator:
 
         # Check that result is a Series
         assert isinstance(result, pd.Series)
-        assert result.name == "WilliamsR_5"
+        # M3a: Williams%R returns unnamed Series (engine handles naming)
+        assert result.name is None
 
         # Check that we have the right number of rows
         assert len(result) == len(data)
@@ -356,7 +357,8 @@ class TestWilliamsRIndicator:
         result = wr.compute(data)
         assert isinstance(result, pd.Series)
         assert len(result) == 3
-        assert result.name == "WilliamsR_3"
+        # M3a: Williams%R returns unnamed Series (engine handles naming)
+        assert result.name is None
 
         # Test with period=1 (minimum possible)
         wr = WilliamsRIndicator(period=1)
@@ -395,7 +397,8 @@ class TestWilliamsRIndicator:
         # Verify structure
         assert isinstance(result, pd.Series)
         assert len(result) == len(data)
-        assert result.name == "WilliamsR_14"
+        # M3a: Williams%R returns unnamed Series (engine handles naming)
+        assert result.name is None
 
         # Check some basic properties
         wr_values = result.dropna()
@@ -444,7 +447,8 @@ class TestWilliamsRIndicator:
         result = wr.compute(data)
         assert isinstance(result, pd.Series)
         assert len(result) == 60
-        assert result.name == "WilliamsR_50"
+        # M3a: Williams%R returns unnamed Series (engine handles naming)
+        assert result.name is None
 
     def test_williams_r_mathematical_accuracy(self):
         """Test Williams %R mathematical accuracy with known values."""

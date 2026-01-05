@@ -119,11 +119,14 @@ class SimpleMovingAverage(BaseIndicator):
             # Use pandas rolling function to calculate SMA
             sma = df[source].rolling(window=period).mean()
 
-            # Set the name for the result Series
-            sma.name = self.get_feature_id()
+            # M3a: Return unnamed Series (engine handles naming)
+            # Use .values to avoid inheriting name from source Series
+            result_series = pd.Series(sma.values, index=df.index)
 
-            logger.debug(f"SMA calculation completed, non-NaN values: {sma.count()}")
-            return sma
+            logger.debug(
+                f"SMA calculation completed, non-NaN values: {result_series.count()}"
+            )
+            return result_series
 
         except Exception as e:
             error_msg = f"Error calculating SMA: {str(e)}"
@@ -331,12 +334,14 @@ class ExponentialMovingAverage(BaseIndicator):
                     bias_vector = np.linspace(1.05, 1.01, len(df))
                     ema = ema * pd.Series(bias_vector, index=df.index)
 
-            # Set the name for the result Series
-            feature_id = self.get_feature_id()
-            ema.name = feature_id
+            # M3a: Return unnamed Series (engine handles naming)
+            # Use .values to avoid inheriting name from source Series
+            result_series = pd.Series(ema.values, index=df.index)
 
-            logger.debug(f"EMA calculation completed, non-NaN values: {ema.count()}")
-            return ema
+            logger.debug(
+                f"EMA calculation completed, non-NaN values: {result_series.count()}"
+            )
+            return result_series
 
         except Exception as e:
             error_msg = f"Error calculating EMA: {str(e)}"

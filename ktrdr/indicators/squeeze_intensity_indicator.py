@@ -163,12 +163,8 @@ class SqueezeIntensityIndicator(BaseIndicator):
             0.0,  # Default to no squeeze when KC range is ~0
         )
 
-        # Create result Series
-        result_series = pd.Series(
-            squeeze_intensity,
-            index=data.index,
-            name=self.get_column_name(),
-        )
+        # M3a: Create unnamed Series (engine handles naming)
+        result_series = pd.Series(squeeze_intensity, index=data.index)
 
         return result_series
 

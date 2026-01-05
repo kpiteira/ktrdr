@@ -162,8 +162,8 @@ class VWAPIndicator(BaseIndicator):
         # Replace infinite values with NaN
         vwap = vwap.replace([float("inf"), float("-inf")], float("nan"))
 
-        # Create result series with proper index
-        result_series = pd.Series(vwap, index=data.index, name=self.get_name())
+        # M3a: Return unnamed Series (engine handles naming)
+        result_series = pd.Series(vwap, index=data.index)
 
         logger.debug(
             f"Computed VWAP with period={period}, use_typical_price={use_typical_price}"

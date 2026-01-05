@@ -153,12 +153,8 @@ class WilliamsRIndicator(BaseIndicator):
         # In this case, price is at the midpoint, so use -50.0 (neutral)
         williams_r = williams_r.fillna(-50.0)
 
-        # Create result Series with appropriate name
-        result_series = pd.Series(
-            williams_r,
-            index=data.index,
-            name=f"WilliamsR_{period}",
-        )
+        # M3a: Create unnamed Series (engine handles naming)
+        result_series = pd.Series(williams_r, index=data.index)
 
         logger.debug(f"Computed Williams %R with period={period}")
 

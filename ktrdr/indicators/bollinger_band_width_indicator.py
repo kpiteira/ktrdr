@@ -124,10 +124,10 @@ class BollingerBandWidthIndicator(BaseIndicator):
         )
 
         # Create result Series
+        # M3a: Create unnamed Series (engine handles naming)
         result_series = pd.Series(
             bb_width,
             index=data.index,
-            name=self.get_column_name(),
         )
 
         return result_series

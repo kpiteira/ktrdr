@@ -116,7 +116,8 @@ class TestATRIndicator:
 
         # Check that result is a Series
         assert isinstance(result, pd.Series)
-        assert result.name == "ATR_5"
+        # M3a: ATR returns unnamed Series (engine handles naming)
+        assert result.name is None
 
         # Check that we have the right number of rows
         assert len(result) == len(data)
@@ -284,7 +285,8 @@ class TestATRIndicator:
         result = atr.compute(data)
         assert isinstance(result, pd.Series)
         assert len(result) == 4
-        assert result.name == "ATR_3"
+        # M3a: ATR returns unnamed Series (engine handles naming)
+        assert result.name is None
 
         # First two values should be NaN (not enough data for period=3)
         # Values starting from index 2 should have ATR values
@@ -407,7 +409,8 @@ class TestATRIndicator:
         # Verify structure
         assert isinstance(result, pd.Series)
         assert len(result) == len(data)
-        assert result.name == "ATR_14"
+        # M3a: ATR returns unnamed Series (engine handles naming)
+        assert result.name is None
 
         # Check some basic properties
         atr_values = result.dropna()
@@ -441,7 +444,8 @@ class TestATRIndicator:
         result = atr.compute(data)
         assert isinstance(result, pd.Series)
         assert len(result) == 3
-        assert result.name == "ATR_1"
+        # M3a: ATR returns unnamed Series (engine handles naming)
+        assert result.name is None
 
         # With period=1, ATR is just the True Range itself
         # First value: TR = 105 - 103 = 2
@@ -468,7 +472,8 @@ class TestATRIndicator:
         result = atr.compute(data)
         assert isinstance(result, pd.Series)
         assert len(result) == 25
-        assert result.name == "ATR_20"
+        # M3a: ATR returns unnamed Series (engine handles naming)
+        assert result.name is None
 
     def test_atr_mathematical_accuracy(self):
         """Test ATR mathematical accuracy with known values."""

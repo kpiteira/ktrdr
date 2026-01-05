@@ -102,12 +102,13 @@ class AsyncOperationExecutor:
         """
         # Priority: explicit parameter > global --url override > config default
         url_override = get_api_url_override()
-        effective_url = base_url or url_override or get_api_base_url()
 
-        # Auto-append /api/v1 if no API path present (for --url flag which provides just host:port)
+        # Auto-append /api/v1 to url_override if no API path present (for --url flag which provides just host:port)
+        if url_override and "/api/" not in url_override:
+            url_override = f"{url_override.rstrip('/')}/api/v1"
+
+        effective_url = base_url or url_override or get_api_base_url()
         effective_url = effective_url.rstrip("/")
-        if url_override and "/api/" not in effective_url:
-            effective_url = f"{effective_url}/api/v1"
 
         self.base_url = effective_url
         self.poll_interval = poll_interval

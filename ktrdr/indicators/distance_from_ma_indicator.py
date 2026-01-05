@@ -133,10 +133,10 @@ class DistanceFromMAIndicator(BaseIndicator):
         )
 
         # Create result Series
+        # M3a: Create unnamed Series (engine handles naming)
         result_series = pd.Series(
             distance_pct,
             index=data.index,
-            name=self.get_column_name(),
         )
 
         return result_series

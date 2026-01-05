@@ -122,8 +122,9 @@ class ROCIndicator(BaseIndicator):
         # Replace infinite values with NaN (in case of division by zero)
         roc = roc.replace([float("inf"), float("-inf")], float("nan"))
 
-        # Create result series with proper index
-        result_series = pd.Series(roc, index=data.index, name=self.get_name())
+        # M3a: Create unnamed Series (engine handles naming)
+        # Use .values to avoid inheriting name from source Series
+        result_series = pd.Series(roc.values, index=data.index)
 
         logger.debug(f"Computed ROC with period={period}, source={source}")
 
