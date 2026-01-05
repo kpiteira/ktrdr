@@ -515,7 +515,7 @@ def up(
 
     # Wait for backend container to be ready (max 30s)
     backend_ready = False
-    for attempt in range(30):
+    for _attempt in range(30):
         try:
             check_cmd = [
                 "docker",
@@ -528,14 +528,14 @@ def up(
                 "echo",
                 "ready",
             ]
-            result = subprocess.run(
+            check_result = subprocess.run(
                 check_cmd,
                 env=compose_env,
                 capture_output=True,
                 text=True,
                 timeout=2,
             )
-            if result.returncode == 0:
+            if check_result.returncode == 0:
                 backend_ready = True
                 break
         except (subprocess.TimeoutExpired, subprocess.CalledProcessError):
@@ -564,18 +564,18 @@ def up(
         ]
 
         try:
-            result = subprocess.run(
+            migration_result = subprocess.run(
                 migration_cmd,
                 env=compose_env,
                 capture_output=True,
                 text=True,
                 timeout=60,
             )
-            if result.returncode == 0:
+            if migration_result.returncode == 0:
                 console.print("  [green]✓[/green] Database migrations applied")
             else:
                 error_console.print("[yellow]Warning:[/yellow] Migration failed")
-                error_console.print(f"  {result.stderr}")
+                error_console.print(f"  {migration_result.stderr}")
                 console.print(
                     "  [dim]You may need to run manually: docker compose exec backend /app/.venv/bin/alembic upgrade head[/dim]"
                 )
