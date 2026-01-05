@@ -249,9 +249,159 @@ class IndicatorEngine:
 
         return data
 
+    def compute_indicator(
+        self,
+        data: pd.DataFrame,
+        indicator: BaseIndicator,
+        indicator_id: str,
+    ) -> pd.DataFrame:
+        """
+        Compute an indicator and return properly named columns.
+
+        Handles both old-format and new-format indicator outputs:
+        - Old format: columns include params (e.g., "upper_20_2.0") -> pass through
+        - New format: semantic names only (e.g., "upper") -> prefix with indicator_id
+
+        For multi-output indicators, adds alias column for bare indicator_id
+        pointing to primary output.
+
+        Args:
+            data: OHLCV DataFrame
+            indicator: The indicator instance
+            indicator_id: Feature identifier string, typically from indicator.get_feature_id().
+                Should use the format: {indicator_name}_{param1}[_{param2}...] (e.g., "rsi_14",
+                "bbands_20_2", "macd_12_26_9"). This becomes the column name (or column prefix
+                for multi-output indicators).
+
+        Returns:
+            DataFrame with columns:
+            - Single-output: {indicator_id}
+            - Multi-output (new): {indicator_id}.{output_name} + {indicator_id} alias
+            - Multi-output (old): original columns + {indicator_id} alias
+        """
+        result = indicator.compute(data)
+
+        if not indicator.is_multi_output():
+            # Single-output: wrap Series in DataFrame with indicator_id column
+            if isinstance(result, pd.Series):
+                return pd.DataFrame({indicator_id: result}, index=data.index)
+            else:
+                # Already DataFrame (shouldn't happen for single-output)
+                result = result.copy()
+                result.columns = [indicator_id]
+                # Ensure index alignment with input data
+                if not result.index.equals(data.index):
+                    result = result.reindex(data.index)
+                return result
+
+        # Multi-output indicator
+        # At this point, result must be a DataFrame (multi-output returns DataFrame)
+        if not isinstance(result, pd.DataFrame):
+            expected_columns = list(indicator.get_output_names())
+            raise ProcessingError(
+                f"Multi-output indicator {indicator.__class__.__name__} must return a pandas.DataFrame "
+                f"with columns matching get_output_names() {expected_columns}, "
+                f"but returned {type(result).__name__} instead.",
+                "PROC-InvalidOutputType",
+                {
+                    "indicator": indicator.__class__.__name__,
+                    "type": type(result).__name__,
+                    "expected_type": "pandas.DataFrame",
+                    "expected_columns": expected_columns,
+                },
+            )
+
+        expected_outputs = set(indicator.get_output_names())
+        actual_columns = set(result.columns)
+
+        if expected_outputs == actual_columns:
+            # NEW FORMAT: semantic names only -> prefix with indicator_id
+            # Copy result to avoid modifying original
+            prefixed = result.copy()
+            prefixed = prefixed.rename(
+                columns={name: f"{indicator_id}.{name}" for name in prefixed.columns}
+            )
+
+            # Add alias for bare indicator_id -> primary output
+            primary = indicator.get_primary_output()
+            if primary:
+                prefixed[indicator_id] = prefixed[f"{indicator_id}.{primary}"]
+
+            return prefixed
+        elif expected_outputs & actual_columns:
+            # PARTIAL OVERLAP detected: some expected columns present, but not all
+            # This likely indicates a bug in the indicator implementation
+            # rather than a legitimate old-format indicator
+            missing = expected_outputs - actual_columns
+            extra = actual_columns - expected_outputs
+
+            logger.error(
+                f"Indicator {indicator.__class__.__name__} returned unexpected output columns "
+                f"(partial overlap with get_output_names())"
+            )
+            raise ProcessingError(
+                f"Indicator {indicator.__class__.__name__} returned unexpected output columns. "
+                f"Expected all of {sorted(expected_outputs)} but got {sorted(actual_columns)}. "
+                f"This suggests a bug in the indicator implementation.",
+                "PROC-InvalidIndicatorOutputs",
+                {
+                    "indicator": indicator.__class__.__name__,
+                    "indicator_id": indicator_id,
+                    "expected_outputs": sorted(expected_outputs),
+                    "actual_columns": sorted(actual_columns),
+                    "missing_expected": sorted(missing),
+                    "unexpected_extra": sorted(extra),
+                },
+            )
+        else:
+            # CLEANUP(v3): Remove old-format handling after v3 migration complete
+            # OLD FORMAT: no overlap with expected outputs -> columns have params embedded
+            # Pass through columns and add alias for primary output
+
+            # Copy result to avoid modifying original
+            result_copy = result.copy()
+
+            primary_suffix = indicator.get_primary_output_suffix()
+            primary_col = None
+
+            if primary_suffix:
+                # Find column that matches primary suffix
+                # Use precise matching: column starts with suffix + "_" (e.g., "upper_20_2.0")
+                # This avoids false matches like "super_upper" when looking for "upper"
+                for col in result_copy.columns:
+                    if col.startswith(primary_suffix + "_"):
+                        primary_col = col
+                        break
+            else:
+                # No suffix means primary is the "base" column (e.g., MACD_12_26)
+                # Find column without underscore-separated suffix
+                for col in result_copy.columns:
+                    if col == indicator.get_column_name():
+                        primary_col = col
+                        break
+
+            if primary_col:
+                # Add backward-compatible alias for the primary output
+                result_copy[indicator_id] = result_copy[primary_col]
+            else:
+                # No primary column found - this can happen for some legacy indicators
+                # during the v2->v3 migration. Log a warning to aid debugging.
+                logger.warning(
+                    f"Could not determine primary output column for indicator '{indicator_id}' "
+                    f"({indicator.__class__.__name__}) in old-format output. "
+                    f"Available columns: {list(result_copy.columns)}. "
+                    f"No alias column will be created."
+                )
+
+            return result_copy
+
     def apply(self, data: pd.DataFrame) -> pd.DataFrame:
         """
         Apply all configured indicators to the input data.
+
+        Routes all indicator computation through compute_indicator() adapter (M2).
+        The adapter handles both old-format and new-format indicator outputs
+        during the v2->v3 migration.
 
         Args:
             data: DataFrame containing OHLCV data to compute indicators on.
@@ -259,6 +409,7 @@ class IndicatorEngine:
 
         Returns:
             DataFrame with original data plus indicator columns.
+            Column names use feature_ids (from indicator.get_feature_id()).
 
         Raises:
             ConfigurationError: If required columns are missing.
@@ -279,70 +430,34 @@ class IndicatorEngine:
                 {"missing_columns": missing_cols},
             )
 
-        # Check for duplicate column names in input
-        duplicate_cols = [
-            col for col in data.columns if list(data.columns).count(col) > 1
-        ]
-        if duplicate_cols:
-            logger.error(
-                f"[CRITICAL BUG] Input DataFrame has DUPLICATE column names: {set(duplicate_cols)}"
+        # Warn if duplicate column names are present in input
+        # (helps debug data quality issues upstream)
+        if data.columns.duplicated().any():
+            duplicate_columns = [
+                col
+                for col, is_dup in zip(data.columns, data.columns.duplicated())
+                if is_dup
+            ]
+            logger.warning(
+                f"Duplicate column names detected in input data: {duplicate_columns}. "
+                f"This may cause unexpected behavior."
             )
 
         # Create a copy of the input data to avoid modifying original
         result_df = data.copy()
 
-        # Apply each indicator
+        # Apply each indicator through compute_indicator() adapter
         for indicator in self.indicators:
             try:
-                # Compute indicator and add to result DataFrame
-                result = indicator.compute(result_df)
+                # Get indicator_id from feature_id or fall back to column name
+                indicator_id = indicator.get_feature_id()
 
-                # Handle both Series and DataFrame results
-                if isinstance(result, pd.Series):
-                    # Single-output indicator: add with technical column name
-                    # Use get_column_name() to get technical name (not feature_id)
-                    column_name = indicator.get_column_name()
+                # Compute indicator using adapter (handles both old/new formats)
+                # Use result_df to support indicator chaining (indicators that depend on previous indicators)
+                computed = self.compute_indicator(result_df, indicator, indicator_id)
 
-                    # Check if column already exists (would create duplicate)
-                    if column_name in result_df.columns:
-                        logger.error(
-                            f"[CRITICAL BUG] Column '{column_name}' already exists in result_df! This will create a duplicate."
-                        )
-                        logger.error(
-                            f"[CRITICAL BUG]   Existing columns: {list(result_df.columns)}"
-                        )
-                        continue
-
-                    result_df[column_name] = result
-                elif isinstance(result, pd.DataFrame):
-                    # Multi-output indicator: add all columns with their technical names
-                    # Use pd.concat to avoid DataFrame fragmentation (much faster than repeated assignments)
-
-                    # Check for columns that already exist (would create duplicates)
-                    existing_overlap = [
-                        col for col in result.columns if col in result_df.columns
-                    ]
-                    if existing_overlap:
-                        logger.error(
-                            f"[CRITICAL BUG] These columns already exist and pd.concat will create duplicates: {existing_overlap}"
-                        )
-                        logger.error(
-                            f"[CRITICAL BUG]   result_df columns count before concat: {len(result_df.columns)}"
-                        )
-
-                        # TEMPORARY FIX: Filter out overlapping columns to prevent duplicates
-                        # This is a workaround - the root cause is that indicators are being computed twice
-                        non_overlapping_cols = [
-                            col
-                            for col in result.columns
-                            if col not in result_df.columns
-                        ]
-                        if non_overlapping_cols:
-                            result = result[non_overlapping_cols]
-                        else:
-                            continue
-
-                    result_df = pd.concat([result_df, result], axis=1)
+                # Merge computed columns into result
+                result_df = pd.concat([result_df, computed], axis=1)
 
             except Exception as e:
                 logger.error(
@@ -354,7 +469,9 @@ class IndicatorEngine:
                     {"indicator": indicator.__class__.__name__, "error": str(e)},
                 ) from e
 
-        # Create feature_id aliases after all indicators are computed
+        # CLEANUP(v3): Remove _create_feature_id_aliases() after v3 migration
+        # The adapter now creates aliases automatically, but keep this for backward compatibility
+        # during transition (in case feature_id_map is used elsewhere)
         result_df = self._create_feature_id_aliases(result_df)
 
         logger.debug(f"Successfully applied {len(self.indicators)} indicators to data")
