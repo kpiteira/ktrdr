@@ -249,6 +249,103 @@ class IndicatorEngine:
 
         return data
 
+    def compute_indicator(
+        self,
+        data: pd.DataFrame,
+        indicator: BaseIndicator,
+        indicator_id: str,
+    ) -> pd.DataFrame:
+        """
+        Compute an indicator and return properly named columns.
+
+        Handles both old-format and new-format indicator outputs:
+        - Old format: columns include params (e.g., "upper_20_2.0") -> pass through
+        - New format: semantic names only (e.g., "upper") -> prefix with indicator_id
+
+        For multi-output indicators, adds alias column for bare indicator_id
+        pointing to primary output.
+
+        Args:
+            data: OHLCV DataFrame
+            indicator: The indicator instance
+            indicator_id: The ID from strategy config (e.g., "rsi_14", "bbands_20_2")
+
+        Returns:
+            DataFrame with columns:
+            - Single-output: {indicator_id}
+            - Multi-output (new): {indicator_id}.{output_name} + {indicator_id} alias
+            - Multi-output (old): original columns + {indicator_id} alias
+        """
+        result = indicator.compute(data)
+
+        if not indicator.is_multi_output():
+            # Single-output: wrap Series in DataFrame with indicator_id column
+            if isinstance(result, pd.Series):
+                return pd.DataFrame({indicator_id: result}, index=data.index)
+            else:
+                # Already DataFrame (shouldn't happen for single-output)
+                result.columns = [indicator_id]
+                return result
+
+        # Multi-output indicator
+        # At this point, result must be a DataFrame (multi-output returns DataFrame)
+        if not isinstance(result, pd.DataFrame):
+            raise ProcessingError(
+                f"Multi-output indicator {indicator.__class__.__name__} returned {type(result).__name__} instead of DataFrame",
+                "PROC-InvalidOutputType",
+                {
+                    "indicator": indicator.__class__.__name__,
+                    "type": type(result).__name__,
+                },
+            )
+
+        expected_outputs = set(indicator.get_output_names())
+        actual_columns = set(result.columns)
+
+        if expected_outputs == actual_columns:
+            # NEW FORMAT: semantic names only -> prefix with indicator_id
+            # Copy result to avoid modifying original
+            prefixed = result.copy()
+            prefixed = prefixed.rename(
+                columns={name: f"{indicator_id}.{name}" for name in prefixed.columns}
+            )
+
+            # Add alias for bare indicator_id -> primary output
+            primary = indicator.get_primary_output()
+            if primary:
+                prefixed[indicator_id] = prefixed[f"{indicator_id}.{primary}"]
+
+            return prefixed
+        else:
+            # CLEANUP(v3): Remove old-format handling after v3 migration complete
+            # OLD FORMAT: columns have params embedded -> pass through
+            # Add alias for bare indicator_id -> primary output column
+
+            # Copy result to avoid modifying original
+            result_copy = result.copy()
+
+            primary_suffix = indicator.get_primary_output_suffix()
+            primary_col = None
+
+            if primary_suffix:
+                # Find column that matches primary suffix
+                for col in result_copy.columns:
+                    if primary_suffix in col:
+                        primary_col = col
+                        break
+            else:
+                # No suffix means primary is the "base" column (e.g., MACD_12_26)
+                # Find column without underscore-separated suffix
+                for col in result_copy.columns:
+                    if col == indicator.get_column_name():
+                        primary_col = col
+                        break
+
+            if primary_col:
+                result_copy[indicator_id] = result_copy[primary_col]
+
+            return result_copy
+
     def apply(self, data: pd.DataFrame) -> pd.DataFrame:
         """
         Apply all configured indicators to the input data.
