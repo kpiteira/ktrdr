@@ -539,6 +539,7 @@ def up(
                 backend_ready = True
                 break
         except (subprocess.TimeoutExpired, subprocess.CalledProcessError):
+            # Backend container not ready yet; ignore transient errors and retry
             pass
         time.sleep(1)
 
@@ -582,10 +583,6 @@ def up(
         except subprocess.TimeoutExpired:
             error_console.print(
                 "[yellow]Warning:[/yellow] Migration timed out after 60s"
-            )
-        except subprocess.CalledProcessError as e:
-            error_console.print(
-                f"[yellow]Warning:[/yellow] Could not run migrations: {e}"
             )
 
     if no_wait:
