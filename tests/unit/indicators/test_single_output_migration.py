@@ -10,11 +10,17 @@ import pytest
 
 from ktrdr.indicators.ad_line import ADLineIndicator
 from ktrdr.indicators.atr_indicator import ATRIndicator
+from ktrdr.indicators.bollinger_band_width_indicator import (
+    BollingerBandWidthIndicator,
+)
 from ktrdr.indicators.cci_indicator import CCIIndicator
 from ktrdr.indicators.cmf_indicator import CMFIndicator
+from ktrdr.indicators.distance_from_ma_indicator import DistanceFromMAIndicator
+from ktrdr.indicators.ma_indicators import ExponentialMovingAverage, SimpleMovingAverage
 from ktrdr.indicators.mfi_indicator import MFIIndicator
 from ktrdr.indicators.momentum_indicator import MomentumIndicator
 from ktrdr.indicators.obv_indicator import OBVIndicator
+from ktrdr.indicators.parabolic_sar_indicator import ParabolicSARIndicator
 from ktrdr.indicators.roc_indicator import ROCIndicator
 from ktrdr.indicators.rsi_indicator import RSIIndicator
 from ktrdr.indicators.rvi_indicator import RVIIndicator
@@ -22,6 +28,7 @@ from ktrdr.indicators.squeeze_intensity_indicator import SqueezeIntensityIndicat
 from ktrdr.indicators.volume_ratio_indicator import VolumeRatioIndicator
 from ktrdr.indicators.vwap_indicator import VWAPIndicator
 from ktrdr.indicators.williams_r_indicator import WilliamsRIndicator
+from ktrdr.indicators.zigzag_indicator import ZigZagIndicator
 
 
 @pytest.fixture
@@ -308,3 +315,126 @@ class TestAdapterIntegration:
         result = engine.compute_indicator(sample_ohlcv_data, atr, "atr_14")
         assert "atr_14" in result.columns, "ATR should have indicator_id column"
         assert len(result.columns) == 1, "Single-output should have 1 column"
+
+
+class TestRemainingIndicatorsMigration:
+    """Test Task 3a.3: Remaining single-output indicators + MAs return unnamed Series."""
+
+    def test_sma_returns_unnamed_series(self, sample_ohlcv_data):
+        """SMA indicator returns Series with no name."""
+        indicator = SimpleMovingAverage(period=20)
+        result = indicator.compute(sample_ohlcv_data)
+
+        assert isinstance(result, pd.Series), "SMA should return a Series"
+        assert result.name is None, "SMA Series should have no name (unnamed)"
+        assert len(result) == len(sample_ohlcv_data)
+
+    def test_ema_returns_unnamed_series(self, sample_ohlcv_data):
+        """EMA indicator returns Series with no name."""
+        indicator = ExponentialMovingAverage(period=20)
+        result = indicator.compute(sample_ohlcv_data)
+
+        assert isinstance(result, pd.Series), "EMA should return a Series"
+        assert result.name is None, "EMA Series should have no name (unnamed)"
+        assert len(result) == len(sample_ohlcv_data)
+
+    def test_distance_from_ma_returns_unnamed_series(self, sample_ohlcv_data):
+        """Distance from MA indicator returns Series with no name."""
+        indicator = DistanceFromMAIndicator(period=20, ma_type="SMA")
+        result = indicator.compute(sample_ohlcv_data)
+
+        assert isinstance(result, pd.Series), "Distance from MA should return a Series"
+        assert (
+            result.name is None
+        ), "Distance from MA Series should have no name (unnamed)"
+        assert len(result) == len(sample_ohlcv_data)
+
+    def test_bollinger_band_width_returns_unnamed_series(self, sample_ohlcv_data):
+        """Bollinger Band Width indicator returns Series with no name."""
+        indicator = BollingerBandWidthIndicator(period=20, multiplier=2.0)
+        result = indicator.compute(sample_ohlcv_data)
+
+        assert isinstance(
+            result, pd.Series
+        ), "Bollinger Band Width should return a Series"
+        assert (
+            result.name is None
+        ), "Bollinger Band Width Series should have no name (unnamed)"
+        assert len(result) == len(sample_ohlcv_data)
+
+    def test_parabolic_sar_returns_unnamed_series(self, sample_ohlcv_data):
+        """Parabolic SAR indicator returns Series with no name."""
+        indicator = ParabolicSARIndicator(initial_af=0.02, step_af=0.02, max_af=0.20)
+        result = indicator.compute(sample_ohlcv_data)
+
+        assert isinstance(result, pd.Series), "Parabolic SAR should return a Series"
+        assert result.name is None, "Parabolic SAR Series should have no name (unnamed)"
+        assert len(result) == len(sample_ohlcv_data)
+
+    def test_zigzag_returns_unnamed_series(self, sample_ohlcv_data):
+        """ZigZag indicator returns Series with no name."""
+        indicator = ZigZagIndicator(threshold=0.05)
+        result = indicator.compute(sample_ohlcv_data)
+
+        assert isinstance(result, pd.Series), "ZigZag should return a Series"
+        assert result.name is None, "ZigZag Series should have no name (unnamed)"
+        assert len(result) == len(sample_ohlcv_data)
+
+
+class TestRemainingIndicatorsValuesUnchanged:
+    """Regression tests: verify Task 3a.3 indicator values are unchanged."""
+
+    def test_sma_values_unchanged(self, sample_ohlcv_data):
+        """SMA values should be unchanged after removing .name assignment."""
+        indicator = SimpleMovingAverage(period=20)
+        result = indicator.compute(sample_ohlcv_data)
+
+        # Spot check: SMA should have calculated values within price range
+        valid_values = result.dropna()
+        assert len(valid_values) > 0, "SMA should produce non-NaN values"
+        # SMA should be within a reasonable range of input prices
+        price_min = sample_ohlcv_data["close"].min()
+        price_max = sample_ohlcv_data["close"].max()
+        assert (valid_values >= price_min).all(), "SMA should be >= min close"
+        assert (valid_values <= price_max).all(), "SMA should be <= max close"
+
+    def test_ema_values_unchanged(self, sample_ohlcv_data):
+        """EMA values should be unchanged after removing .name assignment."""
+        indicator = ExponentialMovingAverage(period=20)
+        result = indicator.compute(sample_ohlcv_data)
+
+        # Spot check: EMA should have calculated values
+        valid_values = result.dropna()
+        assert len(valid_values) > 0, "EMA should produce non-NaN values"
+        # EMA should be within a reasonable range of input prices
+        price_min = sample_ohlcv_data["close"].min()
+        price_max = sample_ohlcv_data["close"].max()
+        assert (valid_values >= price_min).all(), "EMA should be >= min close"
+        assert (valid_values <= price_max).all(), "EMA should be <= max close"
+
+    def test_distance_from_ma_values_unchanged(self, sample_ohlcv_data):
+        """Distance from MA values should be unchanged after migration."""
+        indicator = DistanceFromMAIndicator(period=20, ma_type="SMA")
+        result = indicator.compute(sample_ohlcv_data)
+
+        # Spot check: Distance should be a percentage (could be positive or negative)
+        valid_values = result.dropna()
+        assert len(valid_values) > 0, "Distance from MA should produce non-NaN values"
+        # Distance is a percentage, so should be within reasonable bounds
+        # For trending data, distance should be relatively small
+        assert (valid_values >= -50).all(), "Distance should be > -50%"
+        assert (valid_values <= 50).all(), "Distance should be < 50%"
+
+    def test_parabolic_sar_values_unchanged(self, sample_ohlcv_data):
+        """Parabolic SAR values should be unchanged after migration."""
+        indicator = ParabolicSARIndicator(initial_af=0.02, step_af=0.02, max_af=0.20)
+        result = indicator.compute(sample_ohlcv_data)
+
+        # Spot check: SAR should have calculated values
+        valid_values = result.dropna()
+        assert len(valid_values) > 0, "Parabolic SAR should produce non-NaN values"
+        # SAR should be within a reasonable range of prices
+        price_min = sample_ohlcv_data["low"].min()
+        price_max = sample_ohlcv_data["high"].max()
+        assert (valid_values >= price_min * 0.9).all(), "SAR should be near price range"
+        assert (valid_values <= price_max * 1.1).all(), "SAR should be near price range"

@@ -134,7 +134,8 @@ class ZigZagIndicator(BaseIndicator):
                     last_extreme_idx = i
                     last_extreme_price = current_price
 
-        return pd.Series(zigzag, index=data.index, name=self.get_column_name())
+        # M3a: Return unnamed Series (engine handles naming)
+        return pd.Series(zigzag, index=data.index)
 
     def get_column_name(self, suffix: Optional[str] = None) -> str:
         """Get the column name for this indicator."""

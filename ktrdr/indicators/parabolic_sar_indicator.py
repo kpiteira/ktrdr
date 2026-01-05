@@ -227,7 +227,8 @@ class ParabolicSARIndicator(BaseIndicator):
                         af = min(af + step_af, max_af)  # Increase AF, cap at max
 
         # Create result series with proper index
-        result_series = pd.Series(sar, index=data.index, name=self.get_name())
+        # M3a: Create unnamed Series (engine handles naming)
+        result_series = pd.Series(sar, index=data.index)
 
         logger.debug(
             f"Computed Parabolic SAR with initial_af={initial_af}, step_af={step_af}, max_af={max_af}"
