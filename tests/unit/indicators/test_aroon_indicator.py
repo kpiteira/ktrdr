@@ -149,16 +149,19 @@ class TestAroonIndicator:
         indicator = AroonIndicator(period=10)
         result = indicator.compute(data)
 
-        # Should return DataFrame with 2 columns (Up and Down)
+        # M3b: Should always return DataFrame with 3 columns (Up, Down, Oscillator)
+        # to match get_output_names()
         assert isinstance(result, pd.DataFrame)
-        assert len(result.columns) == 2
+        assert len(result.columns) == 3
 
         # Should have same length as input
         assert len(result) == len(data)
 
         # Column names should be correctly formatted
-        assert "Aroon_10_Up" in result.columns
-        assert "Aroon_10_Down" in result.columns
+        # M3b: Now returns semantic column names
+        assert "up" in result.columns
+        assert "down" in result.columns
+        assert "oscillator" in result.columns
 
     def test_aroon_with_oscillator(self):
         """Test Aroon calculation with oscillator included."""
@@ -206,9 +209,11 @@ class TestAroonIndicator:
 
         # Should return DataFrame with 3 columns (Up, Down, Oscillator)
         assert len(result.columns) == 3
-        assert "Aroon_10_Up" in result.columns
-        assert "Aroon_10_Down" in result.columns
-        assert "Aroon_10_Oscillator" in result.columns
+        # M3b: Now returns semantic column names
+        assert "up" in result.columns
+        assert "down" in result.columns
+        # M3b: Now returns semantic column name
+        assert "oscillator" in result.columns
 
     def test_uptrend_aroon_behavior(self):
         """Test Aroon behavior during strong uptrend."""
@@ -224,8 +229,8 @@ class TestAroonIndicator:
         result = indicator.compute(data)
 
         # In strong uptrend, Aroon Up should be high, Aroon Down should be low
-        valid_up = result["Aroon_10_Up"].dropna()
-        valid_down = result["Aroon_10_Down"].dropna()
+        valid_up = result["up"].dropna()
+        valid_down = result["down"].dropna()
 
         if len(valid_up) > 0 and len(valid_down) > 0:
             # Most recent values should show strong uptrend
@@ -251,8 +256,8 @@ class TestAroonIndicator:
         result = indicator.compute(data)
 
         # In strong downtrend, Aroon Down should be high, Aroon Up should be low
-        valid_up = result["Aroon_10_Up"].dropna()
-        valid_down = result["Aroon_10_Down"].dropna()
+        valid_up = result["up"].dropna()
+        valid_down = result["down"].dropna()
 
         if len(valid_up) > 0 and len(valid_down) > 0:
             # Most recent values should show strong downtrend
@@ -281,8 +286,8 @@ class TestAroonIndicator:
         result = indicator.compute(data)
 
         # In consolidation, both Aroon Up and Down should be moderate
-        valid_up = result["Aroon_10_Up"].dropna()
-        valid_down = result["Aroon_10_Down"].dropna()
+        valid_up = result["up"].dropna()
+        valid_down = result["down"].dropna()
 
         if len(valid_up) > 0 and len(valid_down) > 0:
             # Values should be neither extremely high nor low
@@ -342,15 +347,11 @@ class TestAroonIndicator:
         result = indicator.compute(data)
 
         # Verify oscillator calculation
-        valid_indices = ~(
-            pd.isna(result["Aroon_10_Up"]) | pd.isna(result["Aroon_10_Down"])
-        )
+        valid_indices = ~(pd.isna(result["up"]) | pd.isna(result["down"]))
 
         for idx in result.index[valid_indices]:
-            expected_oscillator = (
-                result["Aroon_10_Up"][idx] - result["Aroon_10_Down"][idx]
-            )
-            actual_oscillator = result["Aroon_10_Oscillator"][idx]
+            expected_oscillator = result["up"][idx] - result["down"][idx]
+            actual_oscillator = result["oscillator"][idx]
             assert abs(actual_oscillator - expected_oscillator) < 0.001
 
     def test_missing_required_columns(self):
@@ -390,8 +391,8 @@ class TestAroonIndicator:
         assert len(result) == 14
 
         # Should have exactly one valid value at the end
-        valid_up = result["Aroon_14_Up"].dropna()
-        valid_down = result["Aroon_14_Down"].dropna()
+        valid_up = result["up"].dropna()
+        valid_down = result["down"].dropna()
         assert len(valid_up) == 1
         assert len(valid_down) == 1
 
@@ -409,8 +410,9 @@ class TestAroonIndicator:
         assert len(result) == 8
 
         # Column names should reflect custom parameters
-        assert "Aroon_5_Up" in result.columns
-        assert "Aroon_5_Down" in result.columns
+        # M3b: Now returns semantic column names
+        assert "up" in result.columns
+        assert "down" in result.columns
 
     def test_extreme_values(self):
         """Test Aroon with extreme high/low values."""
@@ -463,8 +465,8 @@ class TestAroonIndicator:
         assert len(result) == 16
 
         # Values should still be between 0 and 100
-        valid_up = result["Aroon_14_Up"].dropna()
-        valid_down = result["Aroon_14_Down"].dropna()
+        valid_up = result["up"].dropna()
+        valid_down = result["down"].dropna()
 
         assert all(0 <= val <= 100 for val in valid_up)
         assert all(0 <= val <= 100 for val in valid_down)
@@ -583,8 +585,8 @@ class TestAroonIndicator:
         result = indicator.compute(data)
 
         # All valid values should be finite numbers between 0 and 100
-        valid_up = result["Aroon_14_Up"].dropna()
-        valid_down = result["Aroon_14_Down"].dropna()
+        valid_up = result["up"].dropna()
+        valid_down = result["down"].dropna()
 
         assert all(np.isfinite(valid_up))
         assert all(np.isfinite(valid_down))
@@ -649,7 +651,7 @@ class TestAroonIndicator:
         result = indicator.compute(data)
 
         # Last Aroon Up should be 100 (new high at position 0 of lookback)
-        assert result["Aroon_10_Up"].iloc[-1] == 100.0
+        assert result["up"].iloc[-1] == 100.0
 
     def test_aroon_time_calculation(self):
         """Test the time-based calculation logic of Aroon."""
@@ -690,8 +692,8 @@ class TestAroonIndicator:
         # - Highest high (109) is at position 9 (current position), so periods_since_high = 0
         # - Lowest low (95) is at position 2, so periods_since_low = 7 (positions from current)
 
-        aroon_up_last = result["Aroon_8_Up"].iloc[-1]
-        aroon_down_last = result["Aroon_8_Down"].iloc[-1]
+        aroon_up_last = result["up"].iloc[-1]
+        aroon_down_last = result["down"].iloc[-1]
 
         # Aroon Up = ((8 - 0) / 8) * 100 = 100.0 (high was 0 periods ago - current)
         # Aroon Down = ((8 - 7) / 8) * 100 = 12.5 (low was 7 periods ago)
@@ -750,8 +752,8 @@ class TestAroonIndicator:
         assert len(result) == 15
 
         # Values should still be valid
-        valid_up = result["Aroon_10_Up"].dropna()
-        valid_down = result["Aroon_10_Down"].dropna()
+        valid_up = result["up"].dropna()
+        valid_down = result["down"].dropna()
 
         assert all(0 <= val <= 100 for val in valid_up)
         assert all(0 <= val <= 100 for val in valid_down)

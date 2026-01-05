@@ -195,13 +195,9 @@ class MACDIndicator(BaseIndicator):
         # Calculate histogram (MACD line - signal line)
         histogram = macd_line - signal_line
 
-        # Create result DataFrame with column names that include the parameters
-        macd_col = f"MACD_{fast_period}_{slow_period}"
-        signal_col = f"MACD_signal_{fast_period}_{slow_period}_{signal_period}"
-        hist_col = f"MACD_hist_{fast_period}_{slow_period}_{signal_period}"
-
+        # M3b: Return semantic column names only (engine handles prefixing)
         result_df = pd.DataFrame(
-            {macd_col: macd_line, signal_col: signal_line, hist_col: histogram},
+            {"line": macd_line, "signal": signal_line, "histogram": histogram},
             index=data.index,
         )
 

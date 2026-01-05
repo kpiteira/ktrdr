@@ -178,39 +178,18 @@ class FisherTransformIndicator(BaseIndicator):
         # Apply exponential smoothing
         fisher_smooth = fisher_raw.ewm(span=smoothing, adjust=False).mean()
 
-        # Calculate trigger line (previous Fisher Transform value)
-        fisher_trigger = fisher_smooth.shift(1)
+        # Calculate signal line (previous Fisher Transform value)
+        fisher_signal = fisher_smooth.shift(1)
 
-        # Create result DataFrame with ONLY Fisher Transform columns
-        # CRITICAL: Do NOT copy the input data - only return computed columns
-        # The IndicatorEngine will handle merging with the main DataFrame
-        suffix = f"{period}_{smoothing}"
-        result = pd.DataFrame(index=data.index)
-        result[f"Fisher_{suffix}"] = fisher_smooth
-        result[f"Fisher_Trigger_{suffix}"] = fisher_trigger
-        result[f"Fisher_Raw_{suffix}"] = fisher_raw
-        result[f"Fisher_Normalized_{suffix}"] = normalized_price
-
-        # Calculate additional analysis metrics
-        # Fisher Transform momentum (rate of change)
-        fisher_momentum = fisher_smooth - fisher_smooth.shift(3)
-        result[f"Fisher_Momentum_{suffix}"] = fisher_momentum
-
-        # Fisher Transform histogram (difference from trigger)
-        fisher_histogram = fisher_smooth - fisher_trigger
-        result[f"Fisher_Histogram_{suffix}"] = fisher_histogram
-
-        # Zero line crossings
-        fisher_above_zero = fisher_smooth > 0
-        fisher_below_zero = fisher_smooth < 0
-        result[f"Fisher_Above_Zero_{suffix}"] = fisher_above_zero
-        result[f"Fisher_Below_Zero_{suffix}"] = fisher_below_zero
-
-        # Extreme readings
-        fisher_overbought = fisher_smooth > 2
-        fisher_oversold = fisher_smooth < -2
-        result[f"Fisher_Overbought_{suffix}"] = fisher_overbought
-        result[f"Fisher_Oversold_{suffix}"] = fisher_oversold
+        # M3b: Return semantic column names only (no parameter embedding)
+        # Engine will handle prefixing with indicator_id
+        result = pd.DataFrame(
+            {
+                "fisher": fisher_smooth,
+                "signal": fisher_signal,
+            },
+            index=data.index,
+        )
 
         logger.debug(
             f"Computed Fisher Transform with period={period}, smoothing={smoothing}"

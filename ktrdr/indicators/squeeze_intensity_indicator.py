@@ -129,24 +129,20 @@ class SqueezeIntensityIndicator(BaseIndicator):
         )
         bb_data = bb_indicator.compute(data)
 
-        # Extract bands - use parameterized column names
-        # BollingerBands now returns columns like 'upper_20_2.0', 'lower_20_2.0'
-        bb_suffix = f"{bb_period}_{bb_multiplier}"
-        bb_upper = bb_data[f"upper_{bb_suffix}"]
-        bb_lower = bb_data[f"lower_{bb_suffix}"]
+        # M3b: Extract bands using semantic column names (no parameter embedding)
+        # BollingerBands now returns columns: 'upper', 'lower'
+        bb_upper = bb_data["upper"]
+        bb_lower = bb_data["lower"]
 
         # Calculate Keltner Channels (KeltnerChannels uses close by default)
-        # Note: KeltnerChannels uses atr_period=10 by default
         kc_indicator = KeltnerChannelsIndicator(
             period=kc_period, multiplier=kc_multiplier
         )
         kc_data = kc_indicator.compute(data)
 
-        # KeltnerChannels returns column names with parameters
-        # Format: KC_Upper_{period}_{atr_period}_{multiplier}
-        atr_period = 10  # KeltnerChannels default
-        kc_upper = kc_data[f"KC_Upper_{kc_period}_{atr_period}_{kc_multiplier}"]
-        kc_lower = kc_data[f"KC_Lower_{kc_period}_{atr_period}_{kc_multiplier}"]
+        # M3b: KeltnerChannels now returns semantic column names: 'upper', 'lower'
+        kc_upper = kc_data["upper"]
+        kc_lower = kc_data["lower"]
 
         # Calculate squeeze intensity using same logic as training pipeline
         kc_range = kc_upper - kc_lower

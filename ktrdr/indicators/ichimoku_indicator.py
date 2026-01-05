@@ -241,21 +241,18 @@ class IchimokuIndicator(BaseIndicator):
         # Close price shifted backward by displacement
         chikou_span = close.copy()
 
-        # Create result DataFrame with all components
+        # M3b: Return semantic column names only (no parameter embedding)
+        # Engine will handle prefixing with indicator_id
         result = pd.DataFrame(
             {
-                "Tenkan_sen": tenkan_sen,
-                "Kijun_sen": kijun_sen,
-                "Senkou_Span_A": senkou_span_a,
-                "Senkou_Span_B": senkou_span_b,
-                "Chikou_Span": chikou_span,
+                "tenkan": tenkan_sen,
+                "kijun": kijun_sen,
+                "senkou_a": senkou_span_a,
+                "senkou_b": senkou_span_b,
+                "chikou": chikou_span,
             },
             index=data.index,
         )
-
-        # Apply proper naming with parameters
-        name_base = self.get_name()
-        result.columns = [f"{name_base}_{col}" for col in result.columns]
 
         logger.debug(
             f"Computed Ichimoku with tenkan={tenkan_period}, kijun={kijun_period}, senkou_b={senkou_b_period}, displacement={displacement}"

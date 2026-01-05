@@ -124,8 +124,8 @@ class TestStochasticIndicator:
         assert isinstance(result, pd.DataFrame)
 
         # Check column names
-        expected_k_col = "Stochastic_K_5_1"
-        expected_d_col = "Stochastic_D_5_3_1"
+        expected_k_col = "k"
+        expected_d_col = "d"
         assert expected_k_col in result.columns
         assert expected_d_col in result.columns
         assert len(result.columns) == 2
@@ -160,8 +160,8 @@ class TestStochasticIndicator:
         result = stoch.compute(data)
 
         # When high == low, %K should be filled with 50.0 (neutral)
-        k_col = "Stochastic_K_14_3"
-        d_col = "Stochastic_D_14_3_3"
+        k_col = "k"
+        d_col = "d"
 
         # After sufficient periods, both %K and %D should be 50.0
         k_values = result[k_col].iloc[-5:]  # Last 5 values
@@ -245,8 +245,8 @@ class TestStochasticIndicator:
         result = stoch.compute(data)
         assert isinstance(result, pd.DataFrame)
 
-        k_col = "Stochastic_K_5_5"
-        d_col = "Stochastic_D_5_2_5"
+        k_col = "k"
+        d_col = "d"
         assert k_col in result.columns
         assert d_col in result.columns
 
@@ -269,8 +269,8 @@ class TestStochasticIndicator:
         assert isinstance(result, pd.DataFrame)
         assert len(result) == len(data)
 
-        k_col = "Stochastic_K_14_3"
-        d_col = "Stochastic_D_14_3_3"
+        k_col = "k"
+        d_col = "d"
         assert k_col in result.columns
         assert d_col in result.columns
 

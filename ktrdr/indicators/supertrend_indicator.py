@@ -253,44 +253,14 @@ class SuperTrendIndicator(BaseIndicator):
                         supertrend.iloc[i] = final_upper_band.iloc[i]
                         trend_direction.iloc[i] = -1
 
-        # Create result DataFrame
+        # M3b: Return semantic column names only (engine handles prefixing)
         result = pd.DataFrame(
-            index=data.index
-        )  # CRITICAL FIX: Only return computed columns
-        suffix = f"{period}_{multiplier}"
-        result[f"SuperTrend_{suffix}"] = supertrend
-        result[f"ST_Direction_{suffix}"] = trend_direction
-        result[f"ST_Upper_Band_{suffix}"] = final_upper_band
-        result[f"ST_Lower_Band_{suffix}"] = final_lower_band
-        result[f"ST_ATR_{period}"] = atr
-
-        # Calculate additional analysis metrics
-        # Distance from SuperTrend
-        st_distance = (close - supertrend) / supertrend * 100
-        result[f"ST_Distance_{suffix}"] = st_distance
-
-        # Trend strength (how long in current trend)
-        trend_strength = pd.Series(index=data.index, dtype=int)
-        current_streak = 0
-        current_trend = None
-
-        for i in range(len(trend_direction)):
-            if i == 0:
-                current_trend = trend_direction.iloc[i]
-                current_streak = 1
-            else:
-                if trend_direction.iloc[i] == current_trend:
-                    current_streak += 1
-                else:
-                    current_trend = trend_direction.iloc[i]
-                    current_streak = 1
-            trend_strength.iloc[i] = current_streak
-
-        result[f"ST_Strength_{suffix}"] = trend_strength
-
-        # SuperTrend slope (rate of change)
-        st_slope = supertrend.pct_change(periods=3, fill_method=None) * 100
-        result[f"ST_Slope_{suffix}"] = st_slope
+            {
+                "trend": supertrend,
+                "direction": trend_direction,
+            },
+            index=data.index,
+        )
 
         logger.debug(
             f"Computed SuperTrend with period={period}, multiplier={multiplier}"
