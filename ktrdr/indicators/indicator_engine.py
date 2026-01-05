@@ -284,6 +284,7 @@ class IndicatorEngine:
                 return pd.DataFrame({indicator_id: result}, index=data.index)
             else:
                 # Already DataFrame (shouldn't happen for single-output)
+                result = result.copy()
                 result.columns = [indicator_id]
                 return result
 
@@ -391,7 +392,8 @@ class IndicatorEngine:
                 indicator_id = indicator.get_feature_id()
 
                 # Compute indicator using adapter (handles both old/new formats)
-                computed = self.compute_indicator(data, indicator, indicator_id)
+                # Use result_df to support indicator chaining (indicators that depend on previous indicators)
+                computed = self.compute_indicator(result_df, indicator, indicator_id)
 
                 # Merge computed columns into result
                 result_df = pd.concat([result_df, computed], axis=1)

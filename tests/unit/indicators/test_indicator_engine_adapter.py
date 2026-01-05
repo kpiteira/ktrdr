@@ -373,3 +373,39 @@ class TestApplyUsesComputeIndicator:
         # Should use technical column name as fallback
         expected_name = indicator.get_column_name()
         assert expected_name in result.columns
+
+    def test_apply_supports_indicator_chaining(self, sample_data):
+        """apply() supports indicators that depend on previously computed indicators."""
+
+        class ChainedIndicator(BaseIndicator):
+            """Mock indicator that reads a column added by a previous indicator."""
+
+            @classmethod
+            def is_multi_output(cls) -> bool:
+                return False
+
+            def compute(self, df: pd.DataFrame) -> pd.Series:
+                # This indicator depends on 'first_indicator' column
+                if "first_indicator" not in df.columns:
+                    raise ValueError(
+                        "Expected 'first_indicator' column from previous indicator"
+                    )
+                # Compute based on the previous indicator's output
+                return df["first_indicator"] * 2.0
+
+        # First indicator
+        indicator1 = MockSingleOutputIndicator(name="first")
+        indicator1._feature_id = "first_indicator"
+
+        # Second indicator depends on first
+        indicator2 = ChainedIndicator(name="second")
+        indicator2._feature_id = "second_indicator"
+
+        engine = IndicatorEngine(indicators=[indicator1, indicator2])
+        result = engine.apply(sample_data)
+
+        # Both indicators should be computed successfully
+        assert "first_indicator" in result.columns
+        assert "second_indicator" in result.columns
+        # Second indicator should be 2x the first
+        assert result["second_indicator"].tolist() == [2.0, 4.0, 6.0]
