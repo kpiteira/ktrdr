@@ -128,3 +128,4 @@ state/
 
 # Agent memory - experiments are generated, hypotheses is tracked
 memory/experiments/*.yaml
+.env.sandbox

@@ -38,11 +38,15 @@ def create_sample_ohlcv(rows: int = 100) -> pd.DataFrame:
     for change in price_changes[1:]:
         prices.append(prices[-1] * (1 + change * 0.01))
 
+    # Generate high/low variations deterministically
+    high_variations = np.random.normal(0, 0.005, rows)
+    low_variations = np.random.normal(0, 0.005, rows)
+
     data = pd.DataFrame(
         {
             "open": prices,
-            "high": [p * (1 + abs(np.random.normal(0, 0.005))) for p in prices],
-            "low": [p * (1 - abs(np.random.normal(0, 0.005))) for p in prices],
+            "high": [p * (1 + abs(v)) for p, v in zip(prices, high_variations)],
+            "low": [p * (1 - abs(v)) for p, v in zip(prices, low_variations)],
             "close": prices,
             "volume": np.random.randint(1000, 10000, rows),
         },
