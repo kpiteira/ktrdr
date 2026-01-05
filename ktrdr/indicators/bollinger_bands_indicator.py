@@ -159,14 +159,13 @@ class BollingerBandsIndicator(BaseIndicator):
         upper_band = middle_band + (multiplier * rolling_std)
         lower_band = middle_band - (multiplier * rolling_std)
 
-        # Create result DataFrame with unique column names based on parameters
-        # This prevents collisions when multiple BollingerBands with different params are used
-        suffix = f"{period}_{multiplier}"
+        # M3b: Return DataFrame with semantic column names only
+        # Engine handles prefixing with indicator_id to prevent collisions
         result = pd.DataFrame(
             {
-                f"upper_{suffix}": upper_band,
-                f"middle_{suffix}": middle_band,
-                f"lower_{suffix}": lower_band,
+                "upper": upper_band,
+                "middle": middle_band,
+                "lower": lower_band,
             },
             index=data.index,
         )

@@ -20,12 +20,14 @@ class TestBollingerBandsIndicator:
 
     @staticmethod
     def _get_column_names(period: int = 20, multiplier: float = 2.0):
-        """Helper to get expected column names for given parameters."""
-        suffix = f"{period}_{multiplier}"
+        """Helper to get expected column names for given parameters.
+
+        M3b: Now returns semantic names only (no parameter embedding).
+        """
         return {
-            "upper": f"upper_{suffix}",
-            "middle": f"middle_{suffix}",
-            "lower": f"lower_{suffix}",
+            "upper": "upper",
+            "middle": "middle",
+            "lower": "lower",
         }
 
     def test_basic_initialization(self):
