@@ -718,7 +718,8 @@ class FuzzyEngine:
 
         This method implements systematic feature_id lookup:
         1. Direct match: column_name exactly matches a fuzzy key (e.g., "rsi_14")
-        2. Prefix match: column_name starts with a fuzzy key + "_" (e.g., "bbands_20_2_upper" matches "bbands_20_2")
+        2. Prefix match with dot notation: column_name starts with fuzzy key + "." (e.g., "bbands_20_2.upper" matches "bbands_20_2")
+        3. Legacy prefix match with underscore: column_name starts with fuzzy key + "_" (backward compatibility)
 
         Args:
             column_name: The column name to find a fuzzy key for
@@ -729,8 +730,10 @@ class FuzzyEngine:
         Examples:
             >>> engine._find_fuzzy_key("rsi_14")
             "rsi_14"  # Direct match
+            >>> engine._find_fuzzy_key("bbands_20_2.upper")
+            "bbands_20_2"  # M4: Dot notation prefix match (multi-output indicator)
             >>> engine._find_fuzzy_key("bbands_20_2_upper")
-            "bbands_20_2"  # Prefix match (multi-column indicator)
+            "bbands_20_2"  # Legacy: Underscore prefix match (backward compatibility)
             >>> engine._find_fuzzy_key("unknown_indicator")
             None  # No match
         """
@@ -738,7 +741,13 @@ class FuzzyEngine:
         if column_name in self._membership_functions:
             return column_name
 
-        # For multi-column indicators, try prefix matching
+        # M4: For multi-output indicators with dot notation (new format from M3b)
+        # E.g., "bbands_20_2.upper" should match fuzzy key "bbands_20_2"
+        for fuzzy_key in self._membership_functions.keys():
+            if column_name.startswith(f"{fuzzy_key}."):
+                return fuzzy_key
+
+        # Legacy: For backward compatibility with old underscore-based format
         # E.g., "bbands_20_2_upper" should match fuzzy key "bbands_20_2"
         for fuzzy_key in self._membership_functions.keys():
             if column_name.startswith(f"{fuzzy_key}_"):
