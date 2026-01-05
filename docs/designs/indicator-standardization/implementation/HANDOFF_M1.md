@@ -154,18 +154,35 @@ All quality gates passed:
 
 ---
 
-## Next Task: 1.4 - Integration Test for All Indicators
+## Discovered Issues (Resolved in Task 1.4)
 
-**Context for next implementer:**
-- Task 1.1 (BaseIndicator interface): ✅ Complete
-- Task 1.2 (Multi-output indicators): ✅ Complete (10 indicators)
-- Task 1.3 (Single-output indicators): ✅ Complete (19 indicators verified)
-- **Known gap**: RVI indicator missing from Task 1.2
+### Classification Errors Caught by Integration Test
 
-**Task 1.4 will:**
-- Verify ALL registered indicators in IndicatorFactory
-- Test interface contract (is_multi_output ↔ get_output_names consistency)
-- Verify compute() return type matches declaration
-- Will likely catch the RVI gap
+The integration test caught 3 indicators with missing or incorrect interface implementations:
 
-**Test file location:** `tests/integration/indicators/test_indicator_interface_standard.py`
+1. **RVI**: Multi-output but missing `get_output_names()` → Fixed: `["rvi", "signal"]`
+2. **ADLine**: Returns DataFrame but `is_multi_output()` was `False` → Fixed: Added interface methods
+3. **CMF**: Returns DataFrame but `is_multi_output()` was `False` → Fixed: Added interface methods
+
+These were corrected during Task 1.4 implementation.
+
+---
+
+## Milestone 1 Complete ✅
+
+**All tasks completed:**
+- Task 1.1: BaseIndicator interface ✅
+- Task 1.2: Multi-output indicators (10 → 13 after fixes) ✅
+- Task 1.3: Single-output indicators (19 → 17 after reclassification) ✅
+- Task 1.4: Integration test ✅
+
+**Final indicator count:**
+- Multi-output: 13 (BBands, MACD, Stochastic, ADX, Aroon, Ichimoku, SuperTrend, DonchianChannels, KeltnerChannels, FisherTransform, **RVI, ADLine, CMF**)
+- Single-output: 17 (RSI, ATR, CCI, MFI, OBV, ROC, Momentum, WilliamsR, VWAP, VolumeRatio, DistanceFromMA, BollingerBandWidth, SqueezeIntensity, ParabolicSAR, ZigZag, SMA, EMA)
+
+**Test coverage:**
+- Unit tests: 51 single-output + 39 multi-output = 90 tests
+- Integration tests: 2 tests covering all 30 indicators
+- **Total: 92 interface tests passing**
+
+**Next milestone:** M2 - IndicatorEngine adapter layer
