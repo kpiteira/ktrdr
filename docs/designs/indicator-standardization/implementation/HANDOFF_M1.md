@@ -133,25 +133,39 @@ All quality gates passed:
 
 ---
 
-## Next Task: 1.2 - Implement get_output_names() for Multi-Output Indicators
+## Discovered Issue: RVI Indicator Not Included
+
+**Problem:** RVI indicator (`rvi_indicator.py`) is multi-output but was not included in Task 1.2 list
+
+**Evidence:**
+- `RVIIndicator.is_multi_output()` returns `True` (line 42-44)
+- Has old-style `get_primary_output_suffix()` returning "RVI"
+- Missing new `get_output_names()` method
+- Produces two outputs: "RVI" and "Signal"
+
+**Impact:**
+- Task 1.4's integration test will likely fail for RVI
+- RVI should return `["rvi", "signal"]` (lowercase, following standard)
+
+**Recommendation:**
+- Add RVI to multi-output indicator list
+- Implement `get_output_names()` → `["rvi", "signal"]`
+- Or verify if RVI should be included in M1 scope
+
+---
+
+## Next Task: 1.4 - Integration Test for All Indicators
 
 **Context for next implementer:**
-- The interface is now defined in BaseIndicator
-- Default implementation returns `[]` (single-output)
-- Task 1.2 will override `get_output_names()` in 10 multi-output indicator classes
-- Follow the pattern from `DummyMultiOutputIndicator` in the tests
-- Each indicator should return semantic names matching DESIGN.md standard
+- Task 1.1 (BaseIndicator interface): ✅ Complete
+- Task 1.2 (Multi-output indicators): ✅ Complete (10 indicators)
+- Task 1.3 (Single-output indicators): ✅ Complete (19 indicators verified)
+- **Known gap**: RVI indicator missing from Task 1.2
 
-**Files to modify (from M1 plan):**
-1. `bollinger_bands_indicator.py` → `["upper", "middle", "lower"]`
-2. `macd_indicator.py` → `["line", "signal", "histogram"]`
-3. `stochastic_indicator.py` → `["k", "d"]`
-4. `adx_indicator.py` → `["adx", "plus_di", "minus_di"]`
-5. `aroon_indicator.py` → `["up", "down", "oscillator"]`
-6. `ichimoku_indicator.py` → `["tenkan", "kijun", "senkou_a", "senkou_b", "chikou"]`
-7. `supertrend_indicator.py` → `["trend", "direction"]`
-8. `donchian_channels.py` → `["upper", "middle", "lower"]`
-9. `keltner_channels.py` → `["upper", "middle", "lower"]`
-10. `fisher_transform.py` → `["fisher", "signal"]`
+**Task 1.4 will:**
+- Verify ALL registered indicators in IndicatorFactory
+- Test interface contract (is_multi_output ↔ get_output_names consistency)
+- Verify compute() return type matches declaration
+- Will likely catch the RVI gap
 
-**No behavior changes yet** — `compute()` still returns old format
+**Test file location:** `tests/integration/indicators/test_indicator_interface_standard.py`
