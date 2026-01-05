@@ -21,6 +21,7 @@ class MockSingleOutputIndicator(BaseIndicator):
 
     @classmethod
     def get_output_names(cls) -> list[str]:
+        """Single-output indicators return an empty list (no named outputs)."""
         return []
 
     def compute(self, df: pd.DataFrame) -> pd.Series:

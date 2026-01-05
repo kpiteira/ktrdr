@@ -268,7 +268,10 @@ class IndicatorEngine:
         Args:
             data: OHLCV DataFrame
             indicator: The indicator instance
-            indicator_id: The ID from strategy config (e.g., "rsi_14", "bbands_20_2")
+            indicator_id: Feature identifier string, typically from indicator.get_feature_id().
+                Should use the format: {indicator_name}_{param1}[_{param2}...] (e.g., "rsi_14",
+                "bbands_20_2", "macd_12_26_9"). This becomes the column name (or column prefix
+                for multi-output indicators).
 
         Returns:
             DataFrame with columns:
@@ -286,17 +289,25 @@ class IndicatorEngine:
                 # Already DataFrame (shouldn't happen for single-output)
                 result = result.copy()
                 result.columns = [indicator_id]
+                # Ensure index alignment with input data
+                if not result.index.equals(data.index):
+                    result = result.reindex(data.index)
                 return result
 
         # Multi-output indicator
         # At this point, result must be a DataFrame (multi-output returns DataFrame)
         if not isinstance(result, pd.DataFrame):
+            expected_columns = list(indicator.get_output_names())
             raise ProcessingError(
-                f"Multi-output indicator {indicator.__class__.__name__} returned {type(result).__name__} instead of DataFrame",
+                f"Multi-output indicator {indicator.__class__.__name__} must return a pandas.DataFrame "
+                f"with columns matching get_output_names() {expected_columns}, "
+                f"but returned {type(result).__name__} instead.",
                 "PROC-InvalidOutputType",
                 {
                     "indicator": indicator.__class__.__name__,
                     "type": type(result).__name__,
+                    "expected_type": "pandas.DataFrame",
+                    "expected_columns": expected_columns,
                 },
             )
 
@@ -317,10 +328,35 @@ class IndicatorEngine:
                 prefixed[indicator_id] = prefixed[f"{indicator_id}.{primary}"]
 
             return prefixed
+        elif expected_outputs & actual_columns:
+            # PARTIAL OVERLAP detected: some expected columns present, but not all
+            # This likely indicates a bug in the indicator implementation
+            # rather than a legitimate old-format indicator
+            missing = expected_outputs - actual_columns
+            extra = actual_columns - expected_outputs
+
+            logger.error(
+                f"Indicator {indicator.__class__.__name__} returned unexpected output columns "
+                f"(partial overlap with get_output_names())"
+            )
+            raise ProcessingError(
+                f"Indicator {indicator.__class__.__name__} returned unexpected output columns. "
+                f"Expected all of {sorted(expected_outputs)} but got {sorted(actual_columns)}. "
+                f"This suggests a bug in the indicator implementation.",
+                "PROC-InvalidIndicatorOutputs",
+                {
+                    "indicator": indicator.__class__.__name__,
+                    "indicator_id": indicator_id,
+                    "expected_outputs": sorted(expected_outputs),
+                    "actual_columns": sorted(actual_columns),
+                    "missing_expected": sorted(missing),
+                    "unexpected_extra": sorted(extra),
+                },
+            )
         else:
             # CLEANUP(v3): Remove old-format handling after v3 migration complete
-            # OLD FORMAT: columns have params embedded -> pass through
-            # Add alias for bare indicator_id -> primary output column
+            # OLD FORMAT: no overlap with expected outputs -> columns have params embedded
+            # Pass through columns and add alias for primary output
 
             # Copy result to avoid modifying original
             result_copy = result.copy()
@@ -330,8 +366,10 @@ class IndicatorEngine:
 
             if primary_suffix:
                 # Find column that matches primary suffix
+                # Use precise matching: column starts with suffix + "_" (e.g., "upper_20_2.0")
+                # This avoids false matches like "super_upper" when looking for "upper"
                 for col in result_copy.columns:
-                    if primary_suffix in col:
+                    if col.startswith(primary_suffix + "_"):
                         primary_col = col
                         break
             else:
@@ -343,7 +381,17 @@ class IndicatorEngine:
                         break
 
             if primary_col:
+                # Add backward-compatible alias for the primary output
                 result_copy[indicator_id] = result_copy[primary_col]
+            else:
+                # No primary column found - this can happen for some legacy indicators
+                # during the v2->v3 migration. Log a warning to aid debugging.
+                logger.warning(
+                    f"Could not determine primary output column for indicator '{indicator_id}' "
+                    f"({indicator.__class__.__name__}) in old-format output. "
+                    f"Available columns: {list(result_copy.columns)}. "
+                    f"No alias column will be created."
+                )
 
             return result_copy
 
@@ -380,6 +428,19 @@ class IndicatorEngine:
                 f"Missing required columns: {', '.join(missing_cols)}",
                 "CONFIG-MissingColumns",
                 {"missing_columns": missing_cols},
+            )
+
+        # Warn if duplicate column names are present in input
+        # (helps debug data quality issues upstream)
+        if data.columns.duplicated().any():
+            duplicate_columns = [
+                col
+                for col, is_dup in zip(data.columns, data.columns.duplicated())
+                if is_dup
+            ]
+            logger.warning(
+                f"Duplicate column names detected in input data: {duplicate_columns}. "
+                f"This may cause unexpected behavior."
             )
 
         # Create a copy of the input data to avoid modifying original
