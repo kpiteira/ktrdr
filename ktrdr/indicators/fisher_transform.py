@@ -51,6 +51,16 @@ class FisherTransformIndicator(BaseIndicator):
     - smoothing: 3 (EMA smoothing period)
     """
 
+    @classmethod
+    def is_multi_output(cls) -> bool:
+        """Fisher Transform produces multiple outputs (Fisher and Signal)."""
+        return True
+
+    @classmethod
+    def get_output_names(cls) -> list[str]:
+        """Return semantic output names for Fisher Transform."""
+        return ["fisher", "signal"]
+
     def __init__(self, period: int = 10, smoothing: int = 3):
         """
         Initialize Fisher Transform indicator.

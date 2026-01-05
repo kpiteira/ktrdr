@@ -57,6 +57,11 @@ class BollingerBandsIndicator(BaseIndicator):
         return True
 
     @classmethod
+    def get_output_names(cls) -> list[str]:
+        """Return semantic output names for Bollinger Bands."""
+        return ["upper", "middle", "lower"]
+
+    @classmethod
     def get_primary_output_suffix(cls) -> str:
         """Primary output is the upper band."""
         return "upper"

@@ -47,6 +47,11 @@ class StochasticIndicator(BaseIndicator):
         return True
 
     @classmethod
+    def get_output_names(cls) -> list[str]:
+        """Return semantic output names for Stochastic."""
+        return ["k", "d"]
+
+    @classmethod
     def get_primary_output_suffix(cls) -> str:
         """Primary output is the %K line."""
         return "K"
