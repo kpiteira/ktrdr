@@ -233,28 +233,15 @@ class ADXIndicator(BaseIndicator):
         # Calculate ADX (smoothed DX)
         adx = self._wilder_smoothing(dx, period)
 
-        # Create result DataFrame
+        # M3b: Return semantic column names only (engine handles prefixing)
         result = pd.DataFrame(
-            index=data.index
-        )  # CRITICAL FIX: Only return computed columns
-        result[f"ADX_{period}"] = adx
-        result[f"DI_Plus_{period}"] = di_plus
-        result[f"DI_Minus_{period}"] = di_minus
-        result[f"DX_{period}"] = dx
-        result[f"TR_{period}"] = tr
-
-        # Calculate additional analysis metrics
-        # ADX trend (rising/falling ADX)
-        adx_slope = adx - adx.shift(3)  # 3-period slope
-        result[f"ADX_Slope_{period}"] = adx_slope
-
-        # Directional spread (difference between +DI and -DI)
-        di_spread = di_plus - di_minus
-        result[f"DI_Spread_{period}"] = di_spread
-
-        # ADX momentum (rate of change)
-        adx_momentum = adx.pct_change(periods=5) * 100
-        result[f"ADX_Momentum_{period}"] = adx_momentum
+            {
+                "adx": adx,
+                "plus_di": di_plus,
+                "minus_di": di_minus,
+            },
+            index=data.index,
+        )
 
         logger.debug(f"Computed ADX with period={period}")
 

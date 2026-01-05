@@ -190,14 +190,11 @@ class StochasticIndicator(BaseIndicator):
         # Calculate %D as moving average of %K
         percent_d = percent_k.rolling(window=d_period, min_periods=1).mean()
 
-        # Create result DataFrame with column names
-        k_col = f"Stochastic_K_{k_period}_{smooth_k}"
-        d_col = f"Stochastic_D_{k_period}_{d_period}_{smooth_k}"
-
+        # M3b: Return semantic column names only (engine handles prefixing)
         result_df = pd.DataFrame(
             {
-                k_col: percent_k,
-                d_col: percent_d,
+                "k": percent_k,
+                "d": percent_d,
             },
             index=data.index,
         )

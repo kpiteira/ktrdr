@@ -170,3 +170,287 @@ class TestBollingerBandsThroughAdapter:
         # Both sets of prefixed columns should exist
         assert "bbands_20_2.upper" in combined.columns
         assert "bbands_10_1.5.upper" in combined.columns
+
+
+class TestMACDMigration:
+    """Test Task 3b.2: MACD returns semantic column names only."""
+
+    def test_compute_returns_semantic_columns(self, sample_ohlcv_data):
+        """MACD compute() returns DataFrame with semantic names only."""
+        from ktrdr.indicators.macd_indicator import MACDIndicator
+
+        indicator = MACDIndicator(fast_period=12, slow_period=26, signal_period=9)
+        result = indicator.compute(sample_ohlcv_data)
+
+        # Should return DataFrame (not Series)
+        assert isinstance(result, pd.DataFrame), "Multi-output should return DataFrame"
+
+        # Column names should match get_output_names() exactly
+        expected_columns = {"line", "signal", "histogram"}
+        actual_columns = set(result.columns)
+
+        assert (
+            actual_columns == expected_columns
+        ), f"Expected {expected_columns}, got {actual_columns}"
+
+        # No parameter embedding in column names
+        for col in result.columns:
+            assert (
+                "_12_" not in col
+            ), f"Column '{col}' should not contain parameter suffix"
+            assert (
+                "_26_" not in col
+            ), f"Column '{col}' should not contain parameter suffix"
+            assert "MACD" not in col, f"Column '{col}' should not contain 'MACD' prefix"
+
+    def test_columns_match_get_output_names(self, sample_ohlcv_data):
+        """Column names match get_output_names() exactly."""
+        from ktrdr.indicators.macd_indicator import MACDIndicator
+
+        indicator = MACDIndicator(fast_period=12, slow_period=26, signal_period=9)
+        result = indicator.compute(sample_ohlcv_data)
+
+        expected = indicator.get_output_names()
+        actual = list(result.columns)
+
+        # Sort for comparison (order doesn't matter for this test)
+        assert sorted(actual) == sorted(
+            expected
+        ), f"Columns {actual} should match get_output_names() {expected}"
+
+    def test_adapter_prefixes_columns(self, sample_ohlcv_data):
+        """Adapter prefixes semantic columns with indicator_id."""
+        from ktrdr.indicators.macd_indicator import MACDIndicator
+
+        engine = IndicatorEngine()
+        indicator = MACDIndicator(fast_period=12, slow_period=26, signal_period=9)
+        indicator_id = "macd_12_26_9"
+
+        result = engine.compute_indicator(sample_ohlcv_data, indicator, indicator_id)
+
+        # Should have prefixed columns
+        expected_columns = {
+            f"{indicator_id}.line",
+            f"{indicator_id}.signal",
+            f"{indicator_id}.histogram",
+            indicator_id,  # Alias for primary output
+        }
+        actual_columns = set(result.columns)
+
+        assert (
+            actual_columns == expected_columns
+        ), f"Expected prefixed columns {expected_columns}, got {actual_columns}"
+
+
+class TestStochasticMigration:
+    """Test Task 3b.2: Stochastic returns semantic column names only."""
+
+    def test_compute_returns_semantic_columns(self, sample_ohlcv_data):
+        """Stochastic compute() returns DataFrame with semantic names only."""
+        from ktrdr.indicators.stochastic_indicator import StochasticIndicator
+
+        indicator = StochasticIndicator(k_period=14, d_period=3, smooth_k=3)
+        result = indicator.compute(sample_ohlcv_data)
+
+        # Should return DataFrame (not Series)
+        assert isinstance(result, pd.DataFrame), "Multi-output should return DataFrame"
+
+        # Column names should match get_output_names() exactly
+        expected_columns = {"k", "d"}
+        actual_columns = set(result.columns)
+
+        assert (
+            actual_columns == expected_columns
+        ), f"Expected {expected_columns}, got {actual_columns}"
+
+        # No parameter embedding in column names
+        for col in result.columns:
+            assert (
+                "_14_" not in col
+            ), f"Column '{col}' should not contain parameter suffix"
+            assert (
+                "Stochastic" not in col
+            ), f"Column '{col}' should not contain 'Stochastic' prefix"
+
+    def test_adapter_prefixes_columns(self, sample_ohlcv_data):
+        """Adapter prefixes semantic columns with indicator_id."""
+        from ktrdr.indicators.stochastic_indicator import StochasticIndicator
+
+        engine = IndicatorEngine()
+        indicator = StochasticIndicator(k_period=14, d_period=3, smooth_k=3)
+        indicator_id = "stoch_14_3"
+
+        result = engine.compute_indicator(sample_ohlcv_data, indicator, indicator_id)
+
+        # Should have prefixed columns
+        expected_columns = {
+            f"{indicator_id}.k",
+            f"{indicator_id}.d",
+            indicator_id,  # Alias for primary output
+        }
+        actual_columns = set(result.columns)
+
+        assert (
+            actual_columns == expected_columns
+        ), f"Expected prefixed columns {expected_columns}, got {actual_columns}"
+
+
+class TestADXMigration:
+    """Test Task 3b.2: ADX returns semantic column names only."""
+
+    def test_compute_returns_semantic_columns(self, sample_ohlcv_data):
+        """ADX compute() returns DataFrame with semantic names only."""
+        from ktrdr.indicators.adx_indicator import ADXIndicator
+
+        indicator = ADXIndicator(period=14)
+        result = indicator.compute(sample_ohlcv_data)
+
+        # Should return DataFrame (not Series)
+        assert isinstance(result, pd.DataFrame), "Multi-output should return DataFrame"
+
+        # Column names should match get_output_names() exactly
+        expected_columns = {"adx", "plus_di", "minus_di"}
+        actual_columns = set(result.columns)
+
+        assert (
+            actual_columns == expected_columns
+        ), f"Expected {expected_columns}, got {actual_columns}"
+
+        # No parameter embedding in column names
+        for col in result.columns:
+            assert (
+                "_14" not in col
+            ), f"Column '{col}' should not contain parameter suffix"
+            assert (
+                "ADX" not in col and "DI" not in col
+            ), f"Column '{col}' should be lowercase semantic name"
+
+    def test_adapter_prefixes_columns(self, sample_ohlcv_data):
+        """Adapter prefixes semantic columns with indicator_id."""
+        from ktrdr.indicators.adx_indicator import ADXIndicator
+
+        engine = IndicatorEngine()
+        indicator = ADXIndicator(period=14)
+        indicator_id = "adx_14"
+
+        result = engine.compute_indicator(sample_ohlcv_data, indicator, indicator_id)
+
+        # Should have prefixed columns
+        expected_columns = {
+            f"{indicator_id}.adx",
+            f"{indicator_id}.plus_di",
+            f"{indicator_id}.minus_di",
+            indicator_id,  # Alias for primary output
+        }
+        actual_columns = set(result.columns)
+
+        assert (
+            actual_columns == expected_columns
+        ), f"Expected prefixed columns {expected_columns}, got {actual_columns}"
+
+
+class TestAroonMigration:
+    """Test Task 3b.2: Aroon returns semantic column names only."""
+
+    def test_compute_returns_semantic_columns(self, sample_ohlcv_data):
+        """Aroon compute() returns DataFrame with semantic names only."""
+        from ktrdr.indicators.aroon_indicator import AroonIndicator
+
+        indicator = AroonIndicator(period=14, include_oscillator=True)
+        result = indicator.compute(sample_ohlcv_data)
+
+        # Should return DataFrame (not Series)
+        assert isinstance(result, pd.DataFrame), "Multi-output should return DataFrame"
+
+        # Column names should match get_output_names() exactly
+        expected_columns = {"up", "down", "oscillator"}
+        actual_columns = set(result.columns)
+
+        assert (
+            actual_columns == expected_columns
+        ), f"Expected {expected_columns}, got {actual_columns}"
+
+        # No parameter embedding in column names
+        for col in result.columns:
+            assert (
+                "_14_" not in col
+            ), f"Column '{col}' should not contain parameter suffix"
+            assert (
+                "Aroon" not in col
+            ), f"Column '{col}' should not contain 'Aroon' prefix"
+
+    def test_adapter_prefixes_columns(self, sample_ohlcv_data):
+        """Adapter prefixes semantic columns with indicator_id."""
+        from ktrdr.indicators.aroon_indicator import AroonIndicator
+
+        engine = IndicatorEngine()
+        indicator = AroonIndicator(period=14, include_oscillator=True)
+        indicator_id = "aroon_14"
+
+        result = engine.compute_indicator(sample_ohlcv_data, indicator, indicator_id)
+
+        # Should have prefixed columns
+        expected_columns = {
+            f"{indicator_id}.up",
+            f"{indicator_id}.down",
+            f"{indicator_id}.oscillator",
+            indicator_id,  # Alias for primary output
+        }
+        actual_columns = set(result.columns)
+
+        assert (
+            actual_columns == expected_columns
+        ), f"Expected prefixed columns {expected_columns}, got {actual_columns}"
+
+
+class TestSuperTrendMigration:
+    """Test Task 3b.2: SuperTrend returns semantic column names only."""
+
+    def test_compute_returns_semantic_columns(self, sample_ohlcv_data):
+        """SuperTrend compute() returns DataFrame with semantic names only."""
+        from ktrdr.indicators.supertrend_indicator import SuperTrendIndicator
+
+        indicator = SuperTrendIndicator(period=10, multiplier=3.0)
+        result = indicator.compute(sample_ohlcv_data)
+
+        # Should return DataFrame (not Series)
+        assert isinstance(result, pd.DataFrame), "Multi-output should return DataFrame"
+
+        # Column names should match get_output_names() exactly
+        expected_columns = {"trend", "direction"}
+        actual_columns = set(result.columns)
+
+        assert (
+            actual_columns == expected_columns
+        ), f"Expected {expected_columns}, got {actual_columns}"
+
+        # No parameter embedding in column names
+        for col in result.columns:
+            assert (
+                "_10_" not in col
+            ), f"Column '{col}' should not contain parameter suffix"
+            assert (
+                "SuperTrend" not in col and "ST" not in col
+            ), f"Column '{col}' should be lowercase semantic name"
+
+    def test_adapter_prefixes_columns(self, sample_ohlcv_data):
+        """Adapter prefixes semantic columns with indicator_id."""
+        from ktrdr.indicators.supertrend_indicator import SuperTrendIndicator
+
+        engine = IndicatorEngine()
+        indicator = SuperTrendIndicator(period=10, multiplier=3.0)
+        indicator_id = "supertrend_10_3"
+
+        result = engine.compute_indicator(sample_ohlcv_data, indicator, indicator_id)
+
+        # Should have prefixed columns
+        expected_columns = {
+            f"{indicator_id}.trend",
+            f"{indicator_id}.direction",
+            indicator_id,  # Alias for primary output
+        }
+        actual_columns = set(result.columns)
+
+        assert (
+            actual_columns == expected_columns
+        ), f"Expected prefixed columns {expected_columns}, got {actual_columns}"

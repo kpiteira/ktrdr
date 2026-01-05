@@ -92,10 +92,10 @@ class TestFeatureIdAliasing:
         # When: Apply indicators
         result = engine.apply(sample_ohlcv_data)
 
-        # Then: Should have all 3 MACD columns (technical names)
-        assert "MACD_12_26" in result.columns, "Should have MACD main line"
-        assert "MACD_signal_12_26_9" in result.columns, "Should have signal line"
-        assert "MACD_hist_12_26_9" in result.columns, "Should have histogram"
+        # Then: Should have all 3 MACD columns (M3b: semantic names with indicator_id prefix)
+        assert "macd_standard.line" in result.columns, "Should have MACD line"
+        assert "macd_standard.signal" in result.columns, "Should have signal line"
+        assert "macd_standard.histogram" in result.columns, "Should have histogram"
 
         # And: Should have feature_id alias for primary output only
         assert "macd_standard" in result.columns, "Should have feature_id alias"
@@ -179,14 +179,14 @@ class TestFeatureIdAliasingDataIdentity:
         # When: Apply indicators
         result = engine.apply(sample_ohlcv_data)
 
-        # Then: feature_id should reference primary output (MACD main line)
+        # Then: feature_id should reference primary output (M3b: MACD line with semantic prefix)
         pd.testing.assert_series_equal(
-            result["MACD_12_26"], result["macd_standard"], check_names=False
+            result["macd_standard.line"], result["macd_standard"], check_names=False
         )
 
         # And: Should have identical values
         np.testing.assert_array_equal(
-            result["MACD_12_26"].values, result["macd_standard"].values
+            result["macd_standard.line"].values, result["macd_standard"].values
         )
 
 
