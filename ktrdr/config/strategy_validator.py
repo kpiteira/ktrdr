@@ -22,7 +22,6 @@ from pydantic import ValidationError as PydanticValidationError
 from ktrdr import get_logger
 from ktrdr.config.models import LegacyStrategyConfiguration, StrategyConfigurationV2
 from ktrdr.config.strategy_loader import strategy_loader
-from ktrdr.indicators.indicator_factory import BUILT_IN_INDICATORS
 
 logger = get_logger(__name__)
 
@@ -34,11 +33,6 @@ FUZZY_TYPE_PARAM_COUNTS: dict[str, int] = {
     "trapezoidal": 4,
     "gaussian": 2,
     "sigmoid": 2,
-}
-
-# Normalized names for case-insensitive matching
-_NORMALIZED_INDICATOR_NAMES: set[str] = {
-    name.lower() for name in BUILT_IN_INDICATORS.keys()
 }
 
 
@@ -160,6 +154,31 @@ class StrategyValidator:
             "slippage": 0.0005,
         },
     }
+
+    def __init__(self):
+        """Initialize StrategyValidator with lazy-loaded indicator names cache."""
+        self._cached_indicator_names: Optional[set[str]] = None
+
+    def _get_normalized_indicator_names(self) -> set[str]:
+        """
+        Lazy-load indicator names to avoid circular import.
+
+        BUILT_IN_INDICATORS is imported only when validation is actually needed,
+        not at module load time. This breaks the circular dependency:
+        BaseIndicator → InputValidator → StrategyValidator → BUILT_IN_INDICATORS.
+
+        The result is cached after first load for performance.
+
+        Returns:
+            set[str]: Lowercase indicator names for case-insensitive matching
+        """
+        if self._cached_indicator_names is None:
+            from ktrdr.indicators.indicator_factory import BUILT_IN_INDICATORS
+
+            self._cached_indicator_names = {
+                name.lower() for name in BUILT_IN_INDICATORS.keys()
+            }
+        return self._cached_indicator_names
 
     def _format_pydantic_error(
         self, error: PydanticValidationError
@@ -751,6 +770,9 @@ Missing feature_ids: {', '.join(missing_list)}
             indicators: List of indicator configuration dictionaries
             result: ValidationResult to update with errors/suggestions
         """
+        # Lazy-load indicator names (cached after first call)
+        normalized_names = self._get_normalized_indicator_names()
+
         for idx, indicator_dict in enumerate(indicators):
             # Get indicator type from 'name' or 'type' field
             indicator_type = indicator_dict.get("name") or indicator_dict.get("type")
@@ -760,13 +782,13 @@ Missing feature_ids: {', '.join(missing_list)}
 
             # Check case-insensitively against BUILT_IN_INDICATORS
             indicator_type_lower = indicator_type.lower()
-            if indicator_type_lower not in _NORMALIZED_INDICATOR_NAMES:
+            if indicator_type_lower not in normalized_names:
                 result.is_valid = False
 
                 # Find similar indicator names for suggestions
                 similar = get_close_matches(
                     indicator_type_lower,
-                    list(_NORMALIZED_INDICATOR_NAMES),
+                    list(normalized_names),
                     n=3,
                     cutoff=0.6,
                 )
