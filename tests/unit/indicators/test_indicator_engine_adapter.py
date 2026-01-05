@@ -280,3 +280,96 @@ class TestEdgeCases:
         assert "test_10.b" in result.columns
         # No alias should be created (no primary)
         assert "test_10" not in result.columns
+
+
+class TestApplyUsesComputeIndicator:
+    """Tests for apply() routing through compute_indicator()."""
+
+    def test_apply_single_output_uses_feature_id(self, sample_data):
+        """apply() uses feature_id from indicator for single-output."""
+        # Create indicator with feature_id set
+        indicator = MockSingleOutputIndicator(name="rsi")
+        indicator._feature_id = "rsi_14"
+
+        engine = IndicatorEngine(indicators=[indicator])
+        result = engine.apply(sample_data)
+
+        # Should have column with feature_id (not technical name)
+        assert "rsi_14" in result.columns
+        assert result["rsi_14"].tolist() == [1.0, 2.0, 3.0]
+
+    def test_apply_multi_output_old_format_creates_alias(self, sample_data):
+        """apply() creates alias for multi-output old-format indicators."""
+        indicator = MockOldFormatIndicator(name="bbands")
+        indicator._feature_id = "bbands_20_2"
+
+        engine = IndicatorEngine(indicators=[indicator])
+        result = engine.apply(sample_data)
+
+        # Old format columns should exist
+        assert "upper_20_2.0" in result.columns
+        assert "middle_20_2.0" in result.columns
+        assert "lower_20_2.0" in result.columns
+        # Alias should exist
+        assert "bbands_20_2" in result.columns
+        assert result["bbands_20_2"].tolist() == result["upper_20_2.0"].tolist()
+
+    def test_apply_multi_output_new_format_prefixes_columns(self, sample_data):
+        """apply() prefixes columns for multi-output new-format indicators."""
+        indicator = MockNewFormatIndicator(name="bbands")
+        indicator._feature_id = "bbands_20_2"
+
+        engine = IndicatorEngine(indicators=[indicator])
+        result = engine.apply(sample_data)
+
+        # Prefixed columns should exist
+        assert "bbands_20_2.upper" in result.columns
+        assert "bbands_20_2.middle" in result.columns
+        assert "bbands_20_2.lower" in result.columns
+        # Alias should exist
+        assert "bbands_20_2" in result.columns
+        # Original semantic names should NOT exist
+        assert "upper" not in result.columns
+
+    def test_apply_multiple_indicators(self, sample_data):
+        """apply() handles multiple indicators correctly."""
+        indicator1 = MockSingleOutputIndicator(name="rsi")
+        indicator1._feature_id = "rsi_14"
+
+        indicator2 = MockNewFormatIndicator(name="bbands")
+        indicator2._feature_id = "bbands_20_2"
+
+        engine = IndicatorEngine(indicators=[indicator1, indicator2])
+        result = engine.apply(sample_data)
+
+        # Both indicators should be present
+        assert "rsi_14" in result.columns
+        assert "bbands_20_2" in result.columns
+        assert "bbands_20_2.upper" in result.columns
+        assert "bbands_20_2.middle" in result.columns
+        assert "bbands_20_2.lower" in result.columns
+
+    def test_apply_preserves_ohlcv_columns(self, sample_data):
+        """apply() preserves original OHLCV columns."""
+        indicator = MockSingleOutputIndicator(name="rsi")
+        indicator._feature_id = "rsi_14"
+
+        engine = IndicatorEngine(indicators=[indicator])
+        result = engine.apply(sample_data)
+
+        # Original columns should be preserved
+        assert "close" in result.columns
+        # New indicator column should be added
+        assert "rsi_14" in result.columns
+
+    def test_apply_uses_fallback_when_no_feature_id(self, sample_data):
+        """apply() uses get_column_name() when feature_id not set."""
+        indicator = MockSingleOutputIndicator(name="rsi")
+        # Don't set feature_id - should fall back to get_column_name()
+
+        engine = IndicatorEngine(indicators=[indicator])
+        result = engine.apply(sample_data)
+
+        # Should use technical column name as fallback
+        expected_name = indicator.get_column_name()
+        assert expected_name in result.columns

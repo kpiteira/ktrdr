@@ -350,12 +350,17 @@ class IndicatorEngine:
         """
         Apply all configured indicators to the input data.
 
+        Routes all indicator computation through compute_indicator() adapter (M2).
+        The adapter handles both old-format and new-format indicator outputs
+        during the v2->v3 migration.
+
         Args:
             data: DataFrame containing OHLCV data to compute indicators on.
                 Must contain at least 'open', 'high', 'low', 'close' columns.
 
         Returns:
             DataFrame with original data plus indicator columns.
+            Column names use feature_ids (from indicator.get_feature_id()).
 
         Raises:
             ConfigurationError: If required columns are missing.
@@ -376,70 +381,20 @@ class IndicatorEngine:
                 {"missing_columns": missing_cols},
             )
 
-        # Check for duplicate column names in input
-        duplicate_cols = [
-            col for col in data.columns if list(data.columns).count(col) > 1
-        ]
-        if duplicate_cols:
-            logger.error(
-                f"[CRITICAL BUG] Input DataFrame has DUPLICATE column names: {set(duplicate_cols)}"
-            )
-
         # Create a copy of the input data to avoid modifying original
         result_df = data.copy()
 
-        # Apply each indicator
+        # Apply each indicator through compute_indicator() adapter
         for indicator in self.indicators:
             try:
-                # Compute indicator and add to result DataFrame
-                result = indicator.compute(result_df)
+                # Get indicator_id from feature_id or fall back to column name
+                indicator_id = indicator.get_feature_id()
 
-                # Handle both Series and DataFrame results
-                if isinstance(result, pd.Series):
-                    # Single-output indicator: add with technical column name
-                    # Use get_column_name() to get technical name (not feature_id)
-                    column_name = indicator.get_column_name()
+                # Compute indicator using adapter (handles both old/new formats)
+                computed = self.compute_indicator(data, indicator, indicator_id)
 
-                    # Check if column already exists (would create duplicate)
-                    if column_name in result_df.columns:
-                        logger.error(
-                            f"[CRITICAL BUG] Column '{column_name}' already exists in result_df! This will create a duplicate."
-                        )
-                        logger.error(
-                            f"[CRITICAL BUG]   Existing columns: {list(result_df.columns)}"
-                        )
-                        continue
-
-                    result_df[column_name] = result
-                elif isinstance(result, pd.DataFrame):
-                    # Multi-output indicator: add all columns with their technical names
-                    # Use pd.concat to avoid DataFrame fragmentation (much faster than repeated assignments)
-
-                    # Check for columns that already exist (would create duplicates)
-                    existing_overlap = [
-                        col for col in result.columns if col in result_df.columns
-                    ]
-                    if existing_overlap:
-                        logger.error(
-                            f"[CRITICAL BUG] These columns already exist and pd.concat will create duplicates: {existing_overlap}"
-                        )
-                        logger.error(
-                            f"[CRITICAL BUG]   result_df columns count before concat: {len(result_df.columns)}"
-                        )
-
-                        # TEMPORARY FIX: Filter out overlapping columns to prevent duplicates
-                        # This is a workaround - the root cause is that indicators are being computed twice
-                        non_overlapping_cols = [
-                            col
-                            for col in result.columns
-                            if col not in result_df.columns
-                        ]
-                        if non_overlapping_cols:
-                            result = result[non_overlapping_cols]
-                        else:
-                            continue
-
-                    result_df = pd.concat([result_df, result], axis=1)
+                # Merge computed columns into result
+                result_df = pd.concat([result_df, computed], axis=1)
 
             except Exception as e:
                 logger.error(
@@ -451,7 +406,9 @@ class IndicatorEngine:
                     {"indicator": indicator.__class__.__name__, "error": str(e)},
                 ) from e
 
-        # Create feature_id aliases after all indicators are computed
+        # CLEANUP(v3): Remove _create_feature_id_aliases() after v3 migration
+        # The adapter now creates aliases automatically, but keep this for backward compatibility
+        # during transition (in case feature_id_map is used elsewhere)
         result_df = self._create_feature_id_aliases(result_df)
 
         logger.debug(f"Successfully applied {len(self.indicators)} indicators to data")

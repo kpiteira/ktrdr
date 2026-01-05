@@ -43,7 +43,7 @@ class TestFeatureIdAliasing:
         assert list(result.columns).count("rsi_14") == 1, "Should not duplicate column"
 
     def test_aliasing_single_indicator_different_name(self, sample_ohlcv_data):
-        """Test aliasing when feature_id differs from column name."""
+        """Test that adapter uses feature_id directly (M2 behavior)."""
         # Given: RSI with semantic feature_id
         configs = [{"name": "rsi", "feature_id": "rsi_fast", "period": 7}]
         engine = IndicatorEngine(indicators=configs)
@@ -51,12 +51,13 @@ class TestFeatureIdAliasing:
         # When: Apply indicators
         result = engine.apply(sample_ohlcv_data)
 
-        # Then: Should have both technical name and feature_id alias
-        assert "rsi_7" in result.columns, "Should have technical column name"
-        assert "rsi_fast" in result.columns, "Should have feature_id alias"
+        # Then: M2 adapter uses feature_id directly (no technical name)
+        assert "rsi_fast" in result.columns, "Should have feature_id column"
+        # M2: adapter creates feature_id column directly, no technical column
+        # CLEANUP(v3): This test validates M2 adapter behavior
 
     def test_aliasing_multiple_indicators(self, sample_ohlcv_data):
-        """Test aliasing with multiple indicators."""
+        """Test that adapter uses feature_ids directly for multiple indicators (M2)."""
         # Given: Multiple indicators with different feature_ids
         configs = [
             {"name": "rsi", "feature_id": "rsi_fast", "period": 7},
@@ -68,15 +69,11 @@ class TestFeatureIdAliasing:
         # When: Apply indicators
         result = engine.apply(sample_ohlcv_data)
 
-        # Then: Should have all technical names
-        assert "rsi_7" in result.columns
-        assert "rsi_21" in result.columns
-        assert "ema_20" in result.columns
-
-        # And: Should have all feature_id aliases
+        # Then: M2 adapter creates columns with feature_ids directly
         assert "rsi_fast" in result.columns
         assert "rsi_slow" in result.columns
-        # ema_20 matches column name, so no duplicate
+        assert "ema_20" in result.columns
+        # CLEANUP(v3): M2 uses feature_ids directly, no technical names
 
     def test_aliasing_macd_multi_output(self, sample_ohlcv_data):
         """Test aliasing with MACD (multi-output indicator)."""
@@ -134,7 +131,7 @@ class TestFeatureIdAliasingDataIdentity:
         )
 
     def test_alias_references_same_data_not_copied(self, sample_ohlcv_data):
-        """CRITICAL: Test that alias references same data, not a copy."""
+        """M2: Adapter creates feature_id column directly (no alias needed)."""
         # Given: RSI with different feature_id
         configs = [{"name": "rsi", "feature_id": "rsi_fast", "period": 7}]
         engine = IndicatorEngine(indicators=configs)
@@ -142,18 +139,13 @@ class TestFeatureIdAliasingDataIdentity:
         # When: Apply indicators
         result = engine.apply(sample_ohlcv_data)
 
-        # Then: Both columns should have identical values
-        pd.testing.assert_series_equal(
-            result["rsi_7"], result["rsi_fast"], check_names=False
-        )
-
-        # And: Values should be identical (pandas creates a copy, but data is same)
-        # Note: Pandas doesn't support true column aliasing at DataFrame level
-        # The copy is acceptable for memory efficiency as it's one alias per indicator
-        np.testing.assert_array_equal(result["rsi_7"].values, result["rsi_fast"].values)
+        # Then: M2 adapter creates feature_id column directly
+        assert "rsi_fast" in result.columns
+        # No separate technical column in M2
+        # CLEANUP(v3): This validates M2 adapter behavior
 
     def test_multiple_aliases_share_data(self, sample_ohlcv_data):
-        """Test that multiple indicators don't duplicate data unnecessarily."""
+        """M2: Each indicator creates one column with feature_id (no duplication)."""
         # Given: Multiple indicators
         configs = [
             {"name": "rsi", "feature_id": "rsi_fast", "period": 7},
@@ -164,11 +156,11 @@ class TestFeatureIdAliasingDataIdentity:
         # When: Apply indicators
         result = engine.apply(sample_ohlcv_data)
 
-        # Then: Technical name and alias should have identical values
-        np.testing.assert_array_equal(result["rsi_7"].values, result["rsi_fast"].values)
-        np.testing.assert_array_equal(
-            result["ema_9"].values, result["ema_short"].values
-        )
+        # Then: M2 adapter creates columns with feature_ids directly
+        assert "rsi_fast" in result.columns
+        assert "ema_short" in result.columns
+        # No technical columns created separately
+        # CLEANUP(v3): This validates M2 adapter behavior
 
     def test_macd_alias_references_primary_output(self, sample_ohlcv_data):
         """Test that MACD feature_id alias references the primary output."""
