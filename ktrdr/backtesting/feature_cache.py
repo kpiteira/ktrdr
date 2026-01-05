@@ -32,6 +32,59 @@ class FeatureCache:
         self._setup_indicator_engine()
         self._setup_fuzzy_engine()
 
+    @classmethod
+    def from_dataframe(cls, indicators_df: pd.DataFrame) -> "FeatureCache":
+        """Create FeatureCache from pre-computed indicators DataFrame.
+
+        This is a simplified constructor for use cases where indicators are
+        already computed (e.g., testing, or when using IndicatorEngine directly).
+
+        Args:
+            indicators_df: DataFrame with indicator columns (new format)
+
+        Returns:
+            FeatureCache instance with indicators_df set
+        """
+        # Create minimal strategy config to satisfy __init__
+        dummy_config: dict[str, Any] = {
+            "indicators": [],
+            "fuzzy_sets": {},
+        }
+        instance = cls.__new__(cls)
+        instance.strategy_config = dummy_config
+        instance.indicators_df = indicators_df
+        instance.fuzzy_df = None
+        instance.mapped_indicators_df = None
+        # Don't initialize engines (not needed for simple lookup)
+        return instance
+
+    def get_indicator_value(self, feature_id: str, idx: int) -> float:
+        """Get indicator value at index using direct column lookup.
+
+        Args:
+            feature_id: Column name (e.g., 'rsi_14', 'bbands_20_2.upper', 'bbands_20_2')
+            idx: Row index
+
+        Returns:
+            Indicator value at the specified index
+
+        Raises:
+            KeyError: If column not found in indicators DataFrame
+            IndexError: If index out of bounds
+        """
+        if self.indicators_df is None:
+            raise ValueError(
+                "No indicators computed. Call compute_all_features() first."
+            )
+
+        if feature_id not in self.indicators_df.columns:
+            raise KeyError(
+                f"Column '{feature_id}' not found in indicators DataFrame. "
+                f"Available columns: {list(self.indicators_df.columns)}"
+            )
+
+        return self.indicators_df[feature_id].iloc[idx]
+
     def _setup_indicator_engine(self):
         """Setup indicator engine from strategy config."""
         # Strategy config already has feature_id - just use it directly!
@@ -83,8 +136,9 @@ class FeatureCache:
         logger.debug("📊 Computing indicators...")
         self.indicators_df = self.indicator_engine.apply(historical_data)
 
-        # Step 2: Map indicators to original names (optimized but correct approach)
-        logger.debug("🗺️ Mapping indicators to original names...")
+        # Step 2: Map indicators to feature_id keys for fuzzy lookup
+        # M4: Simplified with direct column lookup (no more fuzzy string matching)
+        logger.debug("🗺️ Mapping indicators to feature_id keys...")
         mapped_data = []
 
         # PERFORMANCE OPTIMIZATION: Use full dataset indicators but map correctly
@@ -99,33 +153,21 @@ class FeatureCache:
             current_bar_indicators = {}
 
             for config in self.strategy_config["indicators"]:
-                # CRITICAL FIX: Use feature_id for fuzzy set lookup, not name
-                # feature_id matches the keys in fuzzy_sets (e.g., "rsi_14")
-                # name is just the indicator type (e.g., "rsi")
+                # M4: Direct column lookup using feature_id
+                # With new format, column name IS the feature_id (e.g., "rsi_14")
+                # or for multi-output, it's the alias (e.g., "bbands_20_2" points to primary)
                 feature_id = config.get("feature_id", config["name"])
-                indicator_type = config["name"].upper()
 
-                # Find matching columns (same logic as orchestrator)
-                for col in self.indicators_df.columns:
-                    if col.upper().startswith(indicator_type):
-                        if indicator_type == "MACD":
-                            # Use main MACD line
-                            if (
-                                col.startswith("MACD_")
-                                and "_signal_" not in col
-                                and "_hist_" not in col
-                            ):
-                                current_bar_indicators[feature_id] = self.indicators_df[
-                                    col
-                                ].iloc[idx]
-                                break
-                        else:
-                            # Use raw values for all indicators (including SMA/EMA)
-                            # Fuzzy engine handles transformations via input_transform
-                            current_bar_indicators[feature_id] = self.indicators_df[
-                                col
-                            ].iloc[idx]
-                            break
+                # Direct O(1) lookup instead of O(n) fuzzy string matching
+                if feature_id in self.indicators_df.columns:
+                    current_bar_indicators[feature_id] = self.indicators_df[
+                        feature_id
+                    ].iloc[idx]
+                else:
+                    # Column not found - log warning but continue
+                    logger.warning(
+                        f"Column '{feature_id}' not found in indicators_df at idx {idx}"
+                    )
 
             mapped_data.append(current_bar_indicators)
 
