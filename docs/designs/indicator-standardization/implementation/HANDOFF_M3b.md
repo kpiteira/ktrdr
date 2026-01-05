@@ -128,16 +128,51 @@ def _get_column_names(period: int = 20, multiplier: float = 2.0):
 
 ---
 
-## Next Tasks: 3b.2 and 3b.3
+## Task 3b.2 Complete: Core Multi-Output Indicators
+
+### Indicators Migrated
+
+1. **MACD** → Returns `{"line", "signal", "histogram"}`
+   - Before: `{"MACD_12_26", "MACD_signal_12_26_9", "MACD_hist_12_26_9"}`
+   - After: `{"line", "signal", "histogram"}`
+
+2. **Stochastic** → Returns `{"k", "d"}`
+   - Before: `{"Stochastic_K_14_3", "Stochastic_D_14_3_3"}`
+   - After: `{"k", "d"}`
+
+3. **ADX** → Returns `{"adx", "plus_di", "minus_di"}`
+   - Before: `{"ADX_14", "DI_Plus_14", "DI_Minus_14"} + extra analysis columns`
+   - After: `{"adx", "plus_di", "minus_di"}` (removed extra columns per M3b spec)
+
+4. **Aroon** → Returns `{"up", "down", "oscillator"}`
+   - Before: `{"Aroon_14_Up", "Aroon_14_Down", "Aroon_14_Oscillator"}`
+   - After: `{"up", "down", "oscillator"}`
+
+5. **SuperTrend** → Returns `{"trend", "direction"}`
+   - Before: `{"SuperTrend_10_3.0", "ST_Direction_10_3.0"} + extra analysis columns`
+   - After: `{"trend", "direction"}` (removed extra columns per M3b spec)
+
+### Implementation Notes
+
+**Pattern Followed:**
+All indicators now follow the BollingerBands pattern from Task 3b.1:
+1. Return DataFrame with semantic column names only
+2. No parameter embedding in column names
+3. Engine adapter handles prefixing with `indicator_id.`
+
+**ADX and SuperTrend Simplification:**
+These indicators previously returned extra analysis columns (e.g., `ADX_Slope`, `ST_Distance`). Following the M3b spec, we now return only the core semantic outputs defined in `get_output_names()`. Analysis methods can still compute these if needed.
+
+**Test Updates:**
+- Updated existing unit tests to use new semantic names
+- All test calls to `compute()` now expect semantic names
+- Tests using `IndicatorEngine.apply()` expect prefixed format
+
+---
+
+## Next: Task 3b.3 Remaining Multi-Output Indicators
 
 ### Indicators to Migrate
-
-**Task 3b.2: Core Multi-Output Indicators (5 files)**
-1. MACD → `line`, `signal`, `histogram`
-2. Stochastic → `k`, `d`
-3. ADX → `adx`, `plus_di`, `minus_di`
-4. Aroon → `up`, `down`, `oscillator`
-5. Supertrend → `trend`, `direction`
 
 **Task 3b.3: Remaining Multi-Output Indicators (4 files)**
 1. Ichimoku → `tenkan`, `kijun`, `senkou_a`, `senkou_b`, `chikou`
@@ -169,8 +204,8 @@ def _get_column_names(period: int = 20, multiplier: float = 2.0):
 ## Milestone Progress
 
 - ✅ Task 3b.1: BollingerBands migrated (template established)
-- ⏳ Task 3b.2: Core multi-output indicators (next)
-- ⏳ Task 3b.3: Remaining multi-output indicators
+- ✅ Task 3b.2: Core multi-output indicators (MACD, Stochastic, ADX, Aroon, SuperTrend)
+- ⏳ Task 3b.3: Remaining multi-output indicators (next)
 
-**Total migrated:** 1 multi-output indicator
-**Remaining:** 9 multi-output indicators
+**Total migrated:** 6 multi-output indicators
+**Remaining:** 4 multi-output indicators
