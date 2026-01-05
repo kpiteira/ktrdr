@@ -105,11 +105,10 @@ class VolumeRatioIndicator(BaseIndicator):
             1.0,  # Default ratio when SMA is ~0
         )
 
-        # Create result Series
+        # M3a: Return unnamed Series (engine handles naming)
         result_series = pd.Series(
             volume_ratio,
             index=data.index,
-            name=self.get_column_name(),
         )
 
         return result_series

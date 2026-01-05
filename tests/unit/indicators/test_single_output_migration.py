@@ -8,13 +8,19 @@ Tests verify that single-output indicators return unnamed Series
 import pandas as pd
 import pytest
 
+from ktrdr.indicators.ad_line import ADLineIndicator
+from ktrdr.indicators.atr_indicator import ATRIndicator
 from ktrdr.indicators.cci_indicator import CCIIndicator
+from ktrdr.indicators.cmf_indicator import CMFIndicator
 from ktrdr.indicators.mfi_indicator import MFIIndicator
 from ktrdr.indicators.momentum_indicator import MomentumIndicator
+from ktrdr.indicators.obv_indicator import OBVIndicator
 from ktrdr.indicators.roc_indicator import ROCIndicator
 from ktrdr.indicators.rsi_indicator import RSIIndicator
 from ktrdr.indicators.rvi_indicator import RVIIndicator
 from ktrdr.indicators.squeeze_intensity_indicator import SqueezeIntensityIndicator
+from ktrdr.indicators.volume_ratio_indicator import VolumeRatioIndicator
+from ktrdr.indicators.vwap_indicator import VWAPIndicator
 from ktrdr.indicators.williams_r_indicator import WilliamsRIndicator
 
 
@@ -143,6 +149,115 @@ class TestIndicatorValuesUnchanged:
         assert result.count() > 0, "Williams %R should produce non-NaN values"
 
 
+class TestVolumeTrendMigration:
+    """Test Task 3a.2: Volume/Trend indicators return unnamed Series."""
+
+    def test_obv_returns_unnamed_series(self, sample_ohlcv_data):
+        """OBV indicator returns Series with no name."""
+        indicator = OBVIndicator()
+        result = indicator.compute(sample_ohlcv_data)
+
+        assert isinstance(result, pd.Series), "OBV should return a Series"
+        assert result.name is None, "OBV Series should have no name (unnamed)"
+        assert len(result) == len(sample_ohlcv_data)
+
+    def test_cmf_skipped_multi_output(self, sample_ohlcv_data):
+        """CMF is multi-output, skip for M3a."""
+        indicator = CMFIndicator(period=21)
+
+        # Verify this is multi-output (should be handled in M3b)
+        if indicator.is_multi_output():
+            pytest.skip("CMF is multi-output, will be handled in M3b")
+
+    def test_vwap_returns_unnamed_series(self, sample_ohlcv_data):
+        """VWAP indicator returns Series with no name."""
+        indicator = VWAPIndicator(period=20)
+        result = indicator.compute(sample_ohlcv_data)
+
+        assert isinstance(result, pd.Series), "VWAP should return a Series"
+        assert result.name is None, "VWAP Series should have no name (unnamed)"
+        assert len(result) == len(sample_ohlcv_data)
+
+    def test_volume_ratio_returns_unnamed_series(self, sample_ohlcv_data):
+        """Volume Ratio indicator returns Series with no name."""
+        indicator = VolumeRatioIndicator(period=20)
+        result = indicator.compute(sample_ohlcv_data)
+
+        assert isinstance(result, pd.Series), "Volume Ratio should return a Series"
+        assert result.name is None, "Volume Ratio Series should have no name (unnamed)"
+        assert len(result) == len(sample_ohlcv_data)
+
+    def test_ad_line_skipped_multi_output(self, sample_ohlcv_data):
+        """A/D Line is multi-output, skip for M3a."""
+        indicator = ADLineIndicator()
+
+        # Verify this is multi-output (should be handled in M3b)
+        if indicator.is_multi_output():
+            pytest.skip("A/D Line is multi-output, will be handled in M3b")
+
+    def test_atr_returns_unnamed_series(self, sample_ohlcv_data):
+        """ATR indicator returns Series with no name."""
+        indicator = ATRIndicator(period=14)
+        result = indicator.compute(sample_ohlcv_data)
+
+        assert isinstance(result, pd.Series), "ATR should return a Series"
+        assert result.name is None, "ATR Series should have no name (unnamed)"
+        assert len(result) == len(sample_ohlcv_data)
+
+
+class TestVolumeTrendValuesUnchanged:
+    """Regression tests: verify Task 3a.2 indicator values are unchanged."""
+
+    def test_obv_values_unchanged(self, sample_ohlcv_data):
+        """OBV values should be unchanged after removing .name assignment."""
+        indicator = OBVIndicator()
+        result = indicator.compute(sample_ohlcv_data)
+
+        # Spot check: OBV should have calculated values (cumulative)
+        assert result.count() > 0, "OBV should produce non-NaN values"
+        # OBV is cumulative, so first value should be 0
+        assert result.iloc[0] == 0.0, "OBV should start at 0"
+
+    def test_vwap_values_unchanged(self, sample_ohlcv_data):
+        """VWAP values should be unchanged after migration."""
+        indicator = VWAPIndicator(period=20)
+        result = indicator.compute(sample_ohlcv_data)
+
+        # Spot check: VWAP should be within reasonable range of prices
+        valid_values = result.dropna()
+        price_range = (
+            sample_ohlcv_data["low"].min(),
+            sample_ohlcv_data["high"].max(),
+        )
+        assert (
+            valid_values >= price_range[0] * 0.9
+        ).all(), "VWAP should be near price range"
+        assert (
+            valid_values <= price_range[1] * 1.1
+        ).all(), "VWAP should be near price range"
+
+    def test_volume_ratio_values_unchanged(self, sample_ohlcv_data):
+        """Volume Ratio values should be unchanged after migration."""
+        indicator = VolumeRatioIndicator(period=20)
+        result = indicator.compute(sample_ohlcv_data)
+
+        # Spot check: Volume Ratio should have calculated values
+        valid_values = result.dropna()
+        assert len(valid_values) > 0, "Volume Ratio should produce non-NaN values"
+        # Ratio should be positive
+        assert (valid_values > 0).all(), "Volume Ratio should be positive"
+
+    def test_atr_values_unchanged(self, sample_ohlcv_data):
+        """ATR values should be unchanged after migration."""
+        indicator = ATRIndicator(period=14)
+        result = indicator.compute(sample_ohlcv_data)
+
+        # Spot check: ATR should have calculated values (always positive)
+        valid_values = result.dropna()
+        assert len(valid_values) > 0, "ATR should produce non-NaN values"
+        assert (valid_values > 0).all(), "ATR should be positive"
+
+
 class TestAdapterIntegration:
     """Test that migrated indicators work through IndicatorEngine adapter."""
 
@@ -161,3 +276,35 @@ class TestAdapterIntegration:
         assert len(result.columns) == 1, "Single-output should have 1 column"
         # Verify adapter wrapped the unnamed Series correctly
         assert result["rsi_14"].count() > 0, "Column should have values"
+
+    def test_volume_trend_through_adapter(self, sample_ohlcv_data):
+        """Migrated volume/trend indicators work through adapter."""
+        from ktrdr.indicators import IndicatorEngine
+
+        engine = IndicatorEngine()
+
+        # Test OBV
+        obv = OBVIndicator()
+        result = engine.compute_indicator(sample_ohlcv_data, obv, "obv")
+        assert "obv" in result.columns, "OBV should have indicator_id column"
+        assert len(result.columns) == 1, "Single-output should have 1 column"
+
+        # Test VWAP
+        vwap = VWAPIndicator(period=20)
+        result = engine.compute_indicator(sample_ohlcv_data, vwap, "vwap_20")
+        assert "vwap_20" in result.columns, "VWAP should have indicator_id column"
+        assert len(result.columns) == 1, "Single-output should have 1 column"
+
+        # Test Volume Ratio
+        vol_ratio = VolumeRatioIndicator(period=20)
+        result = engine.compute_indicator(sample_ohlcv_data, vol_ratio, "volume_ratio")
+        assert (
+            "volume_ratio" in result.columns
+        ), "Volume Ratio should have indicator_id column"
+        assert len(result.columns) == 1, "Single-output should have 1 column"
+
+        # Test ATR
+        atr = ATRIndicator(period=14)
+        result = engine.compute_indicator(sample_ohlcv_data, atr, "atr_14")
+        assert "atr_14" in result.columns, "ATR should have indicator_id column"
+        assert len(result.columns) == 1, "Single-output should have 1 column"

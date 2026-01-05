@@ -52,7 +52,8 @@ class TestOBVIndicator:
 
         # Check that result is a Series
         assert isinstance(result, pd.Series)
-        assert result.name == "OBV"
+        # M3a: OBV returns unnamed Series (engine handles naming)
+        assert result.name is None
 
         # Check that we have the right number of rows
         assert len(result) == len(data)
@@ -253,7 +254,8 @@ class TestOBVIndicator:
 
         assert isinstance(result, pd.Series)
         assert len(result) == 2
-        assert result.name == "OBV"
+        # M3a: OBV returns unnamed Series (engine handles naming)
+        assert result.name is None
 
         # Manual calculation:
         # Index 0: OBV = 0
@@ -303,7 +305,8 @@ class TestOBVIndicator:
         # Verify structure
         assert isinstance(result, pd.Series)
         assert len(result) == len(data)
-        assert result.name == "OBV"
+        # M3a: OBV returns unnamed Series (engine handles naming)
+        assert result.name is None
 
         # Check some basic properties
         # OBV should start at 0

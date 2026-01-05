@@ -139,11 +139,10 @@ class ATRIndicator(BaseIndicator):
         # Calculate ATR as the simple moving average of True Range
         atr = true_range.rolling(window=period, min_periods=period).mean()
 
-        # Create result Series with appropriate name
+        # M3a: Return unnamed Series (engine handles naming)
         result_series = pd.Series(
             atr,
             index=data.index,
-            name=f"ATR_{period}",
         )
 
         logger.debug(f"Computed ATR with period={period}")
