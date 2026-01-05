@@ -9,6 +9,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -508,6 +509,81 @@ def up(
     except subprocess.CalledProcessError as e:
         error_console.print(f"[red]Error starting stack:[/red] {e}")
         raise typer.Exit(1) from e
+
+    # Run database migrations
+    console.print("\nApplying database migrations...")
+
+    # Wait for backend container to be ready (max 30s)
+    backend_ready = False
+    for _attempt in range(30):
+        try:
+            check_cmd = [
+                "docker",
+                "compose",
+                "-f",
+                str(compose_file),
+                "exec",
+                "-T",
+                "backend",
+                "echo",
+                "ready",
+            ]
+            check_result = subprocess.run(
+                check_cmd,
+                env=compose_env,
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            if check_result.returncode == 0:
+                backend_ready = True
+                break
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError):
+            # Backend container not ready yet; ignore transient errors and retry
+            pass
+        time.sleep(1)
+
+    if not backend_ready:
+        error_console.print(
+            "[yellow]Warning:[/yellow] Backend container not ready, skipping migrations"
+        )
+        error_console.print(
+            "  [dim]Run manually: docker compose exec backend /app/.venv/bin/alembic upgrade head[/dim]"
+        )
+    else:
+        migration_cmd = [
+            "docker",
+            "compose",
+            "-f",
+            str(compose_file),
+            "exec",
+            "-T",  # Disable TTY allocation for non-interactive execution
+            "backend",
+            "/app/.venv/bin/alembic",
+            "upgrade",
+            "head",
+        ]
+
+        try:
+            migration_result = subprocess.run(
+                migration_cmd,
+                env=compose_env,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            if migration_result.returncode == 0:
+                console.print("  [green]✓[/green] Database migrations applied")
+            else:
+                error_console.print("[yellow]Warning:[/yellow] Migration failed")
+                error_console.print(f"  {migration_result.stderr}")
+                console.print(
+                    "  [dim]You may need to run manually: docker compose exec backend /app/.venv/bin/alembic upgrade head[/dim]"
+                )
+        except subprocess.TimeoutExpired:
+            error_console.print(
+                "[yellow]Warning:[/yellow] Migration timed out after 60s"
+            )
 
     if no_wait:
         console.print("\nInstance starting... (use 'ktrdr sandbox status' to check)")

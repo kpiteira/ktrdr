@@ -63,6 +63,9 @@ services:
       - ./output:/app/output
       - ./training_analytics:/app/training_analytics
       - ./memory:/app/memory
+      # Database migrations
+      - ./alembic:/app/alembic:ro
+      - ./alembic.ini:/app/alembic.ini:ro
       # Shared data with fallback to local (backward compatible)
       # Set KTRDR_DATA_DIR, KTRDR_MODELS_DIR, KTRDR_STRATEGIES_DIR for shared data
       - ${KTRDR_DATA_DIR:-./data}:/app/data

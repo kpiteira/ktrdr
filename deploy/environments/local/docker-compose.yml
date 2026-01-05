@@ -58,6 +58,9 @@ services:
       - ./output:/app/output
       - ./training_analytics:/app/training_analytics
       - ./memory:/app/memory  # Agent memory (experiments, hypotheses)
+      # Database migrations
+      - ./alembic:/app/alembic:ro
+      - ./alembic.ini:/app/alembic.ini:ro
       # Cache directories
       - pip-cache:/root/.cache/pip
       - uv-cache:/root/.cache/uv
