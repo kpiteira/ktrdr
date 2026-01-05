@@ -168,17 +168,44 @@ assert result.name is None
 
 ---
 
-## Next Tasks: 3a.2 and 3a.3
+---
+
+## Task 3a.2 Complete: Volume/Trend Indicators
+
+### Indicators Migrated
+
+**Single-output (4 indicators):**
+1. OBV - `name="OBV"` in constructor → removed
+2. VWAP - `name=self.get_name()` in constructor → removed
+3. VolumeRatio - `name=self.get_column_name()` in constructor → removed
+4. ATR - `name=f"ATR_{period}"` in constructor → removed
+
+**Skipped (multi-output, for M3b):**
+1. CMF - `is_multi_output()` returns `True`
+2. AD Line - `is_multi_output()` returns `True`
+
+### Patterns Observed
+
+**Pattern:** All 4 single-output indicators used `name=` parameter in Series constructor
+
+No name inheritance issues observed (OBV and VWAP create new Series, not derived from source).
+
+### Test Updates
+
+Updated existing indicator-specific tests:
+- `test_obv_indicator.py`: 3 assertions changed from `assert result.name == "OBV"` to `assert result.name is None`
+- `test_atr_indicator.py`: 5 assertions changed from `assert result.name == "ATR_X"` to `assert result.name is None`
+
+---
+
+## Next Task: 3a.3
 
 ### What to Expect
-
-**Task 3a.2: Volume/Trend Indicators (6 files)**
-- Likely patterns: Same as 3a.1
-- Watch for: OBV, VWAP may have name inheritance issues (operate on volume/price)
 
 **Task 3a.3: Remaining + MAs (6+ files)**
 - Moving Averages (SMA, EMA) in `ma_indicators.py` (multiple indicators in one file)
 - May have name inheritance (MAs operate on source Series)
+- Distance from MA, Bollinger Band Width, Parabolic SAR, ZigZag
 
 ### Quick Checklist Per Indicator
 
