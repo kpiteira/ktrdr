@@ -198,21 +198,57 @@ Updated existing indicator-specific tests:
 
 ---
 
-## Next Task: 3a.3
+## Task 3a.3 Complete: Remaining + MA Indicators
+
+### Indicators Migrated
+
+**All 6 indicators migrated successfully:**
+1. SMA - `.name` assignment removed, `.values` used (name inheritance)
+2. EMA - `.name` assignment removed, `.values` used (name inheritance)
+3. DistanceFromMA - `name=` parameter removed
+4. BollingerBandWidth - `name=` parameter removed
+5. ParabolicSAR - `name=` parameter removed
+6. ZigZag - `name=` parameter removed
+
+### Patterns Confirmed
+
+**Name inheritance (Handoff Pattern 2) confirmed for MAs:**
+- Both SMA and EMA inherit the name 'close' from `data[source]`
+- Solution: Use `.values` when creating the result Series
+- Same pattern as Momentum and ROC from Task 3a.1
+
+**No name inheritance for derived indicators:**
+- DistanceFromMA, BollingerBandWidth, ParabolicSAR, ZigZag create new Series
+- Simply removing `name=` parameter was sufficient
+- No `.values` workaround needed
+
+### Milestone 3a Status
+
+**ALL TASKS COMPLETE:**
+- ✅ Task 3a.1: Momentum/oscillator indicators (8 files)
+- ✅ Task 3a.2: Volume/trend indicators (4 single-output files, 2 multi-output skipped)
+- ✅ Task 3a.3: Remaining + MA indicators (6 files)
+
+**Total indicators migrated:** 18 single-output indicators
+**Ready for:** M3b (multi-output indicator migration)
+
+---
+
+## Next Milestone: M3b
 
 ### What to Expect
 
-**Task 3a.3: Remaining + MAs (6+ files)**
-- Moving Averages (SMA, EMA) in `ma_indicators.py` (multiple indicators in one file)
-- May have name inheritance (MAs operate on source Series)
-- Distance from MA, Bollinger Band Width, Parabolic SAR, ZigZag
+**M3b: Multi-Output Indicator Migration**
+- Multi-output indicators return unnamed DataFrame (not Series)
+- Engine handles naming with suffixes (e.g., `bbands_20_2_upper`, `bbands_20_2_middle`, `bbands_20_2_lower`)
+- Different adapter logic than single-output
+- Examples: Bollinger Bands, MACD, Stochastic, ADX
 
-### Quick Checklist Per Indicator
+### Key Differences from M3a
 
-1. ☐ Check `is_multi_output()` - if True, skip for M3a
-2. ☐ Find `.name =` assignments → remove
-3. ☐ Find `name=` parameters → remove
-4. ☐ If operates on `data[source]` → use `.values` when creating result
-5. ☐ Add test to `test_single_output_migration.py`
-6. ☐ Update existing indicator tests (search for `.name ==` assertions)
-7. ☐ Run `make test-unit` and `make quality`
+1. **Return type:** DataFrame instead of Series
+2. **Column naming:** Engine applies suffixes based on `get_output_names()`
+3. **Adapter logic:** Different code path in `compute_indicator()`
+4. **Name inheritance:** Not applicable (DataFrame columns already unnamed in calculation)
+
+---
