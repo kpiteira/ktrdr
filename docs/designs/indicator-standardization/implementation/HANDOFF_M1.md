@@ -6,38 +6,18 @@ This handoff captures gotchas, workarounds, and patterns discovered during M1 im
 
 ## Gotchas
 
-### Circular Import in Indicator Module
+### ~~Circular Import in Indicator Module~~ ✅ FIXED
 
-**Problem:** Direct pytest execution of indicator test files fails with circular import error
+~~**Problem:** Direct pytest execution of indicator test files fails with circular import error~~
 
-**Symptom:**
-```bash
-$ uv run pytest tests/unit/indicators/test_base_indicator.py -v
-ImportError: cannot import name 'BaseIndicator' from partially initialized module
-```
+**Status:** **RESOLVED** in commit `9c94e090`
 
-**Cause:**
-```
-ktrdr/indicators/__init__.py
-  → base_indicator.py
-    → config.validation.InputValidator
-      → config.strategy_validator.StrategyValidator
-        → indicators.indicator_factory.BUILT_IN_INDICATORS
-          → indicators.ad_line.ADLineIndicator
-            → indicators.base_indicator.BaseIndicator  [CIRCULAR]
-```
+**Solution implemented:**
+- Lazy-loaded `BUILT_IN_INDICATORS` in StrategyValidator with caching
+- Moved import from module-level to method-level in `_get_normalized_indicator_names()`
+- Direct pytest execution now works: `uv run pytest tests/unit/indicators/test_base_indicator.py -v`
 
-**Workaround:**
-- Use `make test-unit` (runs with pytest `-n auto` for parallel execution)
-- Parallel pytest handles module loading differently and avoids the circular import
-- All tests pass with `make test-unit`
-- **Impact:** This is a pre-existing issue on main branch, not introduced by M1 changes
-
-**Solution (for future work):**
-- Break the circular dependency by lazy-loading BUILT_IN_INDICATORS in StrategyValidator
-- OR move InputValidator to a module that doesn't depend on config
-- OR restructure indicator_factory to not be imported at config module load time
-- **Recommendation:** Fix this before M2, as it will complicate development
+See `CIRCULAR_IMPORT_FIX_PLAN.md` for detailed analysis and implementation.
 
 ---
 
