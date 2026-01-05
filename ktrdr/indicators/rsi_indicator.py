@@ -127,7 +127,7 @@ class RSIIndicator(BaseIndicator):
                 rsi = pd.Series(index=df.index, dtype=float)
                 rsi.iloc[:period] = np.nan
                 rsi.iloc[period:] = 50.0
-                rsi.name = self.get_feature_id()
+                # M3a: Return unnamed Series (engine handles naming)
                 return rsi
 
             # Normal case - prices have some changes
@@ -179,9 +179,7 @@ class RSIIndicator(BaseIndicator):
                     rs = avg_gain / avg_loss
                     rsi.iloc[i] = 100 - (100 / (1 + rs))
 
-            # Set the name for the result Series
-            rsi.name = self.get_feature_id()
-
+            # M3a: Return unnamed Series (engine handles naming)
             logger.debug(f"RSI calculation completed, non-NaN values: {rsi.count()}")
             return rsi
 

@@ -107,8 +107,9 @@ class MomentumIndicator(BaseIndicator):
         price_series = data[source]
         momentum = price_series - price_series.shift(period)
 
-        # Create result series with proper index
-        result_series = pd.Series(momentum, index=data.index, name=self.get_name())
+        # M3a: Create unnamed Series (engine handles naming)
+        # Use .values to avoid inheriting name from source Series
+        result_series = pd.Series(momentum.values, index=data.index)
 
         logger.debug(f"Computed Momentum with period={period}, source={source}")
 
