@@ -111,9 +111,77 @@ The existing `FeatureCache(strategy_config)` constructor still works:
 
 ---
 
+---
+
+## Task 4.2 Complete: Update FuzzyEngine
+
+### Changes Made
+
+**Before (M3b):**
+- Prefix matching with underscore: `bbands_20_2_upper` matches `bbands_20_2`
+- Did not support dot notation for multi-output indicators
+
+**After (M4):**
+- Prefix matching with dot notation: `bbands_20_2.upper` matches `bbands_20_2`
+- Backward compatible with underscore format
+- Priority: Direct match → Dot notation → Underscore (legacy)
+
+### Implementation Pattern
+
+**Updated `_find_fuzzy_key()` (lines 715-756 in engine.py):**
+
+```python
+# M4: Dot notation prefix matching (new format from M3b)
+for fuzzy_key in self._membership_functions.keys():
+    if column_name.startswith(f"{fuzzy_key}."):
+        return fuzzy_key
+
+# Legacy: Underscore prefix matching (backward compatibility)
+for fuzzy_key in self._membership_functions.keys():
+    if column_name.startswith(f"{fuzzy_key}_"):
+        return fuzzy_key
+```
+
+### Example Matching
+
+| Column Name | Fuzzy Key | Match Type |
+|-------------|-----------|------------|
+| `rsi_14` | `rsi_14` | Direct (O(1)) |
+| `bbands_20_2` | `bbands_20_2` | Direct (alias) |
+| `bbands_20_2.upper` | `bbands_20_2` | Dot notation prefix |
+| `bbands_20_2_upper` | `bbands_20_2` | Legacy underscore prefix |
+| `nonexistent` | None | No match |
+
+### Test Coverage
+
+**New test file:** `tests/unit/fuzzy/test_fuzzy_engine_new_format.py`
+
+**Tests added (9 total):**
+1. Single-output indicator direct lookup
+2. Multi-output with dot notation explicit reference
+3. Direct match (`rsi_14` → `rsi_14`)
+4. Dot notation prefix match (`bbands_20_2.upper` → `bbands_20_2`)
+5. Alias reference (`bbands_20_2` → `bbands_20_2`)
+6. No match returns None
+7. Clear error messages for missing columns
+8. Multi-timeframe with new column format
+9. Multi-timeframe matches dot notation columns
+
+**All tests pass:** 140 fuzzy tests (9 new + 131 existing)
+
+### Backward Compatibility
+
+The existing behavior is preserved:
+- Old underscore format still works (`bbands_20_2_upper`)
+- Direct matching still works (`rsi_14`)
+- All existing tests pass without changes
+
+---
+
 ## Notes for Next Implementer
 
 1. **Column names are exact:** No more fuzzy matching, case normalization, or startsWith logic
 2. **feature_id IS the column name:** For single-output, `feature_id` = column name. For multi-output, `feature_id` = alias column
 3. **Dot notation is explicit:** Use `bbands_20_2.upper` to reference specific outputs
 4. **Error messages are helpful:** KeyError shows all available columns for debugging
+5. **Dot notation priority:** FuzzyEngine now checks dot notation before underscore (new format preferred)
