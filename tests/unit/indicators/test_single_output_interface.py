@@ -5,11 +5,9 @@ This test file verifies that all single-output indicators implement
 the interface correctly by inheriting the default behavior from BaseIndicator.
 """
 
-from ktrdr.indicators.ad_line import ADLineIndicator
 from ktrdr.indicators.atr_indicator import ATRIndicator
 from ktrdr.indicators.bollinger_band_width_indicator import BollingerBandWidthIndicator
 from ktrdr.indicators.cci_indicator import CCIIndicator
-from ktrdr.indicators.cmf_indicator import CMFIndicator
 from ktrdr.indicators.distance_from_ma_indicator import DistanceFromMAIndicator
 from ktrdr.indicators.ma_indicators import ExponentialMovingAverage, SimpleMovingAverage
 from ktrdr.indicators.mfi_indicator import MFIIndicator
@@ -71,22 +69,6 @@ class TestCCIInterface:
     def test_get_primary_output(self):
         """CCI should return None for primary output."""
         assert CCIIndicator.get_primary_output() is None
-
-
-class TestCMFInterface:
-    """Test CMF single-output interface."""
-
-    def test_is_multi_output(self):
-        """CMF should be single-output."""
-        assert CMFIndicator.is_multi_output() is False
-
-    def test_get_output_names(self):
-        """CMF should return empty list."""
-        assert CMFIndicator.get_output_names() == []
-
-    def test_get_primary_output(self):
-        """CMF should return None for primary output."""
-        assert CMFIndicator.get_primary_output() is None
 
 
 class TestMFIInterface:
@@ -279,22 +261,6 @@ class TestZigZagInterface:
     def test_get_primary_output(self):
         """ZigZag should return None for primary output."""
         assert ZigZagIndicator.get_primary_output() is None
-
-
-class TestADLineInterface:
-    """Test ADLine single-output interface."""
-
-    def test_is_multi_output(self):
-        """ADLine should be single-output."""
-        assert ADLineIndicator.is_multi_output() is False
-
-    def test_get_output_names(self):
-        """ADLine should return empty list."""
-        assert ADLineIndicator.get_output_names() == []
-
-    def test_get_primary_output(self):
-        """ADLine should return None for primary output."""
-        assert ADLineIndicator.get_primary_output() is None
 
 
 class TestSMAInterface:

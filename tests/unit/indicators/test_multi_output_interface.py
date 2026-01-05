@@ -5,14 +5,17 @@ This test file verifies that all multi-output indicators implement
 get_output_names() correctly according to the M1 interface standard.
 """
 
+from ktrdr.indicators.ad_line import ADLineIndicator
 from ktrdr.indicators.adx_indicator import ADXIndicator
 from ktrdr.indicators.aroon_indicator import AroonIndicator
 from ktrdr.indicators.bollinger_bands_indicator import BollingerBandsIndicator
+from ktrdr.indicators.cmf_indicator import CMFIndicator
 from ktrdr.indicators.donchian_channels import DonchianChannelsIndicator
 from ktrdr.indicators.fisher_transform import FisherTransformIndicator
 from ktrdr.indicators.ichimoku_indicator import IchimokuIndicator
 from ktrdr.indicators.keltner_channels import KeltnerChannelsIndicator
 from ktrdr.indicators.macd_indicator import MACDIndicator
+from ktrdr.indicators.rvi_indicator import RVIIndicator
 from ktrdr.indicators.stochastic_indicator import StochasticIndicator
 from ktrdr.indicators.supertrend_indicator import SuperTrendIndicator
 
@@ -193,3 +196,67 @@ class TestFisherTransformInterface:
     def test_is_multi_output(self):
         """FisherTransform should be multi-output."""
         assert FisherTransformIndicator.is_multi_output() is True
+
+
+class TestRVIInterface:
+    """Test RVI get_output_names() interface."""
+
+    def test_get_output_names(self):
+        """RVI should return ['rvi', 'signal']."""
+        assert RVIIndicator.get_output_names() == ["rvi", "signal"]
+
+    def test_get_primary_output(self):
+        """RVI primary output should be 'rvi'."""
+        assert RVIIndicator.get_primary_output() == "rvi"
+
+    def test_is_multi_output(self):
+        """RVI should be multi-output."""
+        assert RVIIndicator.is_multi_output() is True
+
+
+class TestADLineInterface:
+    """Test ADLine get_output_names() interface."""
+
+    def test_get_output_names(self):
+        """ADLine should return correct output names."""
+        assert ADLineIndicator.get_output_names() == [
+            "line",
+            "mf_multiplier",
+            "mf_volume",
+            "roc_10",
+            "momentum_21",
+            "relative_strength",
+        ]
+
+    def test_get_primary_output(self):
+        """ADLine primary output should be 'line'."""
+        assert ADLineIndicator.get_primary_output() == "line"
+
+    def test_is_multi_output(self):
+        """ADLine should be multi-output."""
+        assert ADLineIndicator.is_multi_output() is True
+
+
+class TestCMFInterface:
+    """Test CMF get_output_names() interface."""
+
+    def test_get_output_names(self):
+        """CMF should return correct output names."""
+        assert CMFIndicator.get_output_names() == [
+            "cmf",
+            "mf_multiplier",
+            "mf_volume",
+            "momentum",
+            "signal",
+            "histogram",
+            "above_zero",
+            "below_zero",
+        ]
+
+    def test_get_primary_output(self):
+        """CMF primary output should be 'cmf'."""
+        assert CMFIndicator.get_primary_output() == "cmf"
+
+    def test_is_multi_output(self):
+        """CMF should be multi-output."""
+        assert CMFIndicator.is_multi_output() is True

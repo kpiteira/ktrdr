@@ -46,6 +46,23 @@ class ADLineIndicator(BaseIndicator):
     - More effective when combined with price action analysis
     """
 
+    @classmethod
+    def is_multi_output(cls) -> bool:
+        """ADLine produces multiple output columns."""
+        return True
+
+    @classmethod
+    def get_output_names(cls) -> list[str]:
+        """Return semantic output names for ADLine indicator."""
+        return [
+            "line",
+            "mf_multiplier",
+            "mf_volume",
+            "roc_10",
+            "momentum_21",
+            "relative_strength",
+        ]
+
     def __init__(self, use_sma_smoothing: bool = False, smoothing_period: int = 21):
         """
         Initialize A/D Line indicator.
