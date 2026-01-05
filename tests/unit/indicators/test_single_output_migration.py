@@ -57,7 +57,8 @@ class TestMomentumOscillatorMigration:
         assert result.name is None, "RSI Series should have no name (unnamed)"
         assert len(result) == len(sample_ohlcv_data), "Series length should match input"
         # Verify values are still calculated correctly (spot check)
-        assert not result.iloc[-1] == 0, "RSI should have calculated values"
+        assert not pd.isna(result.iloc[-1]), "RSI should have a calculated (non-NaN) value"
+        assert 0 <= result.iloc[-1] <= 100, "RSI value should be within valid range [0, 100]"
 
     def test_cci_returns_unnamed_series(self, sample_ohlcv_data):
         """CCI indicator returns Series with no name."""
