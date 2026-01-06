@@ -5,14 +5,14 @@ This module provides the IndicatorEngine class, which is responsible for
 applying indicators to OHLCV data based on configuration.
 """
 
-from typing import Optional, Union, cast
+from typing import Any, Optional, Union, cast
 
 import pandas as pd
 
 from ktrdr import get_logger
 from ktrdr.errors import ConfigurationError, ProcessingError
 from ktrdr.indicators.base_indicator import BaseIndicator
-from ktrdr.indicators.indicator_factory import IndicatorFactory
+from ktrdr.indicators.indicator_factory import BUILT_IN_INDICATORS, IndicatorFactory
 from ktrdr.indicators.ma_indicators import ExponentialMovingAverage, SimpleMovingAverage
 from ktrdr.indicators.rsi_indicator import RSIIndicator
 
@@ -33,22 +33,41 @@ class IndicatorEngine:
     """
 
     def __init__(
-        self, indicators: Optional[Union[list[dict], list[BaseIndicator]]] = None
+        self,
+        indicators: Optional[
+            Union[dict[str, Any], list[dict], list[BaseIndicator]]
+        ] = None,
     ):
         """
         Initialize the IndicatorEngine with indicator configuration.
 
         Args:
-            indicators: Optional list of indicator configurations or instances.
-                If configurations (dicts) are provided, they will be used to create
-                indicator instances via IndicatorFactory. If indicator instances are
-                provided, they will be used directly.
+            indicators: Indicator configuration in one of three formats:
+                - V3 format: Dict mapping indicator_id to IndicatorDefinition
+                - V2 format: List of indicator config dicts
+                - Direct instances: List of BaseIndicator instances
         """
         self.indicators: list[BaseIndicator] = []
         self.feature_id_map: dict[str, str] = {}  # Maps column_name -> feature_id
+        self._indicators: dict[str, BaseIndicator] = (
+            {}
+        )  # V3: Maps indicator_id to instance
 
         if indicators:
-            if isinstance(indicators[0], dict):
+            # V3 format: dict[str, IndicatorDefinition]
+            if isinstance(indicators, dict):
+                from ..config.models import IndicatorDefinition
+
+                for indicator_id, definition in indicators.items():
+                    # Handle both IndicatorDefinition and plain dict
+                    if not isinstance(definition, IndicatorDefinition):
+                        definition = IndicatorDefinition(**definition)
+
+                    self._indicators[indicator_id] = self._create_indicator(
+                        indicator_id, definition
+                    )
+            # V2 format: list of dicts or BaseIndicator instances
+            elif isinstance(indicators[0], dict):
                 # Create indicators from config dictionaries
                 # Import here to avoid circular dependency
                 from ..config.models import IndicatorConfig
@@ -79,9 +98,113 @@ class IndicatorEngine:
                     {"type": type(indicators[0]).__name__},
                 )
 
-        logger.info(
-            f"Initialized IndicatorEngine with {len(self.indicators)} indicators"
+        # Log based on which format was used
+        indicator_count = (
+            len(self._indicators) if self._indicators else len(self.indicators)
         )
+        logger.info(f"Initialized IndicatorEngine with {indicator_count} indicators")
+
+    def _create_indicator(self, indicator_id: str, definition: Any) -> BaseIndicator:
+        """
+        Create an indicator instance from a v3 IndicatorDefinition.
+
+        Args:
+            indicator_id: The indicator identifier (e.g., "rsi_14")
+            definition: IndicatorDefinition with type and params
+
+        Returns:
+            Instantiated indicator instance
+
+        Raises:
+            ValueError: If indicator type is unknown
+        """
+        from ..config.models import IndicatorDefinition
+
+        # Ensure definition is IndicatorDefinition
+        if not isinstance(definition, IndicatorDefinition):
+            definition = IndicatorDefinition(**definition)
+
+        # Look up indicator class
+        indicator_class = BUILT_IN_INDICATORS.get(definition.type.lower())
+        if indicator_class is None:
+            raise ValueError(
+                f"Unknown indicator type: '{definition.type}'. "
+                f"Available types: {sorted(BUILT_IN_INDICATORS.keys())}"
+            )
+
+        # Get extra params from model_extra (all fields except 'type')
+        params = definition.model_extra or {}
+
+        # Create and return indicator instance
+        try:
+            return indicator_class(**params)
+        except TypeError as e:
+            raise ValueError(
+                f"Failed to create indicator '{indicator_id}' of type '{definition.type}': {e}"
+            ) from e
+
+    def compute(self, data: pd.DataFrame, indicator_ids: set[str]) -> pd.DataFrame:
+        """
+        Compute specified indicators on data.
+
+        Args:
+            data: OHLCV DataFrame
+            indicator_ids: Which indicators to compute
+
+        Returns:
+            DataFrame with indicator columns:
+            - Single-output: {indicator_id}
+            - Multi-output: {indicator_id}.{output_name}
+
+        NOTE: No timeframe prefix added here - caller handles that.
+        """
+        result = data.copy()
+
+        for indicator_id in indicator_ids:
+            if indicator_id not in self._indicators:
+                raise ValueError(f"Unknown indicator: {indicator_id}")
+
+            indicator = self._indicators[indicator_id]
+            output = indicator.compute(data)
+
+            if indicator.is_multi_output():
+                # Validate outputs match expected
+                expected = set(indicator.get_output_names())
+                actual = set(output.columns)
+                if expected != actual:
+                    raise ValueError(
+                        f"Indicator {indicator_id} output mismatch: "
+                        f"expected {expected}, got {actual}"
+                    )
+
+                # Rename columns with indicator_id prefix
+                for col in output.columns:
+                    result[f"{indicator_id}.{col}"] = output[col]
+            else:
+                # Single output - name with indicator_id
+                result[indicator_id] = output
+
+        return result
+
+    def compute_for_timeframe(
+        self, data: pd.DataFrame, timeframe: str, indicator_ids: set[str]
+    ) -> pd.DataFrame:
+        """
+        Compute indicators and prefix columns with timeframe.
+
+        This is a convenience method for pipelines that need
+        timeframe-prefixed columns.
+
+        Args:
+            data: OHLCV DataFrame
+            timeframe: Timeframe string (e.g., "5m", "1h")
+            indicator_ids: Which indicators to compute
+
+        Returns:
+            DataFrame with columns like "5m_rsi_14", "5m_bbands_20_2.upper"
+        """
+        result = self.compute(data, indicator_ids)
+        return self._prefix_indicator_columns(result, timeframe)
 
     def _build_feature_id_map(
         self, configs: list, indicators: list[BaseIndicator]
