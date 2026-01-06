@@ -161,3 +161,212 @@ class TestFuzzyEngineV3Constructor:
                 ),
             }
             FuzzyEngine(fuzzy_sets)
+
+
+class TestFuzzyEngineV3Fuzzify:
+    """Test FuzzyEngine v3 fuzzify() method."""
+
+    def test_fuzzify_returns_dataframe_with_correct_columns(self):
+        """fuzzify() returns DataFrame with {fuzzy_set_id}_{membership} columns."""
+        import pandas as pd
+
+        fuzzy_sets = {
+            "rsi_momentum": FuzzySetDefinition(
+                indicator="rsi_14",
+                oversold=[0, 20, 35],
+                overbought=[65, 80, 100],
+            ),
+        }
+
+        engine = FuzzyEngine(fuzzy_sets)
+        values = pd.Series([25, 50, 75])
+        result = engine.fuzzify("rsi_momentum", values)
+
+        # Should return DataFrame
+        assert isinstance(result, pd.DataFrame)
+
+        # Should have columns with fuzzy_set_id prefix (not indicator prefix)
+        assert "rsi_momentum_oversold" in result.columns
+        assert "rsi_momentum_overbought" in result.columns
+
+    def test_column_names_follow_fuzzy_set_id_membership_pattern(self):
+        """Column names follow {fuzzy_set_id}_{membership} pattern."""
+        import pandas as pd
+
+        fuzzy_sets = {
+            "rsi_fast": FuzzySetDefinition(
+                indicator="rsi_14",
+                oversold=[0, 25, 40],
+                neutral=[35, 50, 65],
+                overbought=[60, 75, 100],
+            ),
+        }
+
+        engine = FuzzyEngine(fuzzy_sets)
+        values = pd.Series([30, 50, 70])
+        result = engine.fuzzify("rsi_fast", values)
+
+        # All columns should have fuzzy_set_id prefix
+        expected_columns = [
+            "rsi_fast_oversold",
+            "rsi_fast_neutral",
+            "rsi_fast_overbought",
+        ]
+        assert list(result.columns) == expected_columns
+
+    def test_unknown_fuzzy_set_id_raises_valueerror(self):
+        """Unknown fuzzy_set_id raises ValueError."""
+        import pandas as pd
+
+        fuzzy_sets = {
+            "rsi_fast": FuzzySetDefinition(
+                indicator="rsi_14",
+                oversold=[0, 25, 40],
+                overbought=[60, 75, 100],
+            ),
+        }
+
+        engine = FuzzyEngine(fuzzy_sets)
+        values = pd.Series([30, 50, 70])
+
+        with pytest.raises(ValueError, match="Unknown fuzzy set"):
+            engine.fuzzify("nonexistent_fuzzy_set", values)
+
+    def test_membership_values_computed_correctly_triangular(self):
+        """Membership values are computed correctly for triangular functions."""
+        import pandas as pd
+
+        fuzzy_sets = {
+            "rsi_test": FuzzySetDefinition(
+                indicator="rsi_14",
+                oversold=[0, 25, 40],  # Triangular: peak at 25
+                overbought=[60, 75, 100],  # Triangular: peak at 75
+            ),
+        }
+
+        engine = FuzzyEngine(fuzzy_sets)
+        values = pd.Series([0, 25, 40, 60, 75, 100])
+        result = engine.fuzzify("rsi_test", values)
+
+        # At value 0: oversold should be 0.0 (at left edge), overbought should be 0.0
+        assert result.loc[0, "rsi_test_oversold"] == pytest.approx(0.0)
+        assert result.loc[0, "rsi_test_overbought"] == pytest.approx(0.0)
+
+        # At value 25 (peak): oversold should be 1.0
+        assert result.loc[1, "rsi_test_oversold"] == pytest.approx(1.0)
+
+        # At value 75 (peak): overbought should be 1.0
+        assert result.loc[4, "rsi_test_overbought"] == pytest.approx(1.0)
+
+    def test_membership_values_computed_correctly_trapezoidal(self):
+        """Membership values are computed correctly for trapezoidal functions."""
+        import pandas as pd
+
+        fuzzy_sets = {
+            "rsi_trap": FuzzySetDefinition(
+                indicator="rsi_14",
+                oversold={"type": "trapezoidal", "parameters": [0, 10, 25, 35]},
+            ),
+        }
+
+        engine = FuzzyEngine(fuzzy_sets)
+        values = pd.Series([0, 15, 30, 40])
+        result = engine.fuzzify("rsi_trap", values)
+
+        # At value 0: should be 0.0 (at left edge)
+        assert result.loc[0, "rsi_trap_oversold"] == pytest.approx(0.0)
+
+        # At value 15: should be 1.0 (in flat top between b=10 and c=25)
+        assert result.loc[1, "rsi_trap_oversold"] == pytest.approx(1.0)
+
+        # At value 30: should be between 0 and 1 (descending slope c < x < d)
+        # Expected: (d - x) / (d - c) = (35 - 30) / (35 - 25) = 5/10 = 0.5
+        assert result.loc[2, "rsi_trap_oversold"] == pytest.approx(0.5)
+
+    def test_nan_handling_in_indicator_values(self):
+        """NaN values in indicator_values are handled correctly."""
+        import numpy as np
+        import pandas as pd
+
+        fuzzy_sets = {
+            "rsi_test": FuzzySetDefinition(
+                indicator="rsi_14",
+                oversold=[0, 25, 40],
+                overbought=[60, 75, 100],
+            ),
+        }
+
+        engine = FuzzyEngine(fuzzy_sets)
+        values = pd.Series([25, np.nan, 75])
+        result = engine.fuzzify("rsi_test", values)
+
+        # First value should be computed
+        assert not pd.isna(result.loc[0, "rsi_test_oversold"])
+
+        # Second value should be NaN
+        assert pd.isna(result.loc[1, "rsi_test_oversold"])
+
+        # Third value should be computed
+        assert not pd.isna(result.loc[2, "rsi_test_overbought"])
+
+    def test_multiple_fuzzy_sets_same_indicator_different_columns(self):
+        """Multiple fuzzy sets referencing same indicator produce different columns."""
+        import pandas as pd
+
+        fuzzy_sets = {
+            "rsi_fast": FuzzySetDefinition(
+                indicator="rsi_14",
+                oversold=[0, 25, 40],
+                overbought=[60, 75, 100],
+            ),
+            "rsi_slow": FuzzySetDefinition(
+                indicator="rsi_14",  # Same indicator
+                oversold=[0, 15, 25],
+                overbought=[75, 85, 100],
+            ),
+        }
+
+        engine = FuzzyEngine(fuzzy_sets)
+        values = pd.Series([20, 50, 80])
+
+        # Fuzzify with rsi_fast
+        result_fast = engine.fuzzify("rsi_fast", values)
+        assert "rsi_fast_oversold" in result_fast.columns
+        assert "rsi_fast_overbought" in result_fast.columns
+
+        # Fuzzify with rsi_slow
+        result_slow = engine.fuzzify("rsi_slow", values)
+        assert "rsi_slow_oversold" in result_slow.columns
+        assert "rsi_slow_overbought" in result_slow.columns
+
+        # The membership values should be different (different thresholds)
+        assert (
+            result_fast.loc[0, "rsi_fast_oversold"]
+            != result_slow.loc[0, "rsi_slow_oversold"]
+        )
+
+    def test_no_timeframe_prefix_in_column_names(self):
+        """Column names do NOT include timeframe prefix (caller responsibility)."""
+        import pandas as pd
+
+        fuzzy_sets = {
+            "rsi_momentum": FuzzySetDefinition(
+                indicator="rsi_14",
+                oversold=[0, 20, 35],
+                overbought=[65, 80, 100],
+            ),
+        }
+
+        engine = FuzzyEngine(fuzzy_sets)
+        values = pd.Series([30, 50, 70])
+        result = engine.fuzzify("rsi_momentum", values)
+
+        # Columns should NOT have timeframe prefix like "1h_" or "15m_"
+        for col in result.columns:
+            assert not col.startswith("1h_")
+            assert not col.startswith("15m_")
+            assert not col.startswith("4h_")
+
+        # Columns should start with fuzzy_set_id
+        for col in result.columns:
+            assert col.startswith("rsi_momentum_")

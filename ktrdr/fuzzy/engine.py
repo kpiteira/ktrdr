@@ -269,25 +269,61 @@ class FuzzyEngine:
         """
         Fuzzify indicator values using the configured membership functions.
 
-        For a single indicator value, returns a dictionary mapping fuzzy set names to membership degrees.
-        For a series of indicator values, returns a DataFrame with columns for each fuzzy set.
+        Supports both v2 and v3 modes:
+        - v3 mode: First parameter is fuzzy_set_id, second is indicator_values (Series only)
+        - v2 mode: First parameter is indicator name, second is values (scalar/Series/array)
+
+        For v3 mode, returns a DataFrame with {fuzzy_set_id}_{membership} columns.
+        For v2 mode with scalar input, returns a dict mapping fuzzy set names to membership degrees.
+        For v2 mode with Series/array input, returns a DataFrame with columns for each fuzzy set.
 
         Args:
-            indicator: Name of the indicator (e.g., "rsi", "macd")
+            indicator: Name of the indicator (v2) or fuzzy_set_id (v3)
             values: Indicator values to fuzzify (scalar, pandas Series, or numpy array)
             context_data: Optional DataFrame containing price data (open, high, low, close)
-                         required for price_ratio transforms
+                         required for price_ratio transforms (v2 only)
 
         Returns:
-            For scalar input: A dictionary mapping fuzzy set names to membership degrees
-            For Series/array input: A DataFrame with columns for each fuzzy set
+            For v3 mode: DataFrame with {fuzzy_set_id}_{membership} columns
+            For v2 scalar input: A dictionary mapping fuzzy set names to membership degrees
+            For v2 Series/array input: A DataFrame with columns for each fuzzy set
 
         Raises:
-            ProcessingError: If the indicator is not in the configuration or if
+            ValueError: If fuzzy_set_id is unknown (v3 mode)
+            ProcessingError: If the indicator is not in the configuration (v2 mode) or if
                            required context_data is missing
             TypeError: If the input type is not supported
         """
-        logger.debug(f"Fuzzifying values for indicator: {indicator}")
+        # V3 mode detection: check if _fuzzy_sets exists and is populated
+        if hasattr(self, "_fuzzy_sets") and self._fuzzy_sets:
+            # V3 mode: First parameter is fuzzy_set_id, second is indicator_values
+            fuzzy_set_id = indicator  # In v3, first param is fuzzy_set_id
+            indicator_values = values  # In v3, second param is indicator_values
+
+            logger.debug(f"V3: Fuzzifying values for fuzzy_set_id: {fuzzy_set_id}")
+
+            # Validate fuzzy_set_id exists
+            if fuzzy_set_id not in self._fuzzy_sets:
+                raise ValueError(f"Unknown fuzzy set: {fuzzy_set_id}")
+
+            # Get the fuzzy set (dict of membership functions)
+            fuzzy_set = self._fuzzy_sets[fuzzy_set_id]
+
+            # Build result dict with {fuzzy_set_id}_{membership} column names
+            result = {}
+            for membership_name, mf in fuzzy_set.items():
+                col_name = f"{fuzzy_set_id}_{membership_name}"
+                result[col_name] = mf.evaluate(indicator_values)
+
+            # Return DataFrame with original index
+            if isinstance(indicator_values, pd.Series):
+                return pd.DataFrame(result, index=indicator_values.index)
+            else:
+                # If values is not a Series, create DataFrame without explicit index
+                return pd.DataFrame(result)
+
+        # V2 mode: existing logic
+        logger.debug(f"V2: Fuzzifying values for indicator: {indicator}")
 
         # Check if the indicator exists in the configuration
         if indicator not in self._membership_functions:
