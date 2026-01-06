@@ -158,11 +158,11 @@ Created integration test file: `tests/integration/training/test_pipeline_new_for
 
 **Tests cover:**
 1. ✅ Indicators produce semantic column names
-2. ⏳ Fuzzy memberships use feature_id format (needs API fix)
-3. ⏳ FuzzyNeuralProcessor uses correct feature names (needs API fix)
-4. ⏳ ModelStorage saves feature names in new format (needs API fix)
+2. ✅ Fuzzy memberships use feature_id format
+3. ✅ FuzzyNeuralProcessor uses correct feature names
+4. ✅ ModelStorage saves feature names in new format
 
-**Test status:** Indicators test passes, fuzzy tests need FuzzyEngine API correction (not a training pipeline issue)
+**Test status:** All tests passing. The training pipeline works correctly with the new format from M3b and updated consumers from M4.
 
 ### Implementation Pattern
 

@@ -20,8 +20,8 @@ from ktrdr.indicators import IndicatorEngine, IndicatorFactory
 from ktrdr.training.model_storage import ModelStorage
 
 
-@pytest.fixture
-def test_data():
+@pytest.fixture(name="test_data")
+def sample_ohlcv_data():
     """Create test OHLCV data for training."""
     import numpy as np
 
@@ -171,8 +171,17 @@ def test_fuzzy_uses_new_column_format(test_data, strategy_config):
     fuzzy_config = FuzzyConfigLoader.load_from_dict(strategy_config["fuzzy_sets"])
     fuzzy_engine = FuzzyEngine(fuzzy_config)
 
-    # Generate fuzzy memberships
-    fuzzy_df = fuzzy_engine.fuzzify(indicators_df)
+    # Generate fuzzy memberships for each indicator (skip price columns)
+    fuzzy_results = []
+    for col in indicators_df.columns:
+        # Only fuzzify columns that have fuzzy configurations
+        # Skip price columns (open, high, low, close, volume)
+        if fuzzy_engine._find_fuzzy_key(col) is not None:
+            fuzzy_result = fuzzy_engine.fuzzify(col, indicators_df[col])
+            fuzzy_results.append(fuzzy_result)
+
+    # Combine all fuzzy results
+    fuzzy_df = pd.concat(fuzzy_results, axis=1)
 
     # Verify fuzzy column names use feature_id format
     assert "rsi_14_oversold" in fuzzy_df.columns, "Fuzzy should have 'rsi_14_oversold'"
@@ -203,7 +212,18 @@ def test_fuzzy_neural_processor_uses_new_feature_names(test_data, strategy_confi
     # Create fuzzy memberships
     fuzzy_config = FuzzyConfigLoader.load_from_dict(strategy_config["fuzzy_sets"])
     fuzzy_engine = FuzzyEngine(fuzzy_config)
-    fuzzy_df = fuzzy_engine.fuzzify(indicators_df)
+
+    # Generate fuzzy memberships for each indicator (skip price columns)
+    fuzzy_results = []
+    for col in indicators_df.columns:
+        # Only fuzzify columns that have fuzzy configurations
+        # Skip price columns (open, high, low, close, volume)
+        if fuzzy_engine._find_fuzzy_key(col) is not None:
+            fuzzy_result = fuzzy_engine.fuzzify(col, indicators_df[col])
+            fuzzy_results.append(fuzzy_result)
+
+    # Combine all fuzzy results
+    fuzzy_df = pd.concat(fuzzy_results, axis=1)
 
     # Create neural features using FuzzyNeuralProcessor
     processor = FuzzyNeuralProcessor({"lookback_periods": 0})
@@ -229,9 +249,10 @@ def test_fuzzy_neural_processor_uses_new_feature_names(test_data, strategy_confi
 
     # Verify no old format names (uppercase, mixed case)
     for name in feature_names:
-        # Feature names should be lowercase with underscores (except for dots in multi-output refs)
+        # Feature names should be lowercase with underscores/dots - check alphabetic chars are lowercase
+        normalized_name = name.replace(".", "_").replace("_", "")
         assert (
-            name.islower() or "." in name or "_" in name
+            normalized_name.islower()
         ), f"Feature name '{name}' should be lowercase with underscores or dots"
         assert (
             "RSI" not in name
@@ -256,7 +277,18 @@ def test_model_storage_saves_new_format_feature_names(
 
     fuzzy_config = FuzzyConfigLoader.load_from_dict(strategy_config["fuzzy_sets"])
     fuzzy_engine = FuzzyEngine(fuzzy_config)
-    fuzzy_df = fuzzy_engine.fuzzify(indicators_df)
+
+    # Generate fuzzy memberships for each indicator (skip price columns)
+    fuzzy_results = []
+    for col in indicators_df.columns:
+        # Only fuzzify columns that have fuzzy configurations
+        # Skip price columns (open, high, low, close, volume)
+        if fuzzy_engine._find_fuzzy_key(col) is not None:
+            fuzzy_result = fuzzy_engine.fuzzify(col, indicators_df[col])
+            fuzzy_results.append(fuzzy_result)
+
+    # Combine all fuzzy results
+    fuzzy_df = pd.concat(fuzzy_results, axis=1)
 
     processor = FuzzyNeuralProcessor({"lookback_periods": 0})
     features, feature_names = processor.prepare_input(fuzzy_df)
