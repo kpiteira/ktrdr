@@ -92,10 +92,54 @@
 - `ktrdr/indicators/indicator_engine.py`: Lines 146-189 (compute() method)
 - `tests/unit/indicators/test_indicator_engine_v3.py`: Lines 97-223 (5 new tests, all passing)
 
-### Next Task Notes
+---
 
-**For Task 2.3 (compute_for_timeframe() helper):**
-- Call `compute()` first to get unprefixed columns
-- Add timeframe prefix to indicator columns only (not OHLCV)
-- Pattern: `{timeframe}_{column}` for non-OHLCV columns
-- OHLCV columns: `{'open', 'high', 'low', 'close', 'volume'}` (case-insensitive)
+## Task 2.3 Complete: V3 compute_for_timeframe() Helper
+
+### Implementation Notes
+
+**compute_for_timeframe() method signature**
+- Accepts: `data: pd.DataFrame, timeframe: str, indicator_ids: set[str]`
+- Returns: DataFrame with timeframe-prefixed indicator columns
+- Convenience wrapper for pipelines needing prefixed columns
+
+**Implementation approach**
+- Reuses `compute()` to get unprefixed indicator columns
+- Reuses `_prefix_indicator_columns()` to add timeframe prefix
+- Clean 3-line implementation (calls two existing methods)
+- DRY: No logic duplication
+
+**Timeframe prefix logic**
+- OHLCV columns remain unprefixed: `{'open', 'high', 'low', 'close', 'volume'}`
+- Case-insensitive check: `col.lower() not in ohlcv_columns`
+- Indicator columns prefixed: `{timeframe}_{column}`
+- Works with dotted multi-output columns: `5m_bbands_20_2.upper`
+
+### Gotchas
+
+**Case-insensitive OHLCV check**
+- Uses `col.lower()` to handle variations (Open, OPEN, open)
+- Set membership check is O(1) - efficient
+- Existing `_prefix_indicator_columns()` already implements this
+
+**Multi-output columns handled correctly**
+- Dotted columns like `bbands_20_2.upper` get full prefix
+- Result: `5m_bbands_20_2.upper` (not `5m_bbands_20_2`.`upper`)
+- Prefix applied to complete column name string
+
+### Files Modified
+
+- `ktrdr/indicators/indicator_engine.py`: Lines 189-207 (compute_for_timeframe() method)
+- `tests/unit/indicators/test_indicator_engine_v3.py`: Lines 224-355 (5 new tests, all passing)
+
+### Milestone Status
+
+**M2 Tasks Complete:**
+- ✅ Task 2.1: V3 Constructor
+- ✅ Task 2.2: V3 compute() Method
+- ✅ Task 2.3: V3 compute_for_timeframe() Helper
+
+**Next Steps:**
+- Run M2 E2E test scenario (from M2_indicator_engine.md lines 290-370)
+- If E2E passes, M2 is complete
+- Then proceed to M3 (FuzzyEngine V3)
