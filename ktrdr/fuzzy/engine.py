@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from ktrdr import get_logger
+from ktrdr.config.models import FuzzySetDefinition
 from ktrdr.errors import ConfigurationError, ProcessingError
 from ktrdr.fuzzy.config import FuzzyConfig
 from ktrdr.fuzzy.membership import (
@@ -46,33 +47,53 @@ class FuzzyEngine:
         ```
     """
 
-    def __init__(self, config: FuzzyConfig):
+    def __init__(self, config: Union[FuzzyConfig, dict[str, FuzzySetDefinition]]):
         """
         Initialize the FuzzyEngine with a configuration.
 
+        Supports both v2 and v3 formats:
+        - v2: FuzzyConfig object (legacy)
+        - v3: dict[str, FuzzySetDefinition] mapping fuzzy_set_id to definition
+
         Args:
-            config: FuzzyConfig object containing membership function configurations
-                   for different indicators
+            config: Either FuzzyConfig (v2) or dict mapping fuzzy_set_id to
+                   FuzzySetDefinition (v3)
 
         Raises:
             ConfigurationError: If the configuration is invalid
         """
         logger.debug("Initializing FuzzyEngine")
-        self._config = config
-        self._validate_config()
-        self._membership_functions: dict[str, dict[str, MembershipFunction]] = {}
-        self._initialize_membership_functions()
-        logger.info(
-            f"FuzzyEngine initialized with {len(self._membership_functions)} indicators"
-        )
+
+        # Detect format and initialize appropriately
+        if isinstance(config, dict):
+            # V3 format: dict[str, FuzzySetDefinition]
+            logger.debug("Initializing FuzzyEngine with v3 format")
+            self._config = None
+            self._fuzzy_sets: dict[str, dict[str, MembershipFunction]] = {}
+            self._indicator_map: dict[str, str] = {}  # fuzzy_set_id -> indicator_id
+            self._initialize_v3(config)
+            logger.info(
+                f"FuzzyEngine initialized with {len(self._fuzzy_sets)} fuzzy sets"
+            )
+        else:
+            # V2 format: FuzzyConfig
+            logger.debug("Initializing FuzzyEngine with v2 format")
+            self._config = config
+            self._membership_functions: dict[str, dict[str, MembershipFunction]] = {}
+            self._validate_config()
+            self._initialize_membership_functions()
+            logger.info(
+                f"FuzzyEngine initialized with {len(self._membership_functions)} indicators"
+            )
 
     def _validate_config(self) -> None:
         """
-        Validate the fuzzy configuration.
+        Validate the fuzzy configuration (v2 only).
 
         Raises:
             ConfigurationError: If the configuration is invalid
         """
+        assert self._config is not None, "v2 mode: _config must be set"
         if not self._config or not self._config.root:
             logger.error("Empty fuzzy configuration")
             raise ConfigurationError(
@@ -97,11 +118,12 @@ class FuzzyEngine:
 
     def _initialize_membership_functions(self) -> None:
         """
-        Initialize membership function instances from the configuration.
+        Initialize membership function instances from the configuration (v2 only).
 
         Raises:
             ConfigurationError: If any membership function configuration is invalid
         """
+        assert self._config is not None, "v2 mode: _config must be set"
         for indicator, fuzzy_sets in self._config.root.items():
             logger.debug(
                 f"Initializing membership functions for indicator: {indicator}"
@@ -129,6 +151,114 @@ class FuzzyEngine:
                             "original_error": str(e),
                         },
                     ) from e
+
+    def _initialize_v3(self, fuzzy_sets: dict[str, FuzzySetDefinition]) -> None:
+        """
+        Initialize FuzzyEngine from v3 format (dict[str, FuzzySetDefinition]).
+
+        Args:
+            fuzzy_sets: Dict mapping fuzzy_set_id to FuzzySetDefinition
+
+        Raises:
+            ConfigurationError: If the configuration is invalid
+        """
+        if not fuzzy_sets:
+            logger.error("Empty fuzzy sets dict")
+            raise ConfigurationError(
+                message="Fuzzy sets configuration cannot be empty",
+                error_code="ENGINE-EmptyConfig",
+                details={},
+            )
+
+        for fuzzy_set_id, definition in fuzzy_sets.items():
+            logger.debug(f"Initializing fuzzy set: {fuzzy_set_id}")
+
+            # Build membership functions for this fuzzy set
+            self._fuzzy_sets[fuzzy_set_id] = self._build_membership_functions(
+                definition
+            )
+
+            # Track which indicator this fuzzy set references
+            self._indicator_map[fuzzy_set_id] = definition.indicator
+
+        logger.debug(f"Initialized {len(self._fuzzy_sets)} fuzzy sets from v3 config")
+
+    def _build_membership_functions(
+        self, definition: FuzzySetDefinition
+    ) -> dict[str, MembershipFunction]:
+        """
+        Build MembershipFunction objects from FuzzySetDefinition.
+
+        Args:
+            definition: FuzzySetDefinition containing membership function specs
+
+        Returns:
+            Dict mapping membership name to MembershipFunction instance
+
+        Raises:
+            ConfigurationError: If membership function creation fails
+        """
+        result = {}
+
+        for name in definition.get_membership_names():
+            # Get membership spec from model_extra
+            membership_def = getattr(definition, name)
+
+            # membership_def is already expanded to {type, parameters} by Pydantic
+            try:
+                result[name] = self._create_membership_function(membership_def)
+            except Exception as e:
+                logger.error(
+                    f"Failed to create membership function '{name}' for fuzzy set: {e}"
+                )
+                raise ConfigurationError(
+                    message=f"Failed to create membership function '{name}'",
+                    error_code="ENGINE-MFCreationError",
+                    details={
+                        "membership_name": name,
+                        "membership_def": membership_def,
+                        "original_error": str(e),
+                    },
+                ) from e
+
+        return result
+
+    def _create_membership_function(self, membership_def: dict) -> MembershipFunction:
+        """
+        Create a MembershipFunction from a dict specification.
+
+        Args:
+            membership_def: Dict with 'type' and 'parameters' keys
+
+        Returns:
+            MembershipFunction instance
+        """
+        return MembershipFunctionFactory.create(
+            membership_def["type"], membership_def["parameters"]
+        )
+
+    def get_indicator_for_fuzzy_set(self, fuzzy_set_id: str) -> str:
+        """
+        Get the indicator_id that a fuzzy_set references (v3 only).
+
+        Args:
+            fuzzy_set_id: The fuzzy set to query
+
+        Returns:
+            The indicator_id that this fuzzy set interprets
+
+        Raises:
+            ValueError: If fuzzy_set_id is unknown or engine is in v2 mode
+        """
+        if not self._indicator_map:
+            raise ValueError(
+                "get_indicator_for_fuzzy_set() is only available in v3 mode"
+            )
+
+        if fuzzy_set_id not in self._indicator_map:
+            raise ValueError(f"Unknown fuzzy set: {fuzzy_set_id}")
+
+        return self._indicator_map[fuzzy_set_id]
 
     def fuzzify(
         self,
@@ -244,7 +374,7 @@ class FuzzyEngine:
         context_data: Optional[pd.DataFrame] = None,
     ) -> Union[float, pd.Series, np.ndarray]:
         """
-        Apply input transform to indicator values before fuzzification.
+        Apply input transform to indicator values before fuzzification (v2 only).
 
         Args:
             indicator: Name of the indicator
@@ -257,6 +387,9 @@ class FuzzyEngine:
         Raises:
             ProcessingError: If required context_data is missing or invalid
         """
+        # v2 mode only - _config must be set
+        assert self._config is not None, "v2 mode: _config must be set"
+
         # Get the fuzzy set config for this indicator
         fuzzy_set_config = self._config.root[indicator]
 
@@ -270,6 +403,10 @@ class FuzzyEngine:
 
         # Handle price_ratio transform
         if input_transform.type == "price_ratio":
+            # Type narrowing for mypy - at this point we know it's PriceRatioTransformConfig
+            assert hasattr(
+                input_transform, "reference"
+            ), "price_ratio transform must have reference attribute"
             logger.debug(
                 f"Applying price_ratio transform for {indicator} with reference '{input_transform.reference}'"
             )
