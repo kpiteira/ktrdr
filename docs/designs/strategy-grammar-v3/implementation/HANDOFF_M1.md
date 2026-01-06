@@ -74,11 +74,51 @@
 - `ktrdr/config/feature_resolver.py`: New file (150 lines)
 - `tests/unit/config/test_feature_resolver.py`: 13 tests (all passing)
 
+---
+
+## Task 1.3 Complete: V3 Strategy Validator
+
+### Implementation Notes
+
+**Validation approach**
+- Created standalone `validate_v3_strategy()` function (not a method)
+- Returns list of warnings; raises StrategyValidationError for fatal errors
+- Validates all 5 rules from ARCHITECTURE.md lines 279-287
+
+**Dot notation validation**
+- Uses `BUILT_IN_INDICATORS` dict from `ktrdr.indicators.indicator_factory`
+- Pattern: `BUILT_IN_INDICATORS.get(indicator_type.lower())`
+- Checks `indicator_class.is_multi_output()` before allowing dot notation
+- Validates output name against `indicator_class.get_output_names()`
+- Handles unknown indicator types gracefully (log warning, skip validation)
+
+**Error handling patterns**
+- Collect all errors before raising (don't fail on first error)
+- Include location context in all error messages (e.g., `fuzzy_sets.bad_ref.indicator`)
+- Separate errors (fatal) from warnings (informational)
+- Warnings use `StrategyValidationWarning` dataclass with message + location
+
+### Gotchas
+
+**Type hints for circular imports**
+- Use `Any` type hint, not forward reference string
+- Import `StrategyConfigurationV3` inside function to avoid circular imports
+- Pattern: `def validate_v3_strategy(config: Any) -> list[StrategyValidationWarning]`
+
+**BUILT_IN_INDICATORS access**
+- Dictionary keys are lowercase: `BUILT_IN_INDICATORS.get(indicator_type.lower())`
+- Returns `None` if indicator type unknown (handle gracefully)
+- Each value is a class (e.g., `BollingerBandsIndicator`)
+
+### Files Modified
+
+- `ktrdr/config/strategy_validator.py`: Lines 1019-1182 (v3 validation code)
+- `tests/unit/config/test_strategy_validator_v3.py`: 246 lines (11 tests, all passing)
+
 ### Next Task Notes
 
-**For Task 1.3 (Strategy Validator):**
-- Import `FeatureResolver` from `ktrdr.config.feature_resolver`
-- Use `resolver.resolve(config)` to get all features for validation
-- Dot notation validation can use `resolver._parse_indicator_reference()` or parse manually
-- Check that `indicator_id` exists in `config.indicators` dict
-- For dot notation, verify `indicator_output` is in indicator's `get_output_names()`
+**For Task 1.4 (Strategy Loader):**
+- Import `validate_v3_strategy` from `ktrdr.config.strategy_validator`
+- Call it in the loader after creating `StrategyConfigurationV3`
+- Warnings should be logged, not raised
+- Errors (StrategyValidationError) should propagate to caller
