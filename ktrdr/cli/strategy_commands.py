@@ -55,14 +55,101 @@ def validate_strategy(
     Validate a trading strategy configuration.
 
     Checks if a strategy YAML file has all required sections and valid configuration
-    for neuro-fuzzy training.
-    """
-    validator = StrategyValidator()
+    for neuro-fuzzy training. Supports both v2 and v3 strategy formats.
 
+    For v3 strategies, displays the resolved NN input features.
+    """
     strategy_path = Path(strategy)
     if not strategy_path.exists():
         console.print(f"[red]❌ Error: Strategy file not found: {strategy_path}[/red]")
         raise typer.Exit(1)
+
+    # Try to detect if v3 format
+    try:
+        import yaml
+
+        with open(strategy_path) as f:
+            raw_config = yaml.safe_load(f)
+
+        is_v3 = (
+            isinstance(raw_config, dict)
+            and isinstance(raw_config.get("indicators"), dict)
+            and "nn_inputs" in raw_config
+        )
+    except Exception as e:
+        console.print(f"[red]❌ Error reading strategy file: {e}[/red]")
+        raise typer.Exit(1) from e
+
+    if is_v3:
+        # Use v3 validation path
+        _validate_v3_strategy(strategy_path, quiet)
+    else:
+        # Use v2 validation path
+        _validate_v2_strategy(strategy_path, quiet)
+
+
+def _validate_v3_strategy(strategy_path: Path, quiet: bool) -> None:
+    """
+    Validate a v3 strategy and display resolved features.
+
+    Args:
+        strategy_path: Path to v3 strategy file
+        quiet: Whether to minimize output
+    """
+    from ktrdr.config.feature_resolver import FeatureResolver
+    from ktrdr.config.strategy_loader import StrategyConfigurationLoader
+    from ktrdr.config.strategy_validator import StrategyValidationError
+
+    console.print(f"🔍 Validating v3 strategy: [blue]{strategy_path}[/blue]")
+    console.print("=" * 60)
+
+    try:
+        # Load and validate
+        loader = StrategyConfigurationLoader()
+        config = loader.load_v3_strategy(strategy_path)
+
+        # Resolve features
+        resolver = FeatureResolver()
+        features = resolver.resolve(config)
+
+        # Display success
+        console.print(
+            f"[green]✅ Strategy '{config.name}' is valid (v3 format)[/green]"
+        )
+        console.print(f"\n[cyan]📊 Resolved features ({len(features)}):[/cyan]")
+        for feature in features:
+            console.print(f"  {feature.feature_id}")
+
+        console.print("\n" + "=" * 60)
+        console.print("[bold green]✅ Validation successful[/bold green]")
+
+    except FileNotFoundError as e:
+        console.print(f"[red]❌ Error: {e}[/red]")
+        raise typer.Exit(1) from e
+    except ValueError as e:
+        # Format detection or YAML errors
+        error_msg = str(e)
+        console.print(f"[red]❌ Error: {error_msg}[/red]")
+        raise typer.Exit(1) from e
+    except StrategyValidationError as e:
+        console.print("[red]❌ Strategy validation failed:[/red]")
+        console.print(f"  {e}")
+        raise typer.Exit(1) from e
+    except Exception as e:
+        console.print(f"[red]❌ Unexpected error: {e}[/red]")
+        logger.exception("Unexpected error during v3 strategy validation")
+        raise typer.Exit(1) from e
+
+
+def _validate_v2_strategy(strategy_path: Path, quiet: bool) -> None:
+    """
+    Validate a v2 strategy using the legacy validator.
+
+    Args:
+        strategy_path: Path to v2 strategy file
+        quiet: Whether to minimize output
+    """
+    validator = StrategyValidator()
 
     console.print(f"🔍 Validating strategy: [blue]{strategy_path}[/blue]")
     console.print("=" * 60)
