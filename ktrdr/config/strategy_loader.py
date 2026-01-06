@@ -11,6 +11,7 @@ from ktrdr.config.models import (
     DeploymentConfiguration,
     LegacyStrategyConfiguration,
     StrategyConfigurationV2,
+    StrategyConfigurationV3,
     StrategyScope,
     SymbolConfiguration,
     SymbolMode,
@@ -26,7 +27,80 @@ logger = get_logger(__name__)
 
 
 class StrategyConfigurationLoader:
-    """Loads and validates strategy configurations, supporting both v1 and v2 formats."""
+    """Loads and validates strategy configurations, supporting v1, v2, and v3 formats."""
+
+    def load_v3_strategy(
+        self, config_path: Union[str, Path]
+    ) -> StrategyConfigurationV3:
+        """
+        Load and validate v3 strategy configuration.
+
+        Args:
+            config_path: Path to strategy configuration file
+
+        Returns:
+            Validated v3 strategy configuration
+
+        Raises:
+            FileNotFoundError: If config file doesn't exist
+            ValueError: If config is not v3 format or YAML is invalid
+            StrategyValidationError: If strategy validation fails
+        """
+        config_path = Path(config_path)
+        if not config_path.exists():
+            raise FileNotFoundError(f"Strategy configuration not found: {config_path}")
+
+        # Load YAML content
+        try:
+            with open(config_path) as f:
+                raw_config = yaml.safe_load(f)
+        except yaml.YAMLError as e:
+            raise ValueError(f"Invalid YAML in {config_path}: {e}") from e
+
+        if not isinstance(raw_config, dict):
+            raise ValueError(
+                f"Strategy configuration must be a dictionary: {config_path}"
+            )
+
+        # Check if v3 format
+        if not self._is_v3_format(raw_config):
+            raise ValueError(
+                f"Strategy '{config_path.name}' is not v3 format. "
+                "Run 'ktrdr strategy migrate' to upgrade."
+            )
+
+        # Parse v3 config
+        try:
+            config = StrategyConfigurationV3(**raw_config)
+        except ValidationError as e:
+            raise ValueError(
+                f"V3 strategy validation failed for {config_path}: {e}"
+            ) from e
+
+        # Run validation (import here to avoid circular imports)
+        from ktrdr.config.strategy_validator import validate_v3_strategy
+
+        warnings = validate_v3_strategy(config)
+        for w in warnings:
+            logger.warning(f"Strategy validation: {w.message} at {w.location}")
+
+        return config
+
+    def _is_v3_format(self, config: dict[str, Any]) -> bool:
+        """
+        Check for v3 format markers.
+
+        V3 format is identified by:
+        - indicators is a dict (not a list)
+        - nn_inputs field is present
+
+        Args:
+            config: Raw configuration dictionary
+
+        Returns:
+            True if config appears to be v3 format
+        """
+        return isinstance(config.get("indicators"), dict) and "nn_inputs" in config
 
     def load_strategy_config(
         self, config_path: Union[str, Path]
