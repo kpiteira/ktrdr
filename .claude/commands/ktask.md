@@ -48,8 +48,13 @@ architecture: docs/designs/feature-name/ARCHITECTURE.md
 2. Research    → Read docs, check handoffs, summarize approach
 3. Implement   → TDD cycle (coding tasks only)
 4. Verify      → Integration test, acceptance criteria, quality gates
-5. Complete    → Memory reflection, handoff update, task summary
+5. E2E Test    → MILESTONE COMPLETE: Run E2E scenario (MANDATORY)
+6. Complete    → HANDOFF UPDATE (MANDATORY), task summary
 ```
+
+**Two steps are MANDATORY and must not be skipped:**
+- **E2E Test (Step 5)**: When completing ANY task that is the LAST task in a milestone
+- **Handoff Update (Step 6)**: After EVERY task (not just milestones)
 
 ---
 
@@ -59,9 +64,12 @@ architecture: docs/designs/feature-name/ARCHITECTURE.md
 
 Extract the task from the implementation plan. Display:
 - Task title and description
-- Acceptance criteria  
+- Acceptance criteria
 - Files to create/modify
-- E2E test scenario (if this completes a milestone)
+- **Is this the last task in the milestone?** (If YES, you MUST run E2E tests)
+- E2E test scenario location (if this completes a milestone)
+
+**IMPORTANT**: If this is the last task in a milestone, IMMEDIATELY note that you will need to run E2E tests after implementation. Add a reminder to yourself in the task notes.
 
 If validation output is provided, review key decisions to ensure consistency with resolved gaps.
 
@@ -173,9 +181,28 @@ After unit tests pass (for changes affecting system behavior):
 
 If integration test fails, investigate and fix before proceeding. The issue is likely architectural, not just code.
 
-### Milestone E2E Test
+### Milestone E2E Test (MANDATORY FOR LAST TASK IN MILESTONE)
 
-If this task completes a milestone, run the milestone's E2E test scenario from the implementation plan. This is more comprehensive than the smoke test — it validates the full user journey for that milestone.
+**REQUIRED**: When you complete the LAST task in a milestone, you MUST run the milestone's E2E test scenario.
+
+**How to identify:**
+- Check the implementation plan - is this the final task listed for the milestone?
+- Does the task description say "completes milestone M1/M2/etc"?
+- Is there an E2E test scenario in the milestone documentation?
+
+**If YES to any above:**
+
+1. **Locate E2E test**: Find the test scenario in the milestone plan (usually at end of file)
+2. **Run the test**: Execute the full scenario step-by-step
+3. **Report results**: Document pass/fail for each test step
+4. **Fix failures**: Do NOT proceed if E2E tests fail - investigate and fix
+
+**This is NOT optional.** E2E tests validate the full user journey and catch integration issues that unit tests miss.
+
+**Example locations for E2E tests:**
+- End of milestone implementation file (e.g., `M1_config_loading.md`)
+- Dedicated `E2E_TESTS.md` file in the design directory
+- `## E2E Test Scenario` section in the plan
 
 ### Acceptance Criteria Validation
 
@@ -202,27 +229,42 @@ All must pass before completion:
 - [ ] Code is documented (docstrings explaining "why")
 - [ ] All work is committed with clear messages
 - [ ] No security vulnerabilities introduced
+- [ ] **E2E test passed** (if this is the last task in a milestone)
+- [ ] **Handoff document updated** (EVERY task - see Completion section)
 
 ---
 
 ## 5. Completion
 
-### Handoff Document
+### Handoff Document (MANDATORY - DO THIS FIRST)
 
-Update or create `HANDOFF_<phase/feature>.md` in the implementation plan directory.
+**REQUIRED AFTER EVERY TASK**: You MUST update the handoff document before writing the task summary.
 
-**Include** (only if it saves time for next implementer):
-- Gotchas: Problem + symptom + solution
-- Workarounds: Non-obvious solutions to constraints
-- Emergent patterns: Architectural decisions made during implementation
+**Action steps:**
 
-**Exclude** (wastes tokens):
+1. **Locate handoff file**: `HANDOFF_<phase/feature>.md` in the implementation plan directory
+   - Example: `docs/designs/strategy-grammar-v3/implementation/HANDOFF_M1.md`
+   - If it doesn't exist, CREATE it
+
+2. **Add section for this task**: Add a new section titled `## Task X.Y Complete: [Task Name]`
+
+3. **Document learnings** (only if it saves time for next implementer):
+   - **Gotchas**: Problem + symptom + solution (e.g., "TimeframeConfiguration is not subscriptable - use .timeframes")
+   - **Workarounds**: Non-obvious solutions to constraints
+   - **Emergent patterns**: Architectural decisions made during implementation
+   - **Implementation notes**: Key patterns or approaches that worked well
+
+4. **Add "Next Task Notes"**: Brief guidance for the next task (what files to import, what to watch out for)
+
+**EXCLUDE** (wastes tokens):
 - Task completion status (already in plan)
 - Process steps (already in this command)
 - Test counts or coverage numbers (observable)
 - File listings (observable from codebase)
 
-Target size: Under 100 lines.
+**Target size**: Under 100 lines total for the entire handoff file.
+
+**Why this matters**: You consistently find handoff documents useful when starting tasks. Creating them ensures the next task (even if it's you in a new session) benefits from your learnings.
 
 ### Task Summary
 
@@ -273,8 +315,12 @@ When given multiple tasks (a milestone or phase):
 
 1. Implement in the order specified in the plan
 2. Each task follows the full workflow above
-3. Commit after each task (not just at the end)
-4. Run the milestone's E2E test after all tasks complete
+3. **Update handoff after EACH task** (not just at the end)
+4. Commit after each task (not just at the end)
+5. **MANDATORY: Run the milestone's E2E test after completing the LAST task**
+   - This is NOT optional
+   - Do NOT skip this step
+   - E2E tests are in the milestone plan documentation
 
 ---
 
@@ -289,5 +335,7 @@ When given multiple tasks (a milestone or phase):
 | REFACTOR | Clean up, quality checks | "✅ Tests and quality passing" |
 | Integration | Start system, execute flow, check logs | "✅ Integration passed" |
 | Acceptance | Validate each criterion | Checklist with status |
-| Quality | Tests, quality, commits | All gates passed |
-| Complete | Reflection, handoff, summary | Task summary with changes/decisions |
+| Quality | Tests, quality, commits, **E2E (if milestone)** | All gates passed |
+| **E2E Test** | **Run milestone E2E scenario (last task only)** | **"✅ E2E test passed"** |
+| **Handoff** | **Update HANDOFF_*.md (EVERY task)** | **Section added to handoff** |
+| Summary | Write task completion summary | Task summary with changes/decisions |
