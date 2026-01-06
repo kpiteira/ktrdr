@@ -115,10 +115,48 @@
 - `ktrdr/config/strategy_validator.py`: Lines 1019-1182 (v3 validation code)
 - `tests/unit/config/test_strategy_validator_v3.py`: 246 lines (11 tests, all passing)
 
+---
+
+## Task 1.4 Complete: V3 Strategy Loader
+
+### Implementation Notes
+
+**Circular import avoidance**
+- Import `validate_v3_strategy` INSIDE the `load_v3_strategy()` method, not at module level
+- Pattern: `from ktrdr.config.strategy_validator import validate_v3_strategy` inside function body
+- Prevents circular import since `strategy_validator.py` imports from `strategy_loader.py`
+
+**V3 detection logic**
+- Simple and robust: `isinstance(config.get("indicators"), dict) and "nn_inputs" in config`
+- V2 list indicators fail `isinstance()` check
+- V2 dict indicators without `nn_inputs` fail second check
+- Matches ARCHITECTURE.md spec exactly
+
+**Error message clarity**
+- V2 rejection: `"Strategy '{config_path.name}' is not v3 format. Run 'ktrdr strategy migrate' to upgrade."`
+- Actionable guidance for users
+- Migration command included in message
+
+### Gotchas
+
+**Validation warning logging**
+- Iterate over warnings list and log each individually
+- Pattern: `for w in warnings: logger.warning(f"Strategy validation: {w.message} at {w.location}")`
+- Do NOT raise warnings; only `StrategyValidationError` should propagate
+
+**Import location for testing**
+- Mock patch path is `ktrdr.config.strategy_validator.validate_v3_strategy`
+- NOT `ktrdr.config.strategy_loader.validate_v3_strategy` (since imported inside function)
+
+### Files Modified
+
+- `ktrdr/config/strategy_loader.py`: Lines 32-103 (v3 loading methods)
+- `tests/unit/config/test_strategy_loader_v3.py`: 276 lines (8 tests, all passing)
+
 ### Next Task Notes
 
-**For Task 1.4 (Strategy Loader):**
-- Import `validate_v3_strategy` from `ktrdr.config.strategy_validator`
-- Call it in the loader after creating `StrategyConfigurationV3`
-- Warnings should be logged, not raised
-- Errors (StrategyValidationError) should propagate to caller
+**For Task 1.5 (CLI validate command):**
+- Use `loader.load_v3_strategy(path)` to load and validate
+- Catch both `ValueError` (format/YAML errors) and `StrategyValidationError` (validation failures)
+- Display features via `FeatureResolver().resolve(config)`
+- Exit code 0 for success, 1 for any error
