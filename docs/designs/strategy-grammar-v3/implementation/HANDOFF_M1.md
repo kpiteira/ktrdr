@@ -160,3 +160,39 @@
 - Catch both `ValueError` (format/YAML errors) and `StrategyValidationError` (validation failures)
 - Display features via `FeatureResolver().resolve(config)`
 - Exit code 0 for success, 1 for any error
+
+---
+
+## Task 1.6 Complete: Example V3 Strategy
+
+### Implementation Notes
+
+**File location**
+- Created at `/Users/karl/.ktrdr/shared/strategies/v3_test_example.yaml`
+- Shared folder is accessible across all sandbox instances
+- Not in git (shared folder is outside repo)
+
+**Strategy demonstrates all v3 features:**
+1. Single-output indicator: `rsi_14`
+2. Multi-output indicators: `bbands_20_2`, `macd_12_26_9`
+3. Two fuzzy sets using same indicator: `rsi_fast` and `rsi_slow` both reference `rsi_14`
+4. Shorthand syntax: `oversold: [0, 25, 40]` (expands to full form during parsing)
+5. Full form syntax: `oversold: {type: triangular, parameters: [0, 15, 25]}`
+6. Dot notation: `bbands_20_2.middle`, `macd_12_26_9.histogram`
+7. Mixed timeframes: explicit lists `[5m]`, `[1h, 1d]` and `all` expansion
+
+**Feature resolution**
+- Strategy resolves to 14 features across 3 timeframes
+- Feature order is deterministic (nn_inputs order × timeframes order × membership order)
+- All features follow naming pattern: `{timeframe}_{fuzzy_set_id}_{membership_name}`
+
+### Gotchas
+
+**SymbolMode enum value**
+- Must use `mode: single` (NOT `single_symbol`)
+- This is `SymbolMode.SINGLE = "single"` per handoff Task 1.1
+- Easy mistake when copying from DESIGN.md examples that use `single_symbol`
+
+### Files Modified
+
+- `/Users/karl/.ktrdr/shared/strategies/v3_test_example.yaml`: 105 lines (shared folder)
