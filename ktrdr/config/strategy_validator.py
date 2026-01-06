@@ -1014,3 +1014,175 @@ Missing feature_ids: {', '.join(missing_list)}
         agent-specific validations (indicator types, fuzzy params).
         """
         return self._validate_v2_strategy(config, result)
+
+
+# =============================
+# V3 Strategy Validation
+# =============================
+
+
+class StrategyValidationError(Exception):
+    """Raised when v3 strategy validation fails."""
+
+    pass
+
+
+@dataclass
+class StrategyValidationWarning:
+    """Non-fatal validation issue for v3 strategies."""
+
+    message: str
+    location: str  # e.g., "indicators.rsi_14"
+
+
+def validate_v3_strategy(
+    config: Any,
+) -> list[StrategyValidationWarning]:
+    """
+    Validate v3 strategy configuration.
+
+    Validates:
+    1. All `indicator` references in fuzzy_sets exist in indicators dict
+    2. All `fuzzy_set` references in nn_inputs exist in fuzzy_sets dict
+    3. All timeframes in nn_inputs are valid (either "all" or in training_data.timeframes)
+    4. Warn if indicators defined but not referenced
+    5. Dot notation references valid indicator outputs
+
+    Args:
+        config: V3 strategy configuration to validate (StrategyConfigurationV3)
+
+    Returns:
+        List of warnings (non-fatal issues)
+
+    Raises:
+        StrategyValidationError: If validation fails
+    """
+    from ktrdr.config.models import StrategyConfigurationV3
+
+    # Import here to avoid circular imports
+    if not isinstance(config, StrategyConfigurationV3):
+        raise StrategyValidationError(
+            f"Expected StrategyConfigurationV3, got {type(config)}"
+        )
+
+    warnings: list[StrategyValidationWarning] = []
+    errors: list[str] = []
+
+    # Get available timeframes for validation
+    available_timeframes = set(config.training_data.timeframes.timeframes or [])
+
+    # Track which indicators are used (for unused warning)
+    used_indicators: set[str] = set()
+
+    # Validation 1 & 5: Validate indicator references in fuzzy_sets (including dot notation)
+    for fuzzy_set_id, fuzzy_set_def in config.fuzzy_sets.items():
+        indicator_ref = fuzzy_set_def.indicator
+
+        # Parse dot notation: "bbands_20_2.upper" -> ("bbands_20_2", "upper")
+        if "." in indicator_ref:
+            indicator_id, output_name = indicator_ref.split(".", 1)
+        else:
+            indicator_id = indicator_ref
+            output_name = None
+
+        # Check if base indicator exists
+        if indicator_id not in config.indicators:
+            errors.append(
+                f"fuzzy_sets.{fuzzy_set_id}.indicator: "
+                f"'{indicator_id}' not found in indicators. "
+                f"Available indicators: {', '.join(sorted(config.indicators.keys()))}"
+            )
+            continue  # Skip dot notation validation if base indicator doesn't exist
+
+        # Mark indicator as used
+        used_indicators.add(indicator_id)
+
+        # Validate dot notation output name if present
+        if output_name is not None:
+            # Get indicator definition
+            indicator_def = config.indicators[indicator_id]
+            indicator_type = indicator_def.type
+
+            # Get indicator class to check output names
+            try:
+                from ktrdr.indicators.indicator_factory import BUILT_IN_INDICATORS
+
+                indicator_class = BUILT_IN_INDICATORS.get(indicator_type.lower())
+                if indicator_class is None:
+                    # Unknown indicator type - skip validation
+                    logger.warning(
+                        f"Unknown indicator type '{indicator_type}' for dot notation validation"
+                    )
+                    continue
+
+                # Check if it's multi-output
+                if not indicator_class.is_multi_output():
+                    errors.append(
+                        f"fuzzy_sets.{fuzzy_set_id}.indicator: "
+                        f"Indicator '{indicator_id}' (type: {indicator_type}) is single-output "
+                        f"and does not support dot notation. Remove '.{output_name}' from reference."
+                    )
+                    continue
+
+                # Validate output name is in get_output_names()
+                valid_outputs = indicator_class.get_output_names()
+                if output_name not in valid_outputs:
+                    errors.append(
+                        f"fuzzy_sets.{fuzzy_set_id}.indicator: "
+                        f"Invalid output '{output_name}' for {indicator_type} indicator '{indicator_id}'. "
+                        f"Valid outputs: {', '.join(valid_outputs)}"
+                    )
+
+            except Exception as e:
+                # If we can't load indicator class, log warning but don't fail validation
+                logger.warning(
+                    f"Could not validate dot notation for {indicator_type}: {e}"
+                )
+
+    # Validation 2: Validate fuzzy_set references in nn_inputs
+    for idx, nn_input in enumerate(config.nn_inputs):
+        fuzzy_set_ref = nn_input.fuzzy_set
+
+        if fuzzy_set_ref not in config.fuzzy_sets:
+            errors.append(
+                f"nn_inputs[{idx}].fuzzy_set: "
+                f"'{fuzzy_set_ref}' not found in fuzzy_sets. "
+                f"Available fuzzy_sets: {', '.join(sorted(config.fuzzy_sets.keys()))}"
+            )
+
+    # Validation 3: Validate timeframes in nn_inputs
+    for idx, nn_input in enumerate(config.nn_inputs):
+        timeframes = nn_input.timeframes
+
+        # "all" is always valid
+        if timeframes == "all":
+            continue
+
+        # Explicit list must contain valid timeframes
+        if isinstance(timeframes, list):
+            for tf in timeframes:
+                if tf not in available_timeframes:
+                    errors.append(
+                        f"nn_inputs[{idx}].timeframes: "
+                        f"Invalid timeframe '{tf}'. "
+                        f"Available timeframes: {', '.join(sorted(available_timeframes))}"
+                    )
+
+    # Validation 4: Warn about unused indicators
+    all_indicators = set(config.indicators.keys())
+    unused_indicators = all_indicators - used_indicators
+
+    for unused_id in sorted(unused_indicators):
+        warnings.append(
+            StrategyValidationWarning(
+                message=f"Indicator '{unused_id}' is defined but not referenced by any fuzzy_set",
+                location=f"indicators.{unused_id}",
+            )
+        )
+
+    # If we have errors, raise exception
+    if errors:
+        error_message = "Strategy validation failed:\n  - " + "\n  - ".join(errors)
+        raise StrategyValidationError(error_message)
+
+    return warnings
