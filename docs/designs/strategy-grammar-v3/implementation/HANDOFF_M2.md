@@ -50,11 +50,52 @@
 - `ktrdr/indicators/indicator_engine.py`: Lines 8, 35-144 (constructor + helper)
 - `tests/unit/indicators/test_indicator_engine_v3.py`: New file, 94 lines, 6 tests (all passing)
 
+---
+
+## Task 2.2 Complete: V3 compute() Method
+
+### Implementation Notes
+
+**compute() method signature**
+- Accepts: `data: pd.DataFrame, indicator_ids: set[str]`
+- Returns: DataFrame with indicator columns added to original data
+- NO timeframe prefix (that's for compute_for_timeframe())
+
+**Column naming logic**
+- Single-output: column name is `{indicator_id}`
+- Multi-output: column names are `{indicator_id}.{output_name}`
+- Uses `indicator.is_multi_output()` to determine which path
+
+**Multi-output validation**
+- Validates `set(output.columns) == set(indicator.get_output_names())`
+- Raises ValueError if mismatch (helps catch indicator bugs early)
+- Error message includes expected vs actual columns
+
+**Error handling**
+- Unknown indicator_id raises ValueError with clear message
+- Multi-output validation catches implementation bugs
+
+### Gotchas
+
+**Set iteration order is non-deterministic**
+- `for indicator_id in indicator_ids:` order varies across runs
+- This is fine - compute() doesn't depend on order
+- Consumers should not rely on column order
+
+**Result is a copy, not mutated input**
+- `result = data.copy()` at start
+- Original data unchanged
+- Safe for indicator chaining
+
+### Files Modified
+
+- `ktrdr/indicators/indicator_engine.py`: Lines 146-189 (compute() method)
+- `tests/unit/indicators/test_indicator_engine_v3.py`: Lines 97-223 (5 new tests, all passing)
+
 ### Next Task Notes
 
-**For Task 2.2 (compute() method):**
-- Use `self._indicators` dict for v3 code path
-- Remember to check for unknown indicator_id
-- Multi-output indicators need dot notation: `{indicator_id}.{output_name}`
-- Single-output indicators: just `{indicator_id}`
-- NO timeframe prefix in compute() - that's for compute_for_timeframe()
+**For Task 2.3 (compute_for_timeframe() helper):**
+- Call `compute()` first to get unprefixed columns
+- Add timeframe prefix to indicator columns only (not OHLCV)
+- Pattern: `{timeframe}_{column}` for non-OHLCV columns
+- OHLCV columns: `{'open', 'high', 'low', 'close', 'volume'}` (case-insensitive)
