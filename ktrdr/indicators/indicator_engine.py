@@ -186,6 +186,26 @@ class IndicatorEngine:
 
         return result
 
+    def compute_for_timeframe(
+        self, data: pd.DataFrame, timeframe: str, indicator_ids: set[str]
+    ) -> pd.DataFrame:
+        """
+        Compute indicators and prefix columns with timeframe.
+
+        This is a convenience method for pipelines that need
+        timeframe-prefixed columns.
+
+        Args:
+            data: OHLCV DataFrame
+            timeframe: Timeframe string (e.g., "5m", "1h")
+            indicator_ids: Which indicators to compute
+
+        Returns:
+            DataFrame with columns like "5m_rsi_14", "5m_bbands_20_2.upper"
+        """
+        result = self.compute(data, indicator_ids)
+        return self._prefix_indicator_columns(result, timeframe)
+
     def _build_feature_id_map(
         self, configs: list, indicators: list[BaseIndicator]
     ) -> None:

@@ -219,3 +219,136 @@ class TestIndicatorEngineV3Compute:
         assert "rsi_14" in result.columns
         assert not any(col.startswith("5m_") for col in result.columns)
         assert not any(col.startswith("1h_") for col in result.columns)
+
+
+class TestIndicatorEngineV3ComputeForTimeframe:
+    """Tests for IndicatorEngine.compute_for_timeframe() method."""
+
+    def test_timeframe_prefix_added_to_indicator_columns(self):
+        """Should add timeframe prefix to indicator columns."""
+        import pandas as pd
+
+        data = pd.DataFrame(
+            {
+                "open": [100] * 30,
+                "high": [101] * 30,
+                "low": [99] * 30,
+                "close": [100] * 30,
+                "volume": [1000] * 30,
+            }
+        )
+
+        indicators = {"rsi_14": IndicatorDefinition(type="rsi", period=14)}
+
+        engine = IndicatorEngine(indicators)
+        result = engine.compute_for_timeframe(data, "5m", {"rsi_14"})
+
+        # Should have prefixed column
+        assert "5m_rsi_14" in result.columns
+
+    def test_ohlcv_columns_not_prefixed(self):
+        """OHLCV columns should remain unprefixed."""
+        import pandas as pd
+
+        data = pd.DataFrame(
+            {
+                "open": [100] * 30,
+                "high": [101] * 30,
+                "low": [99] * 30,
+                "close": [100] * 30,
+                "volume": [1000] * 30,
+            }
+        )
+
+        indicators = {"rsi_14": IndicatorDefinition(type="rsi", period=14)}
+
+        engine = IndicatorEngine(indicators)
+        result = engine.compute_for_timeframe(data, "5m", {"rsi_14"})
+
+        # OHLCV columns should remain unprefixed
+        assert "open" in result.columns
+        assert "high" in result.columns
+        assert "low" in result.columns
+        assert "close" in result.columns
+        assert "volume" in result.columns
+
+        # No prefixed OHLCV columns
+        assert "5m_open" not in result.columns
+        assert "5m_close" not in result.columns
+
+    def test_works_with_single_output_indicator(self):
+        """Should work correctly with single-output indicators."""
+        import pandas as pd
+
+        data = pd.DataFrame(
+            {
+                "open": [100] * 30,
+                "high": [101] * 30,
+                "low": [99] * 30,
+                "close": [100] * 30,
+                "volume": [1000] * 30,
+            }
+        )
+
+        indicators = {"ema_20": IndicatorDefinition(type="ema", period=20)}
+
+        engine = IndicatorEngine(indicators)
+        result = engine.compute_for_timeframe(data, "1h", {"ema_20"})
+
+        assert "1h_ema_20" in result.columns
+
+    def test_works_with_multi_output_indicator(self):
+        """Should work correctly with multi-output indicators."""
+        import pandas as pd
+
+        data = pd.DataFrame(
+            {
+                "open": [100] * 30,
+                "high": [101] * 30,
+                "low": [99] * 30,
+                "close": [100] * 30,
+                "volume": [1000] * 30,
+            }
+        )
+
+        indicators = {
+            "bbands_20_2": IndicatorDefinition(type="bbands", period=20, multiplier=2.0)
+        }
+
+        engine = IndicatorEngine(indicators)
+        result = engine.compute_for_timeframe(data, "15m", {"bbands_20_2"})
+
+        # Should have prefixed dotted columns
+        assert "15m_bbands_20_2.upper" in result.columns
+        assert "15m_bbands_20_2.middle" in result.columns
+        assert "15m_bbands_20_2.lower" in result.columns
+
+    def test_multiple_indicators_all_prefixed(self):
+        """Should prefix all indicators when multiple computed."""
+        import pandas as pd
+
+        data = pd.DataFrame(
+            {
+                "open": [100] * 30,
+                "high": [101] * 30,
+                "low": [99] * 30,
+                "close": [100] * 30,
+                "volume": [1000] * 30,
+            }
+        )
+
+        indicators = {
+            "rsi_14": IndicatorDefinition(type="rsi", period=14),
+            "ema_20": IndicatorDefinition(type="ema", period=20),
+        }
+
+        engine = IndicatorEngine(indicators)
+        result = engine.compute_for_timeframe(data, "5m", {"rsi_14", "ema_20"})
+
+        # Both should be prefixed
+        assert "5m_rsi_14" in result.columns
+        assert "5m_ema_20" in result.columns
+
+        # Unprefixed versions should NOT exist
+        assert "rsi_14" not in result.columns
+        assert "ema_20" not in result.columns
