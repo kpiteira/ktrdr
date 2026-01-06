@@ -257,3 +257,42 @@ def test_multiple_errors_reported_together():
     error_msg = str(exc_info.value)
     # Should mention multiple problems
     assert "nonexistent" in error_msg or "bad_indicator_ref" in error_msg
+
+
+def test_validate_v3_strategy_empty_fuzzy_set():
+    """Test that empty fuzzy sets are rejected."""
+    config = StrategyConfigurationV3(
+        name="empty_fuzzy",
+        version="3.0",
+        training_data={
+            "symbols": {"mode": "multi_symbol", "list": ["EUR USD", "GBPUSD"]},
+            "timeframes": {
+                "mode": "multi_timeframe",
+                "list": ["5m", "1h"],
+                "base_timeframe": "1h",
+            },
+            "history_required": 100,
+        },
+        indicators={
+            "rsi_14": {"type": "rsi", "period": 14},
+        },
+        fuzzy_sets={
+            "empty_set": {
+                "indicator": "rsi_14",
+                # No membership functions defined - this should fail
+            },
+        },
+        nn_inputs=[
+            {"fuzzy_set": "empty_set", "timeframes": ["5m"]},
+        ],
+        model={"type": "mlp"},
+        decisions={"output_format": "classification"},
+        training={"method": "supervised"},
+    )
+
+    with pytest.raises(StrategyValidationError) as exc_info:
+        validate_v3_strategy(config)
+
+    error_msg = str(exc_info.value)
+    assert "empty_set" in error_msg
+    assert "no membership functions" in error_msg.lower()

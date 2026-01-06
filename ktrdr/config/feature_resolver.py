@@ -61,7 +61,16 @@ class FeatureResolver:
         features: list[ResolvedFeature] = []
 
         # Get available timeframes from training data config
-        available_timeframes = config.training_data.timeframes.timeframes
+        # Handle both SINGLE (timeframe) and MULTI_TIMEFRAME (timeframes) modes
+        tf_config = config.training_data.timeframes
+        if tf_config.timeframes is not None:
+            available_timeframes = tf_config.timeframes
+        elif tf_config.timeframe is not None:
+            available_timeframes = [tf_config.timeframe]
+        else:
+            raise ValueError(
+                "TimeframeConfiguration must have either 'timeframe' or 'timeframes' set"
+            )
 
         # Process each nn_input in order
         for nn_input in config.nn_inputs:
@@ -81,7 +90,7 @@ class FeatureResolver:
             # Expand timeframes
             timeframes_to_use: list[str]
             if nn_input.timeframes == "all":
-                timeframes_to_use = available_timeframes or []
+                timeframes_to_use = available_timeframes
             else:
                 timeframes_to_use = nn_input.timeframes  # type: ignore[assignment]
 

@@ -100,8 +100,9 @@ def _validate_v3_strategy(strategy_path: Path, quiet: bool) -> None:
     from ktrdr.config.strategy_loader import StrategyConfigurationLoader
     from ktrdr.config.strategy_validator import StrategyValidationError
 
-    console.print(f"🔍 Validating v3 strategy: [blue]{strategy_path}[/blue]")
-    console.print("=" * 60)
+    if not quiet:
+        console.print(f"🔍 Validating v3 strategy: [blue]{strategy_path}[/blue]")
+        console.print("=" * 60)
 
     try:
         # Load and validate
@@ -113,15 +114,18 @@ def _validate_v3_strategy(strategy_path: Path, quiet: bool) -> None:
         features = resolver.resolve(config)
 
         # Display success
-        console.print(
-            f"[green]✅ Strategy '{config.name}' is valid (v3 format)[/green]"
-        )
-        console.print(f"\n[cyan]📊 Resolved features ({len(features)}):[/cyan]")
-        for feature in features:
-            console.print(f"  {feature.feature_id}")
+        if quiet:
+            console.print(f"✅ {config.name}: valid ({len(features)} features)")
+        else:
+            console.print(
+                f"[green]✅ Strategy '{config.name}' is valid (v3 format)[/green]"
+            )
+            console.print(f"\n[cyan]📊 Resolved features ({len(features)}):[/cyan]")
+            for feature in features:
+                console.print(f"  {feature.feature_id}")
 
-        console.print("\n" + "=" * 60)
-        console.print("[bold green]✅ Validation successful[/bold green]")
+            console.print("\n" + "=" * 60)
+            console.print("[bold green]✅ Validation successful[/bold green]")
 
     except FileNotFoundError as e:
         console.print(f"[red]❌ Error: {e}[/red]")

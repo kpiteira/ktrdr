@@ -1168,7 +1168,17 @@ def validate_v3_strategy(
                         f"Available timeframes: {', '.join(sorted(available_timeframes))}"
                     )
 
-    # Validation 4: Warn about unused indicators
+    # Validation 4: Check that each fuzzy_set has at least one membership function
+    for fuzzy_set_id, fuzzy_set in config.fuzzy_sets.items():
+        membership_names = fuzzy_set.get_membership_names()
+        if not membership_names:
+            errors.append(
+                f"fuzzy_sets.{fuzzy_set_id}: "
+                f"Fuzzy set has no membership functions defined. "
+                f"At least one membership function is required (e.g., oversold, overbought)."
+            )
+
+    # Validation 5: Warn about unused indicators
     all_indicators = set(config.indicators.keys())
     unused_indicators = all_indicators - used_indicators
 

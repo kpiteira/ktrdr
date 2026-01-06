@@ -344,3 +344,43 @@ class TestFeatureResolver:
         assert features[0].membership_name == "low"
         assert features[1].membership_name == "medium"
         assert features[2].membership_name == "high"
+
+
+def test_resolve_handles_single_timeframe_mode():
+    """Test that resolver handles SINGLE timeframe mode correctly."""
+    config = StrategyConfigurationV3(
+        name="single_tf_test",
+        version="3.0",
+        training_data=TrainingDataConfiguration(
+            symbols={"mode": "multi_symbol", "list": ["EURUSD", "GBPUSD"]},
+            timeframes={
+                "mode": "single",  # SINGLE mode
+                "timeframe": "1h",  # Use singular field
+                "base_timeframe": "1h",
+            },
+            history_required=100,
+        ),
+        indicators={"rsi_14": IndicatorDefinition(type="rsi", period=14)},
+        fuzzy_sets={
+            "rsi": FuzzySetDefinition(
+                indicator="rsi_14",
+                **{
+                    "oversold": {"type": "triangular", "parameters": [0, 25, 40]},
+                    "overbought": {"type": "triangular", "parameters": [60, 75, 100]},
+                },
+            )
+        },
+        nn_inputs=[NNInputSpec(fuzzy_set="rsi", timeframes="all")],
+        model={"type": "mlp"},
+        decisions={"output_format": "classification"},
+        training={"method": "supervised"},
+    )
+
+    resolver = FeatureResolver()
+    features = resolver.resolve(config)
+
+    # Should expand "all" to the single timeframe ["1h"]
+    assert len(features) == 2  # 1 timeframe × 2 memberships
+    assert all(f.timeframe == "1h" for f in features)
+    assert features[0].feature_id == "1h_rsi_oversold"
+    assert features[1].feature_id == "1h_rsi_overbought"
