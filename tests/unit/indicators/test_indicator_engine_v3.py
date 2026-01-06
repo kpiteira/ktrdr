@@ -92,3 +92,130 @@ class TestIndicatorEngineV3Constructor:
         assert "rsi_14" in engine._indicators
         assert "macd_12_26_9" in engine._indicators
         assert "bbands_20_2" in engine._indicators
+
+
+class TestIndicatorEngineV3Compute:
+    """Tests for IndicatorEngine.compute() method with v3 indicators."""
+
+    def test_single_output_produces_indicator_id_column(self):
+        """Single-output indicator should produce column named {indicator_id}."""
+        import pandas as pd
+
+        # Create sample data
+        data = pd.DataFrame(
+            {
+                "open": [100] * 50,
+                "high": [101] * 50,
+                "low": [99] * 50,
+                "close": [100] * 50,
+                "volume": [1000] * 50,
+            }
+        )
+
+        indicators = {"rsi_14": IndicatorDefinition(type="rsi", period=14)}
+
+        engine = IndicatorEngine(indicators)
+        result = engine.compute(data, {"rsi_14"})
+
+        # Should have rsi_14 column
+        assert "rsi_14" in result.columns
+        # Original columns should remain
+        assert "close" in result.columns
+
+    def test_multi_output_produces_dotted_columns(self):
+        """Multi-output indicator should produce {indicator_id}.{output} columns."""
+        import pandas as pd
+
+        # Create sample data
+        data = pd.DataFrame(
+            {
+                "open": [100] * 50,
+                "high": [101] * 50,
+                "low": [99] * 50,
+                "close": [100] * 50,
+                "volume": [1000] * 50,
+            }
+        )
+
+        indicators = {
+            "bbands_20_2": IndicatorDefinition(type="bbands", period=20, multiplier=2.0)
+        }
+
+        engine = IndicatorEngine(indicators)
+        result = engine.compute(data, {"bbands_20_2"})
+
+        # Should have dotted columns
+        assert "bbands_20_2.upper" in result.columns
+        assert "bbands_20_2.middle" in result.columns
+        assert "bbands_20_2.lower" in result.columns
+
+    def test_unknown_indicator_id_raises_error(self):
+        """compute() should raise ValueError for unknown indicator_id."""
+        import pandas as pd
+
+        data = pd.DataFrame(
+            {
+                "open": [100] * 50,
+                "high": [101] * 50,
+                "low": [99] * 50,
+                "close": [100] * 50,
+                "volume": [1000] * 50,
+            }
+        )
+
+        indicators = {"rsi_14": IndicatorDefinition(type="rsi", period=14)}
+
+        engine = IndicatorEngine(indicators)
+
+        with pytest.raises(ValueError, match="Unknown indicator"):
+            engine.compute(data, {"nonexistent_indicator"})
+
+    def test_multiple_indicators_computed_in_single_call(self):
+        """Should compute multiple indicators when multiple IDs provided."""
+        import pandas as pd
+
+        data = pd.DataFrame(
+            {
+                "open": [100] * 50,
+                "high": [101] * 50,
+                "low": [99] * 50,
+                "close": [100] * 50,
+                "volume": [1000] * 50,
+            }
+        )
+
+        indicators = {
+            "rsi_14": IndicatorDefinition(type="rsi", period=14),
+            "ema_20": IndicatorDefinition(type="ema", period=20),
+        }
+
+        engine = IndicatorEngine(indicators)
+        result = engine.compute(data, {"rsi_14", "ema_20"})
+
+        # Both indicators computed
+        assert "rsi_14" in result.columns
+        assert "ema_20" in result.columns
+
+    def test_no_timeframe_prefix_in_compute(self):
+        """compute() should NOT add timeframe prefix (that's for compute_for_timeframe)."""
+        import pandas as pd
+
+        data = pd.DataFrame(
+            {
+                "open": [100] * 50,
+                "high": [101] * 50,
+                "low": [99] * 50,
+                "close": [100] * 50,
+                "volume": [1000] * 50,
+            }
+        )
+
+        indicators = {"rsi_14": IndicatorDefinition(type="rsi", period=14)}
+
+        engine = IndicatorEngine(indicators)
+        result = engine.compute(data, {"rsi_14"})
+
+        # Should be "rsi_14", NOT "5m_rsi_14" or similar
+        assert "rsi_14" in result.columns
+        assert not any(col.startswith("5m_") for col in result.columns)
+        assert not any(col.startswith("1h_") for col in result.columns)

@@ -143,6 +143,49 @@ class IndicatorEngine:
                 f"Failed to create indicator '{indicator_id}' of type '{definition.type}': {e}"
             ) from e
 
+    def compute(self, data: pd.DataFrame, indicator_ids: set[str]) -> pd.DataFrame:
+        """
+        Compute specified indicators on data.
+
+        Args:
+            data: OHLCV DataFrame
+            indicator_ids: Which indicators to compute
+
+        Returns:
+            DataFrame with indicator columns:
+            - Single-output: {indicator_id}
+            - Multi-output: {indicator_id}.{output_name}
+
+        NOTE: No timeframe prefix added here - caller handles that.
+        """
+        result = data.copy()
+
+        for indicator_id in indicator_ids:
+            if indicator_id not in self._indicators:
+                raise ValueError(f"Unknown indicator: {indicator_id}")
+
+            indicator = self._indicators[indicator_id]
+            output = indicator.compute(data)
+
+            if indicator.is_multi_output():
+                # Validate outputs match expected
+                expected = set(indicator.get_output_names())
+                actual = set(output.columns)
+                if expected != actual:
+                    raise ValueError(
+                        f"Indicator {indicator_id} output mismatch: "
+                        f"expected {expected}, got {actual}"
+                    )
+
+                # Rename columns with indicator_id prefix
+                for col in output.columns:
+                    result[f"{indicator_id}.{col}"] = output[col]
+            else:
+                # Single output - name with indicator_id
+                result[indicator_id] = output
+
+        return result
+
     def _build_feature_id_map(
         self, configs: list, indicators: list[BaseIndicator]
     ) -> None:
