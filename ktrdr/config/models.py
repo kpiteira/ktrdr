@@ -7,9 +7,9 @@ This module defines the structure and validation rules for KTRDR configuration.
 import builtins
 from enum import Enum
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class DataConfig(BaseModel):
@@ -641,6 +641,121 @@ class LegacyStrategyConfiguration(BaseModel):
     backtesting: Optional[dict[str, Any]] = Field(
         None, description="Backtesting configuration"
     )
+
+
+# =============================
+# V3 Strategy Configuration Models
+# =============================
+
+
+class IndicatorDefinition(BaseModel):
+    """A single indicator calculation definition (v3 format).
+
+    The key in the indicators dict serves as the indicator_id.
+    All fields other than 'type' are indicator-specific parameters.
+    """
+
+    type: str = Field(..., description="Indicator type (rsi, macd, bbands, etc.)")
+
+    model_config = {"extra": "allow"}
+
+
+class FuzzyMembership(BaseModel):
+    """A fuzzy membership function definition."""
+
+    type: str = Field(default="triangular", description="Membership function type")
+    parameters: list[float] = Field(..., description="Membership function parameters")
+
+
+class FuzzySetDefinition(BaseModel):
+    """A fuzzy interpretation of an indicator (v3 format).
+
+    The key in the fuzzy_sets dict serves as the fuzzy_set_id.
+    Membership functions can be specified as:
+    - Shorthand: [a, b, c] → triangular with these parameters
+    - Full form: {type: "triangular", parameters: [a, b, c]}
+    """
+
+    indicator: str = Field(
+        ..., description="indicator_id to interpret (supports dot notation)"
+    )
+
+    model_config = {"extra": "allow"}
+
+    @model_validator(mode="before")
+    @classmethod
+    def expand_shorthand(cls, data: dict) -> dict:
+        """Convert [a,b,c] shorthand to {type: triangular, parameters: [a,b,c]}."""
+        result = {}
+        for key, value in data.items():
+            if key == "indicator":
+                result[key] = value
+            elif isinstance(value, list):
+                # Shorthand: [0, 20, 35] -> FuzzyMembership
+                result[key] = {"type": "triangular", "parameters": value}
+            else:
+                result[key] = value
+        return result
+
+    def get_membership_names(self) -> list[str]:
+        """Return ordered list of membership function names."""
+        if not hasattr(self, "model_extra") or self.model_extra is None:
+            return []
+        return [k for k in self.model_extra.keys() if k != "indicator"]
+
+
+class NNInputSpec(BaseModel):
+    """Specification for neural network inputs."""
+
+    fuzzy_set: str = Field(..., description="fuzzy_set_id to include")
+    timeframes: Union[list[str], str] = Field(
+        ...,
+        description="Timeframes to apply this fuzzy set to. 'all' for all training TFs.",
+    )
+
+
+class StrategyConfigurationV3(BaseModel):
+    """Complete v3 strategy configuration.
+
+    This is the new format that separates:
+    - indicators: Pure calculation definitions (no timeframes)
+    - fuzzy_sets: Interpretations of indicator values
+    - nn_inputs: Explicit specification of NN features
+    """
+
+    # Identity
+    name: str = Field(..., description="Strategy name")
+    description: Optional[str] = Field(None, description="Strategy description")
+    version: str = Field(default="3.0", description="Strategy version")
+
+    # Data scope
+    training_data: TrainingDataConfiguration = Field(
+        ..., description="Training data configuration"
+    )
+    deployment: Optional[DeploymentConfiguration] = Field(
+        None, description="Deployment configuration (optional)"
+    )
+
+    # The new v3 sections
+    indicators: dict[str, IndicatorDefinition] = Field(
+        ..., description="Indicator definitions (key = indicator_id)"
+    )
+    fuzzy_sets: dict[str, FuzzySetDefinition] = Field(
+        ..., description="Fuzzy set definitions (key = fuzzy_set_id)"
+    )
+    nn_inputs: list[NNInputSpec] = Field(
+        ..., description="Neural network input specifications"
+    )
+
+    # Model and training (using dict for now - proper models TBD)
+    model: dict[str, Any] = Field(..., description="Neural network configuration")
+    decisions: dict[str, Any] = Field(..., description="Decision logic configuration")
+    training: dict[str, Any] = Field(..., description="Training configuration")
+
+
+# =============================
+# End V3 Models
+# =============================
 
 
 class KtrdrConfig(BaseModel):
