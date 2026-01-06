@@ -39,10 +39,46 @@
 - `ktrdr/config/models.py`: Lines 646-754 (v3 models)
 - `tests/unit/config/test_models_v3.py`: 16 tests (all passing)
 
+---
+
+## Task 1.2 Complete: FeatureResolver
+
+### Implementation Notes
+
+**Timeframe access pattern**
+- `TimeframeConfiguration` is a Pydantic model, not a dict
+- Access timeframes list via: `config.training_data.timeframes.timeframes`
+- NOT `config.training_data.timeframes["list"]` (will fail with "not subscriptable")
+- Field aliasing: YAML `list:` maps to model attribute `timeframes`
+
+**Feature ordering is deterministic**
+- Order preserved from: nn_inputs order → timeframes order → membership function order
+- `FuzzySetDefinition.get_membership_names()` maintains order from extra fields
+- Same input config always produces same feature list order
+
+**Dot notation parsing**
+- Simple split on `.` character: `"bbands_20_2.upper"` → `("bbands_20_2", "upper")`
+- Single-output indicators have no dot, return `(indicator_id, None)`
+- Pattern: `indicator_ref.split(".", 1)` handles both cases correctly
+
+### Gotchas
+
+**Type handling for timeframes**
+- `NNInputSpec.timeframes` is `Union[list[str], str]` (str for "all")
+- `TimeframeConfiguration.timeframes` is `list[str] | None`
+- Need explicit type annotation when assigning to avoid mypy errors
+- Pattern: `timeframes_to_use: list[str]` then assign with type ignore if needed
+
+### Files Modified
+
+- `ktrdr/config/feature_resolver.py`: New file (150 lines)
+- `tests/unit/config/test_feature_resolver.py`: 13 tests (all passing)
+
 ### Next Task Notes
 
-**For Task 1.2 (FeatureResolver):**
-- Can import v3 models: `from ktrdr.config.models import StrategyConfigurationV3, NNInputSpec, FuzzySetDefinition`
-- `FuzzySetDefinition.get_membership_names()` returns ordered list of membership names
-- Access extra fields via `model_extra` dict
-- Remember `timeframes` can be either `str` (for "all") or `list[str]`
+**For Task 1.3 (Strategy Validator):**
+- Import `FeatureResolver` from `ktrdr.config.feature_resolver`
+- Use `resolver.resolve(config)` to get all features for validation
+- Dot notation validation can use `resolver._parse_indicator_reference()` or parse manually
+- Check that `indicator_id` exists in `config.indicators` dict
+- For dot notation, verify `indicator_output` is in indicator's `get_output_names()`
