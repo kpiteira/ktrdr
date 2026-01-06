@@ -129,7 +129,7 @@ class IndicatorEngine:
         if indicator_class is None:
             raise ValueError(
                 f"Unknown indicator type: '{definition.type}'. "
-                f"Available types: {sorted(set(BUILT_IN_INDICATORS.keys()))}"
+                f"Available types: {sorted(BUILT_IN_INDICATORS.keys())}"
             )
 
         # Get extra params from model_extra (all fields except 'type')
