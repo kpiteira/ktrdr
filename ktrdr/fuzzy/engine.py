@@ -274,7 +274,7 @@ class FuzzyEngine:
         Raises:
             ValueError: If fuzzy_set_id is unknown or engine is in v2 mode
         """
-        if not hasattr(self, "_indicator_map") or not self._indicator_map:
+        if not getattr(self, "_is_v3_mode", False):
             raise ValueError(
                 "get_indicator_for_fuzzy_set() is only available in v3 mode"
             )
@@ -298,7 +298,7 @@ class FuzzyEngine:
         Raises:
             ValueError: If fuzzy_set_id is unknown or engine is in v2 mode
         """
-        if not hasattr(self, "_fuzzy_sets") or not self._fuzzy_sets:
+        if not getattr(self, "_is_v3_mode", False):
             raise ValueError("get_membership_names() is only available in v3 mode")
 
         if fuzzy_set_id not in self._fuzzy_sets:
