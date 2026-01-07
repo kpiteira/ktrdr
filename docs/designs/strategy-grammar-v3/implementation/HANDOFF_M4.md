@@ -186,9 +186,66 @@
 
 ---
 
-## Next Task Notes
+## Task 4.5 Complete: Training Dry-Run Mode
 
-**Task 4.5: Dry-Run Mode**
-- Add `--dry-run` flag to `ktrdr train` command
-- Shows config summary and features without training
-- Useful for debugging strategy config before full training
+### Implementation Notes
+
+**V3 dry-run implemented in `async_model_commands.py`**
+- CLI uses `async_model_commands.py` (not `model_commands.py`)
+- Added `_is_v3_strategy(path)` to detect v3 format before loading
+- Added `_display_v3_dry_run(path)` to show detailed v3 info
+
+**Dry-run flow for v3 strategies**
+1. Validate strategy file exists
+2. Check if v3 format using `_is_v3_strategy()`
+3. If v3 AND dry_run: call `_display_v3_dry_run()` and return early
+4. Otherwise: continue with v2/legacy flow (requires API)
+
+**V3 dry-run displays**
+- Strategy name and version
+- List of indicators with their types
+- List of fuzzy sets with indicator mappings
+- Full list of resolved feature IDs from FeatureResolver
+- Feature count summary
+
+### Gotchas
+
+**Two model command files exist**
+- `ktrdr/cli/model_commands.py`: Not used by CLI (imported by some tests)
+- `ktrdr/cli/async_model_commands.py`: ACTUAL CLI via `async_models_app`
+- Both files were updated, but `async_model_commands.py` is the real entry point
+- CLI init: `from ktrdr.cli.async_model_commands import async_models_app as models_app`
+
+**V3 dry-run bypasses API requirement**
+- V3 dry-run happens BEFORE loading v2 config
+- No API connection needed for v3 dry-run
+- V2 dry-run still requires API (existing behavior unchanged)
+
+### Files Modified
+
+- `ktrdr/cli/async_model_commands.py`: Added v3 dry-run support (~100 lines)
+- `ktrdr/cli/model_commands.py`: Also added (for consistency, though not used by CLI)
+- `tests/unit/cli/test_train_dry_run_v3.py`: New file, 8 tests
+
+---
+
+## M4 Milestone Complete
+
+All 5 tasks completed:
+- Task 4.1: TrainingPipelineV3 class
+- Task 4.2: FuzzyNeuralProcessor v3 support
+- Task 4.3: ModelMetadataV3 dataclass
+- Task 4.4: Training worker v3 support
+- Task 4.5: V3 dry-run mode
+
+Total tests: 86 (all passing)
+Quality checks: All passing
+
+---
+
+## Next Milestone Notes
+
+**M5: Backtest Pipeline**
+- Will need to load `ModelMetadataV3` to get `resolved_features`
+- Use `resolved_features` to validate backtest feature order matches training
+- Pattern: `ModelMetadataV3.from_dict(json.load(metadata_v3.json))`
