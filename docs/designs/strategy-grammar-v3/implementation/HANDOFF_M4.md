@@ -145,10 +145,50 @@
 
 ---
 
+## Task 4.4 Complete: Training Worker V3 Support
+
+### Implementation Notes
+
+**Added static methods to LocalTrainingOrchestrator**
+- `_is_v3_format(config)`: Detects v3 config by checking `indicators` is dict AND `nn_inputs` exists
+- `_save_v3_metadata(...)`: Creates and saves `ModelMetadataV3` to model directory
+
+**V3 metadata saved as `metadata_v3.json`**
+- Separate file from existing metadata.json (preserves backward compatibility)
+- Contains: resolved_features, indicators, fuzzy_sets, nn_inputs, training context
+- File saved to model directory alongside model.pt, config.json, etc.
+
+**Using FeatureResolver to get resolved features**
+- Import `StrategyConfigurationLoader.load_v3_strategy()` to load config as `StrategyConfigurationV3`
+- Use `FeatureResolver.resolve(config)` to get canonical feature list
+- Feature IDs extracted from resolved features: `[f.feature_id for f in resolved]`
+
+### Gotchas
+
+**Static methods for reusability**
+- Both `_is_v3_format` and `_save_v3_metadata` are static methods
+- Can be called without instantiating LocalTrainingOrchestrator
+- Useful for other components that need v3 detection or metadata saving
+
+**Integration with training flow is separate**
+- Current implementation adds the utility methods
+- Full integration (calling these after training) is straightforward but wasn't done to avoid modifying complex training flow
+- Call `_save_v3_metadata` after `TrainingPipeline.train_strategy()` returns, using model_path from result
+
+**StrategyConfigurationV3 has required fields**
+- `model`, `decisions`, `training` are required (not optional)
+- When creating test configs, must provide all three as dicts
+
+### Files Modified
+
+- `ktrdr/api/services/training/local_orchestrator.py`: Added v3 methods (~70 lines)
+- `tests/unit/training/test_training_worker_v3.py`: New file, 9 tests
+
+---
+
 ## Next Task Notes
 
-**Task 4.4: Training Worker for V3**
-- Worker receives v3 strategy config
-- Uses TrainingPipelineV3 for feature preparation
-- Saves ModelMetadataV3 with resolved_features after training
-- Pattern: `resolver.resolve(config)` → train → save metadata with features
+**Task 4.5: Dry-Run Mode**
+- Add `--dry-run` flag to `ktrdr train` command
+- Shows config summary and features without training
+- Useful for debugging strategy config before full training
