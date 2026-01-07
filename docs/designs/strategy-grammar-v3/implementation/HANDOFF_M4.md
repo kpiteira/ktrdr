@@ -229,16 +229,65 @@
 
 ---
 
+## Additional M4 Work: V3 Training Flow
+
+### Implementation Notes
+
+**V3 strategy loading in CLI**
+- Added `_is_v3_strategy()` check in `async_model_commands.py`
+- V3 strategies use `StrategyConfigurationLoader.load_v3_strategy()` for parsing
+- Extract symbols via `config.training_data.symbols.symbols` (not `.list`)
+- Extract timeframes via `tf_config.timeframes` or `tf_config.timeframe`
+
+**V3 validation in backend (context.py)**
+- Added `_is_v3_format()` to detect v3 strategies from raw dict
+- V3 strategies validated with `StrategyConfigurationV3(**config)` + `validate_v3_strategy()`
+- V2 strategies continue to use `_validate_strategy_config()`
+- Added logger import for warning output
+
+**Validator bug fix**
+- Fixed `validate_v3_strategy()` to handle single timeframe mode
+- Was: `set(config.training_data.timeframes.timeframes or [])`
+- Now: checks both `tf_config.timeframes` and `tf_config.timeframe`
+
+### Gotchas
+
+**SymbolConfiguration field names**
+- YAML uses `list:` but model attribute is `symbols`
+- Access via: `config.training_data.symbols.symbols`
+- For single mode: `config.training_data.symbols.symbol`
+
+**TimeframeConfiguration modes**
+- Multi: `timeframes` is list, `timeframe` is None
+- Single: `timeframes` is None, `timeframe` is string
+- Must check both when extracting available timeframes
+
+### Files Modified
+
+- `ktrdr/cli/async_model_commands.py`: V3 strategy loading
+- `ktrdr/api/services/training/context.py`: V3 validation
+- `ktrdr/config/strategy_validator.py`: Single timeframe mode fix
+
+### E2E Test Results
+
+- CLI loads v3 strategy: ✅
+- Backend validates v3 strategy: ✅
+- Training starts (reaches indicator engine): ✅
+- Full training execution: ❌ (requires wiring TrainingPipelineV3 - M5+ work)
+
+---
+
 ## M4 Milestone Complete
 
-All 5 tasks completed:
+All 5 tasks completed plus additional v3 flow work:
 - Task 4.1: TrainingPipelineV3 class
 - Task 4.2: FuzzyNeuralProcessor v3 support
 - Task 4.3: ModelMetadataV3 dataclass
 - Task 4.4: Training worker v3 support
 - Task 4.5: V3 dry-run mode
+- Bonus: V3 strategy loading and validation in CLI/backend
 
-Total tests: 86 (all passing)
+Total tests: 86+ (all passing)
 Quality checks: All passing
 
 ---
@@ -249,3 +298,8 @@ Quality checks: All passing
 - Will need to load `ModelMetadataV3` to get `resolved_features`
 - Use `resolved_features` to validate backtest feature order matches training
 - Pattern: `ModelMetadataV3.from_dict(json.load(metadata_v3.json))`
+
+**Future: Full V3 Training Execution**
+- Wire TrainingPipelineV3 into training workers
+- Use v3 indicator/fuzzy engine patterns
+- Current training workers still expect v2 indicator list format
