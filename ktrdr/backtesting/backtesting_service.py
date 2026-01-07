@@ -5,10 +5,12 @@ Follows the ServiceOrchestrator pattern for async operations support,
 matching the architecture of TrainingService.
 """
 
+import json
 import logging
 import os
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Optional
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import httpx
 
@@ -20,6 +22,8 @@ from ktrdr.async_infrastructure import ServiceOrchestrator
 
 if TYPE_CHECKING:
     from ktrdr.api.services.worker_registry import WorkerRegistry
+    from ktrdr.config.models import StrategyConfigurationV3
+    from ktrdr.models.model_metadata import ModelMetadataV3
 
 logger = logging.getLogger(__name__)
 
@@ -432,3 +436,162 @@ class BacktestingService(ServiceOrchestrator[None]):
             "message": f"Backtest started on remote service: {symbol} {timeframe}",
             "worker_id": worker_id,  # Include worker_id in response for visibility
         }
+
+    # =========================================================================
+    # V3 Model Support Methods (Static)
+    # =========================================================================
+
+    @staticmethod
+    def load_v3_metadata(model_path: Union[str, Path]) -> "ModelMetadataV3":
+        """Load v3 model metadata from model directory.
+
+        V3 models store metadata in 'metadata_v3.json' file within
+        the model directory.
+
+        Args:
+            model_path: Path to model directory
+
+        Returns:
+            ModelMetadataV3 instance
+
+        Raises:
+            FileNotFoundError: If metadata_v3.json doesn't exist
+        """
+        from ktrdr.models.model_metadata import ModelMetadataV3
+
+        model_path = Path(model_path)
+        metadata_path = model_path / "metadata_v3.json"
+
+        if not metadata_path.exists():
+            raise FileNotFoundError(
+                f"V3 metadata not found at {metadata_path}. "
+                f"This model may not be a v3 model or may need to be retrained."
+            )
+
+        with open(metadata_path) as f:
+            data = json.load(f)
+
+        return ModelMetadataV3.from_dict(data)
+
+    @staticmethod
+    def is_v3_model(model_path: Union[str, Path]) -> bool:
+        """Check if a model directory contains v3 metadata.
+
+        Args:
+            model_path: Path to model directory
+
+        Returns:
+            True if metadata_v3.json exists, False otherwise
+        """
+        model_path = Path(model_path)
+        metadata_path = model_path / "metadata_v3.json"
+        return metadata_path.exists()
+
+    @staticmethod
+    def validate_v3_model(model_path: Union[str, Path]) -> None:
+        """Validate that a model is v3 format.
+
+        Args:
+            model_path: Path to model directory
+
+        Raises:
+            ValueError: If model is not v3 format
+        """
+        if not BacktestingService.is_v3_model(model_path):
+            raise ValueError(
+                f"Model at {model_path} is not a v3 model. "
+                f"Expected metadata_v3.json file to exist. "
+                f"This model may need to be retrained with v3 strategy grammar."
+            )
+
+        # Also validate strategy_version field
+        metadata = BacktestingService.load_v3_metadata(model_path)
+        if metadata.strategy_version != "3.0":
+            raise ValueError(
+                f"Model uses strategy version {metadata.strategy_version}, "
+                f"expected 3.0. This model may need to be retrained."
+            )
+
+    @staticmethod
+    def reconstruct_config_from_metadata(
+        metadata: "ModelMetadataV3",
+    ) -> "StrategyConfigurationV3":
+        """Reconstruct StrategyConfigurationV3 from model metadata.
+
+        V3 metadata stores the full strategy configuration for reproducibility.
+        This method reconstructs the config for use in backtesting.
+
+        Args:
+            metadata: ModelMetadataV3 instance
+
+        Returns:
+            StrategyConfigurationV3 that matches the training configuration
+        """
+        from ktrdr.config.models import (
+            FuzzySetDefinition,
+            IndicatorDefinition,
+            NNInputSpec,
+            StrategyConfigurationV3,
+            SymbolConfiguration,
+            SymbolMode,
+            TimeframeConfiguration,
+            TimeframeMode,
+            TrainingDataConfiguration,
+        )
+
+        # Reconstruct indicators
+        indicators: dict[str, IndicatorDefinition] = {}
+        for indicator_id, indicator_data in metadata.indicators.items():
+            indicators[indicator_id] = IndicatorDefinition(**indicator_data)
+
+        # Reconstruct fuzzy sets
+        fuzzy_sets: dict[str, FuzzySetDefinition] = {}
+        for fuzzy_set_id, fuzzy_data in metadata.fuzzy_sets.items():
+            fuzzy_sets[fuzzy_set_id] = FuzzySetDefinition(**fuzzy_data)
+
+        # Reconstruct nn_inputs
+        nn_inputs = [NNInputSpec(**inp) for inp in metadata.nn_inputs]
+
+        # Build training_data config from metadata training context
+        # Use first symbol if available, otherwise a placeholder
+        symbols = metadata.training_symbols or ["UNKNOWN"]
+        timeframes = metadata.training_timeframes or ["1h"]
+
+        if len(symbols) == 1:
+            symbol_config = SymbolConfiguration(
+                mode=SymbolMode.SINGLE, symbol=symbols[0]
+            )
+        else:
+            symbol_config = SymbolConfiguration(
+                mode=SymbolMode.MULTI_SYMBOL, symbols=symbols
+            )
+
+        if len(timeframes) == 1:
+            timeframe_config = TimeframeConfiguration(
+                mode=TimeframeMode.SINGLE, timeframe=timeframes[0]
+            )
+        else:
+            timeframe_config = TimeframeConfiguration(
+                mode=TimeframeMode.MULTI_TIMEFRAME,
+                timeframes=timeframes,
+                base_timeframe=timeframes[0],
+            )
+
+        training_data = TrainingDataConfiguration(
+            symbols=symbol_config,
+            timeframes=timeframe_config,
+            history_required=100,  # Default value
+        )
+
+        return StrategyConfigurationV3(
+            name=metadata.strategy_name,
+            version=metadata.strategy_version,
+            description=f"Reconstructed from model {metadata.model_name}",
+            indicators=indicators,
+            fuzzy_sets=fuzzy_sets,
+            nn_inputs=nn_inputs,
+            model={"type": "mlp"},  # Default, actual architecture in model file
+            decisions={"output_format": "classification"},  # Default
+            training={"epochs": 1},  # Placeholder
+            training_data=training_data,
+        )
