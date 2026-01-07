@@ -80,6 +80,9 @@ class FuzzyEngine:
             logger.debug("Initializing FuzzyEngine with v2 format")
             self._config = config
             self._membership_functions: dict[str, dict[str, MembershipFunction]] = {}
+            # Initialize v3 attributes to empty (defensive, prevents AttributeError)
+            self._fuzzy_sets = {}
+            self._indicator_map = {}
             self._validate_config()
             self._initialize_membership_functions()
             logger.info(
@@ -198,9 +201,19 @@ class FuzzyEngine:
         Raises:
             ConfigurationError: If membership function creation fails
         """
+        membership_names = definition.get_membership_names()
+
+        # Validate at least one membership function is defined
+        if not membership_names:
+            raise ConfigurationError(
+                message="FuzzySetDefinition must have at least one membership function",
+                error_code="ENGINE-NoMembershipFunctions",
+                details={"indicator": definition.indicator},
+            )
+
         result = {}
 
-        for name in definition.get_membership_names():
+        for name in membership_names:
             # Get membership spec from model_extra
             membership_def = getattr(definition, name)
 
@@ -250,7 +263,7 @@ class FuzzyEngine:
         Raises:
             ValueError: If fuzzy_set_id is unknown or engine is in v2 mode
         """
-        if not self._indicator_map:
+        if not hasattr(self, "_indicator_map") or not self._indicator_map:
             raise ValueError(
                 "get_indicator_for_fuzzy_set() is only available in v3 mode"
             )

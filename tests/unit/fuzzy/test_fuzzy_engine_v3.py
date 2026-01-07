@@ -150,16 +150,34 @@ class TestFuzzyEngineV3Constructor:
         with pytest.raises(ConfigurationError):
             FuzzyEngine({})
 
-    def test_invalid_fuzzy_set_definition_raises_error(self):
-        """Invalid FuzzySetDefinition raises error during construction."""
-        # This should fail at Pydantic validation level
+    def test_invalid_fuzzy_set_definition_raises_validation_error(self):
+        """FuzzySetDefinition missing 'indicator' raises Pydantic ValidationError.
+
+        Note: ValidationError is raised during FuzzySetDefinition instantiation,
+        not during FuzzyEngine construction. This test verifies that invalid
+        definitions cannot be created in the first place.
+        """
         with pytest.raises(ValidationError):
-            fuzzy_sets = {
-                "invalid": FuzzySetDefinition(
-                    # Missing required 'indicator' field
-                    oversold=[0, 20, 35],
-                ),
-            }
+            FuzzySetDefinition(
+                # Missing required 'indicator' field
+                oversold=[0, 20, 35],
+            )
+
+    def test_fuzzy_set_without_membership_functions_raises_error(self):
+        """FuzzySetDefinition with only indicator (no membership functions) raises error."""
+        from ktrdr.errors import ConfigurationError
+
+        # Create a definition with only indicator, no membership functions
+        # We need to bypass Pydantic validation by creating a mock-like object
+        # Actually, FuzzySetDefinition requires at least indicator, and any extra
+        # fields become membership functions. So we create one with just indicator.
+        fuzzy_sets = {
+            "empty_set": FuzzySetDefinition(indicator="rsi_14"),
+        }
+
+        with pytest.raises(
+            ConfigurationError, match="at least one membership function"
+        ):
             FuzzyEngine(fuzzy_sets)
 
 
