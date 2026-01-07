@@ -105,9 +105,50 @@
 
 ---
 
+## Task 4.3 Complete: ModelMetadataV3
+
+### Implementation Notes
+
+**Simple dataclass design**
+- Separate from existing `ModelMetadata` (which is complex with nested dataclasses)
+- `ModelMetadataV3` is simpler, focused on v3 needs
+- Uses `field(default_factory=...)` for mutable defaults
+
+**Key fields**
+- `model_name`, `strategy_name`: Identity
+- `created_at`: Auto-set to now (timezone-aware UTC)
+- `strategy_version`: Defaults to "3.0"
+- `indicators`, `fuzzy_sets`, `nn_inputs`: Full config for reproducibility
+- `resolved_features`: CRITICAL - the canonical feature order
+- `training_symbols`, `training_timeframes`, `training_metrics`: Training context
+
+**Serialization**
+- `to_dict()`: Converts datetime to ISO string
+- `from_dict()`: Parses ISO datetime string back to datetime
+- JSON-serializable output (no special types)
+
+### Gotchas
+
+**Datetime handling**
+- Always use timezone-aware UTC datetimes
+- `datetime.now(timezone.utc)` in `__post_init__`
+- `datetime.fromisoformat()` handles both naive and aware strings
+
+**Don't use `asdict()` directly**
+- Custom `to_dict()` needed for datetime ISO serialization
+- `asdict()` would leave datetime as-is (not JSON serializable)
+
+### Files Modified
+
+- `ktrdr/models/model_metadata.py`: Added ModelMetadataV3 class (~100 lines)
+- `tests/unit/models/test_model_metadata_v3.py`: New file, 11 tests
+
+---
+
 ## Next Task Notes
 
-**Task 4.3: ModelMetadataV3**
-- CRITICAL: Store `resolved_features` list from FeatureResolver
-- This list is the source of truth for backtest feature ordering
-- Use dataclass with `to_dict()`/`from_dict()` for JSON serialization
+**Task 4.4: Training Worker for V3**
+- Worker receives v3 strategy config
+- Uses TrainingPipelineV3 for feature preparation
+- Saves ModelMetadataV3 with resolved_features after training
+- Pattern: `resolver.resolve(config)` → train → save metadata with features
