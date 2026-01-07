@@ -41,10 +41,50 @@ FeatureCacheV3(config: StrategyConfigurationV3, model_metadata: ModelMetadataV3)
 
 ---
 
+## Task 5.2 Complete: BacktestingService V3 Support
+
+### Implementation Notes
+
+**Static methods added to BacktestingService**
+- `load_v3_metadata(model_path)` - Load ModelMetadataV3 from metadata_v3.json
+- `is_v3_model(model_path)` - Check if model has v3 metadata file
+- `validate_v3_model(model_path)` - Validate and raise if not v3
+- `reconstruct_config_from_metadata(metadata)` - Rebuild StrategyConfigurationV3
+
+**Usage pattern**
+```python
+# Check if v3 model
+if BacktestingService.is_v3_model(model_path):
+    # Load metadata
+    metadata = BacktestingService.load_v3_metadata(model_path)
+    # Reconstruct config
+    config = BacktestingService.reconstruct_config_from_metadata(metadata)
+    # Create feature cache
+    cache = FeatureCacheV3(config, metadata)
+```
+
+### Gotchas
+
+**metadata_v3.json is the source file**
+- V3 models store metadata in `metadata_v3.json` (not `metadata.json`)
+- `is_v3_model()` checks for this file's existence
+- `load_v3_metadata()` raises FileNotFoundError if missing
+
+**Config reconstruction uses defaults for some fields**
+- `model`, `decisions`, `training` fields get default values
+- Full config stored in metadata includes indicators, fuzzy_sets, nn_inputs
+- Training data context (symbols, timeframes) preserved in metadata
+
+### Files Modified
+
+- `ktrdr/backtesting/backtesting_service.py`: Added 4 static methods (~150 lines)
+- `tests/unit/backtesting/test_backtesting_service_v3.py`: New file, 10 tests
+
+---
+
 ## Next Task Notes
 
-**Task 5.2: BacktestingService V3 Support**
-- Will need to load `ModelMetadataV3` from model directory
-- Check `metadata_v3.json` file (saved by training worker in M4)
-- Use `ModelMetadataV3.from_dict(json.load(...))` to deserialize
-- Create FeatureCacheV3 with loaded config and metadata
+**Task 5.3: Feature Order Validation**
+- Add explicit `_validate_feature_order()` method to FeatureCacheV3
+- Show first mismatch position in error message
+- Distinguish between order mismatch and count mismatch
