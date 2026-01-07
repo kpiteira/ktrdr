@@ -64,10 +64,18 @@ class FuzzyEngine:
         """
         logger.debug("Initializing FuzzyEngine")
 
-        # Detect format and initialize appropriately
-        if isinstance(config, dict):
+        # Detect format: v3 uses dict[str, FuzzySetDefinition], v2 uses FuzzyConfig
+        # Check both that it's a dict AND that values are FuzzySetDefinition (if non-empty)
+        is_v3_format = isinstance(config, dict) and (
+            not config or isinstance(next(iter(config.values())), FuzzySetDefinition)
+        )
+
+        if is_v3_format:
             # V3 format: dict[str, FuzzySetDefinition]
+            # Type assertion for mypy (we verified this in is_v3_format check)
+            assert isinstance(config, dict)
             logger.debug("Initializing FuzzyEngine with v3 format")
+            self._is_v3_mode = True
             self._config = None
             self._fuzzy_sets: dict[str, dict[str, MembershipFunction]] = {}
             self._indicator_map: dict[str, str] = {}  # fuzzy_set_id -> indicator_id
@@ -77,7 +85,10 @@ class FuzzyEngine:
             )
         else:
             # V2 format: FuzzyConfig
+            # Type assertion for mypy (if not v3, must be FuzzyConfig)
+            assert not isinstance(config, dict)
             logger.debug("Initializing FuzzyEngine with v2 format")
+            self._is_v3_mode = False
             self._config = config
             self._membership_functions: dict[str, dict[str, MembershipFunction]] = {}
             # Initialize v3 attributes to empty (defensive, prevents AttributeError)
@@ -214,13 +225,13 @@ class FuzzyEngine:
         result = {}
 
         for name in membership_names:
-            # Get membership spec from model_extra
+            # Get membership spec via getattr (Pydantic exposes extra fields as attributes)
             membership_def = getattr(definition, name)
 
             # membership_def is already expanded to {type, parameters} by Pydantic
             try:
                 result[name] = self._create_membership_function(membership_def)
-            except Exception as e:
+            except (KeyError, TypeError, ValueError) as e:
                 logger.error(
                     f"Failed to create membership function '{name}' for fuzzy set: {e}"
                 )
@@ -329,8 +340,8 @@ class FuzzyEngine:
                            required context_data is missing
             TypeError: If the input type is not supported
         """
-        # V3 mode detection: check if _fuzzy_sets exists and is populated
-        if hasattr(self, "_fuzzy_sets") and self._fuzzy_sets:
+        # V3 mode detection: use explicit flag for clarity
+        if getattr(self, "_is_v3_mode", False):
             # V3 mode: First parameter is fuzzy_set_id, second is indicator_values
             fuzzy_set_id = indicator  # In v3, first param is fuzzy_set_id
             indicator_values = values  # In v3, second param is indicator_values

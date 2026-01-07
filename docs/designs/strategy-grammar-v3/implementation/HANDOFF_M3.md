@@ -124,9 +124,11 @@
 
 ### Gotchas
 
-**v2 mode doesn't have `_fuzzy_sets` attribute at all**
-- Must use `hasattr()` check before accessing `_fuzzy_sets`
-- Pattern: `if not hasattr(self, "_fuzzy_sets") or not self._fuzzy_sets:`
+**Use `_is_v3_mode` flag for mode detection**
+- Engine sets `self._is_v3_mode = True/False` in constructor
+- v2 mode initializes `_fuzzy_sets = {}` and `_indicator_map = {}` (defensive)
+- Pattern for mode detection: `if getattr(self, "_is_v3_mode", False):`
+- Avoids ambiguity between v2 (empty dicts) and invalid v3 config
 
 ### Files Modified
 
