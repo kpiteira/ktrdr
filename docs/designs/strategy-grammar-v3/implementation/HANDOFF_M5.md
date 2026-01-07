@@ -107,10 +107,43 @@ if BacktestingService.is_v3_model(model_path):
 
 ---
 
-## Next Task Notes
+## Task 5.4 Complete: Integration Test - Training → Backtest Consistency
 
-**Task 5.4: Integration Test - Training → Backtest Consistency**
-- Create `tests/integration/test_training_backtest_consistency.py`
-- Verify features from FeatureCacheV3 match TrainingPipelineV3
-- Test feature names, order, and values (within floating point tolerance)
-- This is the FINAL task - remember to run M5 E2E tests after completion
+### Implementation Notes
+
+**Integration test validates the critical training/backtest consistency**
+- Creates same data, runs through TrainingPipelineV3 and FeatureCacheV3
+- Verifies column names match exactly
+- Verifies column order matches resolved features
+- Verifies values match within floating point tolerance (rtol=1e-5)
+
+**Test classes created:**
+- `TestTrainingBacktestConsistency` - Core consistency tests
+- `TestMultiTimeframeConsistency` - Multi-timeframe support
+- `TestFeatureOrderCriticality` - Demonstrates why order matters
+
+**Key insight: Input format differs**
+- TrainingPipelineV3: `{symbol: {timeframe: DataFrame}}`
+- FeatureCacheV3: `{timeframe: DataFrame}` (single symbol)
+- Test accommodates this difference
+
+### Files Created
+
+- `tests/integration/test_training_backtest_consistency.py`: New file, 5 tests
+
+---
+
+## Milestone 5 Complete
+
+All tasks implemented:
+- [x] Task 5.1: FeatureCache updated for v3
+- [x] Task 5.2: BacktestingService updated
+- [x] Task 5.3: Feature order validation added
+- [x] Task 5.4: Integration test created
+
+E2E tests passed:
+- [x] Feature mismatch detection works
+- [x] Training/backtest features match exactly
+- [x] Feature order validation catches wrong order
+
+Ready for PR and merge.
