@@ -260,6 +260,28 @@ class FuzzyEngine:
 
         return self._indicator_map[fuzzy_set_id]
 
+    def get_membership_names(self, fuzzy_set_id: str) -> list[str]:
+        """
+        Get ordered list of membership function names for a fuzzy set (v3 only).
+
+        Args:
+            fuzzy_set_id: The fuzzy set to query
+
+        Returns:
+            List of membership names in definition order
+            e.g., ["oversold", "neutral", "overbought"]
+
+        Raises:
+            ValueError: If fuzzy_set_id is unknown or engine is in v2 mode
+        """
+        if not hasattr(self, "_fuzzy_sets") or not self._fuzzy_sets:
+            raise ValueError("get_membership_names() is only available in v3 mode")
+
+        if fuzzy_set_id not in self._fuzzy_sets:
+            raise ValueError(f"Unknown fuzzy set: {fuzzy_set_id}")
+
+        return list(self._fuzzy_sets[fuzzy_set_id].keys())
+
     def fuzzify(
         self,
         indicator: str,

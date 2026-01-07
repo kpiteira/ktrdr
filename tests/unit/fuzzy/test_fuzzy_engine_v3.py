@@ -370,3 +370,76 @@ class TestFuzzyEngineV3Fuzzify:
         # Columns should start with fuzzy_set_id
         for col in result.columns:
             assert col.startswith("rsi_momentum_")
+
+
+class TestFuzzyEngineV3GetMembershipNames:
+    """Test FuzzyEngine v3 get_membership_names() method."""
+
+    def test_returns_correct_membership_names(self):
+        """get_membership_names() returns correct membership names."""
+        fuzzy_sets = {
+            "rsi_momentum": FuzzySetDefinition(
+                indicator="rsi_14",
+                oversold=[0, 20, 35],
+                neutral=[30, 50, 70],
+                overbought=[65, 80, 100],
+            ),
+        }
+
+        engine = FuzzyEngine(fuzzy_sets)
+        names = engine.get_membership_names("rsi_momentum")
+
+        assert "oversold" in names
+        assert "neutral" in names
+        assert "overbought" in names
+        assert len(names) == 3
+
+    def test_order_matches_definition_order(self):
+        """Membership names are returned in definition order."""
+        fuzzy_sets = {
+            "rsi_ordered": FuzzySetDefinition(
+                indicator="rsi_14",
+                oversold=[0, 20, 35],
+                neutral=[30, 50, 70],
+                overbought=[65, 80, 100],
+            ),
+        }
+
+        engine = FuzzyEngine(fuzzy_sets)
+        names = engine.get_membership_names("rsi_ordered")
+
+        # The order should match definition order
+        expected = ["oversold", "neutral", "overbought"]
+        assert names == expected
+
+    def test_unknown_fuzzy_set_id_raises_valueerror(self):
+        """Unknown fuzzy_set_id raises ValueError."""
+        fuzzy_sets = {
+            "rsi_fast": FuzzySetDefinition(
+                indicator="rsi_14",
+                oversold=[0, 25, 40],
+                overbought=[60, 75, 100],
+            ),
+        }
+
+        engine = FuzzyEngine(fuzzy_sets)
+
+        with pytest.raises(ValueError, match="Unknown fuzzy set"):
+            engine.get_membership_names("nonexistent_fuzzy_set")
+
+    def test_v2_mode_raises_valueerror(self):
+        """get_membership_names() raises ValueError in v2 mode."""
+        from ktrdr.fuzzy.config import FuzzyConfigLoader
+
+        # Create v2 FuzzyConfig
+        v2_config_dict = {
+            "rsi": {
+                "low": {"type": "triangular", "parameters": [0, 30, 50]},
+                "high": {"type": "triangular", "parameters": [50, 70, 100]},
+            }
+        }
+        v2_config = FuzzyConfigLoader.load_from_dict(v2_config_dict)
+        engine = FuzzyEngine(v2_config)
+
+        with pytest.raises(ValueError, match="only available in v3 mode"):
+            engine.get_membership_names("rsi")

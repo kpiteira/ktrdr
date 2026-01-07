@@ -106,10 +106,49 @@
 - `ktrdr/fuzzy/engine.py`: Lines 263-323 (fuzzify method + docstring)
 - `tests/unit/fuzzy/test_fuzzy_engine_v3.py`: Lines 166-365 (8 new tests)
 
-### Next Task Notes
+## Task 3.3 Complete: get_membership_names() Method
 
-**Task 3.3: Add get_membership_names() Method**
-- Simple accessor for `list(self._fuzzy_sets[fuzzy_set_id].keys())`
-- v3-only method (raise error if called in v2 mode? or just return empty?)
-- Used by FeatureResolver to enumerate fuzzy features
-- Should maintain definition order
+### Emergent Patterns
+
+**v3-only accessor follows same pattern as get_indicator_for_fuzzy_set()**
+- Check `if not hasattr(self, "_fuzzy_sets") or not self._fuzzy_sets:` for v2 mode detection
+- Raises ValueError in v2 mode with message "only available in v3 mode"
+- Returns `list(self._fuzzy_sets[fuzzy_set_id].keys())` for ordered membership names
+
+### Implementation Notes
+
+**Order preservation**
+- Python dicts maintain insertion order (3.7+)
+- Membership names returned in definition order
+- Example: `['oversold', 'neutral', 'overbought']`
+
+### Gotchas
+
+**v2 mode doesn't have `_fuzzy_sets` attribute at all**
+- Must use `hasattr()` check before accessing `_fuzzy_sets`
+- Pattern: `if not hasattr(self, "_fuzzy_sets") or not self._fuzzy_sets:`
+
+### Files Modified
+
+- `ktrdr/fuzzy/engine.py`: Lines 263-283 (new method)
+- `tests/unit/fuzzy/test_fuzzy_engine_v3.py`: Lines 375-444 (4 new tests)
+
+---
+
+## Milestone 3 Complete
+
+**All tasks completed:**
+- Task 3.1: V3 constructor ✓
+- Task 3.2: V3 fuzzify() method ✓
+- Task 3.3: get_membership_names() method ✓
+
+**E2E test passed** - All 6 test scenarios pass
+
+**No regression** - All 73 v3 tests pass (M1, M2, M3)
+
+### Next Milestone Notes
+
+**M4: Training Pipeline V3**
+- FuzzyEngine is now ready to be used by TrainingPipeline
+- Key methods: `fuzzify(fuzzy_set_id, values)`, `get_indicator_for_fuzzy_set(fuzzy_set_id)`, `get_membership_names(fuzzy_set_id)`
+- Column naming: `{fuzzy_set_id}_{membership}` (no timeframe prefix)
