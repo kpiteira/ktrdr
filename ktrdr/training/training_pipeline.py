@@ -1191,3 +1191,190 @@ class TrainingPipeline:
                 "feature_count": combined_features.shape[1],
             },
         }
+
+
+class TrainingPipelineV3:
+    """
+    Training pipeline for v3 strategy configuration.
+
+    This class uses FeatureResolver to determine what features to compute
+    and ensures feature order matches the canonical order from nn_inputs.
+
+    The feature ordering is CRITICAL:
+    1. nn_inputs list order (YAML order preserved)
+    2. Within each nn_input: timeframes order × membership function order
+
+    This order must be stored in ModelMetadataV3 and validated at backtest.
+    """
+
+    def __init__(self, config: "StrategyConfigurationV3"):
+        """
+        Initialize TrainingPipelineV3 with v3 strategy configuration.
+
+        Args:
+            config: V3 strategy configuration with indicators, fuzzy_sets, and nn_inputs
+        """
+        from ktrdr.config.feature_resolver import FeatureResolver
+
+        self.config = config
+        self.feature_resolver = FeatureResolver()
+
+        # Initialize engines with v3 config
+        self.indicator_engine = IndicatorEngine(config.indicators)
+        self.fuzzy_engine = FuzzyEngine(config.fuzzy_sets)
+
+        logger.info(
+            f"TrainingPipelineV3 initialized with "
+            f"{len(config.indicators)} indicators, "
+            f"{len(config.fuzzy_sets)} fuzzy sets"
+        )
+
+    def prepare_features(
+        self, data: dict[str, dict[str, pd.DataFrame]]
+    ) -> pd.DataFrame:
+        """
+        Prepare NN input features from multi-symbol, multi-timeframe data.
+
+        Args:
+            data: {symbol: {timeframe: DataFrame}}
+
+        Returns:
+            Feature DataFrame with columns matching resolved feature_ids,
+            in the exact order from FeatureResolver
+        """
+        # Resolve features to get canonical order
+        resolved = self.feature_resolver.resolve(self.config)
+        expected_columns = [f.feature_id for f in resolved]
+
+        logger.info(
+            f"Preparing features: {len(expected_columns)} features expected "
+            f"across {len(data)} symbol(s)"
+        )
+
+        # Group requirements by timeframe for efficient computation
+        tf_requirements = self._group_requirements_by_timeframe(resolved)
+
+        all_features = []
+        for _symbol, tf_data in data.items():
+            symbol_dfs = []
+
+            for timeframe, df in tf_data.items():
+                if timeframe not in tf_requirements:
+                    logger.debug(
+                        f"Skipping timeframe {timeframe} - not required by nn_inputs"
+                    )
+                    continue
+
+                reqs = tf_requirements[timeframe]
+
+                # Compute required indicators for this timeframe
+                indicator_df = self.indicator_engine.compute_for_timeframe(
+                    df, timeframe, reqs["indicators"]
+                )
+
+                # Apply fuzzy sets to compute membership values
+                for fuzzy_set_id in reqs["fuzzy_sets"]:
+                    # Get the indicator this fuzzy set uses
+                    indicator_ref = self.fuzzy_engine.get_indicator_for_fuzzy_set(
+                        fuzzy_set_id
+                    )
+
+                    # Handle dot notation for multi-output indicators
+                    if "." in indicator_ref:
+                        base_indicator, output_name = indicator_ref.split(".", 1)
+                        indicator_col = f"{timeframe}_{base_indicator}.{output_name}"
+                    else:
+                        indicator_col = f"{timeframe}_{indicator_ref}"
+
+                    # Check if column exists
+                    if indicator_col not in indicator_df.columns:
+                        raise ValueError(
+                            f"Indicator column '{indicator_col}' not found in data. "
+                            f"Available columns: {list(indicator_df.columns)}"
+                        )
+
+                    # Fuzzify indicator values
+                    # In v3 mode, fuzzify returns a DataFrame
+                    fuzzify_result = self.fuzzy_engine.fuzzify(
+                        fuzzy_set_id, indicator_df[indicator_col]
+                    )
+
+                    # Type assertion for v3 mode (always returns DataFrame for Series input)
+                    if not isinstance(fuzzify_result, pd.DataFrame):
+                        raise TypeError(
+                            f"Expected DataFrame from fuzzify, got {type(fuzzify_result)}"
+                        )
+                    fuzzy_df: pd.DataFrame = fuzzify_result
+
+                    # Add timeframe prefix to fuzzy columns
+                    # fuzzify returns columns like "rsi_fast_oversold"
+                    # We need "5m_rsi_fast_oversold"
+                    fuzzy_df = fuzzy_df.rename(
+                        columns={col: f"{timeframe}_{col}" for col in fuzzy_df.columns}
+                    )
+
+                    symbol_dfs.append(fuzzy_df)
+
+            if symbol_dfs:
+                # Combine all fuzzy DataFrames for this symbol
+                symbol_features = pd.concat(symbol_dfs, axis=1)
+                all_features.append(symbol_features)
+
+        if not all_features:
+            raise ValueError("No features computed - check data and configuration")
+
+        # Concatenate all symbols (vertically - each symbol's features stacked)
+        result = pd.concat(all_features, axis=0)
+
+        # CRITICAL: Reorder columns to match canonical order
+        # Only keep columns that are in expected_columns
+        missing = set(expected_columns) - set(result.columns)
+        if missing:
+            logger.warning(
+                f"Missing {len(missing)} expected features: {sorted(missing)[:5]}..."
+            )
+
+        # Filter to only expected columns and reorder
+        available_expected = [col for col in expected_columns if col in result.columns]
+        result = result[available_expected]
+
+        logger.info(
+            f"Features prepared: {result.shape[0]} samples, "
+            f"{result.shape[1]} features"
+        )
+
+        return result
+
+    def _group_requirements_by_timeframe(
+        self, resolved: list["ResolvedFeature"]
+    ) -> dict[str, dict]:
+        """
+        Group indicator and fuzzy set requirements by timeframe.
+
+        Args:
+            resolved: List of resolved features from FeatureResolver
+
+        Returns:
+            Dict mapping timeframe to {indicators: set, fuzzy_sets: set}
+        """
+        result: dict[str, dict] = {}
+        for f in resolved:
+            if f.timeframe not in result:
+                result[f.timeframe] = {"indicators": set(), "fuzzy_sets": set()}
+            result[f.timeframe]["indicators"].add(f.indicator_id)
+            result[f.timeframe]["fuzzy_sets"].add(f.fuzzy_set_id)
+
+        # Log requirements summary
+        reqs_summary = ", ".join(
+            f"{tf}: {len(reqs['indicators'])} ind, {len(reqs['fuzzy_sets'])} fuzzy"
+            for tf, reqs in result.items()
+        )
+        logger.debug(f"Requirements grouped by timeframe: {reqs_summary}")
+
+        return result
+
+
+# Type hint imports at module level for forward references
+if TYPE_CHECKING:
+    from ktrdr.config.feature_resolver import ResolvedFeature
+    from ktrdr.config.models import StrategyConfigurationV3
