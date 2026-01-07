@@ -29,6 +29,7 @@ from rich.table import Table
 from ktrdr.cli.api_client import check_api_connection, get_api_client
 from ktrdr.cli.async_cli_client import AsyncCLIClient, AsyncCLIClientError
 from ktrdr.cli.commands import get_effective_api_url
+from ktrdr.cli.v3_utils import display_v3_dry_run, is_v3_strategy
 from ktrdr.config.strategy_loader import strategy_loader
 from ktrdr.config.validation import InputValidator
 from ktrdr.errors import DataError, ValidationError
@@ -153,6 +154,12 @@ def train_model(
                 f"[red]❌ Error: Strategy file not found: {strategy_path}[/red]"
             )
             raise typer.Exit(1)
+
+        # Handle v3 strategy dry-run BEFORE loading v2/legacy config
+        # This displays detailed v3 info (indicators, fuzzy sets, features)
+        if dry_run and is_v3_strategy(strategy_path):
+            display_v3_dry_run(strategy_path)
+            return
 
         # Load strategy configuration to extract symbols/timeframes if not provided
         try:

@@ -15,7 +15,8 @@ from rich.console import Console
 from ktrdr.cli.operation_adapters import TrainingOperationAdapter
 from ktrdr.cli.operation_executor import AsyncOperationExecutor
 from ktrdr.cli.telemetry import trace_cli_command
-from ktrdr.config.strategy_loader import strategy_loader
+from ktrdr.cli.v3_utils import display_v3_dry_run, is_v3_strategy
+from ktrdr.config.strategy_loader import StrategyConfigurationLoader, strategy_loader
 from ktrdr.config.validation import InputValidator
 from ktrdr.errors import ValidationError
 from ktrdr.logging import get_logger
@@ -96,12 +97,39 @@ def train_model_async(
             )
             raise typer.Exit(1)
 
+        # Handle v3 strategy dry-run BEFORE loading v2/legacy config
+        # This displays detailed v3 info (indicators, fuzzy sets, features)
+        if dry_run and is_v3_strategy(strategy_path):
+            display_v3_dry_run(strategy_path)
+            return
+
         # Load strategy configuration to extract symbols/timeframes if not provided
         try:
-            config, is_v2 = strategy_loader.load_strategy_config(str(strategy_path))
-            config_symbols, config_timeframes = (
-                strategy_loader.extract_training_symbols_and_timeframes(config)
-            )
+            if is_v3_strategy(strategy_path):
+                # V3 strategy - use v3 loader
+                loader = StrategyConfigurationLoader()
+                v3_config = loader.load_v3_strategy(strategy_path)
+                # Extract symbols (field is 'symbols', YAML uses 'list' alias)
+                symbol_config = v3_config.training_data.symbols
+                config_symbols = symbol_config.symbols or (
+                    [symbol_config.symbol] if symbol_config.symbol else []
+                )
+                # Extract timeframes
+                tf_config = v3_config.training_data.timeframes
+                if tf_config.timeframes:
+                    config_timeframes = tf_config.timeframes
+                elif tf_config.timeframe:
+                    config_timeframes = [tf_config.timeframe]
+                else:
+                    config_timeframes = []
+            else:
+                # V2 strategy - use legacy loader
+                v2_config, _ = strategy_loader.load_strategy_config(
+                    str(strategy_path)
+                )
+                config_symbols, config_timeframes = (
+                    strategy_loader.extract_training_symbols_and_timeframes(v2_config)
+                )
         except Exception as e:
             console.print(f"[red]❌ Error loading strategy config: {e}[/red]")
             raise typer.Exit(1) from e

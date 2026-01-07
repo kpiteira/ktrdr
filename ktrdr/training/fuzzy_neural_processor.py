@@ -17,19 +17,37 @@ class FuzzyNeuralProcessor:
     This class replaces FeatureEngineer for pure neuro-fuzzy architecture.
     It handles ONLY fuzzy membership values (0-1 range) with optional
     temporal context, eliminating all raw feature engineering.
+
+    For v3 strategy configurations, the processor accepts a resolved_features
+    list that defines the canonical feature order. This ensures training and
+    backtest use identical feature ordering.
     """
 
-    def __init__(self, config: dict[str, Any], disable_temporal: bool = False):
+    def __init__(
+        self,
+        config: dict[str, Any],
+        disable_temporal: bool = False,
+        resolved_features: Optional[list[str]] = None,
+    ):
         """Initialize fuzzy neural processor.
 
         Args:
             config: Fuzzy processing configuration
             disable_temporal: If True, disable temporal feature generation
                              (used in backtesting when FeatureCache handles lag features)
+            resolved_features: Ordered list of expected feature IDs from FeatureResolver.
+                              When set, enables v3 validation mode where incoming
+                              features are validated and reordered to match this list.
         """
         self.config = config
         self.feature_names: list[str] = []
         self.disable_temporal = disable_temporal
+
+        # V3 support
+        self.resolved_features: Optional[list[str]] = resolved_features
+        self.n_features: Optional[int] = (
+            len(resolved_features) if resolved_features else None
+        )
 
     def prepare_input(
         self,
@@ -37,16 +55,44 @@ class FuzzyNeuralProcessor:
     ) -> tuple[torch.Tensor, list[str]]:
         """Prepare pure fuzzy features for neural network training.
 
+        In v3 mode (resolved_features set), validates that all expected
+        features are present and returns them in the canonical order.
+
         Args:
             fuzzy_data: DataFrame with fuzzy membership values (0-1 range)
 
         Returns:
             Tuple of (feature tensor, feature names)
+
+        Raises:
+            ValueError: If required features are missing (v3 mode)
         """
         logger.debug(
             f"Processing fuzzy data with {len(fuzzy_data.columns)} fuzzy features"
         )
 
+        # V3 mode: validate and reorder features
+        if self.resolved_features is not None:
+            self.validate_features(fuzzy_data)
+            ordered_data = self.get_ordered_features(fuzzy_data)
+
+            # Directly use resolved_features order
+            feature_matrix = ordered_data.values.astype(np.float64)
+            feature_names = list(self.resolved_features)
+
+            # Validate fuzzy range (should be 0-1)
+            self._validate_fuzzy_range(feature_matrix, feature_names)
+
+            # Handle any remaining NaN values
+            feature_matrix = np.nan_to_num(feature_matrix, nan=0.0)
+
+            self.feature_names = feature_names
+            logger.debug(
+                f"Prepared {len(feature_names)} v3 features in canonical order"
+            )
+            return torch.FloatTensor(feature_matrix), feature_names
+
+        # Legacy mode: extract and process features
         features = []
         feature_names = []
 
@@ -622,3 +668,49 @@ class FuzzyNeuralProcessor:
             "scaling": False,  # Fuzzy values already 0-1
             "raw_features": False,  # No raw feature engineering
         }
+
+    def validate_features(self, features: pd.DataFrame) -> None:
+        """Validate feature DataFrame has correct columns.
+
+        In v3 mode (when resolved_features is set), this validates that
+        all expected features are present. Extra columns trigger a warning.
+
+        In legacy mode (when resolved_features is None), this is a no-op.
+
+        Args:
+            features: DataFrame with feature columns
+
+        Raises:
+            ValueError: If required features are missing (v3 mode only)
+        """
+        if self.resolved_features is None:
+            # Legacy mode - skip validation
+            return
+
+        missing = set(self.resolved_features) - set(features.columns)
+        if missing:
+            raise ValueError(f"Missing features: {sorted(missing)}")
+
+        extra = set(features.columns) - set(self.resolved_features)
+        if extra:
+            logger.warning(f"Extra columns will be ignored: {sorted(extra)}")
+
+    def get_ordered_features(self, features: pd.DataFrame) -> pd.DataFrame:
+        """Reorder DataFrame columns to match resolved_features order.
+
+        In v3 mode, returns DataFrame with columns reordered to match
+        the canonical feature order from FeatureResolver.
+
+        In legacy mode, returns the DataFrame unchanged.
+
+        Args:
+            features: DataFrame with feature columns
+
+        Returns:
+            DataFrame with columns in resolved_features order (v3) or unchanged (legacy)
+        """
+        if self.resolved_features is None:
+            return features
+
+        # Filter to only resolved_features columns, in order
+        return features[self.resolved_features]

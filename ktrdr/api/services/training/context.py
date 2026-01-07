@@ -14,6 +14,9 @@ import yaml
 
 from ktrdr.api.models.operations import OperationMetadata
 from ktrdr.errors import ConfigurationError, ValidationError
+from ktrdr.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def _get_default_strategy_paths() -> tuple[Path, ...]:
@@ -209,8 +212,50 @@ def _load_strategy_config(strategy_path: Path) -> dict[str, Any]:
     return data
 
 
+def _is_v3_format(strategy_config: dict[str, Any]) -> bool:
+    """Check if strategy config is v3 format."""
+    return (
+        isinstance(strategy_config.get("indicators"), dict)
+        and "nn_inputs" in strategy_config
+    )
+
+
 def _validate_strategy(strategy_config: dict[str, Any], strategy_name: str) -> None:
     """Run shared strategy validation and raise ConfigurationError on errors."""
+    # Check for v3 format first
+    if _is_v3_format(strategy_config):
+        # Use v3 validation
+        from pydantic import ValidationError as PydanticValidationError
+
+        from ktrdr.config.models import StrategyConfigurationV3
+        from ktrdr.config.strategy_validator import (
+            StrategyValidationError,
+            validate_v3_strategy,
+        )
+
+        try:
+            # Parse into v3 model (validates structure)
+            v3_config = StrategyConfigurationV3(**strategy_config)
+            # Then run semantic validation
+            warnings = validate_v3_strategy(v3_config)
+            for w in warnings:
+                logger.warning(f"Strategy validation: {w.message} at {w.location}")
+            return  # V3 validation passed
+        except PydanticValidationError as e:
+            raise ConfigurationError(
+                message=f"V3 strategy structure invalid: {e}",
+                error_code="STRATEGY-V3ParseFailed",
+                context={"strategy_name": strategy_name},
+                suggestion="Ensure the strategy follows v3 format specification",
+            ) from e
+        except StrategyValidationError as e:
+            raise ConfigurationError(
+                message=f"V3 strategy validation failed: {e}",
+                error_code="STRATEGY-V3ValidationFailed",
+                context={"strategy_name": strategy_name},
+                suggestion="Check the v3 strategy configuration for errors",
+            ) from e
+
     # Lazy import to avoid circular dependency:
     # context.py -> strategies.py -> endpoints/__init__.py -> models.py
     # -> training_service.py -> training/__init__.py -> context.py

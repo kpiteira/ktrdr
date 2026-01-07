@@ -301,3 +301,70 @@ class LocalTrainingOrchestrator:
         """
         if self._token and self._token.is_cancelled():
             raise CancellationError("Training operation cancelled")
+
+    @staticmethod
+    def _is_v3_format(config: dict[str, Any]) -> bool:
+        """
+        Check if config is v3 format.
+
+        V3 format is identified by:
+        - indicators is a dict (not a list)
+        - nn_inputs field is present
+
+        Args:
+            config: Strategy configuration dictionary
+
+        Returns:
+            True if config is v3 format
+        """
+        return isinstance(config.get("indicators"), dict) and "nn_inputs" in config
+
+    @staticmethod
+    def _save_v3_metadata(
+        model_path: Path,
+        config: dict[str, Any],
+        resolved_features: list[str],
+        training_metrics: dict[str, Any],
+        training_symbols: list[str],
+        training_timeframes: list[str],
+    ) -> None:
+        """
+        Save ModelMetadataV3 to the model directory.
+
+        Creates metadata_v3.json with v3-specific information including
+        the critical resolved_features list that defines feature order.
+
+        Args:
+            model_path: Path to model directory
+            config: V3 strategy configuration dict
+            resolved_features: Ordered list of feature IDs from FeatureResolver
+            training_metrics: Training metrics (loss, accuracy, etc.)
+            training_symbols: Symbols used during training
+            training_timeframes: Timeframes used during training
+        """
+        import json
+        from pathlib import Path as PathType
+
+        from ktrdr.models.model_metadata import ModelMetadataV3
+
+        # Create metadata
+        metadata = ModelMetadataV3(
+            model_name=config.get("name", "unknown"),
+            strategy_name=config.get("name", "unknown"),
+            strategy_version=config.get("version", "3.0"),
+            indicators=config.get("indicators", {}),
+            fuzzy_sets=config.get("fuzzy_sets", {}),
+            nn_inputs=config.get("nn_inputs", []),
+            resolved_features=resolved_features,
+            training_symbols=training_symbols,
+            training_timeframes=training_timeframes,
+            training_metrics=training_metrics,
+        )
+
+        # Save to model directory
+        model_path = PathType(model_path)
+        metadata_file = model_path / "metadata_v3.json"
+        with open(metadata_file, "w") as f:
+            json.dump(metadata.to_dict(), f, indent=2)
+
+        logger.info(f"Saved ModelMetadataV3 to {metadata_file}")

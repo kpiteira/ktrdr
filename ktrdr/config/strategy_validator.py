@@ -1068,8 +1068,14 @@ def validate_v3_strategy(
     warnings: list[StrategyValidationWarning] = []
     errors: list[str] = []
 
-    # Get available timeframes for validation
-    available_timeframes = set(config.training_data.timeframes.timeframes or [])
+    # Get available timeframes for validation (handle both single and multi modes)
+    tf_config = config.training_data.timeframes
+    if tf_config.timeframes:
+        available_timeframes = set(tf_config.timeframes)
+    elif tf_config.timeframe:
+        available_timeframes = {tf_config.timeframe}
+    else:
+        available_timeframes = set()
 
     # Track which indicators are used (for unused warning)
     used_indicators: set[str] = set()
