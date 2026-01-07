@@ -124,9 +124,7 @@ def train_model_async(
                     config_timeframes = []
             else:
                 # V2 strategy - use legacy loader
-                v2_config, _ = strategy_loader.load_strategy_config(
-                    str(strategy_path)
-                )
+                v2_config, _ = strategy_loader.load_strategy_config(str(strategy_path))
                 config_symbols, config_timeframes = (
                     strategy_loader.extract_training_symbols_and_timeframes(v2_config)
                 )
