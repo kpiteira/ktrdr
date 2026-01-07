@@ -64,6 +64,49 @@
 - FuzzyNeuralProcessor accepts v3 config and feature list
 - Pattern: similar to TrainingPipelineV3 - accept config + resolved features in constructor
 
+---
+
+## Task 4.2 Complete: FuzzyNeuralProcessor V3 Support
+
+### Implementation Notes
+
+**V3 mode via `resolved_features` parameter**
+- Added optional `resolved_features` parameter to `__init__`
+- When set, enables validation and reordering of features
+- Legacy mode (no resolved_features) works unchanged
+
+**Key methods added**
+- `validate_features(df)`: Raises ValueError if missing columns, warns on extra
+- `get_ordered_features(df)`: Returns DataFrame with columns in resolved_features order
+- Both are no-ops in legacy mode (resolved_features=None)
+
+**prepare_input() behavior in v3 mode**
+- Validates features first (fails if any missing)
+- Reorders to match resolved_features order
+- Skips fuzzy column detection (columns are pre-validated)
+- Returns features in exact canonical order
+
+### Gotchas
+
+**Don't mix v3 and legacy modes**
+- If resolved_features is set, the entire flow changes
+- Legacy mode uses fuzzy column detection heuristics
+- V3 mode expects columns to already be correctly named
+
+**Order matters**
+- The resolved_features list IS the canonical order
+- prepare_input returns features in this exact order
+- This order must match training to ensure backtest works
+
+### Files Modified
+
+- `ktrdr/training/fuzzy_neural_processor.py`: Added v3 support (~60 lines)
+- `tests/unit/training/test_fuzzy_neural_processor_v3.py`: New file, 10 tests
+
+---
+
+## Next Task Notes
+
 **Task 4.3: ModelMetadataV3**
 - CRITICAL: Store `resolved_features` list from FeatureResolver
 - This list is the source of truth for backtest feature ordering
