@@ -82,9 +82,35 @@ if BacktestingService.is_v3_model(model_path):
 
 ---
 
+## Task 5.3 Complete: Feature Order Validation
+
+### Implementation Notes
+
+**_validate_feature_order() is a separate method from _validate_features()**
+- `_validate_features()` - Validates set membership (missing/extra features)
+- `_validate_feature_order()` - Validates exact column order matches expected
+
+**Error messages are designed for debugging**
+- Order mismatch: Shows position and expected vs got values
+- Count mismatch: Shows expected count vs actual count
+- Both include "This is a bug" message to indicate it's not user error
+
+**Note: Method is not automatically called in compute_features()**
+- Current flow: `_validate_features()` checks set membership, then result is reordered to match expected
+- `_validate_feature_order()` can be called after reordering to verify the reorder worked
+- The reordering (`result[self.expected_features]`) ensures order is correct
+
+### Files Modified
+
+- `ktrdr/backtesting/feature_cache.py`: Added `_validate_feature_order()` method (~35 lines)
+- `tests/unit/backtesting/test_feature_cache_v3.py`: Added `TestFeatureCacheV3OrderValidation` class (5 tests)
+
+---
+
 ## Next Task Notes
 
-**Task 5.3: Feature Order Validation**
-- Add explicit `_validate_feature_order()` method to FeatureCacheV3
-- Show first mismatch position in error message
-- Distinguish between order mismatch and count mismatch
+**Task 5.4: Integration Test - Training → Backtest Consistency**
+- Create `tests/integration/test_training_backtest_consistency.py`
+- Verify features from FeatureCacheV3 match TrainingPipelineV3
+- Test feature names, order, and values (within floating point tolerance)
+- This is the FINAL task - remember to run M5 E2E tests after completion

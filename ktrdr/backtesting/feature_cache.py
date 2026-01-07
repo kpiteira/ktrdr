@@ -575,6 +575,44 @@ class FeatureCacheV3:
                 f"{'...' if len(extra) > 5 else ''}"
             )
 
+    def _validate_feature_order(self, result: pd.DataFrame) -> None:
+        """Validate feature order matches expected EXACTLY.
+
+        This is critical because neural networks are not invariant to
+        input order — the same features in different order will produce
+        garbage predictions.
+
+        Args:
+            result: Computed features DataFrame
+
+        Raises:
+            ValueError: If feature order doesn't match expected
+        """
+        computed_order = list(result.columns)
+        expected_order = self.expected_features
+
+        if computed_order != expected_order:
+            # Check length first
+            if len(computed_order) != len(expected_order):
+                raise ValueError(
+                    f"Feature count mismatch: "
+                    f"expected {len(expected_order)}, got {len(computed_order)}. "
+                    f"This is a bug in feature generation. Please report this issue."
+                )
+
+            # Find first mismatch position
+            for i, (computed, expected) in enumerate(
+                zip(computed_order, expected_order)
+            ):
+                if computed != expected:
+                    raise ValueError(
+                        f"Feature order mismatch at position {i}:\n"
+                        f"  Expected: {expected}\n"
+                        f"  Got: {computed}\n"
+                        f"This is a bug in feature generation. "
+                        f"Please report this issue."
+                    )
+
 
 if TYPE_CHECKING:
     from ktrdr.config.feature_resolver import ResolvedFeature

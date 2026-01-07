@@ -252,3 +252,131 @@ class TestFeatureCacheV3FeatureOrder:
             "5m_rsi_fast_overbought",
             "5m_rsi_fast_oversold",
         ]
+
+
+class TestFeatureCacheV3OrderValidation:
+    """Tests for explicit _validate_feature_order() method (Task 5.3)."""
+
+    def test_validate_feature_order_catches_reordered_features(
+        self, v3_strategy_config, model_metadata_matching
+    ):
+        """_validate_feature_order should detect when features are in wrong order."""
+        cache = FeatureCacheV3(v3_strategy_config, model_metadata_matching)
+
+        # Create DataFrame with correct features but WRONG order
+        df = pd.DataFrame(
+            {
+                "5m_rsi_fast_overbought": [0.5, 0.6, 0.7],  # Wrong order
+                "5m_rsi_fast_oversold": [0.3, 0.4, 0.5],
+            }
+        )
+
+        # Expected order is: oversold, overbought
+        # But df has: overbought, oversold
+        with pytest.raises(ValueError) as exc_info:
+            cache._validate_feature_order(df)
+
+        error_msg = str(exc_info.value)
+        # Should mention the position of first mismatch
+        assert "position" in error_msg.lower() or "0" in error_msg
+        # Should show what was expected vs got
+        assert "expected" in error_msg.lower()
+        assert "got" in error_msg.lower() or "5m_rsi_fast" in error_msg
+
+    def test_validate_feature_order_error_shows_first_mismatch_position(
+        self, v3_strategy_config
+    ):
+        """Error message should show the position of the first mismatch."""
+        # Create metadata with specific order
+        metadata = ModelMetadataV3(
+            model_name="test_model",
+            strategy_name="test_strategy",
+            resolved_features=[
+                "5m_feature_a",
+                "5m_feature_b",
+                "5m_feature_c",
+                "5m_feature_d",
+            ],
+        )
+
+        cache = FeatureCacheV3(v3_strategy_config, metadata)
+
+        # Create DataFrame with mismatch at position 2
+        df = pd.DataFrame(
+            {
+                "5m_feature_a": [1.0],
+                "5m_feature_b": [2.0],
+                "5m_feature_d": [4.0],  # Wrong - should be feature_c
+                "5m_feature_c": [3.0],
+            }
+        )
+
+        with pytest.raises(ValueError) as exc_info:
+            cache._validate_feature_order(df)
+
+        error_msg = str(exc_info.value)
+        # Error should mention position 2 (where the mismatch is)
+        assert "2" in error_msg
+        # Should show what was expected
+        assert "5m_feature_c" in error_msg
+
+    def test_validate_feature_order_length_mismatch(
+        self, v3_strategy_config, model_metadata_matching
+    ):
+        """_validate_feature_order should catch length mismatches."""
+        cache = FeatureCacheV3(v3_strategy_config, model_metadata_matching)
+
+        # Create DataFrame with too few columns (matching features but missing some)
+        df = pd.DataFrame(
+            {
+                "5m_rsi_fast_oversold": [0.3, 0.4, 0.5],
+                # Missing overbought
+            }
+        )
+
+        with pytest.raises(ValueError) as exc_info:
+            cache._validate_feature_order(df)
+
+        error_msg = str(exc_info.value)
+        # Should mention count/length mismatch
+        assert "expected" in error_msg.lower() and (
+            "2" in error_msg or "1" in error_msg
+        )
+
+    def test_validate_feature_order_passes_for_correct_order(
+        self, v3_strategy_config, model_metadata_matching
+    ):
+        """_validate_feature_order should not raise when order is correct."""
+        cache = FeatureCacheV3(v3_strategy_config, model_metadata_matching)
+
+        # Create DataFrame with correct order
+        df = pd.DataFrame(
+            {
+                "5m_rsi_fast_oversold": [0.3, 0.4, 0.5],
+                "5m_rsi_fast_overbought": [0.5, 0.6, 0.7],
+            }
+        )
+
+        # Should not raise
+        cache._validate_feature_order(df)
+
+    def test_validate_feature_order_error_mentions_it_is_a_bug(
+        self, v3_strategy_config, model_metadata_matching
+    ):
+        """Error message should indicate this is a bug to report."""
+        cache = FeatureCacheV3(v3_strategy_config, model_metadata_matching)
+
+        # Create DataFrame with wrong order
+        df = pd.DataFrame(
+            {
+                "5m_rsi_fast_overbought": [0.5],
+                "5m_rsi_fast_oversold": [0.3],
+            }
+        )
+
+        with pytest.raises(ValueError) as exc_info:
+            cache._validate_feature_order(df)
+
+        error_msg = str(exc_info.value)
+        # Should mention it's a bug to report
+        assert "bug" in error_msg.lower() or "report" in error_msg.lower()
