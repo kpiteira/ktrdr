@@ -9,6 +9,7 @@ Provides functions for saving and managing agent-generated strategies:
 These functions are used by agent tools and can be tested independently.
 """
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -277,3 +278,113 @@ def _format_file_mtime(path: Path) -> str:
     mtime = path.stat().st_mtime
     dt = datetime.fromtimestamp(mtime, tz=timezone.utc)
     return dt.isoformat()
+
+
+# ==============================================================================
+# V3 Strategy Utilities
+# ==============================================================================
+
+
+def parse_strategy_response(response: str) -> dict[str, Any]:
+    """
+    Parse LLM response containing strategy YAML.
+
+    Extracts YAML from markdown code blocks if present, otherwise
+    attempts to parse the raw response as YAML.
+
+    Args:
+        response: LLM response string, potentially with markdown code blocks.
+
+    Returns:
+        Parsed strategy configuration dict, or empty dict if parsing fails.
+    """
+    if not response or not response.strip():
+        return {}
+
+    yaml_str = response.strip()
+
+    # Use regex for robust extraction from markdown code blocks
+    # This handles edge cases like multiple code blocks (takes first match)
+    # and ensures proper matching of opening/closing backticks
+    yaml_match = re.search(r"```(?:yaml)?\n(.*?)```", response, re.DOTALL)
+    if yaml_match:
+        yaml_str = yaml_match.group(1).strip()
+
+    try:
+        result = yaml.safe_load(yaml_str)
+        return result if result else {}
+    except yaml.YAMLError as e:
+        logger.warning("Failed to parse YAML from response", error=str(e))
+        return {}
+
+
+def validate_agent_strategy(config: dict[str, Any]) -> tuple[bool, list[str]]:
+    """
+    Validate agent-generated strategy for v3 format.
+
+    Performs quick v3 format checks before full validation:
+    - indicators must be a dict (not a list like v2)
+    - nn_inputs section must be present
+
+    Args:
+        config: Strategy configuration dictionary.
+
+    Returns:
+        Tuple of (is_valid, list of error/warning messages).
+    """
+    from ktrdr.config.models import StrategyConfigurationV3
+    from ktrdr.config.strategy_validator import validate_v3_strategy
+
+    errors: list[str] = []
+
+    # Quick v3 format checks
+    indicators = config.get("indicators")
+    if indicators is None:
+        errors.append("indicators section is required")
+    elif not isinstance(indicators, dict):
+        errors.append("indicators must be a dict (v3 format), not a list")
+
+    if "nn_inputs" not in config:
+        errors.append("nn_inputs section is required (v3 format)")
+
+    # If basic v3 checks fail, return early
+    if errors:
+        return False, errors
+
+    # Full v3 validation
+    try:
+        parsed = StrategyConfigurationV3(**config)
+        warnings = validate_v3_strategy(parsed)
+        warning_messages = [w.message for w in warnings]
+        return True, warning_messages
+    except Exception as e:
+        return False, [str(e)]
+
+
+def extract_features(config: dict[str, Any]) -> list[str]:
+    """
+    Extract resolved feature list from v3 config.
+
+    Uses FeatureResolver to expand nn_inputs into concrete feature IDs.
+
+    Args:
+        config: V3 strategy configuration dictionary.
+
+    Returns:
+        List of resolved feature IDs (e.g., ['1h_rsi_momentum_oversold', ...]).
+
+    Raises:
+        ValueError: If config is not valid v3 format.
+        Exception: If feature resolution fails.
+    """
+    from ktrdr.config.feature_resolver import FeatureResolver
+    from ktrdr.config.models import StrategyConfigurationV3
+
+    # Parse as v3 config (raises if invalid)
+    parsed = StrategyConfigurationV3(**config)
+
+    # Resolve features
+    resolver = FeatureResolver()
+    resolved = resolver.resolve(parsed)
+
+    return [f.feature_id for f in resolved]

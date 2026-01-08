@@ -219,43 +219,53 @@ Your task is to analyze the results and provide a comprehensive assessment:
 - Mark the session as successful
 - Prepare for the next research cycle
 
-## Strategy YAML Template
+## Strategy YAML Template (v3 Format)
 
-Use this format when creating strategies:
+Use this v3 format when creating strategies. The v3 format has three key sections:
+
+1. **indicators**: Dict of indicator calculations (keyed by indicator_id)
+2. **fuzzy_sets**: Dict of fuzzy interpretations (each references an indicator)
+3. **nn_inputs**: List specifying which fuzzy_set + timeframe combinations feed the neural network
 
 ```yaml
 name: "strategy_name_timestamp"
 description: "One-line description"
-version: "1.0"
+version: "3.0"
 hypothesis: "What market behavior are you trying to capture?"
 
 scope: "universal"
 
 training_data:
   symbols:
-    mode: "multi_symbol"  # or "single"
+    mode: "multi_symbol"
     list: ["EURUSD"]
   timeframes:
-    mode: "single"  # or "multi_timeframe"
+    mode: "single"
     list: ["1h"]
     base_timeframe: "1h"
   history_required: 200
 
 deployment:
   target_symbols:
-    mode: "universal"  # or "training_only" or "group_restricted"
+    mode: "universal"
   target_timeframes:
-    mode: "single"  # or "multi_timeframe"
+    mode: "single"
     supported: ["1h"]
 
 indicators:
-  - name: "rsi"
-    feature_id: rsi_14
+  rsi_14:
+    type: rsi
     period: 14
-    source: "close"
+    source: close
+  macd_12_26_9:
+    type: macd
+    fast_period: 12
+    slow_period: 26
+    signal_period: 9
 
 fuzzy_sets:
-  rsi_14:
+  rsi_momentum:
+    indicator: rsi_14
     oversold:
       type: "triangular"
       parameters: [0, 20, 35]
@@ -265,6 +275,20 @@ fuzzy_sets:
     overbought:
       type: "triangular"
       parameters: [65, 80, 100]
+  macd_trend:
+    indicator: macd_12_26_9.histogram
+    bearish:
+      type: "triangular"
+      parameters: [-50, -10, 0]
+    bullish:
+      type: "triangular"
+      parameters: [0, 10, 50]
+
+nn_inputs:
+  - fuzzy_set: rsi_momentum
+    timeframes: all
+  - fuzzy_set: macd_trend
+    timeframes: ["1h"]
 
 model:
   type: "mlp"
@@ -273,10 +297,6 @@ model:
     activation: "relu"
     output_activation: "softmax"
     dropout: 0.2
-  features:
-    include_price_context: false
-    lookback_periods: 2
-    scale_features: true
   training:
     learning_rate: 0.001
     batch_size: 32
@@ -290,30 +310,45 @@ model:
 decisions:
   output_format: "classification"
   confidence_threshold: 0.6
-  position_awareness: true
 
 training:
   method: "supervised"
   labels:
     source: "zigzag"
     zigzag_threshold: 0.03
-    label_lookahead: 20
   data_split:
     train: 0.7
     validation: 0.15
     test: 0.15
 ```
 
+## V3 Format Key Concepts
+
+### Indicators (Dict, keyed by indicator_id)
+- Keys are descriptive IDs: `rsi_14`, `bbands_20_2`, `macd_12_26_9`
+- Each indicator has a `type` field matching the indicator name
+- Parameters are specific to each indicator type
+
+### Fuzzy Sets (Dict with indicator references)
+- Each fuzzy set has an `indicator` field referencing an indicator_id
+- For multi-output indicators, use dot notation: `indicator: macd_12_26_9.histogram`
+- Multiple fuzzy sets can reference the same indicator (different interpretations)
+
+### NN Inputs (Required list)
+- Explicitly defines which fuzzy_set + timeframe combinations go to the neural network
+- Use `timeframes: all` to apply to all training timeframes
+- Use `timeframes: ["1h", "4h"]` for specific timeframes
+
 ## CRITICAL: Valid Enum Values
 
 You MUST use ONLY these exact values. Using any other value will cause validation failure.
 
 ### training_data.symbols.mode
-- `"single"` - Train on one symbol only (legacy mode)
+- `"single"` - Train on one symbol only
 - `"multi_symbol"` - Train on multiple symbols
 
 ### training_data.timeframes.mode
-- `"single"` - Use one timeframe only (legacy mode)
+- `"single"` - Use one timeframe only
 - `"multi_timeframe"` - Use multiple timeframes
 
 ### deployment.target_symbols.mode
@@ -349,20 +384,24 @@ You MUST use ONLY these exact values. Using any other value will cause validatio
 
 ## CRITICAL: Common Validation Errors (AVOID THESE)
 
-1. **Missing feature_id**: Every indicator MUST have a `feature_id` field. This is REQUIRED.
-   - WRONG: `- name: "RSI", period: 14`
-   - CORRECT: `- name: "RSI", feature_id: "rsi_14", period: 14`
+1. **indicators must be a dict**: In v3, indicators is a dict keyed by indicator_id, NOT a list.
+   - WRONG: `indicators: [{ name: rsi, period: 14 }]`
+   - CORRECT: `indicators: { rsi_14: { type: rsi, period: 14 } }`
 
-2. **fuzzy_sets keys must match feature_id exactly**: The keys in `fuzzy_sets` must match the `feature_id` of the corresponding indicator.
-   - If indicator has `feature_id: "rsi_14"`, then fuzzy_sets must have key `rsi_14:`
+2. **fuzzy_sets must have indicator field**: Each fuzzy set must reference an indicator.
+   - WRONG: `rsi_momentum: { oversold: ... }` (missing indicator reference)
+   - CORRECT: `rsi_momentum: { indicator: rsi_14, oversold: ... }`
 
-3. **Use `parameters` not `params`**: The field name is `parameters` (not `params`) for fuzzy set definitions.
+3. **nn_inputs is required**: You must explicitly list which fuzzy_set + timeframe combinations to use.
+   - Every strategy MUST have an `nn_inputs` section
+
+4. **Use `parameters` not `params`**: The field name is `parameters` (not `params`) for fuzzy set definitions.
    - WRONG: `params: [0, 30, 50]`
    - CORRECT: `parameters: [0, 30, 50]`
 
-4. **Indicator names are case-sensitive**: Use the exact name as shown in the Available Indicators list (with backticks).
+5. **Indicator names are case-sensitive**: Use the exact name as shown in the Available Indicators list (with backticks).
 
-5. **DO NOT invent enum values**: Only use values listed above. Never use values like `mode: "adaptive"` or `type: "lstm"`.
+6. **DO NOT invent enum values**: Only use values listed above. Never use values like `mode: "adaptive"` or `type: "lstm"`.
 
 ## Design Guidelines
 
