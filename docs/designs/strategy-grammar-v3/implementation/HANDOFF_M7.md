@@ -31,18 +31,53 @@
 
 ---
 
-## Next Task Notes (7.2: Update Strategy Utilities)
+## Task 7.2 Complete: Update Strategy Utilities
 
-**Files to modify:** `ktrdr/agents/strategy_utils.py`
+### Implementation Notes
 
-**Key imports needed:**
-- `from ktrdr.config.models import StrategyConfigurationV3`
-- `from ktrdr.config.strategy_validator import validate_v3_strategy`
-- `from ktrdr.config.feature_resolver import FeatureResolver`
+**File modified:** `ktrdr/agents/strategy_utils.py`
 
-**Functions to update:**
-- `parse_strategy_response()` - Already handles YAML extraction, may need minor v3 adjustments
-- `validate_agent_strategy()` - Should check for v3 markers (indicators dict, nn_inputs present)
-- `extract_features()` - Use FeatureResolver to get resolved features
+**Three new functions added:**
 
-**Pattern from M6 handoff:** The validation should reject v2 format with clear error messages like "indicators must be a dict (v3 format)" and "nn_inputs section required (v3 format)"
+1. `parse_strategy_response(response: str) -> dict`
+   - Extracts YAML from markdown code blocks (`yaml` or generic ```)
+   - Falls back to raw YAML parsing if no code blocks
+   - Returns empty dict on parse failure
+
+2. `validate_agent_strategy(config: dict) -> tuple[bool, list[str]]`
+   - Quick v3 format checks first (indicators dict, nn_inputs present)
+   - Full Pydantic validation if basic checks pass
+   - Returns `(is_valid, messages)` tuple
+
+3. `extract_features(config: dict) -> list[str]`
+   - Uses `FeatureResolver` to resolve nn_inputs
+   - Returns list of feature IDs like `['1h_rsi_momentum_oversold', ...]`
+   - Raises `ValidationError` for invalid configs
+
+### Gotchas
+
+**Functions are synchronous (not async)**
+- Unlike existing functions in the file (`validate_strategy_config`, `save_strategy_config`)
+- These are simple utility functions that don't need async
+
+**Imports are inside functions**
+- Heavy imports like `StrategyConfigurationV3` are inside function bodies
+- Avoids circular import issues and speeds up module load
+
+### Files Created/Modified
+
+- `ktrdr/agents/strategy_utils.py`: Added 3 functions (~116 lines)
+- `tests/unit/agents/test_strategy_utils_v3.py`: New file with 11 tests
+
+---
+
+## Next Task Notes (7.3: Update MCP Strategy Tools)
+
+**Files to check:** `mcp/src/tools/strategy_tools.py`
+
+**Note:** This task may need investigation - the milestone plan mentions MCP tools but check if they exist. If not present, may need to skip or adapt.
+
+**Expected functionality:**
+- `validate_strategy()` - Should use v3 loader and return format info
+- Return `format: "v3"` or `format: "v2"` with migration suggestion
+- Include resolved feature count for v3 strategies
