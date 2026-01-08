@@ -8,8 +8,6 @@ the error classification in the architecture blueprint.
 
 from typing import Any, Optional
 
-from ktrdr.errors.error_codes import ErrorCodes
-
 
 class KtrdrError(Exception):
     """
@@ -277,13 +275,6 @@ class ConfigurationError(KtrdrError):
             ...     suggestion="Fix the validation errors:\\nfuzzy_sets: ..."
             ... )
 
-        Using factory method:
-            >>> raise ConfigurationError.missing_feature_id(
-            ...     indicator_type="rsi",
-            ...     indicator_index=0,
-            ...     file_path="strategies/my_strategy.yaml"
-            ... )
-
         API endpoint usage:
             >>> try:
             ...     validate_strategy(config)
@@ -364,152 +355,6 @@ class ConfigurationError(KtrdrError):
         if self.error_code:
             return f"[{self.error_code}] {self.message}"
         return self.message
-
-    @classmethod
-    def missing_feature_id(
-        cls, indicator_type: str, indicator_index: int, file_path: str = "strategy.yaml"
-    ) -> "ConfigurationError":
-        """
-        Factory method for missing feature_id error.
-
-        Args:
-            indicator_type: Type of indicator missing feature_id
-            indicator_index: Index of indicator in config
-            file_path: Path to strategy file
-
-        Returns:
-            ConfigurationError for missing feature_id
-        """
-        return cls(
-            message=f"Indicator '{indicator_type}' at index {indicator_index} missing required field 'feature_id'",
-            error_code=ErrorCodes.STRATEGY_MISSING_FEATURE_ID,
-            context={
-                "file": file_path,
-                "section": f"indicators[{indicator_index}]",
-                "indicator_type": indicator_type,
-            },
-            details={"indicator_type": indicator_type, "index": indicator_index},
-            suggestion=(
-                f"Add 'feature_id' to indicator:\n\n"
-                f"indicators:\n"
-                f'  - type: "{indicator_type}"\n'
-                f'    feature_id: "{indicator_type}_14"  # ADD THIS\n'
-                f"    period: 14\n\n"
-                f"Or run migration tool:\n"
-                f"  python scripts/migrate_to_feature_ids.py {file_path}"
-            ),
-        )
-
-    @classmethod
-    def duplicate_feature_id(
-        cls, feature_id: str, indices: list[int], file_path: str = "strategy.yaml"
-    ) -> "ConfigurationError":
-        """
-        Factory method for duplicate feature_id error.
-
-        Args:
-            feature_id: The duplicate feature_id
-            indices: Indices where duplicate appears
-            file_path: Path to strategy file
-
-        Returns:
-            ConfigurationError for duplicate feature_id
-        """
-        return cls(
-            message=f"Duplicate feature_id '{feature_id}' found at indices {indices}",
-            error_code=ErrorCodes.STRATEGY_DUPLICATE_FEATURE_ID,
-            context={
-                "file": file_path,
-                "section": "indicators",
-                "feature_id": feature_id,
-            },
-            details={"feature_id": feature_id, "indices": indices},
-            suggestion=(
-                "Ensure each indicator has a unique feature_id.\n"
-                "Use parameters in feature_id for distinction:\n\n"
-                '  - type: "rsi"\n'
-                '    feature_id: "rsi_14"  # Use period\n'
-                "    period: 14\n\n"
-                '  - type: "rsi"\n'
-                '    feature_id: "rsi_21"  # Different period\n'
-                "    period: 21"
-            ),
-        )
-
-    @classmethod
-    def invalid_feature_id_format(
-        cls, feature_id: str, indicator_index: int, file_path: str = "strategy.yaml"
-    ) -> "ConfigurationError":
-        """
-        Factory method for invalid feature_id format error.
-
-        Args:
-            feature_id: The invalid feature_id
-            indicator_index: Index of indicator in config
-            file_path: Path to strategy file
-
-        Returns:
-            ConfigurationError for invalid format
-        """
-        return cls(
-            message=f"Invalid feature_id format: '{feature_id}' at index {indicator_index}",
-            error_code=ErrorCodes.STRATEGY_INVALID_FEATURE_ID_FORMAT,
-            context={
-                "file": file_path,
-                "section": f"indicators[{indicator_index}]",
-                "feature_id": feature_id,
-            },
-            details={"feature_id": feature_id, "index": indicator_index},
-            suggestion=(
-                "feature_id must start with a letter and contain only:\n"
-                "  - Letters (a-z, A-Z)\n"
-                "  - Numbers (0-9)\n"
-                "  - Underscore (_) or dash (-)\n\n"
-                "Valid examples:\n"
-                "  - 'rsi_14' (good)\n"
-                "  - 'macd_standard' (good)\n"
-                "  - '123_invalid' (bad - starts with number)\n"
-                "  - 'rsi@14' (bad - contains special character)"
-            ),
-        )
-
-    @classmethod
-    def reserved_feature_id(
-        cls, feature_id: str, indicator_index: int, file_path: str = "strategy.yaml"
-    ) -> "ConfigurationError":
-        """
-        Factory method for reserved feature_id error.
-
-        Args:
-            feature_id: The reserved feature_id
-            indicator_index: Index of indicator in config
-            file_path: Path to strategy file
-
-        Returns:
-            ConfigurationError for reserved word
-        """
-        reserved_words = ["open", "high", "low", "close", "volume"]
-        return cls(
-            message=f"Reserved feature_id '{feature_id}' at index {indicator_index}",
-            error_code=ErrorCodes.STRATEGY_RESERVED_FEATURE_ID,
-            context={
-                "file": file_path,
-                "section": f"indicators[{indicator_index}]",
-                "feature_id": feature_id,
-            },
-            details={
-                "feature_id": feature_id,
-                "index": indicator_index,
-                "reserved_words": reserved_words,
-            },
-            suggestion=(
-                f"feature_id '{feature_id}' is reserved for price data.\n"
-                f"Reserved words: {', '.join(reserved_words)}\n\n"
-                f"Use a different name:\n"
-                f"  - 'rsi_14' instead of 'close'\n"
-                f"  - 'volume_sma_20' instead of 'volume'"
-            ),
-        )
 
 
 class MissingConfigurationError(ConfigurationError):

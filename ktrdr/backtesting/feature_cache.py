@@ -152,16 +152,14 @@ class FeatureCache:
 
             current_bar_indicators = {}
 
-            # Handle both v2 (list) and v3 (dict) indicator formats
+            # V3 format: indicators is a dict where key is indicator_id (= feature_id)
             indicators_config = self.strategy_config["indicators"]
-            if isinstance(indicators_config, dict):
-                # V3 format: dict where key is indicator_id (= feature_id)
-                indicator_ids = list(indicators_config.keys())
-            else:
-                # V2 format: list of dicts with "name" and "feature_id"
-                indicator_ids = [
-                    cfg.get("feature_id", cfg["name"]) for cfg in indicators_config
-                ]
+            if not isinstance(indicators_config, dict):
+                raise ValueError(
+                    "Strategy config must use v3 format (indicators as dict). "
+                    "Run 'ktrdr strategy migrate' to upgrade."
+                )
+            indicator_ids = list(indicators_config.keys())
 
             for feature_id in indicator_ids:
                 # Direct O(1) lookup - column name IS the feature_id

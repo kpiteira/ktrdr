@@ -96,7 +96,58 @@
 - 0 failed
 - 76 skipped (v15 tests when shared dir missing)
 
-**Next Task Notes (8.5):**
-- Remove v2 code paths from IndicatorEngine (`feature_id_map`, `_build_feature_id_map`, `_create_feature_id_aliases`)
-- Consider deleting migration code and tests (`strategy_migration.py`, `test_strategy_migration.py`, `test_strategy_migrate.py`)
-- The v2 handling in `feature_cache.py` can be simplified once v2 is fully removed
+---
+
+## Task 8.5 Complete: Remove V2 Code Paths
+
+**What was removed:**
+
+1. **IndicatorEngine (`ktrdr/indicators/indicator_engine.py`):**
+   - `feature_id_map` attribute - v2 column name → feature_id mapping
+   - `_build_feature_id_map()` method - built mapping from v2 configs
+   - `_create_feature_id_aliases()` method - created duplicate columns for aliasing
+   - Call to `_create_feature_id_aliases()` in `apply()` method
+
+2. **feature_cache.py (`ktrdr/backtesting/feature_cache.py`):**
+   - Removed v2 list format handling
+   - Now raises ValueError if strategy config uses v2 format (list-based indicators)
+
+3. **exceptions.py (`ktrdr/errors/exceptions.py`):**
+   - Removed v2 factory methods:
+     - `missing_feature_id()` - v2 indicator missing feature_id field
+     - `duplicate_feature_id()` - v2 duplicate feature_id values
+     - `invalid_feature_id_format()` - v2 feature_id format validation
+     - `reserved_feature_id()` - v2 reserved word validation
+   - Removed `ErrorCodes` import (no longer used)
+
+4. **error_codes.py (`ktrdr/errors/error_codes.py`):**
+   - Removed v2-specific error codes:
+     - `STRATEGY_MISSING_FEATURE_ID`
+     - `STRATEGY_DUPLICATE_FEATURE_ID`
+     - `STRATEGY_INVALID_FEATURE_ID_FORMAT`
+     - `STRATEGY_RESERVED_FEATURE_ID`
+
+5. **Deleted obsolete test files:**
+   - `tests/unit/api/test_strategy_error_responses.py` - tested v2 error factory methods
+   - `tests/unit/config/test_validation_errors.py` - tested v2 error factory methods
+   - `tests/unit/test_configuration_error.py` - tested v2 error factory methods
+
+**What was preserved:**
+- `strategy_migration.py` - users may still need to migrate old v2 strategies
+- `get_feature_id()` method in base_indicator.py - this is the v3 API
+- `_feature_id` attribute in base_indicator.py - used by indicator factory
+
+**Gotchas:**
+- The term "feature_id" is still valid in v3 context - it's how indicators identify themselves via `get_feature_id()`
+- In v3, `indicator_id` (the dict key) IS the feature_id - no aliasing needed
+- Strategy loader `_detect_v2_format()` and `_is_v3_format()` are preserved for migration support
+
+**Test results after Task 8.5:**
+- 3836 passed
+- 0 failed
+- 76 skipped (v15 tests when shared dir missing)
+
+**Next Task Notes (8.6):**
+- Update documentation to reflect v3-only world
+- Add deprecation note for v2 format
+- Ensure examples use v3 format
