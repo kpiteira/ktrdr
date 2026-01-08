@@ -775,3 +775,113 @@ def _migrate_single_file(
         console.print("  ✅ Validation: [green]PASSED[/green]")
     except Exception as e:
         console.print(f"  ⚠️  Validation: [yellow]WARNING - {e}[/yellow]")
+
+
+@strategies_app.command("features")
+@trace_cli_command("strategies_features")
+def list_features(
+    path: str = typer.Argument(..., help="Path to v3 strategy YAML file"),
+    group_by: str = typer.Option(
+        "none",
+        "--group-by",
+        help="Group features by attribute",
+        case_sensitive=False,
+    ),
+):
+    """
+    List generated NN input features for a v3 strategy.
+
+    Displays the resolved features that will be used as neural network inputs
+    based on the strategy's nn_inputs configuration.
+
+    Features can be grouped by:
+    - none: Flat list of all features (default)
+    - timeframe: Group features by their timeframe
+    - fuzzy_set: Group features by their fuzzy set
+    """
+    from ktrdr.config.feature_resolver import FeatureResolver
+    from ktrdr.config.strategy_loader import StrategyConfigurationLoader
+
+    strategy_path = Path(path)
+    if not strategy_path.exists():
+        console.print(f"[red]❌ Error: Strategy file not found: {strategy_path}[/red]")
+        raise typer.Exit(1)
+
+    # Validate group_by option
+    valid_group_options = {"none", "timeframe", "fuzzy_set"}
+    if group_by.lower() not in valid_group_options:
+        console.print(f"[red]❌ Error: Invalid --group-by option: {group_by}[/red]")
+        console.print(f"Valid options: {', '.join(valid_group_options)}")
+        raise typer.Exit(1)
+
+    group_by = group_by.lower()
+
+    # Load strategy - must be v3 format
+    try:
+        loader = StrategyConfigurationLoader()
+        config = loader.load_v3_strategy(strategy_path)
+    except FileNotFoundError as e:
+        console.print(f"[red]❌ Error: {e}[/red]")
+        raise typer.Exit(1) from e
+    except ValueError as e:
+        # v2 format or invalid YAML
+        error_msg = str(e)
+        console.print(f"[red]❌ Error: {error_msg}[/red]")
+        console.print(
+            "[yellow]This command requires v3 format. "
+            "Use 'ktrdr strategies migrate' to convert v2 strategies.[/yellow]"
+        )
+        raise typer.Exit(1) from e
+    except Exception as e:
+        console.print(f"[red]❌ Error loading strategy: {e}[/red]")
+        raise typer.Exit(1) from e
+
+    # Resolve features
+    resolver = FeatureResolver()
+    features = resolver.resolve(config)
+
+    # Display header
+    console.print(f"Strategy: [cyan]{config.name}[/cyan]")
+    console.print(f"Features ({len(features)} total):")
+    console.print()
+
+    if group_by == "none":
+        _display_features_flat(features)
+    elif group_by == "timeframe":
+        _display_features_by_timeframe(features)
+    elif group_by == "fuzzy_set":
+        _display_features_by_fuzzy_set(features, config)
+
+
+def _display_features_flat(features: list) -> None:
+    """Display features in a flat list."""
+    for f in features:
+        console.print(f"  {f.feature_id}")
+
+
+def _display_features_by_timeframe(features: list) -> None:
+    """Display features grouped by timeframe."""
+    by_tf: dict[str, list] = {}
+    for f in features:
+        by_tf.setdefault(f.timeframe, []).append(f)
+
+    for tf in sorted(by_tf.keys()):
+        console.print(f"  [bold][{tf}][/bold]")
+        for f in by_tf[tf]:
+            console.print(f"    {f.fuzzy_set_id}_{f.membership_name}")
+        console.print()
+
+
+def _display_features_by_fuzzy_set(features: list, config) -> None:
+    """Display features grouped by fuzzy set."""
+    by_fs: dict[str, list] = {}
+    for f in features:
+        by_fs.setdefault(f.fuzzy_set_id, []).append(f)
+
+    for fs_id in by_fs.keys():
+        indicator = config.fuzzy_sets[fs_id].indicator
+        # Use escape sequences so Rich doesn't interpret brackets as markup
+        console.print(f"  [bold]\\[{fs_id}][/bold] -> {indicator}")
+        for f in by_fs[fs_id]:
+            console.print(f"    {f.timeframe}_{f.membership_name}")
+        console.print()

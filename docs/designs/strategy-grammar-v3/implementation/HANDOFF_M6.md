@@ -76,11 +76,48 @@ ktrdr strategies migrate <path> [--output PATH] [--backup] [--dry-run]
 - `ktrdr/cli/strategy_commands.py`: Added `migrate` command (~80 lines)
 - `tests/unit/cli/test_strategy_migrate.py`: New file, 9 tests
 
+---
+
+## Task 6.3 Complete: Add CLI `strategy features` Command
+
+### Implementation Notes
+
+**Command location:** `ktrdr/cli/strategy_commands.py`
+
+**Command usage:**
+```bash
+ktrdr strategies features <path> [--group-by none|timeframe|fuzzy_set]
+```
+
+**Features implemented:**
+- Loads v3 strategy with `StrategyConfigurationLoader.load_v3_strategy()`
+- Resolves features with `FeatureResolver.resolve(config)`
+- Three display modes via `--group-by`:
+  - `none` (default): Flat list of all features
+  - `timeframe`: Groups features by timeframe with `[5m]`, `[1h]` headers
+  - `fuzzy_set`: Groups by fuzzy set showing indicator reference
+- Shows strategy name and total feature count
+- Proper error handling for v2 strategies (suggests migration)
+
+### Gotchas
+
+**Rich markup escaping**
+- Fuzzy set names in `[brackets]` need escaping for Rich console
+- Used `\\[{fs_id}]` to display literal brackets
+
+**v2 strategy detection**
+- Catches `ValueError` from loader when format detection fails
+- Shows helpful message suggesting `strategies migrate` command
+
+### Files Modified
+
+- `ktrdr/cli/strategy_commands.py`: Added `features` command (~75 lines)
+- `tests/unit/cli/test_strategy_features.py`: New file, 9 tests
+
 ### Next Task Notes
 
-Task 6.3 adds the CLI `strategy features` command. It should:
-- Use `FeatureResolver.resolve(config)` to get resolved features
-- Support `--group-by` option (none, timeframe, fuzzy_set)
-- Display feature list in readable format
+Task 6.4 updates help text for all strategy commands to reflect v3 focus.
+The `strategies` command group help text should mention v3 format and list
+all available subcommands.
 
 ---
