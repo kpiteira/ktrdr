@@ -147,7 +147,39 @@
 - 0 failed
 - 76 skipped (v15 tests when shared dir missing)
 
+### FeatureCache Deep Cleanup (Additional Task 8.5 Work)
+
+**What was done:**
+
+1. **FeatureCache consolidation:**
+   - Deleted old v2 FeatureCache class (dict-based strategy config approach)
+   - Renamed FeatureCacheV3 → FeatureCache (clean v3 interface)
+   - Simplified `get_features_for_timestamp()` to return `dict[str, float] | None`
+   - Removed obsolete compatibility methods
+
+2. **Orchestrator v3-only:**
+   - Removed v2/v3 branching in DecisionOrchestrator
+   - Now requires v3 model for backtest mode (raises ValueError for v2)
+   - Renamed `_create_v3_feature_cache()` → `_create_feature_cache()`
+   - Updated `make_decision()` to use v3 interface (dict return, not tuple)
+
+3. **Deleted obsolete tests:**
+   - `tests/unit/backtesting/test_feature_cache_new_format.py` - v2 tests
+   - `tests/integration/indicators/test_full_pipeline_new_format.py` - v2 integration
+   - `TestFeatureCacheOrderValidation` class - tested removed method
+
+**What was NOT done (deferred):**
+- TrainingPipeline/TrainingPipelineV3 consolidation - requires changes to local_orchestrator
+- ModelMetadata/ModelMetadataV3 rename - used across many components
+- These have workarounds via TYPE_CHECKING aliases
+
+**Test results after FeatureCache cleanup:**
+- 3823 passed
+- 0 failed
+- 76 skipped
+
 **Next Task Notes (8.6):**
 - Update documentation to reflect v3-only world
 - Add deprecation note for v2 format
 - Ensure examples use v3 format
+- Consider follow-up task for TrainingPipeline/ModelMetadata cleanup
