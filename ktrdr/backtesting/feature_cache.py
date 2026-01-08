@@ -409,6 +409,14 @@ class FeatureCacheV3:
     - Any mismatch will cause garbage predictions
 
     Mirrors TrainingPipelineV3.prepare_features() but for single-symbol data.
+
+    V2 Compatibility Layer:
+        This class includes temporary compatibility methods (compute_all_features,
+        get_features_for_timestamp, is_ready) that adapt the v3 interface to work
+        with DecisionOrchestrator's v2-style API. These methods are marked for
+        removal once DecisionOrchestrator is refactored to use the native v3
+        feature interface directly. Do not build new dependencies on these
+        compatibility methods.
     """
 
     def __init__(
