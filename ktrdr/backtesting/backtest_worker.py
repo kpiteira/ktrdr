@@ -9,7 +9,7 @@ import asyncio
 import os
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 from fastapi import FastAPI
 from opentelemetry import trace
@@ -52,6 +52,7 @@ class BacktestStartRequest(WorkerOperationMixin):
     initial_capital: float = 100000.0
     commission: float = 0.001
     slippage: float = 0.0
+    model_path: Optional[str] = None  # Explicit model path for v3 models
 
 
 class BacktestResumeRequest(WorkerOperationMixin):
@@ -341,12 +342,33 @@ class BacktestWorker(WorkerAPIBase):
 
         # 4. Execute actual work (Engine, not Service!)
         try:
+            # Translate model_path from host path to container path if needed
+            model_path = request.model_path
+            if model_path:
+                # Common host path patterns to translate
+                # ~/.ktrdr/shared/models/ → /app/models/
+                # /Users/.../models/ → /app/models/
+                if "/.ktrdr/shared/models/" in model_path:
+                    # Extract relative path after shared/models/
+                    relative = model_path.split("/.ktrdr/shared/models/")[-1]
+                    model_path = f"/app/models/{relative}"
+                    logger.info(
+                        f"Translated model path: {request.model_path} → {model_path}"
+                    )
+                elif model_path.startswith("/") and "/models/" in model_path:
+                    # Generic host absolute path - extract from /models/
+                    relative = model_path.split("/models/")[-1]
+                    model_path = f"/app/models/{relative}"
+                    logger.info(
+                        f"Translated model path: {request.model_path} → {model_path}"
+                    )
+
             # Build engine configuration
             engine_config = BacktestConfig(
                 symbol=request.symbol,
                 timeframe=request.timeframe,
                 strategy_config_path=strategy_config_path,
-                model_path=None,  # Auto-discovery
+                model_path=model_path,  # Use explicit path if provided (for v3)
                 start_date=start_date.isoformat(),
                 end_date=end_date.isoformat(),
                 initial_capital=request.initial_capital,
@@ -551,12 +573,28 @@ class BacktestWorker(WorkerAPIBase):
 
         # 4. Execute resumed backtest
         try:
+            # Translate model_path from host path to container path if needed
+            model_path = original_request.get("model_path")
+            if model_path:
+                if "/.ktrdr/shared/models/" in model_path:
+                    relative = model_path.split("/.ktrdr/shared/models/")[-1]
+                    model_path = f"/app/models/{relative}"
+                    logger.info(
+                        f"Translated model path: {original_request.get('model_path')} → {model_path}"
+                    )
+                elif model_path.startswith("/") and "/models/" in model_path:
+                    relative = model_path.split("/models/")[-1]
+                    model_path = f"/app/models/{relative}"
+                    logger.info(
+                        f"Translated model path: {original_request.get('model_path')} → {model_path}"
+                    )
+
             # Build engine configuration from original request
             engine_config = BacktestConfig(
                 symbol=original_request["symbol"],
                 timeframe=original_request["timeframe"],
                 strategy_config_path=strategy_config_path,
-                model_path=None,
+                model_path=model_path,  # Preserve model_path for v3
                 start_date=original_request["start_date"],
                 end_date=original_request["end_date"],
                 initial_capital=original_request.get("initial_capital", 100000.0),

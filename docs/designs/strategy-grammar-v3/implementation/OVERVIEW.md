@@ -22,16 +22,17 @@
 
 | # | Name | Tasks | E2E Test | Status |
 |---|------|-------|----------|--------|
-| M1 | [Config Loading](M1_config_loading.md) | 6 | `ktrdr strategy validate` works | ⏳ |
-| M2 | [IndicatorEngine V3](M2_indicator_engine.md) | 3 | Dict-based indicator computation | ⏳ |
-| M3 | [FuzzyEngine V3](M3_fuzzy_engine.md) | 3 | fuzzy_set_id-based fuzzification | ⏳ |
-| M4 | [Training Pipeline](M4_training_pipeline.md) | 5 | Training produces correct features | ⏳ |
-| M5 | [Backtest Pipeline](M5_backtest_pipeline.md) | 4 | Backtest matches training features | ⏳ |
-| M6 | [CLI & Migration](M6_cli_migration.md) | 4 | `ktrdr strategy migrate` works | ⏳ |
+| M1 | [Config Loading](M1_config_loading.md) | 6 | `ktrdr strategy validate` works | ✅ |
+| M2 | [IndicatorEngine V3](M2_indicator_engine.md) | 3 | Dict-based indicator computation | ✅ |
+| M3 | [FuzzyEngine V3](M3_fuzzy_engine.md) | 3 | fuzzy_set_id-based fuzzification | ✅ |
+| M4 | [Training Pipeline](M4_training_pipeline.md) | 5 | Training produces correct features | ✅ |
+| M5 | [Backtest Pipeline](M5_backtest_pipeline.md) | 4 | Backtest matches training features | ✅ |
+| M6 | [CLI & Migration](M6_cli_migration.md) | 4 | `ktrdr strategy migrate` works | ✅ |
+| M6.5 | [Integration Wiring](M6.5_integration_wiring.md) | 4 | V3 train → backtest E2E | ⏳ |
 | M7 | [Agent Integration](M7_agent_integration.md) | 3 | Agent generates valid v3 | ⏳ |
 | M8 | [Cleanup](M8_cleanup.md) | 4 | No v2 remnants | ⏳ |
 
-**Total Tasks:** ~32
+**Total Tasks:** ~36
 **Post-work:** Indicator Standardization M6 (cleanup) after v3 complete
 
 ---
@@ -55,15 +56,19 @@
        └──────┬───────┘
               │
        ┌──────▼───────┐
-       │ M4: Training │  Full training pipeline with v3
+       │ M4: Training │  TrainingPipelineV3 class (isolated)
        └──────┬───────┘
               │
        ┌──────▼───────┐
-       │ M5: Backtest │  Feature alignment validation
+       │ M5: Backtest │  FeatureCacheV3 class (isolated)
        └──────┬───────┘
               │
        ┌──────▼───────┐
        │ M6: CLI      │  migrate, features commands
+       └──────┬───────┘
+              │
+       ┌──────▼───────┐
+       │ M6.5: Wiring │  Wire v3 into execution flows
        └──────┬───────┘
               │
        ┌──────▼───────┐

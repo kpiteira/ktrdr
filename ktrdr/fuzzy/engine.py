@@ -787,7 +787,9 @@ class FuzzyEngine:
 
                     # Detect v3 format (values have 'indicator' key)
                     first_value = next(iter(filtered_fuzzy_config.values()), {})
-                    is_v3_format = isinstance(first_value, dict) and "indicator" in first_value
+                    is_v3_format = (
+                        isinstance(first_value, dict) and "indicator" in first_value
+                    )
 
                     if is_v3_format:
                         # V3 format: convert to FuzzySetDefinition objects and pass directly
@@ -798,7 +800,9 @@ class FuzzyEngine:
                             if isinstance(sets_config, FuzzySetDefinition):
                                 v3_config[fuzzy_set_id] = sets_config
                             else:
-                                v3_config[fuzzy_set_id] = FuzzySetDefinition(**sets_config)
+                                v3_config[fuzzy_set_id] = FuzzySetDefinition(
+                                    **sets_config
+                                )
                         processing_engine = FuzzyEngine(v3_config)
                     else:
                         # V2 format: use FuzzyConfigLoader
@@ -856,12 +860,11 @@ class FuzzyEngine:
                 # Get fuzzy keys based on engine mode (v3 uses _fuzzy_sets, v2 uses _membership_functions)
                 fuzzy_keys = (
                     processing_engine._fuzzy_sets.keys()
-                    if hasattr(processing_engine, "_is_v3_mode") and processing_engine._is_v3_mode
+                    if hasattr(processing_engine, "_is_v3_mode")
+                    and processing_engine._is_v3_mode
                     else getattr(processing_engine, "_membership_functions", {}).keys()
                 )
-                logger.info(
-                    f"Fuzzy membership functions keys: {list(fuzzy_keys)}"
-                )
+                logger.info(f"Fuzzy membership functions keys: {list(fuzzy_keys)}")
 
                 for indicator_col in indicators_data.columns:
                     # Skip non-indicator columns (OHLCV data)

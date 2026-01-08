@@ -29,6 +29,7 @@ class BacktestStartRequest(BaseModel):
     initial_capital: float = 100000.0
     commission: float = 0.001
     slippage: float = 0.001
+    model_path: Optional[str] = None  # Explicit model path (for v3 models)
 
     @field_validator("strategy_name", "symbol", "timeframe")
     @classmethod

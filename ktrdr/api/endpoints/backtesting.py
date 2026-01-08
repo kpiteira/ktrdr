@@ -74,10 +74,8 @@ async def start_backtest(
         # Call ktrdr.backtesting.BacktestingService (not api.services!)
         strategy_config_path = f"strategies/{request.strategy_name}.yaml"
 
-        # Auto-discover model (like old system did)
-        # Pass None to let DecisionOrchestrator find the latest trained model
-        # for this strategy. If user provides explicit model_path, use it.
-        model_path = getattr(request, "model_path", None)
+        # Use explicit model_path if provided (for v3 models), otherwise auto-discover
+        model_path = request.model_path
 
         result = await service.run_backtest(
             symbol=request.symbol,
