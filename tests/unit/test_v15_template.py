@@ -1,11 +1,23 @@
-"""Tests for v1.5 strategy template structure."""
+"""Tests for v1.5 strategy template structure.
+
+NOTE: v1.5 strategies are user experiment files stored in ~/.ktrdr/shared/strategies/,
+not project fixtures. These tests validate the experiment suite follows the template spec.
+"""
 
 from pathlib import Path
 
 import pytest
 import yaml
 
-TEMPLATE_PATH = Path("strategies/v15_template.yaml")
+# v1.5 strategies are in shared strategies directory (user experiments)
+SHARED_STRATEGIES_DIR = Path.home() / ".ktrdr" / "shared" / "strategies"
+TEMPLATE_PATH = SHARED_STRATEGIES_DIR / "v15_template.yaml"
+
+# Skip all tests in this module if shared strategies directory doesn't exist
+pytestmark = pytest.mark.skipif(
+    not SHARED_STRATEGIES_DIR.exists(),
+    reason="v1.5 strategies not found in ~/.ktrdr/shared/strategies/ (user experiments)",
+)
 
 # Fixed parameters that must be identical across all v1.5 strategies
 FIXED_PARAMS = {
@@ -191,7 +203,7 @@ class TestV15Strategies:
         """Load all v15 strategy files."""
         strategies = {}
         for name in EXPECTED_STRATEGIES:
-            path = Path(f"strategies/{name}.yaml")
+            path = SHARED_STRATEGIES_DIR / f"{name}.yaml"
             if path.exists():
                 with open(path) as f:
                     strategies[name] = yaml.safe_load(f)
@@ -201,7 +213,7 @@ class TestV15Strategies:
         """All 23 strategy files must exist."""
         missing = []
         for name in EXPECTED_STRATEGIES:
-            path = Path(f"strategies/{name}.yaml")
+            path = SHARED_STRATEGIES_DIR / f"{name}.yaml"
             if not path.exists():
                 missing.append(name)
         assert not missing, f"Missing strategy files: {missing}"

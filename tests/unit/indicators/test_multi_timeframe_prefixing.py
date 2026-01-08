@@ -6,12 +6,15 @@ with timeframe names to prevent collisions when combining data from different
 timeframes (e.g., both 5m and 1h producing 'rsi_14' should become '5m_rsi_14'
 and '1h_rsi_14').
 
+Updated for v3 format - uses dict-based indicator configs.
+
 Bug reference: HANDOFF_M5.md - "Backtest Indicator Column Name Collision"
 """
 
 import pandas as pd
 import pytest
 
+from ktrdr.config.models import IndicatorDefinition
 from ktrdr.indicators.indicator_engine import IndicatorEngine
 
 
@@ -32,12 +35,12 @@ class TestMultiTimeframePrefixing:
         )
 
     @pytest.fixture
-    def indicator_configs(self) -> list[dict]:
-        """Standard indicator configs with RSI."""
-        return [{"name": "rsi", "feature_id": "rsi_14", "period": 14}]
+    def indicator_configs(self) -> dict:
+        """Standard indicator configs with RSI (v3 format)."""
+        return {"rsi_14": IndicatorDefinition(type="rsi", period=14)}
 
     def test_multi_timeframe_prefixes_indicator_columns(
-        self, sample_ohlcv: pd.DataFrame, indicator_configs: list[dict]
+        self, sample_ohlcv: pd.DataFrame, indicator_configs: dict
     ):
         """Test that indicator columns are prefixed with timeframe.
 
@@ -68,7 +71,7 @@ class TestMultiTimeframePrefixing:
         ), f"Expected '5m_rsi_14' in 5m columns, got: {list(result['5m'].columns)}"
 
     def test_no_unprefixed_indicator_columns(
-        self, sample_ohlcv: pd.DataFrame, indicator_configs: list[dict]
+        self, sample_ohlcv: pd.DataFrame, indicator_configs: dict
     ):
         """Test that raw indicator columns (without prefix) are NOT present.
 
@@ -91,7 +94,7 @@ class TestMultiTimeframePrefixing:
             ), f"Indicator column '{col}' should be prefixed with '1h_'"
 
     def test_ohlcv_columns_not_prefixed(
-        self, sample_ohlcv: pd.DataFrame, indicator_configs: list[dict]
+        self, sample_ohlcv: pd.DataFrame, indicator_configs: dict
     ):
         """Test that OHLCV columns retain original names (not prefixed).
 
@@ -116,7 +119,11 @@ class TestMultiTimeframePrefixing:
 
     def test_multi_output_indicators_prefixed(self, sample_ohlcv: pd.DataFrame):
         """Test that multi-output indicators (like MACD) are also prefixed."""
-        macd_configs = [{"name": "macd", "feature_id": "macd_std"}]
+        macd_configs = {
+            "macd_std": IndicatorDefinition(
+                type="macd", fast_period=12, slow_period=26, signal_period=9
+            )
+        }
 
         multi_data = {"1h": sample_ohlcv.copy()}
 
@@ -124,7 +131,8 @@ class TestMultiTimeframePrefixing:
         result = engine.apply_multi_timeframe(multi_data)
 
         # MACD produces multiple columns - all should be prefixed
-        macd_cols = [c for c in result["1h"].columns if "MACD" in c.upper()]
+        # v3 format: macd_std.line, macd_std.signal, macd_std.histogram
+        macd_cols = [c for c in result["1h"].columns if "macd" in c.lower()]
 
         for col in macd_cols:
             assert col.startswith(
@@ -132,7 +140,7 @@ class TestMultiTimeframePrefixing:
             ), f"MACD column '{col}' should be prefixed with '1h_'"
 
     def test_all_indicator_columns_prefixed(
-        self, sample_ohlcv: pd.DataFrame, indicator_configs: list[dict]
+        self, sample_ohlcv: pd.DataFrame, indicator_configs: dict
     ):
         """Test that all indicator columns are prefixed with timeframe.
 
@@ -173,7 +181,7 @@ class TestMultiTimeframeNoPrefixOption:
 
     def test_prefix_columns_default_true(self, sample_ohlcv: pd.DataFrame):
         """Test that prefix_columns defaults to True (the safe behavior)."""
-        configs = [{"name": "rsi", "feature_id": "rsi_14", "period": 14}]
+        configs = {"rsi_14": IndicatorDefinition(type="rsi", period=14)}
         multi_data = {"1h": sample_ohlcv.copy()}
 
         engine = IndicatorEngine(indicators=configs)
@@ -190,7 +198,7 @@ class TestMultiTimeframeNoPrefixOption:
         This is useful for single-timeframe scenarios or when the caller
         handles prefixing externally.
         """
-        configs = [{"name": "rsi", "feature_id": "rsi_14", "period": 14}]
+        configs = {"rsi_14": IndicatorDefinition(type="rsi", period=14)}
         multi_data = {"1h": sample_ohlcv.copy()}
 
         engine = IndicatorEngine(indicators=configs)

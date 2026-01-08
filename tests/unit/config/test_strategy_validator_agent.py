@@ -468,15 +468,15 @@ class TestDuplicateStrategyNameValidation:
         """Duplicate strategy name should fail validation."""
         validator = StrategyValidator()
 
-        # Use a name we know exists (neuro_mean_reversion exists)
-        existing_name = "neuro_mean_reversion"
+        # Use a v3 strategy name we know exists
+        existing_name = "v3_minimal"
         strategies_dir = Path("strategies")
 
         result = validator.check_strategy_name_unique(existing_name, strategies_dir)
 
         assert not result.is_valid
         assert any(
-            "neuro_mean_reversion" in err or "already exists" in err.lower()
+            "v3_minimal" in err or "already exists" in err.lower()
             for err in result.errors
         )
 
@@ -484,8 +484,8 @@ class TestDuplicateStrategyNameValidation:
         """Duplicate check should work with or without .yaml extension."""
         validator = StrategyValidator()
 
-        # Check with .yaml extension
-        name_with_ext = "neuro_mean_reversion.yaml"
+        # Check with .yaml extension - use existing v3 strategy
+        name_with_ext = "v3_minimal.yaml"
         strategies_dir = Path("strategies")
 
         result = validator.check_strategy_name_unique(name_with_ext, strategies_dir)
