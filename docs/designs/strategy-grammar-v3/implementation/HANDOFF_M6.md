@@ -35,11 +35,52 @@
 - `ktrdr/config/strategy_migration.py`: Migration logic (~75 lines)
 - `tests/unit/config/test_strategy_migration.py`: 15 unit tests
 
+---
+
+## Task 6.2 Complete: Add CLI `strategy migrate` Command
+
+### Implementation Notes
+
+**Command location:** `ktrdr/cli/strategy_commands.py`
+
+**Command usage:**
+```bash
+ktrdr strategies migrate <path> [--output PATH] [--backup] [--dry-run]
+```
+
+**Note:** The CLI uses `strategies` (plural) as the command group, not `strategy` (singular).
+
+**Features implemented:**
+- Single file migration with `--output` for alternate destination
+- Directory migration (processes all *.yaml and *.yml files)
+- `--backup` creates .bak file before overwriting in place
+- `--dry-run` shows what would change without writing
+- Automatic v3 format detection (skips already-migrated files)
+- Post-migration validation with `StrategyConfigurationLoader`
+
+### Gotchas
+
+**Uses typer, not click**
+- The CLI uses `typer` (not `click` as mentioned in design doc)
+- Typer is built on click but has different API
+
+**Parent directories created automatically**
+- `out_path.parent.mkdir(parents=True, exist_ok=True)` ensures output directory exists
+
+**Validation is non-blocking**
+- Migration completes even if validation fails
+- Shows warning instead of error (allows manual fixing)
+
+### Files Modified
+
+- `ktrdr/cli/strategy_commands.py`: Added `migrate` command (~80 lines)
+- `tests/unit/cli/test_strategy_migrate.py`: New file, 9 tests
+
 ### Next Task Notes
 
-Task 6.2 adds the CLI `strategy migrate` command. It should:
-- Import `migrate_v2_to_v3` and `validate_migration` from `ktrdr.config.strategy_migration`
-- Use click for CLI arguments (path, --output, --backup, --dry-run)
-- Use `StrategyConfigurationLoader` for validation after migration
+Task 6.3 adds the CLI `strategy features` command. It should:
+- Use `FeatureResolver.resolve(config)` to get resolved features
+- Support `--group-by` option (none, timeframe, fuzzy_set)
+- Display feature list in readable format
 
 ---

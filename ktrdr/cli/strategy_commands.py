@@ -9,10 +9,13 @@ This module contains essential CLI commands related to trading strategies:
 """
 
 import asyncio
+import shutil
 import sys
 from pathlib import Path
+from typing import Optional
 
 import typer
+import yaml
 from pydantic import ValidationError
 from rich.console import Console
 from rich.progress import (
@@ -28,6 +31,7 @@ from ktrdr.cli.api_client import check_api_connection, get_api_client
 from ktrdr.cli.commands import get_effective_api_url
 from ktrdr.cli.telemetry import trace_cli_command
 from ktrdr.config.strategy_loader import strategy_loader
+from ktrdr.config.strategy_migration import migrate_v2_to_v3, validate_migration
 from ktrdr.config.strategy_validator import StrategyValidator
 from ktrdr.config.validation import InputValidator
 from ktrdr.logging import get_logger
@@ -647,3 +651,127 @@ def validate_all_cmd(
         raise typer.Exit(1)
     else:
         console.print("\n[green]🎉 All strategies are valid![/green]")
+
+
+@strategies_app.command("migrate")
+@trace_cli_command("strategies_migrate")
+def migrate_strategy(
+    path: str = typer.Argument(..., help="Path to strategy file or directory"),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output path (default: overwrite in place)"
+    ),
+    backup: bool = typer.Option(
+        False, "--backup", help="Create .bak backup before overwriting"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show what would change without writing"
+    ),
+):
+    """
+    Migrate v2 strategy to v3 format.
+
+    Converts v2 strategy configurations (list-based indicators) to v3 format
+    (dict-based indicators with nn_inputs).
+
+    Can process a single file or all YAML files in a directory.
+    """
+    input_path = Path(path)
+
+    if not input_path.exists():
+        console.print(f"[red]❌ Error: Path not found: {input_path}[/red]")
+        raise typer.Exit(1)
+
+    # Handle directory or file
+    if input_path.is_dir():
+        files = list(input_path.glob("*.yaml")) + list(input_path.glob("*.yml"))
+        files = [f for f in files if not f.name.startswith(".")]
+    else:
+        files = [input_path]
+
+    if not files:
+        console.print(f"[yellow]📭 No strategy files found in {input_path}[/yellow]")
+        return
+
+    for file_path in files:
+        _migrate_single_file(file_path, output, backup, dry_run)
+
+
+def _migrate_single_file(
+    file_path: Path,
+    output: Optional[str],
+    backup: bool,
+    dry_run: bool,
+) -> None:
+    """
+    Migrate a single strategy file from v2 to v3 format.
+
+    Args:
+        file_path: Path to the strategy file
+        output: Optional output path
+        backup: Whether to create backup
+        dry_run: Whether to only show changes without writing
+    """
+    console.print(f"\n🔍 Processing: [blue]{file_path}[/blue]")
+
+    try:
+        with open(file_path) as f:
+            original = yaml.safe_load(f)
+    except Exception as e:
+        console.print(f"  [red]❌ Error reading file: {e}[/red]")
+        return
+
+    if not isinstance(original, dict):
+        console.print("  [red]❌ Invalid YAML: not a dictionary[/red]")
+        return
+
+    # Check if already v3
+    if isinstance(original.get("indicators"), dict) and "nn_inputs" in original:
+        console.print("  [yellow]⏭️  Already v3 format, skipping[/yellow]")
+        return
+
+    # Migrate
+    migrated = migrate_v2_to_v3(original)
+
+    # Validate migration
+    issues = validate_migration(original, migrated)
+    for issue in issues:
+        console.print(f"  [yellow]⚠️  Warning: {issue}[/yellow]")
+
+    if dry_run:
+        console.print("  [cyan][Dry run] Would migrate to v3:[/cyan]")
+        # Show diff preview
+        orig_ind_count = len(original.get("indicators", []))
+        migrated_ind_count = len(migrated.get("indicators", {}))
+        console.print(
+            f"    Indicators: list[{orig_ind_count}] -> dict[{migrated_ind_count}]"
+        )
+        console.print(f"    NN Inputs: {len(migrated.get('nn_inputs', []))} entries")
+        return
+
+    # Determine output path
+    out_path = Path(output) if output else file_path
+
+    # Create parent directories if needed
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Backup if requested and overwriting in place
+    if backup and out_path == file_path:
+        backup_path = file_path.with_suffix(file_path.suffix + ".bak")
+        shutil.copy(file_path, backup_path)
+        console.print(f"  📦 Backup created: {backup_path}")
+
+    # Write migrated config
+    with open(out_path, "w") as f:
+        yaml.dump(migrated, f, default_flow_style=False, sort_keys=False)
+
+    console.print(f"  ✅ Migrated to: {out_path}")
+
+    # Validate the result
+    try:
+        from ktrdr.config.strategy_loader import StrategyConfigurationLoader
+
+        loader = StrategyConfigurationLoader()
+        loader.load_v3_strategy(out_path)
+        console.print("  ✅ Validation: [green]PASSED[/green]")
+    except Exception as e:
+        console.print(f"  ⚠️  Validation: [yellow]WARNING - {e}[/yellow]")
