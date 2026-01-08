@@ -152,13 +152,19 @@ class FeatureCache:
 
             current_bar_indicators = {}
 
-            for config in self.strategy_config["indicators"]:
-                # M4: Direct column lookup using feature_id
-                # With new format, column name IS the feature_id (e.g., "rsi_14")
-                # or for multi-output, it's the alias (e.g., "bbands_20_2" points to primary)
-                feature_id = config.get("feature_id", config["name"])
+            # Handle both v2 (list) and v3 (dict) indicator formats
+            indicators_config = self.strategy_config["indicators"]
+            if isinstance(indicators_config, dict):
+                # V3 format: dict where key is indicator_id (= feature_id)
+                indicator_ids = list(indicators_config.keys())
+            else:
+                # V2 format: list of dicts with "name" and "feature_id"
+                indicator_ids = [
+                    cfg.get("feature_id", cfg["name"]) for cfg in indicators_config
+                ]
 
-                # Direct O(1) lookup instead of O(n) fuzzy string matching
+            for feature_id in indicator_ids:
+                # Direct O(1) lookup - column name IS the feature_id
                 if feature_id in self.indicators_df.columns:
                     current_bar_indicators[feature_id] = self.indicators_df[
                         feature_id

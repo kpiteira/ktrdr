@@ -80,7 +80,23 @@
 - 2 failed (pre-existing backtest integration issues)
 - 98 skipped (v2 tests + v15 tests when shared dir missing)
 
+**Additional fixes (post-8.4):**
+
+4. **Fixed v3 compatibility bug in feature_cache.py:**
+   - `ktrdr/backtesting/feature_cache.py`: Updated indicator iteration to handle both v2 list and v3 dict formats
+   - Bug: Code assumed `indicators` was always a list, causing `AttributeError: 'str' object has no attribute 'get'`
+   - Fix: Check `isinstance(indicators_config, dict)` and iterate over keys for v3
+
+5. **Deleted obsolete v2-only tests:**
+   - `test_feature_id_map.py`: Tested v2 `feature_id_map` attribute (not needed in v3)
+   - `test_feature_id_aliasing.py`: Tested v2 aliasing (not needed in v3 - indicator_id IS the feature_id)
+
+**Final test results:**
+- 3891 passed
+- 0 failed
+- 76 skipped (v15 tests when shared dir missing)
+
 **Next Task Notes (8.5):**
-- Remove v2 code paths from IndicatorEngine and other components
-- Delete the skipped v2 tests (test_feature_id_map.py, test_feature_id_aliasing.py)
-- Fix or remove the failing backtest progress tests
+- Remove v2 code paths from IndicatorEngine (`feature_id_map`, `_build_feature_id_map`, `_create_feature_id_aliases`)
+- Consider deleting migration code and tests (`strategy_migration.py`, `test_strategy_migration.py`, `test_strategy_migrate.py`)
+- The v2 handling in `feature_cache.py` can be simplified once v2 is fully removed
