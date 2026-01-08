@@ -178,8 +178,53 @@
 - 0 failed
 - 76 skipped
 
+---
+
+## Deep Cleanup Continued (Task 8.5 Extended)
+
+### TrainingPipeline Cleanup
+
+**What was done:**
+
+1. **TrainingPipeline.train_strategy() deleted:**
+   - Removed ~360 lines of v2 orchestration code
+   - Static utility methods preserved (load_market_data, calculate_indicators, etc.)
+   - TrainingPipelineV3 remains for v3 feature preparation
+
+2. **LocalTrainingOrchestrator v3-only:**
+   - Removed v2/v3 branching
+   - Deleted `_execute_v2_training()` method
+   - Now raises ValueError for v2 format strategies
+
+3. **Obsolete tests deleted:**
+   - TestTrainStrategyHighLevel class
+   - test_train_strategy_accepts_checkpoint_callback
+   - test_execute_v2_training_method_exists
+
+### ModelMetadata Cleanup
+
+**What was done:**
+
+1. **ModelMetadata consolidated:**
+   - Renamed ModelMetadataV3 → ModelMetadata
+   - Added backwards compatibility alias: `ModelMetadataV3 = ModelMetadata`
+   - File reduced from ~630 lines to ~120 lines
+
+2. **Dead code deleted:**
+   - Old ModelMetadata class (~200 lines)
+   - ModelMetadataManager class (~150 lines)
+   - All supporting dataclasses (TrainingDataInfo, DeploymentCapabilities, etc.)
+   - model_storage_v2.py entire file (~560 lines) - not imported anywhere
+   - Module-level metadata_manager instance
+
+**Total lines deleted:** ~2,000 lines of v2 code
+
+**Test results:**
+- 3817 passed
+- 0 failed
+- 76 skipped
+
 **Next Task Notes (8.6):**
 - Update documentation to reflect v3-only world
 - Add deprecation note for v2 format
 - Ensure examples use v3 format
-- Consider follow-up task for TrainingPipeline/ModelMetadata cleanup
