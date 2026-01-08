@@ -88,6 +88,8 @@ class LocalTrainingOrchestrator:
         """
         Execute training synchronously in worker thread.
 
+        Detects v2 vs v3 format and dispatches to appropriate training path.
+
         Returns:
             Training result with session metadata
         """
@@ -99,28 +101,15 @@ class LocalTrainingOrchestrator:
 
         config = self._load_strategy_config(self._context.strategy_path)
 
-        # Step 2: Create progress callback adapter
-        progress_callback = self._create_progress_callback()
+        # Step 2: Branch based on format
+        if self._is_v3_format(config):
+            logger.info("Detected v3 strategy format - using TrainingPipelineV3")
+            result = self._execute_v3_training(config)
+        else:
+            logger.info("Detected v2 strategy format - using TrainingPipeline")
+            result = self._execute_v2_training(config)
 
-        # Step 3: Call TrainingPipeline.train_strategy() with all parameters
-        self._bridge.on_phase("training", message="Starting training pipeline")
-        self._check_cancellation()
-
-        result = TrainingPipeline.train_strategy(
-            symbols=self._context.symbols,
-            timeframes=self._context.timeframes,
-            strategy_config=config,
-            start_date=self._context.start_date or "2020-01-01",
-            end_date=self._context.end_date or "2024-12-31",
-            model_storage=self._model_storage,
-            progress_callback=progress_callback,
-            cancellation_token=self._token,
-            repository=None,  # Let pipeline create it (cached data only)
-            checkpoint_callback=self._checkpoint_callback,
-            resume_context=self._resume_context,
-        )
-
-        # Step 4: Add session metadata to result
+        # Step 3: Add session metadata to result
         result["session_info"] = {
             "operation_id": self._context.operation_id,
             "strategy_name": self._context.strategy_name,
@@ -137,7 +126,7 @@ class LocalTrainingOrchestrator:
             result["resource_usage"] = {}
         result["resource_usage"]["training_mode"] = "local"
 
-        # TASK 3.3: Verification logging for result harmonization
+        # Verification logging for result harmonization
         logger.info("=" * 80)
         logger.info("LOCAL TRAINING RESULT STRUCTURE")
         logger.info(f"  Keys: {list(result.keys())}")
@@ -155,6 +144,229 @@ class LocalTrainingOrchestrator:
         logger.info("=" * 80)
 
         return result
+
+    def _execute_v2_training(self, config: dict[str, Any]) -> dict[str, Any]:
+        """
+        Execute v2 training using legacy TrainingPipeline.
+
+        Args:
+            config: V2 strategy configuration dictionary
+
+        Returns:
+            Training result dictionary
+        """
+        # Create progress callback adapter
+        progress_callback = self._create_progress_callback()
+
+        # Call TrainingPipeline.train_strategy() with all parameters
+        self._bridge.on_phase("training", message="Starting v2 training pipeline")
+        self._check_cancellation()
+
+        return TrainingPipeline.train_strategy(
+            symbols=self._context.symbols,
+            timeframes=self._context.timeframes,
+            strategy_config=config,
+            start_date=self._context.start_date or "2020-01-01",
+            end_date=self._context.end_date or "2024-12-31",
+            model_storage=self._model_storage,
+            progress_callback=progress_callback,
+            cancellation_token=self._token,
+            repository=None,  # Let pipeline create it (cached data only)
+            checkpoint_callback=self._checkpoint_callback,
+            resume_context=self._resume_context,
+        )
+
+    def _execute_v3_training(self, config: dict[str, Any]) -> dict[str, Any]:
+        """
+        Execute v3 training using TrainingPipelineV3.
+
+        This uses the v3 pipeline for feature preparation, then calls the standard
+        model training/evaluation flow. After training completes, saves metadata_v3.json.
+
+        Args:
+            config: V3 strategy configuration dictionary
+
+        Returns:
+            Training result dictionary
+        """
+        from pathlib import Path
+
+        from ktrdr.config.feature_resolver import FeatureResolver
+        from ktrdr.config.strategy_loader import StrategyConfigurationLoader
+        from ktrdr.data.repository import DataRepository
+        from ktrdr.training.training_pipeline import TrainingPipelineV3
+
+        self._bridge.on_phase("training", message="Starting v3 training pipeline")
+        self._check_cancellation()
+
+        # Load as typed v3 config
+        loader = StrategyConfigurationLoader()
+        v3_config = loader.load_v3_strategy(self._context.strategy_path)
+
+        # Resolve features to get canonical order
+        resolver = FeatureResolver()
+        resolved = resolver.resolve(v3_config)
+        resolved_features = [f.feature_id for f in resolved]
+
+        logger.info(f"V3 training: {len(resolved_features)} resolved features")
+
+        # Create v3 pipeline
+        pipeline = TrainingPipelineV3(v3_config)
+
+        # Load market data for all symbols
+        repository = DataRepository()
+        all_data: dict[str, dict[str, Any]] = {}
+
+        for symbol in self._context.symbols:
+            symbol_data = TrainingPipeline.load_market_data(
+                symbol=symbol,
+                timeframes=self._context.timeframes,
+                start_date=self._context.start_date or "2020-01-01",
+                end_date=self._context.end_date or "2024-12-31",
+                repository=repository,
+            )
+            all_data[symbol] = symbol_data
+
+        # Prepare features using v3 pipeline
+        logger.info("Preparing features with TrainingPipelineV3...")
+        features_df = pipeline.prepare_features(all_data)
+
+        # Convert to tensors and create labels using base pipeline methods
+        import torch
+
+        features = torch.FloatTensor(features_df.values)
+        feature_names = list(features_df.columns)
+
+        # Generate labels from price data (use first symbol's base timeframe)
+        base_symbol = self._context.symbols[0]
+        price_data = all_data[base_symbol]
+
+        # Extract training section and label config from v3 config
+        training_section = config.get("training", {})
+        labels_config = training_section.get("labels", {})
+
+        # Build v2-compatible label config for create_labels()
+        label_config = {
+            "zigzag_threshold": labels_config.get("zigzag_threshold", 0.02),
+            "label_lookahead": labels_config.get("label_lookahead", 10),
+        }
+
+        labels = TrainingPipeline.create_labels(price_data, label_config)
+
+        # Align features and labels (they may have different lengths due to NaN handling)
+        min_len = min(len(features), len(labels))
+        if min_len == 0:
+            raise ValueError(
+                f"No aligned samples available: min_len={min_len}, "
+                f"features_len={len(features)}, labels_len={len(labels)}. "
+                "One or both of features/labels are empty after alignment."
+            )
+        features_aligned = features[-min_len:]
+        labels_aligned = labels[-min_len:]
+
+        logger.info(
+            f"V3 features: {features_aligned.shape}, labels: {labels_aligned.shape}"
+        )
+
+        # Split data
+        data_split = training_section.get("data_split", {})
+        train_ratio = data_split.get("train", 0.7)
+        val_ratio = data_split.get("validation", 0.15)
+
+        total_samples = len(features_aligned)
+        train_end = int(total_samples * train_ratio)
+        val_end = int(total_samples * (train_ratio + val_ratio))
+
+        X_train = features_aligned[:train_end]
+        y_train = labels_aligned[:train_end]
+        X_val = features_aligned[train_end:val_end]
+        y_val = labels_aligned[train_end:val_end]
+        X_test = features_aligned[val_end:]
+        y_test = labels_aligned[val_end:]
+
+        logger.info(
+            f"V3 splits: train={len(X_train)}, val={len(X_val)}, test={len(X_test)}"
+        )
+
+        # Create model
+        model_config = config.get("model", {})
+        model = TrainingPipeline.create_model(
+            input_dim=features.shape[1],
+            output_dim=3,  # Buy, Hold, Sell
+            model_config=model_config,
+        )
+
+        # Train model
+        progress_callback = self._create_progress_callback()
+        training_config = model_config.get("training", {})
+
+        training_results = TrainingPipeline.train_model(
+            model=model,
+            X_train=X_train,
+            y_train=y_train,
+            X_val=X_val,
+            y_val=y_val,
+            training_config=training_config,
+            progress_callback=progress_callback,
+            cancellation_token=self._token,
+            checkpoint_callback=self._checkpoint_callback,
+            resume_context=self._resume_context,
+        )
+
+        # Evaluate model
+        test_metrics = TrainingPipeline.evaluate_model(model, X_test, y_test)
+
+        # Save model
+        model_path = self._model_storage.save_model(
+            model=model,
+            strategy_name=config.get("name", "v3_strategy"),
+            symbol=(
+                "MULTI" if len(self._context.symbols) > 1 else self._context.symbols[0]
+            ),
+            timeframe=self._context.timeframes[0],
+            config=config,
+            training_metrics=training_results,
+            feature_names=feature_names,
+            feature_importance=None,
+            scaler=None,
+        )
+
+        logger.info(f"V3 model saved to: {str(model_path)}")
+
+        # CRITICAL: Save v3 metadata with resolved features
+        self._save_v3_metadata(
+            model_path=Path(model_path),
+            config=config,
+            resolved_features=resolved_features,
+            training_metrics=training_results,
+            training_symbols=self._context.symbols,
+            training_timeframes=self._context.timeframes,
+        )
+
+        return {
+            "model_path": model_path,
+            "training_metrics": training_results,
+            "test_metrics": test_metrics,
+            "artifacts": {
+                "feature_importance": None,
+                "per_symbol_metrics": None,
+            },
+            "model_info": {
+                "parameters_count": sum(p.numel() for p in model.parameters()),
+                "trainable_parameters": sum(
+                    p.numel() for p in model.parameters() if p.requires_grad
+                ),
+                "architecture": "v3_mlp",
+            },
+            "data_summary": {
+                "symbols": self._context.symbols,
+                "timeframes": self._context.timeframes,
+                "start_date": self._context.start_date,
+                "end_date": self._context.end_date,
+                "total_samples": total_samples,
+                "feature_count": features_aligned.shape[1],
+            },
+        }
 
     def _load_strategy_config(self, config_path: Path) -> dict[str, Any]:
         """

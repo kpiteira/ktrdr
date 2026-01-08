@@ -1,18 +1,24 @@
 """
-Strategy management commands for the KTRDR CLI.
+Strategy management commands for the KTRDR CLI (v3 format).
 
-This module contains essential CLI commands related to trading strategies:
-- validate: Validate strategy configurations
+This module provides commands for working with v3 strategy configurations:
+- validate: Validate strategy configurations (v2 and v3)
 - list: List available strategies
 - backtest: Run backtesting on strategies
 - validate-all: Validate all strategies in a directory
+- migrate: Convert v2 strategies to v3 format
+- features: Display resolved NN input features for v3 strategies
 """
 
 import asyncio
+import shutil
 import sys
 from pathlib import Path
+from typing import Optional
 
+import click
 import typer
+import yaml
 from pydantic import ValidationError
 from rich.console import Console
 from rich.progress import (
@@ -28,6 +34,7 @@ from ktrdr.cli.api_client import check_api_connection, get_api_client
 from ktrdr.cli.commands import get_effective_api_url
 from ktrdr.cli.telemetry import trace_cli_command
 from ktrdr.config.strategy_loader import strategy_loader
+from ktrdr.config.strategy_migration import migrate_v2_to_v3, validate_migration
 from ktrdr.config.strategy_validator import StrategyValidator
 from ktrdr.config.validation import InputValidator
 from ktrdr.logging import get_logger
@@ -40,7 +47,16 @@ error_console = Console(stderr=True)
 # Create the CLI app for strategy commands
 strategies_app = typer.Typer(
     name="strategies",
-    help="Trading strategy management commands",
+    help="""Manage trading strategies (v3 format).
+
+Commands for validating, migrating, and inspecting strategies.
+Most commands expect v3 format; use 'migrate' to convert v2 strategies.
+
+Examples:
+    ktrdr strategies validate my_strategy.yaml
+    ktrdr strategies migrate old_v2_strategy.yaml --backup
+    ktrdr strategies features my_strategy.yaml --group-by timeframe
+""",
     no_args_is_help=True,
 )
 
@@ -647,3 +663,246 @@ def validate_all_cmd(
         raise typer.Exit(1)
     else:
         console.print("\n[green]🎉 All strategies are valid![/green]")
+
+
+@strategies_app.command("migrate")
+@trace_cli_command("strategies_migrate")
+def migrate_strategy(
+    path: str = typer.Argument(..., help="Path to strategy file or directory"),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output path (default: overwrite in place)"
+    ),
+    backup: bool = typer.Option(
+        False, "--backup", help="Create .bak backup before overwriting"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show what would change without writing"
+    ),
+):
+    """
+    Migrate v2 strategy to v3 format.
+
+    Converts v2 strategy configurations (list-based indicators) to v3 format
+    (dict-based indicators with nn_inputs).
+
+    Can process a single file or all YAML files in a directory.
+    """
+    input_path = Path(path)
+
+    if not input_path.exists():
+        console.print(f"[red]❌ Error: Path not found: {input_path}[/red]")
+        raise typer.Exit(1)
+
+    # Handle directory or file
+    is_dir_migration = input_path.is_dir()
+    if is_dir_migration:
+        files = list(input_path.glob("*.yaml")) + list(input_path.glob("*.yml"))
+        files = [f for f in files if not f.name.startswith(".")]
+    else:
+        files = [input_path]
+
+    if not files:
+        console.print(f"[yellow]📭 No strategy files found in {input_path}[/yellow]")
+        return
+
+    # When migrating a directory with --output, treat output as a directory
+    output_dir = Path(output) if output and is_dir_migration else None
+
+    for file_path in files:
+        # For directory migration with output, compute per-file output path
+        file_output: Optional[str]
+        if output_dir:
+            file_output = str(output_dir / file_path.name)
+        else:
+            file_output = output
+        _migrate_single_file(file_path, file_output, backup, dry_run)
+
+
+def _migrate_single_file(
+    file_path: Path,
+    output: Optional[str],
+    backup: bool,
+    dry_run: bool,
+) -> None:
+    """
+    Migrate a single strategy file from v2 to v3 format.
+
+    Args:
+        file_path: Path to the strategy file
+        output: Optional output path
+        backup: Whether to create backup
+        dry_run: Whether to only show changes without writing
+    """
+    console.print(f"\n🔍 Processing: [blue]{file_path}[/blue]")
+
+    try:
+        with open(file_path) as f:
+            original = yaml.safe_load(f)
+    except Exception as e:
+        console.print(f"  [red]❌ Error reading file: {e}[/red]")
+        return
+
+    if not isinstance(original, dict):
+        console.print("  [red]❌ Invalid YAML: not a dictionary[/red]")
+        return
+
+    # Check if already v3
+    if isinstance(original.get("indicators"), dict) and "nn_inputs" in original:
+        console.print("  [yellow]⏭️  Already v3 format, skipping[/yellow]")
+        return
+
+    # Migrate
+    migrated = migrate_v2_to_v3(original)
+
+    # Validate migration
+    issues = validate_migration(original, migrated)
+    for issue in issues:
+        console.print(f"  [yellow]⚠️  Warning: {issue}[/yellow]")
+
+    if dry_run:
+        console.print("  [cyan][Dry run] Would migrate to v3:[/cyan]")
+        # Show diff preview
+        orig_ind_count = len(original.get("indicators", []))
+        migrated_ind_count = len(migrated.get("indicators", {}))
+        console.print(
+            f"    Indicators: list[{orig_ind_count}] -> dict[{migrated_ind_count}]"
+        )
+        console.print(f"    NN Inputs: {len(migrated.get('nn_inputs', []))} entries")
+        return
+
+    # Determine output path
+    out_path = Path(output) if output else file_path
+
+    # Create parent directories if needed
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Backup if requested and overwriting in place
+    if backup and out_path == file_path:
+        backup_path = file_path.with_suffix(file_path.suffix + ".bak")
+        shutil.copy(file_path, backup_path)
+        console.print(f"  📦 Backup created: {backup_path}")
+
+    # Write migrated config
+    with open(out_path, "w") as f:
+        yaml.dump(migrated, f, default_flow_style=False, sort_keys=False)
+
+    console.print(f"  ✅ Migrated to: {out_path}")
+
+    # Validate the result
+    try:
+        from ktrdr.config.strategy_loader import StrategyConfigurationLoader
+
+        loader = StrategyConfigurationLoader()
+        loader.load_v3_strategy(out_path)
+        console.print("  ✅ Validation: [green]PASSED[/green]")
+    except Exception as e:
+        console.print(f"  ⚠️  Validation: [yellow]WARNING - {e}[/yellow]")
+
+
+@strategies_app.command("features")
+@trace_cli_command("strategies_features")
+def list_features(
+    path: str = typer.Argument(..., help="Path to v3 strategy YAML file"),
+    group_by: str = typer.Option(
+        "none",
+        "--group-by",
+        help="Group features by: none (flat list), timeframe, or fuzzy_set",
+        case_sensitive=False,
+        click_type=click.Choice(
+            ["none", "timeframe", "fuzzy_set"], case_sensitive=False
+        ),
+    ),
+):
+    """
+    List generated NN input features for a v3 strategy.
+
+    Displays the resolved features that will be used as neural network inputs
+    based on the strategy's nn_inputs configuration.
+
+    Features can be grouped by:
+    - none: Flat list of all features (default)
+    - timeframe: Group features by their timeframe
+    - fuzzy_set: Group features by their fuzzy set
+    """
+    from ktrdr.config.feature_resolver import FeatureResolver
+    from ktrdr.config.strategy_loader import StrategyConfigurationLoader
+
+    strategy_path = Path(path)
+    if not strategy_path.exists():
+        console.print(f"[red]❌ Error: Strategy file not found: {strategy_path}[/red]")
+        raise typer.Exit(1)
+
+    # group_by is validated by click.Choice; normalize to lowercase
+    group_by = group_by.lower()
+
+    # Load strategy - must be v3 format
+    try:
+        loader = StrategyConfigurationLoader()
+        config = loader.load_v3_strategy(strategy_path)
+    except FileNotFoundError as e:
+        console.print(f"[red]❌ Error: {e}[/red]")
+        raise typer.Exit(1) from e
+    except ValueError as e:
+        # v2 format, invalid YAML, or other validation errors
+        error_msg = str(e)
+        console.print(f"[red]❌ Error: {error_msg}[/red]")
+        # Only show v2 migration hint when the error suggests v2 format
+        if "v2" in error_msg.lower() or "list" in error_msg.lower():
+            console.print(
+                "[yellow]This command requires v3 format. "
+                "Use 'ktrdr strategies migrate' to convert v2 strategies.[/yellow]"
+            )
+        raise typer.Exit(1) from e
+    except Exception as e:
+        console.print(f"[red]❌ Error loading strategy: {e}[/red]")
+        raise typer.Exit(1) from e
+
+    # Resolve features
+    resolver = FeatureResolver()
+    features = resolver.resolve(config)
+
+    # Display header
+    console.print(f"Strategy: [cyan]{config.name}[/cyan]")
+    console.print(f"Features ({len(features)} total):")
+    console.print()
+
+    if group_by == "none":
+        _display_features_flat(features)
+    elif group_by == "timeframe":
+        _display_features_by_timeframe(features)
+    elif group_by == "fuzzy_set":
+        _display_features_by_fuzzy_set(features, config)
+
+
+def _display_features_flat(features: list) -> None:
+    """Display features in a flat list."""
+    for f in features:
+        console.print(f"  {f.feature_id}")
+
+
+def _display_features_by_timeframe(features: list) -> None:
+    """Display features grouped by timeframe."""
+    by_tf: dict[str, list] = {}
+    for f in features:
+        by_tf.setdefault(f.timeframe, []).append(f)
+
+    for tf in sorted(by_tf.keys()):
+        console.print(f"  [bold][{tf}][/bold]")
+        for f in by_tf[tf]:
+            console.print(f"    {f.fuzzy_set_id}_{f.membership_name}")
+        console.print()
+
+
+def _display_features_by_fuzzy_set(features: list, config) -> None:
+    """Display features grouped by fuzzy set."""
+    by_fs: dict[str, list] = {}
+    for f in features:
+        by_fs.setdefault(f.fuzzy_set_id, []).append(f)
+
+    for fs_id in by_fs.keys():
+        indicator = config.fuzzy_sets[fs_id].indicator
+        # Use escape sequences so Rich doesn't interpret brackets as markup
+        console.print(f"  [bold]\\[{fs_id}][/bold] -> {indicator}")
+        for f in by_fs[fs_id]:
+            console.print(f"    {f.timeframe}_{f.membership_name}")
+        console.print()

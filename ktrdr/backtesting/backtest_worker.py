@@ -9,7 +9,7 @@ import asyncio
 import os
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 from fastapi import FastAPI
 from opentelemetry import trace
@@ -27,6 +27,48 @@ if TYPE_CHECKING:
     from ktrdr.backtesting.checkpoint_restore import BacktestResumeContext
 
 logger = get_logger(__name__)
+
+
+def _translate_model_path(model_path: str | None) -> str | None:
+    """Translate host model path to container path if needed.
+
+    CLI passes host paths like ~/.ktrdr/shared/models/... but inside Docker,
+    paths are at /app/models/...
+
+    Args:
+        model_path: Original path (may be host path or container path)
+
+    Returns:
+        Translated container path, or original path if no translation needed
+    """
+    if not model_path:
+        return model_path
+
+    original_path = model_path
+
+    # Pattern 1: ~/.ktrdr/shared/models/ → /app/models/
+    ktrdr_shared_marker = "/.ktrdr/shared/models/"
+    if ktrdr_shared_marker in model_path:
+        marker_idx = model_path.index(ktrdr_shared_marker)
+        relative = model_path[marker_idx + len(ktrdr_shared_marker) :]
+        model_path = f"/app/models/{relative}"
+        logger.info(f"Translated model path: {original_path} → {model_path}")
+        return model_path
+
+    # Pattern 2: Generic /*/models/ → /app/models/ (but not already /app/)
+    if (
+        model_path.startswith("/")
+        and "/models/" in model_path
+        and not model_path.startswith("/app/")
+    ):
+        marker_idx = model_path.index("/models/")
+        relative = model_path[marker_idx + len("/models/") :]
+        model_path = f"/app/models/{relative}"
+        logger.info(f"Translated model path: {original_path} → {model_path}")
+        return model_path
+
+    return model_path
+
 
 # Get worker ID for unique service identification
 worker_id = os.getenv("WORKER_ID", uuid.uuid4().hex[:8])
@@ -52,6 +94,7 @@ class BacktestStartRequest(WorkerOperationMixin):
     initial_capital: float = 100000.0
     commission: float = 0.001
     slippage: float = 0.0
+    model_path: Optional[str] = None  # Explicit model path for v3 models
 
 
 class BacktestResumeRequest(WorkerOperationMixin):
@@ -341,12 +384,15 @@ class BacktestWorker(WorkerAPIBase):
 
         # 4. Execute actual work (Engine, not Service!)
         try:
+            # Translate model_path from host path to container path if needed
+            model_path = _translate_model_path(request.model_path)
+
             # Build engine configuration
             engine_config = BacktestConfig(
                 symbol=request.symbol,
                 timeframe=request.timeframe,
                 strategy_config_path=strategy_config_path,
-                model_path=None,  # Auto-discovery
+                model_path=model_path,  # Use explicit path if provided (for v3)
                 start_date=start_date.isoformat(),
                 end_date=end_date.isoformat(),
                 initial_capital=request.initial_capital,
@@ -551,12 +597,15 @@ class BacktestWorker(WorkerAPIBase):
 
         # 4. Execute resumed backtest
         try:
+            # Translate model_path from host path to container path if needed
+            model_path = _translate_model_path(original_request.get("model_path"))
+
             # Build engine configuration from original request
             engine_config = BacktestConfig(
                 symbol=original_request["symbol"],
                 timeframe=original_request["timeframe"],
                 strategy_config_path=strategy_config_path,
-                model_path=None,
+                model_path=model_path,  # Preserve model_path for v3
                 start_date=original_request["start_date"],
                 end_date=original_request["end_date"],
                 initial_capital=original_request.get("initial_capital", 100000.0),

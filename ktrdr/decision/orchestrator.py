@@ -160,11 +160,21 @@ class DecisionOrchestrator:
         self.max_history = 100
 
         # Feature caching for backtesting performance
+        # V3 models use FeatureCacheV3 for proper feature alignment
         self.feature_cache = None
-        if mode == "backtest":
-            from ..backtesting.feature_cache import FeatureCache
+        self._is_v3_model = False
 
-            self.feature_cache = FeatureCache(self.strategy_config)
+        if mode == "backtest":
+            # Check if model is v3 format
+            if model_path and self._check_v3_model(model_path):
+                self._is_v3_model = True
+                self.feature_cache = self._create_v3_feature_cache(model_path)
+                logger.info(f"Using FeatureCacheV3 for v3 model at {model_path}")
+            else:
+                from ..backtesting.feature_cache import FeatureCache
+
+                self.feature_cache = FeatureCache(self.strategy_config)
+                logger.debug("Using FeatureCache (v2) for backtesting")
 
     def prepare_feature_cache(self, historical_data: pd.DataFrame) -> None:
         """Pre-compute all features for backtesting performance.
@@ -760,3 +770,40 @@ class DecisionOrchestrator:
         else:
             self.position_states.clear()
             self.decision_history.clear()
+
+    def _check_v3_model(self, model_path: str) -> bool:
+        """Check if model is v3 format by looking for metadata_v3.json.
+
+        Args:
+            model_path: Path to model directory
+
+        Returns:
+            True if model has metadata_v3.json
+        """
+        from ..backtesting.backtesting_service import BacktestingService
+
+        return BacktestingService.is_v3_model(model_path)
+
+    def _create_v3_feature_cache(self, model_path: str):
+        """Create FeatureCacheV3 for v3 model.
+
+        Loads ModelMetadataV3 from model directory and reconstructs
+        StrategyConfigurationV3 to initialize FeatureCacheV3.
+
+        Args:
+            model_path: Path to v3 model directory
+
+        Returns:
+            FeatureCacheV3 instance
+        """
+        from ..backtesting.backtesting_service import BacktestingService
+        from ..backtesting.feature_cache import FeatureCacheV3
+
+        # Load v3 metadata
+        metadata = BacktestingService.load_v3_metadata(model_path)
+
+        # Reconstruct config from metadata
+        config = BacktestingService.reconstruct_config_from_metadata(metadata)
+
+        # Create v3 feature cache
+        return FeatureCacheV3(config=config, model_metadata=metadata)

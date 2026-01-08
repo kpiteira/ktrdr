@@ -409,6 +409,14 @@ class FeatureCacheV3:
     - Any mismatch will cause garbage predictions
 
     Mirrors TrainingPipelineV3.prepare_features() but for single-symbol data.
+
+    V2 Compatibility Layer:
+        This class includes temporary compatibility methods (compute_all_features,
+        get_features_for_timestamp, is_ready) that adapt the v3 interface to work
+        with DecisionOrchestrator's v2-style API. These methods are marked for
+        removal once DecisionOrchestrator is refactored to use the native v3
+        feature interface directly. Do not build new dependencies on these
+        compatibility methods.
     """
 
     def __init__(
@@ -612,6 +620,94 @@ class FeatureCacheV3:
                         f"This is a bug in feature generation. "
                         f"Please report this issue."
                     )
+
+    def compute_all_features(self, historical_data: pd.DataFrame) -> None:
+        """Pre-compute all features for backtesting (v2 compatibility interface).
+
+        This method adapts FeatureCacheV3 to the same interface as FeatureCache
+        so DecisionOrchestrator can use it seamlessly.
+
+        Lifecycle / migration notes:
+        - This method, together with ``get_features_for_timestamp`` and ``is_ready``,
+          forms a temporary v2-compatibility layer.
+        - The long-term goal is to refactor DecisionOrchestrator (and any other
+          consumers) to use the native v3 feature interface directly.
+        - Once all callers are migrated to the v3 API, this compatibility layer may
+          be removed.
+
+        Args:
+            historical_data: Complete historical OHLCV data
+        """
+        logger.info(
+            f"FeatureCacheV3: Pre-computing features for {len(historical_data)} bars..."
+        )
+
+        # Get base timeframe from config
+        base_timeframe: str | None = None
+        if hasattr(self.config, "training_data") and self.config.training_data:
+            if hasattr(self.config.training_data, "timeframes"):
+                tf = getattr(
+                    self.config.training_data.timeframes, "base_timeframe", None
+                )
+                if tf:
+                    base_timeframe = tf
+
+        if base_timeframe is None:
+            logger.warning(
+                "FeatureCacheV3: base_timeframe not found in config; "
+                'falling back to default "1h". This may cause mismatches if '
+                "the model was trained on a different base timeframe."
+            )
+            base_timeframe = "1h"
+
+        # V3 compute_features expects dict[timeframe, DataFrame]
+        data = {base_timeframe: historical_data}
+
+        # Compute features
+        self._cached_features = self.compute_features(data)
+        self._cached_index = historical_data.index
+
+        logger.info(
+            f"FeatureCacheV3: Cached {len(self._cached_features)} bars x "
+            f"{len(self._cached_features.columns)} features"
+        )
+
+    def get_features_for_timestamp(
+        self,
+        timestamp: pd.Timestamp,
+        symbol: str,
+        timeframe: str,
+    ) -> dict[str, float] | None:
+        """Get pre-computed features for a specific timestamp.
+
+        Args:
+            timestamp: Target timestamp
+            symbol: Trading symbol (unused in v3 - single symbol)
+            timeframe: Timeframe (unused in v3 - features already resolved)
+
+        Returns:
+            Dict of feature_id -> value, or None if not found
+        """
+        if not self.is_ready():
+            return None
+
+        if timestamp not in self._cached_features.index:
+            return None
+
+        row = self._cached_features.loc[timestamp]
+        return {str(k): float(v) for k, v in row.to_dict().items()}
+
+    def is_ready(self) -> bool:
+        """Check if feature cache has pre-computed features.
+
+        Returns:
+            True if features are cached and ready to use
+        """
+        return (
+            hasattr(self, "_cached_features")
+            and self._cached_features is not None
+            and len(self._cached_features) > 0
+        )
 
 
 if TYPE_CHECKING:

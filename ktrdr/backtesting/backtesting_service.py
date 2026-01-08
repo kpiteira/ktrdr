@@ -327,6 +327,7 @@ class BacktestingService(ServiceOrchestrator[None]):
             "initial_capital": initial_capital,
             "commission": commission,
             "slippage": slippage,
+            "model_path": model_path,  # Pass model_path to worker for v3 detection
         }
 
         remote_response = None
