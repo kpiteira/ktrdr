@@ -5,10 +5,18 @@ This module tests the `ktrdr strategies features` command for listing
 resolved NN input features for v3 strategies.
 """
 
+import re
+
 import pytest
 from typer.testing import CliRunner
 
 from ktrdr.cli.strategy_commands import strategies_app
+
+
+def strip_ansi(text: str) -> str:
+    """Remove ANSI escape codes from text for reliable assertions."""
+    ansi_pattern = re.compile(r"\x1b\[[0-9;]*m")
+    return ansi_pattern.sub("", text)
 
 
 @pytest.fixture
@@ -124,8 +132,10 @@ class TestStrategyFeaturesCommand:
         """Test that the features command exists and shows help."""
         result = cli_runner.invoke(strategies_app, ["features", "--help"])
         assert result.exit_code == 0
-        assert "features" in result.stdout.lower()
-        assert "--group-by" in result.stdout
+        # Strip ANSI codes for reliable assertion (Rich adds formatting)
+        output = strip_ansi(result.stdout)
+        assert "features" in output.lower()
+        assert "--group-by" in output
 
     def test_lists_features_for_v3_strategy(
         self, cli_runner, v3_strategy_yaml, tmp_path

@@ -347,17 +347,25 @@ class BacktestWorker(WorkerAPIBase):
             if model_path:
                 # Common host path patterns to translate
                 # ~/.ktrdr/shared/models/ → /app/models/
+                # Translate host paths to container paths using robust pattern matching
                 # /Users/.../models/ → /app/models/
-                if "/.ktrdr/shared/models/" in model_path:
-                    # Extract relative path after shared/models/
-                    relative = model_path.split("/.ktrdr/shared/models/")[-1]
+                ktrdr_shared_marker = "/.ktrdr/shared/models/"
+                if ktrdr_shared_marker in model_path:
+                    # Find the first occurrence and extract everything after it
+                    marker_idx = model_path.index(ktrdr_shared_marker)
+                    relative = model_path[marker_idx + len(ktrdr_shared_marker) :]
                     model_path = f"/app/models/{relative}"
                     logger.info(
                         f"Translated model path: {request.model_path} → {model_path}"
                     )
-                elif model_path.startswith("/") and "/models/" in model_path:
-                    # Generic host absolute path - extract from /models/
-                    relative = model_path.split("/models/")[-1]
+                elif (
+                    model_path.startswith("/")
+                    and "/models/" in model_path
+                    and not model_path.startswith("/app/")
+                ):
+                    # Generic host absolute path - find first occurrence of /models/
+                    marker_idx = model_path.index("/models/")
+                    relative = model_path[marker_idx + len("/models/") :]
                     model_path = f"/app/models/{relative}"
                     logger.info(
                         f"Translated model path: {request.model_path} → {model_path}"

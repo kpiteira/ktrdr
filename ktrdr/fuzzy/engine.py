@@ -785,16 +785,22 @@ class FuzzyEngine:
                             },
                         )
 
-                    # Detect v3 format (values have 'indicator' key)
-                    first_value = next(iter(filtered_fuzzy_config.values()), {})
-                    is_v3_format = (
-                        isinstance(first_value, dict) and "indicator" in first_value
+                    # Detect v3 format by checking all values
+                    # V3 format: values are dicts with 'indicator' key or FuzzySetDefinition
+                    # V2 format: values are dicts without 'indicator' key
+                    from ktrdr.config.models import FuzzySetDefinition
+
+                    values = list(filtered_fuzzy_config.values())
+                    has_v3_indicator = any(
+                        isinstance(v, dict) and "indicator" in v for v in values
                     )
+                    has_fuzzy_def = any(
+                        isinstance(v, FuzzySetDefinition) for v in values
+                    )
+                    is_v3_format = has_v3_indicator or has_fuzzy_def
 
                     if is_v3_format:
                         # V3 format: convert to FuzzySetDefinition objects and pass directly
-                        from ktrdr.config.models import FuzzySetDefinition
-
                         v3_config = {}
                         for fuzzy_set_id, sets_config in filtered_fuzzy_config.items():
                             if isinstance(sets_config, FuzzySetDefinition):

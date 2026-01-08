@@ -255,6 +255,10 @@ class LocalTrainingOrchestrator:
 
         # Align features and labels (they may have different lengths due to NaN handling)
         min_len = min(len(features), len(labels))
+        if min_len == 0:
+            raise ValueError(
+                "No aligned samples available: features or labels are empty after alignment"
+            )
         features_aligned = features[-min_len:]
         labels_aligned = labels[-min_len:]
 

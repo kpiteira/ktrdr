@@ -693,7 +693,8 @@ def migrate_strategy(
         raise typer.Exit(1)
 
     # Handle directory or file
-    if input_path.is_dir():
+    is_dir_migration = input_path.is_dir()
+    if is_dir_migration:
         files = list(input_path.glob("*.yaml")) + list(input_path.glob("*.yml"))
         files = [f for f in files if not f.name.startswith(".")]
     else:
@@ -703,8 +704,17 @@ def migrate_strategy(
         console.print(f"[yellow]📭 No strategy files found in {input_path}[/yellow]")
         return
 
+    # When migrating a directory with --output, treat output as a directory
+    output_dir = Path(output) if output and is_dir_migration else None
+
     for file_path in files:
-        _migrate_single_file(file_path, output, backup, dry_run)
+        # For directory migration with output, compute per-file output path
+        file_output: Optional[str]
+        if output_dir:
+            file_output = str(output_dir / file_path.name)
+        else:
+            file_output = output
+        _migrate_single_file(file_path, file_output, backup, dry_run)
 
 
 def _migrate_single_file(

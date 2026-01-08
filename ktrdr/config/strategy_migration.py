@@ -12,7 +12,10 @@ Migration rules (from ARCHITECTURE.md):
 """
 
 import copy
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 def migrate_v2_to_v3(v2_config: dict[str, Any]) -> dict[str, Any]:
@@ -39,10 +42,15 @@ def migrate_v2_to_v3(v2_config: dict[str, Any]) -> dict[str, Any]:
             # feature_id becomes the key, falls back to 'name' if missing
             ind_id = ind.get("feature_id", ind.get("name"))
             if ind_id is None:
+                logger.warning(
+                    "Skipping indicator during migration: missing both 'feature_id' and 'name'. "
+                    f"Indicator data: {ind}"
+                )
                 continue
 
-            # Build the indicator definition
-            indicator_def: dict[str, Any] = {"type": ind["name"]}
+            # Build the indicator definition, handling missing 'name' safely
+            name = ind.get("name") or ind_id
+            indicator_def: dict[str, Any] = {"type": name}
 
             # Copy all parameters except name and feature_id
             for key, value in ind.items():
