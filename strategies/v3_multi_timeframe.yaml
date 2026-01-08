@@ -1,0 +1,91 @@
+# =============================================================================
+# V3 STRATEGY EXAMPLE: Multi-Timeframe Analysis
+# =============================================================================
+# Analyzes RSI across multiple timeframes (1h, 4h, 1d) for better context.
+# The neural network sees the same indicator at different time horizons.
+#
+# Use case: Trend alignment, higher timeframe confirmation
+# =============================================================================
+
+name: v3_multi_timeframe_example
+version: "3.0"
+description: RSI momentum across multiple timeframes for trend alignment
+
+training_data:
+  symbols:
+    mode: single
+    symbol: EURUSD
+  # Multi-timeframe configuration
+  timeframes:
+    mode: multi_timeframe     # Enable multi-timeframe
+    list:                     # For multi mode, use 'list'
+      - "1h"
+      - "4h"
+      - "1d"
+    base_timeframe: "1h"      # Primary timeframe for signal generation
+  history_required: 200
+
+# Single indicator computed across all timeframes
+indicators:
+  rsi_14:
+    type: rsi
+    period: 14
+    source: close
+
+fuzzy_sets:
+  rsi_14:
+    indicator: rsi_14
+    oversold:
+      type: triangular
+      parameters: [0, 30, 40]
+    neutral:
+      type: triangular
+      parameters: [35, 50, 65]
+    overbought:
+      type: triangular
+      parameters: [60, 70, 100]
+
+# ---------------------------------------------------------------------------
+# NN INPUTS - 'all' means all configured timeframes
+# ---------------------------------------------------------------------------
+nn_inputs:
+  - fuzzy_set: rsi_14
+    timeframes: all           # Will create features for 1h, 4h, 1d
+
+# Larger network to handle more input features
+model:
+  type: mlp
+  architecture:
+    hidden_layers: [128, 64, 32]
+    activation: relu
+    output_activation: softmax
+    dropout: 0.3
+  features:
+    include_price_context: false
+    lookback_periods: 2
+    scale_features: true
+  training:
+    learning_rate: 0.001
+    batch_size: 32
+    epochs: 100
+    optimizer: adam
+    early_stopping:
+      enabled: true
+      patience: 15
+      min_delta: 0.001
+
+decisions:
+  output_format: classification
+  confidence_threshold: 0.6
+  position_awareness: true
+
+training:
+  method: supervised
+  labels:
+    source: zigzag
+    zigzag_threshold: 0.025
+    label_lookahead: 20
+  data_split:
+    train: 0.7
+    validation: 0.15
+    test: 0.15

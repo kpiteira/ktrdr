@@ -79,7 +79,6 @@ logs/
 **/.DS_Store
 *.log
 ktrdr-patch.tar.gz
-strategies/
 
 # Output files
 output/

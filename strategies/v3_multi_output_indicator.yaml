@@ -1,0 +1,122 @@
+# =============================================================================
+# V3 STRATEGY EXAMPLE: Multi-Output Indicator (ADX with DI+/DI-)
+# =============================================================================
+# Some indicators produce multiple output columns. ADX produces:
+# - ADX (trend strength)
+# - DI+ (positive directional indicator)
+# - DI- (negative directional indicator)
+#
+# This example shows how to create separate fuzzy sets for each output.
+#
+# Use case: ADX trend analysis with directional components
+# =============================================================================
+
+name: v3_multi_output_indicator_example
+version: "3.0"
+description: ADX with separate fuzzy sets for ADX, DI+, and DI-
+
+training_data:
+  symbols:
+    mode: single
+    symbol: EURUSD
+  timeframes:
+    mode: single
+    timeframe: "1h"
+  history_required: 200
+
+# Single indicator definition produces multiple outputs
+indicators:
+  adx_14:
+    type: adx
+    period: 14
+    # This produces columns: ADX_14, DI_Plus_14, DI_Minus_14
+
+# ---------------------------------------------------------------------------
+# SEPARATE FUZZY SETS FOR EACH OUTPUT
+# All reference the same indicator ID (adx_14)
+# ---------------------------------------------------------------------------
+fuzzy_sets:
+  # ADX trend strength
+  adx_strength:
+    indicator: adx_14         # Always reference the indicator ID
+    weak:
+      type: triangular
+      parameters: [0, 15, 25]
+    moderate:
+      type: triangular
+      parameters: [20, 35, 50]
+    strong:
+      type: triangular
+      parameters: [45, 60, 100]
+
+  # DI+ (bullish pressure)
+  di_plus:
+    indicator: adx_14         # Same indicator, different interpretation
+    low:
+      type: triangular
+      parameters: [0, 15, 25]
+    medium:
+      type: triangular
+      parameters: [20, 35, 50]
+    high:
+      type: triangular
+      parameters: [45, 60, 100]
+
+  # DI- (bearish pressure)
+  di_minus:
+    indicator: adx_14         # Same indicator
+    low:
+      type: triangular
+      parameters: [0, 15, 25]
+    medium:
+      type: triangular
+      parameters: [20, 35, 50]
+    high:
+      type: triangular
+      parameters: [45, 60, 100]
+
+# Include all three fuzzy sets as NN inputs
+nn_inputs:
+  - fuzzy_set: adx_strength
+    timeframes: all
+  - fuzzy_set: di_plus
+    timeframes: all
+  - fuzzy_set: di_minus
+    timeframes: all
+
+model:
+  type: mlp
+  architecture:
+    hidden_layers: [64, 32]
+    activation: relu
+    output_activation: softmax
+    dropout: 0.2
+  features:
+    include_price_context: false
+    lookback_periods: 2
+    scale_features: true
+  training:
+    learning_rate: 0.001
+    batch_size: 32
+    epochs: 100
+    optimizer: adam
+    early_stopping:
+      enabled: true
+      patience: 15
+      min_delta: 0.001
+
+decisions:
+  output_format: classification
+  confidence_threshold: 0.6
+  position_awareness: true
+
+training:
+  method: supervised
+  labels:
+    source: zigzag
+    zigzag_threshold: 0.025
+    label_lookahead: 20
+  data_split:
+    train: 0.7
+    validation: 0.15
+    test: 0.15
