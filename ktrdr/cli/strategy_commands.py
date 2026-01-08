@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+import click
 import typer
 import yaml
 from pydantic import ValidationError
@@ -805,8 +806,11 @@ def list_features(
     group_by: str = typer.Option(
         "none",
         "--group-by",
-        help="Group features by attribute",
+        help="Group features by: none (flat list), timeframe, or fuzzy_set",
         case_sensitive=False,
+        click_type=click.Choice(
+            ["none", "timeframe", "fuzzy_set"], case_sensitive=False
+        ),
     ),
 ):
     """
@@ -828,13 +832,7 @@ def list_features(
         console.print(f"[red]❌ Error: Strategy file not found: {strategy_path}[/red]")
         raise typer.Exit(1)
 
-    # Validate group_by option
-    valid_group_options = {"none", "timeframe", "fuzzy_set"}
-    if group_by.lower() not in valid_group_options:
-        console.print(f"[red]❌ Error: Invalid --group-by option: {group_by}[/red]")
-        console.print(f"Valid options: {', '.join(valid_group_options)}")
-        raise typer.Exit(1)
-
+    # group_by is validated by click.Choice; normalize to lowercase
     group_by = group_by.lower()
 
     # Load strategy - must be v3 format
@@ -845,13 +843,15 @@ def list_features(
         console.print(f"[red]❌ Error: {e}[/red]")
         raise typer.Exit(1) from e
     except ValueError as e:
-        # v2 format or invalid YAML
+        # v2 format, invalid YAML, or other validation errors
         error_msg = str(e)
         console.print(f"[red]❌ Error: {error_msg}[/red]")
-        console.print(
-            "[yellow]This command requires v3 format. "
-            "Use 'ktrdr strategies migrate' to convert v2 strategies.[/yellow]"
-        )
+        # Only show v2 migration hint when the error suggests v2 format
+        if "v2" in error_msg.lower() or "list" in error_msg.lower():
+            console.print(
+                "[yellow]This command requires v3 format. "
+                "Use 'ktrdr strategies migrate' to convert v2 strategies.[/yellow]"
+            )
         raise typer.Exit(1) from e
     except Exception as e:
         console.print(f"[red]❌ Error loading strategy: {e}[/red]")

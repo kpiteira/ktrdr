@@ -241,7 +241,7 @@ class LocalTrainingOrchestrator:
         base_symbol = self._context.symbols[0]
         price_data = all_data[base_symbol]
 
-        # Extract label config from v3 training section
+        # Extract training section and label config from v3 config
         training_section = config.get("training", {})
         labels_config = training_section.get("labels", {})
 
@@ -331,7 +331,7 @@ class LocalTrainingOrchestrator:
             scaler=None,
         )
 
-        logger.info(f"V3 model saved to: {model_path}")
+        logger.info(f"V3 model saved to: {str(model_path)}")
 
         # CRITICAL: Save v3 metadata with resolved features
         self._save_v3_metadata(

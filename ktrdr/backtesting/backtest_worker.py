@@ -598,20 +598,7 @@ class BacktestWorker(WorkerAPIBase):
         # 4. Execute resumed backtest
         try:
             # Translate model_path from host path to container path if needed
-            model_path = original_request.get("model_path")
-            if model_path:
-                if "/.ktrdr/shared/models/" in model_path:
-                    relative = model_path.split("/.ktrdr/shared/models/")[-1]
-                    model_path = f"/app/models/{relative}"
-                    logger.info(
-                        f"Translated model path: {original_request.get('model_path')} → {model_path}"
-                    )
-                elif model_path.startswith("/") and "/models/" in model_path:
-                    relative = model_path.split("/models/")[-1]
-                    model_path = f"/app/models/{relative}"
-                    logger.info(
-                        f"Translated model path: {original_request.get('model_path')} → {model_path}"
-                    )
+            model_path = _translate_model_path(original_request.get("model_path"))
 
             # Build engine configuration from original request
             engine_config = BacktestConfig(

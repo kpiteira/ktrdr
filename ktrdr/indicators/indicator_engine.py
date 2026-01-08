@@ -66,8 +66,11 @@ class IndicatorEngine:
                     self._indicators[indicator_id] = self._create_indicator(
                         indicator_id, definition
                     )
-                # Also populate self.indicators for backward compatibility
-                # Methods like apply_multi_timeframe() check self.indicators
+                # Also populate self.indicators for backward compatibility:
+                # older code paths and some helper methods still iterate over
+                # IndicatorEngine.indicators directly instead of using self._indicators.
+                # Once all such usages are migrated to self._indicators, this
+                # assignment and the indicators attribute can be removed.
                 self.indicators = list(self._indicators.values())
             # V2 format: list of dicts or BaseIndicator instances
             elif isinstance(indicators[0], dict):
