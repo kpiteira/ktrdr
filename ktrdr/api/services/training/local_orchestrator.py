@@ -101,13 +101,14 @@ class LocalTrainingOrchestrator:
 
         config = self._load_strategy_config(self._context.strategy_path)
 
-        # Step 2: Branch based on format
-        if self._is_v3_format(config):
-            logger.info("Detected v3 strategy format - using TrainingPipelineV3")
-            result = self._execute_v3_training(config)
-        else:
-            logger.info("Detected v2 strategy format - using TrainingPipeline")
-            result = self._execute_v2_training(config)
+        # Step 2: Verify v3 format and execute training
+        if not self._is_v3_format(config):
+            raise ValueError(
+                "V2 strategy format is no longer supported. "
+                "Please migrate your strategy to v3 format using 'ktrdr strategy migrate'."
+            )
+        logger.info("Detected v3 strategy format - executing training")
+        result = self._execute_v3_training(config)
 
         # Step 3: Add session metadata to result
         result["session_info"] = {
@@ -144,37 +145,6 @@ class LocalTrainingOrchestrator:
         logger.info("=" * 80)
 
         return result
-
-    def _execute_v2_training(self, config: dict[str, Any]) -> dict[str, Any]:
-        """
-        Execute v2 training using legacy TrainingPipeline.
-
-        Args:
-            config: V2 strategy configuration dictionary
-
-        Returns:
-            Training result dictionary
-        """
-        # Create progress callback adapter
-        progress_callback = self._create_progress_callback()
-
-        # Call TrainingPipeline.train_strategy() with all parameters
-        self._bridge.on_phase("training", message="Starting v2 training pipeline")
-        self._check_cancellation()
-
-        return TrainingPipeline.train_strategy(
-            symbols=self._context.symbols,
-            timeframes=self._context.timeframes,
-            strategy_config=config,
-            start_date=self._context.start_date or "2020-01-01",
-            end_date=self._context.end_date or "2024-12-31",
-            model_storage=self._model_storage,
-            progress_callback=progress_callback,
-            cancellation_token=self._token,
-            repository=None,  # Let pipeline create it (cached data only)
-            checkpoint_callback=self._checkpoint_callback,
-            resume_context=self._resume_context,
-        )
 
     def _execute_v3_training(self, config: dict[str, Any]) -> dict[str, Any]:
         """
