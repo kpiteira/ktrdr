@@ -158,7 +158,7 @@ cli_app.add_typer(
     models_app, name="models", help="Neural network model management commands"
 )
 cli_app.add_typer(
-    strategies_app, name="strategies", help="Trading strategy management commands"
+    strategies_app, name="strategies", help="Manage trading strategies (v3 format)"
 )
 cli_app.add_typer(fuzzy_app, name="fuzzy", help="Fuzzy logic operations commands")
 cli_app.add_typer(

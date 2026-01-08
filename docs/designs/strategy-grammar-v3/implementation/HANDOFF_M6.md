@@ -114,10 +114,43 @@ ktrdr strategies features <path> [--group-by none|timeframe|fuzzy_set]
 - `ktrdr/cli/strategy_commands.py`: Added `features` command (~75 lines)
 - `tests/unit/cli/test_strategy_features.py`: New file, 9 tests
 
-### Next Task Notes
+---
 
-Task 6.4 updates help text for all strategy commands to reflect v3 focus.
-The `strategies` command group help text should mention v3 format and list
-all available subcommands.
+## Task 6.4 Complete: Update Strategy Commands Help Text
+
+### Implementation Notes
+
+**Files modified:**
+- `ktrdr/cli/strategy_commands.py`: Updated module docstring and `strategies_app` help
+- `ktrdr/cli/__init__.py`: Updated help text in `add_typer()` call
+
+**Changes made:**
+- Module docstring now lists all 6 commands including migrate and features
+- `strategies_app` help includes v3 format mention and usage examples
+- Main CLI registration updated to show "Manage trading strategies (v3 format)"
+
+### Gotchas
+
+**Help text override in main CLI**
+- The `add_typer()` call in `__init__.py` overrides `strategies_app.help`
+- Need to update both locations for changes to take effect
+
+---
+
+## Milestone 6 Complete: E2E Test Results
+
+All E2E tests passed:
+
+| Test | Description | Result |
+|------|-------------|--------|
+| Test 1 | Dry-run migration shows preview | ✅ PASS |
+| Test 2 | Migration creates valid v3 file with nn_inputs | ✅ PASS |
+| Test 3 | Validation passes on migrated strategy | ✅ PASS |
+| Test 4 | Features listed correctly | ✅ PASS |
+| Test 5 | Features grouped by timeframe | ✅ PASS |
+
+**Note:** v2 strategies with `single_symbol` mode need `single` for v3 compatibility.
+The migration does not auto-convert enum values, so source v2 files may need
+manual adjustment if they use deprecated enum names.
 
 ---

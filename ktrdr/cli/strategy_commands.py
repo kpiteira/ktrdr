@@ -1,11 +1,13 @@
 """
-Strategy management commands for the KTRDR CLI.
+Strategy management commands for the KTRDR CLI (v3 format).
 
-This module contains essential CLI commands related to trading strategies:
-- validate: Validate strategy configurations
+This module provides commands for working with v3 strategy configurations:
+- validate: Validate strategy configurations (v2 and v3)
 - list: List available strategies
 - backtest: Run backtesting on strategies
 - validate-all: Validate all strategies in a directory
+- migrate: Convert v2 strategies to v3 format
+- features: Display resolved NN input features for v3 strategies
 """
 
 import asyncio
@@ -44,7 +46,16 @@ error_console = Console(stderr=True)
 # Create the CLI app for strategy commands
 strategies_app = typer.Typer(
     name="strategies",
-    help="Trading strategy management commands",
+    help="""Manage trading strategies (v3 format).
+
+Commands for validating, migrating, and inspecting strategies.
+Most commands expect v3 format; use 'migrate' to convert v2 strategies.
+
+Examples:
+    ktrdr strategies validate my_strategy.yaml
+    ktrdr strategies migrate old_v2_strategy.yaml --backup
+    ktrdr strategies features my_strategy.yaml --group-by timeframe
+""",
     no_args_is_help=True,
 )
 
