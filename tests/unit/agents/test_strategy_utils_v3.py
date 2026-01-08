@@ -100,7 +100,7 @@ indicators:
         from ktrdr.agents.strategy_utils import parse_strategy_response
 
         result = parse_strategy_response("")
-        assert result == {} or result is None
+        assert result == {}
 
 
 class TestValidateAgentStrategy:

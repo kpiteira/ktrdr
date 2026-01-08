@@ -9,6 +9,7 @@ Provides functions for saving and managing agent-generated strategies:
 These functions are used by agent tools and can be tested independently.
 """
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -302,18 +303,12 @@ def parse_strategy_response(response: str) -> dict[str, Any]:
 
     yaml_str = response.strip()
 
-    # Try to extract from ```yaml code block
-    if "```yaml" in response:
-        start = response.find("```yaml") + 7
-        end = response.find("```", start)
-        if end > start:
-            yaml_str = response[start:end].strip()
-    # Try to extract from generic ``` code block
-    elif "```" in response:
-        start = response.find("```") + 3
-        end = response.find("```", start)
-        if end > start:
-            yaml_str = response[start:end].strip()
+    # Use regex for robust extraction from markdown code blocks
+    # This handles edge cases like multiple code blocks (takes first match)
+    # and ensures proper matching of opening/closing backticks
+    yaml_match = re.search(r"```(?:yaml)?\n(.*?)```", response, re.DOTALL)
+    if yaml_match:
+        yaml_str = yaml_match.group(1).strip()
 
     try:
         result = yaml.safe_load(yaml_str)

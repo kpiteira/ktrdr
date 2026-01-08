@@ -61,7 +61,10 @@ async def validate_strategy(path: str) -> dict[str, Any]:
     except ValueError as e:
         error_str = str(e)
 
-        # Check if this is a "not v3 format" error
+        # Detect v2 format based on the loader's error message.
+        # StrategyConfigurationLoader.load_v3_strategy() raises ValueError
+        # with message "Strategy '<name>' is not v3 format. Run 'ktrdr strategy
+        # migrate' to upgrade." when the file is valid v2 but not v3.
         if "not v3 format" in error_str:
             return {
                 "valid": False,
