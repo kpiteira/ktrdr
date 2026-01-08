@@ -3,26 +3,14 @@ Tests for CLI strategy features command.
 
 This module tests the `ktrdr strategies features` command for listing
 resolved NN input features for v3 strategies.
+
+Note: Uses the shared `runner` fixture from conftest.py which provides
+ANSI-stripped output via CleanCliRunner.
 """
 
-import re
-
 import pytest
-from typer.testing import CliRunner
 
 from ktrdr.cli.strategy_commands import strategies_app
-
-
-def strip_ansi(text: str) -> str:
-    """Remove ANSI escape codes from text for reliable assertions."""
-    ansi_pattern = re.compile(r"\x1b\[[0-9;]*m")
-    return ansi_pattern.sub("", text)
-
-
-@pytest.fixture
-def cli_runner():
-    """Fixture providing a Typer CLI runner."""
-    return CliRunner()
 
 
 @pytest.fixture
@@ -128,23 +116,21 @@ training:
 class TestStrategyFeaturesCommand:
     """Test suite for the `ktrdr strategies features` command."""
 
-    def test_command_exists(self, cli_runner):
+    def test_command_exists(self, runner):
         """Test that the features command exists and shows help."""
-        result = cli_runner.invoke(strategies_app, ["features", "--help"])
+        result = runner.invoke(strategies_app, ["features", "--help"])
         assert result.exit_code == 0
-        # Strip ANSI codes for reliable assertion (Rich adds formatting)
-        output = strip_ansi(result.stdout)
-        assert "features" in output.lower()
-        assert "--group-by" in output
+        assert "features" in result.stdout.lower()
+        assert "--group-by" in result.stdout
 
     def test_lists_features_for_v3_strategy(
-        self, cli_runner, v3_strategy_yaml, tmp_path
+        self, runner, v3_strategy_yaml, tmp_path
     ):
         """Test that features are listed correctly for a v3 strategy."""
         strategy_file = tmp_path / "v3_strategy.yaml"
         strategy_file.write_text(v3_strategy_yaml)
 
-        result = cli_runner.invoke(
+        result = runner.invoke(
             strategies_app,
             ["features", str(strategy_file)],
         )
@@ -168,12 +154,12 @@ class TestStrategyFeaturesCommand:
         assert "1h_rsi_fast_overbought" in result.stdout
         assert "1h_bb_position_below" in result.stdout
 
-    def test_group_by_none_lists_flat(self, cli_runner, v3_strategy_yaml, tmp_path):
+    def test_group_by_none_lists_flat(self, runner, v3_strategy_yaml, tmp_path):
         """Test that --group-by none lists features in flat format."""
         strategy_file = tmp_path / "v3_strategy.yaml"
         strategy_file.write_text(v3_strategy_yaml)
 
-        result = cli_runner.invoke(
+        result = runner.invoke(
             strategies_app,
             ["features", str(strategy_file), "--group-by", "none"],
         )
@@ -187,13 +173,13 @@ class TestStrategyFeaturesCommand:
         assert "5m_rsi_fast_overbought" in result.stdout
 
     def test_group_by_timeframe_groups_correctly(
-        self, cli_runner, v3_strategy_yaml, tmp_path
+        self, runner, v3_strategy_yaml, tmp_path
     ):
         """Test that --group-by timeframe groups features by timeframe."""
         strategy_file = tmp_path / "v3_strategy.yaml"
         strategy_file.write_text(v3_strategy_yaml)
 
-        result = cli_runner.invoke(
+        result = runner.invoke(
             strategies_app,
             ["features", str(strategy_file), "--group-by", "timeframe"],
         )
@@ -213,13 +199,13 @@ class TestStrategyFeaturesCommand:
         assert "overbought" in output_lines
 
     def test_group_by_fuzzy_set_groups_correctly(
-        self, cli_runner, v3_strategy_yaml, tmp_path
+        self, runner, v3_strategy_yaml, tmp_path
     ):
         """Test that --group-by fuzzy_set groups features by fuzzy set."""
         strategy_file = tmp_path / "v3_strategy.yaml"
         strategy_file.write_text(v3_strategy_yaml)
 
-        result = cli_runner.invoke(
+        result = runner.invoke(
             strategies_app,
             ["features", str(strategy_file), "--group-by", "fuzzy_set"],
         )
@@ -233,9 +219,9 @@ class TestStrategyFeaturesCommand:
         assert "bb_position" in result.stdout
         assert "bbands_20_2" in result.stdout  # indicator reference
 
-    def test_nonexistent_file_shows_error(self, cli_runner):
+    def test_nonexistent_file_shows_error(self, runner):
         """Test that nonexistent file shows clear error."""
-        result = cli_runner.invoke(
+        result = runner.invoke(
             strategies_app, ["features", "/tmp/does_not_exist.yaml"]
         )
 
@@ -246,13 +232,13 @@ class TestStrategyFeaturesCommand:
         assert "error" in result.stdout.lower() or "not found" in result.stdout.lower()
 
     def test_v2_strategy_shows_error_or_warning(
-        self, cli_runner, v2_strategy_yaml, tmp_path
+        self, runner, v2_strategy_yaml, tmp_path
     ):
         """Test that v2 strategy shows appropriate error or warning."""
         strategy_file = tmp_path / "v2_strategy.yaml"
         strategy_file.write_text(v2_strategy_yaml)
 
-        result = cli_runner.invoke(
+        result = runner.invoke(
             strategies_app,
             ["features", str(strategy_file)],
         )
@@ -266,13 +252,13 @@ class TestStrategyFeaturesCommand:
         )
 
     def test_invalid_group_by_option_shows_error(
-        self, cli_runner, v3_strategy_yaml, tmp_path
+        self, runner, v3_strategy_yaml, tmp_path
     ):
         """Test that invalid --group-by option shows error."""
         strategy_file = tmp_path / "v3_strategy.yaml"
         strategy_file.write_text(v3_strategy_yaml)
 
-        result = cli_runner.invoke(
+        result = runner.invoke(
             strategies_app,
             ["features", str(strategy_file), "--group-by", "invalid"],
         )
@@ -281,13 +267,13 @@ class TestStrategyFeaturesCommand:
         assert result.exit_code != 0
 
     def test_output_includes_feature_count(
-        self, cli_runner, v3_strategy_yaml, tmp_path
+        self, runner, v3_strategy_yaml, tmp_path
     ):
         """Test that output includes total feature count."""
         strategy_file = tmp_path / "v3_strategy.yaml"
         strategy_file.write_text(v3_strategy_yaml)
 
-        result = cli_runner.invoke(
+        result = runner.invoke(
             strategies_app,
             ["features", str(strategy_file)],
         )

@@ -2,27 +2,15 @@
 Tests for CLI strategy migrate command.
 
 This module tests the `ktrdr strategies migrate` command for v2 to v3 migration.
-"""
 
-import re
+Note: Uses the shared `runner` fixture from conftest.py which provides
+ANSI-stripped output via CleanCliRunner.
+"""
 
 import pytest
 import yaml
-from typer.testing import CliRunner
 
 from ktrdr.cli.strategy_commands import strategies_app
-
-
-def strip_ansi(text: str) -> str:
-    """Remove ANSI escape codes from text for reliable assertions."""
-    ansi_pattern = re.compile(r"\x1b\[[0-9;]*m")
-    return ansi_pattern.sub("", text)
-
-
-@pytest.fixture
-def cli_runner():
-    """Fixture providing a Typer CLI runner."""
-    return CliRunner()
 
 
 @pytest.fixture
@@ -122,18 +110,16 @@ training:
 class TestStrategyMigrateCommand:
     """Test suite for the `ktrdr strategies migrate` command."""
 
-    def test_command_exists(self, cli_runner):
+    def test_command_exists(self, runner):
         """Test that the migrate command exists and shows help."""
-        result = cli_runner.invoke(strategies_app, ["migrate", "--help"])
+        result = runner.invoke(strategies_app, ["migrate", "--help"])
         assert result.exit_code == 0
-        # Strip ANSI codes for reliable assertion (Rich adds formatting)
-        output = strip_ansi(result.stdout)
-        assert "migrate" in output.lower()
-        assert "--dry-run" in output
-        assert "--backup" in output
-        assert "--output" in output
+        assert "migrate" in result.stdout.lower()
+        assert "--dry-run" in result.stdout
+        assert "--backup" in result.stdout
+        assert "--output" in result.stdout
 
-    def test_single_file_migration_works(self, cli_runner, v2_strategy_yaml, tmp_path):
+    def test_single_file_migration_works(self, runner, v2_strategy_yaml, tmp_path):
         """Test that a single v2 file is migrated to v3."""
         # Create v2 strategy file
         input_file = tmp_path / "v2_strategy.yaml"
@@ -141,7 +127,7 @@ class TestStrategyMigrateCommand:
 
         # Migrate with explicit output
         output_file = tmp_path / "v3_strategy.yaml"
-        result = cli_runner.invoke(
+        result = runner.invoke(
             strategies_app,
             ["migrate", str(input_file), "--output", str(output_file)],
         )
@@ -166,7 +152,7 @@ class TestStrategyMigrateCommand:
         assert migrated["indicators"]["rsi_14"]["type"] == "rsi"
 
     def test_dry_run_shows_changes_without_writing(
-        self, cli_runner, v2_strategy_yaml, tmp_path
+        self, runner, v2_strategy_yaml, tmp_path
     ):
         """Test that dry-run shows what would change without writing."""
         input_file = tmp_path / "v2_strategy.yaml"
@@ -175,7 +161,7 @@ class TestStrategyMigrateCommand:
         # Original modification time
         original_content = input_file.read_text()
 
-        result = cli_runner.invoke(
+        result = runner.invoke(
             strategies_app,
             ["migrate", str(input_file), "--dry-run"],
         )
@@ -196,7 +182,7 @@ class TestStrategyMigrateCommand:
         assert input_file.read_text() == original_content
 
     def test_backup_created_when_requested(
-        self, cli_runner, v2_strategy_yaml, tmp_path
+        self, runner, v2_strategy_yaml, tmp_path
     ):
         """Test that backup is created when --backup flag is used."""
         input_file = tmp_path / "v2_strategy.yaml"
@@ -204,7 +190,7 @@ class TestStrategyMigrateCommand:
         original_content = input_file.read_text()
 
         # Migrate in place with backup
-        result = cli_runner.invoke(
+        result = runner.invoke(
             strategies_app,
             ["migrate", str(input_file), "--backup"],
         )
@@ -224,14 +210,14 @@ class TestStrategyMigrateCommand:
             migrated = yaml.safe_load(f)
         assert migrated["version"] == "3.0"
 
-    def test_output_path_option_works(self, cli_runner, v2_strategy_yaml, tmp_path):
+    def test_output_path_option_works(self, runner, v2_strategy_yaml, tmp_path):
         """Test that --output option writes to specified path."""
         input_file = tmp_path / "input.yaml"
         input_file.write_text(v2_strategy_yaml)
 
         output_file = tmp_path / "subdir" / "output.yaml"
 
-        result = cli_runner.invoke(
+        result = runner.invoke(
             strategies_app,
             ["migrate", str(input_file), "--output", str(output_file)],
         )
@@ -247,12 +233,12 @@ class TestStrategyMigrateCommand:
             original = yaml.safe_load(f)
         assert isinstance(original["indicators"], list)  # Still v2
 
-    def test_already_v3_files_skipped(self, cli_runner, v3_strategy_yaml, tmp_path):
+    def test_already_v3_files_skipped(self, runner, v3_strategy_yaml, tmp_path):
         """Test that already-v3 files are skipped with a message."""
         input_file = tmp_path / "v3_strategy.yaml"
         input_file.write_text(v3_strategy_yaml)
 
-        result = cli_runner.invoke(
+        result = runner.invoke(
             strategies_app,
             ["migrate", str(input_file)],
         )
@@ -263,13 +249,13 @@ class TestStrategyMigrateCommand:
         # Should indicate file was skipped
         assert "skip" in result.stdout.lower() or "already" in result.stdout.lower()
 
-    def test_directory_migration_works(self, cli_runner, v2_strategy_yaml, tmp_path):
+    def test_directory_migration_works(self, runner, v2_strategy_yaml, tmp_path):
         """Test that migrating a directory processes all YAML files."""
         # Create multiple v2 strategy files
         (tmp_path / "strat1.yaml").write_text(v2_strategy_yaml)
         (tmp_path / "strat2.yml").write_text(v2_strategy_yaml)
 
-        result = cli_runner.invoke(
+        result = runner.invoke(
             strategies_app,
             ["migrate", str(tmp_path), "--dry-run"],
         )
@@ -277,15 +263,13 @@ class TestStrategyMigrateCommand:
         # Should succeed
         assert result.exit_code == 0
 
-        # Should process both files (check for filenames in output, ignoring newlines)
-        # Console may wrap long paths with newlines, so normalize the output
-        normalized_output = result.stdout.replace("\n", " ")
-        assert "strat1.yaml" in normalized_output or "strat1" in normalized_output
-        assert "strat2.yml" in normalized_output or "strat2" in normalized_output
+        # Should process both files
+        assert "strat1.yaml" in result.stdout or "strat1" in result.stdout
+        assert "strat2.yml" in result.stdout or "strat2" in result.stdout
 
-    def test_nonexistent_path_shows_error(self, cli_runner):
+    def test_nonexistent_path_shows_error(self, runner):
         """Test that nonexistent path shows clear error."""
-        result = cli_runner.invoke(
+        result = runner.invoke(
             strategies_app, ["migrate", "/tmp/does_not_exist.yaml"]
         )
 
@@ -296,7 +280,7 @@ class TestStrategyMigrateCommand:
         assert "not found" in result.stdout.lower() or "error" in result.stdout.lower()
 
     def test_validation_runs_after_migration(
-        self, cli_runner, v2_strategy_yaml, tmp_path
+        self, runner, v2_strategy_yaml, tmp_path
     ):
         """Test that validation runs and reports result after migration."""
         input_file = tmp_path / "v2_strategy.yaml"
@@ -304,7 +288,7 @@ class TestStrategyMigrateCommand:
 
         output_file = tmp_path / "v3_migrated.yaml"
 
-        result = cli_runner.invoke(
+        result = runner.invoke(
             strategies_app,
             ["migrate", str(input_file), "--output", str(output_file)],
         )
