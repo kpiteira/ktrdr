@@ -224,7 +224,38 @@
 - 0 failed
 - 76 skipped
 
+---
+
+## E2E Validation Complete
+
+**What was tested:**
+
+1. **Dry-run validation:** All 6 v3 example strategies pass dry-run (v3_minimal, v3_single_indicator, v3_multi_indicator, v3_multi_timeframe, v3_multi_symbol, v3_multi_output_indicator)
+
+2. **Real training:** Successfully trained v3 strategies against sandbox:
+   - `v3_e2e_test` (EURUSD 1h, single symbol/timeframe)
+   - `v3_aapl_test` (AAPL 1h, single symbol/timeframe)
+
+3. **Real backtest:** Successfully ran backtest against v3 trained model:
+   - `v3_e2e_test` model on EURUSD 1h (2024-03-01 to 2024-04-01)
+
+4. **Deleted obsolete v2 E2E test:**
+   - `tests/e2e/training/test_feature_id_e2e.py` - tested v2 list format and aliasing
+
+**Pre-existing issues (not from v2 cleanup):**
+- NaN serialization bug in training results when data has NaN values
+- Multi-output indicator fuzzy set syntax needs documentation (use `adx_14.adx` not `adx_14`)
+
+**Final test results:**
+- 3817 unit tests passed
+- 0 failed
+- 76 skipped
+- All quality checks pass
+
+---
+
 **Next Task Notes (8.6):**
 - Update documentation to reflect v3-only world
 - Add deprecation note for v2 format
 - Ensure examples use v3 format
+- Document multi-output indicator fuzzy set syntax
