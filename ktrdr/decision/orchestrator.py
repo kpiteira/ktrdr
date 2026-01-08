@@ -160,21 +160,17 @@ class DecisionOrchestrator:
         self.max_history = 100
 
         # Feature caching for backtesting performance
-        # V3 models use FeatureCacheV3 for proper feature alignment
         self.feature_cache = None
-        self._is_v3_model = False
 
-        if mode == "backtest":
-            # Check if model is v3 format
-            if model_path and self._check_v3_model(model_path):
-                self._is_v3_model = True
-                self.feature_cache = self._create_v3_feature_cache(model_path)
-                logger.info(f"Using FeatureCacheV3 for v3 model at {model_path}")
-            else:
-                from ..backtesting.feature_cache import FeatureCache
-
-                self.feature_cache = FeatureCache(self.strategy_config)
-                logger.debug("Using FeatureCache (v2) for backtesting")
+        if mode == "backtest" and model_path:
+            # V3-only: require a v3 model for backtesting
+            if not self._check_v3_model(model_path):
+                raise ValueError(
+                    f"Model at {model_path} is not a v3 model. "
+                    "V2 models are no longer supported. Please retrain with v3 strategy."
+                )
+            self.feature_cache = self._create_feature_cache(model_path)
+            logger.info(f"Using FeatureCache for v3 model at {model_path}")
 
     def prepare_feature_cache(self, historical_data: pd.DataFrame) -> None:
         """Pre-compute all features for backtesting performance.
@@ -217,33 +213,28 @@ class DecisionOrchestrator:
         Returns:
             TradingDecision with signal, confidence, and metadata
         """
-        # Step 1 & 2: Get indicators and fuzzy memberships (cached or computed)
-        # FEATURE CACHE ENABLED: Fixed sliding window computation
-        if self.feature_cache and self.feature_cache.is_ready():
-            current_timestamp = (
-                current_bar.name if hasattr(current_bar, "name") else pd.Timestamp.now()
-            )
+        # Get features (v3: features are the fuzzy memberships)
+        current_timestamp = (
+            current_bar.name if hasattr(current_bar, "name") else pd.Timestamp.now()
+        )
 
-            try:
-                # Use pre-computed cached features for fast lookup
-                mapped_indicators, fuzzy_values = (
-                    self.feature_cache.get_features_for_timestamp(
-                        pd.Timestamp(str(current_timestamp))
-                    )
+        if self.feature_cache and self.feature_cache.is_ready():
+            # Use pre-computed cached features
+            fuzzy_values = self.feature_cache.get_features_for_timestamp(
+                pd.Timestamp(str(current_timestamp))
+            )
+            if fuzzy_values is None:
+                raise ValueError(
+                    f"No cached features found for timestamp {current_timestamp}. "
+                    "Ensure the timestamp is within the cached data range."
                 )
-                logger.debug(
-                    f"🚀 [{cast(pd.Timestamp, current_timestamp).strftime('%Y-%m-%d %H:%M')}] Using cached features: {len(mapped_indicators)} indicators, {len(fuzzy_values)} fuzzy"
-                )
-            except ValueError as e:
-                logger.debug(
-                    f"⚠️ Cache lookup failed: {e}, falling back to real-time computation"
-                )
-                # Fall back to real-time computation
-                mapped_indicators, fuzzy_values = self._compute_features_realtime(
-                    historical_data, current_bar
-                )
+            # In v3, features ARE fuzzy memberships - no separate indicators
+            mapped_indicators: dict[str, float] = {}
+            logger.debug(
+                f"🚀 [{cast(pd.Timestamp, current_timestamp).strftime('%Y-%m-%d %H:%M')}] Using cached features: {len(fuzzy_values)} fuzzy"
+            )
         else:
-            # Real-time computation (for non-backtest modes or when cache not ready)
+            # Real-time computation (for non-backtest modes)
             mapped_indicators, fuzzy_values = self._compute_features_realtime(
                 historical_data, current_bar
             )
@@ -784,20 +775,20 @@ class DecisionOrchestrator:
 
         return BacktestingService.is_v3_model(model_path)
 
-    def _create_v3_feature_cache(self, model_path: str):
-        """Create FeatureCacheV3 for v3 model.
+    def _create_feature_cache(self, model_path: str):
+        """Create FeatureCache for v3 model.
 
-        Loads ModelMetadataV3 from model directory and reconstructs
-        StrategyConfigurationV3 to initialize FeatureCacheV3.
+        Loads ModelMetadata from model directory and reconstructs
+        StrategyConfigurationV3 to initialize FeatureCache.
 
         Args:
             model_path: Path to v3 model directory
 
         Returns:
-            FeatureCacheV3 instance
+            FeatureCache instance
         """
         from ..backtesting.backtesting_service import BacktestingService
-        from ..backtesting.feature_cache import FeatureCacheV3
+        from ..backtesting.feature_cache import FeatureCache
 
         # Load v3 metadata
         metadata = BacktestingService.load_v3_metadata(model_path)
@@ -805,5 +796,5 @@ class DecisionOrchestrator:
         # Reconstruct config from metadata
         config = BacktestingService.reconstruct_config_from_metadata(metadata)
 
-        # Create v3 feature cache
-        return FeatureCacheV3(config=config, model_metadata=metadata)
+        # Create feature cache
+        return FeatureCache(config=config, model_metadata=metadata)
