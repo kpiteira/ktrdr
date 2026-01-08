@@ -270,4 +270,4 @@ class FeatureCache:
 if TYPE_CHECKING:
     from ktrdr.config.feature_resolver import ResolvedFeature
     from ktrdr.config.models import StrategyConfigurationV3
-    from ktrdr.models.model_metadata import ModelMetadataV3 as ModelMetadata
+    from ktrdr.models.model_metadata import ModelMetadata
