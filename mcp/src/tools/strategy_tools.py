@@ -2,23 +2,22 @@
 MCP tools for strategy management.
 
 Provides MCP tool wrappers for strategy operations:
-- save_strategy_config: Validate and save strategy to disk
+- validate_strategy: Validate a strategy file (v3 format detection)
 
-The actual business logic is in research_agents.services.strategy_service
-to allow proper unit testing.
+The actual business logic is in ktrdr.mcp.strategy_service
+to allow proper unit testing without FastMCP dependencies.
 """
 
 from typing import Any
 
+from ktrdr.mcp.strategy_service import validate_strategy as _validate_strategy
 from mcp.server.fastmcp import FastMCP
-from research_agents.services.strategy_service import (
-    get_recent_strategies as _get_recent_strategies,
-)
-from research_agents.services.strategy_service import (
-    save_strategy_config as _save_strategy_config,
-)
 
 from ..telemetry import trace_mcp_tool
+
+# Re-export validate_strategy for direct access (e.g., in smoke tests)
+# This allows: from mcp.src.tools.strategy_tools import validate_strategy
+validate_strategy = _validate_strategy
 
 
 def register_strategy_tools(mcp: FastMCP) -> None:
@@ -28,115 +27,44 @@ def register_strategy_tools(mcp: FastMCP) -> None:
         mcp: The FastMCP server instance to register tools with.
     """
 
-    @trace_mcp_tool("save_strategy_config")
+    @trace_mcp_tool("validate_strategy")
     @mcp.tool()
-    async def save_strategy_config(
-        name: str,
-        config: dict[str, Any],
-        description: str,
-    ) -> dict[str, Any]:
+    async def validate_strategy_tool(path: str) -> dict[str, Any]:
         """
-        Validate and save a strategy configuration to disk.
+        Validate a strategy file.
 
-        Use this tool to save agent-designed strategies. The strategy will be
-        validated against KTRDR's requirements before saving.
+        Use this tool to check if a strategy configuration file is valid
+        and get information about its format (v3 vs v2).
 
         Args:
-            name: Strategy name (file saved as strategies/{name}.yaml)
-            config: Complete strategy configuration dictionary including:
-                - indicators: List of technical indicators
-                - fuzzy_sets: Fuzzy membership functions for each indicator
-                - model: Neural network configuration
-                - decisions: Decision output configuration
-                - training: Training methodology configuration
-            description: Human-readable description of the strategy
+            path: Path to the strategy YAML file
 
         Returns:
             Dict with structure:
             {
-                "success": bool,
-                "path": str,        # Absolute path to saved file (if success)
-                "message": str,     # Success or error message
-                "errors": list,     # List of error messages (if failed)
-                "suggestions": list # Suggestions for fixing errors (if failed)
+                "valid": bool,         # True if strategy is valid v3
+                "format": str,         # "v3", "v2", or "unknown"
+                "features": list,      # Feature IDs (if v3 valid)
+                "feature_count": int,  # Number of features (if v3 valid)
+                "errors": list,        # Error messages (if invalid)
+                "suggestion": str      # Migration suggestion (if v2)
             }
 
         Examples:
-            # Save a momentum-based strategy
-            result = await save_strategy_config(
-                name="momentum_rsi_macd",
-                config={
-                    "scope": "universal",
-                    "indicators": [...],
-                    "fuzzy_sets": {...},
-                    "model": {...},
-                    "decisions": {...},
-                    "training": {...}
-                },
-                description="Momentum strategy using RSI and MACD"
-            )
-
-            if result["success"]:
-                print(f"Saved to: {result['path']}")
+            # Validate a v3 strategy
+            result = await validate_strategy("strategies/momentum_v3.yaml")
+            if result["valid"]:
+                print(f"Valid v3 strategy with {result['feature_count']} features")
             else:
                 print(f"Errors: {result['errors']}")
 
-        See Also:
-            - get_available_indicators(): See available indicators
-            - get_available_strategies(): List existing strategies
+            # Check if migration is needed
+            if result["format"] == "v2":
+                print(result["suggestion"])  # Run 'ktrdr strategy migrate' to upgrade
 
         Notes:
-            - Strategy names must be unique
-            - Indicator types are validated against KTRDR's registry
-            - Fuzzy membership parameters are validated
-            - Strategy saved to strategies/ folder
+            - V3 format has indicators as dict + nn_inputs section
+            - V2 format has indicators as list + feature_id per indicator
+            - Use 'ktrdr strategy migrate' to upgrade v2 to v3
         """
-        return await _save_strategy_config(
-            name=name,
-            config=config,
-            description=description,
-        )
-
-    @trace_mcp_tool("get_recent_strategies")
-    @mcp.tool()
-    async def get_recent_strategies(n: int = 5) -> list[dict[str, Any]]:
-        """
-        Get the N most recent strategies designed by the agent.
-
-        Use this tool to see what strategies have been tried recently.
-        Helps avoid repeating similar strategies and enables novelty.
-
-        Args:
-            n: Number of recent strategies to return (default 5, max 20)
-
-        Returns:
-            List of strategy summaries with structure:
-            [
-                {
-                    "name": str,        # Strategy name
-                    "type": str | None, # Model type (e.g., "mlp", "lstm")
-                    "indicators": list, # List of indicator names used
-                    "outcome": str,     # Session outcome (success, failed_training, etc.)
-                    "created_at": str   # ISO timestamp of when strategy was created
-                }
-            ]
-
-        Examples:
-            # Get last 5 strategies (default)
-            strategies = await get_recent_strategies()
-
-            # Check what was tried recently
-            for s in strategies:
-                print(f"{s['name']}: {s['outcome']} - {s['indicators']}")
-
-            # Get more history
-            strategies = await get_recent_strategies(n=10)
-
-        Notes:
-            - Strategies are ordered by creation date (most recent first)
-            - Failed sessions may have partial info (null type/indicators)
-            - Use this before designing to ensure novelty
-        """
-        # Clamp n to reasonable range
-        n = max(1, min(n, 20))
-        return await _get_recent_strategies(n=n)
+        return await _validate_strategy(path)
