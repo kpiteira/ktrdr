@@ -742,7 +742,16 @@ class FuzzyEngine:
 
                     # Filter fuzzy config to only include indicators that are available
                     filtered_fuzzy_config = {}
-                    for indicator, sets_config in fuzzy_sets_config.items():
+                    for fuzzy_set_id, sets_config in fuzzy_sets_config.items():
+                        # V3 format: sets_config has 'indicator' key specifying the indicator
+                        # V2 format: fuzzy_set_id IS the indicator name
+                        if isinstance(sets_config, dict) and "indicator" in sets_config:
+                            # V3 format
+                            indicator = sets_config["indicator"]
+                        else:
+                            # V2 format (backward compatibility)
+                            indicator = fuzzy_set_id
+
                         # Check if the base indicator name is in available indicators
                         # or if any column starts with the indicator name
                         matching_indicators = [
@@ -754,12 +763,13 @@ class FuzzyEngine:
 
                         if matching_indicators:
                             logger.debug(
-                                f"Found matches for {indicator}: {matching_indicators}"
+                                f"Found matches for {fuzzy_set_id} (indicator: {indicator}): {matching_indicators}"
                             )
-                            filtered_fuzzy_config[indicator] = sets_config
+                            filtered_fuzzy_config[fuzzy_set_id] = sets_config
                         else:
                             logger.warning(
-                                f"No matching indicators found for fuzzy set '{indicator}'"
+                                f"No matching indicators found for fuzzy set '{fuzzy_set_id}' "
+                                f"(looking for indicator: {indicator})"
                             )
 
                     # Only proceed if we have at least one matched fuzzy set
@@ -775,14 +785,29 @@ class FuzzyEngine:
                             },
                         )
 
-                    # Use FuzzyConfigLoader to properly process the filtered config
-                    from ktrdr.fuzzy.config import FuzzyConfigLoader
+                    # Detect v3 format (values have 'indicator' key)
+                    first_value = next(iter(filtered_fuzzy_config.values()), {})
+                    is_v3_format = isinstance(first_value, dict) and "indicator" in first_value
 
-                    temp_config = FuzzyConfigLoader.load_from_dict(
-                        filtered_fuzzy_config
-                    )
+                    if is_v3_format:
+                        # V3 format: convert to FuzzySetDefinition objects and pass directly
+                        from ktrdr.config.models import FuzzySetDefinition
 
-                    processing_engine = FuzzyEngine(temp_config)
+                        v3_config = {}
+                        for fuzzy_set_id, sets_config in filtered_fuzzy_config.items():
+                            if isinstance(sets_config, FuzzySetDefinition):
+                                v3_config[fuzzy_set_id] = sets_config
+                            else:
+                                v3_config[fuzzy_set_id] = FuzzySetDefinition(**sets_config)
+                        processing_engine = FuzzyEngine(v3_config)
+                    else:
+                        # V2 format: use FuzzyConfigLoader
+                        from ktrdr.fuzzy.config import FuzzyConfigLoader
+
+                        temp_config = FuzzyConfigLoader.load_from_dict(
+                            filtered_fuzzy_config
+                        )
+                        processing_engine = FuzzyEngine(temp_config)
                 except Exception as e:
                     raise ConfigurationError(
                         f"Failed to create FuzzyEngine from provided configuration: {str(e)}",
@@ -828,8 +853,14 @@ class FuzzyEngine:
                 logger.info(
                     f"Available columns for {timeframe}: {list(indicators_data.columns)}"
                 )
+                # Get fuzzy keys based on engine mode (v3 uses _fuzzy_sets, v2 uses _membership_functions)
+                fuzzy_keys = (
+                    processing_engine._fuzzy_sets.keys()
+                    if hasattr(processing_engine, "_is_v3_mode") and processing_engine._is_v3_mode
+                    else getattr(processing_engine, "_membership_functions", {}).keys()
+                )
                 logger.info(
-                    f"Fuzzy membership functions keys: {list(processing_engine._membership_functions.keys())}"
+                    f"Fuzzy membership functions keys: {list(fuzzy_keys)}"
                 )
 
                 for indicator_col in indicators_data.columns:
@@ -956,19 +987,37 @@ class FuzzyEngine:
             >>> engine._find_fuzzy_key("unknown_indicator")
             None  # No match
         """
+        # Determine which attribute to check based on mode
+        # v3 uses _fuzzy_sets, v2 uses _membership_functions
+        fuzzy_keys = (
+            self._fuzzy_sets.keys()
+            if hasattr(self, "_is_v3_mode") and self._is_v3_mode
+            else getattr(self, "_membership_functions", {}).keys()
+        )
+
         # Direct match first (most common case)
-        if column_name in self._membership_functions:
+        if column_name in fuzzy_keys:
             return column_name
+
+        # V3: Check if column matches an indicator in _indicator_map
+        # E.g., column "rsi_14" matches fuzzy_set "rsi_momentum" which has indicator "rsi_14"
+        if hasattr(self, "_indicator_map") and self._indicator_map:
+            for fuzzy_set_id, indicator in self._indicator_map.items():
+                if column_name == indicator:
+                    return fuzzy_set_id
+                # Also check prefix match for multi-output indicators
+                if column_name.startswith(f"{indicator}."):
+                    return fuzzy_set_id
 
         # M4: For multi-output indicators with dot notation (new format from M3b)
         # E.g., "bbands_20_2.upper" should match fuzzy key "bbands_20_2"
-        for fuzzy_key in self._membership_functions.keys():
+        for fuzzy_key in fuzzy_keys:
             if column_name.startswith(f"{fuzzy_key}."):
                 return fuzzy_key
 
         # Legacy: For backward compatibility with old underscore-based format
         # E.g., "bbands_20_2_upper" should match fuzzy key "bbands_20_2"
-        for fuzzy_key in self._membership_functions.keys():
+        for fuzzy_key in fuzzy_keys:
             if column_name.startswith(f"{fuzzy_key}_"):
                 return fuzzy_key
 

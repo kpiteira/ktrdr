@@ -137,9 +137,9 @@ ktrdr strategies features <path> [--group-by none|timeframe|fuzzy_set]
 
 ---
 
-## Milestone 6 Complete: E2E Test Results
+## Milestone 6 Complete: CLI E2E Test Results
 
-All E2E tests passed:
+All CLI E2E tests passed:
 
 | Test | Description | Result |
 |------|-------------|--------|
@@ -152,5 +152,45 @@ All E2E tests passed:
 **Note:** v2 strategies with `single_symbol` mode need `single` for v3 compatibility.
 The migration does not auto-convert enum values, so source v2 files may need
 manual adjustment if they use deprecated enum names.
+
+---
+
+## V3 Training Integration Gap (Post-M6 Work)
+
+### Problem
+
+Full E2E testing revealed that v3 strategies cannot complete training because
+TrainingPipelineV3 is not wired into the training workers. The workers still use
+the v2 TrainingPipeline which has format incompatibilities with v3 configs.
+
+### Fixes Applied in This Session
+
+1. **IndicatorEngine v3 fix**: Added `self.indicators = list(self._indicators.values())`
+   to populate the `indicators` list when v3 format is used, fixing "No indicators
+   configured" error.
+
+2. **FuzzyEngine v3 fixes**:
+   - Updated `generate_multi_timeframe_memberships()` to detect v3 format and
+     create FuzzyEngine directly (not via FuzzyConfigLoader which expects v2)
+   - Updated `_find_fuzzy_key()` to check `_indicator_map` for v3 indicator matching
+   - Fixed logging line that accessed `_membership_functions` (v2-only attribute)
+
+### Remaining Work (Future Milestone)
+
+The v2 TrainingPipeline has fundamental format incompatibilities with v3:
+
+1. **Fuzzy sets structure**: v2 uses `{indicator_name: {membership: {type, params}}}`,
+   v3 uses `{fuzzy_set_id: {indicator, membership: [params]}}`
+
+2. **Labels config**: v2 expects flat `zigzag_threshold`, `label_lookahead`;
+   v3 defines `parameters: {threshold: ...}`
+
+3. **Training config access**: Various `strategy_config["training"]` accesses
+   assume v2 structure
+
+**Options:**
+1. Wire TrainingPipelineV3 into LocalTrainingOrchestrator (preferred)
+2. Add v3->v2 conversion layer in training workers
+3. Fully migrate TrainingPipeline to handle both formats
 
 ---

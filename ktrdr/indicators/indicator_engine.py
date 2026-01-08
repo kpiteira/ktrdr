@@ -66,6 +66,9 @@ class IndicatorEngine:
                     self._indicators[indicator_id] = self._create_indicator(
                         indicator_id, definition
                     )
+                # Also populate self.indicators for backward compatibility
+                # Methods like apply_multi_timeframe() check self.indicators
+                self.indicators = list(self._indicators.values())
             # V2 format: list of dicts or BaseIndicator instances
             elif isinstance(indicators[0], dict):
                 # Create indicators from config dictionaries
