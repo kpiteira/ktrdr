@@ -260,6 +260,41 @@ if mode == "backtest":
 
 ---
 
+## Additional Fixes Required (M6.5 Session)
+
+Beyond the planned tasks, additional fixes were needed for full E2E functionality:
+
+### Backtest API Model Missing model_path
+
+**Problem:** `BacktestStartRequest` in `ktrdr/api/models/backtesting.py` didn't have a `model_path` field.
+
+**Fix:** Added `model_path: Optional[str] = None` to the Pydantic model.
+
+### Backtest Request Payload Missing model_path
+
+**Problem:** `run_backtest_on_worker()` in `backtesting_service.py` didn't include `model_path` in the worker request.
+
+**Fix:** Added `"model_path": model_path` to the request payload.
+
+### Host Path vs Container Path Translation
+
+**Problem:** CLI passes host paths like `~/.ktrdr/shared/models/...` but inside Docker, paths are at `/app/models/...`.
+
+**Fix:** Added path translation in `backtest_worker.py`:
+- Detect `/.ktrdr/shared/models/` pattern
+- Extract relative path and prepend `/app/models/`
+
+### FeatureCacheV3 Missing Interface Methods
+
+**Problem:** `DecisionOrchestrator` calls `compute_all_features()`, `get_features_for_timestamp()`, and `is_ready()` on feature caches, but `FeatureCacheV3` only had `compute_features()`.
+
+**Fix:** Added three methods to `FeatureCacheV3`:
+- `compute_all_features(historical_data)` - wraps compute_features with v2 interface
+- `get_features_for_timestamp(timestamp, symbol, timeframe)` - retrieves cached row
+- `is_ready()` - checks if features are cached
+
+---
+
 ## Earlier Fixes Applied (M6 Session)
 
 1. **IndicatorEngine v3 fix**: Added `self.indicators = list(self._indicators.values())`
