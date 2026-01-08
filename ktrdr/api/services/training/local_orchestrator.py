@@ -257,7 +257,9 @@ class LocalTrainingOrchestrator:
         min_len = min(len(features), len(labels))
         if min_len == 0:
             raise ValueError(
-                "No aligned samples available: features or labels are empty after alignment"
+                f"No aligned samples available: min_len={min_len}, "
+                f"features_len={len(features)}, labels_len={len(labels)}. "
+                "One or both of features/labels are empty after alignment."
             )
         features_aligned = features[-min_len:]
         labels_aligned = labels[-min_len:]

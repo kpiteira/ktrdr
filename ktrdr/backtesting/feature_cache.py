@@ -619,6 +619,14 @@ class FeatureCacheV3:
         This method adapts FeatureCacheV3 to the same interface as FeatureCache
         so DecisionOrchestrator can use it seamlessly.
 
+        Lifecycle / migration notes:
+        - This method, together with ``get_features_for_timestamp`` and ``is_ready``,
+          forms a temporary v2-compatibility layer.
+        - The long-term goal is to refactor DecisionOrchestrator (and any other
+          consumers) to use the native v3 feature interface directly.
+        - Once all callers are migrated to the v3 API, this compatibility layer may
+          be removed.
+
         Args:
             historical_data: Complete historical OHLCV data
         """
@@ -627,12 +635,22 @@ class FeatureCacheV3:
         )
 
         # Get base timeframe from config
-        base_timeframe: str = "1h"  # Default; should come from config
+        base_timeframe: str | None = None
         if hasattr(self.config, "training_data") and self.config.training_data:
             if hasattr(self.config.training_data, "timeframes"):
-                tf = self.config.training_data.timeframes.base_timeframe
+                tf = getattr(
+                    self.config.training_data.timeframes, "base_timeframe", None
+                )
                 if tf:
                     base_timeframe = tf
+
+        if base_timeframe is None:
+            logger.warning(
+                "FeatureCacheV3: base_timeframe not found in config; "
+                'falling back to default "1h". This may cause mismatches if '
+                "the model was trained on a different base timeframe."
+            )
+            base_timeframe = "1h"
 
         # V3 compute_features expects dict[timeframe, DataFrame]
         data = {base_timeframe: historical_data}

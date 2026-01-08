@@ -123,9 +123,7 @@ class TestStrategyFeaturesCommand:
         assert "features" in result.stdout.lower()
         assert "--group-by" in result.stdout
 
-    def test_lists_features_for_v3_strategy(
-        self, runner, v3_strategy_yaml, tmp_path
-    ):
+    def test_lists_features_for_v3_strategy(self, runner, v3_strategy_yaml, tmp_path):
         """Test that features are listed correctly for a v3 strategy."""
         strategy_file = tmp_path / "v3_strategy.yaml"
         strategy_file.write_text(v3_strategy_yaml)
@@ -221,9 +219,7 @@ class TestStrategyFeaturesCommand:
 
     def test_nonexistent_file_shows_error(self, runner):
         """Test that nonexistent file shows clear error."""
-        result = runner.invoke(
-            strategies_app, ["features", "/tmp/does_not_exist.yaml"]
-        )
+        result = runner.invoke(strategies_app, ["features", "/tmp/does_not_exist.yaml"])
 
         # Should fail
         assert result.exit_code != 0
@@ -266,9 +262,7 @@ class TestStrategyFeaturesCommand:
         # Should fail - typer validates Choice options
         assert result.exit_code != 0
 
-    def test_output_includes_feature_count(
-        self, runner, v3_strategy_yaml, tmp_path
-    ):
+    def test_output_includes_feature_count(self, runner, v3_strategy_yaml, tmp_path):
         """Test that output includes total feature count."""
         strategy_file = tmp_path / "v3_strategy.yaml"
         strategy_file.write_text(v3_strategy_yaml)

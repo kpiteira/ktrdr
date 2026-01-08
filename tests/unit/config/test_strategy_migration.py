@@ -304,8 +304,10 @@ class TestValidateMigration:
 
         issues = validate_migration(original, migrated)
 
-        assert len(issues) == 1
-        assert "Indicator count changed: 2 -> 1" in issues[0]
+        # Enhanced validation reports count mismatch AND specific missing indicator
+        assert len(issues) == 2
+        assert any("Indicator count changed: 2 -> 1" in issue for issue in issues)
+        assert any("macd_default" in issue and "missing" in issue for issue in issues)
 
     def test_reports_fuzzy_set_count_mismatch(self):
         """Report if fuzzy set count changed during migration."""
@@ -320,8 +322,10 @@ class TestValidateMigration:
 
         issues = validate_migration(original, migrated)
 
-        assert len(issues) == 1
-        assert "Fuzzy set count changed: 2 -> 1" in issues[0]
+        # Enhanced validation reports count mismatch AND specific missing fuzzy set
+        assert len(issues) == 2
+        assert any("Fuzzy set count changed: 2 -> 1" in issue for issue in issues)
+        assert any("macd_default" in issue for issue in issues)
 
     def test_handles_missing_sections(self):
         """Handle configs with missing indicators/fuzzy_sets sections."""

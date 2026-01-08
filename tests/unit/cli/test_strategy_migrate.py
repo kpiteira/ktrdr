@@ -174,16 +174,12 @@ class TestStrategyMigrateCommand:
 
         # Should show migration preview
         assert "indicators" in result.stdout.lower()
-        assert (
-            "nn_inputs" in result.stdout.lower() or "nn inputs" in result.stdout.lower()
-        )
+        assert "nn" in result.stdout.lower()  # Shows "NN Inputs: X entries"
 
         # Original file should be unchanged
         assert input_file.read_text() == original_content
 
-    def test_backup_created_when_requested(
-        self, runner, v2_strategy_yaml, tmp_path
-    ):
+    def test_backup_created_when_requested(self, runner, v2_strategy_yaml, tmp_path):
         """Test that backup is created when --backup flag is used."""
         input_file = tmp_path / "v2_strategy.yaml"
         input_file.write_text(v2_strategy_yaml)
@@ -269,9 +265,7 @@ class TestStrategyMigrateCommand:
 
     def test_nonexistent_path_shows_error(self, runner):
         """Test that nonexistent path shows clear error."""
-        result = runner.invoke(
-            strategies_app, ["migrate", "/tmp/does_not_exist.yaml"]
-        )
+        result = runner.invoke(strategies_app, ["migrate", "/tmp/does_not_exist.yaml"])
 
         # Should fail
         assert result.exit_code != 0
@@ -279,9 +273,7 @@ class TestStrategyMigrateCommand:
         # Should mention file not found
         assert "not found" in result.stdout.lower() or "error" in result.stdout.lower()
 
-    def test_validation_runs_after_migration(
-        self, runner, v2_strategy_yaml, tmp_path
-    ):
+    def test_validation_runs_after_migration(self, runner, v2_strategy_yaml, tmp_path):
         """Test that validation runs and reports result after migration."""
         input_file = tmp_path / "v2_strategy.yaml"
         input_file.write_text(v2_strategy_yaml)

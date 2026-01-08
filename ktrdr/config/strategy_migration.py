@@ -97,26 +97,65 @@ def validate_migration(original: dict[str, Any], migrated: dict[str, Any]) -> li
     """
     issues: list[str] = []
 
-    # Check indicator count preserved
+    # Get indicators from both configs
     orig_indicators = original.get("indicators", [])
-    if isinstance(orig_indicators, list):
-        orig_count = len(orig_indicators)
-    else:
-        orig_count = len(orig_indicators) if orig_indicators else 0
-
     migrated_indicators = migrated.get("indicators", {})
-    if isinstance(migrated_indicators, dict):
-        migrated_count = len(migrated_indicators)
+
+    # Normalize original indicators to a list
+    if isinstance(orig_indicators, dict):
+        orig_ind_list = list(orig_indicators.values())
+    elif isinstance(orig_indicators, list):
+        orig_ind_list = orig_indicators
     else:
-        migrated_count = len(migrated_indicators) if migrated_indicators else 0
+        orig_ind_list = []
+
+    # Check indicator count preserved
+    orig_count = len(orig_ind_list)
+    migrated_count = (
+        len(migrated_indicators) if isinstance(migrated_indicators, dict) else 0
+    )
 
     if orig_count != migrated_count:
         issues.append(f"Indicator count changed: {orig_count} -> {migrated_count}")
+
+    # Check indicator IDs and types are preserved
+    if isinstance(migrated_indicators, dict):
+        for ind in orig_ind_list:
+            if not isinstance(ind, dict):
+                continue
+
+            # feature_id becomes the key, falls back to 'name' (same logic as migration)
+            ind_id = ind.get("feature_id", ind.get("name"))
+            if ind_id is None:
+                continue  # Nothing to validate
+
+            if ind_id not in migrated_indicators:
+                issues.append(f"Indicator '{ind_id}' missing in migrated config")
+                continue
+
+            # Verify type matches original name
+            migrated_ind = migrated_indicators.get(ind_id)
+            if isinstance(migrated_ind, dict):
+                orig_name = ind.get("name")
+                if orig_name:
+                    migrated_type = migrated_ind.get("type")
+                    if migrated_type != orig_name:
+                        issues.append(
+                            f"Indicator '{ind_id}' type mismatch: "
+                            f"'{migrated_type}' != '{orig_name}'"
+                        )
 
     # Check fuzzy set count preserved
     orig_fs = len(original.get("fuzzy_sets", {}))
     migrated_fs = len(migrated.get("fuzzy_sets", {}))
     if orig_fs != migrated_fs:
         issues.append(f"Fuzzy set count changed: {orig_fs} -> {migrated_fs}")
+
+    # Check fuzzy set keys are preserved
+    orig_fs_keys = set(original.get("fuzzy_sets", {}).keys())
+    migrated_fs_keys = set(migrated.get("fuzzy_sets", {}).keys())
+    missing_fs = orig_fs_keys - migrated_fs_keys
+    if missing_fs:
+        issues.append(f"Fuzzy sets missing in migrated config: {missing_fs}")
 
     return issues
