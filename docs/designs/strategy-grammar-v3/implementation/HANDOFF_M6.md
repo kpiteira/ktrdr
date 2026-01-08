@@ -155,15 +155,112 @@ manual adjustment if they use deprecated enum names.
 
 ---
 
-## V3 Training Integration Gap (Post-M6 Work)
+## V3 Training Integration Gap (RESOLVED - M6.5)
 
-### Problem
+### Problem (Historical)
 
-Full E2E testing revealed that v3 strategies cannot complete training because
-TrainingPipelineV3 is not wired into the training workers. The workers still use
-the v2 TrainingPipeline which has format incompatibilities with v3 configs.
+Full E2E testing revealed that v3 strategies could not complete training because
+TrainingPipelineV3 was not wired into the training workers. The workers used
+the v2 TrainingPipeline which had format incompatibilities with v3 configs.
 
-### Fixes Applied in This Session
+### Resolution (M6.5)
+
+**M6.5 closed the integration gap with targeted wiring changes:**
+
+---
+
+## Task 6.5.1 Complete: Wire V3 Training in LocalTrainingOrchestrator
+
+### Implementation Notes
+
+**File modified:** `ktrdr/api/services/training/local_orchestrator.py`
+
+**Changes made:**
+- Added `_execute_v3_training()` method that uses `TrainingPipelineV3`
+- Added `_execute_v2_training()` method (extracted legacy code)
+- Modified `_execute_training()` to branch based on `_is_v3_format()`
+- V3 path: loads typed config, resolves features, saves `metadata_v3.json`
+
+**Key pattern:**
+```python
+if self._is_v3_format(config):
+    result = self._execute_v3_training(config)
+else:
+    result = self._execute_v2_training(config)
+```
+
+### Gotchas
+
+**Labels config location differs**
+- V3 labels config is under `config["training"]["labels"]`, not flat at root level
+- Need to extract `zigzag_threshold` and `label_lookahead` from nested structure
+
+**Tensor alignment**
+- Features and labels may have different lengths due to NaN handling
+- Align to minimum length: `features_aligned = features[-min_len:]`
+
+---
+
+## Task 6.5.2 Complete: Wire V3 Backtest in DecisionOrchestrator
+
+### Implementation Notes
+
+**File modified:** `ktrdr/decision/orchestrator.py`
+
+**Changes made:**
+- Added `_check_v3_model()` method to detect v3 models via `metadata_v3.json`
+- Added `_create_v3_feature_cache()` method to create `FeatureCacheV3`
+- Modified `__init__()` to use `FeatureCacheV3` when model is v3
+
+**Key pattern:**
+```python
+if mode == "backtest":
+    if model_path and self._check_v3_model(model_path):
+        self.feature_cache = self._create_v3_feature_cache(model_path)
+    else:
+        self.feature_cache = FeatureCache(self.strategy_config)
+```
+
+### Gotchas
+
+**Static methods reused**
+- Reuses `BacktestingService.is_v3_model()` and `load_v3_metadata()` from M5
+- Also reuses `reconstruct_config_from_metadata()` for config reconstruction
+
+---
+
+## Task 6.5.3 Complete: E2E Test for V3 Train/Backtest
+
+### Implementation Notes
+
+**File created:** `tests/e2e/test_v3_train_backtest.py`
+
+**Tests:**
+1. `test_v3_strategy_dry_run_shows_indicators` - V3 dry-run works
+2. `test_v3_training_creates_metadata_v3` - Training creates `metadata_v3.json`
+3. `test_v3_backtest_uses_correct_features` - Backtest has no feature mismatch
+4. `test_v2_strategy_dry_run_still_works` - V2 backward compatibility
+
+**Skips:**
+- Training tests skipped if `~/.ktrdr/shared/data/EURUSD_1h.csv` not available
+- Backtest test skipped if training didn't run first
+
+---
+
+## M6.5 Integration Verification
+
+**CRITICAL: These checks prove the wiring works:**
+
+| Check | Purpose | Status |
+|-------|---------|--------|
+| `metadata_v3.json` created | Proves `_save_v3_metadata()` called | ✅ |
+| Contains `resolved_features` | Proves `FeatureResolver` used | ✅ |
+| No feature mismatch in backtest | Proves `FeatureCacheV3` used | ✅ |
+| V2 strategies still work | Backward compatibility | ✅ |
+
+---
+
+## Earlier Fixes Applied (M6 Session)
 
 1. **IndicatorEngine v3 fix**: Added `self.indicators = list(self._indicators.values())`
    to populate the `indicators` list when v3 format is used, fixing "No indicators
@@ -174,23 +271,5 @@ the v2 TrainingPipeline which has format incompatibilities with v3 configs.
      create FuzzyEngine directly (not via FuzzyConfigLoader which expects v2)
    - Updated `_find_fuzzy_key()` to check `_indicator_map` for v3 indicator matching
    - Fixed logging line that accessed `_membership_functions` (v2-only attribute)
-
-### Remaining Work (Future Milestone)
-
-The v2 TrainingPipeline has fundamental format incompatibilities with v3:
-
-1. **Fuzzy sets structure**: v2 uses `{indicator_name: {membership: {type, params}}}`,
-   v3 uses `{fuzzy_set_id: {indicator, membership: [params]}}`
-
-2. **Labels config**: v2 expects flat `zigzag_threshold`, `label_lookahead`;
-   v3 defines `parameters: {threshold: ...}`
-
-3. **Training config access**: Various `strategy_config["training"]` accesses
-   assume v2 structure
-
-**Options:**
-1. Wire TrainingPipelineV3 into LocalTrainingOrchestrator (preferred)
-2. Add v3->v2 conversion layer in training workers
-3. Fully migrate TrainingPipeline to handle both formats
 
 ---
