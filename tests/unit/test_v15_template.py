@@ -97,9 +97,9 @@ class TestV15Template:
     def test_has_placeholder_indicators(self, template):
         """Template should have placeholder indicator section."""
         assert "indicators" in template
-        # The template should have some indicator defined (even if placeholder)
+        # V3 format: indicators is a dict keyed by indicator_id
         # to show the correct structure
-        assert isinstance(template["indicators"], list)
+        assert isinstance(template["indicators"], dict)
 
     def test_has_placeholder_fuzzy_sets(self, template):
         """Template should have placeholder fuzzy sets section."""
@@ -251,13 +251,19 @@ class TestV15Strategies:
     def test_no_forbidden_indicators(self, all_strategies):
         """No Tier 2/3 indicators should be used."""
         for name, config in all_strategies.items():
-            indicators = config.get("indicators", [])
-            for ind in indicators:
-                ind_name = ind.get("name", "").lower()
+            indicators = config.get("indicators", {})
+            # V3 format: indicators is a dict keyed by indicator_id
+            for ind_key, ind_config in indicators.items():
+                # Get indicator type from config, or use key as fallback
+                ind_type = (
+                    ind_config.get("type", ind_key).lower()
+                    if isinstance(ind_config, dict)
+                    else ind_key.lower()
+                )
                 for forbidden in FORBIDDEN_INDICATORS:
                     assert (
-                        forbidden not in ind_name
-                    ), f"{name}: uses forbidden indicator '{ind_name}'"
+                        forbidden not in ind_type
+                    ), f"{name}: uses forbidden indicator '{ind_type}'"
 
     def test_all_strategies_use_default_zigzag(self, all_strategies):
         """All strategies must use 2.5% zigzag threshold."""
@@ -270,48 +276,54 @@ class TestV15Strategies:
     def test_all_strategies_have_indicators(self, all_strategies):
         """All strategies must have at least one indicator."""
         for name, config in all_strategies.items():
-            indicators = config.get("indicators", [])
+            indicators = config.get("indicators", {})
+            # V3 format: indicators is a dict
             assert len(indicators) >= 1, f"{name}: must have at least one indicator"
 
     def test_all_strategies_have_fuzzy_sets(self, all_strategies):
         """All strategies must have fuzzy sets matching their indicators."""
         for name, config in all_strategies.items():
-            indicators = config.get("indicators", [])
+            indicators = config.get("indicators", {})
             fuzzy_sets = config.get("fuzzy_sets", {})
-            for ind in indicators:
-                feature_id = ind.get("feature_id")
-                if feature_id:
-                    # Handle indicators that produce multiple features
-                    # ADX produces: ADX_14, DI_Plus_14, DI_Minus_14
-                    # Aroon produces: aroon_up_25, aroon_down_25
-                    if ind.get("name") == "adx":
-                        # v15_di_only uses ADX indicator but only wants DI outputs
-                        # ADX indicator produces DI_Plus_14 and DI_Minus_14 column names
-                        if name == "v15_di_only":
-                            assert (
-                                "DI_Plus_14" in fuzzy_sets
-                            ), f"{name}: missing fuzzy set for DI_Plus_14"
-                            assert (
-                                "DI_Minus_14" in fuzzy_sets
-                            ), f"{name}: missing fuzzy set for DI_Minus_14"
-                        else:
-                            # Other ADX strategies need adx_14 (lowercase in most strategy files)
-                            # Note: v15_adx_di uses ADX_14 but validator accepts both
-                            assert (
-                                "adx_14" in fuzzy_sets or "ADX_14" in fuzzy_sets
-                            ), f"{name}: missing fuzzy set for adx_14 or ADX_14"
-                    elif ind.get("name") == "aroon":
-                        # Aroon indicator - check both up and down
+            # V3 format: indicators is a dict keyed by indicator_id
+            for ind_key, ind_config in indicators.items():
+                ind_type = (
+                    ind_config.get("type", "").lower()
+                    if isinstance(ind_config, dict)
+                    else ""
+                )
+                # Handle indicators that produce multiple features
+                # ADX produces: ADX_14, DI_Plus_14, DI_Minus_14
+                # Aroon produces: aroon_up_25, aroon_down_25
+                if ind_type == "adx":
+                    # v15_di_only uses ADX indicator but only wants DI outputs
+                    # ADX indicator produces DI_Plus_14 and DI_Minus_14 column names
+                    if name == "v15_di_only":
                         assert (
-                            "aroon_up_25" in fuzzy_sets
-                        ), f"{name}: missing fuzzy set for aroon_up_25"
+                            "DI_Plus_14" in fuzzy_sets
+                        ), f"{name}: missing fuzzy set for DI_Plus_14"
                         assert (
-                            "aroon_down_25" in fuzzy_sets
-                        ), f"{name}: missing fuzzy set for aroon_down_25"
+                            "DI_Minus_14" in fuzzy_sets
+                        ), f"{name}: missing fuzzy set for DI_Minus_14"
                     else:
+                        # Other ADX strategies need adx_14 (lowercase in most strategy files)
+                        # Note: v15_adx_di uses ADX_14 but validator accepts both
                         assert (
-                            feature_id in fuzzy_sets
-                        ), f"{name}: missing fuzzy set for {feature_id}"
+                            "adx_14" in fuzzy_sets or "ADX_14" in fuzzy_sets
+                        ), f"{name}: missing fuzzy set for adx_14 or ADX_14"
+                elif ind_type == "aroon":
+                    # Aroon indicator - check both up and down
+                    assert (
+                        "aroon_up_25" in fuzzy_sets
+                    ), f"{name}: missing fuzzy set for aroon_up_25"
+                    assert (
+                        "aroon_down_25" in fuzzy_sets
+                    ), f"{name}: missing fuzzy set for aroon_down_25"
+                else:
+                    # For other indicators, the indicator_id should have a matching fuzzy set
+                    assert (
+                        ind_key in fuzzy_sets
+                    ), f"{name}: missing fuzzy set for {ind_key}"
 
     def test_analytics_enabled_all_strategies(self, all_strategies):
         """Analytics must be enabled for all strategies."""

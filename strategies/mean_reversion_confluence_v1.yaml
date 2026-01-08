@@ -1,6 +1,6 @@
 name: mean_reversion_confluence_v1
 description: Mean reversion strategy with trend and momentum confluence filters
-version: '1.0'
+version: '3.0'
 hypothesis: Mean reversion opportunities are most profitable when trend strength is
   moderate and momentum confirms the potential reversal
 scope: universal
@@ -25,18 +25,18 @@ deployment:
     supported:
     - 1h
 indicators:
-- name: RSI
-  feature_id: rsi_14
-  period: 14
-  source: close
-- name: ADX
-  feature_id: adx_14
-  period: 14
-  source: close
-- name: MACD
-  feature_id: macd_12
-  period: 12
-  source: close
+  rsi_14:
+    type: RSI
+    period: 14
+    source: close
+  adx_14:
+    type: ADX
+    period: 14
+    source: close
+  macd_12:
+    type: MACD
+    period: 12
+    source: close
 fuzzy_sets:
   rsi_14:
     oversold:
@@ -57,6 +57,7 @@ fuzzy_sets:
       - 60
       - 75
       - 100
+    indicator: rsi_14
   adx_14:
     weak_trend:
       type: triangular
@@ -76,6 +77,7 @@ fuzzy_sets:
       - 45
       - 70
       - 100
+    indicator: adx_14
   macd_12:
     bearish:
       type: triangular
@@ -95,6 +97,7 @@ fuzzy_sets:
       - 0
       - 0.2
       - 1.0
+    indicator: macd_12
 model:
   type: mlp
   architecture:
@@ -131,3 +134,10 @@ training:
     train: 0.7
     validation: 0.15
     test: 0.15
+nn_inputs:
+- fuzzy_set: rsi_14
+  timeframes: all
+- fuzzy_set: adx_14
+  timeframes: all
+- fuzzy_set: macd_12
+  timeframes: all

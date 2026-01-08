@@ -5,7 +5,7 @@ description: 'Innovative volatility breakout strategy that combines three comple
   after periods of low volatility, and by combining these indicators we can identify
   both the timing and direction of breakouts. Uses a deeper neural network (48-24-12)
   with higher confidence threshold (0.65) to focus on high-conviction signals.'
-version: '1.0'
+version: '3.0'
 hypothesis: Markets make significant moves after low volatility periods. Combine volatility
   compression (BB Width), trend strength (ADX), and momentum direction (MACD) to catch
   breakouts.
@@ -29,18 +29,18 @@ deployment:
     supported:
     - 1h
 indicators:
-- name: BollingerBandWidth
-  feature_id: bb_width_20
-  period: 20
-  source: close
-- name: ADX
-  feature_id: adx_14
-  period: 14
-  source: close
-- name: MACD
-  feature_id: macd_12
-  period: 12
-  source: close
+  bb_width_20:
+    type: BollingerBandWidth
+    period: 20
+    source: close
+  adx_14:
+    type: ADX
+    period: 14
+    source: close
+  macd_12:
+    type: MACD
+    period: 12
+    source: close
 fuzzy_sets:
   bb_width_20:
     compressed:
@@ -61,6 +61,7 @@ fuzzy_sets:
       - 0.035
       - 0.05
       - 0.1
+    indicator: bb_width_20
   adx_14:
     weak:
       type: triangular
@@ -80,6 +81,7 @@ fuzzy_sets:
       - 55
       - 70
       - 100
+    indicator: adx_14
   macd_12:
     bearish:
       type: triangular
@@ -99,6 +101,7 @@ fuzzy_sets:
       - 0
       - 0.003
       - 0.01
+    indicator: macd_12
 model:
   type: mlp
   architecture:
@@ -136,3 +139,10 @@ training:
     train: 0.7
     validation: 0.15
     test: 0.15
+nn_inputs:
+- fuzzy_set: bb_width_20
+  timeframes: all
+- fuzzy_set: adx_14
+  timeframes: all
+- fuzzy_set: macd_12
+  timeframes: all

@@ -1,7 +1,7 @@
 name: volatility_momentum_confluence_20241220
 description: Multi-dimensional strategy capturing volatility breakouts with momentum
   confirmation using Bollinger Band Width, Fisher Transform, and ATR
-version: '1.0'
+version: '3.0'
 hypothesis: Market breakouts following volatility squeezes are more reliable when
   confirmed by momentum transformation and volatility context
 scope: universal
@@ -26,18 +26,18 @@ deployment:
     supported:
     - 1h
 indicators:
-- name: BollingerBandWidth
-  feature_id: bbw_20
-  period: 20
-  source: close
-- name: FisherTransform
-  feature_id: fisher_10
-  period: 10
-  source: close
-- name: ATR
-  feature_id: atr_14
-  period: 14
-  source: close
+  bbw_20:
+    type: BollingerBandWidth
+    period: 20
+    source: close
+  fisher_10:
+    type: FisherTransform
+    period: 10
+    source: close
+  atr_14:
+    type: ATR
+    period: 14
+    source: close
 fuzzy_sets:
   bbw_20:
     squeeze:
@@ -60,6 +60,7 @@ fuzzy_sets:
       - 0.2
       - 1.0
       - 1.0
+    indicator: bbw_20
   fisher_10:
     strong_sell:
       type: trapezoidal
@@ -81,6 +82,7 @@ fuzzy_sets:
       - 2.0
       - 5.0
       - 5.0
+    indicator: fisher_10
   atr_14:
     low_volatility:
       type: trapezoidal
@@ -102,6 +104,7 @@ fuzzy_sets:
       - 0.008
       - 0.05
       - 0.05
+    indicator: atr_14
 model:
   type: mlp
   architecture:
@@ -138,3 +141,10 @@ training:
     train: 0.7
     validation: 0.15
     test: 0.15
+nn_inputs:
+- fuzzy_set: bbw_20
+  timeframes: all
+- fuzzy_set: fisher_10
+  timeframes: all
+- fuzzy_set: atr_14
+  timeframes: all

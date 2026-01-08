@@ -1,75 +1,90 @@
-# =============================================================================
-# v1.5 EXPERIMENTAL STRATEGY
-# =============================================================================
-# This strategy is part of the v1.5 experiment to validate neuro-fuzzy learning.
-# DO NOT modify training parameters - consistency is critical for valid comparisons.
-# =============================================================================
-
-# === STRATEGY IDENTITY ===
-name: "v15_adx_di"
-description: "v1.5 experiment: ADX + DI - full ADX directional system"
-version: "1.0"
-
-# === TRAINING DATA CONFIG (FIXED) ===
+name: v15_adx_di
+description: 'v1.5 experiment: ADX + DI - full ADX directional system'
+version: '3.0'
 training_data:
   symbols:
-    mode: "single_symbol"
+    mode: single
     list:
-      - "EURUSD"
+    - EURUSD
   timeframes:
-    mode: "single_timeframe"
+    mode: single
     list:
-      - "1h"
-    base_timeframe: "1h"
+    - 1h
+    base_timeframe: 1h
   history_required: 200
-
-# === TECHNICAL INDICATORS ===
 indicators:
-  - name: "adx"
-    feature_id: adx_14
+  adx_14:
+    type: adx
     period: 14
-
-# === FUZZY LOGIC CONFIGURATION ===
-# Note: ADX indicator produces ADX_14, DI_Plus_14, and DI_Minus_14 column names
 fuzzy_sets:
   ADX_14:
     weak:
-      type: "triangular"
-      parameters: [0, 15, 25]
+      type: triangular
+      parameters:
+      - 0
+      - 15
+      - 25
     moderate:
-      type: "triangular"
-      parameters: [20, 35, 50]
+      type: triangular
+      parameters:
+      - 20
+      - 35
+      - 50
     strong:
-      type: "triangular"
-      parameters: [45, 60, 100]
+      type: triangular
+      parameters:
+      - 45
+      - 60
+      - 100
+    indicator: adx_14
   DI_Plus_14:
     weak:
-      type: "triangular"
-      parameters: [0, 15, 25]
+      type: triangular
+      parameters:
+      - 0
+      - 15
+      - 25
     moderate:
-      type: "triangular"
-      parameters: [20, 35, 50]
+      type: triangular
+      parameters:
+      - 20
+      - 35
+      - 50
     strong:
-      type: "triangular"
-      parameters: [45, 60, 100]
+      type: triangular
+      parameters:
+      - 45
+      - 60
+      - 100
+    indicator: adx_14
   DI_Minus_14:
     weak:
-      type: "triangular"
-      parameters: [0, 15, 25]
+      type: triangular
+      parameters:
+      - 0
+      - 15
+      - 25
     moderate:
-      type: "triangular"
-      parameters: [20, 35, 50]
+      type: triangular
+      parameters:
+      - 20
+      - 35
+      - 50
     strong:
-      type: "triangular"
-      parameters: [45, 60, 100]
-
-# === NEURAL NETWORK MODEL (FIXED) ===
+      type: triangular
+      parameters:
+      - 45
+      - 60
+      - 100
+    indicator: adx_14
 model:
-  type: "mlp"
+  type: mlp
   architecture:
-    hidden_layers: [64, 32]
-    activation: "relu"
-    output_activation: "softmax"
+    hidden_layers:
+    - 64
+    - 32
+    activation: relu
+    output_activation: softmax
     dropout: 0.2
   features:
     include_price_context: false
@@ -79,7 +94,7 @@ model:
     learning_rate: 0.001
     batch_size: 32
     epochs: 100
-    optimizer: "adam"
+    optimizer: adam
     early_stopping:
       enabled: true
       patience: 15
@@ -89,21 +104,17 @@ model:
       export_csv: true
       export_json: true
       export_alerts: true
-
-# === DECISION LOGIC ===
 decisions:
-  output_format: "classification"
+  output_format: classification
   confidence_threshold: 0.6
   position_awareness: true
   filters:
     min_signal_separation: 4
     volume_filter: false
-
-# === TRAINING CONFIGURATION (FIXED) ===
 training:
-  method: "supervised"
+  method: supervised
   labels:
-    source: "zigzag"
+    source: zigzag
     zigzag_threshold: 0.025
     label_lookahead: 20
   data_split:
@@ -111,5 +122,12 @@ training:
     validation: 0.15
     test: 0.15
   date_range:
-    start: "2015-01-01"
-    end: "2023-12-31"
+    start: '2015-01-01'
+    end: '2023-12-31'
+nn_inputs:
+- fuzzy_set: ADX_14
+  timeframes: all
+- fuzzy_set: DI_Plus_14
+  timeframes: all
+- fuzzy_set: DI_Minus_14
+  timeframes: all

@@ -5,7 +5,7 @@ description: A neuro-fuzzy strategy that identifies volatility breakout opportun
   out of low-volatility consolidation phases into trending moves. Trained on major
   forex pairs (EURUSD, GBPUSD, USDJPY) using 1-hour timeframes for universal deployment
   across all markets.
-version: '1.0'
+version: '3.0'
 hypothesis: Markets alternate between low-volatility consolidation and high-volatility
   breakout phases. By identifying when volatility is compressed and trend strength
   is building, we can catch profitable breakout moves.
@@ -31,18 +31,18 @@ deployment:
     supported:
     - 1h
 indicators:
-- name: ADX
-  feature_id: adx_14
-  period: 14
-  source: close
-- name: ATR
-  feature_id: atr_20
-  period: 20
-  source: close
-- name: MACD
-  feature_id: macd_12
-  period: 12
-  source: close
+  adx_14:
+    type: ADX
+    period: 14
+    source: close
+  atr_20:
+    type: ATR
+    period: 20
+    source: close
+  macd_12:
+    type: MACD
+    period: 12
+    source: close
 fuzzy_sets:
   adx_14:
     weak_trend:
@@ -63,6 +63,7 @@ fuzzy_sets:
       - 35
       - 50
       - 100
+    indicator: adx_14
   atr_20:
     low_volatility:
       type: triangular
@@ -82,6 +83,7 @@ fuzzy_sets:
       - 1.0
       - 1.5
       - 3.0
+    indicator: atr_20
   macd_12:
     bearish_momentum:
       type: triangular
@@ -101,6 +103,7 @@ fuzzy_sets:
       - 0
       - 0.5
       - 2.0
+    indicator: macd_12
 model:
   type: mlp
   architecture:
@@ -137,3 +140,10 @@ training:
     train: 0.7
     validation: 0.15
     test: 0.15
+nn_inputs:
+- fuzzy_set: adx_14
+  timeframes: all
+- fuzzy_set: atr_20
+  timeframes: all
+- fuzzy_set: macd_12
+  timeframes: all

@@ -1,82 +1,93 @@
-# Universal Zero-Shot Neural Trading Strategy
-# This strategy uses symbol-agnostic features for true cross-symbol generalization
-
-name: "universal_zero_shot_model"
-description: "Universal neural model with zero-shot generalization to unseen symbols"
-version: "2.1"
-hypothesis: "Symbol-agnostic features enable universal pattern recognition across
-  any asset"
-scope: "universal"  # Key field for universal architecture
-
-# Training Data Configuration
+name: universal_zero_shot_model
+description: Universal neural model with zero-shot generalization to unseen symbols
+version: '3.0'
+hypothesis: Symbol-agnostic features enable universal pattern recognition across any
+  asset
+scope: universal
 training_data:
   symbols:
-    mode: "multi_symbol"
-    list: ["EURUSD", "GBPUSD"]  # Training symbols
+    mode: multi_symbol
+    list:
+    - EURUSD
+    - GBPUSD
   timeframes:
-    mode: "single"
-    timeframe: "1h"
+    mode: single
+    timeframe: 1h
   history_required: 200
-
-# Deployment Configuration
 deployment:
   target_symbols:
-    mode: "universal"  # Can trade any symbol
+    mode: universal
   target_timeframes:
-    mode: "single"
-    timeframe: "1h"
-
-# Technical Indicators
+    mode: single
+    timeframe: 1h
 indicators:
-- name: "rsi"
-  feature_id: rsi_14
-  period: 14
-  source: "close"
-- name: "macd"
-  feature_id: macd_12_26_9
-  fast_period: 12
-  slow_period: 26
-  signal_period: 9
-  source: "close"
-- name: "sma"
-  feature_id: sma_20
-  period: 20
-  source: "close"
-
-# Fuzzy Logic Configuration
+  rsi_14:
+    type: rsi
+    period: 14
+    source: close
+  macd_12_26_9:
+    type: macd
+    fast_period: 12
+    slow_period: 26
+    signal_period: 9
+    source: close
+  sma_20:
+    type: sma
+    period: 20
+    source: close
 fuzzy_sets:
   rsi_14:
     oversold:
-      type: "triangular"
-      parameters: [0, 20, 35]
+      type: triangular
+      parameters:
+      - 0
+      - 20
+      - 35
     neutral:
-      type: "triangular"
-      parameters: [30, 50, 70]
+      type: triangular
+      parameters:
+      - 30
+      - 50
+      - 70
     overbought:
-      type: "triangular"
-      parameters: [65, 80, 100]
+      type: triangular
+      parameters:
+      - 65
+      - 80
+      - 100
+    indicator: rsi_14
   sma_20:
-    input_transform:  # Transform SMA to price ratio for fuzzification
-      type: "price_ratio"
-      reference: "close"
+    input_transform:
+      type: price_ratio
+      reference: close
     below:
-      type: "triangular"
-      parameters: [0.85, 0.95, 1.0]
+      type: triangular
+      parameters:
+      - 0.85
+      - 0.95
+      - 1.0
     neutral:
-      type: "triangular"
-      parameters: [0.98, 1.0, 1.02]
+      type: triangular
+      parameters:
+      - 0.98
+      - 1.0
+      - 1.02
     above:
-      type: "triangular"
-      parameters: [1.0, 1.05, 1.15]
-
-# Universal Neural Network Model (NO symbol embeddings)
+      type: triangular
+      parameters:
+      - 1.0
+      - 1.05
+      - 1.15
+    indicator: sma_20
 model:
-  type: "mlp"
-  # NOTE: No symbol_embedding_dim - universal architecture uses symbol-agnostic features
+  type: mlp
   architecture:
-    hidden_layers: [128, 64, 32]
-    activation: "relu"
-    output_activation: "softmax"
+    hidden_layers:
+    - 128
+    - 64
+    - 32
+    activation: relu
+    output_activation: softmax
     dropout: 0.2
   features:
     include_price_context: true
@@ -86,26 +97,27 @@ model:
     learning_rate: 0.001
     batch_size: 64
     epochs: 40
-    optimizer: "adam"
-  input_size: 36  # Base fuzzy features + universal features
-
-# Decision Making
+    optimizer: adam
+  input_size: 36
 decisions:
-  output_format: "classification"
+  output_format: classification
   confidence_threshold: 0.6
   position_awareness: true
   filters:
     min_signal_separation: 4
     volume_filter: false
-
-# Training Configuration
 training:
-  method: "supervised"
+  method: supervised
   labels:
-    source: "zigzag"
+    source: zigzag
     zigzag_threshold: 0.02
     label_lookahead: 12
   data_split:
     train: 0.7
     validation: 0.15
     test: 0.15
+nn_inputs:
+- fuzzy_set: rsi_14
+  timeframes: all
+- fuzzy_set: sma_20
+  timeframes: all

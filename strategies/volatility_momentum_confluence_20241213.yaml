@@ -1,7 +1,7 @@
 name: volatility_momentum_confluence_20241213
 description: Captures breakouts using volatility expansion, momentum alignment, and
   volume flow confirmation
-version: '1.0'
+version: '3.0'
 hypothesis: Markets make significant moves when volatility expands after compression,
   especially with momentum and money flow alignment
 scope: universal
@@ -26,22 +26,22 @@ deployment:
     supported:
     - 1h
 indicators:
-- name: ATR
-  feature_id: atr_14
-  period: 14
-  source: close
-- name: MACD
-  feature_id: macd_12
-  period: 12
-  source: close
-- name: CMF
-  feature_id: cmf_21
-  period: 21
-  source: close
-- name: BollingerBandWidth
-  feature_id: bb_width_20
-  period: 20
-  source: close
+  atr_14:
+    type: ATR
+    period: 14
+    source: close
+  macd_12:
+    type: MACD
+    period: 12
+    source: close
+  cmf_21:
+    type: CMF
+    period: 21
+    source: close
+  bb_width_20:
+    type: BollingerBandWidth
+    period: 20
+    source: close
 fuzzy_sets:
   atr_14:
     low_volatility:
@@ -62,6 +62,7 @@ fuzzy_sets:
       - 0.8
       - 1.2
       - 2.0
+    indicator: atr_14
   macd_12:
     bearish_momentum:
       type: triangular
@@ -81,6 +82,7 @@ fuzzy_sets:
       - 0.0
       - 0.02
       - 0.05
+    indicator: macd_12
   cmf_21:
     money_outflow:
       type: triangular
@@ -100,6 +102,7 @@ fuzzy_sets:
       - 0.0
       - 0.1
       - 0.3
+    indicator: cmf_21
   bb_width_20:
     compressed:
       type: triangular
@@ -119,6 +122,7 @@ fuzzy_sets:
       - 0.08
       - 0.12
       - 0.2
+    indicator: bb_width_20
 model:
   type: mlp
   architecture:
@@ -156,3 +160,12 @@ training:
     train: 0.7
     validation: 0.15
     test: 0.15
+nn_inputs:
+- fuzzy_set: atr_14
+  timeframes: all
+- fuzzy_set: macd_12
+  timeframes: all
+- fuzzy_set: cmf_21
+  timeframes: all
+- fuzzy_set: bb_width_20
+  timeframes: all

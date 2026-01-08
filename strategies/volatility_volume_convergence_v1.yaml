@@ -1,7 +1,7 @@
 name: volatility_volume_convergence_v1
 description: Volatility-volume convergence strategy using Bollinger Band Width, MFI,
   and ATR for reversal detection
-version: '1.0'
+version: '3.0'
 hypothesis: Market reversals occur when volatility contracts (low BBWidth) while smart
   money accumulates/distributes (MFI extremes), with ATR providing volatility confirmation
 scope: universal
@@ -26,18 +26,18 @@ deployment:
     supported:
     - 1h
 indicators:
-- name: BollingerBandWidth
-  feature_id: bb_width_20
-  period: 20
-  source: close
-- name: MFI
-  feature_id: mfi_14
-  period: 14
-  source: close
-- name: ATR
-  feature_id: atr_14
-  period: 14
-  source: close
+  bb_width_20:
+    type: BollingerBandWidth
+    period: 20
+    source: close
+  mfi_14:
+    type: MFI
+    period: 14
+    source: close
+  atr_14:
+    type: ATR
+    period: 14
+    source: close
 fuzzy_sets:
   bb_width_20:
     low_volatility:
@@ -60,6 +60,7 @@ fuzzy_sets:
       - 1.5
       - 3.0
       - 3.0
+    indicator: bb_width_20
   mfi_14:
     oversold:
       type: trapezoidal
@@ -81,6 +82,7 @@ fuzzy_sets:
       - 80
       - 100
       - 100
+    indicator: mfi_14
   atr_14:
     low_atr:
       type: gaussian
@@ -97,6 +99,7 @@ fuzzy_sets:
       parameters:
       - 0.008
       - 0.003
+    indicator: atr_14
 model:
   type: mlp
   architecture:
@@ -134,3 +137,10 @@ training:
     train: 0.7
     validation: 0.15
     test: 0.15
+nn_inputs:
+- fuzzy_set: bb_width_20
+  timeframes: all
+- fuzzy_set: mfi_14
+  timeframes: all
+- fuzzy_set: atr_14
+  timeframes: all

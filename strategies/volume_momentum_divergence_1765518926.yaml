@@ -3,7 +3,7 @@ description: 'Volume-Momentum Divergence Strategy: Captures market turning point
   by identifying divergences between price momentum (MACD) and institutional money
   flow (MFI), with volatility context (ATR) for robust signal generation. Targets
   4-hour timeframe across major currency pairs to leverage institutional trading patterns.'
-version: '1.0'
+version: '3.0'
 hypothesis: Market turning points exhibit divergences between price momentum and volume
   flow, creating profitable trading opportunities when institutional money contradicts
   short-term price action
@@ -29,18 +29,18 @@ deployment:
     supported:
     - 4h
 indicators:
-- name: MACD
-  feature_id: macd_12_26
-  period: 12
-  source: close
-- name: MFI
-  feature_id: mfi_14
-  period: 14
-  source: close
-- name: ATR
-  feature_id: atr_14
-  period: 14
-  source: close
+  macd_12_26:
+    type: MACD
+    period: 12
+    source: close
+  mfi_14:
+    type: MFI
+    period: 14
+    source: close
+  atr_14:
+    type: ATR
+    period: 14
+    source: close
 fuzzy_sets:
   macd_12_26:
     strong_bearish:
@@ -75,6 +75,7 @@ fuzzy_sets:
       - 0.5
       - 1.0
       - 2.0
+    indicator: macd_12_26
   mfi_14:
     oversold:
       type: trapezoidal
@@ -108,6 +109,7 @@ fuzzy_sets:
       - 80
       - 90
       - 100
+    indicator: mfi_14
   atr_14:
     low_volatility:
       type: gaussian
@@ -124,6 +126,7 @@ fuzzy_sets:
       parameters:
       - 0.006
       - 0.002
+    indicator: atr_14
 model:
   type: mlp
   architecture:
@@ -161,3 +164,10 @@ training:
     train: 0.7
     validation: 0.15
     test: 0.15
+nn_inputs:
+- fuzzy_set: macd_12_26
+  timeframes: all
+- fuzzy_set: mfi_14
+  timeframes: all
+- fuzzy_set: atr_14
+  timeframes: all

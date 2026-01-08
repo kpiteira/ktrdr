@@ -1,7 +1,7 @@
 name: mean_reversion_momentum_v2
 description: Mean reversion strategy using momentum divergence and trend exhaustion
   signals
-version: '1.0'
+version: '3.0'
 hypothesis: Markets overextend and reverse when momentum diverges from price and trend
   strength weakens
 scope: universal
@@ -26,22 +26,22 @@ deployment:
     supported:
     - 1h
 indicators:
-- name: MACD
-  feature_id: macd_12_26_9
-  period: 26
-  source: close
-- name: RSI
-  feature_id: rsi_14
-  period: 14
-  source: close
-- name: ADX
-  feature_id: adx_14
-  period: 14
-  source: close
-- name: EMA
-  feature_id: ema_20
-  period: 20
-  source: close
+  macd_12_26_9:
+    type: MACD
+    period: 26
+    source: close
+  rsi_14:
+    type: RSI
+    period: 14
+    source: close
+  adx_14:
+    type: ADX
+    period: 14
+    source: close
+  ema_20:
+    type: EMA
+    period: 20
+    source: close
 fuzzy_sets:
   macd_12_26_9:
     strong_bearish:
@@ -74,6 +74,7 @@ fuzzy_sets:
       - 0.002
       - 0.005
       - 0.01
+    indicator: macd_12_26_9
   rsi_14:
     oversold:
       type: triangular
@@ -105,6 +106,7 @@ fuzzy_sets:
       - 65
       - 75
       - 100
+    indicator: rsi_14
   adx_14:
     weak_trend:
       type: triangular
@@ -130,6 +132,7 @@ fuzzy_sets:
       - 60
       - 75
       - 100
+    indicator: adx_14
   ema_20:
     price_below:
       type: triangular
@@ -149,6 +152,7 @@ fuzzy_sets:
       - 0.002
       - 0.01
       - 0.02
+    indicator: ema_20
 model:
   type: mlp
   architecture:
@@ -186,3 +190,12 @@ training:
     train: 0.7
     validation: 0.15
     test: 0.15
+nn_inputs:
+- fuzzy_set: macd_12_26_9
+  timeframes: all
+- fuzzy_set: rsi_14
+  timeframes: all
+- fuzzy_set: adx_14
+  timeframes: all
+- fuzzy_set: ema_20
+  timeframes: all

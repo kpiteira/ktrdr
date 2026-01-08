@@ -1,7 +1,7 @@
 name: volatility_volume_breakout_v1
 description: Volatility squeeze breakout detection with volume confirmation - targets
   breakouts following low volatility periods with volume expansion
-version: '1.0'
+version: '3.0'
 hypothesis: Breakouts following volatility squeezes with volume expansion have higher
   success probability
 scope: universal
@@ -26,18 +26,18 @@ deployment:
     supported:
     - 1h
 indicators:
-- name: BollingerBandWidth
-  feature_id: bb_width_20
-  period: 20
-  source: close
-- name: ATR
-  feature_id: atr_14
-  period: 14
-  source: close
-- name: VolumeRatio
-  feature_id: vol_ratio_10
-  period: 10
-  source: close
+  bb_width_20:
+    type: BollingerBandWidth
+    period: 20
+    source: close
+  atr_14:
+    type: ATR
+    period: 14
+    source: close
+  vol_ratio_10:
+    type: VolumeRatio
+    period: 10
+    source: close
 fuzzy_sets:
   bb_width_20:
     squeezed:
@@ -58,6 +58,7 @@ fuzzy_sets:
       - 0.8
       - 1.2
       - 2.0
+    indicator: bb_width_20
   atr_14:
     low_volatility:
       type: triangular
@@ -77,6 +78,7 @@ fuzzy_sets:
       - 0.7
       - 1.0
       - 1.5
+    indicator: atr_14
   vol_ratio_10:
     low_volume:
       type: triangular
@@ -96,6 +98,7 @@ fuzzy_sets:
       - 1.4
       - 2.0
       - 3.0
+    indicator: vol_ratio_10
 model:
   type: mlp
   architecture:
@@ -133,3 +136,10 @@ training:
     train: 0.7
     validation: 0.15
     test: 0.15
+nn_inputs:
+- fuzzy_set: bb_width_20
+  timeframes: all
+- fuzzy_set: atr_14
+  timeframes: all
+- fuzzy_set: vol_ratio_10
+  timeframes: all

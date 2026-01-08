@@ -1,94 +1,88 @@
-# === STRATEGY IDENTITY ===
-name: "v15_test_analytics"
-description: "Minimal test strategy to validate TrainingAnalyzer output"
-version: "1.0"
-hypothesis: "RSI oversold/overbought conditions create predictable mean reversion opportunities"
-
-# === STRATEGY SCOPE ===
-scope: "single_symbol"  # Minimal test - single symbol only
-
-# === TRAINING APPROACH ===
+name: v15_test_analytics
+description: Minimal test strategy to validate TrainingAnalyzer output
+version: '3.0'
+hypothesis: RSI oversold/overbought conditions create predictable mean reversion opportunities
+scope: single_symbol
 training_data:
   symbols:
-    mode: "single_symbol"
+    mode: single
     list:
-      - "EURUSD"
+    - EURUSD
   timeframes:
-    mode: "single_timeframe"
+    mode: single
     list:
-      - "1h"
-    base_timeframe: "1h"
+    - 1h
+    base_timeframe: 1h
   history_required: 100
-
-# === TECHNICAL INDICATORS ===
-# RSI only - simplest Tier 1 bounded indicator
 indicators:
-  - name: "rsi"
-    feature_id: rsi_14
+  rsi_14:
+    type: rsi
     period: 14
-    source: "close"
-
-# === FUZZY LOGIC CONFIGURATION ===
-# Exact fuzzy sets from DESIGN.md reference for RSI [0-100]
+    source: close
 fuzzy_sets:
   rsi_14:
     oversold:
-      type: "triangular"
-      parameters: [0, 30, 40]
+      type: triangular
+      parameters:
+      - 0
+      - 30
+      - 40
     neutral:
-      type: "triangular"
-      parameters: [35, 50, 65]
+      type: triangular
+      parameters:
+      - 35
+      - 50
+      - 65
     overbought:
-      type: "triangular"
-      parameters: [60, 70, 100]
-
-# === NEURAL NETWORK MODEL ===
+      type: triangular
+      parameters:
+      - 60
+      - 70
+      - 100
+    indicator: rsi_14
 model:
-  type: "mlp"
+  type: mlp
   architecture:
-    # Note: uses smaller hidden layers than M2 Task 2.1 template ([64, 32])
-    # to keep this a lightweight, minimal test strategy for analyzer validation.
-    hidden_layers: [32, 16]
-    activation: "relu"
-    output_activation: "softmax"
+    hidden_layers:
+    - 32
+    - 16
+    activation: relu
+    output_activation: softmax
     dropout: 0.2
   features:
     include_price_context: false
-    # Note: uses shorter lookback than M2 Task 2.1 template (2 periods)
-    # to minimize data requirements for this minimal analytics test.
     lookback_periods: 1
     scale_features: true
   training:
     learning_rate: 0.001
     batch_size: 32
-    epochs: 10  # Short run - just validating analytics work
-    optimizer: "adam"
+    epochs: 10
+    optimizer: adam
     analytics:
       enabled: true
       export_csv: true
       export_json: true
       export_alerts: true
-
-# === DECISION LOGIC ===
 decisions:
-  output_format: "classification"
+  output_format: classification
   confidence_threshold: 0.6
   position_awareness: true
   filters:
     min_signal_separation: 4
     volume_filter: false
-
-# === TRAINING CONFIGURATION ===
 training:
-  method: "supervised"
+  method: supervised
   labels:
-    source: "zigzag"
-    zigzag_threshold: 0.025  # 2.5% threshold for ~50/50 BUY/SELL split
+    source: zigzag
+    zigzag_threshold: 0.025
     label_lookahead: 20
   data_split:
     train: 0.7
     validation: 0.15
     test: 0.15
   date_range:
-    start: "2023-01-01"
-    end: "2023-06-30"
+    start: '2023-01-01'
+    end: '2023-06-30'
+nn_inputs:
+- fuzzy_set: rsi_14
+  timeframes: all

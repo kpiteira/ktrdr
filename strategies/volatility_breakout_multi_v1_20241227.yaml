@@ -1,7 +1,7 @@
 name: volatility_breakout_multi_v1_20241227
 description: Multi-dimensional volatility breakout strategy using BB width squeeze
   detection with CCI momentum confirmation
-version: '1.0'
+version: '3.0'
 hypothesis: Markets experience explosive moves after volatility contraction periods.
   Detect squeeze conditions via BB width, confirm momentum with CCI, and normalize
   volatility context using ATR.
@@ -27,18 +27,18 @@ deployment:
     supported:
     - 1h
 indicators:
-- name: BollingerBandWidth
-  feature_id: bb_width_20
-  period: 20
-  source: close
-- name: ATR
-  feature_id: atr_14
-  period: 14
-  source: close
-- name: CCI
-  feature_id: cci_20
-  period: 20
-  source: close
+  bb_width_20:
+    type: BollingerBandWidth
+    period: 20
+    source: close
+  atr_14:
+    type: ATR
+    period: 14
+    source: close
+  cci_20:
+    type: CCI
+    period: 20
+    source: close
 fuzzy_sets:
   bb_width_20:
     very_low:
@@ -65,6 +65,7 @@ fuzzy_sets:
       - 0.9
       - 1.2
       - 1.5
+    indicator: bb_width_20
   atr_14:
     low_volatility:
       type: triangular
@@ -84,6 +85,7 @@ fuzzy_sets:
       - 1.0
       - 1.5
       - 2.0
+    indicator: atr_14
   cci_20:
     strong_oversold:
       type: trapezoidal
@@ -117,6 +119,7 @@ fuzzy_sets:
       - 150
       - 200
       - 300
+    indicator: cci_20
 model:
   type: mlp
   architecture:
@@ -154,3 +157,10 @@ training:
     train: 0.7
     validation: 0.15
     test: 0.15
+nn_inputs:
+- fuzzy_set: bb_width_20
+  timeframes: all
+- fuzzy_set: atr_14
+  timeframes: all
+- fuzzy_set: cci_20
+  timeframes: all

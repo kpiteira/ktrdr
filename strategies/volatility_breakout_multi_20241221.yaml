@@ -4,7 +4,7 @@ description: Innovative volatility breakout strategy that identifies low volatil
   Band Width to detect compression, ATR for volatility confirmation, and MACD for
   directional momentum. Designed to capture high-probability breakout scenarios across
   multiple currency pairs.
-version: '1.0'
+version: '3.0'
 hypothesis: Market breakouts occur when low volatility periods (compression) are followed
   by volatility expansion with momentum confirmation
 scope: universal
@@ -29,18 +29,18 @@ deployment:
     supported:
     - 1h
 indicators:
-- name: BollingerBandWidth
-  feature_id: bb_width_20
-  period: 20
-  source: close
-- name: ATR
-  feature_id: atr_14
-  period: 14
-  source: close
-- name: MACD
-  feature_id: macd_12
-  period: 12
-  source: close
+  bb_width_20:
+    type: BollingerBandWidth
+    period: 20
+    source: close
+  atr_14:
+    type: ATR
+    period: 14
+    source: close
+  macd_12:
+    type: MACD
+    period: 12
+    source: close
 fuzzy_sets:
   bb_width_20:
     compressed:
@@ -63,6 +63,7 @@ fuzzy_sets:
       - 1.2
       - 2.0
       - 2.0
+    indicator: bb_width_20
   atr_14:
     low:
       type: triangular
@@ -82,6 +83,7 @@ fuzzy_sets:
       - 0.6
       - 1.0
       - 1.0
+    indicator: atr_14
   macd_12:
     strong_bearish:
       type: trapezoidal
@@ -103,6 +105,7 @@ fuzzy_sets:
       - 0.3
       - 1.0
       - 1.0
+    indicator: macd_12
 model:
   type: mlp
   architecture:
@@ -140,3 +143,10 @@ training:
     train: 0.7
     validation: 0.15
     test: 0.15
+nn_inputs:
+- fuzzy_set: bb_width_20
+  timeframes: all
+- fuzzy_set: atr_14
+  timeframes: all
+- fuzzy_set: macd_12
+  timeframes: all

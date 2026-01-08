@@ -1,7 +1,7 @@
 name: volatility_breakout_fisher_v1
 description: Multi-dimensional volatility breakout strategy using ATR, Squeeze Intensity,
   and Fisher Transform
-version: '1.0'
+version: '3.0'
 hypothesis: Markets experience explosive directional moves after volatility compression
   periods. Combining volatility measurement, squeeze detection, and precise turning
   point identification can capture high-probability breakout opportunities.
@@ -27,18 +27,18 @@ deployment:
     supported:
     - 1h
 indicators:
-- name: ATR
-  feature_id: atr_14
-  period: 14
-  source: close
-- name: SqueezeIntensity
-  feature_id: squeeze_intensity_20
-  period: 20
-  source: close
-- name: FisherTransform
-  feature_id: fisher_transform_10
-  period: 10
-  source: close
+  atr_14:
+    type: ATR
+    period: 14
+    source: close
+  squeeze_intensity_20:
+    type: SqueezeIntensity
+    period: 20
+    source: close
+  fisher_transform_10:
+    type: FisherTransform
+    period: 10
+    source: close
 fuzzy_sets:
   atr_14:
     low_volatility:
@@ -61,6 +61,7 @@ fuzzy_sets:
       - 1.2
       - 2.0
       - 2.0
+    indicator: atr_14
   squeeze_intensity_20:
     tight_squeeze:
       type: trapezoidal
@@ -82,6 +83,7 @@ fuzzy_sets:
       - 0.8
       - 1.0
       - 1.0
+    indicator: squeeze_intensity_20
   fisher_transform_10:
     strong_bearish:
       type: trapezoidal
@@ -103,6 +105,7 @@ fuzzy_sets:
       - 1.5
       - 3.0
       - 3.0
+    indicator: fisher_transform_10
 model:
   type: mlp
   architecture:
@@ -140,3 +143,10 @@ training:
     train: 0.7
     validation: 0.15
     test: 0.15
+nn_inputs:
+- fuzzy_set: atr_14
+  timeframes: all
+- fuzzy_set: squeeze_intensity_20
+  timeframes: all
+- fuzzy_set: fisher_transform_10
+  timeframes: all

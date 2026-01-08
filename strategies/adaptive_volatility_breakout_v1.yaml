@@ -1,7 +1,7 @@
 name: adaptive_volatility_breakout_v1
 description: Volatility squeeze breakout strategy using ATR, Bollinger Bands, and
   Fisher Transform for high-probability entries
-version: '1.0'
+version: '3.0'
 hypothesis: Low volatility periods (squeeze) followed by momentum confirmation indicate
   high-probability breakout opportunities
 scope: universal
@@ -26,18 +26,18 @@ deployment:
     supported:
     - 1h
 indicators:
-- name: ATRIndicator
-  feature_id: atr_14
-  period: 14
-  source: close
-- name: BollingerBandsIndicator
-  feature_id: bb_20
-  period: 20
-  source: close
-- name: FisherTransformIndicator
-  feature_id: fisher_9
-  period: 9
-  source: close
+  atr_14:
+    type: ATRIndicator
+    period: 14
+    source: close
+  bb_20:
+    type: BollingerBandsIndicator
+    period: 20
+    source: close
+  fisher_9:
+    type: FisherTransformIndicator
+    period: 9
+    source: close
 fuzzy_sets:
   atr_14:
     low_volatility:
@@ -58,6 +58,7 @@ fuzzy_sets:
       - 0.6
       - 0.8
       - 1.0
+    indicator: atr_14
   bb_20:
     lower_band:
       type: triangular
@@ -77,6 +78,7 @@ fuzzy_sets:
       - 0.7
       - 0.9
       - 1.0
+    indicator: bb_20
   fisher_9:
     strong_sell:
       type: triangular
@@ -96,6 +98,7 @@ fuzzy_sets:
       - 1
       - 2
       - 3
+    indicator: fisher_9
 model:
   type: mlp
   architecture:
@@ -133,3 +136,10 @@ training:
     train: 0.7
     validation: 0.15
     test: 0.15
+nn_inputs:
+- fuzzy_set: atr_14
+  timeframes: all
+- fuzzy_set: bb_20
+  timeframes: all
+- fuzzy_set: fisher_9
+  timeframes: all

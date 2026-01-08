@@ -1,7 +1,7 @@
 name: momentum_acceleration_v1
 description: Multi-timeframe momentum acceleration strategy using ROC, ATR, and Williams
   %R
-version: '1.0'
+version: '3.0'
 hypothesis: Price momentum that accelerates consistently across timeframes indicates
   stronger directional moves than single-timeframe signals
 scope: universal
@@ -25,24 +25,24 @@ deployment:
     supported:
     - 1h
 indicators:
-- name: roc
-  feature_id: roc_12_1h
-  period: 12
-  source: close
-  timeframe: 1h
-- name: roc
-  feature_id: roc_12_4h
-  period: 12
-  source: close
-  timeframe: 4h
-- name: atr
-  feature_id: atr_14
-  period: 14
-  timeframe: 1h
-- name: williamsr
-  feature_id: williams_r_14
-  period: 14
-  timeframe: 1h
+  roc_12_1h:
+    type: roc
+    period: 12
+    source: close
+    timeframe: 1h
+  roc_12_4h:
+    type: roc
+    period: 12
+    source: close
+    timeframe: 4h
+  atr_14:
+    type: atr
+    period: 14
+    timeframe: 1h
+  williams_r_14:
+    type: williamsr
+    period: 14
+    timeframe: 1h
 fuzzy_sets:
   roc_12_1h:
     strong_negative:
@@ -75,6 +75,7 @@ fuzzy_sets:
       - 1
       - 3
       - 10
+    indicator: roc_12_1h
   roc_12_4h:
     strong_negative:
       type: triangular
@@ -106,6 +107,7 @@ fuzzy_sets:
       - 2
       - 5
       - 15
+    indicator: roc_12_4h
   atr_14:
     low_volatility:
       type: triangular
@@ -125,6 +127,7 @@ fuzzy_sets:
       - 0.005
       - 0.008
       - 0.015
+    indicator: atr_14
   williams_r_14:
     oversold:
       type: triangular
@@ -144,6 +147,7 @@ fuzzy_sets:
       - -35
       - -15
       - 0
+    indicator: williams_r_14
 model:
   type: mlp
   architecture:
@@ -181,3 +185,12 @@ training:
     train: 0.7
     validation: 0.15
     test: 0.15
+nn_inputs:
+- fuzzy_set: roc_12_1h
+  timeframes: all
+- fuzzy_set: roc_12_4h
+  timeframes: all
+- fuzzy_set: atr_14
+  timeframes: all
+- fuzzy_set: williams_r_14
+  timeframes: all

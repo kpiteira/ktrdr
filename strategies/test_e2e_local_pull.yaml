@@ -1,57 +1,56 @@
-# === STRATEGY IDENTITY ===
-name: "test_e2e_local_pull"
-description: "Minimal strategy for E2E testing of pull-based operations"
-version: "1.0"
-hypothesis: "Simple RSI strategy for fast testing"
-
-# === STRATEGY SCOPE ===
-scope: "symbol_specific"
-
-# === TRAINING APPROACH ===
+name: test_e2e_local_pull
+description: Minimal strategy for E2E testing of pull-based operations
+version: '3.0'
+hypothesis: Simple RSI strategy for fast testing
+scope: symbol_specific
 training_data:
   symbols:
-    mode: "single"
-    symbol: "EURUSD"  # Single symbol for fast testing
+    mode: single
+    symbol: EURUSD
   timeframes:
-    mode: "single"
-    timeframe: "5m"  # Single timeframe for fast testing
-  history_required: 100  # Minimal history for quick data loading
-
-# === DEPLOYMENT TARGETS ===
+    mode: single
+    timeframe: 5m
+  history_required: 100
 deployment:
   target_symbols:
-    mode: "training_only"
+    mode: training_only
   target_timeframes:
-    mode: "single"
-    timeframe: "1h"
-
-# === TECHNICAL INDICATORS ===
+    mode: single
+    timeframe: 1h
 indicators:
-- name: "rsi"
-  feature_id: rsi_14
-  period: 14
-  source: "close"
-
-# === FUZZY LOGIC CONFIGURATION ===
+  rsi_14:
+    type: rsi
+    period: 14
+    source: close
 fuzzy_sets:
   rsi_14:
     oversold:
-      type: "triangular"
-      parameters: [0, 20, 35]
+      type: triangular
+      parameters:
+      - 0
+      - 20
+      - 35
     neutral:
-      type: "triangular"
-      parameters: [30, 50, 70]
+      type: triangular
+      parameters:
+      - 30
+      - 50
+      - 70
     overbought:
-      type: "triangular"
-      parameters: [65, 80, 100]
-
-# === NEURAL NETWORK MODEL ===
+      type: triangular
+      parameters:
+      - 65
+      - 80
+      - 100
+    indicator: rsi_14
 model:
-  type: "mlp"
+  type: mlp
   architecture:
-    hidden_layers: [25, 15]  # Smaller network for fast training
-    activation: "relu"
-    output_activation: "softmax"
+    hidden_layers:
+    - 25
+    - 15
+    activation: relu
+    output_activation: softmax
     dropout: 0.1
   features:
     include_price_context: false
@@ -60,26 +59,25 @@ model:
   training:
     learning_rate: 0.001
     batch_size: 32
-    epochs: 10  # SMALL for fast testing!
-    optimizer: "adam"
-
-# === DECISION LOGIC ===
+    epochs: 10
+    optimizer: adam
 decisions:
-  output_format: "classification"
+  output_format: classification
   confidence_threshold: 0.6
   position_awareness: true
   filters:
     min_signal_separation: 4
     volume_filter: false
-
-# === TRAINING CONFIGURATION ===
 training:
-  method: "supervised"
+  method: supervised
   labels:
-    source: "zigzag"
+    source: zigzag
     zigzag_threshold: 0.03
     label_lookahead: 20
   data_split:
     train: 0.7
     validation: 0.15
     test: 0.15
+nn_inputs:
+- fuzzy_set: rsi_14
+  timeframes: all

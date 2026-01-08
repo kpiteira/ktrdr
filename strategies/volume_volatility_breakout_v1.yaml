@@ -1,7 +1,7 @@
 name: volume_volatility_breakout_v1
 description: Volume-volatility confluence strategy targeting breakout opportunities
   after compression periods
-version: '1.0'
+version: '3.0'
 hypothesis: Major price movements are preceded by unusual volume activity combined
   with volatility compression patterns
 scope: universal
@@ -26,22 +26,22 @@ deployment:
     supported:
     - 1h
 indicators:
-- name: MFI
-  feature_id: mfi_21
-  period: 21
-  source: close
-- name: VWAP
-  feature_id: vwap_20
-  period: 20
-  source: close
-- name: ATR
-  feature_id: atr_14
-  period: 14
-  source: close
-- name: ROC
-  feature_id: roc_10
-  period: 10
-  source: close
+  mfi_21:
+    type: MFI
+    period: 21
+    source: close
+  vwap_20:
+    type: VWAP
+    period: 20
+    source: close
+  atr_14:
+    type: ATR
+    period: 14
+    source: close
+  roc_10:
+    type: ROC
+    period: 10
+    source: close
 fuzzy_sets:
   mfi_21:
     low_flow:
@@ -65,6 +65,7 @@ fuzzy_sets:
       - 80
       - 100
       - 100
+    indicator: mfi_21
   vwap_20:
     below_vwap:
       type: sigmoid
@@ -81,6 +82,7 @@ fuzzy_sets:
       parameters:
       - 0.001
       - 1000
+    indicator: vwap_20
   atr_14:
     low_volatility:
       type: gaussian
@@ -97,6 +99,7 @@ fuzzy_sets:
       parameters:
       - 0.003
       - 0.001
+    indicator: atr_14
   roc_10:
     negative_momentum:
       type: triangular
@@ -116,6 +119,7 @@ fuzzy_sets:
       - 0
       - 2
       - 5
+    indicator: roc_10
 model:
   type: mlp
   architecture:
@@ -153,3 +157,12 @@ training:
     train: 0.7
     validation: 0.15
     test: 0.15
+nn_inputs:
+- fuzzy_set: mfi_21
+  timeframes: all
+- fuzzy_set: vwap_20
+  timeframes: all
+- fuzzy_set: atr_14
+  timeframes: all
+- fuzzy_set: roc_10
+  timeframes: all

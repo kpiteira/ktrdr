@@ -1,7 +1,7 @@
 name: volatility_breakout_momentum_v1
 description: Multi-dimensional volatility breakout strategy using Bollinger Band Width,
   Fisher Transform, and ADX
-version: '1.0'
+version: '3.0'
 hypothesis: Market volatility contraction followed by momentum expansion with trend
   strength confirmation creates predictable price movements
 scope: universal
@@ -26,18 +26,18 @@ deployment:
     supported:
     - 1h
 indicators:
-- name: BollingerBandWidth
-  feature_id: bb_width_20
-  period: 20
-  source: close
-- name: FisherTransform
-  feature_id: fisher_10
-  period: 10
-  source: close
-- name: ADX
-  feature_id: adx_14
-  period: 14
-  source: close
+  bb_width_20:
+    type: BollingerBandWidth
+    period: 20
+    source: close
+  fisher_10:
+    type: FisherTransform
+    period: 10
+    source: close
+  adx_14:
+    type: ADX
+    period: 14
+    source: close
 fuzzy_sets:
   bb_width_20:
     low_volatility:
@@ -60,6 +60,7 @@ fuzzy_sets:
       - 0.12
       - 1.0
       - 1.0
+    indicator: bb_width_20
   fisher_10:
     strong_bearish:
       type: trapezoidal
@@ -81,6 +82,7 @@ fuzzy_sets:
       - 1.5
       - 5.0
       - 5.0
+    indicator: fisher_10
   adx_14:
     weak_trend:
       type: trapezoidal
@@ -102,6 +104,7 @@ fuzzy_sets:
       - 65
       - 100
       - 100
+    indicator: adx_14
 model:
   type: mlp
   architecture:
@@ -138,3 +141,10 @@ training:
     train: 0.7
     validation: 0.15
     test: 0.15
+nn_inputs:
+- fuzzy_set: bb_width_20
+  timeframes: all
+- fuzzy_set: fisher_10
+  timeframes: all
+- fuzzy_set: adx_14
+  timeframes: all

@@ -1,7 +1,7 @@
 name: multidim_squeeze_breakout
 description: Multi-dimensional volatility breakout strategy combining Bollinger Bands
   squeeze, volume confirmation, and trend strength analysis
-version: '1.0'
+version: '3.0'
 hypothesis: Markets tend to have explosive moves after periods of low volatility.
   By identifying volatility squeezes using Bollinger Bands and ATR, then confirming
   breakouts with volume and trend strength, we can capture significant price movements.
@@ -27,26 +27,26 @@ deployment:
     supported:
     - 1h
 indicators:
-- name: BollingerBands
-  feature_id: bb_20
-  period: 20
-  source: close
-- name: ATR
-  feature_id: atr_14
-  period: 14
-  source: close
-- name: ADX
-  feature_id: adx_14
-  period: 14
-  source: close
-- name: MFI
-  feature_id: mfi_14
-  period: 14
-  source: close
-- name: BollingerBandWidth
-  feature_id: bbw_20
-  period: 20
-  source: close
+  bb_20:
+    type: BollingerBands
+    period: 20
+    source: close
+  atr_14:
+    type: ATR
+    period: 14
+    source: close
+  adx_14:
+    type: ADX
+    period: 14
+    source: close
+  mfi_14:
+    type: MFI
+    period: 14
+    source: close
+  bbw_20:
+    type: BollingerBandWidth
+    period: 20
+    source: close
 fuzzy_sets:
   bb_20:
     lower_band:
@@ -69,6 +69,7 @@ fuzzy_sets:
       - 0.5
       - 1.5
       - 2.0
+    indicator: bb_20
   atr_14:
     low_volatility:
       type: trapezoidal
@@ -90,6 +91,7 @@ fuzzy_sets:
       - 0.9
       - 1.0
       - 1.0
+    indicator: atr_14
   adx_14:
     weak_trend:
       type: trapezoidal
@@ -111,6 +113,7 @@ fuzzy_sets:
       - 45
       - 100
       - 100
+    indicator: adx_14
   mfi_14:
     oversold:
       type: trapezoidal
@@ -132,6 +135,7 @@ fuzzy_sets:
       - 85
       - 100
       - 100
+    indicator: mfi_14
   bbw_20:
     squeeze:
       type: trapezoidal
@@ -153,6 +157,7 @@ fuzzy_sets:
       - 0.3
       - 1.0
       - 1.0
+    indicator: bbw_20
 model:
   type: mlp
   architecture:
@@ -190,3 +195,14 @@ training:
     train: 0.7
     validation: 0.15
     test: 0.15
+nn_inputs:
+- fuzzy_set: bb_20
+  timeframes: all
+- fuzzy_set: atr_14
+  timeframes: all
+- fuzzy_set: adx_14
+  timeframes: all
+- fuzzy_set: mfi_14
+  timeframes: all
+- fuzzy_set: bbw_20
+  timeframes: all

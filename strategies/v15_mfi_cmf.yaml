@@ -1,67 +1,73 @@
-# =============================================================================
-# v1.5 EXPERIMENTAL STRATEGY
-# =============================================================================
-# This strategy is part of the v1.5 experiment to validate neuro-fuzzy learning.
-# DO NOT modify training parameters - consistency is critical for valid comparisons.
-# =============================================================================
-
-# === STRATEGY IDENTITY ===
-name: "v15_mfi_cmf"
-description: "v1.5 experiment: MFI + CMF - dual volume indicators"
-version: "1.0"
-
-# === TRAINING DATA CONFIG (FIXED) ===
+name: v15_mfi_cmf
+description: 'v1.5 experiment: MFI + CMF - dual volume indicators'
+version: '3.0'
 training_data:
   symbols:
-    mode: "single_symbol"
+    mode: single
     list:
-      - "EURUSD"
+    - EURUSD
   timeframes:
-    mode: "single_timeframe"
+    mode: single
     list:
-      - "1h"
-    base_timeframe: "1h"
+    - 1h
+    base_timeframe: 1h
   history_required: 200
-
-# === TECHNICAL INDICATORS ===
 indicators:
-  - name: "mfi"
-    feature_id: mfi_14
+  mfi_14:
+    type: mfi
     period: 14
-  - name: "cmf"
-    feature_id: cmf_20
+  cmf_20:
+    type: cmf
     period: 20
-
-# === FUZZY LOGIC CONFIGURATION ===
 fuzzy_sets:
   mfi_14:
     oversold:
-      type: "triangular"
-      parameters: [0, 30, 40]
+      type: triangular
+      parameters:
+      - 0
+      - 30
+      - 40
     neutral:
-      type: "triangular"
-      parameters: [35, 50, 65]
+      type: triangular
+      parameters:
+      - 35
+      - 50
+      - 65
     overbought:
-      type: "triangular"
-      parameters: [60, 70, 100]
+      type: triangular
+      parameters:
+      - 60
+      - 70
+      - 100
+    indicator: mfi_14
   cmf_20:
     selling:
-      type: "triangular"
-      parameters: [-1, -0.3, -0.05]
+      type: triangular
+      parameters:
+      - -1
+      - -0.3
+      - -0.05
     neutral:
-      type: "triangular"
-      parameters: [-0.1, 0, 0.1]
+      type: triangular
+      parameters:
+      - -0.1
+      - 0
+      - 0.1
     buying:
-      type: "triangular"
-      parameters: [0.05, 0.3, 1]
-
-# === NEURAL NETWORK MODEL (FIXED) ===
+      type: triangular
+      parameters:
+      - 0.05
+      - 0.3
+      - 1
+    indicator: cmf_20
 model:
-  type: "mlp"
+  type: mlp
   architecture:
-    hidden_layers: [64, 32]
-    activation: "relu"
-    output_activation: "softmax"
+    hidden_layers:
+    - 64
+    - 32
+    activation: relu
+    output_activation: softmax
     dropout: 0.2
   features:
     include_price_context: false
@@ -71,7 +77,7 @@ model:
     learning_rate: 0.001
     batch_size: 32
     epochs: 100
-    optimizer: "adam"
+    optimizer: adam
     early_stopping:
       enabled: true
       patience: 15
@@ -81,21 +87,17 @@ model:
       export_csv: true
       export_json: true
       export_alerts: true
-
-# === DECISION LOGIC ===
 decisions:
-  output_format: "classification"
+  output_format: classification
   confidence_threshold: 0.6
   position_awareness: true
   filters:
     min_signal_separation: 4
     volume_filter: false
-
-# === TRAINING CONFIGURATION (FIXED) ===
 training:
-  method: "supervised"
+  method: supervised
   labels:
-    source: "zigzag"
+    source: zigzag
     zigzag_threshold: 0.025
     label_lookahead: 20
   data_split:
@@ -103,5 +105,10 @@ training:
     validation: 0.15
     test: 0.15
   date_range:
-    start: "2015-01-01"
-    end: "2023-12-31"
+    start: '2015-01-01'
+    end: '2023-12-31'
+nn_inputs:
+- fuzzy_set: mfi_14
+  timeframes: all
+- fuzzy_set: cmf_20
+  timeframes: all

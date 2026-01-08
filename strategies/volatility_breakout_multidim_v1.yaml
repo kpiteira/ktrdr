@@ -1,7 +1,7 @@
 name: volatility_breakout_multidim_v1
 description: Multi-dimensional volatility breakout strategy combining Fisher Transform
   momentum, dual volatility indicators (ATR/BBWidth), and volume confirmation (CMF)
-version: '1.0'
+version: '3.0'
 hypothesis: Markets exhibit predictable behavior when volatility changes coincide
   with momentum shifts and volume confirmation. Fisher Transform provides momentum
   clarity, ATR/BBWidth measure volatility states, and CMF confirms with volume analysis.
@@ -27,22 +27,22 @@ deployment:
     supported:
     - 1h
 indicators:
-- name: FisherTransform
-  feature_id: fisher_10
-  period: 10
-  source: close
-- name: ATR
-  feature_id: atr_14
-  period: 14
-  source: close
-- name: BollingerBandWidth
-  feature_id: bbwidth_20
-  period: 20
-  source: close
-- name: CMF
-  feature_id: cmf_21
-  period: 21
-  source: close
+  fisher_10:
+    type: FisherTransform
+    period: 10
+    source: close
+  atr_14:
+    type: ATR
+    period: 14
+    source: close
+  bbwidth_20:
+    type: BollingerBandWidth
+    period: 20
+    source: close
+  cmf_21:
+    type: CMF
+    period: 21
+    source: close
 fuzzy_sets:
   fisher_10:
     strong_bearish:
@@ -75,6 +75,7 @@ fuzzy_sets:
       - 1.0
       - 2.0
       - 3.0
+    indicator: fisher_10
   atr_14:
     low_volatility:
       type: triangular
@@ -94,6 +95,7 @@ fuzzy_sets:
       - 0.01
       - 0.02
       - 0.05
+    indicator: atr_14
   bbwidth_20:
     squeeze:
       type: triangular
@@ -113,6 +115,7 @@ fuzzy_sets:
       - 0.06
       - 0.1
       - 0.2
+    indicator: bbwidth_20
   cmf_21:
     strong_selling:
       type: triangular
@@ -132,6 +135,7 @@ fuzzy_sets:
       - 0.1
       - 0.3
       - 1.0
+    indicator: cmf_21
 model:
   type: mlp
   architecture:
@@ -169,3 +173,12 @@ training:
     train: 0.7
     validation: 0.15
     test: 0.15
+nn_inputs:
+- fuzzy_set: fisher_10
+  timeframes: all
+- fuzzy_set: atr_14
+  timeframes: all
+- fuzzy_set: bbwidth_20
+  timeframes: all
+- fuzzy_set: cmf_21
+  timeframes: all

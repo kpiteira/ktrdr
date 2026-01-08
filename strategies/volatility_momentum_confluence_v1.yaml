@@ -1,7 +1,7 @@
 name: volatility_momentum_confluence_v1
 description: Multi-dimensional breakout strategy combining volatility expansion, momentum
   extremes, and trend strength
-version: '1.0'
+version: '3.0'
 hypothesis: Strong directional moves occur when volatility expansion coincides with
   momentum extremes and rising trend strength
 scope: universal
@@ -26,18 +26,18 @@ deployment:
     supported:
     - 1h
 indicators:
-- name: BollingerBandWidth
-  feature_id: bb_width_20
-  period: 20
-  source: close
-- name: FisherTransform
-  feature_id: fisher_14
-  period: 14
-  source: close
-- name: ADX
-  feature_id: adx_14
-  period: 14
-  source: close
+  bb_width_20:
+    type: BollingerBandWidth
+    period: 20
+    source: close
+  fisher_14:
+    type: FisherTransform
+    period: 14
+    source: close
+  adx_14:
+    type: ADX
+    period: 14
+    source: close
 fuzzy_sets:
   bb_width_20:
     low_volatility:
@@ -58,6 +58,7 @@ fuzzy_sets:
       - 0.06
       - 0.1
       - 0.2
+    indicator: bb_width_20
   fisher_14:
     strong_bearish:
       type: triangular
@@ -77,6 +78,7 @@ fuzzy_sets:
       - 1.5
       - 2.5
       - 4.0
+    indicator: fisher_14
   adx_14:
     weak_trend:
       type: triangular
@@ -96,6 +98,7 @@ fuzzy_sets:
       - 45
       - 65
       - 100
+    indicator: adx_14
 model:
   type: mlp
   architecture:
@@ -133,3 +136,10 @@ training:
     train: 0.7
     validation: 0.15
     test: 0.15
+nn_inputs:
+- fuzzy_set: bb_width_20
+  timeframes: all
+- fuzzy_set: fisher_14
+  timeframes: all
+- fuzzy_set: adx_14
+  timeframes: all

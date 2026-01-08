@@ -1,7 +1,7 @@
 name: mean_reversion_momentum_v1
 description: Mean reversion strategy using RSI/Williams%R with MACD momentum confirmation
   and volume validation via OBV
-version: '1.0'
+version: '3.0'
 hypothesis: Market prices tend to revert to mean after extreme moves, but confirmation
   from momentum and volume indicators improves signal quality and timing
 scope: universal
@@ -26,22 +26,22 @@ deployment:
     supported:
     - 1h
 indicators:
-- name: RSIIndicator
-  feature_id: rsi_21
-  period: 21
-  source: close
-- name: WilliamsRIndicator
-  feature_id: williams_14
-  period: 14
-  source: close
-- name: MACDIndicator
-  feature_id: macd_12
-  period: 12
-  source: close
-- name: OBVIndicator
-  feature_id: obv_10
-  period: 10
-  source: close
+  rsi_21:
+    type: RSIIndicator
+    period: 21
+    source: close
+  williams_14:
+    type: WilliamsRIndicator
+    period: 14
+    source: close
+  macd_12:
+    type: MACDIndicator
+    period: 12
+    source: close
+  obv_10:
+    type: OBVIndicator
+    period: 10
+    source: close
 fuzzy_sets:
   rsi_21:
     oversold:
@@ -62,6 +62,7 @@ fuzzy_sets:
       - 60
       - 75
       - 100
+    indicator: rsi_21
   williams_14:
     oversold:
       type: triangular
@@ -81,6 +82,7 @@ fuzzy_sets:
       - -40
       - -20
       - 0
+    indicator: williams_14
   macd_12:
     bearish:
       type: triangular
@@ -100,6 +102,7 @@ fuzzy_sets:
       - 0
       - 0.01
       - 0.02
+    indicator: macd_12
   obv_10:
     declining:
       type: triangular
@@ -119,6 +122,7 @@ fuzzy_sets:
       - 0
       - 500000
       - 1000000
+    indicator: obv_10
 model:
   type: mlp
   architecture:
@@ -155,3 +159,12 @@ training:
     train: 0.7
     validation: 0.15
     test: 0.15
+nn_inputs:
+- fuzzy_set: rsi_21
+  timeframes: all
+- fuzzy_set: williams_14
+  timeframes: all
+- fuzzy_set: macd_12
+  timeframes: all
+- fuzzy_set: obv_10
+  timeframes: all
