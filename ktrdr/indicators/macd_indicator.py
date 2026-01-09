@@ -5,8 +5,6 @@ This module provides the MACDIndicator class for calculating the Moving Average 
 Divergence (MACD) indicator.
 """
 
-from typing import Optional
-
 import pandas as pd
 
 from ktrdr import get_logger
@@ -52,33 +50,6 @@ class MACDIndicator(BaseIndicator):
     def get_output_names(cls) -> list[str]:
         """Return semantic output names for MACD."""
         return ["line", "signal", "histogram"]
-
-    def get_column_name(self, suffix: Optional[str] = None) -> str:
-        """
-        Generate column name matching what compute() actually produces.
-
-        MACD uses uppercase and specific parameter formatting:
-        - Primary: "MACD_{fast}_{slow}"
-        - Signal: "MACD_signal_{fast}_{slow}_{signal}"
-        - Histogram: "MACD_hist_{fast}_{slow}_{signal}"
-
-        Args:
-            suffix: Optional suffix ("signal", "hist", or None for primary)
-
-        Returns:
-            Column name matching compute() output format
-        """
-        fast = self.params.get("fast_period", 12)
-        slow = self.params.get("slow_period", 26)
-        signal = self.params.get("signal_period", 9)
-
-        if suffix == "signal":
-            return f"MACD_signal_{fast}_{slow}_{signal}"
-        elif suffix == "hist":
-            return f"MACD_hist_{fast}_{slow}_{signal}"
-        else:
-            # Primary output (no suffix)
-            return f"MACD_{fast}_{slow}"
 
     def __init__(
         self,

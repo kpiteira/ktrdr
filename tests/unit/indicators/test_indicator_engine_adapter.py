@@ -314,15 +314,13 @@ class TestApplyWithV3Format:
             index=dates,
         )
 
-    def test_apply_requires_v3_format(self, sample_data):
-        """apply() rejects v2 list format."""
+    def test_constructor_requires_v3_format(self, sample_data):
+        """IndicatorEngine constructor rejects v2 list format."""
         indicator = MockSingleOutputIndicator(name="rsi")
 
-        # V2 format (list) should be rejected
-        engine = IndicatorEngine(indicators=[indicator])
-
+        # V2 format (list) should be rejected at construction time
         with pytest.raises(Exception) as exc_info:
-            engine.apply(sample_data)
+            IndicatorEngine(indicators=[indicator])
 
         assert (
             "v3" in str(exc_info.value).lower() or "dict" in str(exc_info.value).lower()

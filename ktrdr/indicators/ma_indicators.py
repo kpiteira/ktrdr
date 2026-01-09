@@ -6,8 +6,6 @@ This module provides classes for different types of moving averages:
 - ExponentialMovingAverage (EMA): A weighted average that gives more importance to recent data
 """
 
-from typing import Optional
-
 import numpy as np
 import pandas as pd
 
@@ -234,33 +232,6 @@ class ExponentialMovingAverage(BaseIndicator):
         # Note: adjust is already validated in __init__ so we don't need to check it again here
 
         return params
-
-    def get_column_name(self, suffix: Optional[str] = None) -> str:
-        """
-        Get the standardized column name for this indicator.
-
-        This overrides the base class method to exclude the 'adjust' parameter.
-
-        Args:
-            suffix (str, optional): Optional suffix to append to the column name.
-
-        Returns:
-            str: The standardized column name
-        """
-        # Get the key parameters for the column name (exclude adjust)
-        key_params = {
-            k: v for k, v in self.params.items() if k not in ["source", "adjust"]
-        }
-
-        # Format parameters as underscore-separated values
-        param_str = "_".join(str(v) for k, v in sorted(key_params.items()))
-
-        # Build the column name
-        col_name = f"{self.name.lower()}_{param_str}"
-        if suffix:
-            col_name = f"{col_name}_{suffix}"
-
-        return col_name
 
     def compute(self, df: pd.DataFrame) -> pd.Series:
         """

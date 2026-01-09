@@ -5,7 +5,7 @@ This module implements the complete Ichimoku Cloud indicator system, which provi
 a comprehensive view of trend, momentum, and support/resistance levels.
 """
 
-from typing import Optional, Union
+from typing import Union
 
 import pandas as pd
 
@@ -83,36 +83,6 @@ class IchimokuIndicator(BaseIndicator):
     def get_output_names(cls) -> list[str]:
         """Return semantic output names for Ichimoku."""
         return ["tenkan", "kijun", "senkou_a", "senkou_b", "chikou"]
-
-    def get_column_name(self, suffix: Optional[str] = None) -> str:
-        """
-        Generate column name matching what compute() actually produces.
-
-        Ichimoku format (no parameters in column names):
-        - Tenkan_sen: "Tenkan_sen"
-        - Kijun_sen: "Kijun_sen"
-        - Senkou_Span_A: "Senkou_Span_A"
-        - Senkou_Span_B: "Senkou_Span_B"
-        - Chikou_Span: "Chikou_Span"
-
-        Args:
-            suffix: Optional suffix ("Tenkan_sen", "Kijun_sen", "Senkou_Span_A", "Senkou_Span_B", "Chikou_Span", or None for Tenkan_sen)
-
-        Returns:
-            Column name matching compute() output format
-        """
-        # Ichimoku columns don't include parameters
-        if suffix == "Kijun_sen":
-            return "Kijun_sen"
-        elif suffix == "Senkou_Span_A":
-            return "Senkou_Span_A"
-        elif suffix == "Senkou_Span_B":
-            return "Senkou_Span_B"
-        elif suffix == "Chikou_Span":
-            return "Chikou_Span"
-        else:
-            # Default to Tenkan_sen (primary)
-            return "Tenkan_sen"
 
     def __init__(
         self,

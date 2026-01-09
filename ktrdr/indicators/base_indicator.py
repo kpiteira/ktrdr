@@ -53,10 +53,6 @@ class BaseIndicator(ABC):
         )
         self.params = self._validate_params(params)
         self.display_as_overlay = display_as_overlay
-        self._feature_id: Optional[str] = None  # Set by IndicatorFactory from config
-        self._timeframe: Optional[str] = (
-            None  # Set by IndicatorFactory for multi-TF strategies
-        )
 
         logger.info(f"Initialized {self.name} indicator with parameters: {self.params}")
 
@@ -209,91 +205,3 @@ class BaseIndicator(ABC):
                     "required_points": min_periods,
                 },
             )
-
-    def get_column_name(self, suffix: Optional[str] = None) -> str:
-        """
-        Generate a standardized column name for the indicator output.
-
-        If this indicator has a timeframe config (for multi-timeframe strategies),
-        the timeframe is prefixed to prevent column name collisions when the same
-        indicator (e.g., RSI) is used on multiple timeframes.
-
-        Args:
-            suffix (Optional[str]): Optional suffix to append to the name
-
-        Returns:
-            str: Column name for the indicator output
-        """
-        base_name = self.name.lower()
-
-        # Add parameters to the name if present
-        param_str = ""
-
-        # Include only the most relevant parameters in the name
-        # Typically for indicators, 'period' is the main parameter to include
-        if "period" in self.params:
-            param_str += f"_{self.params['period']}"
-
-        # Add additional significant parameters but skip 'source' as it's usually implicit
-        for key, value in self.params.items():
-            # Skip already included parameters and 'source'
-            if key == "period" or key == "source":
-                continue
-
-            # Only include numeric or string parameters in the column name
-            if isinstance(value, (int, float, str)):
-                param_str += f"_{value}"
-
-        # Add suffix if provided
-        suffix_str = f"_{suffix}" if suffix else ""
-
-        # Construct base column name
-        column_name = f"{base_name}{param_str}{suffix_str}"
-
-        # CRITICAL FIX: Prefix with timeframe if set (multi-timeframe strategies)
-        # This prevents collisions when same indicator is used on multiple timeframes
-        # e.g., "rsi_14" becomes "5m_rsi_14" and "1h_rsi_14"
-        if self._timeframe:
-            column_name = f"{self._timeframe}_{column_name}"
-
-        return column_name
-
-    def get_feature_id(self) -> str:
-        """
-        Get the unique feature identifier for this indicator instance.
-
-        The feature_id is the canonical way to identify a specific indicator instance
-        with its parameters. It's used for:
-        - Dataframe column names
-        - Fuzzy set references
-        - Model feature naming
-
-        If a feature_id was explicitly set via config, it's used directly.
-        Otherwise, falls back to get_column_name() for backward compatibility.
-
-        Returns:
-            str: The unique feature identifier for this indicator
-        """
-        # DEBUG: Check type WITHOUT triggering ambiguity error
-        import pandas as pd
-
-        # Check if it's a Series (the bug we're looking for)
-        if isinstance(self._feature_id, pd.Series):
-            # Log the bug using logger (not stderr to avoid broken pipe)
-            logger.error(
-                f"[CRITICAL BUG] _feature_id is a pandas Series for indicator {self.name}! "
-                f"Type: {type(self._feature_id).__name__}, "
-                f"This should NEVER happen - feature_id must be a string."
-            )
-            # Log stack trace
-            import traceback
-
-            logger.error(f"Stack trace:\n{''.join(traceback.format_stack())}")
-            # Return fallback to avoid the ambiguity error
-            return self.get_column_name()
-
-        # Normal flow - use 'is not None' to avoid ambiguity with Series
-        if self._feature_id is not None:
-            return self._feature_id
-        # Fallback to column name for backward compatibility
-        return self.get_column_name()

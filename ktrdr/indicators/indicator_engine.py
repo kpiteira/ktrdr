@@ -5,14 +5,14 @@ This module provides the IndicatorEngine class, which is responsible for
 applying indicators to OHLCV data based on configuration.
 """
 
-from typing import Any, Optional, Union, cast
+from typing import Any, Optional
 
 import pandas as pd
 
 from ktrdr import get_logger
 from ktrdr.errors import ConfigurationError, ProcessingError
 from ktrdr.indicators.base_indicator import BaseIndicator
-from ktrdr.indicators.indicator_factory import BUILT_IN_INDICATORS, IndicatorFactory
+from ktrdr.indicators.indicator_factory import BUILT_IN_INDICATORS
 from ktrdr.indicators.ma_indicators import ExponentialMovingAverage, SimpleMovingAverage
 from ktrdr.indicators.rsi_indicator import RSIIndicator
 
@@ -25,86 +25,50 @@ class IndicatorEngine:
     Engine for computing technical indicators on OHLCV data.
 
     The IndicatorEngine transforms OHLCV data into computed technical indicators
-    that can be used as inputs for fuzzy logic and model training. It accepts
-    configuration via a list of indicator specifications or direct indicator instances.
+    that can be used as inputs for fuzzy logic and model training.
+
+    Accepts v3 dict format: {"indicator_id": {"type": "...", ...params}}
 
     Attributes:
-        indicators (List[BaseIndicator]): List of indicator instances to apply.
+        _indicators: Dict mapping indicator_id to BaseIndicator instance.
     """
 
     def __init__(
         self,
-        indicators: Optional[
-            Union[dict[str, Any], list[dict], list[BaseIndicator]]
-        ] = None,
+        indicators: Optional[dict[str, Any]] = None,
     ):
         """
         Initialize the IndicatorEngine with indicator configuration.
 
         Args:
-            indicators: Indicator configuration in one of three formats:
-                - V3 format: Dict mapping indicator_id to IndicatorDefinition
-                - V2 format: List of indicator config dicts
-                - Direct instances: List of BaseIndicator instances
+            indicators: V3 format dict mapping indicator_id to IndicatorDefinition.
+                Example: {"rsi_14": {"type": "rsi", "period": 14}}
         """
-        self.indicators: list[BaseIndicator] = []
-        self._indicators: dict[str, BaseIndicator] = (
-            {}
-        )  # V3: Maps indicator_id to instance
+        self._indicators: dict[str, BaseIndicator] = {}
 
         if indicators:
-            # V3 format: dict[str, IndicatorDefinition]
-            if isinstance(indicators, dict):
-                from ..config.models import IndicatorDefinition
-
-                for indicator_id, definition in indicators.items():
-                    # Handle both IndicatorDefinition and plain dict
-                    if not isinstance(definition, IndicatorDefinition):
-                        definition = IndicatorDefinition(**definition)
-
-                    self._indicators[indicator_id] = self._create_indicator(
-                        indicator_id, definition
-                    )
-                # Also populate self.indicators for backward compatibility:
-                # older code paths and some helper methods still iterate over
-                # IndicatorEngine.indicators directly instead of using self._indicators.
-                # Once all such usages are migrated to self._indicators, this
-                # assignment and the indicators attribute can be removed.
-                self.indicators = list(self._indicators.values())
-            # V2 format: list of dicts or BaseIndicator instances
-            elif isinstance(indicators[0], dict):
-                # Create indicators from config dictionaries
-                # Import here to avoid circular dependency
-                from ..config.models import IndicatorConfig
-
-                # Convert dict configs to IndicatorConfig objects
-                indicator_configs: list[IndicatorConfig] = []
-                for ind_dict in indicators:
-                    if isinstance(ind_dict, dict):
-                        indicator_configs.append(IndicatorConfig(**ind_dict))
-                    else:
-                        # Already an IndicatorConfig object
-                        indicator_configs.append(ind_dict)  # type: ignore[arg-type]
-
-                # Create factory with configs and build all indicators
-                factory = IndicatorFactory(indicator_configs)
-                self.indicators = factory.build()
-            elif isinstance(indicators[0], BaseIndicator):
-                # Use provided indicator instances directly
-                # Type narrowing: if first element is BaseIndicator, assume all are
-                self.indicators = cast(list[BaseIndicator], indicators)
-            else:
+            if not isinstance(indicators, dict):
                 raise ConfigurationError(
-                    "Invalid indicator specification type. Must be dict or BaseIndicator instance.",
-                    "CONFIG-InvalidType",
-                    {"type": type(indicators[0]).__name__},
+                    "IndicatorEngine requires v3 dict format. "
+                    "Example: {'rsi_14': {'type': 'rsi', 'period': 14}}",
+                    "CONFIG-V2FormatRemoved",
+                    {"received_type": type(indicators).__name__},
                 )
 
-        # Log based on which format was used
-        indicator_count = (
-            len(self._indicators) if self._indicators else len(self.indicators)
+            from ..config.models import IndicatorDefinition
+
+            for indicator_id, definition in indicators.items():
+                # Handle both IndicatorDefinition and plain dict
+                if not isinstance(definition, IndicatorDefinition):
+                    definition = IndicatorDefinition(**definition)
+
+                self._indicators[indicator_id] = self._create_indicator(
+                    indicator_id, definition
+                )
+
+        logger.info(
+            f"Initialized IndicatorEngine with {len(self._indicators)} indicators"
         )
-        logger.info(f"Initialized IndicatorEngine with {indicator_count} indicators")
 
     def _create_indicator(self, indicator_id: str, definition: Any) -> BaseIndicator:
         """
@@ -267,7 +231,7 @@ class IndicatorEngine:
         Args:
             data: OHLCV DataFrame
             indicator: The indicator instance
-            indicator_id: Feature identifier string, typically from indicator.get_feature_id().
+            indicator_id: Feature identifier string.
                 Should use the format: {indicator_name}_{param1}[_{param2}...] (e.g., "rsi_14",
                 "bbands_20_2", "macd_12_26_9"). This becomes the column name (or column prefix
                 for multi-output indicators).

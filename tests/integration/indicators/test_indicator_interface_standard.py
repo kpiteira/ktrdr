@@ -1,7 +1,7 @@
 """
 Integration test for indicator interface standard.
 
-This test verifies that ALL registered indicators in IndicatorFactory
+This test verifies that ALL registered indicators in BUILT_IN_INDICATORS
 follow the M1 interface standard:
 - Multi-output indicators must have get_output_names() returning non-empty list
 - Single-output indicators must have get_output_names() returning empty list

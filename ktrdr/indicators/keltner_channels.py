@@ -8,7 +8,7 @@ They help identify volatility, trend direction, and potential reversal points.
 Author: KTRDR
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pandas as pd
 
@@ -55,33 +55,6 @@ class KeltnerChannelsIndicator(BaseIndicator):
     def get_output_names(cls) -> list[str]:
         """Return semantic output names for Keltner Channels."""
         return ["upper", "middle", "lower"]
-
-    def get_column_name(self, suffix: Optional[str] = None) -> str:
-        """
-        Generate column name matching what compute() actually produces.
-
-        Keltner Channels format:
-        - Middle: "KC_Middle_{period}"
-        - Upper: "KC_Upper_{period}_{atr_period}_{multiplier}"
-        - Lower: "KC_Lower_{period}_{atr_period}_{multiplier}"
-
-        Args:
-            suffix: Optional suffix ("Middle", "Upper", "Lower", or None for Middle)
-
-        Returns:
-            Column name matching compute() output format
-        """
-        period = self.params.get("period", 20)
-        atr_period = self.params.get("atr_period", 10)
-        multiplier = self.params.get("multiplier", 2.0)
-
-        if suffix == "Upper":
-            return f"KC_Upper_{period}_{atr_period}_{multiplier}"
-        elif suffix == "Lower":
-            return f"KC_Lower_{period}_{atr_period}_{multiplier}"
-        else:
-            # Default to Middle (primary)
-            return f"KC_Middle_{period}"
 
     def __init__(self, period: int = 20, atr_period: int = 10, multiplier: float = 2.0):
         """

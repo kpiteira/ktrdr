@@ -110,17 +110,14 @@ class TestOldFormatRaisesError:
             "upper" in str(exc_info.value) or "expected" in str(exc_info.value).lower()
         )
 
-    def test_v2_list_format_rejected_by_apply(self, sample_data):
-        """apply() rejects v2 list format (only v3 dict format supported)."""
+    def test_v2_list_format_rejected_by_constructor(self, sample_data):
+        """IndicatorEngine constructor rejects v2 list format."""
         indicator = MockOldFormatIndicator(name="bbands")
         indicator._feature_id = "bbands_20_2"
 
-        # V2 format: list of indicator instances
-        engine = IndicatorEngine(indicators=[indicator])
-
-        # apply() should reject v2 format before even computing
+        # V2 format (list) should be rejected at construction time
         with pytest.raises(Exception) as exc_info:
-            engine.apply(sample_data)
+            IndicatorEngine(indicators=[indicator])
 
         # Should mention v3 or dict format requirement
         error_msg = str(exc_info.value).lower()

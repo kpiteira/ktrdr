@@ -1,7 +1,7 @@
-"""Integration test for training pipeline with new indicator column format.
+"""Integration test for training pipeline with v3 indicator column format.
 
 This test validates that the complete training pipeline works end-to-end
-with the new semantic column naming convention from M3b:
+with the v3 semantic column naming convention:
 - Indicators use semantic column names (e.g., 'rsi_14', 'bbands_20_2.upper')
 - Fuzzy memberships use feature_id format (e.g., 'rsi_14_oversold')
 - Model metadata stores feature names in new format
@@ -16,7 +16,7 @@ import pytest
 
 from ktrdr.fuzzy import FuzzyEngine
 from ktrdr.fuzzy.config import FuzzyConfigLoader
-from ktrdr.indicators import IndicatorEngine, IndicatorFactory
+from ktrdr.indicators import IndicatorEngine
 from ktrdr.training.model_storage import ModelStorage
 
 
@@ -51,25 +51,20 @@ def sample_ohlcv_data():
 
 @pytest.fixture
 def strategy_config():
-    """Create test strategy configuration with new format indicators."""
+    """Create test strategy configuration with v3 format indicators."""
     return {
         "name": "test_new_format_strategy",
-        "indicators": [
-            {"name": "rsi", "feature_id": "rsi_14", "period": 14},
-            {
-                "name": "bbands",
-                "feature_id": "bbands_20_2",
-                "period": 20,
-                "multiplier": 2.0,
-            },
-            {
-                "name": "macd",
-                "feature_id": "macd_12_26_9",
+        # V3 format: dict mapping indicator_id to definition
+        "indicators": {
+            "rsi_14": {"type": "rsi", "period": 14},
+            "bbands_20_2": {"type": "bbands", "period": 20, "multiplier": 2.0},
+            "macd_12_26_9": {
+                "type": "macd",
                 "fast_period": 12,
                 "slow_period": 26,
                 "signal_period": 9,
             },
-        ],
+        },
         "fuzzy_sets": {
             "rsi_14": {
                 "oversold": {"type": "triangular", "parameters": [0, 30, 40]},
@@ -94,8 +89,10 @@ def strategy_config():
         },
         "model": {
             "type": "mlp",
-            "hidden_layers": [32, 16],
-            "dropout": 0.2,
+            "architecture": {
+                "hidden_layers": [32, 16],
+                "dropout": 0.2,
+            },
             "num_classes": 3,
             "features": {"lookback_periods": 0},  # No temporal features for this test
             "training": {
@@ -120,11 +117,9 @@ def temp_models_dir(tmp_path):
 
 
 def test_indicators_use_new_column_format(test_data, strategy_config):
-    """Test that indicators produce columns in new semantic format."""
-    # Create and apply indicators
-    factory = IndicatorFactory(strategy_config["indicators"])
-    indicators = factory.build()
-    engine = IndicatorEngine(indicators)
+    """Test that indicators produce columns in v3 semantic format."""
+    # Create IndicatorEngine with v3 dict format
+    engine = IndicatorEngine(strategy_config["indicators"])
     indicators_df = engine.apply(test_data)
 
     # Verify single-output indicator (RSI)
@@ -161,10 +156,8 @@ def test_indicators_use_new_column_format(test_data, strategy_config):
 
 def test_fuzzy_uses_new_column_format(test_data, strategy_config):
     """Test that fuzzy memberships use feature_id in column names."""
-    # Create indicators
-    factory = IndicatorFactory(strategy_config["indicators"])
-    indicators = factory.build()
-    engine = IndicatorEngine(indicators)
+    # Create IndicatorEngine with v3 dict format
+    engine = IndicatorEngine(strategy_config["indicators"])
     indicators_df = engine.apply(test_data)
 
     # Create fuzzy engine
@@ -200,13 +193,11 @@ def test_fuzzy_uses_new_column_format(test_data, strategy_config):
 
 
 def test_fuzzy_neural_processor_uses_new_feature_names(test_data, strategy_config):
-    """Test that FuzzyNeuralProcessor creates features with new column format."""
+    """Test that FuzzyNeuralProcessor creates features with v3 column format."""
     from ktrdr.training.fuzzy_neural_processor import FuzzyNeuralProcessor
 
-    # Create indicators
-    factory = IndicatorFactory(strategy_config["indicators"])
-    indicators = factory.build()
-    engine = IndicatorEngine(indicators)
+    # Create IndicatorEngine with v3 dict format
+    engine = IndicatorEngine(strategy_config["indicators"])
     indicators_df = engine.apply(test_data)
 
     # Create fuzzy memberships
@@ -265,14 +256,11 @@ def test_fuzzy_neural_processor_uses_new_feature_names(test_data, strategy_confi
 def test_model_storage_saves_new_format_feature_names(
     test_data, strategy_config, temp_models_dir
 ):
-    """Test that model storage saves feature names in new format to metadata."""
+    """Test that model storage saves feature names in v3 format to metadata."""
     from ktrdr.training.fuzzy_neural_processor import FuzzyNeuralProcessor
 
-    # Create a minimal trained model for testing
-    # Create indicators → fuzzy → features
-    factory = IndicatorFactory(strategy_config["indicators"])
-    indicators = factory.build()
-    engine = IndicatorEngine(indicators)
+    # Create IndicatorEngine with v3 dict format
+    engine = IndicatorEngine(strategy_config["indicators"])
     indicators_df = engine.apply(test_data)
 
     fuzzy_config = FuzzyConfigLoader.load_from_dict(strategy_config["fuzzy_sets"])

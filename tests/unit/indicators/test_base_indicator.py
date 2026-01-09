@@ -131,16 +131,6 @@ class TestBaseIndicator:
         # For our dummy indicator, result should be the same as the input column
         pd.testing.assert_series_equal(result, df["close"])
 
-    def test_column_name_generation(self):
-        """Test the column name generation."""
-        indicator = DummyIndicator(name="RSI", period=14)
-        assert indicator.get_column_name() == "rsi_14"
-        assert indicator.get_column_name(suffix="overbought") == "rsi_14_overbought"
-
-        # Test with multiple parameters
-        indicator = DummyIndicator(name="MACD", period=12, signal=9)
-        assert "macd_12_9" in indicator.get_column_name()
-
     def test_name_validation(self):
         """Test validation of indicator names."""
         # Valid name
