@@ -249,7 +249,8 @@ class TrainingPipeline:
 
     @staticmethod
     def calculate_indicators(
-        price_data: dict[str, pd.DataFrame], indicator_configs: list[dict[str, Any]]
+        price_data: dict[str, pd.DataFrame],
+        indicator_configs: dict[str, dict[str, Any]],
     ) -> dict[str, pd.DataFrame]:
         """
         Calculate technical indicators (unified single/multi-timeframe approach).
@@ -257,12 +258,10 @@ class TrainingPipeline:
         Single-timeframe is just multi-timeframe with one key. This eliminates
         code duplication and ensures consistent behavior.
 
-        ROOT CAUSE FIX: Creates IndicatorEngine ONCE and uses apply_multi_timeframe()
-        without passing indicator_configs parameter, preventing duplicate engine creation.
-
         Args:
             price_data: Dictionary mapping timeframes to OHLCV DataFrames
-            indicator_configs: List of indicator configurations
+            indicator_configs: V3 format dict mapping indicator_id to definition
+                Example: {"rsi_14": {"type": "rsi", "period": 14}}
 
         Returns:
             Dictionary mapping timeframes to DataFrames with indicators

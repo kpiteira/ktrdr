@@ -110,20 +110,21 @@ class TestOldFormatRaisesError:
             "upper" in str(exc_info.value) or "expected" in str(exc_info.value).lower()
         )
 
-    def test_old_format_in_apply_raises_error(self, sample_data):
-        """Old-format indicator via apply() should also raise error."""
+    def test_v2_list_format_rejected_by_apply(self, sample_data):
+        """apply() rejects v2 list format (only v3 dict format supported)."""
         indicator = MockOldFormatIndicator(name="bbands")
         indicator._feature_id = "bbands_20_2"
 
+        # V2 format: list of indicator instances
         engine = IndicatorEngine(indicators=[indicator])
 
-        # Should raise ProcessingError (which wraps ValueError)
+        # apply() should reject v2 format before even computing
         with pytest.raises(Exception) as exc_info:
             engine.apply(sample_data)
 
-        # The error should bubble up through apply()
+        # Should mention v3 or dict format requirement
         error_msg = str(exc_info.value).lower()
-        assert "mismatch" in error_msg or "failed" in error_msg
+        assert "v3" in error_msg or "dict" in error_msg
 
 
 class TestNewFormatStillWorks:

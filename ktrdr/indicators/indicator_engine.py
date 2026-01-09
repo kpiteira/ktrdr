@@ -154,9 +154,9 @@ class IndicatorEngine:
             indicator_ids: Which indicators to compute
 
         Returns:
-            DataFrame with indicator columns:
+            DataFrame with OHLCV + indicator columns:
             - Single-output: {indicator_id}
-            - Multi-output: {indicator_id}.{output_name}
+            - Multi-output: {indicator_id}.{output_name} + {indicator_id} alias
 
         NOTE: No timeframe prefix added here - caller handles that.
         """
@@ -182,6 +182,11 @@ class IndicatorEngine:
                 # Rename columns with indicator_id prefix
                 for col in output.columns:
                     result[f"{indicator_id}.{col}"] = output[col]
+
+                # Add alias for primary output (for backward compatibility)
+                primary = indicator.get_primary_output()
+                if primary:
+                    result[indicator_id] = result[f"{indicator_id}.{primary}"]
             else:
                 # Single output - name with indicator_id
                 result[indicator_id] = output
@@ -363,8 +368,8 @@ class IndicatorEngine:
         """
         Apply all configured indicators to the input data.
 
-        All indicator computation is routed through compute_indicator().
-        Indicators must return columns matching their get_output_names().
+        This method requires the engine to be initialized with v3 dict format.
+        It delegates to compute() internally.
 
         Args:
             data: DataFrame containing OHLCV data to compute indicators on.
@@ -372,12 +377,23 @@ class IndicatorEngine:
 
         Returns:
             DataFrame with original data plus indicator columns.
-            Column names use feature_ids (from indicator.get_feature_id()).
 
         Raises:
-            ConfigurationError: If required columns are missing.
+            ConfigurationError: If engine not initialized with v3 format,
+                or if required columns are missing.
             ProcessingError: If indicator computation fails.
         """
+        # Require v3 format - engine must have _indicators populated
+        if not self._indicators:
+            raise ConfigurationError(
+                "apply() requires v3 dict format. Initialize IndicatorEngine with "
+                "dict[str, IndicatorDefinition] instead of list.",
+                "CONFIG-V2FormatDeprecated",
+                {
+                    "hint": "Use IndicatorEngine({'rsi_14': {'type': 'rsi', 'period': 14}})"
+                },
+            )
+
         if data is None or data.empty:
             raise ConfigurationError(
                 "Cannot compute indicators on empty data.", "CONFIG-EmptyData", {}
@@ -394,7 +410,6 @@ class IndicatorEngine:
             )
 
         # Warn if duplicate column names are present in input
-        # (helps debug data quality issues upstream)
         if data.columns.duplicated().any():
             duplicate_columns = [
                 col
@@ -406,34 +421,12 @@ class IndicatorEngine:
                 f"This may cause unexpected behavior."
             )
 
-        # Create a copy of the input data to avoid modifying original
-        result_df = data.copy()
+        # Delegate to v3 compute() with all indicator_ids
+        indicator_ids = set(self._indicators.keys())
+        result = self.compute(data, indicator_ids)
 
-        # Apply each indicator through compute_indicator() adapter
-        for indicator in self.indicators:
-            try:
-                # Get indicator_id from feature_id or fall back to column name
-                indicator_id = indicator.get_feature_id()
-
-                # Compute indicator and add standardized columns
-                # Use result_df to support indicator chaining (indicators that depend on previous indicators)
-                computed = self.compute_indicator(result_df, indicator, indicator_id)
-
-                # Merge computed columns into result
-                result_df = pd.concat([result_df, computed], axis=1)
-
-            except Exception as e:
-                logger.error(
-                    f"Error computing indicator {indicator.__class__.__name__}: {str(e)}"
-                )
-                raise ProcessingError(
-                    f"Failed to compute indicator {indicator.__class__.__name__}: {str(e)}",
-                    "PROC-IndicatorFailed",
-                    {"indicator": indicator.__class__.__name__, "error": str(e)},
-                ) from e
-
-        logger.debug(f"Successfully applied {len(self.indicators)} indicators to data")
-        return result_df
+        logger.debug(f"Successfully applied {len(indicator_ids)} indicators to data")
+        return result
 
     def apply_multi_timeframe(
         self,
