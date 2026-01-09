@@ -1,0 +1,54 @@
+# =============================================================================
+# V3 STRATEGY EXAMPLE: Minimal Configuration
+# =============================================================================
+# This is the simplest possible v3 strategy - useful for quick tests.
+# Shows only required fields with minimal configuration.
+#
+# Use case: Testing, validation, quick experiments
+# =============================================================================
+
+name: v3_minimal
+version: "3.0"
+description: Minimal v3 strategy for quick testing
+
+# Single indicator with minimal config
+indicators:
+  rsi_14:
+    type: rsi
+    period: 14
+
+# Single fuzzy set - shorthand array format for membership functions
+fuzzy_sets:
+  rsi_momentum:
+    indicator: rsi_14
+    oversold: [0, 25, 40]
+    overbought: [60, 75, 100]
+
+# Explicit NN inputs - required in v3
+nn_inputs:
+  - fuzzy_set: rsi_momentum
+    timeframes: ["1h"]
+
+# Minimal model config
+model:
+  type: mlp
+  hidden_layers: [32, 16]
+  dropout: 0.2
+
+decisions:
+  output_format: classification
+
+training:
+  epochs: 10
+  batch_size: 32
+  learning_rate: 0.001
+
+# Single symbol, single timeframe
+training_data:
+  symbols:
+    mode: single
+    symbol: EURUSD
+  timeframes:
+    mode: single
+    timeframe: "1h"
+  history_required: 100

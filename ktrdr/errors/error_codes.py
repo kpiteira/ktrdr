@@ -18,8 +18,8 @@ Usage:
     from ktrdr.errors.error_codes import ErrorCodes
 
     raise ConfigurationError(
-        message="Feature ID is missing",
-        error_code=ErrorCodes.STRATEGY_MISSING_FEATURE_ID,
+        message="Strategy validation failed",
+        error_code=ErrorCodes.STRATEGY_VALIDATION_FAILED,
         ...
     )
 """
@@ -35,10 +35,6 @@ class ErrorCodes:
     CONFIG_VALIDATION_FAILED = "CONFIG-ValidationFailed"
 
     # Strategy validation errors
-    STRATEGY_MISSING_FEATURE_ID = "STRATEGY-MissingFeatureId"
-    STRATEGY_DUPLICATE_FEATURE_ID = "STRATEGY-DuplicateFeatureId"
-    STRATEGY_INVALID_FEATURE_ID_FORMAT = "STRATEGY-InvalidFeatureIdFormat"
-    STRATEGY_RESERVED_FEATURE_ID = "STRATEGY-ReservedFeatureId"
     STRATEGY_VALIDATION_FAILED = "STRATEGY-ValidationFailed"
     STRATEGY_FUZZY_MISMATCH = "STRATEGY-FuzzyMismatch"
     STRATEGY_INVALID_SCOPE = "STRATEGY-InvalidScope"

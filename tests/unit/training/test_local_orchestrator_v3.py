@@ -161,17 +161,9 @@ training:
 
     def test_execute_v3_training_method_exists(self):
         """_execute_v3_training method should exist for v3 path."""
-        # This test will fail until we implement the method
         assert hasattr(
             LocalTrainingOrchestrator, "_execute_v3_training"
         ), "_execute_v3_training method must be implemented for v3 training path"
-
-    def test_execute_v2_training_method_exists(self):
-        """_execute_v2_training method should exist for v2 path."""
-        # This test will fail until we implement the method
-        assert hasattr(
-            LocalTrainingOrchestrator, "_execute_v2_training"
-        ), "_execute_v2_training method must be implemented for v2 backward compat"
 
 
 class TestLocalOrchestratorV3Metadata:

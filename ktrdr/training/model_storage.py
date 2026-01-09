@@ -227,10 +227,17 @@ class ModelStorage:
         # Load model
         try:
             # Try loading full model first (easier)
-            model = torch.load(model_dir / "model_full.pt", map_location="cpu")
+            # Note: weights_only=False needed for PyTorch 2.6+ to load nn.Module objects
+            model = torch.load(
+                model_dir / "model_full.pt",
+                map_location="cpu",
+                weights_only=False,  # Required to load custom nn.Module classes
+            )
         except Exception:
             # Fallback: load state dict (requires rebuilding model)
-            model_state = torch.load(model_dir / "model.pt", map_location="cpu")
+            model_state = torch.load(
+                model_dir / "model.pt", map_location="cpu", weights_only=True
+            )
             # Note: Would need model architecture info to rebuild
             model = model_state  # Return state dict for now
 

@@ -3,6 +3,8 @@ Unit tests verifying IndicatorEngine does NOT compute indicators during initiali
 
 This module tests that Phase 7 eliminates ALL computation on sample data during
 IndicatorEngine initialization by using class methods instead.
+
+Updated for v3 format - uses dict-based indicator configs.
 """
 
 from unittest.mock import patch
@@ -10,6 +12,7 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
+from ktrdr.config.models import IndicatorDefinition
 from ktrdr.indicators.indicator_engine import IndicatorEngine
 
 
@@ -18,37 +21,43 @@ class TestNoInitComputation:
 
     def test_single_output_indicator_no_computation(self):
         """Test single-output indicator (RSI) - NO compute() during init."""
-        configs = [{"name": "rsi", "feature_id": "rsi_14", "period": 14}]
+        indicators = {"rsi_14": IndicatorDefinition(type="rsi", period=14)}
 
         # Mock compute to track if it's called
         with patch(
             "ktrdr.indicators.rsi_indicator.RSIIndicator.compute"
         ) as mock_compute:
-            _engine = IndicatorEngine(indicators=configs)
+            IndicatorEngine(indicators=indicators)
 
             # compute() should NEVER be called during __init__
             mock_compute.assert_not_called()
 
     def test_multi_output_indicator_no_computation(self):
         """Test multi-output indicator (MACD) - NO compute() during init."""
-        configs = [{"name": "macd", "feature_id": "macd_std"}]
+        indicators = {
+            "macd_std": IndicatorDefinition(
+                type="macd", fast_period=12, slow_period=26, signal_period=9
+            )
+        }
 
         with patch(
             "ktrdr.indicators.macd_indicator.MACDIndicator.compute"
         ) as mock_compute:
-            _engine = IndicatorEngine(indicators=configs)
+            IndicatorEngine(indicators=indicators)
 
             # compute() should NEVER be called during __init__
             mock_compute.assert_not_called()
 
     def test_multiple_indicators_no_computation(self):
         """Test multiple indicators - NO compute() calls during init."""
-        configs = [
-            {"name": "rsi", "feature_id": "rsi_14", "period": 14},
-            {"name": "macd", "feature_id": "macd_std"},
-            {"name": "sma", "feature_id": "sma_20", "period": 20},
-            {"name": "ema", "feature_id": "ema_10", "period": 10},
-        ]
+        indicators = {
+            "rsi_14": IndicatorDefinition(type="rsi", period=14),
+            "macd_std": IndicatorDefinition(
+                type="macd", fast_period=12, slow_period=26, signal_period=9
+            ),
+            "sma_20": IndicatorDefinition(type="sma", period=20),
+            "ema_10": IndicatorDefinition(type="ema", period=10),
+        }
 
         # Mock all indicator compute methods
         with (
@@ -61,7 +70,7 @@ class TestNoInitComputation:
                 "ktrdr.indicators.ma_indicators.ExponentialMovingAverage.compute"
             ) as mock_ema,
         ):
-            _engine = IndicatorEngine(indicators=configs)
+            IndicatorEngine(indicators=indicators)
 
             # NONE of the compute() methods should be called
             mock_rsi.assert_not_called()
@@ -69,86 +78,84 @@ class TestNoInitComputation:
             mock_sma.assert_not_called()
             mock_ema.assert_not_called()
 
-    def test_feature_id_map_built_correctly_without_computation(self):
-        """Test feature_id_map is correctly built WITHOUT any computation."""
-        configs = [
-            {"name": "rsi", "feature_id": "rsi_14", "period": 14},
-            {"name": "macd", "feature_id": "macd_std"},
-        ]
+    def test_indicators_dict_built_without_computation(self):
+        """Test _indicators dict is correctly built WITHOUT any computation."""
+        indicators = {
+            "rsi_14": IndicatorDefinition(type="rsi", period=14),
+            "macd_std": IndicatorDefinition(
+                type="macd", fast_period=12, slow_period=26, signal_period=9
+            ),
+        }
 
         # Mock compute to ensure it's not called
         with patch(
             "ktrdr.indicators.base_indicator.BaseIndicator.compute"
         ) as mock_compute:
-            engine = IndicatorEngine(indicators=configs)
+            engine = IndicatorEngine(indicators=indicators)
 
-            # Verify feature_id_map is correctly built
-            # RSI: single-output -> maps column name to feature_id
-            assert "rsi_14" in engine.feature_id_map
-            assert engine.feature_id_map["rsi_14"] == "rsi_14"
-
-            # MACD: multi-output -> maps primary column to feature_id
-            # NOTE: This test uses class methods (old API), so still uses old format names
-            # Primary column should be "MACD_12_26" (uppercase, no suffix)
-            assert "MACD_12_26" in engine.feature_id_map
-            assert engine.feature_id_map["MACD_12_26"] == "macd_std"
+            # Verify _indicators dict is correctly built
+            assert "rsi_14" in engine._indicators
+            assert "macd_std" in engine._indicators
 
             # Verify compute was NEVER called
             mock_compute.assert_not_called()
 
-    def test_class_methods_used_not_computation(self):
-        """Test that class methods are used instead of computation."""
-        configs = [{"name": "macd", "feature_id": "macd_std"}]
+    def test_indicator_instances_created_not_computation(self):
+        """Test that indicator instances are created without computation."""
+        from ktrdr.indicators.macd_indicator import MACDIndicator
 
-        # Mock the class methods to track calls
-        with (
-            patch(
-                "ktrdr.indicators.macd_indicator.MACDIndicator.is_multi_output",
-                return_value=True,
-            ) as mock_is_multi,
-            patch(
-                "ktrdr.indicators.macd_indicator.MACDIndicator.compute"
-            ) as mock_compute,
-        ):
-            engine = IndicatorEngine(indicators=configs)
+        indicators = {
+            "macd_std": IndicatorDefinition(
+                type="macd", fast_period=12, slow_period=26, signal_period=9
+            )
+        }
 
-            # Class methods SHOULD be called
-            assert mock_is_multi.called
-            # Note: get_primary_output_suffix might be called depending on implementation
+        # Mock compute to track if it's called
+        with patch(
+            "ktrdr.indicators.macd_indicator.MACDIndicator.compute"
+        ) as mock_compute:
+            engine = IndicatorEngine(indicators=indicators)
 
-            # But compute() should NEVER be called
+            # compute() should NEVER be called during init
             mock_compute.assert_not_called()
 
-            # Verify feature_id_map was still built correctly
-            assert len(engine.feature_id_map) > 0
+            # Verify _indicators was built correctly with actual instance
+            assert len(engine._indicators) > 0
+            assert "macd_std" in engine._indicators
+            assert isinstance(engine._indicators["macd_std"], MACDIndicator)
 
     def test_initialization_performance_without_computation(self):
         """Test that initialization is fast without computation."""
         import time
 
         # Strategy with 10 indicator instances
-        configs = [
-            {"name": "rsi", "feature_id": f"rsi_{i}", "period": 14} for i in range(10)
-        ]
+        indicators = {
+            f"rsi_{i}": IndicatorDefinition(type="rsi", period=14) for i in range(10)
+        }
 
         # Measure initialization time
         start = time.time()
-        _engine = IndicatorEngine(indicators=configs)
+        engine = IndicatorEngine(indicators=indicators)
         elapsed = time.time() - start
+
+        # Verify engine was created with all indicators
+        assert len(engine._indicators) == 10
 
         # Without computation, init should be very fast (< 0.1s even on slow systems)
         # This is a reasonable threshold - creating 10 indicator instances
-        # and building feature_id_map should be near-instantaneous
+        # should be near-instantaneous
         assert (
             elapsed < 0.1
         ), f"Initialization took {elapsed:.3f}s - too slow, likely computing!"
 
     def test_no_sample_dataframe_creation(self):
         """Test that NO sample DataFrames are created during init."""
-        configs = [
-            {"name": "rsi", "feature_id": "rsi_14", "period": 14},
-            {"name": "macd", "feature_id": "macd_std"},
-        ]
+        indicators = {
+            "rsi_14": IndicatorDefinition(type="rsi", period=14),
+            "macd_std": IndicatorDefinition(
+                type="macd", fast_period=12, slow_period=26, signal_period=9
+            ),
+        }
 
         # Mock DataFrame constructor to track calls
         original_dataframe_init = pd.DataFrame.__init__
@@ -160,7 +167,10 @@ class TestNoInitComputation:
             return original_dataframe_init(self, *args, **kwargs)
 
         with patch.object(pd.DataFrame, "__init__", track_dataframe_init):
-            _engine = IndicatorEngine(indicators=configs)
+            engine = IndicatorEngine(indicators=indicators)
+
+            # Verify engine was created
+            assert engine is not None
 
             # Check that no 100-row sample DataFrames were created
             # (the old code created DataFrames with 100 rows of sample data)
@@ -181,11 +191,11 @@ class TestNoInitComputation:
 
 
 class TestComputeStillWorks:
-    """Verify that compute() still works correctly during apply()."""
+    """Verify that compute() still works correctly during compute()/compute_for_timeframe()."""
 
-    def test_compute_called_during_apply(self):
-        """Test that compute() IS called during apply() (as it should be)."""
-        configs = [{"name": "rsi", "feature_id": "rsi_14", "period": 14}]
+    def test_compute_called_during_compute_method(self):
+        """Test that indicator compute() IS called during engine.compute() (as it should be)."""
+        indicators = {"rsi_14": IndicatorDefinition(type="rsi", period=14)}
 
         sample_data = pd.DataFrame(
             {
@@ -197,26 +207,28 @@ class TestComputeStillWorks:
             }
         )
 
-        engine = IndicatorEngine(indicators=configs)
+        engine = IndicatorEngine(indicators=indicators)
 
-        # Mock compute to track if it's called during apply()
+        # Mock compute to track if it's called during engine.compute()
         with patch(
             "ktrdr.indicators.rsi_indicator.RSIIndicator.compute"
         ) as mock_compute:
             # Set up mock to return valid Series
             mock_compute.return_value = pd.Series([50.0] * 100, name="rsi_14")
 
-            _result = engine.apply(sample_data)
+            engine.compute(sample_data, {"rsi_14"})
 
-            # compute() SHOULD be called during apply()
+            # compute() SHOULD be called during engine.compute()
             mock_compute.assert_called_once()
 
     def test_indicators_work_correctly_after_init_changes(self):
         """Test that indicators produce correct output after Phase 7 changes."""
-        configs = [
-            {"name": "rsi", "feature_id": "rsi_14", "period": 14},
-            {"name": "macd", "feature_id": "macd_std"},
-        ]
+        indicators = {
+            "rsi_14": IndicatorDefinition(type="rsi", period=14),
+            "macd_std": IndicatorDefinition(
+                type="macd", fast_period=12, slow_period=26, signal_period=9
+            ),
+        }
 
         sample_data = pd.DataFrame(
             {
@@ -228,21 +240,13 @@ class TestComputeStillWorks:
             }
         )
 
-        engine = IndicatorEngine(indicators=configs)
-        result = engine.apply(sample_data)
+        engine = IndicatorEngine(indicators=indicators)
+        result = engine.compute(sample_data, {"rsi_14", "macd_std"})
 
-        # Verify RSI column exists (technical name)
+        # Verify RSI column exists
         assert "rsi_14" in result.columns
 
-        # M3b: Verify MACD semantic columns exist (engine-prefixed)
+        # V3: Verify MACD semantic columns exist (engine-prefixed)
         assert "macd_std.line" in result.columns
         assert "macd_std.signal" in result.columns
         assert "macd_std.histogram" in result.columns
-
-        # Verify feature_id alias exists for MACD
-        assert "macd_std" in result.columns  # feature_id alias for primary column
-
-        # Verify the alias has the same values as the primary technical column
-        pd.testing.assert_series_equal(
-            result["macd_std.line"], result["macd_std"], check_names=False
-        )

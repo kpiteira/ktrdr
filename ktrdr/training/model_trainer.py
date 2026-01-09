@@ -392,11 +392,10 @@ class ModelTrainer:
                 optimizer.zero_grad()
                 loss.backward()
 
-                # Gradient clipping
-                if self.config.get("gradient_clip", 0) > 0:
-                    torch.nn.utils.clip_grad_norm_(
-                        model.parameters(), self.config["gradient_clip"]
-                    )
+                # Gradient clipping (default to 1.0 for training stability)
+                gradient_clip = self.config.get("gradient_clip", 1.0)
+                if gradient_clip > 0:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), gradient_clip)
 
                 optimizer.step()
 
@@ -858,11 +857,10 @@ class ModelTrainer:
                 optimizer.zero_grad()
                 loss.backward()
 
-                # Gradient clipping
-                if self.config.get("gradient_clip", 0) > 0:
-                    torch.nn.utils.clip_grad_norm_(
-                        model.parameters(), self.config["gradient_clip"]
-                    )
+                # Gradient clipping (default to 1.0 for training stability)
+                gradient_clip = self.config.get("gradient_clip", 1.0)
+                if gradient_clip > 0:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), gradient_clip)
 
                 optimizer.step()
 

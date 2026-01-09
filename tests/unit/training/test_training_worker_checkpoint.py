@@ -151,17 +151,6 @@ class TestTrainingPipelineCheckpointCallback:
 
         assert "checkpoint_callback" in params
 
-    def test_train_strategy_accepts_checkpoint_callback(self):
-        """TrainingPipeline.train_strategy should accept checkpoint_callback."""
-        import inspect
-
-        from ktrdr.training.training_pipeline import TrainingPipeline
-
-        sig = inspect.signature(TrainingPipeline.train_strategy)
-        params = list(sig.parameters.keys())
-
-        assert "checkpoint_callback" in params
-
 
 class TestLocalOrchestratorCheckpointCallback:
     """Tests for checkpoint callback in LocalTrainingOrchestrator."""

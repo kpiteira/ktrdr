@@ -1,6 +1,6 @@
 """Unit tests for BacktestingService v3 wiring.
 
-Tests that v3 models are detected and use FeatureCacheV3.
+Tests that v3 models are detected and use FeatureCache.
 """
 
 from __future__ import annotations
@@ -150,7 +150,7 @@ class TestBacktestingServiceV3ConfigReconstruction:
 
 
 class TestDecisionOrchestratorV3Wiring:
-    """Test DecisionOrchestrator uses FeatureCacheV3 for v3 models."""
+    """Test DecisionOrchestrator uses FeatureCache for v3 models."""
 
     def test_check_v3_model_detects_v3(self, tmp_path: Path):
         """_check_v3_model returns True for v3 model directories."""
@@ -200,11 +200,11 @@ class TestDecisionOrchestratorV3Wiring:
 
         assert orchestrator._check_v3_model(str(model_dir)) is False
 
-    def test_decision_orchestrator_has_is_v3_model_flag(self):
-        """DecisionOrchestrator should have _is_v3_model attribute."""
+    def test_decision_orchestrator_has_v3_methods(self):
+        """DecisionOrchestrator should have v3 model methods."""
         from ktrdr.decision.orchestrator import DecisionOrchestrator
 
         # We can't easily instantiate without a real strategy config,
-        # but we can check that the method exists
+        # but we can check that the methods exist
         assert hasattr(DecisionOrchestrator, "_check_v3_model")
-        assert hasattr(DecisionOrchestrator, "_create_v3_feature_cache")
+        assert hasattr(DecisionOrchestrator, "_create_feature_cache")

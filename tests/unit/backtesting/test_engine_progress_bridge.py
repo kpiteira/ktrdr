@@ -23,13 +23,13 @@ class TestEngineProgressBridgeIntegration:
     @pytest.fixture
     def minimal_config(self):
         """Create minimal backtest config for testing."""
-        # Use existing strategy file
-        strategy_path = "strategies/trend_momentum.yaml"
+        # Use v3 minimal strategy for testing
+        strategy_path = "strategies/v3_minimal.yaml"
 
         return BacktestConfig(
             strategy_config_path=strategy_path,
             model_path=None,
-            symbol="AAPL",
+            symbol="EURUSD",  # Match strategy symbol
             timeframe="1h",
             start_date="2024-01-01",
             end_date=None,  # No end date - process all data provided
