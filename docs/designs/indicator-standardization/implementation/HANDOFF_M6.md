@@ -38,10 +38,47 @@ The three branches in `compute_indicator()` are now:
 - `tests/unit/indicators/test_indicator_engine_v3_only.py` — New tests for v3-only behavior
 - `tests/unit/indicators/test_indicator_engine_adapter.py` — Updated old-format tests to expect errors
 
-### Notes for Task 6.2
+---
 
-The remaining `CLEANUP(v3)` comments are in:
-- `ktrdr/indicators/base_indicator.py:155` — `get_primary_output_suffix()`
-- `ktrdr/indicators/rvi_indicator.py:63` — same deprecated method
+## Task 6.2 Complete: Remove Deprecated Methods
 
-These are deprecated methods that should be removed in Task 6.2.
+### What Was Removed
+
+**`get_primary_output_suffix()`** removed from:
+- `ktrdr/indicators/base_indicator.py` (BaseIndicator)
+- `ktrdr/indicators/adx_indicator.py`
+- `ktrdr/indicators/aroon_indicator.py`
+- `ktrdr/indicators/bollinger_bands_indicator.py`
+- `ktrdr/indicators/donchian_channels.py`
+- `ktrdr/indicators/ichimoku_indicator.py`
+- `ktrdr/indicators/keltner_channels.py`
+- `ktrdr/indicators/macd_indicator.py`
+- `ktrdr/indicators/rvi_indicator.py`
+- `ktrdr/indicators/stochastic_indicator.py`
+- `ktrdr/indicators/supertrend_indicator.py`
+
+**Use instead:** `get_primary_output()` (returns first element of `get_output_names()`)
+
+### Methods NOT Removed (Still In Use)
+
+The following were identified for removal but are still in active use:
+
+| Method | Used By | Reason Can't Remove |
+|--------|---------|---------------------|
+| `get_column_name()` | `get_feature_id()`, indicator subclasses | Fallback for feature ID generation |
+| `get_feature_id()` | `apply()` in IndicatorEngine | V2 API path still used across codebase |
+| `_feature_id` | `get_feature_id()`, IndicatorFactory | Set by factory, used for v2 indicators |
+| `_timeframe` | `get_column_name()`, IndicatorFactory | Multi-timeframe column prefixing |
+
+**Note:** These can be removed once `apply()` is deprecated in favor of `compute()`.
+
+### Test Changes
+
+- `tests/unit/indicators/test_deprecated_methods_removed.py` — Verifies `get_primary_output_suffix` is gone
+- `tests/unit/indicators/test_base_indicator.py` — Removed backward compat tests
+
+### Notes for Task 6.3
+
+No `CLEANUP(v3)` comments remain in `ktrdr/`. All deprecated code with that marker has been addressed.
+
+Task 6.3 should delete `column_standardization.py` if it's no longer imported.

@@ -61,11 +61,6 @@ class ADXIndicator(BaseIndicator):
         """Return semantic output names for ADX."""
         return ["adx", "plus_di", "minus_di"]
 
-    @classmethod
-    def get_primary_output_suffix(cls) -> None:
-        """Primary output is ADX with no suffix."""
-        return None
-
     def get_column_name(self, suffix: Optional[str] = None) -> str:
         """
         Generate column name matching what compute() actually produces.

@@ -130,31 +130,6 @@ class BaseIndicator(ABC):
         outputs = cls.get_output_names()
         return outputs[0] if outputs else None
 
-    @classmethod
-    def get_primary_output_suffix(cls) -> Optional[str]:
-        """
-        Get the suffix for the primary output column of multi-output indicators.
-
-        DEPRECATED: Use get_primary_output() instead.
-        This method is kept for backward compatibility and will be removed in M6.
-
-        For multi-output indicators, this defines which column is considered
-        the "primary" output for feature_id mapping. Returns None for
-        single-output indicators or if primary output is the base name.
-
-        Returns:
-            Optional[str]: Suffix for primary output column, or None if N/A
-
-        Example:
-            For MACD which produces "MACD_12_26", "MACD_signal_12_26_9", "MACD_hist_12_26_9",
-            the primary output is "MACD_12_26" (no suffix, just params), so return None.
-
-            For BollingerBands which produces "upper_20_2.0", "middle_20_2.0", "lower_20_2.0",
-            the primary output is "upper_20_2.0", so return "upper".
-        """
-        # CLEANUP(v3): Remove after v3 migration complete
-        return cls.get_primary_output()
-
     @abstractmethod
     def compute(self, df: pd.DataFrame) -> Union[pd.Series, pd.DataFrame]:
         """

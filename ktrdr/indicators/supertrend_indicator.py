@@ -61,11 +61,6 @@ class SuperTrendIndicator(BaseIndicator):
         """Return semantic output names for SuperTrend."""
         return ["trend", "direction"]
 
-    @classmethod
-    def get_primary_output_suffix(cls) -> None:
-        """Primary output is SuperTrend with no suffix."""
-        return None
-
     def get_column_name(self, suffix: Optional[str] = None) -> str:
         """
         Generate column name matching what compute() actually produces.

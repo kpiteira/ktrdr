@@ -61,11 +61,6 @@ class BollingerBandsIndicator(BaseIndicator):
         """Return semantic output names for Bollinger Bands."""
         return ["upper", "middle", "lower"]
 
-    @classmethod
-    def get_primary_output_suffix(cls) -> str:
-        """Primary output is the upper band."""
-        return "upper"
-
     def get_column_name(self, suffix: Optional[str] = None) -> str:
         """
         Generate column name matching what compute() actually produces.

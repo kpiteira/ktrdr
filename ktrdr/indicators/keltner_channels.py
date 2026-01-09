@@ -56,11 +56,6 @@ class KeltnerChannelsIndicator(BaseIndicator):
         """Return semantic output names for Keltner Channels."""
         return ["upper", "middle", "lower"]
 
-    @classmethod
-    def get_primary_output_suffix(cls) -> str:
-        """Primary output is the Middle line (EMA)."""
-        return "Middle"
-
     def get_column_name(self, suffix: Optional[str] = None) -> str:
         """
         Generate column name matching what compute() actually produces.

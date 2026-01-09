@@ -162,11 +162,6 @@ class TestBaseIndicator:
         # Single-output indicator should return None
         assert DummyIndicator.get_primary_output() is None
 
-    def test_get_primary_output_suffix_backward_compat(self):
-        """Test that get_primary_output_suffix() still works for backward compatibility."""
-        # Should delegate to get_primary_output()
-        assert DummyIndicator.get_primary_output_suffix() is None
-
     def test_multi_output_get_output_names(self):
         """Test that multi-output indicators return correct output names."""
         # Multi-output indicator should return list of semantic names
@@ -180,8 +175,3 @@ class TestBaseIndicator:
         """Test that multi-output indicators return first output as primary."""
         # Primary output should be first in the list
         assert DummyMultiOutputIndicator.get_primary_output() == "upper"
-
-    def test_multi_output_get_primary_output_suffix_backward_compat(self):
-        """Test backward compatibility for multi-output indicators."""
-        # Should delegate to get_primary_output()
-        assert DummyMultiOutputIndicator.get_primary_output_suffix() == "upper"

@@ -84,11 +84,6 @@ class IchimokuIndicator(BaseIndicator):
         """Return semantic output names for Ichimoku."""
         return ["tenkan", "kijun", "senkou_a", "senkou_b", "chikou"]
 
-    @classmethod
-    def get_primary_output_suffix(cls) -> str:
-        """Primary output is Tenkan_sen (Conversion Line)."""
-        return "Tenkan_sen"
-
     def get_column_name(self, suffix: Optional[str] = None) -> str:
         """
         Generate column name matching what compute() actually produces.

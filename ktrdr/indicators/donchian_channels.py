@@ -55,11 +55,6 @@ class DonchianChannelsIndicator(BaseIndicator):
         """Return semantic output names for Donchian Channels."""
         return ["upper", "middle", "lower"]
 
-    @classmethod
-    def get_primary_output_suffix(cls) -> str:
-        """Primary output is the Upper channel."""
-        return "Upper"
-
     def get_column_name(self, suffix: Optional[str] = None) -> str:
         """
         Generate column name matching what compute() actually produces.

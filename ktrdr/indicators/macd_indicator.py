@@ -53,16 +53,6 @@ class MACDIndicator(BaseIndicator):
         """Return semantic output names for MACD."""
         return ["line", "signal", "histogram"]
 
-    @classmethod
-    def get_primary_output_suffix(cls) -> None:
-        """
-        Primary output is the MACD line with no suffix.
-
-        Returns None because the primary column name is just "MACD_12_26"
-        (no suffix like "signal" or "hist").
-        """
-        return None
-
     def get_column_name(self, suffix: Optional[str] = None) -> str:
         """
         Generate column name matching what compute() actually produces.
