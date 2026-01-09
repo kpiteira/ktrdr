@@ -6,6 +6,7 @@ async operations across the KTRDR system.
 """
 
 import asyncio
+import math
 import os
 import time
 import uuid
@@ -46,6 +47,31 @@ PHASE_WEIGHT_TRAINING_START = 5.0
 PHASE_WEIGHT_TRAINING_END = 80.0
 PHASE_WEIGHT_BACKTEST_START = 80.0
 PHASE_WEIGHT_BACKTEST_END = 100.0
+
+
+def _sanitize_for_json(obj: Any) -> Any:
+    """Recursively sanitize a dict/list for JSON serialization.
+
+    Replaces NaN and Inf float values with None, which is valid JSON.
+    PostgreSQL JSONB columns reject NaN/Inf as invalid JSON tokens.
+
+    Args:
+        obj: Object to sanitize (dict, list, or scalar)
+
+    Returns:
+        Sanitized object safe for JSON serialization
+    """
+    if obj is None:
+        return None
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_for_json(item) for item in obj]
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    return obj
 
 
 class OperationsService:
@@ -454,11 +480,13 @@ class OperationsService:
 
             # Persist to repository (if available)
             if self._repository:
+                # Sanitize result to handle NaN/Inf values that PostgreSQL JSONB rejects
+                sanitized_result = _sanitize_for_json(result_summary)
                 await self._repository.update(
                     operation_id,
                     status=OperationStatus.COMPLETED.value,
                     completed_at=operation.completed_at,
-                    result=result_summary,
+                    result=sanitized_result,
                     progress_percent=100.0,
                 )
 

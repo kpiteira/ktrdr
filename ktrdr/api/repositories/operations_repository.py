@@ -4,6 +4,7 @@ This repository isolates database access from business logic, providing
 async CRUD operations for the operations table.
 """
 
+import math
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Optional, cast
@@ -22,6 +23,35 @@ from ktrdr.api.models.operations import (
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def _sanitize_for_json(obj: Any) -> Any:
+    """Recursively sanitize a dict/list for JSON serialization.
+
+    Replaces NaN and Inf float values with None, which is valid JSON.
+    PostgreSQL JSONB columns reject NaN/Inf as invalid JSON tokens.
+
+    Args:
+        obj: Object to sanitize (dict, list, or scalar)
+
+    Returns:
+        Sanitized object safe for JSON serialization
+    """
+    if obj is None:
+        return None
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_for_json(item) for item in obj]
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    return obj
+
+
+# JSONB fields that need sanitization before saving
+_JSONB_FIELDS = {"result", "metadata_"}
 
 
 class OperationsRepository:
@@ -114,9 +144,11 @@ class OperationsRepository:
             if record is None:
                 return None
 
-            # Apply field updates
+            # Apply field updates (sanitize JSONB fields to handle NaN/Inf)
             for field_name, value in fields.items():
                 if hasattr(record, field_name):
+                    if field_name in _JSONB_FIELDS and value is not None:
+                        value = _sanitize_for_json(value)
                     setattr(record, field_name, value)
 
             # Auto-set completed_at when transitioning to terminal status

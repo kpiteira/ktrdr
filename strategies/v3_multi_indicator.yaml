@@ -54,9 +54,9 @@ fuzzy_sets:
       parameters: [60, 70, 100]
 
   # ADX interpretation (trend strength)
-  # Note: fuzzy set name can differ from indicator ID
+  # Note: For multi-output indicators, reference specific output with dot notation
   adx_trend:
-    indicator: adx_14         # References the indicator ID
+    indicator: adx_14.adx     # ADX main line (not DI+ or DI-)
     weak:
       type: triangular
       parameters: [0, 15, 25]

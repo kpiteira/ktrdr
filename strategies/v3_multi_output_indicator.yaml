@@ -36,9 +36,9 @@ indicators:
 # All reference the same indicator ID (adx_14)
 # ---------------------------------------------------------------------------
 fuzzy_sets:
-  # ADX trend strength
+  # ADX trend strength - reference the .adx output
   adx_strength:
-    indicator: adx_14         # Always reference the indicator ID
+    indicator: adx_14.adx     # Main ADX line (trend strength 0-100)
     weak:
       type: triangular
       parameters: [0, 15, 25]
@@ -49,9 +49,9 @@ fuzzy_sets:
       type: triangular
       parameters: [45, 60, 100]
 
-  # DI+ (bullish pressure)
+  # DI+ (bullish pressure) - reference the .plus_di output
   di_plus:
-    indicator: adx_14         # Same indicator, different interpretation
+    indicator: adx_14.plus_di  # Positive directional indicator
     low:
       type: triangular
       parameters: [0, 15, 25]
@@ -62,9 +62,9 @@ fuzzy_sets:
       type: triangular
       parameters: [45, 60, 100]
 
-  # DI- (bearish pressure)
+  # DI- (bearish pressure) - reference the .minus_di output
   di_minus:
-    indicator: adx_14         # Same indicator
+    indicator: adx_14.minus_di  # Negative directional indicator
     low:
       type: triangular
       parameters: [0, 15, 25]
