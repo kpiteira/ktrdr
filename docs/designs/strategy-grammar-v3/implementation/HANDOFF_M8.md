@@ -226,25 +226,32 @@
 
 ---
 
-## E2E Validation Complete
+## E2E Validation Complete (Real Training & Backtest)
 
-**What was tested:**
+**Comprehensive E2E tests run against sandbox:**
 
-1. **Dry-run validation:** All 6 v3 example strategies pass dry-run (v3_minimal, v3_single_indicator, v3_multi_indicator, v3_multi_timeframe, v3_multi_symbol, v3_multi_output_indicator)
+| Test Case | Training | Backtest | Notes |
+|-----------|----------|----------|-------|
+| Single symbol/timeframe | ✅ PASS | ✅ PASS | EURUSD 1h, 6-month range |
+| Multi-indicator (RSI+ADX) | ✅ PASS | ✅ PASS | Two indicators, one fuzzy per |
+| Multi-output indicator | ✅ PASS | ✅ PASS | ADX with DI+/DI- (3 outputs) |
+| Multi-timeframe | ✅ PASS | ⚠️ Limited | 1h/4h/1d - backtest needs all TF data |
+| Multi-symbol | ✅ PASS | ✅ PASS | EURUSD/GBPUSD/USDJPY |
 
-2. **Real training:** Successfully trained v3 strategies against sandbox:
-   - `v3_e2e_test` (EURUSD 1h, single symbol/timeframe)
-   - `v3_aapl_test` (AAPL 1h, single symbol/timeframe)
+**Bugs fixed during E2E validation:**
 
-3. **Real backtest:** Successfully ran backtest against v3 trained model:
-   - `v3_e2e_test` model on EURUSD 1h (2024-03-01 to 2024-04-01)
+1. **NaN serialization (FIXED):**
+   - Issue: Training results with NaN values failed PostgreSQL JSONB storage
+   - Root cause: No NaN sanitization before JSON serialization
+   - Fix: Added `_sanitize_for_json()` to `operations_repository.py`
 
-4. **Deleted obsolete v2 E2E test:**
-   - `tests/e2e/training/test_feature_id_e2e.py` - tested v2 list format and aliasing
+2. **Multi-output indicator syntax (FIXED):**
+   - Issue: Fuzzy sets referencing `indicator: adx_14` failed
+   - Root cause: Multi-output indicators need dot notation for specific outputs
+   - Fix: Updated strategies to use `indicator: adx_14.adx`, `adx_14.plus_di`, etc.
 
-**Pre-existing issues (not from v2 cleanup):**
-- NaN serialization bug in training results when data has NaN values
-- Multi-output indicator fuzzy set syntax needs documentation (use `adx_14.adx` not `adx_14`)
+**Deleted obsolete tests:**
+- `tests/e2e/training/test_feature_id_e2e.py` - tested v2 list format and aliasing
 
 **Final test results:**
 - 3817 unit tests passed
@@ -258,4 +265,4 @@
 - Update documentation to reflect v3-only world
 - Add deprecation note for v2 format
 - Ensure examples use v3 format
-- Document multi-output indicator fuzzy set syntax
+- Document multi-output indicator fuzzy set syntax (`.adx`, `.plus_di`, `.minus_di`)
