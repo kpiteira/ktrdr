@@ -252,9 +252,9 @@ class IndicatorEngine:
         """
         Compute an indicator and return properly named columns.
 
-        Handles both old-format and new-format indicator outputs:
-        - Old format: columns include params (e.g., "upper_20_2.0") -> pass through
-        - New format: semantic names only (e.g., "upper") -> prefix with indicator_id
+        Indicators must return columns matching get_output_names():
+        - Single-output: Returns Series or single-column DataFrame
+        - Multi-output: Returns DataFrame with semantic column names (e.g., "upper", "lower")
 
         For multi-output indicators, adds alias column for bare indicator_id
         pointing to primary output.
@@ -270,8 +270,10 @@ class IndicatorEngine:
         Returns:
             DataFrame with columns:
             - Single-output: {indicator_id}
-            - Multi-output (new): {indicator_id}.{output_name} + {indicator_id} alias
-            - Multi-output (old): original columns + {indicator_id} alias
+            - Multi-output: {indicator_id}.{output_name} + {indicator_id} alias
+
+        Raises:
+            ValueError: If multi-output indicator returns columns not matching get_output_names()
         """
         result = indicator.compute(data)
 
@@ -348,54 +350,21 @@ class IndicatorEngine:
                 },
             )
         else:
-            # CLEANUP(v3): Remove old-format handling after v3 migration complete
-            # OLD FORMAT: no overlap with expected outputs -> columns have params embedded
-            # Pass through columns and add alias for primary output
-
-            # Copy result to avoid modifying original
-            result_copy = result.copy()
-
-            primary_suffix = indicator.get_primary_output_suffix()
-            primary_col = None
-
-            if primary_suffix:
-                # Find column that matches primary suffix
-                # Use precise matching: column starts with suffix + "_" (e.g., "upper_20_2.0")
-                # This avoids false matches like "super_upper" when looking for "upper"
-                for col in result_copy.columns:
-                    if col.startswith(primary_suffix + "_"):
-                        primary_col = col
-                        break
-            else:
-                # No suffix means primary is the "base" column (e.g., MACD_12_26)
-                # Find column without underscore-separated suffix
-                for col in result_copy.columns:
-                    if col == indicator.get_column_name():
-                        primary_col = col
-                        break
-
-            if primary_col:
-                # Add backward-compatible alias for the primary output
-                result_copy[indicator_id] = result_copy[primary_col]
-            else:
-                # No primary column found - this can happen for some legacy indicators
-                # during the v2->v3 migration. Log a warning to aid debugging.
-                logger.warning(
-                    f"Could not determine primary output column for indicator '{indicator_id}' "
-                    f"({indicator.__class__.__name__}) in old-format output. "
-                    f"Available columns: {list(result_copy.columns)}. "
-                    f"No alias column will be created."
-                )
-
-            return result_copy
+            # No overlap with expected outputs - columns don't match get_output_names()
+            # This indicates an indicator that hasn't been migrated to v3 format
+            raise ValueError(
+                f"Indicator {indicator.__class__.__name__} output mismatch: "
+                f"expected columns {sorted(expected_outputs)}, "
+                f"got {sorted(actual_columns)}. "
+                f"Indicator must return columns matching get_output_names()."
+            )
 
     def apply(self, data: pd.DataFrame) -> pd.DataFrame:
         """
         Apply all configured indicators to the input data.
 
-        Routes all indicator computation through compute_indicator() adapter (M2).
-        The adapter handles both old-format and new-format indicator outputs
-        during the v2->v3 migration.
+        All indicator computation is routed through compute_indicator().
+        Indicators must return columns matching their get_output_names().
 
         Args:
             data: DataFrame containing OHLCV data to compute indicators on.
@@ -446,7 +415,7 @@ class IndicatorEngine:
                 # Get indicator_id from feature_id or fall back to column name
                 indicator_id = indicator.get_feature_id()
 
-                # Compute indicator using adapter (handles both old/new formats)
+                # Compute indicator and add standardized columns
                 # Use result_df to support indicator chaining (indicators that depend on previous indicators)
                 computed = self.compute_indicator(result_df, indicator, indicator_id)
 

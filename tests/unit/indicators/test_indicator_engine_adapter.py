@@ -118,42 +118,47 @@ class TestComputeIndicatorSingleOutput:
 
 
 class TestComputeIndicatorOldFormat:
-    """Tests for old-format multi-output indicators."""
+    """Tests for old-format multi-output indicators.
 
-    def test_old_format_columns_passed_through(self, sample_data):
-        """Old-format columns are passed through unchanged."""
+    After M6 cleanup, old-format indicators (those returning columns with
+    params embedded in names like 'upper_20_2.0') are no longer supported
+    and should raise ValueError.
+    """
+
+    def test_old_format_raises_value_error(self, sample_data):
+        """Old-format columns should raise ValueError after v3 cleanup."""
         engine = IndicatorEngine()
         indicator = MockOldFormatIndicator(name="test")
 
-        result = engine.compute_indicator(sample_data, indicator, "bbands_20_2")
+        with pytest.raises(ValueError) as exc_info:
+            engine.compute_indicator(sample_data, indicator, "bbands_20_2")
 
-        # Old format columns should be preserved
-        assert "upper_20_2.0" in result.columns
-        assert "middle_20_2.0" in result.columns
-        assert "lower_20_2.0" in result.columns
+        # Error message should be helpful
+        assert "output mismatch" in str(exc_info.value).lower()
 
-    def test_old_format_adds_alias(self, sample_data):
-        """Old-format indicators get alias column for indicator_id."""
+    def test_old_format_error_shows_expected_columns(self, sample_data):
+        """Error message should list expected column names."""
         engine = IndicatorEngine()
         indicator = MockOldFormatIndicator(name="test")
 
-        result = engine.compute_indicator(sample_data, indicator, "bbands_20_2")
+        with pytest.raises(ValueError) as exc_info:
+            engine.compute_indicator(sample_data, indicator, "bbands_20_2")
 
-        # Alias should exist
-        assert "bbands_20_2" in result.columns
-        # Alias should point to primary output (upper)
-        assert result["bbands_20_2"].tolist() == result["upper_20_2.0"].tolist()
+        error_msg = str(exc_info.value)
+        # Should mention expected columns from get_output_names()
+        assert "upper" in error_msg or "lower" in error_msg or "middle" in error_msg
 
-    def test_old_format_preserves_all_values(self, sample_data):
-        """Old-format indicators preserve all column values."""
+    def test_old_format_error_shows_actual_columns(self, sample_data):
+        """Error message should list actual column names returned."""
         engine = IndicatorEngine()
         indicator = MockOldFormatIndicator(name="test")
 
-        result = engine.compute_indicator(sample_data, indicator, "bbands_20_2")
+        with pytest.raises(ValueError) as exc_info:
+            engine.compute_indicator(sample_data, indicator, "bbands_20_2")
 
-        assert result["upper_20_2.0"].tolist() == [1.0, 1.0, 1.0]
-        assert result["middle_20_2.0"].tolist() == [0.5, 0.5, 0.5]
-        assert result["lower_20_2.0"].tolist() == [0.0, 0.0, 0.0]
+        error_msg = str(exc_info.value)
+        # Should show what columns were actually returned
+        assert "upper_20_2.0" in error_msg
 
 
 class TestComputeIndicatorNewFormat:
@@ -200,19 +205,22 @@ class TestComputeIndicatorNewFormat:
 
 
 class TestFormatDetection:
-    """Tests for format detection logic."""
+    """Tests for format detection logic.
 
-    def test_detects_old_format_by_column_mismatch(self, sample_data):
-        """Format detection identifies old format by column name mismatch."""
+    After M6 cleanup, old-format indicators raise errors instead of
+    being detected and handled specially.
+    """
+
+    def test_column_mismatch_raises_error(self, sample_data):
+        """Column mismatch (old format) now raises ValueError."""
         engine = IndicatorEngine()
         indicator = MockOldFormatIndicator(name="test")
 
-        result = engine.compute_indicator(sample_data, indicator, "bbands_20_2")
+        with pytest.raises(ValueError) as exc_info:
+            engine.compute_indicator(sample_data, indicator, "bbands_20_2")
 
-        # If old format detected, original columns should exist
-        assert "upper_20_2.0" in result.columns
-        # And alias should be added
-        assert "bbands_20_2" in result.columns
+        # Should clearly indicate mismatch
+        assert "mismatch" in str(exc_info.value).lower()
 
     def test_detects_new_format_by_column_match(self, sample_data):
         """Format detection identifies new format by column name match."""
@@ -299,21 +307,19 @@ class TestApplyUsesComputeIndicator:
         assert "rsi_14" in result.columns
         assert result["rsi_14"].tolist() == [1.0, 2.0, 3.0]
 
-    def test_apply_multi_output_old_format_creates_alias(self, sample_data):
-        """apply() creates alias for multi-output old-format indicators."""
+    def test_apply_multi_output_old_format_raises_error(self, sample_data):
+        """apply() raises error for old-format indicators after v3 cleanup."""
         indicator = MockOldFormatIndicator(name="bbands")
         indicator._feature_id = "bbands_20_2"
 
         engine = IndicatorEngine(indicators=[indicator])
-        result = engine.apply(sample_data)
 
-        # Old format columns should exist
-        assert "upper_20_2.0" in result.columns
-        assert "middle_20_2.0" in result.columns
-        assert "lower_20_2.0" in result.columns
-        # Alias should exist
-        assert "bbands_20_2" in result.columns
-        assert result["bbands_20_2"].tolist() == result["upper_20_2.0"].tolist()
+        # Old format should now raise ProcessingError (wrapping ValueError)
+        with pytest.raises(Exception) as exc_info:
+            engine.apply(sample_data)
+
+        error_msg = str(exc_info.value).lower()
+        assert "mismatch" in error_msg or "failed" in error_msg
 
     def test_apply_multi_output_new_format_prefixes_columns(self, sample_data):
         """apply() prefixes columns for multi-output new-format indicators."""
