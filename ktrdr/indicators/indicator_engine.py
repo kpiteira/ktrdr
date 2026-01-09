@@ -431,7 +431,7 @@ class IndicatorEngine:
     def apply_multi_timeframe(
         self,
         multi_timeframe_ohlcv: dict[str, pd.DataFrame],
-        indicator_configs: Optional[list[dict]] = None,
+        indicator_configs: Optional[dict[str, dict]] = None,
         prefix_columns: bool = True,
     ) -> dict[str, pd.DataFrame]:
         """
@@ -448,8 +448,9 @@ class IndicatorEngine:
         Args:
             multi_timeframe_ohlcv: Dictionary mapping timeframes to OHLCV DataFrames
                                  Format: {timeframe: ohlcv_dataframe}
-            indicator_configs: Optional list of indicator configurations. If None,
-                             uses the indicators configured in this engine instance.
+            indicator_configs: Optional v3 dict mapping indicator_id to definition.
+                             If None, uses the indicators configured in this engine.
+                             Example: {"rsi_14": {"type": "rsi", "period": 14}}
             prefix_columns: If True (default), prefix indicator column names with
                           timeframe to prevent collisions. OHLCV columns are not
                           prefixed. Set to False for backward compatibility.
@@ -464,10 +465,9 @@ class IndicatorEngine:
             ProcessingError: If indicator computation fails for any timeframe
 
         Example:
-            >>> engine = IndicatorEngine()
+            >>> engine = IndicatorEngine({"rsi_14": {"type": "rsi", "period": 14}})
             >>> multi_data = {'1h': ohlcv_1h, '4h': ohlcv_4h}
-            >>> configs = [{'name': 'rsi', 'period': 14}]
-            >>> results = engine.apply_multi_timeframe(multi_data, configs)
+            >>> results = engine.apply_multi_timeframe(multi_data)
             >>> # results = {'1h': df with '1h_rsi_14', '4h': df with '4h_rsi_14'}
         """
         # Validate inputs
@@ -486,14 +486,15 @@ class IndicatorEngine:
                     error_code="MTIND-NoConfigs",
                     details={"configs_provided": indicator_configs},
                 )
-            # Create temporary engine with the provided configs
+            # Create temporary engine with the provided configs (v3 dict format)
             processing_engine = IndicatorEngine(indicators=indicator_configs)
         else:
-            if not self.indicators:
+            if not self._indicators:
                 raise ConfigurationError(
-                    "No indicators configured in engine and no configs provided",
+                    "No indicators configured in engine and no configs provided. "
+                    "Initialize engine with v3 dict format.",
                     error_code="MTIND-NoIndicators",
-                    details={"engine_indicators": len(self.indicators)},
+                    details={"engine_indicators": len(self._indicators)},
                 )
             # Use current engine
             processing_engine = self
@@ -510,7 +511,7 @@ class IndicatorEngine:
         for timeframe, ohlcv_data in multi_timeframe_ohlcv.items():
             try:
                 logger.debug(
-                    f"Processing {len(processing_engine.indicators)} indicators for timeframe: {timeframe}"
+                    f"Processing {len(processing_engine._indicators)} indicators for timeframe: {timeframe}"
                 )
 
                 # Validate timeframe data
