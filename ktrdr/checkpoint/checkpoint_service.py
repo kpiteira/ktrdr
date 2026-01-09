@@ -8,12 +8,13 @@ Provides CRUD operations for operation checkpoints using hybrid storage:
 import asyncio
 import json
 import logging
+import math
 import shutil
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
@@ -22,6 +23,25 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ktrdr.api.models.db.checkpoints import CheckpointRecord
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_for_json(obj: Any) -> Any:
+    """Recursively sanitize a dict/list for JSON serialization.
+
+    Replaces NaN and Inf float values with None, which is valid JSON.
+    PostgreSQL JSONB columns reject NaN/Inf as invalid JSON tokens.
+    """
+    if obj is None:
+        return None
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_for_json(item) for item in obj]
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    return obj
 
 
 class CheckpointCorruptedError(Exception):
@@ -136,8 +156,11 @@ class CheckpointService:
             artifacts_path = await self._write_artifacts(operation_id, artifacts)
             artifacts_size_bytes = sum(len(data) for data in artifacts.values())
 
+        # Sanitize state to handle NaN/Inf values before JSON serialization
+        sanitized_state = _sanitize_for_json(state)
+
         # Calculate state size
-        state_json = json.dumps(state)
+        state_json = json.dumps(sanitized_state)
         state_size_bytes = len(state_json.encode("utf-8"))
 
         # Step 3: UPSERT to database
@@ -146,7 +169,7 @@ class CheckpointService:
                 stmt = insert(CheckpointRecord).values(
                     operation_id=operation_id,
                     checkpoint_type=checkpoint_type,
-                    state=state,
+                    state=sanitized_state,
                     artifacts_path=str(artifacts_path) if artifacts_path else None,
                     state_size_bytes=state_size_bytes,
                     artifacts_size_bytes=artifacts_size_bytes,

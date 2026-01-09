@@ -202,9 +202,17 @@ class LocalTrainingOrchestrator:
         features_df = pipeline.prepare_features(all_data)
 
         # Convert to tensors and create labels using base pipeline methods
+        import numpy as np
         import torch
 
-        features = torch.FloatTensor(features_df.values)
+        # Handle NaN values before converting to tensor (fuzzy outputs can have NaN at edges)
+        features_array = features_df.values
+        nan_count = np.isnan(features_array).sum()
+        if nan_count > 0:
+            logger.warning(f"Replacing {nan_count} NaN values in features with 0.0")
+            features_array = np.nan_to_num(features_array, nan=0.0)
+
+        features = torch.FloatTensor(features_array)
         feature_names = list(features_df.columns)
 
         # Generate labels from price data (use first symbol's base timeframe)

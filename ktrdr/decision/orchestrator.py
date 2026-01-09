@@ -162,15 +162,26 @@ class DecisionOrchestrator:
         # Feature caching for backtesting performance
         self.feature_cache = None
 
-        if mode == "backtest" and model_path:
-            # V3-only: require a v3 model for backtesting
-            if not self._check_v3_model(model_path):
-                raise ValueError(
-                    f"Model at {model_path} is not a v3 model. "
-                    "V2 models are no longer supported. Please retrain with v3 strategy."
+        if mode == "backtest":
+            # Auto-discover model_path if not provided
+            resolved_model_path = model_path
+            if resolved_model_path is None:
+                resolved_model_path = self._auto_discover_model_path()
+
+            if resolved_model_path:
+                # V3-only: require a v3 model for backtesting
+                if not self._check_v3_model(resolved_model_path):
+                    raise ValueError(
+                        f"Model at {resolved_model_path} is not a v3 model. "
+                        "V2 models are no longer supported. Please retrain with v3 strategy."
+                    )
+                self.feature_cache = self._create_feature_cache(resolved_model_path)
+                logger.info(f"Using FeatureCache for v3 model at {resolved_model_path}")
+            else:
+                logger.warning(
+                    f"No model found for strategy {self.strategy_name}. "
+                    "Backtest will use real-time feature computation (slow and may fail for v3)."
                 )
-            self.feature_cache = self._create_feature_cache(model_path)
-            logger.info(f"Using FeatureCache for v3 model at {model_path}")
 
     def prepare_feature_cache(self, historical_data: pd.DataFrame) -> None:
         """Pre-compute all features for backtesting performance.
@@ -798,3 +809,58 @@ class DecisionOrchestrator:
 
         # Create feature cache
         return FeatureCache(config=config, model_metadata=metadata)
+
+    def _auto_discover_model_path(self) -> Optional[str]:
+        """Auto-discover the latest model path for this strategy.
+
+        Searches the models directory for the latest version of a model
+        trained with this strategy. Supports both universal (symbol-agnostic)
+        and symbol-specific model patterns.
+
+        Returns:
+            Path to the latest model directory, or None if not found.
+        """
+        from ..training.model_storage import ModelStorage
+
+        # Get the strategy timeframe from config
+        timeframe = "1h"  # Default
+        if "training_data" in self.strategy_config:
+            td = self.strategy_config["training_data"]
+            if isinstance(td, dict) and "timeframes" in td:
+                tf = td["timeframes"]
+                if isinstance(tf, dict):
+                    timeframe = tf.get("timeframe") or tf.get("base_timeframe") or "1h"
+                elif isinstance(tf, str):
+                    timeframe = tf
+
+        # Try to find model using ModelStorage
+        try:
+            storage = ModelStorage()
+            # First try universal (symbol-agnostic) pattern
+            latest = storage._find_latest_version(self.strategy_name, None, timeframe)
+            if latest:
+                logger.info(
+                    f"Auto-discovered model for {self.strategy_name}/{timeframe}: {latest}"
+                )
+                return str(latest)
+
+            # Fallback: list all models and find the most recent for this strategy
+            models = storage.list_models(self.strategy_name)
+            if models:
+                # Models are already sorted by created_at descending
+                best_model = models[0]
+                model_path = best_model["path"]
+                logger.info(
+                    f"Auto-discovered model (from list) for {self.strategy_name}: {model_path}"
+                )
+                return model_path
+
+            logger.warning(
+                f"No models found for strategy {self.strategy_name}. "
+                f"Train a model first with 'ktrdr models train'."
+            )
+            return None
+
+        except Exception as e:
+            logger.error(f"Failed to auto-discover model: {e}")
+            return None
