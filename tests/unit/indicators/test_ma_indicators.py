@@ -108,9 +108,6 @@ class TestSimpleMovingAverage:
         assert sma.params["period"] == 10
         assert sma.params["source"] == "high"
 
-        # Test column name generation
-        assert sma.get_column_name() == "sma_10"
-
     def test_parameter_validation(self):
         """Test that parameter validation works."""
         # Valid parameters
@@ -205,9 +202,6 @@ class TestExponentialMovingAverage:
         assert ema.params["period"] == 10
         assert ema.params["source"] == "high"
         assert not ema.params["adjust"]
-
-        # Test column name generation
-        assert ema.get_column_name() == "ema_10"
 
     def test_parameter_validation(self):
         """Test that parameter validation works."""

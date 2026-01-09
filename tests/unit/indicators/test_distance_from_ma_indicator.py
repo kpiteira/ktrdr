@@ -187,13 +187,6 @@ class TestDistanceFromMAIndicator:
         # Should have valid results after the warm-up period
         assert not pd.isna(result.iloc[period - 1 :]).any()
 
-    def test_column_name_generation(self):
-        """Test proper column name generation."""
-        indicator = DistanceFromMAIndicator(period=20, ma_type="SMA")
-        column_name = indicator.get_column_name()
-        expected_name = "distancefromma_20_SMA"  # MA type is not lowercased
-        assert column_name == expected_name
-
     def test_positive_negative_distances(self):
         """Test that distances are correctly positive/negative."""
         # Create data where price moves above and below MA

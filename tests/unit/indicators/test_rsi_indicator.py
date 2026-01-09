@@ -83,9 +83,6 @@ class TestRSIIndicator:
         assert rsi.params["period"] == 7
         assert rsi.params["source"] == "high"
 
-        # Test column name generation
-        assert rsi.get_column_name() == "rsi_7"
-
     def test_parameter_validation(self):
         """Test that parameter validation works."""
         # Valid parameters

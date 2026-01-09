@@ -361,42 +361,15 @@ class DecisionOrchestrator:
         Returns:
             Tuple of (mapped_indicators, fuzzy_values) dictionaries
         """
-        # Step 1: Calculate indicators (original logic)
-        # Initialize indicator engine with strategy configs if not already done
-        if not self.indicator_engine.indicators:
-            # Convert dict configs to proper format using same mapping as training
+        # Step 1: Calculate indicators
+        # Initialize indicator engine with v3 strategy config if not already done
+        if not self.indicator_engine._indicators:
+            # V3 format: indicators is already a dict mapping indicator_id to definition
             indicator_configs = self.strategy_config["indicators"]
-            fixed_configs = []
-
-            # Use same mapping as training for consistency
-            name_mapping = {
-                "bollinger_bands": "BollingerBands",
-                "keltner_channels": "KeltnerChannels",
-                "momentum": "Momentum",
-                "volume_sma": "SMA",
-                "atr": "ATR",
-                "rsi": "RSI",
-                "sma": "SMA",
-                "ema": "EMA",
-                "macd": "MACD",
-            }
-
-            for config in indicator_configs:
-                if isinstance(config, dict) and "type" not in config:
-                    config = config.copy()
-                    indicator_name = config["name"].lower()
-                    if indicator_name in name_mapping:
-                        config["type"] = name_mapping[indicator_name]
-                    else:
-                        # Fallback: convert snake_case to PascalCase
-                        config["type"] = "".join(
-                            word.capitalize() for word in indicator_name.split("_")
-                        )
-                fixed_configs.append(config)
 
             from ..indicators.indicator_engine import IndicatorEngine
 
-            self.indicator_engine = IndicatorEngine(indicators=fixed_configs)
+            self.indicator_engine = IndicatorEngine(indicators=indicator_configs)
 
         # Apply indicators to get calculated values
         indicators_df = self.indicator_engine.apply(historical_data)

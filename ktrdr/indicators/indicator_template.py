@@ -131,8 +131,8 @@ class NewIndicator(BaseIndicator):
             # This is just a placeholder implementation
             result = df[param2].rolling(window=param1).mean()
 
-            # Set the name for the result Series
-            result.name = self.get_feature_id()
+            # Note: In v3, column naming is handled by IndicatorEngine
+            # No need to set result.name here
 
             logger.debug(
                 f"{self.name} calculation completed, non-NaN values: {result.count()}"

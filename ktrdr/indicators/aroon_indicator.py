@@ -18,7 +18,7 @@ The Aroon lines oscillate between 0 and 100:
 - Crossovers between the lines signal potential trend changes
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pandas as pd
 
@@ -50,36 +50,6 @@ class AroonIndicator(BaseIndicator):
     def get_output_names(cls) -> list[str]:
         """Return semantic output names for Aroon."""
         return ["up", "down", "oscillator"]
-
-    @classmethod
-    def get_primary_output_suffix(cls) -> str:
-        """Primary output is the Aroon Up line."""
-        return "Up"
-
-    def get_column_name(self, suffix: Optional[str] = None) -> str:
-        """
-        Generate column name matching what compute() actually produces.
-
-        Aroon format:
-        - Up: "Aroon_{period}_Up"
-        - Down: "Aroon_{period}_Down"
-        - Oscillator: "Aroon_{period}_Oscillator"
-
-        Args:
-            suffix: Optional suffix ("Up", "Down", "Oscillator", or None for Up)
-
-        Returns:
-            Column name matching compute() output format
-        """
-        period = self.params.get("period", 14)
-
-        if suffix == "Down":
-            return f"Aroon_{period}_Down"
-        elif suffix == "Oscillator":
-            return f"Aroon_{period}_Oscillator"
-        else:
-            # Default to Up (primary)
-            return f"Aroon_{period}_Up"
 
     def __init__(self, period: int = 14, include_oscillator: bool = False):
         """

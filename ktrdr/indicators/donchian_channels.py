@@ -8,7 +8,7 @@ volatility, support/resistance levels, and potential breakout points.
 Author: KTRDR
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pandas as pd
 
@@ -54,36 +54,6 @@ class DonchianChannelsIndicator(BaseIndicator):
     def get_output_names(cls) -> list[str]:
         """Return semantic output names for Donchian Channels."""
         return ["upper", "middle", "lower"]
-
-    @classmethod
-    def get_primary_output_suffix(cls) -> str:
-        """Primary output is the Upper channel."""
-        return "Upper"
-
-    def get_column_name(self, suffix: Optional[str] = None) -> str:
-        """
-        Generate column name matching what compute() actually produces.
-
-        Donchian Channels format:
-        - Upper: "DC_Upper_{period}"
-        - Lower: "DC_Lower_{period}"
-        - Middle: "DC_Middle_{period}"
-
-        Args:
-            suffix: Optional suffix ("Upper", "Lower", "Middle", or None for Upper)
-
-        Returns:
-            Column name matching compute() output format
-        """
-        period = self.params.get("period", 20)
-
-        if suffix == "Lower":
-            return f"DC_Lower_{period}"
-        elif suffix == "Middle":
-            return f"DC_Middle_{period}"
-        else:
-            # Default to Upper (primary)
-            return f"DC_Upper_{period}"
 
     def __init__(self, period: int = 20, include_middle: bool = True):
         """

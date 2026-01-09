@@ -15,7 +15,7 @@ The RVI oscillates around zero, with values above zero indicating bullish moment
 and values below zero indicating bearish momentum.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pandas as pd
 
@@ -47,44 +47,6 @@ class RVIIndicator(BaseIndicator):
     def get_output_names(cls) -> list[str]:
         """Return semantic output names for RVI indicator."""
         return ["rvi", "signal"]
-
-    @classmethod
-    def get_primary_output_suffix(cls) -> str:
-        """
-        DEPRECATED: Use get_primary_output() instead.
-
-        Note:
-            This returns the legacy uppercase suffix "RVI" used in v2 column names
-            (e.g., "RVI_{period}_{signal_period}_RVI"). The newer get_output_names()
-            API returns lowercase semantic names ["rvi", "signal"] following the v3
-            naming standard. The casing intentionally differs during the migration
-            period to maintain backward compatibility with existing column-dependent code.
-        """
-        # CLEANUP(v3): Remove after v3 migration complete
-        return "RVI"
-
-    def get_column_name(self, suffix: Optional[str] = None) -> str:
-        """
-        Generate column name matching what compute() actually produces.
-
-        RVI format:
-        - RVI: "RVI_{period}_{signal_period}_RVI"
-        - Signal: "RVI_{period}_{signal_period}_Signal"
-
-        Args:
-            suffix: Optional suffix ("RVI", "Signal", or None for RVI)
-
-        Returns:
-            Column name matching compute() output format
-        """
-        period = self.params.get("period", 10)
-        signal_period = self.params.get("signal_period", 4)
-
-        if suffix == "Signal":
-            return f"RVI_{period}_{signal_period}_Signal"
-        else:
-            # Default to RVI (primary)
-            return f"RVI_{period}_{signal_period}_RVI"
 
     def __init__(self, period: int = 10, signal_period: int = 4):
         """

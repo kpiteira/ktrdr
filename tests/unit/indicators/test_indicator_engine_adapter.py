@@ -118,42 +118,47 @@ class TestComputeIndicatorSingleOutput:
 
 
 class TestComputeIndicatorOldFormat:
-    """Tests for old-format multi-output indicators."""
+    """Tests for old-format multi-output indicators.
 
-    def test_old_format_columns_passed_through(self, sample_data):
-        """Old-format columns are passed through unchanged."""
+    After M6 cleanup, old-format indicators (those returning columns with
+    params embedded in names like 'upper_20_2.0') are no longer supported
+    and should raise ValueError.
+    """
+
+    def test_old_format_raises_value_error(self, sample_data):
+        """Old-format columns should raise ValueError after v3 cleanup."""
         engine = IndicatorEngine()
         indicator = MockOldFormatIndicator(name="test")
 
-        result = engine.compute_indicator(sample_data, indicator, "bbands_20_2")
+        with pytest.raises(ValueError) as exc_info:
+            engine.compute_indicator(sample_data, indicator, "bbands_20_2")
 
-        # Old format columns should be preserved
-        assert "upper_20_2.0" in result.columns
-        assert "middle_20_2.0" in result.columns
-        assert "lower_20_2.0" in result.columns
+        # Error message should be helpful
+        assert "output mismatch" in str(exc_info.value).lower()
 
-    def test_old_format_adds_alias(self, sample_data):
-        """Old-format indicators get alias column for indicator_id."""
+    def test_old_format_error_shows_expected_columns(self, sample_data):
+        """Error message should list expected column names."""
         engine = IndicatorEngine()
         indicator = MockOldFormatIndicator(name="test")
 
-        result = engine.compute_indicator(sample_data, indicator, "bbands_20_2")
+        with pytest.raises(ValueError) as exc_info:
+            engine.compute_indicator(sample_data, indicator, "bbands_20_2")
 
-        # Alias should exist
-        assert "bbands_20_2" in result.columns
-        # Alias should point to primary output (upper)
-        assert result["bbands_20_2"].tolist() == result["upper_20_2.0"].tolist()
+        error_msg = str(exc_info.value)
+        # Should mention expected columns from get_output_names()
+        assert "upper" in error_msg or "lower" in error_msg or "middle" in error_msg
 
-    def test_old_format_preserves_all_values(self, sample_data):
-        """Old-format indicators preserve all column values."""
+    def test_old_format_error_shows_actual_columns(self, sample_data):
+        """Error message should list actual column names returned."""
         engine = IndicatorEngine()
         indicator = MockOldFormatIndicator(name="test")
 
-        result = engine.compute_indicator(sample_data, indicator, "bbands_20_2")
+        with pytest.raises(ValueError) as exc_info:
+            engine.compute_indicator(sample_data, indicator, "bbands_20_2")
 
-        assert result["upper_20_2.0"].tolist() == [1.0, 1.0, 1.0]
-        assert result["middle_20_2.0"].tolist() == [0.5, 0.5, 0.5]
-        assert result["lower_20_2.0"].tolist() == [0.0, 0.0, 0.0]
+        error_msg = str(exc_info.value)
+        # Should show what columns were actually returned
+        assert "upper_20_2.0" in error_msg
 
 
 class TestComputeIndicatorNewFormat:
@@ -200,19 +205,22 @@ class TestComputeIndicatorNewFormat:
 
 
 class TestFormatDetection:
-    """Tests for format detection logic."""
+    """Tests for format detection logic.
 
-    def test_detects_old_format_by_column_mismatch(self, sample_data):
-        """Format detection identifies old format by column name mismatch."""
+    After M6 cleanup, old-format indicators raise errors instead of
+    being detected and handled specially.
+    """
+
+    def test_column_mismatch_raises_error(self, sample_data):
+        """Column mismatch (old format) now raises ValueError."""
         engine = IndicatorEngine()
         indicator = MockOldFormatIndicator(name="test")
 
-        result = engine.compute_indicator(sample_data, indicator, "bbands_20_2")
+        with pytest.raises(ValueError) as exc_info:
+            engine.compute_indicator(sample_data, indicator, "bbands_20_2")
 
-        # If old format detected, original columns should exist
-        assert "upper_20_2.0" in result.columns
-        # And alias should be added
-        assert "bbands_20_2" in result.columns
+        # Should clearly indicate mismatch
+        assert "mismatch" in str(exc_info.value).lower()
 
     def test_detects_new_format_by_column_match(self, sample_data):
         """Format detection identifies new format by column name match."""
@@ -283,130 +291,113 @@ class TestEdgeCases:
         assert "test_10" not in result.columns
 
 
-class TestApplyUsesComputeIndicator:
-    """Tests for apply() routing through compute_indicator()."""
+class TestApplyWithV3Format:
+    """Tests for apply() with v3 dict format (v2 list format no longer supported)."""
 
-    def test_apply_single_output_uses_feature_id(self, sample_data):
-        """apply() uses feature_id from indicator for single-output."""
-        # Create indicator with feature_id set
+    @pytest.fixture
+    def ohlcv_data(self):
+        """Generate realistic OHLCV data for testing real indicators."""
+        import numpy as np
+
+        np.random.seed(42)
+        n = 50
+        dates = pd.date_range("2024-01-01", periods=n, freq="1h")
+        close = 100 + np.cumsum(np.random.randn(n) * 0.5)
+        return pd.DataFrame(
+            {
+                "open": close - np.abs(np.random.randn(n) * 0.3),
+                "high": close + np.abs(np.random.randn(n) * 0.5),
+                "low": close - np.abs(np.random.randn(n) * 0.5),
+                "close": close,
+                "volume": np.random.randint(1000, 10000, n),
+            },
+            index=dates,
+        )
+
+    def test_constructor_requires_v3_format(self, sample_data):
+        """IndicatorEngine constructor rejects v2 list format."""
         indicator = MockSingleOutputIndicator(name="rsi")
-        indicator._feature_id = "rsi_14"
 
-        engine = IndicatorEngine(indicators=[indicator])
-        result = engine.apply(sample_data)
+        # V2 format (list) should be rejected at construction time
+        with pytest.raises(Exception) as exc_info:
+            IndicatorEngine(indicators=[indicator])
 
-        # Should have column with feature_id (not technical name)
+        assert (
+            "v3" in str(exc_info.value).lower() or "dict" in str(exc_info.value).lower()
+        )
+
+    def test_apply_single_output_indicator(self, ohlcv_data):
+        """apply() works with single-output indicator in v3 format."""
+        # V3 format: dict mapping indicator_id to definition
+        engine = IndicatorEngine(
+            indicators={
+                "rsi_14": {"type": "rsi", "period": 14},
+            }
+        )
+        result = engine.apply(ohlcv_data)
+
+        # Should have indicator column
         assert "rsi_14" in result.columns
-        assert result["rsi_14"].tolist() == [1.0, 2.0, 3.0]
+        # Should preserve OHLCV
+        assert "close" in result.columns
+        assert "open" in result.columns
 
-    def test_apply_multi_output_old_format_creates_alias(self, sample_data):
-        """apply() creates alias for multi-output old-format indicators."""
-        indicator = MockOldFormatIndicator(name="bbands")
-        indicator._feature_id = "bbands_20_2"
+    def test_apply_multi_output_indicator(self, ohlcv_data):
+        """apply() works with multi-output indicator in v3 format."""
+        engine = IndicatorEngine(
+            indicators={
+                "bbands_20_2": {"type": "bbands", "period": 20, "multiplier": 2.0},
+            }
+        )
+        result = engine.apply(ohlcv_data)
 
-        engine = IndicatorEngine(indicators=[indicator])
-        result = engine.apply(sample_data)
-
-        # Old format columns should exist
-        assert "upper_20_2.0" in result.columns
-        assert "middle_20_2.0" in result.columns
-        assert "lower_20_2.0" in result.columns
-        # Alias should exist
-        assert "bbands_20_2" in result.columns
-        assert result["bbands_20_2"].tolist() == result["upper_20_2.0"].tolist()
-
-    def test_apply_multi_output_new_format_prefixes_columns(self, sample_data):
-        """apply() prefixes columns for multi-output new-format indicators."""
-        indicator = MockNewFormatIndicator(name="bbands")
-        indicator._feature_id = "bbands_20_2"
-
-        engine = IndicatorEngine(indicators=[indicator])
-        result = engine.apply(sample_data)
-
-        # Prefixed columns should exist
+        # Should have prefixed columns
         assert "bbands_20_2.upper" in result.columns
         assert "bbands_20_2.middle" in result.columns
         assert "bbands_20_2.lower" in result.columns
-        # Alias should exist
+        # Should have alias
         assert "bbands_20_2" in result.columns
-        # Original semantic names should NOT exist
-        assert "upper" not in result.columns
 
-    def test_apply_multiple_indicators(self, sample_data):
-        """apply() handles multiple indicators correctly."""
-        indicator1 = MockSingleOutputIndicator(name="rsi")
-        indicator1._feature_id = "rsi_14"
-
-        indicator2 = MockNewFormatIndicator(name="bbands")
-        indicator2._feature_id = "bbands_20_2"
-
-        engine = IndicatorEngine(indicators=[indicator1, indicator2])
-        result = engine.apply(sample_data)
+    def test_apply_multiple_indicators(self, ohlcv_data):
+        """apply() handles multiple indicators in v3 format."""
+        engine = IndicatorEngine(
+            indicators={
+                "rsi_14": {"type": "rsi", "period": 14},
+                "sma_20": {"type": "sma", "period": 20},
+            }
+        )
+        result = engine.apply(ohlcv_data)
 
         # Both indicators should be present
         assert "rsi_14" in result.columns
-        assert "bbands_20_2" in result.columns
-        assert "bbands_20_2.upper" in result.columns
-        assert "bbands_20_2.middle" in result.columns
-        assert "bbands_20_2.lower" in result.columns
+        assert "sma_20" in result.columns
 
-    def test_apply_preserves_ohlcv_columns(self, sample_data):
+    def test_apply_preserves_ohlcv_columns(self, ohlcv_data):
         """apply() preserves original OHLCV columns."""
-        indicator = MockSingleOutputIndicator(name="rsi")
-        indicator._feature_id = "rsi_14"
-
-        engine = IndicatorEngine(indicators=[indicator])
-        result = engine.apply(sample_data)
+        engine = IndicatorEngine(
+            indicators={
+                "rsi_14": {"type": "rsi", "period": 14},
+            }
+        )
+        result = engine.apply(ohlcv_data)
 
         # Original columns should be preserved
-        assert "close" in result.columns
-        # New indicator column should be added
-        assert "rsi_14" in result.columns
+        for col in ["open", "high", "low", "close", "volume"]:
+            assert col in result.columns
 
-    def test_apply_uses_fallback_when_no_feature_id(self, sample_data):
-        """apply() uses get_column_name() when feature_id not set."""
-        indicator = MockSingleOutputIndicator(name="rsi")
-        # Don't set feature_id - should fall back to get_column_name()
+    def test_apply_delegates_to_compute(self, ohlcv_data):
+        """apply() internally uses compute() - results should match."""
+        engine = IndicatorEngine(
+            indicators={
+                "rsi_14": {"type": "rsi", "period": 14},
+            }
+        )
 
-        engine = IndicatorEngine(indicators=[indicator])
-        result = engine.apply(sample_data)
+        # Get results via both paths
+        apply_result = engine.apply(ohlcv_data)
+        compute_result = engine.compute(ohlcv_data, {"rsi_14"})
 
-        # Should use technical column name as fallback
-        expected_name = indicator.get_column_name()
-        assert expected_name in result.columns
-
-    def test_apply_supports_indicator_chaining(self, sample_data):
-        """apply() supports indicators that depend on previously computed indicators."""
-
-        class ChainedIndicator(BaseIndicator):
-            """Mock indicator that reads a column added by a previous indicator."""
-
-            @classmethod
-            def is_multi_output(cls) -> bool:
-                return False
-
-            def compute(self, df: pd.DataFrame) -> pd.Series:
-                # This indicator depends on 'first_indicator' column
-                if "first_indicator" not in df.columns:
-                    raise ValueError(
-                        "Expected 'first_indicator' column from previous indicator"
-                    )
-                # Compute based on the previous indicator's output
-                return df["first_indicator"] * 2.0
-
-        # First indicator
-        indicator1 = MockSingleOutputIndicator(name="first")
-        indicator1._feature_id = "first_indicator"
-
-        # Second indicator depends on first
-        indicator2 = ChainedIndicator(name="second")
-        indicator2._feature_id = "second_indicator"
-
-        engine = IndicatorEngine(indicators=[indicator1, indicator2])
-        result = engine.apply(sample_data)
-
-        # Both indicators should be computed successfully
-        assert "first_indicator" in result.columns
-        assert "second_indicator" in result.columns
-        # Second indicator should be 2x the first
-        assert result["second_indicator"].tolist() == [2.0, 4.0, 6.0]
+        # The indicator columns should be identical
+        pd.testing.assert_series_equal(
+            apply_result["rsi_14"], compute_result["rsi_14"], check_names=False
+        )

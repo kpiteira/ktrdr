@@ -250,50 +250,39 @@ class IndicatorService(BaseService):
 
             logger.info(f"Loaded {len(df)} data points")
 
-            # Create indicator instances from the request
-            indicators = []
+            # Build v3 indicator config dict from request
+            indicator_dict: dict[str, dict] = {}
             for indicator_config in request.indicators:
-                # Create the appropriate indicator instance
-                try:
-                    indicator_class = BUILT_IN_INDICATORS.get(indicator_config.id)
-                    if not indicator_class:
-                        raise ConfigurationError(
-                            message=f"Unknown indicator: {indicator_config.id}",
-                            error_code="CONFIG-UnknownIndicator",
-                            details={"indicator_id": indicator_config.id},
-                        )
-
-                    # Create indicator instance with provided parameters
-                    indicator = indicator_class(**indicator_config.parameters)
-
-                    # If custom output name is specified, store it for later
-                    if indicator_config.output_name:
-                        # Store custom output name for later use (type: ignore for dynamic attribute)
-                        indicator.output_name = indicator_config.output_name  # type: ignore[attr-defined]
-
-                    indicators.append(indicator)
-
-                except Exception as e:
-                    logger.error(
-                        f"Error creating indicator {indicator_config.id}: {str(e)}"
-                    )
+                # Verify indicator type is known
+                if indicator_config.id not in BUILT_IN_INDICATORS:
                     raise ConfigurationError(
-                        message=f"Failed to create indicator {indicator_config.id}",
-                        error_code="CONFIG-IndicatorCreationFailed",
-                        details={
-                            "indicator_id": indicator_config.id,
-                            "parameters": indicator_config.parameters,
-                            "error": str(e),
-                        },
-                    ) from e
+                        message=f"Unknown indicator: {indicator_config.id}",
+                        error_code="CONFIG-UnknownIndicator",
+                        details={"indicator_id": indicator_config.id},
+                    )
 
-            # Initialize the indicator engine with the created indicators
-            engine = IndicatorEngine(indicators)
+                # Generate indicator_id from type and key params
+                # e.g., rsi with period=14 -> rsi_14
+                params = indicator_config.parameters or {}
+                if indicator_config.output_name:
+                    indicator_id = indicator_config.output_name
+                elif "period" in params:
+                    indicator_id = f"{indicator_config.id}_{params['period']}"
+                else:
+                    # Use type as ID if no period
+                    indicator_id = indicator_config.id
+
+                # Build v3 definition: {"type": "rsi", "period": 14, ...}
+                definition = {"type": indicator_config.id, **params}
+                indicator_dict[indicator_id] = definition
+
+            # Initialize the indicator engine with v3 dict format
+            engine = IndicatorEngine(indicator_dict)
 
             # Calculate indicators
             try:
                 result_df = engine.apply(df)
-                logger.info(f"Successfully calculated {len(indicators)} indicators")
+                logger.info(f"Successfully calculated {len(indicator_dict)} indicators")
             except Exception as e:
                 logger.error(f"Error calculating indicators: {str(e)}")
                 raise ProcessingError(
@@ -315,22 +304,14 @@ class IndicatorService(BaseService):
             ]
 
             # Map indicator values by name
+            # In v3, column names already use the indicator_id from indicator_dict
+            import math
+
             indicator_values = {}
             for col in indicator_columns:
-                # Handle custom output names
-                output_name = col
-                for indicator in indicators:
-                    if hasattr(indicator, "output_name") and output_name.startswith(
-                        indicator.name
-                    ):
-                        output_name = indicator.output_name
-                        break
-
                 # Convert to list and handle NaN/Inf values for JSON compatibility
                 values = result_df[col].tolist()
                 # Replace NaN and Inf values with None for JSON serialization
-                import math
-
                 clean_values: list[float | None] = []
                 for val in values:
                     if pd.isna(val) or math.isinf(val):
@@ -338,7 +319,7 @@ class IndicatorService(BaseService):
                     else:
                         clean_values.append(val)
 
-                indicator_values[output_name] = clean_values
+                indicator_values[col] = clean_values
 
             # Create metadata
             metadata = {

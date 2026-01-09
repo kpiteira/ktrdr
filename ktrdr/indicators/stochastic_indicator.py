@@ -5,7 +5,7 @@ The Stochastic Oscillator is a momentum indicator that compares a security's clo
 to its price range over a given time period. It generates two lines: %K and %D.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pandas as pd
 
@@ -50,35 +50,6 @@ class StochasticIndicator(BaseIndicator):
     def get_output_names(cls) -> list[str]:
         """Return semantic output names for Stochastic."""
         return ["k", "d"]
-
-    @classmethod
-    def get_primary_output_suffix(cls) -> str:
-        """Primary output is the %K line."""
-        return "K"
-
-    def get_column_name(self, suffix: Optional[str] = None) -> str:
-        """
-        Generate column name matching what compute() actually produces.
-
-        Stochastic format:
-        - K line: "Stochastic_K_{k_period}_{smooth_k}"
-        - D line: "Stochastic_D_{k_period}_{d_period}_{smooth_k}"
-
-        Args:
-            suffix: Optional suffix ("K", "D", or None for K)
-
-        Returns:
-            Column name matching compute() output format
-        """
-        k_period = self.params.get("k_period", 14)
-        d_period = self.params.get("d_period", 3)
-        smooth_k = self.params.get("smooth_k", 3)
-
-        if suffix == "D":
-            return f"Stochastic_D_{k_period}_{d_period}_{smooth_k}"
-        else:
-            # Default to K line (primary)
-            return f"Stochastic_K_{k_period}_{smooth_k}"
 
     def __init__(
         self,

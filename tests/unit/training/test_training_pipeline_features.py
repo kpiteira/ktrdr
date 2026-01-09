@@ -33,10 +33,11 @@ class TestCalculateIndicators:
             )
         }
 
-        indicator_configs = [
-            {"name": "rsi", "feature_id": "rsi_14", "period": 14},
-            {"name": "sma", "feature_id": "sma_20", "period": 20},
-        ]
+        # V3 format: dict mapping indicator_id to definition
+        indicator_configs = {
+            "rsi_14": {"type": "rsi", "period": 14},
+            "sma_20": {"type": "sma", "period": 20},
+        }
 
         # Act
         result = TrainingPipeline.calculate_indicators(price_data, indicator_configs)
@@ -76,7 +77,8 @@ class TestCalculateIndicators:
             ),
         }
 
-        indicator_configs = [{"name": "rsi", "feature_id": "rsi_14", "period": 14}]
+        # V3 format
+        indicator_configs = {"rsi_14": {"type": "rsi", "period": 14}}
 
         # Act
         result = TrainingPipeline.calculate_indicators(price_data, indicator_configs)
@@ -106,7 +108,8 @@ class TestCalculateIndicators:
             )
         }
 
-        indicator_configs = [{"name": "sma", "feature_id": "sma_5", "period": 5}]
+        # V3 format
+        indicator_configs = {"sma_5": {"type": "sma", "period": 5}}
 
         # Act
         result = TrainingPipeline.calculate_indicators(price_data, indicator_configs)
@@ -135,14 +138,10 @@ class TestCalculateIndicators:
             )
         }
 
-        indicator_configs = [
-            {
-                "name": "macd",
-                "feature_id": "macd_12_26",
-                "fast_period": 12,
-                "slow_period": 26,
-            }
-        ]
+        # V3 format
+        indicator_configs = {
+            "macd_12_26": {"type": "macd", "fast_period": 12, "slow_period": 26}
+        }
 
         # Act
         result = TrainingPipeline.calculate_indicators(price_data, indicator_configs)
@@ -168,7 +167,8 @@ class TestCalculateIndicators:
             )
         }
 
-        indicator_configs = [{"name": "rsi", "feature_id": "rsi_14", "period": 14}]
+        # V3 format
+        indicator_configs = {"rsi_14": {"type": "rsi", "period": 14}}
 
         # Act
         result = TrainingPipeline.calculate_indicators(price_data, indicator_configs)
