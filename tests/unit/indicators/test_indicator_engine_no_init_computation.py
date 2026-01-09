@@ -27,7 +27,7 @@ class TestNoInitComputation:
         with patch(
             "ktrdr.indicators.rsi_indicator.RSIIndicator.compute"
         ) as mock_compute:
-            _engine = IndicatorEngine(indicators=indicators)
+            IndicatorEngine(indicators=indicators)
 
             # compute() should NEVER be called during __init__
             mock_compute.assert_not_called()
@@ -43,7 +43,7 @@ class TestNoInitComputation:
         with patch(
             "ktrdr.indicators.macd_indicator.MACDIndicator.compute"
         ) as mock_compute:
-            _engine = IndicatorEngine(indicators=indicators)
+            IndicatorEngine(indicators=indicators)
 
             # compute() should NEVER be called during __init__
             mock_compute.assert_not_called()
@@ -70,7 +70,7 @@ class TestNoInitComputation:
                 "ktrdr.indicators.ma_indicators.ExponentialMovingAverage.compute"
             ) as mock_ema,
         ):
-            _engine = IndicatorEngine(indicators=indicators)
+            IndicatorEngine(indicators=indicators)
 
             # NONE of the compute() methods should be called
             mock_rsi.assert_not_called()
@@ -135,8 +135,11 @@ class TestNoInitComputation:
 
         # Measure initialization time
         start = time.time()
-        _engine = IndicatorEngine(indicators=indicators)
+        engine = IndicatorEngine(indicators=indicators)
         elapsed = time.time() - start
+
+        # Verify engine was created with all indicators
+        assert len(engine._indicators) == 10
 
         # Without computation, init should be very fast (< 0.1s even on slow systems)
         # This is a reasonable threshold - creating 10 indicator instances
@@ -164,7 +167,10 @@ class TestNoInitComputation:
             return original_dataframe_init(self, *args, **kwargs)
 
         with patch.object(pd.DataFrame, "__init__", track_dataframe_init):
-            _engine = IndicatorEngine(indicators=indicators)
+            engine = IndicatorEngine(indicators=indicators)
+
+            # Verify engine was created
+            assert engine is not None
 
             # Check that no 100-row sample DataFrames were created
             # (the old code created DataFrames with 100 rows of sample data)
@@ -210,7 +216,7 @@ class TestComputeStillWorks:
             # Set up mock to return valid Series
             mock_compute.return_value = pd.Series([50.0] * 100, name="rsi_14")
 
-            _result = engine.compute(sample_data, {"rsi_14"})
+            engine.compute(sample_data, {"rsi_14"})
 
             # compute() SHOULD be called during engine.compute()
             mock_compute.assert_called_once()
