@@ -11,7 +11,7 @@
 
 **Command:**
 ```bash
-docker compose ps --format json | jq -r '.[].State' | grep -v "running" | wc -l
+docker compose ps --format "table {{.State}}" | grep -v "STATE" | grep -v "running" | wc -l
 ```
 
 **Pass if:** Output is `0` (all containers running)
@@ -24,7 +24,7 @@ docker compose ps --format json | jq -r '.[].State' | grep -v "running" | wc -l
 
 **Command:**
 ```bash
-curl -s -o /dev/null -w "%{http_code}" http://localhost:${API_PORT:-8000}/health
+curl -s -o /dev/null -w "%{http_code}" http://localhost:${KTRDR_API_PORT:-8000}/api/v1/health
 ```
 
 **Pass if:** Output is `200`
@@ -39,9 +39,9 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:${API_PORT:-8000}/health
 ```bash
 if [ -f .env.sandbox ]; then
   source .env.sandbox
-  echo "Sandbox: API_PORT=$API_PORT"
+  echo "Sandbox: KTRDR_API_PORT=$KTRDR_API_PORT"
 else
-  echo "Main environment: API_PORT=8000"
+  echo "Main environment: KTRDR_API_PORT=8000"
 fi
 ```
 
@@ -61,12 +61,12 @@ set -e
 
 # Load sandbox config if present
 [ -f .env.sandbox ] && source .env.sandbox
-API_PORT=${API_PORT:-8000}
+API_PORT=${KTRDR_API_PORT:-8000}
 
 echo "=== Pre-Flight: Common Checks ==="
 
 # Check 1: Docker
-UNHEALTHY=$(docker compose ps --format json | jq -r '.[].State' | grep -v "running" | wc -l)
+UNHEALTHY=$(docker compose ps --format "table {{.State}}" | grep -v "STATE" | grep -v "running" | wc -l | tr -d ' ')
 if [ "$UNHEALTHY" -gt 0 ]; then
   echo "FAIL: Docker containers not all running"
   docker compose ps
@@ -75,7 +75,7 @@ fi
 echo "OK: Docker healthy"
 
 # Check 2: Backend API
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$API_PORT/health)
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$API_PORT/api/v1/health)
 if [ "$HTTP_CODE" != "200" ]; then
   echo "FAIL: Backend API not responding (HTTP $HTTP_CODE)"
   exit 1

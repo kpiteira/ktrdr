@@ -42,7 +42,7 @@
 
 **Command:**
 ```bash
-RESPONSE=$(curl -s -X POST http://localhost:${API_PORT:-8000}/api/v1/trainings/start \
+RESPONSE=$(curl -s -X POST http://localhost:${KTRDR_API_PORT:-8000}/api/v1/trainings/start \
   -H "Content-Type: application/json" \
   -d '{"symbols":["EURUSD"],"timeframes":["1d"],"strategy_name":"test_e2e_local_pull","start_date":"2024-01-01","end_date":"2024-12-31"}')
 
@@ -61,7 +61,7 @@ echo "Task ID: $TASK_ID"
 **Command:**
 ```bash
 sleep 10
-curl -s "http://localhost:${API_PORT:-8000}/api/v1/operations/$TASK_ID" | \
+curl -s "http://localhost:${KTRDR_API_PORT:-8000}/api/v1/operations/$TASK_ID" | \
   jq '{status:.data.status, samples:.data.result_summary.data_summary.total_samples}'
 ```
 
@@ -100,7 +100,7 @@ docker compose logs backend --since 2m | grep -i "error\|exception" | grep -v "N
 
 **Check command:**
 ```bash
-curl -s "http://localhost:${API_PORT:-8000}/api/v1/operations/$TASK_ID" | \
+curl -s "http://localhost:${KTRDR_API_PORT:-8000}/api/v1/operations/$TASK_ID" | \
   jq '.data.result_summary.training_metrics | {accuracy, final_loss, training_time}'
 ```
 
