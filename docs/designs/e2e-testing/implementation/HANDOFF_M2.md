@@ -26,9 +26,29 @@ Output format includes:
 - Per-test sections with Category, Pre-flight, Evidence
 - Failure categorization: CODE_BUG | ENVIRONMENT | CONFIGURATION | TEST_ISSUE
 
+---
+
+## Task 2.2 Complete: Test Execution Helpers
+
+**Script file:** `.claude/skills/e2e-testing/helpers/run-test.sh`
+
+### Usage
+
+```bash
+./run-test.sh preflight  # Run all pre-flight checks, output JSON
+```
+
+### JSON Output Format
+
+Each check outputs a line of JSON:
+```json
+{"check": "docker", "status": "PASSED"}
+{"check": "api", "status": "PASSED"}
+{"preflight": "PASSED", "api_port": "8001"}
+```
+
+Agent can parse the final line to get overall result and detected port.
+
 ### Next Task Notes
 
-Task 2.2 creates a helper script `run-test.sh`. Note that:
-- The agent already documents sandbox detection in the "Sandbox Awareness" section
-- Helper script should use same port detection pattern: `${KTRDR_API_PORT:-8000}`
-- JSON output from helper script should be parseable by the agent
+Task 2.3 updates SKILL.md to reference the agent. The agent file is at `.claude/agents/e2e-tester.md`.
