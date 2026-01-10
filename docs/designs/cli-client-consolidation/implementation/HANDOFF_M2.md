@@ -130,6 +130,26 @@ Replaced convenience methods with raw HTTP calls:
 
 ---
 
+## Test Files Updated
+
+Tests referencing removed async helpers needed rewriting:
+- `test_operations_commands.py`: Tests sync `list_operations` with mocked client
+- `test_resume_command.py`: Tests sync `resume_operation` with mocked client
+
+Pattern for all migrated command tests:
+```python
+mock_sync_client = MagicMock()
+mock_sync_client.health_check.return_value = True
+mock_sync_client.get.return_value = {...}
+
+with patch("ktrdr.cli.xxx_commands.SyncCLIClient") as mock_client_class:
+    mock_client_class.return_value.__enter__ = MagicMock(return_value=mock_sync_client)
+    mock_client_class.return_value.__exit__ = MagicMock(return_value=False)
+    command_function(...)
+```
+
+---
+
 ## M2 Complete
 
 All 6 sync commands migrated from `KtrdrApiClient` async pattern to `SyncCLIClient`:
@@ -139,3 +159,8 @@ All 6 sync commands migrated from `KtrdrApiClient` async pattern to `SyncCLIClie
 4. ib_commands.py
 5. fuzzy_commands.py
 6. operations_commands.py
+
+### E2E Verification
+- Unit tests: 432 passed
+- Quality checks: All passed
+- Integration smoke tests: Verified commands work with API
