@@ -10,9 +10,9 @@ This module provides commands for working with v3 strategy configurations:
 - features: Display resolved NN input features for v3 strategies
 """
 
-import asyncio
 import shutil
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -30,8 +30,7 @@ from rich.progress import (
 )
 from rich.table import Table
 
-from ktrdr.cli.api_client import check_api_connection, get_api_client
-from ktrdr.cli.commands import get_effective_api_url
+from ktrdr.cli.client import CLIClientError, SyncCLIClient
 from ktrdr.cli.telemetry import trace_cli_command
 from ktrdr.config.strategy_loader import strategy_loader
 from ktrdr.config.strategy_migration import migrate_v2_to_v3, validate_migration
@@ -403,168 +402,178 @@ def backtest_strategy(
         console.print("Valid timeframes: 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w")
         raise typer.Exit(1) from e
 
-    # Run the backtest asynchronously
-    asyncio.run(
-        run_backtest_async(
-            strategy_file,
-            symbol,
-            timeframe,
-            start_date,
-            end_date,
-            initial_capital,
-            dry_run,
-            verbose,
-        )
-    )
-
-
-async def run_backtest_async(
-    strategy_file: str,
-    symbol: str,
-    timeframe: str,
-    start_date: str,
-    end_date: str,
-    initial_capital: float,
-    dry_run: bool,
-    verbose: bool,
-):
-    """Async wrapper for backtest execution."""
     try:
-        # Check API connection
-        if not await check_api_connection():
-            error_console.print(
-                "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
-            )
-            error_console.print(
-                f"Make sure the API server is running at {get_effective_api_url()}"
-            )
-            sys.exit(1)
+        with SyncCLIClient() as client:
+            # Check API connection
+            if not client.health_check():
+                error_console.print(
+                    "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
+                )
+                error_console.print(
+                    f"Make sure the API server is running at {client.config.base_url}"
+                )
+                sys.exit(1)
+                return  # For test mocking
 
-        api_client = get_api_client()
+            if verbose:
+                console.print(f"📈 Backtesting strategy for {symbol} ({timeframe})")
+                console.print(f"📋 Strategy: {strategy_file}")
+                console.print(f"📅 Period: {start_date} to {end_date}")
+                console.print(f"💰 Initial capital: ${initial_capital:,.2f}")
 
-        if verbose:
-            console.print(f"📈 Backtesting strategy for {symbol} ({timeframe})")
-            console.print(f"📋 Strategy: {strategy_file}")
-            console.print(f"📅 Period: {start_date} to {end_date}")
-            console.print(f"💰 Initial capital: ${initial_capital:,.2f}")
+            if dry_run:
+                console.print(
+                    "🔍 [yellow]DRY RUN - No backtest will be executed[/yellow]"
+                )
+                console.print(f"📋 Would backtest: {symbol} on {timeframe}")
+                console.print(f"📊 Strategy: {strategy_file}")
+                console.print(f"💰 Capital: ${initial_capital:,.2f}")
+                console.print(f"📅 Period: {start_date} to {end_date}")
+                return
 
-        if dry_run:
-            console.print("🔍 [yellow]DRY RUN - No backtest will be executed[/yellow]")
-            console.print(f"📋 Would backtest: {symbol} on {timeframe}")
-            console.print(f"📊 Strategy: {strategy_file}")
-            console.print(f"💰 Capital: ${initial_capital:,.2f}")
-            console.print(f"📅 Period: {start_date} to {end_date}")
-            return
+            # Call the real backtesting API endpoint
+            console.print("🚀 [cyan]Starting backtest via API...[/cyan]")
+            console.print("📋 Backtest parameters:")
+            console.print(f"   Strategy: {strategy_file}")
+            console.print(f"   Symbol: {symbol}")
+            console.print(f"   Timeframe: {timeframe}")
+            console.print(f"   Period: {start_date} to {end_date}")
+            console.print(f"   Capital: ${initial_capital:,.2f}")
 
-        # Call the real backtesting API endpoint
-        console.print("🚀 [cyan]Starting backtest via API...[/cyan]")
-        console.print("📋 Backtest parameters:")
-        console.print(f"   Strategy: {strategy_file}")
-        console.print(f"   Symbol: {symbol}")
-        console.print(f"   Timeframe: {timeframe}")
-        console.print(f"   Period: {start_date} to {end_date}")
-        console.print(f"   Capital: ${initial_capital:,.2f}")
+            # Extract strategy name from file path for API call
+            strategy_name = Path(strategy_file).stem
 
-        # Extract strategy name from file path for API call
-        strategy_name = Path(strategy_file).stem
+            # Start the backtest via API
+            try:
+                payload = {
+                    "strategy_name": strategy_name,
+                    "symbol": symbol,
+                    "timeframe": timeframe,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "initial_capital": initial_capital,
+                }
+                result = client.post("/backtests/run", json=payload)
 
-        # Start the backtest via API
-        try:
-            result = await api_client.start_backtest(
-                strategy_name=strategy_name,
-                symbol=symbol,
-                timeframe=timeframe,
-                start_date=start_date,
-                end_date=end_date,
-                initial_capital=initial_capital,
-            )
+                if not result.get("success"):
+                    console.print(
+                        f"❌ [red]Failed to start backtest: "
+                        f"{result.get('message', 'Unknown error')}[/red]"
+                    )
+                    return
 
-            backtest_id = result["backtest_id"]
-            console.print(f"✅ Backtest started with ID: [bold]{backtest_id}[/bold]")
+                backtest_id = result.get("backtest_id") or result.get("data", {}).get(
+                    "backtest_id"
+                )
+                if not backtest_id:
+                    console.print("❌ [red]No backtest ID returned[/red]")
+                    return
 
-        except Exception as e:
-            console.print(f"❌ [red]Failed to start backtest: {str(e)}[/red]")
-            return
+                console.print(
+                    f"✅ Backtest started with ID: [bold]{backtest_id}[/bold]"
+                )
 
-        # Poll for progress with real API calls
-        # Temporarily suppress httpx logging to keep progress display clean
-        import logging
+            except CLIClientError as e:
+                console.print(f"❌ [red]Failed to start backtest: {str(e)}[/red]")
+                return
 
-        httpx_logger = logging.getLogger("httpx")
-        original_level = httpx_logger.level
-        httpx_logger.setLevel(logging.WARNING)
+            # Poll for progress with real API calls
+            # Temporarily suppress httpx logging to keep progress display clean
+            import logging
 
-        try:
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-                TimeElapsedColumn(),
-                console=console,
-            ) as progress:
-                task = progress.add_task("Running backtest...", total=100)
+            httpx_logger = logging.getLogger("httpx")
+            original_level = httpx_logger.level
+            httpx_logger.setLevel(logging.WARNING)
 
-                while True:
-                    try:
-                        # Get real status from operations API
-                        status_result = await api_client.get_operation_status(
-                            backtest_id
-                        )
-                        data = status_result.get("data", {})
-                        status = data.get("status", "unknown")
-                        progress_info = data.get("progress", {})
-                        progress_pct = progress_info.get("percentage", 0)
+            try:
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    BarColumn(),
+                    TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                    TimeElapsedColumn(),
+                    console=console,
+                ) as progress:
+                    task = progress.add_task("Running backtest...", total=100)
 
-                        # Update progress bar with real progress
-                        progress.update(
-                            task,
-                            completed=progress_pct,
-                            description=f"Status: {status}",
-                        )
+                    while True:
+                        try:
+                            # Get real status from operations API
+                            status_result = client.get(f"/operations/{backtest_id}")
+                            data = status_result.get("data", {})
+                            status = data.get("status", "unknown")
+                            progress_info = data.get("progress", {})
+                            progress_pct = progress_info.get("percentage", 0)
 
-                        if status == "completed":
-                            console.print(
-                                "✅ [green]Backtest completed successfully![/green]"
+                            # Update progress bar with real progress
+                            progress.update(
+                                task,
+                                completed=progress_pct,
+                                description=f"Status: {status}",
                             )
-                            break
-                        elif status == "failed":
-                            error_msg = data.get("error_message", "Unknown error")
-                            console.print(f"❌ [red]Backtest failed: {error_msg}[/red]")
+
+                            if status == "completed":
+                                console.print(
+                                    "✅ [green]Backtest completed successfully![/green]"
+                                )
+                                break
+                            elif status == "failed":
+                                error_msg = data.get("error_message", "Unknown error")
+                                console.print(
+                                    f"❌ [red]Backtest failed: {error_msg}[/red]"
+                                )
+                                return
+
+                            # Wait before next poll
+                            time.sleep(2)
+
+                        except CLIClientError as e:
+                            console.print(
+                                f"❌ [red]Error polling backtest status: {str(e)}[/red]"
+                            )
                             return
 
-                        # Wait before next poll
-                        await asyncio.sleep(2)
+            finally:
+                # Restore original logging level
+                httpx_logger.setLevel(original_level)
 
-                    except Exception as e:
-                        console.print(
-                            f"❌ [red]Error polling backtest status: {str(e)}[/red]"
-                        )
-                        return
+            # Get final results
+            try:
+                results_response = client.get(f"/backtests/{backtest_id}/results")
+                results = results_response.get("data", results_response)
 
-        finally:
-            # Restore original logging level
-            httpx_logger.setLevel(original_level)
+                if results:
+                    console.print("\n📊 [bold green]Backtest Results:[/bold green]")
+                    console.print(
+                        f"   Total Return: {results.get('total_return', 'N/A')}"
+                    )
+                    console.print(
+                        f"   Sharpe Ratio: {results.get('sharpe_ratio', 'N/A')}"
+                    )
+                    console.print(
+                        f"   Max Drawdown: {results.get('max_drawdown', 'N/A')}"
+                    )
+                    console.print(
+                        f"   Total Trades: {results.get('total_trades', 'N/A')}"
+                    )
+                    console.print(f"   Win Rate: {results.get('win_rate', 'N/A')}")
+                else:
+                    console.print("[yellow]⚠️  Results not yet available[/yellow]")
 
-        # Get final results
-        try:
-            results = await api_client.get_backtest_results(backtest_id)
+            except CLIClientError as e:
+                console.print(
+                    f"[yellow]⚠️  Could not retrieve results: {str(e)}[/yellow]"
+                )
 
-            if results:
-                console.print("\n📊 [bold green]Backtest Results:[/bold green]")
-                console.print(f"   Total Return: {results.get('total_return', 'N/A')}")
-                console.print(f"   Sharpe Ratio: {results.get('sharpe_ratio', 'N/A')}")
-                console.print(f"   Max Drawdown: {results.get('max_drawdown', 'N/A')}")
-                console.print(f"   Total Trades: {results.get('total_trades', 'N/A')}")
-                console.print(f"   Win Rate: {results.get('win_rate', 'N/A')}")
-            else:
-                console.print("[yellow]⚠️  Results not yet available[/yellow]")
-
-        except Exception as e:
-            console.print(f"[yellow]⚠️  Could not retrieve results: {str(e)}[/yellow]")
-
+    except CLIClientError as e:
+        error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        if verbose:
+            logger.error(f"Client error: {str(e)}", exc_info=True)
+        sys.exit(1)
     except Exception as e:
-        console.print(f"❌ [red]Backtest failed: {str(e)}[/red]")
+        error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        if verbose:
+            logger.error(f"Unexpected error: {str(e)}", exc_info=True)
         sys.exit(1)
 
 

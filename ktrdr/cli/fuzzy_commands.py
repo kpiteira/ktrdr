@@ -7,7 +7,7 @@ This module contains all CLI commands related to fuzzy logic operations:
 - config: Manage fuzzy configuration
 """
 
-import asyncio
+import json
 import sys
 from pathlib import Path
 from typing import Optional
@@ -16,11 +16,10 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from ktrdr.cli.api_client import check_api_connection, get_api_client
-from ktrdr.cli.commands import get_effective_api_url
+from ktrdr.cli.client import CLIClientError, SyncCLIClient
 from ktrdr.cli.telemetry import trace_cli_command
 from ktrdr.config.validation import InputValidator
-from ktrdr.errors import DataError, ValidationError
+from ktrdr.errors import ValidationError
 from ktrdr.logging import get_logger
 
 # Setup logging and console
@@ -92,168 +91,145 @@ def compute_fuzzy(
                     details={"file": fuzzy_config},
                 )
 
-        # Run async operation
-        asyncio.run(
-            _compute_fuzzy_async(
-                symbol,
-                indicator,
-                period,
-                timeframe,
-                fuzzy_config,
-                output_format,
-                output_file,
-                verbose,
-            )
-        )
+        with SyncCLIClient() as client:
+            # Check API connection
+            if not client.health_check():
+                error_console.print(
+                    "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
+                )
+                error_console.print(
+                    f"Make sure the API server is running at {client.config.base_url}"
+                )
+                sys.exit(1)
+                return  # For test mocking
+
+            if verbose:
+                console.print(f"🔮 Computing fuzzy values for {indicator} on {symbol}")
+                console.print(f"📊 Period: {period} | Timeframe: {timeframe}")
+                if fuzzy_config:
+                    console.print(f"⚙️  Config: {fuzzy_config}")
+
+            # Call the fuzzy API endpoint
+            request_data = {
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "indicator": {"type": indicator, "period": period},
+            }
+
+            if fuzzy_config:
+                request_data["config_file"] = fuzzy_config
+
+            result = client.post("/fuzzy/calculate", json=request_data)
+
+            if result.get("success"):
+                data = result.get("data", {})
+
+                # Format output
+                if output_format == "json":
+                    if output_file:
+                        with open(output_file, "w") as f:
+                            json.dump(result, f, indent=2)
+                        console.print(f"💾 Results saved to {output_file}")
+                    else:
+                        print(json.dumps(result, indent=2))
+                else:
+                    # Table format
+                    fuzzy_values = data.get("fuzzy_values", {})
+                    timestamps = data.get("timestamps", [])
+
+                    console.print(
+                        f"\n🔮 [bold]Fuzzy Analysis Results for {symbol}[/bold]"
+                    )
+                    console.print(
+                        f"Indicator: {indicator}({period}) | Timeframe: {timeframe}"
+                    )
+
+                    if fuzzy_values:
+                        table = Table()
+                        table.add_column("Timestamp", style="cyan")
+                        table.add_column(
+                            "Indicator Value", style="blue", justify="right"
+                        )
+
+                        # Add fuzzy membership columns
+                        for fuzzy_set in fuzzy_values.keys():
+                            table.add_column(
+                                f"{fuzzy_set}", style="green", justify="right"
+                            )
+
+                        # Show last 20 values
+                        indicator_values = data.get("indicator_values", [])
+                        recent_count = min(20, len(timestamps))
+
+                        for i in range(-recent_count, 0):
+                            if i < -len(timestamps):
+                                continue
+
+                            timestamp = timestamps[i]
+                            indicator_val = (
+                                indicator_values[i]
+                                if i < len(indicator_values)
+                                else None
+                            )
+
+                            row = [timestamp[:19]]
+                            if indicator_val is not None:
+                                row.append(f"{indicator_val:.4f}")
+                            else:
+                                row.append("N/A")
+
+                            # Add fuzzy membership values
+                            for fuzzy_set in fuzzy_values.keys():
+                                fuzzy_vals = fuzzy_values[fuzzy_set]
+                                if i < len(fuzzy_vals) and fuzzy_vals[i] is not None:
+                                    row.append(f"{fuzzy_vals[i]:.3f}")
+                                else:
+                                    row.append("N/A")
+
+                            table.add_row(*row)
+
+                        console.print(table)
+
+                        if len(timestamps) > 20:
+                            console.print(
+                                f"\n[dim]Showing last 20 of {len(timestamps)} values[/dim]"
+                            )
+
+                        if output_file:
+                            # Save to CSV
+                            import pandas as pd
+
+                            df_data = {"timestamp": timestamps}
+                            if indicator_values:
+                                df_data[f"{indicator}_{period}"] = indicator_values
+                            for fuzzy_set, values in fuzzy_values.items():
+                                df_data[f"fuzzy_{fuzzy_set}"] = values
+
+                            df = pd.DataFrame(df_data)
+                            df.to_csv(output_file, index=False)
+                            console.print(f"💾 Results saved to {output_file}")
+                    else:
+                        console.print("[yellow]⚠️  No fuzzy values returned[/yellow]")
+            else:
+                error_msg = result.get("message", "Unknown error")
+                console.print(f"[red]❌ Error: {error_msg}[/red]")
+                sys.exit(1)
 
     except ValidationError as e:
         error_console.print(f"[bold red]Validation error:[/bold red] {str(e)}")
         if verbose:
             logger.error(f"Validation error: {str(e)}")
         sys.exit(1)
+    except CLIClientError as e:
+        error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        if verbose:
+            logger.error(f"Client error: {str(e)}", exc_info=True)
+        sys.exit(1)
     except Exception as e:
         error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
         if verbose:
             logger.error(f"Unexpected error: {str(e)}", exc_info=True)
         sys.exit(1)
-
-
-async def _compute_fuzzy_async(
-    symbol: str,
-    indicator: str,
-    period: int,
-    timeframe: str,
-    fuzzy_config: Optional[str],
-    output_format: str,
-    output_file: Optional[str],
-    verbose: bool,
-):
-    """Async implementation of compute fuzzy command."""
-    try:
-        # Check API connection
-        if not await check_api_connection():
-            error_console.print(
-                "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
-            )
-            error_console.print(
-                f"Make sure the API server is running at {get_effective_api_url()}"
-            )
-            sys.exit(1)
-
-        api_client = get_api_client()
-
-        if verbose:
-            console.print(f"🔮 Computing fuzzy values for {indicator} on {symbol}")
-            console.print(f"📊 Period: {period} | Timeframe: {timeframe}")
-            if fuzzy_config:
-                console.print(f"⚙️  Config: {fuzzy_config}")
-
-        # Call the fuzzy API endpoint
-        request_data = {
-            "symbol": symbol,
-            "timeframe": timeframe,
-            "indicator": {"type": indicator, "period": period},
-        }
-
-        if fuzzy_config:
-            request_data["config_file"] = fuzzy_config
-
-        result = await api_client.post("/fuzzy/calculate", json=request_data)
-
-        if result.get("success"):
-            data = result.get("data", {})
-
-            # Format output
-            if output_format == "json":
-                if output_file:
-                    import json
-
-                    with open(output_file, "w") as f:
-                        json.dump(result, f, indent=2)
-                    console.print(f"💾 Results saved to {output_file}")
-                else:
-                    print(json.dumps(result, indent=2))
-            else:
-                # Table format
-                fuzzy_values = data.get("fuzzy_values", {})
-                timestamps = data.get("timestamps", [])
-
-                console.print(f"\n🔮 [bold]Fuzzy Analysis Results for {symbol}[/bold]")
-                console.print(
-                    f"Indicator: {indicator}({period}) | Timeframe: {timeframe}"
-                )
-
-                if fuzzy_values:
-                    table = Table()
-                    table.add_column("Timestamp", style="cyan")
-                    table.add_column("Indicator Value", style="blue", justify="right")
-
-                    # Add fuzzy membership columns
-                    for fuzzy_set in fuzzy_values.keys():
-                        table.add_column(f"{fuzzy_set}", style="green", justify="right")
-
-                    # Show last 20 values
-                    indicator_values = data.get("indicator_values", [])
-                    recent_count = min(20, len(timestamps))
-
-                    for i in range(-recent_count, 0):
-                        if i < -len(timestamps):
-                            continue
-
-                        timestamp = timestamps[i]
-                        indicator_val = (
-                            indicator_values[i] if i < len(indicator_values) else None
-                        )
-
-                        row = [timestamp[:19]]
-                        if indicator_val is not None:
-                            row.append(f"{indicator_val:.4f}")
-                        else:
-                            row.append("N/A")
-
-                        # Add fuzzy membership values
-                        for fuzzy_set in fuzzy_values.keys():
-                            fuzzy_vals = fuzzy_values[fuzzy_set]
-                            if i < len(fuzzy_vals) and fuzzy_vals[i] is not None:
-                                row.append(f"{fuzzy_vals[i]:.3f}")
-                            else:
-                                row.append("N/A")
-
-                        table.add_row(*row)
-
-                    console.print(table)
-
-                    if len(timestamps) > 20:
-                        console.print(
-                            f"\n[dim]Showing last 20 of {len(timestamps)} values[/dim]"
-                        )
-
-                    if output_file:
-                        # Save to CSV
-                        import pandas as pd
-
-                        df_data = {"timestamp": timestamps}
-                        if indicator_values:
-                            df_data[f"{indicator}_{period}"] = indicator_values
-                        for fuzzy_set, values in fuzzy_values.items():
-                            df_data[f"fuzzy_{fuzzy_set}"] = values
-
-                        df = pd.DataFrame(df_data)
-                        df.to_csv(output_file, index=False)
-                        console.print(f"💾 Results saved to {output_file}")
-                else:
-                    console.print("[yellow]⚠️  No fuzzy values returned[/yellow]")
-        else:
-            error_msg = result.get("message", "Unknown error")
-            console.print(f"[red]❌ Error: {error_msg}[/red]")
-            sys.exit(1)
-
-    except Exception as e:
-        raise DataError(
-            message=f"Failed to compute fuzzy values for {symbol}",
-            error_code="CLI-ComputeFuzzyError",
-            details={"symbol": symbol, "indicator": indicator, "error": str(e)},
-        ) from e
 
 
 @fuzzy_app.command("visualize")
@@ -312,89 +288,60 @@ def visualize_fuzzy(
                     details={"file": fuzzy_config},
                 )
 
-        # Run async operation
-        asyncio.run(
-            _visualize_fuzzy_async(
-                symbol,
-                indicator,
-                period,
-                timeframe,
-                fuzzy_config,
-                output_file,
-                show,
-                verbose,
+        with SyncCLIClient() as client:
+            # Check API connection
+            if not client.health_check():
+                error_console.print(
+                    "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
+                )
+                error_console.print(
+                    f"Make sure the API server is running at {client.config.base_url}"
+                )
+                sys.exit(1)
+                return  # For test mocking
+
+            if verbose:
+                console.print(f"📈 Generating fuzzy visualization for {symbol}")
+                console.print(
+                    f"📊 Indicator: {indicator}({period}) | Timeframe: {timeframe}"
+                )
+                if fuzzy_config:
+                    console.print(f"⚙️  Config: {fuzzy_config}")
+
+            # This would call the fuzzy visualization API endpoint
+            # For now, show a placeholder message
+            console.print(
+                "⚠️  [yellow]Fuzzy visualization via API not yet implemented[/yellow]"
             )
-        )
+            console.print("📋 Would generate fuzzy chart for:")
+            console.print(f"   Symbol: {symbol}")
+            console.print(f"   Indicator: {indicator}({period})")
+            console.print(f"   Timeframe: {timeframe}")
+
+            if fuzzy_config:
+                console.print(f"   Config: {fuzzy_config}")
+
+            if output_file:
+                console.print(f"💾 Would save chart to: {output_file}")
+
+            if show:
+                console.print("🌐 Would open chart in browser")
 
     except ValidationError as e:
         error_console.print(f"[bold red]Validation error:[/bold red] {str(e)}")
         if verbose:
             logger.error(f"Validation error: {str(e)}")
         sys.exit(1)
+    except CLIClientError as e:
+        error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        if verbose:
+            logger.error(f"Client error: {str(e)}", exc_info=True)
+        sys.exit(1)
     except Exception as e:
         error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
         if verbose:
             logger.error(f"Unexpected error: {str(e)}", exc_info=True)
         sys.exit(1)
-
-
-async def _visualize_fuzzy_async(
-    symbol: str,
-    indicator: str,
-    period: int,
-    timeframe: str,
-    fuzzy_config: Optional[str],
-    output_file: Optional[str],
-    show: bool,
-    verbose: bool,
-):
-    """Async implementation of visualize fuzzy command."""
-    try:
-        # Check API connection
-        if not await check_api_connection():
-            error_console.print(
-                "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
-            )
-            error_console.print(
-                f"Make sure the API server is running at {get_effective_api_url()}"
-            )
-            sys.exit(1)
-
-        get_api_client()
-
-        if verbose:
-            console.print(f"📈 Generating fuzzy visualization for {symbol}")
-            console.print(
-                f"📊 Indicator: {indicator}({period}) | Timeframe: {timeframe}"
-            )
-            if fuzzy_config:
-                console.print(f"⚙️  Config: {fuzzy_config}")
-
-        # This would call the fuzzy visualization API endpoint
-        # For now, show a placeholder message
-        console.print(
-            "⚠️  [yellow]Fuzzy visualization via API not yet implemented[/yellow]"
-        )
-        console.print("📋 Would generate fuzzy chart for:")
-        console.print(f"   Symbol: {symbol}")
-        console.print(f"   Indicator: {indicator}({period})")
-        console.print(f"   Timeframe: {timeframe}")
-
-        if fuzzy_config:
-            console.print(f"   Config: {fuzzy_config}")
-
-        if output_file:
-            console.print(f"💾 Would save chart to: {output_file}")
-
-        if show:
-            console.print("🌐 Would open chart in browser")
-
-    except Exception as e:
-        raise DataError(
-            message=f"Failed to generate fuzzy visualization for {symbol}",
-            error_code="CLI-FuzzyVisualizeError",
-            details={"symbol": symbol, "indicator": indicator, "error": str(e)},
-        ) from e
 
 
 @fuzzy_app.command("config")
@@ -452,74 +399,57 @@ def manage_config(
                     details={"file": config_file},
                 )
 
-        # Run async operation
-        asyncio.run(
-            _manage_config_async(action, config_file, output_file, template, verbose)
-        )
+        with SyncCLIClient() as client:
+            # Check API connection
+            if not client.health_check():
+                error_console.print(
+                    "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
+                )
+                error_console.print(
+                    f"Make sure the API server is running at {client.config.base_url}"
+                )
+                sys.exit(1)
+                return  # For test mocking
+
+            if verbose:
+                console.print(f"⚙️  Managing fuzzy config: {action}")
+                if config_file:
+                    console.print(f"📋 Config file: {config_file}")
+
+            if action == "validate":
+                console.print(
+                    "✅ [green]Fuzzy config validation would be performed[/green]"
+                )
+                console.print(f"📋 Config file: {config_file}")
+
+            elif action == "generate":
+                console.print(
+                    "🔧 [yellow]Fuzzy config generation not yet implemented[/yellow]"
+                )
+                console.print(f"📋 Would generate config with template: {template}")
+                if output_file:
+                    console.print(f"💾 Would save to: {output_file}")
+
+            elif action == "upgrade":
+                console.print(
+                    "⬆️  [yellow]Fuzzy config upgrade not yet implemented[/yellow]"
+                )
+                console.print(f"📋 Would upgrade: {config_file}")
+                if output_file:
+                    console.print(f"💾 Would save to: {output_file}")
 
     except ValidationError as e:
         error_console.print(f"[bold red]Validation error:[/bold red] {str(e)}")
         if verbose:
             logger.error(f"Validation error: {str(e)}")
         sys.exit(1)
+    except CLIClientError as e:
+        error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        if verbose:
+            logger.error(f"Client error: {str(e)}", exc_info=True)
+        sys.exit(1)
     except Exception as e:
         error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
         if verbose:
             logger.error(f"Unexpected error: {str(e)}", exc_info=True)
         sys.exit(1)
-
-
-async def _manage_config_async(
-    action: str,
-    config_file: Optional[str],
-    output_file: Optional[str],
-    template: str,
-    verbose: bool,
-):
-    """Async implementation of manage config command."""
-    try:
-        # Check API connection
-        if not await check_api_connection():
-            error_console.print(
-                "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
-            )
-            error_console.print(
-                f"Make sure the API server is running at {get_effective_api_url()}"
-            )
-            sys.exit(1)
-
-        get_api_client()
-
-        if verbose:
-            console.print(f"⚙️  Managing fuzzy config: {action}")
-            if config_file:
-                console.print(f"📋 Config file: {config_file}")
-
-        if action == "validate":
-            console.print(
-                "✅ [green]Fuzzy config validation would be performed[/green]"
-            )
-            console.print(f"📋 Config file: {config_file}")
-
-        elif action == "generate":
-            console.print(
-                "🔧 [yellow]Fuzzy config generation not yet implemented[/yellow]"
-            )
-            console.print(f"📋 Would generate config with template: {template}")
-            if output_file:
-                console.print(f"💾 Would save to: {output_file}")
-
-        elif action == "upgrade":
-            console.print(
-                "⬆️  [yellow]Fuzzy config upgrade not yet implemented[/yellow]"
-            )
-            console.print(f"📋 Would upgrade: {config_file}")
-            if output_file:
-                console.print(f"💾 Would save to: {output_file}")
-
-    except Exception as e:
-        raise DataError(
-            message="Failed to manage fuzzy config",
-            error_code="CLI-FuzzyConfigError",
-            details={"action": action, "config_file": config_file, "error": str(e)},
-        ) from e
