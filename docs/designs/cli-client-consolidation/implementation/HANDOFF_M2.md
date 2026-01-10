@@ -60,3 +60,34 @@ return  # For test mocking
 ### Next Task Notes
 
 Task 2.3 (strategy_commands.py) - same migration pattern.
+
+---
+
+## Task 2.3 Complete: Migrate strategy_commands.py
+
+### Partial Migration
+
+Only `backtest_strategy` command uses API client. Other commands (`validate`, `list`, `validate-all`, `migrate`, `features`) work with local files only - no changes needed.
+
+### API Method Replacement
+
+Old `KtrdrApiClient` had convenience methods. With `SyncCLIClient`, use raw HTTP:
+```python
+# Old
+result = await api_client.start_backtest(strategy_name=..., ...)
+status = await api_client.get_operation_status(backtest_id)
+results = await api_client.get_backtest_results(backtest_id)
+
+# New
+result = client.post("/backtests/run", json=payload)
+status = client.get(f"/operations/{backtest_id}")
+results = client.get(f"/backtests/{backtest_id}/results")
+```
+
+### Sync Sleep for Polling
+
+Replace `await asyncio.sleep(2)` with `time.sleep(2)` for polling loops.
+
+### Next Task Notes
+
+Task 2.4 (ib_commands.py) - same pattern.
