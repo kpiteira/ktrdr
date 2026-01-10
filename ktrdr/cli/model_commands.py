@@ -27,7 +27,7 @@ from rich.progress import (
 from rich.table import Table
 
 from ktrdr.cli.api_client import check_api_connection, get_api_client
-from ktrdr.cli.async_cli_client import AsyncCLIClient, AsyncCLIClientError
+from ktrdr.cli.client import AsyncCLIClient, CLIClientError
 from ktrdr.cli.commands import get_effective_api_url
 from ktrdr.cli.v3_utils import display_v3_dry_run, is_v3_strategy
 from ktrdr.config.strategy_loader import strategy_loader
@@ -51,9 +51,7 @@ async def _wait_for_cancellation_completion(
 
     while time.time() - start_time < timeout:
         try:
-            status_result = await cli._make_request(
-                "GET", f"/operations/{operation_id}/status"
-            )
+            status_result = await cli.get(f"/operations/{operation_id}/status")
             operation_data = status_result.get("data", {})
             status = operation_data.get("status", "unknown")
 
@@ -274,19 +272,15 @@ async def _train_model_async(
         # Use AsyncCLIClient for connection reuse and performance
         async with AsyncCLIClient() as cli:
             # Check API connection using AsyncCLIClient
-            try:
-                await cli._make_request("GET", "/health")
-            except AsyncCLIClientError as e:
-                if e.error_code == "CLI-ConnectionError":
-                    error_console.print(
-                        "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
-                    )
-                    error_console.print(
-                        "Make sure the API server is running at the configured URL"
-                    )
-                    sys.exit(1)
-                else:
-                    raise
+            if not await cli.health_check():
+                error_console.print(
+                    "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
+                )
+                error_console.print(
+                    "Make sure the API server is running at the configured URL"
+                )
+                sys.exit(1)
+                return
 
             if verbose:
                 symbols_str = ", ".join(symbols)
@@ -325,10 +319,9 @@ async def _train_model_async(
                 strategy_name = Path(strategy_file).stem
 
                 # Use training API with improved connection reuse
-                result = await cli._make_request(
-                    "POST",
+                result = await cli.post(
                     "/trainings/start",
-                    json_data={
+                    json={
                         "symbols": symbols,
                         "timeframes": timeframes,
                         "strategy_name": strategy_name,
@@ -347,7 +340,7 @@ async def _train_model_async(
                 task_id = result["task_id"]
                 console.print(f"✅ Training started with ID: [bold]{task_id}[/bold]")
 
-            except AsyncCLIClientError as e:
+            except CLIClientError as e:
                 console.print(f"❌ [red]Failed to start training: {str(e)}[/red]")
                 return
 
@@ -394,10 +387,9 @@ async def _train_model_async(
                                 "[yellow]🛑 Sending cancellation to training service...[/yellow]"
                             )
                             try:
-                                cancel_response = await cli._make_request(
-                                    "POST",
+                                cancel_response = await cli.post(
                                     f"/operations/{task_id}/cancel",
-                                    json_data={
+                                    json={
                                         "reason": "User requested cancellation via CLI"
                                     },
                                 )
@@ -420,9 +412,7 @@ async def _train_model_async(
                             return
 
                         # Get status from operations framework using AsyncCLIClient
-                        status_result = await cli._make_request(
-                            "GET", f"/operations/{task_id}/status"
-                        )
+                        status_result = await cli.get(f"/operations/{task_id}/status")
                         operation_data = status_result.get("data", {})
 
                         status = operation_data.get("status", "unknown")
@@ -553,9 +543,7 @@ async def _train_model_async(
 
             # Get real results from API using AsyncCLIClient
             try:
-                performance_result = await cli._make_request(
-                    "GET", f"/trainings/{task_id}/performance"
-                )
+                performance_result = await cli.get(f"/trainings/{task_id}/performance")
                 training_metrics = performance_result.get("training_metrics", {})
                 test_metrics = performance_result.get("test_metrics", {})
                 model_info = performance_result.get("model_info", {})
@@ -605,7 +593,7 @@ async def _train_model_async(
 
             console.print("💾 Model training completed via API")
 
-    except AsyncCLIClientError:
+    except CLIClientError:
         # Re-raise CLI errors without wrapping
         raise
     except Exception as e:
