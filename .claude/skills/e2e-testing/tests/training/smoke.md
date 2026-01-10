@@ -94,14 +94,20 @@ docker compose logs backend --since 2m | grep -i "error\|exception" | grep -v "N
 
 **CRITICAL:** These catch false positives
 
-- [ ] **Accuracy < 99%** — If accuracy is 100%, likely model collapse (see E2E_CHALLENGES_ANALYSIS.md)
-- [ ] **Loss > 0.001** — If loss is ~0, training may have collapsed to trivial solution
-- [ ] **Duration > 1s** — If instant, something is wrong (cached result? skipped training?)
+- [ ] **Test accuracy < 99%** — If test_accuracy is 100%, likely data leakage or model collapse
+- [ ] **Val accuracy < 100%** — If final_val_accuracy is 100%, may indicate overfitting on small val set
+- [ ] **Loss > 0.001** — If final_val_loss is ~0, training may have collapsed to trivial solution
+- [ ] **Duration > 0.1s** — If training_time < 0.1s, something is wrong (cached result? skipped training?)
 
 **Check command:**
 ```bash
 curl -s "http://localhost:${KTRDR_API_PORT:-8000}/api/v1/operations/$TASK_ID" | \
-  jq '.data.result_summary.training_metrics | {accuracy, final_loss, training_time}'
+  jq '.data.result_summary | {
+    test_accuracy: .test_metrics.test_accuracy,
+    val_accuracy: .training_metrics.final_val_accuracy,
+    val_loss: .training_metrics.final_val_loss,
+    training_time: .training_metrics.training_time
+  }'
 ```
 
 ---
@@ -111,6 +117,11 @@ curl -s "http://localhost:${KTRDR_API_PORT:-8000}/api/v1/operations/$TASK_ID" | 
 **If "strategy file not found":**
 - **Cause:** Strategy not in shared directory
 - **Cure:** Copy strategy to `~/.ktrdr/shared/strategies/`
+
+**If "No features computed":**
+- **Cause:** Timeframe mismatch — strategy expects different timeframe than test provides
+- **Symptom:** Logs show "Skipping timeframe X - not required by nn_inputs"
+- **Cure:** Check strategy's `training_data.timeframes` matches test parameters. For this test, strategy must have `timeframe: 1d`
 
 **If training times out:**
 - **Cause:** Backend may be overloaded or stuck
