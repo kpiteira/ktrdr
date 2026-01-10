@@ -13,7 +13,7 @@
 
 | # | Name | Tasks | E2E Test | Status |
 |---|------|-------|----------|--------|
-| M1 | [Skill Foundation](M1_skill_foundation.md) | 5 | Claude navigates skill to find test | ⏳ |
+| M1 | [Skill Foundation](M1_skill_foundation.md) | 5 | Skill loads + pre-flight/training execute | ⏳ |
 | M2 | [Tester Agent Core](M2_tester_agent_core.md) | 4 | Tester executes training/smoke, returns PASSED | ⏳ |
 | M3 | [Pre-Flight Cure System](M3_preflight_cure_system.md) | 3 | Docker stopped → tester applies cure → recovers | ⏳ |
 | M4 | [Failure Handling](M4_failure_handling.md) | 4 | Model collapse detected → categorized failure | ⏳ |
@@ -81,6 +81,21 @@ All milestones are sequential. Each builds on the previous.
 4. **Failure Categories:** Four types with prescribed actions
 5. **Designer Invocation:** Per milestone during impl-plan Step 4
 6. **Content Harvesting:** Before migration, with decision point
+
+---
+
+## E2E Test Scenario Requirements
+
+**Lesson from M1:** E2E test scenarios must include actual execution, not just structure verification.
+
+A milestone's E2E test should verify:
+1. **Structure** — Files exist, links work, sections present
+2. **Execution** — Commands actually run and produce expected output
+3. **Integration** — Components work together (e.g., skill content matches API behavior)
+
+**Anti-pattern:** "Navigate to file X and confirm it has sections A, B, C" — This is a structural test that won't catch wrong env vars, incorrect endpoints, or parameter mismatches.
+
+**Good pattern:** "Run the pre-flight script, verify it detects correct port. Start training, verify it completes." — This catches real integration issues.
 
 ---
 

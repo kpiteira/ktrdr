@@ -101,7 +101,7 @@ For each test in the agreed curriculum:
    - Add standard frontmatter
    - Add pre-flight references
    - Add sanity checks section (critical!)
-   - Update commands for sandbox compatibility (${API_PORT})
+   - Update commands for sandbox compatibility (${KTRDR_API_PORT:-8000})
    - Add troubleshooting section
 
 3. **Write to destination** in tests/{category}/
@@ -187,7 +187,7 @@ For each test in the agreed curriculum:
 - [ ] All agreed tests migrated
 - [ ] Template structure followed
 - [ ] Sanity checks added
-- [ ] Sandbox-compatible (${API_PORT})
+- [ ] Sandbox-compatible (${KTRDR_API_PORT:-8000})
 - [ ] SKILL.md catalog updated
 
 ---
@@ -319,7 +319,7 @@ ls ~/.ktrdr/shared/strategies/${STRATEGY_NAME}.yaml
 
 **Command:**
 ```bash
-curl -s "http://localhost:${API_PORT}/api/v1/data/${SYMBOL}/${TIMEFRAME}" | jq '.data.dates | length'
+curl -s "http://localhost:${KTRDR_API_PORT:-8000}/api/v1/data/${SYMBOL}/${TIMEFRAME}" | jq '.data.dates | length'
 ```
 
 **Pass if:** Returns count > 0
@@ -352,7 +352,7 @@ ls ~/.ktrdr/shared/models/${MODEL_PATH}
 
 **Command:**
 ```bash
-curl -s "http://localhost:${API_PORT}/api/v1/workers" | jq '.workers[] | select(.type=="backtest")'
+curl -s "http://localhost:${KTRDR_API_PORT:-8000}/api/v1/workers" | jq '.workers[] | select(.type=="backtest")'
 ```
 ```
 

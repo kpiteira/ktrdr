@@ -299,7 +299,7 @@ Common training test failures and their solutions.
 **Diagnosis Steps:**
 ```bash
 # Check what the model predicts
-curl -s "http://localhost:8000/api/v1/operations/$TASK_ID" | \
+curl -s "http://localhost:${KTRDR_API_PORT:-8000}/api/v1/operations/$TASK_ID" | \
   jq '.data.result_summary.training_metrics'
 
 # If accuracy is 100%, check label distribution
@@ -329,7 +329,7 @@ curl -s "http://localhost:8000/api/v1/operations/$TASK_ID" | \
 **Diagnosis Steps:**
 ```bash
 # Check backtest results
-curl -s "http://localhost:8000/api/v1/operations/$TASK_ID" | \
+curl -s "http://localhost:${KTRDR_API_PORT:-8000}/api/v1/operations/$TASK_ID" | \
   jq '.data.result_summary.trade_count'
 ```
 
@@ -376,7 +376,7 @@ docker compose logs backend --since 5m | grep -i "nan\|inf"
 **Diagnosis Steps:**
 ```bash
 # Check training progress
-curl -s "http://localhost:8000/api/v1/operations/$TASK_ID" | jq '.data.progress'
+curl -s "http://localhost:${KTRDR_API_PORT:-8000}/api/v1/operations/$TASK_ID" | jq '.data.progress'
 
 # Check worker health
 curl -s http://localhost:5002/health

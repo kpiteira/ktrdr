@@ -93,7 +93,7 @@ sleep 15
 ```bash
 # Check if it's a port issue first
 [ -f .env.sandbox ] && source .env.sandbox
-API_PORT=${API_PORT:-8000}
+API_PORT=${KTRDR_API_PORT:-8000}
 echo "Using API_PORT=$API_PORT"
 
 # If still failing, restart backend
@@ -117,7 +117,8 @@ sleep 10
 # Source sandbox config
 if [ -f .env.sandbox ]; then
   source .env.sandbox
-  echo "Loaded sandbox config: API_PORT=$API_PORT"
+  echo "Loaded sandbox config: KTRDR_API_PORT=$KTRDR_API_PORT"
+  export API_PORT=$KTRDR_API_PORT
 else
   echo "No sandbox detected, using default port 8000"
   export API_PORT=8000
