@@ -91,3 +91,13 @@ Replace `await asyncio.sleep(2)` with `time.sleep(2)` for polling loops.
 ### Next Task Notes
 
 Task 2.4 (ib_commands.py) - same pattern.
+
+---
+
+## Task 2.4 Complete: Migrate ib_commands.py
+
+Three commands migrated: `test`, `cleanup`, `status`. All used async pattern with placeholder implementations. Migration was straightforward.
+
+### Next Task Notes
+
+Task 2.5 (fuzzy_commands.py) and 2.6 (operations_commands.py) - same pattern.
