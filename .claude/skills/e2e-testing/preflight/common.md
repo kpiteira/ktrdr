@@ -92,10 +92,67 @@ echo "=== All pre-flight checks passed ==="
 
 ## Symptom→Cure Mappings
 
-*(Cures will be added in Milestone 3)*
+### Docker Not Running
 
-| Symptom | Cause | Cure |
-|---------|-------|------|
-| Docker containers not running | Docker stopped or crashed | TBD (M3) |
-| Backend API not responding | Container starting or crashed | TBD (M3) |
-| Wrong port | Sandbox detection failed | TBD (M3) |
+**Symptom:** "Docker containers not all running" or `docker compose ps` shows stopped containers
+
+**Cause:** Docker daemon stopped, containers crashed, or compose not started
+
+**Cure:**
+```bash
+# Restart Docker compose
+docker compose down
+docker compose up -d
+# Wait for services to stabilize
+sleep 15
+```
+
+**Max Retries:** 2
+**Wait After Cure:** 15 seconds
+
+---
+
+### Backend API Not Responding
+
+**Symptom:** Health check returns non-200 or connection refused
+
+**Cause:** Backend container not ready, crashed, or wrong port
+
+**Cure:**
+```bash
+# Check if it's a port issue first
+[ -f .env.sandbox ] && source .env.sandbox
+API_PORT=${KTRDR_API_PORT:-8000}
+echo "Using API_PORT=$API_PORT"
+
+# If still failing, restart backend
+docker compose restart backend
+sleep 10
+```
+
+**Max Retries:** 2
+**Wait After Cure:** 10 seconds
+
+---
+
+### Wrong Port (Sandbox Issue)
+
+**Symptom:** Connection refused on port 8000 but sandbox is active
+
+**Cause:** .env.sandbox not loaded, using default port instead of sandbox port
+
+**Cure:**
+```bash
+# Source sandbox config
+if [ -f .env.sandbox ]; then
+  source .env.sandbox
+  echo "Loaded sandbox config: KTRDR_API_PORT=$KTRDR_API_PORT"
+  export API_PORT=$KTRDR_API_PORT
+else
+  echo "No sandbox detected, using default port 8000"
+  export API_PORT=8000
+fi
+```
+
+**Max Retries:** 1 (if this doesn't work, it's a real problem)
+**Wait After Cure:** 0 seconds (just config reload)
