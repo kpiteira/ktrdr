@@ -36,3 +36,31 @@ Key patterns:
 - Match "Docker containers not all running" → Docker Not Running cure
 - Match "Backend API not responding" → Backend API Not Responding cure
 - Match "connection refused" on port 8000 with sandbox → Wrong Port cure
+
+---
+
+## Task 3.2 Complete: Tester Agent Cure Logic
+
+**File:** `.claude/agents/e2e-tester.md`
+
+### Changes Made
+
+1. **Pre-flight section (b)** — Replaced placeholder with full cure loop pseudocode
+2. **New "Cure Application" section** — Added with:
+   - When to apply cures
+   - Cure reporting formats (success and failure templates)
+   - Diagnostic gathering checklist
+
+### Report Formats
+
+Agent now reports cures in two formats:
+
+**Success:** `**Pre-flight:** PASSED (after cure)` + `**Cures Applied:**` list
+**Failure:** `**Pre-flight:** FAILED` + `**Cures Attempted:**` + `**Diagnostics:**` + `**Escalation:**`
+
+### For Task 3.3
+
+Task 3.3 is the integration test — manually verify the cure system works by:
+1. Stopping backend (`docker compose stop backend`)
+2. Invoking tester agent
+3. Observing cure application and recovery
