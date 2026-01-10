@@ -101,3 +101,41 @@ Three commands migrated: `test`, `cleanup`, `status`. All used async pattern wit
 ### Next Task Notes
 
 Task 2.5 (fuzzy_commands.py) and 2.6 (operations_commands.py) - same pattern.
+
+---
+
+## Task 2.5 Complete: Migrate fuzzy_commands.py
+
+Three commands migrated: `compute`, `visualize`, `config`. Straightforward migration.
+
+---
+
+## Task 2.6 Complete: Migrate operations_commands.py
+
+Five commands migrated: `list`, `status`, `cancel`, `retry`, `resume`.
+
+### Helper Functions Inlined
+
+`format_duration()` was a method on `KtrdrApiClient`. Created local `_format_duration()` helper instead.
+
+### Raw HTTP Endpoints Used
+
+Replaced convenience methods with raw HTTP calls:
+- `list_operations()` → `client.get("/operations", params=...)`
+- `get_operation_status()` → `client.get(f"/operations/{id}")`
+- `get_operation_children()` → `client.get(f"/operations/{id}/children")`
+- `cancel_operation()` → `client.delete(f"/operations/{id}", json=...)`
+- `retry_operation()` → `client.post(f"/operations/{id}/retry")`
+- `resume_operation()` → `client.post(f"/operations/{id}/resume")`
+
+---
+
+## M2 Complete
+
+All 6 sync commands migrated from `KtrdrApiClient` async pattern to `SyncCLIClient`:
+1. indicator_commands.py
+2. checkpoints_commands.py
+3. strategy_commands.py
+4. ib_commands.py
+5. fuzzy_commands.py
+6. operations_commands.py
