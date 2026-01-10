@@ -4,7 +4,7 @@ Tests for resume operation CLI command and API client method.
 Task 4.6: Add Resume CLI Command
 """
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -67,147 +67,129 @@ class TestResumeOperationCommand:
     """Test resume operation CLI command."""
 
     @pytest.fixture
-    def mock_api_connection_success(self):
-        """Mock API connection check to return True."""
+    def mock_sync_client(self):
+        """Create a mock SyncCLIClient for testing."""
+        mock_client = MagicMock()
+        mock_client.health_check.return_value = True
+        mock_client.config.base_url = "http://localhost:8000/api/v1"
+        return mock_client
 
-        async def async_check():
-            return True
-
-        with patch(
-            "ktrdr.cli.operations_commands.check_api_connection", new=async_check
-        ):
-            yield
-
-    @pytest.fixture
-    def mock_api_client(self):
-        """Mock get_api_client to return a mock client."""
-        mock_client = AsyncMock()
-        with patch(
-            "ktrdr.cli.operations_commands.get_api_client", return_value=mock_client
-        ):
-            yield mock_client
-
-    @pytest.mark.asyncio
-    async def test_resume_operation_async_success(
-        self, mock_api_connection_success, mock_api_client
-    ):
+    def test_resume_operation_success(self, mock_sync_client):
         """Test successful resume displays epoch info."""
-        from ktrdr.cli.operations_commands import _resume_operation_async
+        from ktrdr.cli.operations_commands import resume_operation
 
-        mock_api_client.resume_operation = AsyncMock(
-            return_value={
-                "success": True,
-                "data": {
-                    "operation_id": "op_test_123",
-                    "status": "RUNNING",
-                    "resumed_from": {
-                        "checkpoint_type": "training",
-                        "created_at": "2024-01-15T10:00:00Z",
-                        "epoch": 25,
-                    },
+        mock_sync_client.post.return_value = {
+            "success": True,
+            "data": {
+                "operation_id": "op_test_123",
+                "status": "RUNNING",
+                "resumed_from": {
+                    "checkpoint_type": "training",
+                    "created_at": "2024-01-15T10:00:00Z",
+                    "epoch": 25,
                 },
-            }
-        )
+            },
+        }
 
-        with patch("ktrdr.cli.operations_commands.console") as mock_console:
-            await _resume_operation_async("op_test_123", verbose=False)
+        with patch("ktrdr.cli.operations_commands.SyncCLIClient") as mock_client_class:
+            mock_client_class.return_value.__enter__ = MagicMock(
+                return_value=mock_sync_client
+            )
+            mock_client_class.return_value.__exit__ = MagicMock(return_value=False)
 
-            # Verify success message with epoch displayed
-            print_calls = [str(call) for call in mock_console.print.call_args_list]
-            all_output = " ".join(print_calls)
+            with patch("ktrdr.cli.operations_commands.console") as mock_console:
+                resume_operation("op_test_123", verbose=False)
 
-            assert "op_test_123" in all_output
-            assert "25" in all_output  # epoch
+                # Verify success message with epoch displayed
+                calls = [str(call) for call in mock_console.print.call_args_list]
+                output = " ".join(calls)
 
-    @pytest.mark.asyncio
-    async def test_resume_operation_async_api_connection_failure(self):
+                assert "op_test_123" in output
+                assert "25" in output  # epoch
+
+    def test_resume_operation_api_connection_failure(self, mock_sync_client):
         """Test resume command exits on API connection failure."""
-        from ktrdr.cli.operations_commands import _resume_operation_async
+        from ktrdr.cli.operations_commands import resume_operation
 
-        async def async_check_fail():
-            return False
+        mock_sync_client.health_check.return_value = False
 
-        with patch(
-            "ktrdr.cli.operations_commands.check_api_connection", new=async_check_fail
-        ):
-            with pytest.raises(SystemExit):
-                await _resume_operation_async("op_test_123", verbose=False)
+        with patch("ktrdr.cli.operations_commands.SyncCLIClient") as mock_client_class:
+            mock_client_class.return_value.__enter__ = MagicMock(
+                return_value=mock_sync_client
+            )
+            mock_client_class.return_value.__exit__ = MagicMock(return_value=False)
 
-    @pytest.mark.asyncio
-    async def test_resume_operation_async_not_found(
-        self, mock_api_connection_success, mock_api_client
-    ):
+            with patch("ktrdr.cli.operations_commands.error_console"):
+                with patch("sys.exit") as mock_exit:
+                    resume_operation("op_test_123", verbose=False)
+
+                    mock_exit.assert_called_once_with(1)
+
+    def test_resume_operation_not_found(self, mock_sync_client):
         """Test resume command handles 404 not found."""
-        from ktrdr.cli.operations_commands import _resume_operation_async
+        from ktrdr.cli.client import CLIClientError
+        from ktrdr.cli.operations_commands import resume_operation
 
-        mock_api_client.resume_operation = AsyncMock(
-            side_effect=DataError(
-                message="Operation not found",
-                error_code="API-404",
-                details={"operation_id": "op_test_123"},
+        mock_sync_client.post.side_effect = CLIClientError("404: not found")
+
+        with patch("ktrdr.cli.operations_commands.SyncCLIClient") as mock_client_class:
+            mock_client_class.return_value.__enter__ = MagicMock(
+                return_value=mock_sync_client
             )
-        )
+            mock_client_class.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("ktrdr.cli.operations_commands.error_console") as mock_error:
-            with pytest.raises(SystemExit):
-                await _resume_operation_async("op_test_123", verbose=False)
+            with patch("ktrdr.cli.operations_commands.error_console") as mock_error:
+                with patch("sys.exit") as mock_exit:
+                    resume_operation("op_test_123", verbose=False)
 
-            # Should display not found error
-            print_calls = [str(call) for call in mock_error.print.call_args_list]
-            all_output = " ".join(print_calls)
-            assert "not found" in all_output.lower() or "404" in all_output
+                    mock_exit.assert_called_once_with(1)
+                    calls = [str(call) for call in mock_error.print.call_args_list]
+                    output = " ".join(calls)
+                    assert "not found" in output.lower()
 
-    @pytest.mark.asyncio
-    async def test_resume_operation_async_already_running(
-        self, mock_api_connection_success, mock_api_client
-    ):
+    def test_resume_operation_already_running(self, mock_sync_client):
         """Test resume command handles 409 conflict (already running)."""
-        from ktrdr.cli.operations_commands import _resume_operation_async
+        from ktrdr.cli.client import CLIClientError
+        from ktrdr.cli.operations_commands import resume_operation
 
-        mock_api_client.resume_operation = AsyncMock(
-            side_effect=DataError(
-                message="Operation already running",
-                error_code="API-409",
-                details={"operation_id": "op_test_123"},
+        mock_sync_client.post.side_effect = CLIClientError("409: already running")
+
+        with patch("ktrdr.cli.operations_commands.SyncCLIClient") as mock_client_class:
+            mock_client_class.return_value.__enter__ = MagicMock(
+                return_value=mock_sync_client
             )
-        )
+            mock_client_class.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("ktrdr.cli.operations_commands.error_console") as mock_error:
-            with pytest.raises(SystemExit):
-                await _resume_operation_async("op_test_123", verbose=False)
+            with patch("ktrdr.cli.operations_commands.error_console") as mock_error:
+                with patch("sys.exit") as mock_exit:
+                    resume_operation("op_test_123", verbose=False)
 
-            # Should display conflict error
-            print_calls = [str(call) for call in mock_error.print.call_args_list]
-            all_output = " ".join(print_calls)
-            assert (
-                "running" in all_output.lower()
-                or "409" in all_output
-                or "cannot" in all_output.lower()
-            )
+                    mock_exit.assert_called_once_with(1)
+                    calls = [str(call) for call in mock_error.print.call_args_list]
+                    output = " ".join(calls)
+                    assert "running" in output.lower() or "cannot" in output.lower()
 
-    @pytest.mark.asyncio
-    async def test_resume_operation_async_no_checkpoint(
-        self, mock_api_connection_success, mock_api_client
-    ):
+    def test_resume_operation_no_checkpoint(self, mock_sync_client):
         """Test resume command handles no checkpoint available."""
-        from ktrdr.cli.operations_commands import _resume_operation_async
+        from ktrdr.cli.client import CLIClientError
+        from ktrdr.cli.operations_commands import resume_operation
 
-        mock_api_client.resume_operation = AsyncMock(
-            side_effect=DataError(
-                message="No checkpoint available",
-                error_code="API-404",
-                details={"operation_id": "op_test_123"},
+        mock_sync_client.post.side_effect = CLIClientError("no checkpoint available")
+
+        with patch("ktrdr.cli.operations_commands.SyncCLIClient") as mock_client_class:
+            mock_client_class.return_value.__enter__ = MagicMock(
+                return_value=mock_sync_client
             )
-        )
+            mock_client_class.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("ktrdr.cli.operations_commands.error_console") as mock_error:
-            with pytest.raises(SystemExit):
-                await _resume_operation_async("op_test_123", verbose=False)
+            with patch("ktrdr.cli.operations_commands.error_console") as mock_error:
+                with patch("sys.exit") as mock_exit:
+                    resume_operation("op_test_123", verbose=False)
 
-            # Should display no checkpoint error
-            print_calls = [str(call) for call in mock_error.print.call_args_list]
-            all_output = " ".join(print_calls)
-            assert "checkpoint" in all_output.lower() or "404" in all_output
+                    mock_exit.assert_called_once_with(1)
+                    calls = [str(call) for call in mock_error.print.call_args_list]
+                    output = " ".join(calls)
+                    assert "checkpoint" in output.lower()
 
 
 class TestResumeOperationCommandEntry:
@@ -225,5 +207,5 @@ class TestResumeOperationCommandEntry:
         """Test resume command accepts operation_id argument."""
         from ktrdr.cli.operations_commands import resume_operation
 
-        # Check that the function exists and is decorated
+        # Check that the function exists and is callable
         assert callable(resume_operation)
