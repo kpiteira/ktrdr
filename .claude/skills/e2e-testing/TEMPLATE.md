@@ -21,7 +21,7 @@
 
 ```json
 {
-  // Request payload
+  "REPLACE": "with actual request payload"
 }
 ```
 

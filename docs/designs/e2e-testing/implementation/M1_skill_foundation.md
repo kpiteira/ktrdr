@@ -211,7 +211,7 @@ Create the template for new test recipes. This enforces consistency and ensures 
 
 ```json
 {
-  // Request payload
+  "REPLACE": "with actual request payload"
 }
 ```
 

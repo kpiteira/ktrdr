@@ -105,10 +105,11 @@ curl -s "http://localhost:${KTRDR_API_PORT:-8000}/api/v1/operations/$TASK_ID" | 
   jq '{test:.data.result_summary.test_metrics.test_accuracy,val:.data.result_summary.training_metrics.final_val_accuracy,loss:.data.result_summary.training_metrics.final_val_loss,time:.data.result_summary.training_metrics.training_time}'
 ```
 
-**Expected output:**
+**Expected output (example):**
 ```json
-{"test": 0.77, "val": <1.0, "loss": >0.001, "time": >0.1}
+{"test": 0.77, "val": 0.85, "loss": 0.28, "time": 0.16}
 ```
+*Thresholds: test < 0.99, val < 1.0, loss > 0.001, time > 0.1*
 
 ---
 
