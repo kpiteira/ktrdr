@@ -49,6 +49,14 @@ Each check outputs a line of JSON:
 
 Agent can parse the final line to get overall result and detected port.
 
+---
+
+## Task 2.3 Complete: SKILL.md Agent Reference
+
+Added sections to SKILL.md:
+- "Agents That Use This Skill" table linking to agent definitions
+- "How Tests Are Executed" explaining the 6-step flow
+
 ### Next Task Notes
 
-Task 2.3 updates SKILL.md to reference the agent. The agent file is at `.claude/agents/e2e-tester.md`.
+Task 2.4 is verification - invoke the e2e-tester agent with "Run tests: training/smoke" and verify the report format matches the spec.
