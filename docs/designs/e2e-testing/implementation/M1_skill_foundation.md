@@ -15,17 +15,26 @@ architecture: ../ARCHITECTURE.md
 
 ## E2E Test Scenario
 
-**Purpose:** Verify Claude can load the skill and navigate to a specific test recipe.
+**Purpose:** Verify skill loads correctly AND pre-flight/test commands actually work.
 
-**Duration:** Manual verification (~2 minutes)
+**Duration:** Manual verification (~5 minutes)
 
 **Test Steps:**
 
 ```markdown
+## Part 1: Structure Verification
 1. Load the e2e-testing skill
 2. Find the training/smoke test in the catalog
 3. Navigate to the test recipe file
 4. Confirm all sections are present (pre-flight, execution, validation)
+
+## Part 2: Execution Verification (CRITICAL)
+5. Run the pre-flight quick check script from preflight/common.md
+6. Verify sandbox detection returns correct port (KTRDR_API_PORT)
+7. Verify API health check succeeds (HTTP 200)
+8. Run training/smoke Step 1 (start training) - must get task_id
+9. Wait for completion, verify status="completed"
+10. Run sanity check command - verify output has expected fields
 ```
 
 **Success Criteria:**
@@ -33,6 +42,17 @@ architecture: ../ARCHITECTURE.md
 - [ ] Catalog shows training/smoke test
 - [ ] Link to tests/training/smoke.md works
 - [ ] Test recipe has all required sections
+- [ ] Pre-flight detects correct API port (8001 for sandbox, 8000 for main)
+- [ ] API health check returns 200
+- [ ] Training starts and returns task_id
+- [ ] Training completes (not fails)
+- [ ] Sanity check command returns valid JSON with test/val/loss/time fields
+
+**Why execution matters:** Structural tests only verify files exist. They won't catch:
+- Wrong environment variables (API_PORT vs KTRDR_API_PORT)
+- Wrong API endpoints (/health vs /api/v1/health)
+- Incorrect jq query paths
+- Strategy/test parameter mismatches
 
 ---
 
