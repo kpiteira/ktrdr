@@ -102,12 +102,12 @@ docker compose logs backend --since 2m | grep -i "error\|exception" | grep -v "N
 **Check command:**
 ```bash
 curl -s "http://localhost:${KTRDR_API_PORT:-8000}/api/v1/operations/$TASK_ID" | \
-  jq '.data.result_summary | {
-    test_accuracy: .test_metrics.test_accuracy,
-    val_accuracy: .training_metrics.final_val_accuracy,
-    val_loss: .training_metrics.final_val_loss,
-    training_time: .training_metrics.training_time
-  }'
+  jq '{test:.data.result_summary.test_metrics.test_accuracy,val:.data.result_summary.training_metrics.final_val_accuracy,loss:.data.result_summary.training_metrics.final_val_loss,time:.data.result_summary.training_metrics.training_time}'
+```
+
+**Expected output:**
+```json
+{"test": 0.77, "val": <1.0, "loss": >0.001, "time": >0.1}
 ```
 
 ---
