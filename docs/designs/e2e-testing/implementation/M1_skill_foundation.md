@@ -339,7 +339,7 @@ Create the first real test recipe by migrating content from SCENARIOS.md scenari
 
 **Command:**
 ```bash
-RESPONSE=$(curl -s -X POST http://localhost:${API_PORT:-8000}/api/v1/trainings/start \
+RESPONSE=$(curl -s -X POST http://localhost:${KTRDR_API_PORT:-8000}/api/v1/trainings/start \
   -H "Content-Type: application/json" \
   -d '{"symbols":["EURUSD"],"timeframes":["1d"],"strategy_name":"test_e2e_local_pull","start_date":"2024-01-01","end_date":"2024-12-31"}')
 
@@ -358,7 +358,7 @@ echo "Task ID: $TASK_ID"
 **Command:**
 ```bash
 sleep 10
-curl -s "http://localhost:${API_PORT:-8000}/api/v1/operations/$TASK_ID" | \
+curl -s "http://localhost:${KTRDR_API_PORT:-8000}/api/v1/operations/$TASK_ID" | \
   jq '{status:.data.status, samples:.data.result_summary.data_summary.total_samples}'
 ```
 
@@ -391,14 +391,15 @@ docker compose logs backend --since 2m | grep -i "error\|exception" | grep -v "N
 
 **CRITICAL:** These catch false positives
 
-- [ ] **Accuracy < 99%** — If accuracy is 100%, likely model collapse (see E2E_CHALLENGES_ANALYSIS.md)
-- [ ] **Loss > 0.001** — If loss is ~0, training may have collapsed to trivial solution
-- [ ] **Duration > 1s** — If instant, something is wrong (cached result? skipped training?)
+- [ ] **Test accuracy < 99%** — If test_accuracy is 100%, likely data leakage or model collapse
+- [ ] **Val accuracy < 100%** — If final_val_accuracy is 100%, may indicate overfitting on small val set
+- [ ] **Loss > 0.001** — If final_val_loss is ~0, training may have collapsed to trivial solution
+- [ ] **Duration > 0.1s** — If training_time < 0.1s, something is wrong (cached result? skipped training?)
 
 **Check command:**
 ```bash
-curl -s "http://localhost:${API_PORT:-8000}/api/v1/operations/$TASK_ID" | \
-  jq '.data.result_summary.training_metrics | {accuracy, final_loss, training_time}'
+curl -s "http://localhost:${KTRDR_API_PORT:-8000}/api/v1/operations/$TASK_ID" | \
+  jq '{test:.data.result_summary.test_metrics.test_accuracy,val:.data.result_summary.training_metrics.final_val_accuracy,loss:.data.result_summary.training_metrics.final_val_loss,time:.data.result_summary.training_metrics.training_time}'
 ```
 
 ---
@@ -408,6 +409,11 @@ curl -s "http://localhost:${API_PORT:-8000}/api/v1/operations/$TASK_ID" | \
 **If "strategy file not found":**
 - **Cause:** Strategy not in shared directory
 - **Cure:** Copy strategy to `~/.ktrdr/shared/strategies/`
+
+**If "No features computed":**
+- **Cause:** Timeframe mismatch — strategy expects different timeframe than test provides
+- **Symptom:** Logs show "Skipping timeframe X - not required by nn_inputs"
+- **Cure:** Check strategy's `training_data.timeframes` matches test parameters. For this test, strategy must have `timeframe: 1d`
 
 **If training times out:**
 - **Cause:** Backend may be overloaded or stuck
@@ -428,9 +434,9 @@ curl -s "http://localhost:${API_PORT:-8000}/api/v1/operations/$TASK_ID" | \
 ```
 
 **Implementation Notes:**
-- Uses `${API_PORT:-8000}` for sandbox compatibility
-- Sanity checks from E2E_CHALLENGES_ANALYSIS.md lessons
-- Troubleshooting covers known gotchas
+- Uses `${KTRDR_API_PORT:-8000}` for sandbox compatibility (NOT API_PORT)
+- Sanity checks use correct field paths (test_metrics.test_accuracy, training_metrics.final_val_accuracy, etc.)
+- Troubleshooting covers known gotchas including timeframe mismatch
 
 **Testing Requirements:**
 
@@ -472,7 +478,7 @@ Create the common pre-flight module with checks that ALL tests need. This milest
 
 **Command:**
 ```bash
-docker compose ps --format json | jq -r '.[].State' | grep -v "running" | wc -l
+docker compose ps --format "table {{.State}}" | grep -v "STATE" | grep -v "running" | wc -l
 ```
 
 **Pass if:** Output is `0` (all containers running)
@@ -485,7 +491,7 @@ docker compose ps --format json | jq -r '.[].State' | grep -v "running" | wc -l
 
 **Command:**
 ```bash
-curl -s -o /dev/null -w "%{http_code}" http://localhost:${API_PORT:-8000}/health
+curl -s -o /dev/null -w "%{http_code}" http://localhost:${KTRDR_API_PORT:-8000}/api/v1/health
 ```
 
 **Pass if:** Output is `200`
@@ -500,9 +506,9 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:${API_PORT:-8000}/health
 ```bash
 if [ -f .env.sandbox ]; then
   source .env.sandbox
-  echo "Sandbox: API_PORT=$API_PORT"
+  echo "Sandbox: KTRDR_API_PORT=$KTRDR_API_PORT"
 else
-  echo "Main environment: API_PORT=8000"
+  echo "Main environment: KTRDR_API_PORT=8000"
 fi
 ```
 
@@ -522,12 +528,12 @@ set -e
 
 # Load sandbox config if present
 [ -f .env.sandbox ] && source .env.sandbox
-API_PORT=${API_PORT:-8000}
+API_PORT=${KTRDR_API_PORT:-8000}
 
 echo "=== Pre-Flight: Common Checks ==="
 
 # Check 1: Docker
-UNHEALTHY=$(docker compose ps --format json | jq -r '.[].State' | grep -v "running" | wc -l)
+UNHEALTHY=$(docker compose ps --format "table {{.State}}" | grep -v "STATE" | grep -v "running" | wc -l | tr -d ' ')
 if [ "$UNHEALTHY" -gt 0 ]; then
   echo "FAIL: Docker containers not all running"
   docker compose ps
@@ -536,7 +542,7 @@ fi
 echo "OK: Docker healthy"
 
 # Check 2: Backend API
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$API_PORT/health)
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$API_PORT/api/v1/health)
 if [ "$HTTP_CODE" != "200" ]; then
   echo "FAIL: Backend API not responding (HTTP $HTTP_CODE)"
   exit 1

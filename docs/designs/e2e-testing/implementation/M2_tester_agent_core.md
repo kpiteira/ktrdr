@@ -294,13 +294,13 @@ set -e
 
 # Load sandbox config if present
 [ -f .env.sandbox ] && source .env.sandbox
-export API_PORT=${API_PORT:-8000}
+export API_PORT=${KTRDR_API_PORT:-8000}
 
 case "$1" in
   preflight)
     # Run pre-flight checks, output JSON
     echo '{"check": "docker", "status": "checking"}'
-    UNHEALTHY=$(docker compose ps --format json 2>/dev/null | jq -r '.[].State' | grep -v "running" | wc -l || echo "999")
+    UNHEALTHY=$(docker compose ps --format "table {{.State}}" 2>/dev/null | grep -v "STATE" | grep -v "running" | wc -l | tr -d ' ' || echo "999")
     if [ "$UNHEALTHY" -gt 0 ]; then
       echo '{"check": "docker", "status": "FAILED", "message": "Containers not running"}'
       exit 1
@@ -308,7 +308,7 @@ case "$1" in
     echo '{"check": "docker", "status": "PASSED"}'
 
     echo '{"check": "api", "status": "checking"}'
-    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$API_PORT/health 2>/dev/null || echo "000")
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$API_PORT/api/v1/health 2>/dev/null || echo "000")
     if [ "$HTTP_CODE" != "200" ]; then
       echo '{"check": "api", "status": "FAILED", "message": "Backend not responding (HTTP '$HTTP_CODE')"}'
       exit 1

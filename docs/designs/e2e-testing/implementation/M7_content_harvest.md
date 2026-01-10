@@ -252,7 +252,7 @@ Read each source document and extract E2E-related content into a structured inve
 |-------|-------------------|-------------|
 | Old training endpoint | 3 | Update to /trainings/start |
 | Host service config | 5 | Now uses WorkerRegistry |
-| Port hardcoding | 4 | Use ${API_PORT} variable |
+| Port hardcoding | 4 | Use ${KTRDR_API_PORT:-8000} variable |
 
 ---
 
