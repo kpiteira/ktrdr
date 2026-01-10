@@ -14,7 +14,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from ktrdr.cli.async_cli_client import AsyncCLIClient, AsyncCLIClientError
+from ktrdr.cli.client import AsyncCLIClient, CLIClientError
 from ktrdr.cli.telemetry import trace_cli_command
 from ktrdr.logging import get_logger
 
@@ -52,7 +52,7 @@ async def _show_status_async():
     """Async implementation of status command using API."""
     try:
         async with AsyncCLIClient() as client:
-            result = await client._make_request("GET", "/agent/status")
+            result = await client.get("/agent/status")
 
         console.print("\n[bold]Agent Research System Status[/bold]")
         console.print()
@@ -99,7 +99,7 @@ async def _show_status_async():
                     "Use [cyan]ktrdr agent trigger[/cyan] to start a new research cycle."
                 )
 
-    except AsyncCLIClientError as e:
+    except CLIClientError as e:
         logger.error(f"API error: {e}")
         raise
     except Exception as e:
@@ -180,9 +180,7 @@ async def _trigger_agent_async(
                 json_data["bypass_gates"] = True
 
         async with AsyncCLIClient() as client:
-            result = await client._make_request(
-                "POST", "/agent/trigger", json_data=json_data
-            )
+            result = await client.post("/agent/trigger", json=json_data)
 
         if result.get("triggered"):
             operation_id = result["operation_id"]
@@ -225,7 +223,7 @@ async def _trigger_agent_async(
             else:
                 console.print(f"\n[yellow]Could not trigger:[/yellow] {message}")
 
-    except AsyncCLIClientError as e:
+    except CLIClientError as e:
         logger.error(f"API error: {e}")
         raise
     except Exception as e:
@@ -296,9 +294,7 @@ async def _monitor_agent_cycle(operation_id: str) -> dict:
                 while not cancelled:
                     try:
                         # Poll parent operation
-                        result = await client._make_request(
-                            "GET", f"/operations/{operation_id}"
-                        )
+                        result = await client.get(f"/operations/{operation_id}")
                         # Reset retry delay on success
                         retry_delay = 1.0
 
@@ -342,8 +338,8 @@ async def _monitor_agent_cycle(operation_id: str) -> dict:
                         # Poll child operation if exists
                         if child_op_id and child_task is not None:
                             try:
-                                child_result = await client._make_request(
-                                    "GET", f"/operations/{child_op_id}"
+                                child_result = await client.get(
+                                    f"/operations/{child_op_id}"
                                 )
                                 child_data = child_result.get("data", {})
                                 child_prog = child_data.get("progress", {})
@@ -367,18 +363,17 @@ async def _monitor_agent_cycle(operation_id: str) -> dict:
                         if status in ("completed", "failed", "cancelled"):
                             break
 
-                    except AsyncCLIClientError as e:
+                    except CLIClientError as e:
                         # Check for 404 (operation not found - lost after restart)
-                        if "404" in e.error_code or (
-                            e.details and e.details.get("status_code") == 404
-                        ):
+                        error_str = str(e)
+                        if "404" in error_str:
                             console.print(
                                 "\n[yellow]Operation not found — may have been lost due to restart[/yellow]"
                             )
                             return {"status": "lost"}
 
                         # Connection error - retry with backoff
-                        if "Connection" in e.error_code or "Timeout" in e.error_code:
+                        if "Connection" in error_str or "Timeout" in error_str:
                             progress.update(
                                 parent_task,
                                 description="[bold blue]Research Cycle[/] [yellow]⚠ Connection lost, retrying...[/]",
@@ -396,17 +391,13 @@ async def _monitor_agent_cycle(operation_id: str) -> dict:
                     # Send cancellation request
                     console.print("\n[yellow]Cancelling research cycle...[/yellow]")
                     try:
-                        await client._make_request(
-                            "DELETE", f"/operations/{operation_id}"
-                        )
+                        await client.delete(f"/operations/{operation_id}")
                     except Exception:
                         pass  # Continue even if cancel fails
                     # Wait briefly for cancellation to process
                     await asyncio.sleep(1)
                     try:
-                        result = await client._make_request(
-                            "GET", f"/operations/{operation_id}"
-                        )
+                        result = await client.get(f"/operations/{operation_id}")
                         op_data = result.get("data", {})
                     except Exception:
                         # If we can't get final status, use what we had
@@ -492,7 +483,7 @@ async def _cancel_agent_async():
     """Async implementation of cancel command using API."""
     try:
         async with AsyncCLIClient() as client:
-            result = await client._make_request("DELETE", "/agent/cancel")
+            result = await client.delete("/agent/cancel")
 
         if result.get("success"):
             console.print("\n[green]Research cycle cancelled![/green]")
@@ -513,7 +504,7 @@ async def _cancel_agent_async():
             else:
                 console.print(f"\n[yellow]Could not cancel:[/yellow] {message}")
 
-    except AsyncCLIClientError as e:
+    except CLIClientError as e:
         # Handle 404 "no active cycle" gracefully
         if "no_active_cycle" in str(e).lower() or "no active" in str(e).lower():
             console.print("\n[dim]No active research cycle to cancel.[/dim]")
@@ -551,7 +542,7 @@ async def _show_budget_async():
     """Async implementation of budget command using API."""
     try:
         async with AsyncCLIClient() as client:
-            result = await client._make_request("GET", "/agent/budget")
+            result = await client.get("/agent/budget")
 
         console.print("\n[bold]Agent Budget Status[/bold]")
         console.print()
@@ -586,7 +577,7 @@ async def _show_budget_async():
         console.print(table)
         console.print()
 
-    except AsyncCLIClientError as e:
+    except CLIClientError as e:
         logger.error(f"API error: {e}")
         raise
     except Exception as e:
