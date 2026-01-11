@@ -212,6 +212,111 @@ Shall I proceed with implementing the valuable changes and drafting push-back re
 
 ---
 
+## Comparing Copilot vs Claude Reviews
+
+When both reviewers have commented on a PR, generate a comparison summary.
+
+### How to Identify Reviewer Source
+
+```bash
+# Copilot comments have user.login = "Copilot" or similar bot identifier
+# Claude comments may come from a GitHub Action or specific bot account
+
+gh api repos/{owner}/{repo}/pulls/$PR_NUMBER/comments | jq '
+  group_by(.user.login) |
+  map({reviewer: .[0].user.login, count: length, comments: map(.body[:80])})
+'
+```
+
+### Comparison Summary Template
+
+```
+## Reviewer Comparison: PR #194
+
+### Overview
+| Metric | Copilot | Claude |
+|--------|---------|--------|
+| Total comments | 4 | 6 |
+| High value | 1 | 3 |
+| Low value/nitpicks | 3 | 2 |
+| Overlapping concerns | 2 | 2 |
+
+### Agreement (Both flagged)
+These issues were caught by both reviewers — higher confidence they matter:
+- [ ] Issue X: [brief description]
+- [ ] Issue Y: [brief description]
+
+### Copilot Only
+Issues only Copilot raised:
+- [ ] [description] — Assessment: [IMPLEMENT/PUSH BACK/DISCUSS]
+
+### Claude Only
+Issues only Claude raised:
+- [ ] [description] — Assessment: [IMPLEMENT/PUSH BACK/DISCUSS]
+
+### Contradictions
+Where reviewers disagree or suggest opposite approaches:
+- Copilot says: [X]
+- Claude says: [Y]
+- **Recommendation**: [which to follow and why]
+
+### Complementarity Analysis
+- **Copilot strengths this PR**: [e.g., caught syntax issues, import redundancy]
+- **Claude strengths this PR**: [e.g., caught logic issues, UX concerns]
+- **Blind spots both missed**: [if any obvious issues neither caught]
+
+### Summary
+[1-2 sentences on overall review quality and recommended actions]
+```
+
+### Interpreting Agreement/Disagreement
+
+| Scenario | Interpretation | Action |
+|----------|---------------|--------|
+| Both flag same issue | High confidence it matters | Likely IMPLEMENT |
+| Only Copilot flags | Often a pattern/style nitpick | Assess carefully, often PUSH BACK |
+| Only Claude flags | Often contextual/architectural | Assess carefully, often valuable |
+| They contradict | Need human judgment | DISCUSS with user |
+
+### Example Comparison Output
+
+```
+## Reviewer Comparison: PR #194
+
+### Overview
+| Metric | Copilot | Claude |
+|--------|---------|--------|
+| Total comments | 6 | 4 |
+| High value | 1 | 2 |
+| Low value/nitpicks | 4 | 1 |
+| Overlapping concerns | 1 | 1 |
+
+### Agreement
+- Silent return when no metrics (both caught) → IMPLEMENT
+
+### Copilot Only
+- Combine redundant assertions → PUSH BACK (loses debug info)
+- Remove "inline polling" from message → PUSH BACK (nitpick)
+- Use sys.modules instead of import → IMPLEMENT (valid)
+- Simplify test structure → PUSH BACK (over-abstraction)
+
+### Claude Only
+- Consider retry logic for flaky API → DISCUSS (scope creep?)
+- Add integration test coverage → IMPLEMENT (good catch)
+- Type hints on callback → PUSH BACK (internal function)
+
+### Complementarity
+- **Copilot**: Good at catching import/syntax patterns
+- **Claude**: Better at catching missing functionality and UX issues
+- **Together**: Reasonable coverage, but both over-index on style
+
+### Summary
+6 of 10 comments are low-value nitpicks. Implement 3 (silent return,
+sys.modules, integration test), push back on 6, discuss 1 (retry logic).
+```
+
+---
+
 ## Key Reminders
 
 1. **Quality over compliance** — A clean review with 0 comments addressed can be better than implementing bad suggestions
