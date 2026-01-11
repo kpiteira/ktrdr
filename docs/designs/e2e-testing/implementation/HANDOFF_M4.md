@@ -48,3 +48,32 @@ Sanity check failures are **real failures**, not warnings. The test FAILS and ge
 ### For Task 4.3
 
 Task 4.3 creates troubleshooting/training.md with known training issues from E2E_CHALLENGES_ANALYSIS.md. Focus on model collapse, 0 trades, NaN metrics, timeouts, and strategy file issues.
+
+---
+
+## Task 4.3 Complete: Training Troubleshooting Module
+
+**File:** `.claude/skills/e2e-testing/troubleshooting/training.md`
+
+### Issues Documented
+
+| Issue | Category | Key Symptom |
+|-------|----------|-------------|
+| Model Collapse | CONFIGURATION | 100% accuracy |
+| 0 Trades | CONFIGURATION | Trade count = 0 |
+| NaN Metrics | CODE_BUG/CONFIG | Loss/accuracy is NaN |
+| Training Timeout | ENVIRONMENT | Status stuck on "running" |
+| Strategy Not Found | CONFIGURATION | Immediate failure |
+
+### Pattern
+
+Each issue follows the structure:
+- Symptom (what you see)
+- Cause (why it happens)
+- Diagnosis Steps (executable bash commands)
+- Solution (specific fixes)
+- Prevention (where applicable)
+
+### For Task 4.4
+
+Task 4.4 adds explicit failure categorization guidance to the tester agent with a quick reference table and example report format.
