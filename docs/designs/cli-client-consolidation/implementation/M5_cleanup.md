@@ -6,7 +6,7 @@ architecture: ../ARCHITECTURE.md
 # Milestone 5: Cleanup
 
 **Branch:** `feature/cli-client-consolidation-m5`
-**Builds on:** M2, M3, M4
+**Builds on:** M2, M3, M4, M4.5
 **Goal:** Old client code deleted. Single source of truth.
 
 ## E2E Test Scenario
@@ -23,7 +23,7 @@ grep -r "from ktrdr.cli.operation_executor" ktrdr/
 make test-unit
 make quality
 
-# FULL E2E: Run all commands and verify SUCCESS (see Task 5.4)
+# FULL E2E: Run all commands and verify SUCCESS (see Task 5.0 and 5.4)
 # This requires IB host service + Anthropic API key
 # Commands must complete successfully, not just start
 ```
@@ -40,73 +40,98 @@ make quality
 ## Task 5.0: Pre-Deletion E2E Verification
 
 **Type:** TESTING
-**Estimated time:** 2-4 hours (including wait time for long operations)
 **Task Categories:** E2E
 
 **Description:**
-Before deleting any old client files, verify ALL migrated CLI commands work correctly with the new unified client. This establishes a baseline — if anything fails here, fix it before proceeding with deletion.
+Before deleting any old client files, verify ALL API-based CLI commands work correctly with the new unified client. This establishes a baseline — if anything fails here, fix it before proceeding with deletion.
 
 **Prerequisites (ask user to ensure before starting):**
 - IB host service running and connected
 - Docker environment running (`docker compose up`)
 - Market data available for test symbols
+- Anthropic API key configured (for agent commands)
 
 **Commands to test (must ALL succeed):**
 
 ```bash
-# === SYNC COMMANDS (M2) ===
+# =============================================================================
+# SYNC COMMANDS (use SyncCLIClient)
+# =============================================================================
 
-# Data commands
-ktrdr data show AAPL 1d --start-date 2024-01-01
-ktrdr data get-range AAPL 1d
+# --- Data commands ---
+ktrdr data show AAPL --start 2024-01-01           # Display cached data
+ktrdr data range AAPL                              # Get available date range
+ktrdr data load AAPL --timeframe 1h --start 2024-01-01 --end 2024-03-31  # Load via API (requires IB)
 
-# Indicator commands
-ktrdr indicators list
-ktrdr indicators info RSI
+# --- Indicator commands ---
+ktrdr indicators list                              # List available indicators
+ktrdr indicators compute AAPL 1d RSI               # Compute indicator (optional)
 
-# Strategy commands
-ktrdr strategies list
-ktrdr strategies validate strategies/v3_minimal.yaml
+# --- Strategy commands ---
+ktrdr strategies list                              # List strategies
+ktrdr strategies validate strategies/v3_minimal.yaml  # Validate strategy
 
-# Operations commands
-ktrdr operations list
+# --- Operations commands ---
+ktrdr operations list                              # List operations
 
-# Fuzzy commands
-ktrdr fuzzy list-sets
+# --- Fuzzy commands ---
+ktrdr fuzzy config validate --config config/fuzzy.yaml  # Validate config
 
-# IB commands (if IB host service available)
-ktrdr ib status
+# --- IB commands (requires IB host service) ---
+ktrdr ib status                                    # Check IB connection status
+ktrdr ib test                                      # Test IB connection
 
-# === ASYNC COMMANDS (M3) ===
+# =============================================================================
+# ASYNC COMMANDS (use AsyncCLIClient)
+# =============================================================================
 
-# Checkpoint commands
-ktrdr checkpoints list
+# --- Checkpoint commands ---
+ktrdr checkpoints show test_op_123                 # Show checkpoint (expect 404 for non-existent)
 
-# === OPERATION COMMANDS (M4) ===
+# --- Agent commands (requires Anthropic API key) ---
+ktrdr agent status                                 # Show agent status
+ktrdr agent budget                                 # Show budget status
 
-# Training (wait for completion)
+# =============================================================================
+# OPERATION COMMANDS (use AsyncCLIClient.execute_operation)
+# =============================================================================
+
+# --- Training (wait for completion) ---
 ktrdr models train strategies/v3_minimal.yaml --start-date 2024-01-01 --end-date 2024-03-31
 
-# Backtest (wait for completion)
+# --- Backtest (wait for completion) ---
 ktrdr backtest run v3_minimal EURUSD 1h --start-date 2024-01-01 --end-date 2024-03-31
+
+# --- Dummy (for testing operation pattern) ---
+ktrdr dummy dummy
 ```
 
 **Process:**
-1. Ask user: "Please ensure Docker is running and IB host service is available"
-2. Run each command category and verify success
+1. Ask user: "Please ensure Docker is running, IB host service is available, and Anthropic API key is set"
+2. Run each command and verify success
 3. For long-running operations (training, backtest), wait for actual completion
-4. If any command fails, investigate and fix BEFORE proceeding to deletion tasks
-5. Document all results
+4. Commands may fail at infrastructure layer (IB not connected, no API key) — that's OK
+5. Commands must NOT fail at client layer (connection, HTTP, parsing)
+6. Document all results
 
 **Acceptance Criteria:**
-- [ ] All sync commands succeed (data, indicators, strategies, operations, fuzzy, ib)
-- [ ] All async commands succeed (checkpoints)
+- [ ] All data commands succeed (show, range, load*)
+- [ ] All indicator commands succeed (list, compute)
+- [ ] All strategy commands succeed (list, validate)
+- [ ] All operations commands succeed (list)
+- [ ] All fuzzy commands succeed (config validate)
+- [ ] All IB commands succeed (status, test*)
+- [ ] All checkpoint commands succeed (show)
+- [ ] All agent commands succeed (status, budget*)
 - [ ] Training completes successfully (not just starts)
 - [ ] Backtest completes successfully (not just starts)
+- [ ] Dummy operation completes successfully
 - [ ] No commands fail due to client issues
 - [ ] Results documented
 
-**If any test fails:** Stop. Do not proceed to Task 5.1. Fix the issue first.
+*Commands marked with asterisk may fail at infrastructure layer (IB, Anthropic) — that's acceptable if the client layer works.
+
+**If any test fails due to client issues:** Stop. Do not proceed to Task 5.1. Fix the issue first.
 
 ---
 
@@ -114,7 +139,6 @@ ktrdr backtest run v3_minimal EURUSD 1h --start-date 2024-01-01 --end-date 2024-
 
 **File(s):** `ktrdr/cli/async_cli_client.py`
 **Type:** CODING
-**Estimated time:** 30 minutes
 **Task Categories:** -
 
 **Description:**
@@ -136,7 +160,6 @@ grep -r "from ktrdr.cli.async_cli_client" ktrdr/
 
 **File(s):** `ktrdr/cli/api_client.py`
 **Type:** CODING
-**Estimated time:** 30 minutes
 **Task Categories:** -
 
 **Description:**
@@ -160,7 +183,6 @@ grep -r "get_api_client" ktrdr/
 
 **File(s):** `ktrdr/cli/operation_executor.py`
 **Type:** CODING
-**Estimated time:** 30 minutes
 **Task Categories:** -
 
 **Description:**
@@ -181,39 +203,66 @@ grep -r "from ktrdr.cli.operation_executor" ktrdr/
 ## Task 5.4: Post-Deletion Verification
 
 **Type:** TESTING
-**Estimated time:** 30-60 minutes
 **Task Categories:** E2E
 
 **Description:**
-After deleting old client files, verify that nothing broke. This is a confirmation that the deletions were safe — Task 5.0 already verified functionality, so this is a sanity check.
+After deleting old client files, verify that nothing broke. This confirms the deletions were safe.
 
-**Commands to test (same as Task 5.0, abbreviated):**
+**Commands to test (ALL API-based commands):**
 
 ```bash
-# Quick sync command checks
-ktrdr data show AAPL 1d --start-date 2024-01-01
+# =============================================================================
+# SYNC COMMANDS
+# =============================================================================
+
+ktrdr data show AAPL --start 2024-01-01
+ktrdr data range AAPL
+ktrdr data load AAPL --timeframe 1h --start 2024-01-01 --end 2024-03-31
+
 ktrdr indicators list
+ktrdr indicators compute AAPL 1d RSI
+
 ktrdr strategies list
+ktrdr strategies validate strategies/v3_minimal.yaml
+
 ktrdr operations list
 
-# Quick async command check
-ktrdr checkpoints list
+ktrdr fuzzy config validate --config config/fuzzy.yaml
 
-# One operation command (training is faster than backtest)
+ktrdr ib status
+ktrdr ib test
+
+# =============================================================================
+# ASYNC COMMANDS
+# =============================================================================
+
+ktrdr checkpoints show test_op_123
+
+ktrdr agent status
+ktrdr agent budget
+
+# =============================================================================
+# OPERATION COMMANDS
+# =============================================================================
+
 ktrdr models train strategies/v3_minimal.yaml --start-date 2024-01-01 --end-date 2024-03-31
+
+ktrdr backtest run v3_minimal EURUSD 1h --start-date 2024-01-01 --end-date 2024-03-31
+
+ktrdr dummy dummy
 ```
 
 **Process:**
-1. Run representative commands from each category
+1. Run all commands from Task 5.0
 2. Verify no import errors or missing module issues
-3. Verify at least one long-running operation still works
+3. Verify all long-running operations complete
 4. If anything fails, the deletion broke something — investigate
 
 **Acceptance Criteria:**
 - [ ] No import errors related to deleted files
-- [ ] Representative sync commands work
-- [ ] Representative async commands work
-- [ ] At least one operation command completes successfully
+- [ ] All sync commands work
+- [ ] All async commands work
+- [ ] All operation commands complete successfully
 - [ ] `make test-unit` passes
 - [ ] `make quality` passes
 
