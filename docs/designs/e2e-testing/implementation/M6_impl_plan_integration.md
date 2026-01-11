@@ -5,11 +5,34 @@ architecture: ../ARCHITECTURE.md
 
 # Milestone 6: kdesign-impl-plan Integration
 
-**Goal:** Update /kdesign-impl-plan to invoke the e2e-test-designer agent during planning and incorporate test recommendations into milestone plans.
+**Goal:** Update /kdesign-impl-plan to invoke the e2e-test-designer (and e2e-test-architect when needed) during planning and incorporate test recommendations into milestone plans.
 
 **Branch:** `feature/e2e-framework-m6`
 
-**Builds On:** M5 (Designer Agent)
+**Builds On:** M5 (Designer + Architect Agents)
+
+## Two-Agent Flow
+
+From M5, test design uses two agents:
+
+```
+/kdesign-impl-plan
+    │
+    ▼
+e2e-test-designer (haiku)
+    │
+    ├── Match found → Include in E2E Validation section
+    │
+    └── No match → "Architect Handoff Required"
+                       │
+                       ▼
+               e2e-test-architect (opus)
+                       │
+                       ▼
+               Include detailed spec in E2E Validation section
+```
+
+This milestone wires both agents into /kdesign-impl-plan.
 
 ---
 
@@ -91,23 +114,37 @@ For each milestone, determine what needs E2E validation:
    **Expectations:** [What passing looks like]
    ```
 
-3. **Incorporate Recommendations**
+3. **Handle Designer Response**
+
+   **If designer returns existing tests:**
+   - Include them in E2E Validation section
+   - Note any gaps identified
+
+   **If designer returns "Architect Handoff Required":**
+   - Invoke e2e-test-architect with the handoff context
+   - Architect returns detailed test specification
+   - Include the specification in E2E Validation section
+   - Add task to create the test file before execution
+
+4. **Incorporate Recommendations**
 
    Add to milestone output:
    ```markdown
    ## E2E Validation
 
-   **Tests to Run (from e2e-test-designer):**
+   **Tests to Run:**
 
    | Test | Purpose | Notes |
    |------|---------|-------|
-   | training/smoke | Verify training works | No regression |
+   | training/smoke | Verify training works | Existing test |
 
-   **Additional Checks (if any):**
-   - [Proposed checks from designer]
+   **New Test Specification (from e2e-test-architect):**
 
-   **New Test Required (if any):**
-   - [Test name and purpose]
+   If architect was invoked, include the full test specification:
+   - Test name and purpose
+   - Execution steps
+   - Success criteria
+   - Sanity checks
 
    **Execution:** At milestone completion, invoke e2e-tester with above tests.
    ```
@@ -128,14 +165,38 @@ Update the milestone file template to include E2E Validation section:
 
 **Tests to Run:**
 
-| Test | Purpose | Notes |
-|------|---------|-------|
-| [From designer] | [Purpose] | [Notes] |
+| Test | Purpose | Source |
+|------|---------|--------|
+| [test-name] | [Purpose] | Existing / New |
 
-**New Tests to Create (if any):**
-- [test-name]: [purpose] (building blocks: [list])
+**New Test Specification (from e2e-test-architect):**
 
-**Execution:** After all tasks complete, invoke e2e-tester:
+If architect was invoked, include full specification here:
+
+### Test: [category]/[name]
+
+**Purpose:** [one sentence]
+**Duration:** [expected time]
+
+**Execution Steps:**
+1. [Step with command]
+2. [Step with expected result]
+
+**Success Criteria:**
+- [ ] [Specific, measurable criterion]
+
+**Sanity Checks:**
+| Check | Threshold | Failure Indicates |
+|-------|-----------|-------------------|
+| [metric] | [condition] | [meaning] |
+
+---
+
+**Pre-Execution Task:**
+If new test was designed, add task to create the test file:
+- [ ] Create `.claude/skills/e2e-testing/tests/[category]/[name].md` from architect specification
+
+**Execution:** After all tasks complete (including test creation), invoke e2e-tester:
 ```
 Use the e2e-tester agent to run: [test-list]
 ```
@@ -145,18 +206,22 @@ Use the e2e-tester agent to run: [test-list]
 ## Milestone Completion Checklist
 
 ... existing checklist ...
+- [ ] New test files created (if any)
 - [ ] E2E tests pass: [test-list]
 ```
 
 **Implementation Notes:**
-- Designer is invoked per milestone (from VALIDATION.md decision)
+- Designer (haiku) is invoked per milestone for fast catalog lookup
+- If no match, architect (opus) is invoked for quality test design
 - Use structured input format from VALIDATION.md
-- Include test execution instructions in milestone output
+- Include full test specification when architect is used
 
 **Acceptance Criteria:**
 - [ ] Impl-plan invokes designer at Step 4
+- [ ] Impl-plan invokes architect when designer returns handoff
 - [ ] Input format matches VALIDATION.md contract
 - [ ] Milestone output includes E2E Validation section
+- [ ] New test specifications included when architect used
 - [ ] Execution instructions are clear
 
 ---
@@ -262,13 +327,21 @@ After M6, the planning → testing loop is complete:
 
 ```
 1. /kdesign-impl-plan runs
-2. Designer proposes E2E tests for each milestone
-3. Milestones include E2E Validation sections
-4. After implementation, Claude sees "Run: training/smoke"
-5. Claude invokes e2e-tester
-6. Tests run with pre-flight checks
-7. Results reported with categories
-8. Loop closes: plan → implement → validate
+2. Designer (haiku) searches for existing tests
+   - If found → recommends them
+   - If not found → hands off to architect
+3. Architect (opus) designs new test if needed
+4. Milestones include E2E Validation sections with:
+   - Existing tests to run
+   - New test specifications (if architect was invoked)
+5. After implementation, Claude sees specific tests to run
+6. Claude invokes e2e-tester
+7. Tests run with pre-flight checks
+8. Results reported with categories
+9. Loop closes: plan → implement → validate
 ```
 
-This is the core value proposition: Claude is told what tests to run, not left to reinvent them.
+**Key benefits of two-agent design:**
+- Fast: Most milestones match existing tests (haiku handles quickly)
+- Quality: New tests get opus-level reasoning
+- Complete: Every milestone has specific, actionable tests

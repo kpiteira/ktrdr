@@ -453,7 +453,13 @@ After M8, the E2E testing framework is fully operational:
 │                                                              │
 │  /kdesign-impl-plan                                          │
 │       ↓                                                      │
-│  e2e-test-designer                                           │
+│  e2e-test-designer (haiku) ─── catalog lookup                │
+│       │                                                      │
+│       ├── match found ──→ recommend existing tests           │
+│       │                                                      │
+│       └── no match ──→ e2e-test-architect (opus)            │
+│                              ↓                               │
+│                        design new test                       │
 │       ↓                                                      │
 │  Milestone E2E Validation section                            │
 └─────────────────────────────────────────────────────────────┘
@@ -463,13 +469,14 @@ After M8, the E2E testing framework is fully operational:
 │                                                              │
 │  Claude implements milestone                                 │
 │       ↓                                                      │
-│  e2e-tester (with tests from plan)                          │
+│  e2e-tester (sonnet) ─── with tests from plan               │
 │       ↓                                                      │
 │  Pre-flight → Execution → Sanity Checks → Report            │
 └─────────────────────────────────────────────────────────────┘
 
 Key Achievements:
-✅ Tests are discovered, not reinvented
+✅ Tests are discovered, not reinvented (haiku speed)
+✅ New tests are well-designed (opus quality)
 ✅ Pre-flight catches environment issues
 ✅ Sanity checks catch false positives
 ✅ Failures are categorized and actionable
