@@ -4,6 +4,7 @@ description: Use this agent during implementation planning to find appropriate E
 tools: Read, Glob, Grep
 model: haiku
 color: blue
+permissionMode: bypassPermissions
 ---
 
 # E2E Test Designer
