@@ -24,14 +24,14 @@
   "symbols": ["EURUSD"],
   "timeframes": ["1d"],
   "strategy_name": "test_e2e_local_pull",
-  "start_date": "2024-01-01",
+  "start_date": "2020-01-01",
   "end_date": "2024-12-31"
 }
 ```
 
 **Why this data:**
-- EURUSD 1d: 258 samples, trains in ~2s (fast feedback)
-- 1 year range: Sufficient for smoke test, not too large
+- EURUSD 1d: ~1300 samples over 5 years, trains in ~3s (fast feedback)
+- 5 year range: Large enough validation set to avoid false 100% accuracy
 - test_e2e_local_pull: Known-good strategy for testing
 
 ---
@@ -44,7 +44,7 @@
 ```bash
 RESPONSE=$(curl -s -X POST http://localhost:${KTRDR_API_PORT:-8000}/api/v1/trainings/start \
   -H "Content-Type: application/json" \
-  -d '{"symbols":["EURUSD"],"timeframes":["1d"],"strategy_name":"test_e2e_local_pull","start_date":"2024-01-01","end_date":"2024-12-31"}')
+  -d '{"symbols":["EURUSD"],"timeframes":["1d"],"strategy_name":"test_e2e_local_pull","start_date":"2020-01-01","end_date":"2024-12-31"}')
 
 TASK_ID=$(echo "$RESPONSE" | jq -r '.task_id')
 echo "Task ID: $TASK_ID"
@@ -67,7 +67,7 @@ curl -s "http://localhost:${KTRDR_API_PORT:-8000}/api/v1/operations/$TASK_ID" | 
 
 **Expected:**
 - `status: "completed"`
-- `samples: 258`
+- `samples: ~1300` (5 years of daily data)
 
 ### 3. Verify No Errors
 
@@ -85,7 +85,7 @@ docker compose logs backend --since 2m | grep -i "error\|exception" | grep -v "N
 
 - [ ] Training starts successfully (HTTP 200, task_id returned)
 - [ ] Training completes (status = "completed")
-- [ ] Correct sample count (258 samples)
+- [ ] Correct sample count (~1300 samples)
 - [ ] No errors in logs
 
 ---
