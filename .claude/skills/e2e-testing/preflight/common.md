@@ -122,8 +122,8 @@ docker compose up -d --force-recreate
 export API_PORT=${KTRDR_API_PORT:-8000}
 echo "Using API_PORT=$API_PORT"
 
-# Restart backend container
-docker compose restart backend
+# Start or restart backend (handles both stopped and removed containers)
+docker compose up -d backend
 ```
 
 **Max Retries:** 2
@@ -139,7 +139,7 @@ docker compose restart backend
 
 **Cure:**
 ```bash
-# Source sandbox config
+# Source sandbox config and export for subsequent commands
 if [ -f .env.sandbox ]; then
   source .env.sandbox
   echo "Loaded sandbox config: KTRDR_API_PORT=$KTRDR_API_PORT"
@@ -149,6 +149,8 @@ else
   export API_PORT=8000
 fi
 ```
+
+**Note:** This cure fixes the agent's port detection. The agent must re-source .env.sandbox before retrying the health check to use the correct port.
 
 **Max Retries:** 1 (config issue — if this doesn't work, it's a real problem)
 **Wait After Cure:** 0 seconds (config reload only, no service restart)
