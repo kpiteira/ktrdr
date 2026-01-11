@@ -32,8 +32,9 @@ nn_inputs:
 # Minimal model config
 model:
   type: mlp
-  hidden_layers: [32, 16]
-  dropout: 0.2
+  architecture:
+    hidden_layers: [32, 16]
+    dropout: 0.2
 
 decisions:
   output_format: classification

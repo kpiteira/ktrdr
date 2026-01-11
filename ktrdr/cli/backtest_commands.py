@@ -1,7 +1,7 @@
-"""Backtesting commands using unified AsyncOperationExecutor pattern.
+"""Backtesting commands using AsyncCLIClient.execute_operation() pattern.
 
 This module provides backtesting commands using the unified async operations
-pattern with AsyncOperationExecutor and BacktestingOperationAdapter.
+pattern with AsyncCLIClient and BacktestingOperationAdapter.
 """
 
 import asyncio
@@ -10,9 +10,16 @@ from typing import Optional
 
 import typer
 from rich.console import Console
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
 
+from ktrdr.cli.client import AsyncCLIClient, CLIClientError
 from ktrdr.cli.operation_adapters import BacktestingOperationAdapter
-from ktrdr.cli.operation_executor import AsyncOperationExecutor
 from ktrdr.cli.telemetry import trace_cli_command
 from ktrdr.config.validation import InputValidator
 from ktrdr.errors import ValidationError
@@ -132,7 +139,7 @@ async def _run_backtest_async_impl(
     model_path: Optional[str],
     verbose: bool,
 ) -> None:
-    """Async implementation of run backtest command using unified executor pattern."""
+    """Async implementation of run backtest command using AsyncCLIClient.execute_operation()."""
     # Reduce HTTP logging noise unless verbose mode
     if not verbose:
         import logging
@@ -140,83 +147,134 @@ async def _run_backtest_async_impl(
         httpx_logger = logging.getLogger("httpx")
         httpx_logger.setLevel(logging.WARNING)
 
-    if verbose:
-        console.print(f"🔬 Running backtest for {symbol} ({timeframe})")
-        console.print(f"📋 Strategy: {strategy}")
-        console.print(f"📅 Period: {start_date} to {end_date}")
-        console.print(f"💰 Initial capital: ${capital:,.2f}")
+    # Use AsyncCLIClient for connection reuse and performance
+    async with AsyncCLIClient() as cli:
+        # Check API connection using AsyncCLIClient
+        if not await cli.health_check():
+            error_console.print(
+                "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
+            )
+            error_console.print(
+                "Make sure the API server is running at the configured URL"
+            )
+            sys.exit(1)
 
-    # Display backtest parameters
-    console.print("🚀 [cyan]Starting backtest via async API...[/cyan]")
-    console.print("📋 Backtest parameters:")
-    console.print(f"   Strategy: {strategy}")
-    console.print(f"   Symbol: {symbol}")
-    console.print(f"   Timeframe: {timeframe}")
-    console.print(f"   Period: {start_date} to {end_date}")
-    console.print(f"   Initial capital: ${capital:,.2f}")
-    console.print(f"   Commission: {commission * 100:.2f}%")
-    console.print(f"   Slippage: {slippage * 100:.2f}%")
-    if model_path:
-        console.print(f"   Model: {model_path}")
+        if verbose:
+            console.print(f"🔬 Running backtest for {symbol} ({timeframe})")
+            console.print(f"📋 Strategy: {strategy}")
+            console.print(f"📅 Period: {start_date} to {end_date}")
+            console.print(f"💰 Initial capital: ${capital:,.2f}")
 
-    # Create adapter with backtesting-specific parameters
-    adapter = BacktestingOperationAdapter(
-        strategy_name=strategy,
-        symbol=symbol,
-        timeframe=timeframe,
-        start_date=start_date,
-        end_date=end_date,
-        initial_capital=capital,
-        commission=commission,
-        slippage=slippage,
-        model_path=model_path,
-    )
+        # Display backtest parameters
+        console.print("🚀 [cyan]Starting backtest via async API...[/cyan]")
+        console.print("📋 Backtest parameters:")
+        console.print(f"   Strategy: {strategy}")
+        console.print(f"   Symbol: {symbol}")
+        console.print(f"   Timeframe: {timeframe}")
+        console.print(f"   Period: {start_date} to {end_date}")
+        console.print(f"   Initial capital: ${capital:,.2f}")
+        console.print(f"   Commission: {commission * 100:.2f}%")
+        console.print(f"   Slippage: {slippage * 100:.2f}%")
+        if model_path:
+            console.print(f"   Model: {model_path}")
 
-    # Create executor for unified async operation handling
-    executor = AsyncOperationExecutor()
+        # Create adapter with backtesting-specific parameters
+        adapter = BacktestingOperationAdapter(
+            strategy_name=strategy,
+            symbol=symbol,
+            timeframe=timeframe,
+            start_date=start_date,
+            end_date=end_date,
+            initial_capital=capital,
+            commission=commission,
+            slippage=slippage,
+            model_path=model_path,
+        )
 
-    # Define backtesting-specific progress message formatter
-    def format_backtest_progress(operation_data: dict) -> str:
-        """Format progress message with backtesting-specific details."""
-        status = operation_data.get("status", "unknown")
-        progress_info = operation_data.get("progress") or {}
+        # Set up progress display using Rich Progress
+        progress_bar = Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TimeElapsedColumn(),
+            console=console,
+        )
+        task_id = None
 
-        # Try to use pre-formatted message from backend
-        rendered_message = progress_info.get("current_step")
-        if rendered_message and rendered_message != "Status: running":
-            return f"Status: {status} - {rendered_message}"
+        def on_progress(percentage: int, message: str) -> None:
+            """Progress callback for Rich progress display."""
+            nonlocal task_id
+            if task_id is not None:
+                progress_bar.update(task_id, completed=percentage, description=message)
 
-        # Fallback: extract context and build message manually
-        progress_context = (
-            progress_info.get("context") if progress_info else None
-        ) or {}
+        # Execute the operation with progress display
+        try:
+            with progress_bar:
+                task_id = progress_bar.add_task("Running backtest...", total=100)
+                result = await cli.execute_operation(
+                    adapter,
+                    on_progress=on_progress,
+                    poll_interval=0.3,
+                )
+        except CLIClientError as e:
+            console.print(f"❌ [red]Failed to start backtest: {str(e)}[/red]")
+            return
 
-        # Build status message with bar/trade info
-        status_msg = f"Status: {status}"
+        # Handle result based on final status
+        status = result.get("status", "unknown")
+        operation_id = result.get("operation_id", "")
 
-        # Get current bar information
-        current_bar = progress_context.get("current_bar", 0)
-        total_bars = progress_context.get("total_bars", 0)
-        if current_bar > 0 and total_bars > 0:
-            status_msg += f" (Bar: {current_bar}/{total_bars})"
+        if status == "completed":
+            console.print("✅ [green]Backtest completed successfully![/green]")
+            console.print(f"   Operation ID: [bold]{operation_id}[/bold]")
 
-        # Get current trade statistics
-        total_trades = progress_context.get("total_trades", 0)
-        current_pnl = progress_context.get("current_pnl")
-        if total_trades > 0:
-            status_msg += f", Trades: {total_trades}"
-        if current_pnl is not None:
-            status_msg += f", PnL: ${current_pnl:,.2f}"
+            # Display backtest results from result_summary
+            _display_backtest_results(result, console)
 
-        return status_msg
+        elif status == "failed":
+            error_msg = result.get(
+                "error_message", result.get("error", "Unknown error")
+            )
+            console.print(f"❌ [red]Backtest failed: {error_msg}[/red]")
 
-    # Execute operation - executor handles progress bar
-    success = await executor.execute_operation(
-        adapter=adapter,
-        console=console,
-        progress_callback=format_backtest_progress,
-        show_progress=True,
-    )
+        elif status == "cancelled":
+            console.print("✅ [yellow]Backtest cancelled successfully[/yellow]")
 
-    # Exit with appropriate code
-    sys.exit(0 if success else 1)
+        else:
+            console.print(f"⚠️ [yellow]Backtest ended with status: {status}[/yellow]")
+
+
+def _display_backtest_results(result: dict, console: Console) -> None:
+    """Display backtest performance results.
+
+    If no metrics are present in the result, a notice is printed and the function
+    returns without displaying detailed metrics.
+    """
+    result_summary = result.get("result_summary", {})
+    metrics = result_summary.get("metrics", {})
+
+    if not metrics:
+        console.print(
+            "[yellow]No performance metrics were returned for this backtest.[/yellow]"
+        )
+        return
+
+    console.print("📊 [bold green]Backtest Results:[/bold green]")
+
+    # Performance metrics
+    total_return_pct = metrics.get("total_return_pct", 0.0)
+    console.print(f"   Total Return: {total_return_pct:.2%}")
+
+    sharpe_ratio = metrics.get("sharpe_ratio", 0.0)
+    console.print(f"   Sharpe Ratio: {sharpe_ratio:.2f}")
+
+    max_drawdown_pct = metrics.get("max_drawdown_pct", 0.0)
+    console.print(f"   Max Drawdown: {max_drawdown_pct:.2%}")
+
+    # Trade statistics
+    total_trades = metrics.get("total_trades", 0)
+    console.print(f"   Total Trades: {total_trades}")
+
+    win_rate = metrics.get("win_rate", 0.0)
+    console.print(f"   Win Rate: {win_rate:.2%}")
