@@ -59,11 +59,32 @@ Read the test file (e.g., `.claude/skills/e2e-testing/tests/training/smoke.md`)
 
 1. Load required pre-flight modules (e.g., `preflight/common.md`)
 2. Execute each check
-3. If any check fails:
-   - Note the failure
-   - (M3+) Apply cure if available
-   - (M3+) Retry check
-   - If still failing, stop and report pre-flight failure
+3. **If a check fails:**
+
+   **Cure Loop (respects per-cure Max Retries from mapping):**
+
+   ```
+   1. Look up symptom→cure mapping in preflight module
+   2. If cure exists:
+      maxRetries = cure's "Max Retries" value (e.g., 2 for Docker, 1 for Wrong Port)
+      for attempt in 1..maxRetries:
+        - Log: "Applying cure for [symptom] (attempt {attempt}/{maxRetries})"
+        - Execute cure commands
+        - Wait the cure's "Wait After Cure" duration
+        - Retry the check
+        - If check passes: continue to next check
+      If still failing after maxRetries:
+        - Proceed to diagnostics
+   3. If no cure exists or max retries exhausted:
+      - Gather diagnostics
+      - Report pre-flight failure with:
+        - Which check failed
+        - What cures were attempted
+        - Current system state
+        - Escalate to main agent
+   ```
+
+4. If all checks pass: proceed to test execution
 
 #### c. Execute Test Steps
 
@@ -221,6 +242,54 @@ API_PORT=${KTRDR_API_PORT:-8000}
 ```
 
 All API calls should use `http://localhost:$API_PORT/...` rather than hardcoded ports.
+
+---
+
+## Cure Application
+
+### When to Apply Cures
+
+- Pre-flight check fails AND cure is documented in preflight module
+- Use the cure's **Max Retries** value (e.g., 2 for Docker/Backend, 1 for Wrong Port)
+- Wait the cure's **Wait After Cure** duration after executing cure commands
+
+### Cure Reporting
+
+Include cure attempts in the report.
+
+**Successful recovery:**
+```markdown
+**Pre-flight:** PASSED (after cure)
+**Cures Applied:**
+- Docker restart (attempt 1/2) → SUCCESS
+```
+
+**Failed recovery (escalation):**
+```markdown
+**Pre-flight:** FAILED
+**Cures Attempted:**
+- Docker restart (attempt 1/2) → FAILED
+- Docker restart (attempt 2/2) → FAILED
+**Diagnostics:**
+- `docker compose ps`: [output]
+- `docker compose logs backend --tail 20`: [output]
+**Escalation:** Pre-flight failure after 2 cure attempts. Manual intervention needed.
+```
+
+### Diagnostic Gathering
+
+When escalating after cure failure, capture context-appropriate diagnostics:
+
+**For Docker/Backend issues:**
+1. `docker compose ps` output
+2. `docker compose logs backend --tail 20` (or all services if Docker cure)
+3. Current port configuration (`echo $KTRDR_API_PORT`)
+
+**For all failures:**
+4. Any error messages from cure attempts
+5. Number of attempts made vs max allowed
+
+This information helps the main agent (or human) understand the failure.
 
 ---
 
