@@ -11,7 +11,7 @@ This module contains all CLI commands related to data operations:
 import asyncio
 import json
 import sys
-from typing import Optional, cast
+from typing import Any, Optional, cast
 
 import pandas as pd
 import typer
@@ -19,7 +19,6 @@ from rich.console import Console
 from rich.table import Table
 
 from ktrdr.async_infrastructure.cancellation import setup_cli_cancellation_handler
-from ktrdr.cli.api_client import check_api_connection, get_api_client
 from ktrdr.cli.client import APIError, AsyncCLIClient, CLIClientError, ConnectionError
 from ktrdr.cli.error_handler import (
     display_ib_connection_required_message,
@@ -35,6 +34,17 @@ from ktrdr.logging import get_logger
 logger = get_logger(__name__)
 console = Console()
 error_console = Console(stderr=True)
+
+
+def _format_duration(seconds: float) -> str:
+    """Format duration in human-readable format."""
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    elif seconds < 3600:
+        return f"{seconds / 60:.1f}m"
+    else:
+        return f"{seconds / 3600:.1f}h"
+
 
 # Create the CLI app for data commands
 data_app = typer.Typer(
@@ -376,7 +386,7 @@ async def _load_data_async(
     verbose: bool,
     quiet: bool,
 ):
-    """Async implementation of load-data command using API."""
+    """Async implementation of load-data command using AsyncCLIClient."""
     # Reduce HTTP logging noise unless verbose mode
     if not verbose:
         import logging
@@ -386,297 +396,326 @@ async def _load_data_async(
         httpx_logger.setLevel(logging.WARNING)
 
     try:
-        # Check API connection
-        if not await check_api_connection():
-            display_ib_connection_required_message()
-            sys.exit(1)
+        async with AsyncCLIClient() as cli:
+            # Check API connection
+            if not await cli.health_check():
+                display_ib_connection_required_message()
+                sys.exit(1)
 
-        api_client = get_api_client()
-
-        if not quiet:
-            console.print(f"🚀 [bold]Loading data for {symbol} ({timeframe})[/bold]")
-            console.print(
-                f"📋 Mode: {mode} | Trading hours filter: {trading_hours_only}"
-            )
-            if start_date or end_date:
+            if not quiet:
                 console.print(
-                    f"📅 Date range: {start_date or 'earliest'} to {end_date or 'latest'}"
+                    f"🚀 [bold]Loading data for {symbol} ({timeframe})[/bold]"
                 )
-            console.print()
-
-        # Show progress if requested
-        # Use async mode for cancellable operations
-        async_mode = True  # Always use async mode for cancellation support
-
-        # Set up async signal handling
-        import signal
-
-        cancelled = False
-        operation_id = None
-
-        # Set up signal handler using asyncio
-        loop = asyncio.get_running_loop()
-
-        def signal_handler():
-            """Handle Ctrl+C for graceful cancellation."""
-            nonlocal cancelled
-            cancelled = True
-            console.print(
-                "\\n[yellow]🛑 Cancellation requested... stopping operation[/yellow]"
-            )
-            # Debug output
-            import sys
-
-            sys.stderr.write(
-                "\\n[DEBUG] Async signal handler called, cancelled flag set to True\\n"
-            )
-            sys.stderr.flush()
-
-        # Register signal handler with the event loop
-        loop.add_signal_handler(signal.SIGINT, signal_handler)
-
-        try:
-            # Start async operation
-            response = await api_client.load_data(
-                symbol=symbol,
-                timeframe=timeframe,
-                mode=mode,
-                start_date=start_date,
-                end_date=end_date,
-                trading_hours_only=trading_hours_only,
-                include_extended=include_extended,
-                async_mode=async_mode,
-            )
-
-            # Get operation ID from response
-            if response.get("success") and response.get("operation_id"):
-                operation_id = response["operation_id"]
-                if not quiet:
-                    console.print(f"⚡ Started operation: {operation_id}")
-            else:
-                # Fallback to sync mode if async not supported
-                if not quiet:
-                    console.print("ℹ️  Using synchronous mode")
-                # Process sync response directly
-                return await _process_data_load_response(
-                    response,
-                    symbol,
-                    timeframe,
-                    mode,
-                    output_format,
-                    verbose,
-                    quiet,
-                    api_client,
+                console.print(
+                    f"📋 Mode: {mode} | Trading hours filter: {trading_hours_only}"
                 )
+                if start_date or end_date:
+                    console.print(
+                        f"📅 Date range: {start_date or 'earliest'} to {end_date or 'latest'}"
+                    )
+                console.print()
 
-            # Monitor operation progress with enhanced display
-            if show_progress and not quiet:
-                # Create enhanced progress display
-                from datetime import datetime
+            # Build payload for load request
+            payload: dict[str, Any] = {
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "mode": mode,
+            }
 
-                from ktrdr.async_infrastructure.progress import GenericProgressState
+            if start_date:
+                payload["start_date"] = start_date
+            if end_date:
+                payload["end_date"] = end_date
 
-                enhanced_callback, display = create_enhanced_progress_callback(
-                    console=console, show_details=True
+            if trading_hours_only or include_extended:
+                payload["filters"] = {
+                    "trading_hours_only": trading_hours_only,
+                    "include_extended": include_extended,
+                }
+
+            # Use async mode for cancellable operations
+            async_mode = True
+            params = {"async_mode": "true"} if async_mode else {}
+
+            # Set up async signal handling
+            import signal
+
+            cancelled = False
+            operation_id = None
+
+            # Set up signal handler using asyncio
+            loop = asyncio.get_running_loop()
+
+            def signal_handler():
+                """Handle Ctrl+C for graceful cancellation."""
+                nonlocal cancelled
+                cancelled = True
+                console.print(
+                    "\n[yellow]🛑 Cancellation requested... stopping operation[/yellow]"
                 )
+                # Debug output
+                import sys
 
-                operation_started = False
+                sys.stderr.write(
+                    "\n[DEBUG] Async signal handler called, cancelled flag set to True\n"
+                )
+                sys.stderr.flush()
 
-                # Poll operation status with enhanced display
-                while True:
-                    try:
-                        # Check for cancellation and send cancel request immediately
-                        if cancelled:
-                            console.print(
-                                "[yellow]🛑 Sending cancellation to server...[/yellow]"
-                            )
-                            try:
-                                cancel_response = await api_client.cancel_operation(
-                                    operation_id=operation_id,
-                                    reason="User requested cancellation via CLI",
-                                )
-                                if cancel_response.get("success"):
-                                    console.print(
-                                        "✅ [yellow]Cancellation sent successfully[/yellow]"
-                                    )
-                                else:
-                                    console.print(
-                                        f"[red]Cancel failed: {cancel_response}[/red]"
-                                    )
-                            except Exception as e:
-                                console.print(
-                                    f"[red]Cancel request failed: {str(e)}[/red]"
-                                )
-                            break  # Exit the polling loop
+            # Register signal handler with the event loop
+            loop.add_signal_handler(signal.SIGINT, signal_handler)
 
-                        status_response = await api_client.get_operation_status(
-                            operation_id
-                        )
-                        operation_data = status_response.get("data", {})
-
-                        status = operation_data.get("status")
-                        progress_info = operation_data.get("progress", {})
-                        progress_percentage = progress_info.get("percentage", 0)
-                        current_step = progress_info.get("current_step", "Loading...")
-
-                        # Display warnings if any
-                        warnings = operation_data.get("warnings", [])
-                        if warnings:
-                            for warning in warnings[-2:]:  # Show last 2 warnings
-                                console.print(f"[yellow]⚠️  {warning}[/yellow]")
-
-                        # Display errors if any
-                        errors = operation_data.get("errors", [])
-                        if errors:
-                            for error in errors[-2:]:  # Show last 2 errors
-                                console.print(f"[red]❌ {error}[/red]")
-
-                        # Create GenericProgressState for enhanced display
-                        progress_state = GenericProgressState(
-                            operation_id=operation_id,
-                            current_step=progress_info.get("steps_completed", 0),
-                            total_steps=progress_info.get("steps_total", 10),
-                            message=current_step,
-                            percentage=progress_percentage,
-                            start_time=datetime.now(),  # Approximate - could be improved
-                            items_processed=progress_info.get("items_processed", 0),
-                            total_items=progress_info.get("items_total", None),
-                            # Add the missing step fields for progress tracking
-                            step_current=progress_info.get("steps_completed", 0),
-                            step_total=progress_info.get("steps_total", 10),
-                        )
-
-                        # Start operation on first callback
-                        if not operation_started:
-                            display.start_operation(
-                                operation_name=f"load_data_{symbol}_{timeframe}",
-                                total_steps=progress_state.total_steps,
-                                context={
-                                    "symbol": symbol,
-                                    "timeframe": timeframe,
-                                    "mode": mode,
-                                },
-                            )
-                            operation_started = True
-
-                        # Update enhanced progress display
-                        display.update_progress(progress_state)
-
-                        # Check if operation completed
-                        if status in ["completed", "failed", "cancelled"]:
-                            display.complete_operation(success=(status == "completed"))
-                            break
-
-                        # Poll every 300ms for responsive updates
-                        await asyncio.sleep(0.3)
-
-                    except Exception as e:
-                        if not quiet:
-                            console.print(
-                                f"[yellow]Warning: Failed to get operation status: {str(e)}[/yellow]"
-                            )
-                        # Continue polling instead of breaking - temporary status errors shouldn't kill the loop
-                        await asyncio.sleep(1.0)
-                        continue
-            else:
-                # Simple polling without progress display
-                while True:
-                    try:
-                        # Check for cancellation and send cancel request immediately
-                        if cancelled:
-                            if not quiet:
-                                console.print("🛑 Sending cancellation to server...")
-                            try:
-                                cancel_response = await api_client.cancel_operation(
-                                    operation_id=operation_id,
-                                    reason="User requested cancellation via CLI",
-                                )
-                                if cancel_response.get("success"):
-                                    if not quiet:
-                                        console.print(
-                                            "✅ Cancellation sent successfully"
-                                        )
-                                else:
-                                    if not quiet:
-                                        console.print(
-                                            f"Cancel failed: {cancel_response}"
-                                        )
-                            except Exception as e:
-                                if not quiet:
-                                    console.print(f"Cancel request failed: {str(e)}")
-                            break  # Exit the polling loop
-
-                        status_response = await api_client.get_operation_status(
-                            operation_id
-                        )
-                        operation_data = status_response.get("data", {})
-                        status = operation_data.get("status")
-
-                        # Check if operation completed
-                        if status in ["completed", "failed", "cancelled"]:
-                            break
-
-                        await asyncio.sleep(2.0)
-
-                    except Exception as e:
-                        if not quiet:
-                            console.print(
-                                f"[yellow]Warning: Failed to get operation status: {str(e)}[/yellow]"
-                            )
-                        # Continue polling instead of breaking - temporary status errors shouldn't kill the loop
-                        await asyncio.sleep(2.0)
-                        continue
-
-            # If we reach here and cancelled is True, the operation was cancelled
-            if cancelled:
-                if not quiet:
-                    console.print("🛑 [yellow]Operation cancelled by user[/yellow]")
-                return
-
-            # Get final operation status
             try:
-                final_response = await api_client.get_operation_status(operation_id)
+                # Start async operation using new client
+                response = await cli.post(
+                    "/data/acquire/download",
+                    json=payload,
+                    params=params,
+                    timeout=10.0 if async_mode else 300.0,
+                )
 
-                # Handle None response
-                if final_response is None:
+                # Get operation ID from response
+                if response.get("success") and response.get("operation_id"):
+                    operation_id = response["operation_id"]
+                    if not quiet:
+                        console.print(f"⚡ Started operation: {operation_id}")
+                else:
+                    # Fallback to sync mode if async not supported
+                    if not quiet:
+                        console.print("ℹ️  Using synchronous mode")
+                    # Process sync response directly
+                    return await _process_data_load_response(
+                        response,
+                        symbol,
+                        timeframe,
+                        mode,
+                        output_format,
+                        verbose,
+                        quiet,
+                    )
+
+                # Monitor operation progress with enhanced display
+                if show_progress and not quiet:
+                    # Create enhanced progress display
+                    from datetime import datetime
+
+                    from ktrdr.async_infrastructure.progress import GenericProgressState
+
+                    enhanced_callback, display = create_enhanced_progress_callback(
+                        console=console, show_details=True
+                    )
+
+                    operation_started = False
+
+                    # Poll operation status with enhanced display
+                    while True:
+                        try:
+                            # Check for cancellation and send cancel request immediately
+                            if cancelled:
+                                console.print(
+                                    "[yellow]🛑 Sending cancellation to server...[/yellow]"
+                                )
+                                try:
+                                    cancel_payload = {
+                                        "reason": "User requested cancellation via CLI"
+                                    }
+                                    cancel_response = await cli.delete(
+                                        f"/operations/{operation_id}",
+                                        json=cancel_payload,
+                                        timeout=60.0,
+                                    )
+                                    if cancel_response.get("success"):
+                                        console.print(
+                                            "✅ [yellow]Cancellation sent successfully[/yellow]"
+                                        )
+                                    else:
+                                        console.print(
+                                            f"[red]Cancel failed: {cancel_response}[/red]"
+                                        )
+                                except Exception as e:
+                                    console.print(
+                                        f"[red]Cancel request failed: {str(e)}[/red]"
+                                    )
+                                break  # Exit the polling loop
+
+                            status_response = await cli.get(
+                                f"/operations/{operation_id}"
+                            )
+                            operation_data = status_response.get("data", {})
+
+                            status = operation_data.get("status")
+                            progress_info = operation_data.get("progress", {})
+                            progress_percentage = progress_info.get("percentage", 0)
+                            current_step = progress_info.get(
+                                "current_step", "Loading..."
+                            )
+
+                            # Display warnings if any
+                            warnings = operation_data.get("warnings", [])
+                            if warnings:
+                                for warning in warnings[-2:]:  # Show last 2 warnings
+                                    console.print(f"[yellow]⚠️  {warning}[/yellow]")
+
+                            # Display errors if any
+                            errors = operation_data.get("errors", [])
+                            if errors:
+                                for error in errors[-2:]:  # Show last 2 errors
+                                    console.print(f"[red]❌ {error}[/red]")
+
+                            # Create GenericProgressState for enhanced display
+                            progress_state = GenericProgressState(
+                                operation_id=operation_id,
+                                current_step=progress_info.get("steps_completed", 0),
+                                total_steps=progress_info.get("steps_total", 10),
+                                message=current_step,
+                                percentage=progress_percentage,
+                                start_time=datetime.now(),  # Approximate - could be improved
+                                items_processed=progress_info.get("items_processed", 0),
+                                total_items=progress_info.get("items_total", None),
+                                # Add the missing step fields for progress tracking
+                                step_current=progress_info.get("steps_completed", 0),
+                                step_total=progress_info.get("steps_total", 10),
+                            )
+
+                            # Start operation on first callback
+                            if not operation_started:
+                                display.start_operation(
+                                    operation_name=f"load_data_{symbol}_{timeframe}",
+                                    total_steps=progress_state.total_steps,
+                                    context={
+                                        "symbol": symbol,
+                                        "timeframe": timeframe,
+                                        "mode": mode,
+                                    },
+                                )
+                                operation_started = True
+
+                            # Update enhanced progress display
+                            display.update_progress(progress_state)
+
+                            # Check if operation completed
+                            if status in ["completed", "failed", "cancelled"]:
+                                display.complete_operation(
+                                    success=(status == "completed")
+                                )
+                                break
+
+                            # Poll every 300ms for responsive updates
+                            await asyncio.sleep(0.3)
+
+                        except Exception as e:
+                            if not quiet:
+                                console.print(
+                                    f"[yellow]Warning: Failed to get operation status: {str(e)}[/yellow]"
+                                )
+                            # Continue polling instead of breaking - temporary status errors shouldn't kill the loop
+                            await asyncio.sleep(1.0)
+                            continue
+                else:
+                    # Simple polling without progress display
+                    while True:
+                        try:
+                            # Check for cancellation and send cancel request immediately
+                            if cancelled:
+                                if not quiet:
+                                    console.print(
+                                        "🛑 Sending cancellation to server..."
+                                    )
+                                try:
+                                    cancel_payload = {
+                                        "reason": "User requested cancellation via CLI"
+                                    }
+                                    cancel_response = await cli.delete(
+                                        f"/operations/{operation_id}",
+                                        json=cancel_payload,
+                                        timeout=60.0,
+                                    )
+                                    if cancel_response.get("success"):
+                                        if not quiet:
+                                            console.print(
+                                                "✅ Cancellation sent successfully"
+                                            )
+                                    else:
+                                        if not quiet:
+                                            console.print(
+                                                f"Cancel failed: {cancel_response}"
+                                            )
+                                except Exception as e:
+                                    if not quiet:
+                                        console.print(
+                                            f"Cancel request failed: {str(e)}"
+                                        )
+                                break  # Exit the polling loop
+
+                            status_response = await cli.get(
+                                f"/operations/{operation_id}"
+                            )
+                            operation_data = status_response.get("data", {})
+                            status = operation_data.get("status")
+
+                            # Check if operation completed
+                            if status in ["completed", "failed", "cancelled"]:
+                                break
+
+                            await asyncio.sleep(2.0)
+
+                        except Exception as e:
+                            if not quiet:
+                                console.print(
+                                    f"[yellow]Warning: Failed to get operation status: {str(e)}[/yellow]"
+                                )
+                            # Continue polling instead of breaking - temporary status errors shouldn't kill the loop
+                            await asyncio.sleep(2.0)
+                            continue
+
+                # If we reach here and cancelled is True, the operation was cancelled
+                if cancelled:
+                    if not quiet:
+                        console.print("🛑 [yellow]Operation cancelled by user[/yellow]")
+                    return
+
+                # Get final operation status
+                try:
+                    final_response = await cli.get(f"/operations/{operation_id}")
+
+                    # Handle None response
+                    if final_response is None:
+                        if not quiet:
+                            console.print(
+                                "[red]❌ No response from API when getting operation status[/red]"
+                            )
+                        return
+
+                    operation_data = final_response.get("data", {})
+
+                    # Process final response using common handler
+                    return await _process_data_load_response(
+                        final_response,
+                        symbol,
+                        timeframe,
+                        mode,
+                        output_format,
+                        verbose,
+                        quiet,
+                    )
+
+                except Exception as e:
                     if not quiet:
                         console.print(
-                            "[red]❌ No response from API when getting operation status[/red]"
+                            f"[red]❌ Error getting final operation status: {str(e)}[/red]"
                         )
                     return
 
-                operation_data = final_response.get("data", {})
-
-                # Process final response using common handler
-                return await _process_data_load_response(
-                    final_response,
-                    symbol,
-                    timeframe,
-                    mode,
-                    output_format,
-                    verbose,
-                    quiet,
-                    api_client,
-                )
-
-            except Exception as e:
-                if not quiet:
-                    console.print(
-                        f"[red]❌ Error getting final operation status: {str(e)}[/red]"
-                    )
-                return
-
-        finally:
-            # Remove signal handler to avoid issues with event loop
-            try:
-                loop.remove_signal_handler(signal.SIGINT)
-            except (ValueError, NotImplementedError):
-                # Signal handling not supported on this platform, ignore
-                pass
+            finally:
+                # Remove signal handler to avoid issues with event loop
+                try:
+                    loop.remove_signal_handler(signal.SIGINT)
+                except (ValueError, NotImplementedError):
+                    # Signal handling not supported on this platform, ignore
+                    pass
 
     except KeyboardInterrupt:
         if not quiet:
-            console.print("\\n[yellow]Operation cancelled by user[/yellow]")
+            console.print("\n[yellow]Operation cancelled by user[/yellow]")
         sys.exit(1)
     except Exception as e:
         if not verbose:
@@ -705,7 +744,6 @@ async def _process_data_load_response(
     output_format: str,
     verbose: bool,
     quiet: bool,
-    api_client,
 ) -> None:
     """Process and display data load response."""
     # Process response
@@ -757,9 +795,7 @@ async def _process_data_load_response(
                 console.print(f"ℹ️  Data loading completed with status: {status}")
 
             if execution_time:
-                console.print(
-                    f"⏱️  Duration: {api_client.format_duration(execution_time)}"
-                )
+                console.print(f"⏱️  Duration: {_format_duration(execution_time)}")
 
             # Show additional metrics if available
             if verbose and data:
@@ -877,47 +913,63 @@ async def _get_data_range_async(
     output_format: str,
     verbose: bool,
 ):
-    """Async implementation of data range command."""
+    """Async implementation of data range command using AsyncCLIClient."""
     try:
-        # Check API connection
-        if not await check_api_connection():
-            display_ib_connection_required_message()
-            sys.exit(1)
+        async with AsyncCLIClient() as cli:
+            # Check API connection
+            if not await cli.health_check():
+                display_ib_connection_required_message()
+                sys.exit(1)
 
-        api_client = get_api_client()
+            if verbose:
+                console.print(f"🔍 Getting data range for {symbol} ({timeframe})")
 
-        if verbose:
-            console.print(f"🔍 Getting data range for {symbol} ({timeframe})")
-
-        # Get data range via API
-        data = await api_client.get_data_range(symbol=symbol, timeframe=timeframe)
-
-        # Format output
-        if output_format == "json":
-            result = {
+            # Get data range via API
+            payload = {
                 "symbol": symbol,
                 "timeframe": timeframe,
-                "range": data,
             }
-            print(json.dumps(result, indent=2, default=str))
-        else:
-            # Table format
-            console.print(f"\n📅 [bold]{symbol} ({timeframe}) - Data Range[/bold]")
 
-            table = Table()
-            table.add_column("Property", style="cyan")
-            table.add_column("Value", style="green")
+            response = await cli.post("/data/range", json=payload)
 
-            table.add_row("Symbol", data.get("symbol", "N/A"))
-            table.add_row("Timeframe", data.get("timeframe", "N/A"))
-            table.add_row("Start Date", str(data.get("start_date", "N/A")))
-            table.add_row("End Date", str(data.get("end_date", "N/A")))
-            table.add_row("Data Points", str(data.get("point_count", "N/A")))
+            if not response.get("success"):
+                raise DataError(
+                    message=f"Failed to get data range for {symbol} ({timeframe})",
+                    error_code="API-GetDataRangeError",
+                    details={
+                        "response": response,
+                        "symbol": symbol,
+                        "timeframe": timeframe,
+                    },
+                )
+            data = response.get("data", {})
 
-            console.print(table)
+            # Format output
+            if output_format == "json":
+                result = {
+                    "symbol": symbol,
+                    "timeframe": timeframe,
+                    "range": data,
+                }
+                print(json.dumps(result, indent=2, default=str))
+            else:
+                # Table format
+                console.print(f"\n📅 [bold]{symbol} ({timeframe}) - Data Range[/bold]")
 
-        if verbose:
-            console.print("✅ Retrieved data range information")
+                table = Table()
+                table.add_column("Property", style="cyan")
+                table.add_column("Value", style="green")
+
+                table.add_row("Symbol", data.get("symbol", "N/A"))
+                table.add_row("Timeframe", data.get("timeframe", "N/A"))
+                table.add_row("Start Date", str(data.get("start_date", "N/A")))
+                table.add_row("End Date", str(data.get("end_date", "N/A")))
+                table.add_row("Data Points", str(data.get("point_count", "N/A")))
+
+                console.print(table)
+
+            if verbose:
+                console.print("✅ Retrieved data range information")
 
     except Exception as e:
         if "404" in str(e) or "not found" in str(e).lower():

@@ -19,15 +19,16 @@ class TestDataCommandsEndpointFix:
         """Test that show_data calls /data/{symbol}/{timeframe} not /data/cached."""
         # Arrange
         mock_cli = AsyncMock()
-        mock_cli._make_request = AsyncMock()
-        mock_cli._make_request.return_value = {
-            "success": True,
-            "data": {
-                "dates": [],
-                "ohlcv": [],
-                "metadata": {"symbol": "AAPL", "timeframe": "1d", "points": 0},
-            },
-        }
+        mock_cli.get = AsyncMock(
+            return_value={
+                "success": True,
+                "data": {
+                    "dates": [],
+                    "ohlcv": [],
+                    "metadata": {"symbol": "AAPL", "timeframe": "1d", "points": 0},
+                },
+            }
+        )
 
         # Mock the CLI creation and console
         with (
@@ -35,8 +36,8 @@ class TestDataCommandsEndpointFix:
             patch("ktrdr.cli.data_commands.console"),
         ):
             # Setup the context manager behavior
-            mock_cli_class.return_value.__aenter__.return_value = mock_cli
-            mock_cli_class.return_value.__aexit__.return_value = None
+            mock_cli_class.return_value.__aenter__ = AsyncMock(return_value=mock_cli)
+            mock_cli_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             # Act
             await _show_data_async(
@@ -44,12 +45,12 @@ class TestDataCommandsEndpointFix:
             )
 
             # Assert - verify correct endpoint is called
-            mock_cli._make_request.assert_called_once()
-            call_args = mock_cli._make_request.call_args
+            mock_cli.get.assert_called_once()
+            call_args = mock_cli.get.call_args
 
             # Should call GET with /data/{symbol}/{timeframe} endpoint
-            assert call_args[0][0] == "GET"
-            assert call_args[0][1] == "/data/AAPL/1d"
+            endpoint = call_args[0][0]
+            assert endpoint == "/data/AAPL/1d"
 
             # Should NOT call the old /data/cached endpoint
             assert "/data/cached" not in str(call_args)
@@ -66,23 +67,30 @@ class TestDataCommandsEndpointFix:
         for symbol, timeframe, expected_endpoint in test_cases:
             # Arrange
             mock_cli = AsyncMock()
-            mock_cli._make_request = AsyncMock()
-            mock_cli._make_request.return_value = {
-                "success": True,
-                "data": {
-                    "dates": [],
-                    "ohlcv": [],
-                    "metadata": {"symbol": symbol, "timeframe": timeframe, "points": 0},
-                },
-            }
+            mock_cli.get = AsyncMock(
+                return_value={
+                    "success": True,
+                    "data": {
+                        "dates": [],
+                        "ohlcv": [],
+                        "metadata": {
+                            "symbol": symbol,
+                            "timeframe": timeframe,
+                            "points": 0,
+                        },
+                    },
+                }
+            )
 
             with (
                 patch("ktrdr.cli.data_commands.AsyncCLIClient") as mock_cli_class,
                 patch("ktrdr.cli.data_commands.console"),
             ):
                 # Setup the context manager behavior
-                mock_cli_class.return_value.__aenter__.return_value = mock_cli
-                mock_cli_class.return_value.__aexit__.return_value = None
+                mock_cli_class.return_value.__aenter__ = AsyncMock(
+                    return_value=mock_cli
+                )
+                mock_cli_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
                 # Act
                 await _show_data_async(
@@ -90,31 +98,33 @@ class TestDataCommandsEndpointFix:
                 )
 
                 # Assert
-                call_args = mock_cli._make_request.call_args
-                assert call_args[0][1] == expected_endpoint
+                call_args = mock_cli.get.call_args
+                endpoint = call_args[0][0]
+                assert endpoint == expected_endpoint
 
     @pytest.mark.asyncio
     async def test_show_data_passes_query_parameters(self):
         """Test that query parameters are still passed correctly."""
         # Arrange
         mock_cli = AsyncMock()
-        mock_cli._make_request = AsyncMock()
-        mock_cli._make_request.return_value = {
-            "success": True,
-            "data": {
-                "dates": [],
-                "ohlcv": [],
-                "metadata": {"symbol": "AAPL", "timeframe": "1d", "points": 0},
-            },
-        }
+        mock_cli.get = AsyncMock(
+            return_value={
+                "success": True,
+                "data": {
+                    "dates": [],
+                    "ohlcv": [],
+                    "metadata": {"symbol": "AAPL", "timeframe": "1d", "points": 0},
+                },
+            }
+        )
 
         with (
             patch("ktrdr.cli.data_commands.AsyncCLIClient") as mock_cli_class,
             patch("ktrdr.cli.data_commands.console"),
         ):
             # Setup the context manager behavior
-            mock_cli_class.return_value.__aenter__.return_value = mock_cli
-            mock_cli_class.return_value.__aexit__.return_value = None
+            mock_cli_class.return_value.__aenter__ = AsyncMock(return_value=mock_cli)
+            mock_cli_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             # Act - with trading hours and extended hours options
             await _show_data_async(
@@ -122,7 +132,7 @@ class TestDataCommandsEndpointFix:
             )
 
             # Assert
-            call_args = mock_cli._make_request.call_args
+            call_args = mock_cli.get.call_args
             params = call_args[1]["params"]  # Keyword arguments
 
             # Verify query parameters are passed

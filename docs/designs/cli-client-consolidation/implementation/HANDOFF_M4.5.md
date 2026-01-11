@@ -92,3 +92,56 @@ For Task 4.5.2 (`data_commands.py`), the migration is simpler:
 - Replace `check_api_connection()` with `cli.health_check()`
 - Replace `get_api_client()` calls with `cli.get/post()` methods
 - Param is `json=` not `json_data=`
+
+---
+
+## Task 4.5.2 Complete: Migrate data_commands.py (data load)
+
+### Migration Applied
+
+Migrated `_load_data_async` and `_get_data_range_async` from old `api_client.py` to new `AsyncCLIClient`.
+
+**Key changes:**
+1. Removed imports: `check_api_connection`, `get_api_client` from `api_client.py`
+2. Wrapped function body in `async with AsyncCLIClient() as cli:`
+3. Replaced `check_api_connection()` → `cli.health_check()`
+4. Replaced `api_client.load_data()` → `cli.post("/data/acquire/download", json=payload, params=params)`
+5. Replaced `api_client.get_operation_status()` → `cli.get(f"/operations/{operation_id}")`
+6. Replaced `api_client.cancel_operation()` → `cli.delete(f"/operations/{operation_id}", json=cancel_payload)`
+7. Replaced `api_client.get_data_range()` → `cli.post("/data/range", json=payload)` with success check
+8. Added local `_format_duration()` helper (was method on KtrdrApiClient)
+
+### Payload Construction
+
+The old `KtrdrApiClient` methods built payloads internally. Now the command builds them:
+
+```python
+# Build payload for load request
+payload: dict[str, Any] = {
+    "symbol": symbol,
+    "timeframe": timeframe,
+    "mode": mode,
+}
+if start_date:
+    payload["start_date"] = start_date
+if end_date:
+    payload["end_date"] = end_date
+if trading_hours_only or include_extended:
+    payload["filters"] = {
+        "trading_hours_only": trading_hours_only,
+        "include_extended": include_extended,
+    }
+params = {"async_mode": "true"} if async_mode else {}
+```
+
+### Test Update Required
+
+The existing `test_data_commands_endpoint_fix.py` tests were mocking `_make_request` but `_show_data_async` uses `cli.get()`. Updated tests to mock `get` method directly with proper `AsyncMock` return values.
+
+### Next Task Notes
+
+For Task 4.5.3 (`dummy_commands.py`):
+- Uses BOTH `api_client.py` and `operation_executor.py`
+- Replace `check_api_connection()` with `cli.health_check()`
+- Replace `AsyncOperationExecutor()` with `cli.execute_operation(adapter)`
+- Need to check what operation adapter is used
