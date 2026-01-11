@@ -14,7 +14,13 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from ktrdr.cli.client import AsyncCLIClient, CLIClientError
+from ktrdr.cli.client import (
+    APIError,
+    AsyncCLIClient,
+    CLIClientError,
+    ConnectionError,
+    TimeoutError,
+)
 from ktrdr.cli.telemetry import trace_cli_command
 from ktrdr.logging import get_logger
 
@@ -365,16 +371,14 @@ async def _monitor_agent_cycle(operation_id: str) -> dict:
 
                     except CLIClientError as e:
                         # Check for 404 (operation not found - lost after restart)
-                        error_str = str(e)
-                        if "404" in error_str:
+                        if isinstance(e, APIError) and e.status_code == 404:
                             console.print(
                                 "\n[yellow]Operation not found — may have been lost due to restart[/yellow]"
                             )
                             return {"status": "lost"}
 
                         # Connection error - retry with backoff
-                        error_lower = error_str.lower()
-                        if "connect" in error_lower or "timeout" in error_lower:
+                        if isinstance(e, (ConnectionError, TimeoutError)):
                             progress.update(
                                 parent_task,
                                 description="[bold blue]Research Cycle[/] [yellow]⚠ Connection lost, retrying...[/]",

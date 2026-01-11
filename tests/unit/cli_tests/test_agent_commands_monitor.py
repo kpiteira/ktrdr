@@ -531,18 +531,21 @@ class TestErrorHandlingAndPolish:
             elif call_count == 2:
                 # First connection error
                 raise ConnectionError(
-                    "Could not connect to API at http://localhost:8000")
+                    "Could not connect to API at http://localhost:8000"
+                )
             elif call_count == 3:
                 # Second connection error (should use 2s delay)
                 raise ConnectionError(
-                    "Could not connect to API at http://localhost:8000")
+                    "Could not connect to API at http://localhost:8000"
+                )
             elif call_count == 4:
                 # Success - delay should reset
                 return parent_op_running
             elif call_count == 5:
                 # Another error - should start from 1s again
                 raise ConnectionError(
-                    "Could not connect to API at http://localhost:8000")
+                    "Could not connect to API at http://localhost:8000"
+                )
             else:
                 return parent_op_completed
 

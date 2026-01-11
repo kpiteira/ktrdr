@@ -13,7 +13,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from ktrdr.cli.client import AsyncCLIClient, CLIClientError
+from ktrdr.cli.client import APIError, AsyncCLIClient, CLIClientError, ConnectionError
 from ktrdr.cli.error_handler import handle_cli_error
 from ktrdr.config.validation import InputValidator
 from ktrdr.errors import DataError
@@ -137,8 +137,7 @@ async def _show_data_async_impl(
             try:
                 data = await cli.get("/data/cached", params=params)
             except CLIClientError as e:
-                error_str = str(e)
-                if "Connection" in error_str:
+                if isinstance(e, ConnectionError):
                     console.print(
                         "[red]❌ Error: Could not connect to KTRDR API server[/red]"
                     )
@@ -146,7 +145,7 @@ async def _show_data_async_impl(
                         "Make sure the API server is running at the configured URL"
                     )
                     sys.exit(1)
-                elif "404" in error_str:
+                elif isinstance(e, APIError) and e.status_code == 404:
                     console.print(f"ℹ️  No cached data found for {symbol} ({timeframe})")
                     if start_date or end_date:
                         console.print(

@@ -20,7 +20,7 @@ from rich.table import Table
 
 from ktrdr.async_infrastructure.cancellation import setup_cli_cancellation_handler
 from ktrdr.cli.api_client import check_api_connection, get_api_client
-from ktrdr.cli.client import AsyncCLIClient, CLIClientError
+from ktrdr.cli.client import APIError, AsyncCLIClient, CLIClientError, ConnectionError
 from ktrdr.cli.error_handler import (
     display_ib_connection_required_message,
     handle_cli_error,
@@ -148,11 +148,10 @@ async def _show_data_async(
             try:
                 data = await cli.get(f"/data/{symbol}/{timeframe}", params=params)
             except CLIClientError as e:
-                error_str = str(e)
-                if "Connection" in error_str:
+                if isinstance(e, ConnectionError):
                     display_ib_connection_required_message()
                     sys.exit(1)
-                elif "404" in error_str:
+                elif isinstance(e, APIError) and e.status_code == 404:
                     console.print(f"ℹ️  No cached data found for {symbol} ({timeframe})")
                     if start_date or end_date:
                         console.print(
