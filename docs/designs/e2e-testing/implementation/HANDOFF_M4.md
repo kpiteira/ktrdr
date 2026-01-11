@@ -26,3 +26,25 @@ Key branch points:
 ### For Task 4.2
 
 Task 4.2 adds sanity check validation to the tester agent. The agent will use FAILURE_CATEGORIES.md to categorize failures when sanity checks fail (typically CONFIGURATION for 100% accuracy, CODE_BUG for impossible states).
+
+---
+
+## Task 4.2 Complete: Sanity Check Validation
+
+**File:** `.claude/agents/e2e-tester.md`
+
+### New Section Added
+
+Added "Sanity Check Validation" section with:
+- Why sanity checks matter (catches false positives)
+- 4-step process (read, execute, compare, fail if any fail)
+- Common checks table (accuracy, loss, duration, trade count)
+- Reporting format with category and diagnosis
+
+### Key Point
+
+Sanity check failures are **real failures**, not warnings. The test FAILS and gets categorized (usually CONFIGURATION for data quality issues like 100% accuracy).
+
+### For Task 4.3
+
+Task 4.3 creates troubleshooting/training.md with known training issues from E2E_CHALLENGES_ANALYSIS.md. Focus on model collapse, 0 trades, NaN metrics, timeouts, and strategy file issues.

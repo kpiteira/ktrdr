@@ -293,6 +293,51 @@ This information helps the main agent (or human) understand the failure.
 
 ---
 
+## Sanity Check Validation
+
+### Why Sanity Checks Matter
+
+From E2E_CHALLENGES_ANALYSIS.md: A test can "pass" all steps but still be invalid.
+
+**Example:** Training completes, returns "success", metrics look normal... but accuracy is 100%, indicating model collapse. The model learned to always predict HOLD because training data had no BUY/SELL labels.
+
+### Sanity Check Process
+
+After all test steps pass:
+
+1. **Read sanity checks from test recipe**
+2. **Execute each check command**
+3. **Compare against thresholds**
+4. **If ANY sanity check fails:**
+   - The test FAILS (not a warning!)
+   - Categorize using FAILURE_CATEGORIES.md
+   - Include sanity check details in report
+
+### Common Sanity Checks
+
+| Check | Threshold | Failure Indicates |
+|-------|-----------|-------------------|
+| Accuracy < 99% | >= 99% fails | Model collapse |
+| Loss > 0.001 | <= 0.001 fails | Trivial solution |
+| Duration > 1s | <= 1s fails | Skipped execution |
+| Trade count > 0 | == 0 fails | No signals generated |
+
+### Sanity Check Reporting
+
+When sanity checks fail, include full details:
+
+```markdown
+**Sanity Checks:**
+- Accuracy: 100% ❌ (threshold: < 99%)
+- Loss: 0.0001 ❌ (threshold: > 0.001)
+
+**Category:** CONFIGURATION
+**Diagnosis:** Model collapse detected. 100% accuracy with near-zero loss indicates training data has no class variance. Likely cause: zigzag threshold too high for this asset type.
+**Suggested Action:** Check label distribution. For forex (EURUSD), use 0.5% zigzag threshold instead of 2.5%.
+```
+
+---
+
 ## Tool Access
 
 You have access to:
