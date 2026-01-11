@@ -5,11 +5,34 @@ architecture: ../ARCHITECTURE.md
 
 # Milestone 5: Designer Agent
 
-**Goal:** Create the e2e-test-designer agent that researches existing tests and proposes appropriate ones for validation needs.
+**Goal:** Create the e2e-test-designer and e2e-test-architect agents that research existing tests and design new ones when needed.
 
 **Branch:** `feature/e2e-framework-m5`
 
 **Builds On:** M4 (Failure Handling)
+
+## Architecture Decision: Two-Agent Split
+
+Test design is split into two agents by cognitive demand:
+
+```
+/kdesign-impl-plan
+    │
+    ▼
+e2e-test-designer (haiku) ─── Fast catalog lookup
+    │
+    ├── Match found → Return recommendation
+    │
+    └── No match → Structured handoff
+                       │
+                       ▼
+               e2e-test-architect (opus) ─── Deep reasoning
+                       │
+                       ▼
+               Detailed test specification
+```
+
+**Rationale:** Designing new tests requires genuine reasoning about behavior validation, false positives, and edge cases. This is worth opus-level quality. Catalog lookup is mechanical and works well with haiku.
 
 ---
 
@@ -380,7 +403,7 @@ When proposing new tests, reference:
 
 ---
 
-## Task 5.2: Update SKILL.md with Designer Reference
+## Task 5.2: Update SKILL.md with Agent References
 
 **File:** `.claude/skills/e2e-testing/SKILL.md`
 
@@ -389,7 +412,7 @@ When proposing new tests, reference:
 **Task Categories:** Configuration
 
 **Description:**
-Update SKILL.md to reference the designer agent now that it exists.
+Update SKILL.md to reference both design agents now that they exist.
 
 **Changes:**
 
@@ -398,10 +421,11 @@ Update the agents table:
 ```markdown
 ## Agents That Use This Skill
 
-| Agent | Purpose | When Invoked |
-|-------|---------|--------------|
-| [e2e-tester](../../agents/e2e-tester.md) | Execute tests, report results | After milestone implementation |
-| [e2e-test-designer](../../agents/e2e-test-designer.md) | Find/propose tests | During /kdesign-impl-plan |
+| Agent | Model | Purpose | When Invoked |
+|-------|-------|---------|--------------|
+| [e2e-tester](../../agents/e2e-tester.md) | sonnet | Execute tests, report results | After milestone implementation |
+| [e2e-test-designer](../../agents/e2e-test-designer.md) | haiku | Find existing tests, identify gaps | During /kdesign-impl-plan |
+| [e2e-test-architect](../../agents/e2e-test-architect.md) | opus | Design new tests from scratch | When designer finds no match |
 ```
 
 Add section:
@@ -409,23 +433,34 @@ Add section:
 ```markdown
 ## How Tests Are Designed
 
-The e2e-test-designer agent:
+Test design uses two agents with different cognitive demands:
+
+### e2e-test-designer (haiku) - Catalog Lookup
 1. Receives validation requirements from /kdesign-impl-plan
 2. Loads this skill's catalog
 3. Searches for matching tests
-4. Returns recommendations or new test proposals
+4. Returns recommendations OR hands off to architect
 
-See [e2e-test-designer agent](../../agents/e2e-test-designer.md) for full details.
+### e2e-test-architect (opus) - New Test Design
+1. Receives handoff from designer when no match exists
+2. Analyzes requirements deeply
+3. Designs comprehensive test specification
+4. Returns detailed test with success criteria and sanity checks
+
+**Why two agents?** Catalog lookup is mechanical (haiku). Designing new tests requires reasoning about validation, false positives, and edge cases (opus).
+
+See [e2e-test-designer](../../agents/e2e-test-designer.md) and [e2e-test-architect](../../agents/e2e-test-architect.md) for full details.
 ```
 
 **Acceptance Criteria:**
-- [ ] Designer agent referenced
-- [ ] Design flow explained
+- [ ] Both agents referenced in table
+- [ ] Two-agent design flow explained
+- [ ] Model choices documented
 - [ ] Links are correct
 
 ---
 
-## Task 5.3: Verify Designer Agent Works
+## Task 5.3: Verify Both Agents Work
 
 **File:** N/A (verification task)
 
@@ -434,9 +469,11 @@ See [e2e-test-designer agent](../../agents/e2e-test-designer.md) for full detail
 **Task Categories:** Cross-Component
 
 **Description:**
-Manually verify the designer agent works by invoking it and checking output format.
+Manually verify both agents work by invoking them and checking output formats.
 
 **Verification Steps:**
+
+### Part A: Designer Agent - Exact Match
 
 1. Invoke designer agent:
    ```
@@ -450,6 +487,8 @@ Manually verify the designer agent works by invoking it and checking output form
    - [ ] Output format matches specification
    - [ ] Recommendation is actionable
 
+### Part B: Designer Agent - Partial Match
+
 3. Test partial match:
    ```
    Use the e2e-test-designer agent to find tests for:
@@ -458,8 +497,10 @@ Manually verify the designer agent works by invoking it and checking output form
 
 4. Verify output:
    - [ ] Identifies training/smoke as partial match
-   - [ ] Notes what's not covered
-   - [ ] Proposes additional checks or new test
+   - [ ] Notes what's not covered (progress tracking)
+   - [ ] Suggests invoking architect OR extending test
+
+### Part C: Designer Agent - No Match (Architect Handoff)
 
 5. Test no match:
    ```
@@ -467,32 +508,51 @@ Manually verify the designer agent works by invoking it and checking output form
    "Validate strategy hot-reload works"
    ```
 
-6. Verify output:
+6. Verify designer output:
    - [ ] Correctly identifies no existing test
-   - [ ] Proposes new test structure
-   - [ ] Lists building blocks to use
+   - [ ] Returns "Architect Handoff Required" section
+   - [ ] Handoff includes all context (requirements, components, building blocks)
+
+### Part D: Architect Agent - New Test Design
+
+7. Take the handoff from step 6 and invoke architect:
+   ```
+   Use the e2e-test-architect agent with the handoff from designer:
+   [paste handoff content]
+   ```
+
+8. Verify architect output:
+   - [ ] Returns complete test specification
+   - [ ] Includes execution steps with expected results
+   - [ ] Includes success criteria (specific, measurable)
+   - [ ] Includes sanity checks (catch false positives)
+   - [ ] Includes failure categorization guidance
 
 **Acceptance Criteria:**
-- [ ] All three scenarios work correctly
-- [ ] Output formats match specification
-- [ ] Recommendations are useful
+- [ ] Designer handles all three scenarios (exact, partial, no match)
+- [ ] Designer produces valid architect handoff when no match
+- [ ] Architect produces detailed, actionable test specification
+- [ ] Output formats match specifications
+- [ ] Two-agent flow works end-to-end
 
 ---
 
 ## Milestone 5 Completion Checklist
 
 ### All Tasks Complete
-- [ ] Task 5.1: e2e-test-designer agent definition
-- [ ] Task 5.2: SKILL.md updated with designer reference
-- [ ] Task 5.3: Designer agent verified working
+- [ ] Task 5.1: e2e-test-designer agent definition (haiku, matching)
+- [ ] Task 5.1: e2e-test-architect agent definition (opus, design)
+- [ ] Task 5.2: SKILL.md updated with both agent references
+- [ ] Task 5.3: Both agents verified working
 
 ### E2E Verification
-- [ ] Exact match: finds existing test
-- [ ] Partial match: identifies gap, proposes checks
-- [ ] No match: proposes new test structure
-- [ ] Output format matches VALIDATION.md contract
+- [ ] Designer: Exact match finds existing test
+- [ ] Designer: Partial match identifies gap
+- [ ] Designer: No match produces architect handoff
+- [ ] Architect: Produces detailed test specification
+- [ ] Two-agent flow works end-to-end
 
 ### Quality Gates
 - [ ] `make quality` passes
 - [ ] All files committed to feature branch
-- [ ] Designer and tester agents both working
+- [ ] Designer, architect, and tester agents all working
