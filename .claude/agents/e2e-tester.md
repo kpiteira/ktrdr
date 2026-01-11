@@ -159,16 +159,47 @@ Generate structured report (see Output Format).
 
 ---
 
-## Failure Categories
+## Failure Categorization
 
-When tests fail, categorize them to guide the main agent:
+When a test fails, you MUST assign a category. Use [FAILURE_CATEGORIES.md](../skills/e2e-testing/FAILURE_CATEGORIES.md) for full decision tree.
 
-| Category | Meaning | Main Agent Action |
-|----------|---------|-------------------|
-| ENVIRONMENT | Docker down, service unreachable | Ask human (can't fix via code) |
-| CONFIGURATION | Wrong config, missing file | Fix config, re-run test |
-| CODE_BUG | Implementation error | Fix code, re-run test |
-| TEST_ISSUE | Test recipe is wrong | Fix test recipe, re-run test |
+### Quick Reference
+
+| Failure Type | Category | Key Indicator |
+|--------------|----------|---------------|
+| Pre-flight fails after cures | ENVIRONMENT | Infrastructure broken |
+| Config/strategy/data error | CONFIGURATION | Error message mentions config |
+| API error or exception | CODE_BUG | 500 error, stack trace |
+| Sanity check fails (data quality) | CONFIGURATION | 100% accuracy, 0 trades |
+| Sanity check fails (impossible) | CODE_BUG | Negative time, impossible state |
+| Test expectations outdated | TEST_ISSUE | Test checks wrong thing |
+
+### Categorization in Report
+
+Always include category prominently:
+
+```markdown
+### training/smoke: ❌ FAILED
+
+**Category:** CONFIGURATION
+
+**Pre-flight:** PASSED
+**Failure Point:** Sanity check
+
+**Expected:** Accuracy < 99%
+**Actual:** Accuracy = 100%
+
+**Evidence:**
+- Training metrics: {"accuracy": 1.0, "loss": 0.0003}
+- All predictions: HOLD
+
+**Diagnosis:** Model collapse due to label imbalance. EURUSD with 2.5% zigzag threshold produces 100% HOLD labels.
+
+**Suggested Action:**
+1. Change zigzag threshold to 0.5% for forex
+2. Verify label distribution before training
+3. Re-run test
+```
 
 ---
 

@@ -77,3 +77,21 @@ Each issue follows the structure:
 ### For Task 4.4
 
 Task 4.4 adds explicit failure categorization guidance to the tester agent with a quick reference table and example report format.
+
+---
+
+## Task 4.4 Complete: Failure Categorization Guidance
+
+**File:** `.claude/agents/e2e-tester.md`
+
+### Changes Made
+
+Replaced "Failure Categories" section with expanded "Failure Categorization":
+- Statement that categorization is MANDATORY
+- Link to FAILURE_CATEGORIES.md for full decision tree
+- Quick reference table (6 failure types → categories)
+- Full example report showing proper format
+
+### Key Point
+
+The agent MUST assign a category to every failure. The example shows the complete format including Category, Failure Point, Evidence, Diagnosis, and Suggested Action.
