@@ -86,8 +86,52 @@ Three lookup tables in designer agent:
 - By Capability ("X works" -> */smoke)
 - By Keywords ("training" -> training/*)
 
-### For Task 5.2
+---
 
-Task 5.2 updates SKILL.md to reference both agents:
-- Update agents table to add e2e-test-designer and e2e-test-architect rows
-- Add "How Tests Are Designed" section explaining the two-agent flow
+## Task 5.2 Complete: SKILL.md Updated
+
+**File:** `.claude/skills/e2e-testing/SKILL.md`
+
+Updated with:
+- Agents table now has all three agents with model column
+- "How Tests Are Designed" section with diagram and rationale
+- Troubleshooting section links to training.md
+
+---
+
+## Task 5.3 Complete: Verification Passed
+
+All four scenarios verified:
+
+| Scenario | Agent | Result |
+|----------|-------|--------|
+| Exact match ("training works") | designer | ✅ Found training/smoke, full coverage |
+| Partial match ("progress tracking") | designer | ✅ Identified gap, produced handoff |
+| No match ("hot-reload") | designer | ✅ No match, produced handoff |
+| New test design | architect | ✅ Detailed spec with steps, sanity checks |
+
+**Key observations:**
+- Designer (haiku) is fast and produces clean handoffs
+- Architect (opus) produces comprehensive specs including:
+  - Detailed bash commands
+  - Success criteria checklists
+  - Sanity checks with thresholds
+  - Failure categorization tables
+  - Implementation notes
+
+---
+
+## M5 Milestone Complete
+
+All tasks completed:
+- [x] Task 5.1: e2e-test-designer agent (haiku)
+- [x] Task 5.1: e2e-test-architect agent (opus)
+- [x] Task 5.2: SKILL.md updated with both agents
+- [x] Task 5.3: Verification passed for all scenarios
+
+### For M6
+
+M6 wires these agents into /kdesign-impl-plan:
+1. Invoke designer during Step 4 (task expansion)
+2. If designer returns handoff, invoke architect
+3. Include test recommendations in milestone output
