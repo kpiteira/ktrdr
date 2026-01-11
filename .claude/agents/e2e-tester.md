@@ -4,6 +4,7 @@ description: Use this agent to execute E2E tests and get detailed PASS/FAIL repo
 tools: Bash, Read, Grep, Write, Glob
 model: sonnet
 color: green
+permissionMode: bypassPermissions
 ---
 
 # E2E Test Executor
@@ -159,16 +160,47 @@ Generate structured report (see Output Format).
 
 ---
 
-## Failure Categories
+## Failure Categorization
 
-When tests fail, categorize them to guide the main agent:
+When a test fails, you MUST assign a category. Use [FAILURE_CATEGORIES.md](../skills/e2e-testing/FAILURE_CATEGORIES.md) for full decision tree.
 
-| Category | Meaning | Main Agent Action |
-|----------|---------|-------------------|
-| ENVIRONMENT | Docker down, service unreachable | Ask human (can't fix via code) |
-| CONFIGURATION | Wrong config, missing file | Fix config, re-run test |
-| CODE_BUG | Implementation error | Fix code, re-run test |
-| TEST_ISSUE | Test recipe is wrong | Fix test recipe, re-run test |
+### Quick Reference
+
+| Failure Type | Category | Key Indicator |
+|--------------|----------|---------------|
+| Pre-flight fails after cures | ENVIRONMENT | Infrastructure broken |
+| Config/strategy/data error | CONFIGURATION | Error message mentions config |
+| API error or exception | CODE_BUG | 500 error, stack trace |
+| Sanity check fails (data quality) | CONFIGURATION | 100% accuracy, 0 trades |
+| Sanity check fails (impossible) | CODE_BUG | Negative time, impossible state |
+| Test expectations outdated | TEST_ISSUE | Test checks wrong thing |
+
+### Categorization in Report
+
+Always include category prominently:
+
+```markdown
+### training/smoke: ❌ FAILED
+
+**Category:** CONFIGURATION
+
+**Pre-flight:** PASSED
+**Failure Point:** Sanity check
+
+**Expected:** Accuracy < 99%
+**Actual:** Accuracy = 100%
+
+**Evidence:**
+- Training metrics: {"accuracy": 1.0, "loss": 0.0003}
+- All predictions: HOLD
+
+**Diagnosis:** Model collapse due to label imbalance. EURUSD with 2.5% zigzag threshold produces 100% HOLD labels.
+
+**Suggested Action:**
+1. Change zigzag threshold to 0.5% for forex
+2. Verify label distribution before training
+3. Re-run test
+```
 
 ---
 
@@ -290,6 +322,51 @@ When escalating after cure failure, capture context-appropriate diagnostics:
 5. Number of attempts made vs max allowed
 
 This information helps the main agent (or human) understand the failure.
+
+---
+
+## Sanity Check Validation
+
+### Why Sanity Checks Matter
+
+From E2E_CHALLENGES_ANALYSIS.md: A test can "pass" all steps but still be invalid.
+
+**Example:** Training completes, returns "success", metrics look normal... but accuracy is 100%, indicating model collapse. The model learned to always predict HOLD because training data had no BUY/SELL labels.
+
+### Sanity Check Process
+
+After all test steps pass:
+
+1. **Read sanity checks from test recipe**
+2. **Execute each check command**
+3. **Compare against thresholds**
+4. **If ANY sanity check fails:**
+   - The test FAILS (not a warning!)
+   - Categorize using FAILURE_CATEGORIES.md
+   - Include sanity check details in report
+
+### Common Sanity Checks
+
+| Check | Threshold | Failure Indicates |
+|-------|-----------|-------------------|
+| Accuracy < 99% | >= 99% fails | Model collapse |
+| Loss > 0.001 | <= 0.001 fails | Trivial solution |
+| Duration > 1s | <= 1s fails | Skipped execution |
+| Trade count > 0 | == 0 fails | No signals generated |
+
+### Sanity Check Reporting
+
+When sanity checks fail, include full details:
+
+```markdown
+**Sanity Checks:**
+- Accuracy: 100% ❌ (threshold: < 99%)
+- Loss: 0.0001 ❌ (threshold: > 0.001)
+
+**Category:** CONFIGURATION
+**Diagnosis:** Model collapse detected. 100% accuracy with near-zero loss indicates training data has no class variance. Likely cause: zigzag threshold too high for this asset type.
+**Suggested Action:** Check label distribution. For forex (EURUSD), use 0.5% zigzag threshold instead of 2.5%.
+```
 
 ---
 

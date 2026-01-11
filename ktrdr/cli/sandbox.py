@@ -276,6 +276,13 @@ def create(
     instance_id = derive_instance_id(worktree_path)
     generate_env_file(worktree_path, instance_id, slot)
 
+    # Copy Claude Code settings if example exists
+    claude_settings_example = worktree_path / ".claude" / "settings.local.example.json"
+    claude_settings_target = worktree_path / ".claude" / "settings.local.json"
+    if claude_settings_example.exists() and not claude_settings_target.exists():
+        shutil.copy(claude_settings_example, claude_settings_target)
+        console.print("  [dim]Copied .claude/settings.local.json from example[/dim]")
+
     # Register instance
     add_instance(
         InstanceInfo(
@@ -362,6 +369,13 @@ def init(
 
     # Generate .env.sandbox
     generate_env_file(cwd, instance_id, slot)
+
+    # Copy Claude Code settings if example exists
+    claude_settings_example = cwd / ".claude" / "settings.local.example.json"
+    claude_settings_target = cwd / ".claude" / "settings.local.json"
+    if claude_settings_example.exists() and not claude_settings_target.exists():
+        shutil.copy(claude_settings_example, claude_settings_target)
+        console.print("  [dim]Copied .claude/settings.local.json from example[/dim]")
 
     # Detect if this is a worktree
     is_worktree = (cwd / ".git").is_file()  # Worktrees have .git as file, not dir
