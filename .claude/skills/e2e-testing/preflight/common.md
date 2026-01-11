@@ -100,15 +100,12 @@ echo "=== All pre-flight checks passed ==="
 
 **Cure:**
 ```bash
-# Restart Docker compose
-docker compose down
-docker compose up -d
-# Wait for services to stabilize
-sleep 15
+# Recreate and restart Docker compose services (preserves volumes)
+docker compose up -d --force-recreate
 ```
 
 **Max Retries:** 2
-**Wait After Cure:** 15 seconds
+**Wait After Cure:** 15 seconds (agent applies this wait after executing cure)
 
 ---
 
@@ -122,16 +119,15 @@ sleep 15
 ```bash
 # Check if it's a port issue first
 [ -f .env.sandbox ] && source .env.sandbox
-API_PORT=${KTRDR_API_PORT:-8000}
+export API_PORT=${KTRDR_API_PORT:-8000}
 echo "Using API_PORT=$API_PORT"
 
-# If still failing, restart backend
+# Restart backend container
 docker compose restart backend
-sleep 10
 ```
 
 **Max Retries:** 2
-**Wait After Cure:** 10 seconds
+**Wait After Cure:** 10 seconds (agent applies this wait after executing cure)
 
 ---
 
@@ -154,5 +150,5 @@ else
 fi
 ```
 
-**Max Retries:** 1 (if this doesn't work, it's a real problem)
-**Wait After Cure:** 0 seconds (just config reload)
+**Max Retries:** 1 (config issue — if this doesn't work, it's a real problem)
+**Wait After Cure:** 0 seconds (config reload only, no service restart)

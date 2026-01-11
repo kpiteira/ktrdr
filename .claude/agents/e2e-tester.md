@@ -61,25 +61,27 @@ Read the test file (e.g., `.claude/skills/e2e-testing/tests/training/smoke.md`)
 2. Execute each check
 3. **If a check fails:**
 
-   **Cure Loop (max 2 attempts per check):**
+   **Cure Loop (respects per-cure Max Retries from mapping):**
 
    ```
-   for attempt in 1, 2:
-     1. Look up symptom→cure mapping in preflight module
-     2. If cure exists:
-        - Log: "Applying cure for [symptom] (attempt {attempt}/2)"
+   1. Look up symptom→cure mapping in preflight module
+   2. If cure exists:
+      maxRetries = cure's "Max Retries" value (e.g., 2 for Docker, 1 for Wrong Port)
+      for attempt in 1..maxRetries:
+        - Log: "Applying cure for [symptom] (attempt {attempt}/{maxRetries})"
         - Execute cure commands
-        - Wait specified time (10-15s)
+        - Wait the cure's "Wait After Cure" duration
         - Retry the check
         - If check passes: continue to next check
-        - If check fails: continue to next attempt
-     3. If no cure exists or max attempts reached:
-        - Gather diagnostics
-        - Report pre-flight failure with:
-          - Which check failed
-          - What cures were attempted
-          - Current system state
-          - Escalate to main agent
+      If still failing after maxRetries:
+        - Proceed to diagnostics
+   3. If no cure exists or max retries exhausted:
+      - Gather diagnostics
+      - Report pre-flight failure with:
+        - Which check failed
+        - What cures were attempted
+        - Current system state
+        - Escalate to main agent
    ```
 
 4. If all checks pass: proceed to test execution
@@ -248,8 +250,8 @@ All API calls should use `http://localhost:$API_PORT/...` rather than hardcoded 
 ### When to Apply Cures
 
 - Pre-flight check fails AND cure is documented in preflight module
-- Max 2 attempts per check (prevents infinite loops)
-- Wait 10-15s after applying cure (services need time to stabilize)
+- Use the cure's **Max Retries** value (e.g., 2 for Docker/Backend, 1 for Wrong Port)
+- Wait the cure's **Wait After Cure** duration after executing cure commands
 
 ### Cure Reporting
 
@@ -276,11 +278,16 @@ Include cure attempts in the report.
 
 ### Diagnostic Gathering
 
-When escalating after cure failure, capture:
+When escalating after cure failure, capture context-appropriate diagnostics:
+
+**For Docker/Backend issues:**
 1. `docker compose ps` output
-2. `docker compose logs backend --tail 20`
+2. `docker compose logs backend --tail 20` (or all services if Docker cure)
 3. Current port configuration (`echo $KTRDR_API_PORT`)
+
+**For all failures:**
 4. Any error messages from cure attempts
+5. Number of attempts made vs max allowed
 
 This information helps the main agent (or human) understand the failure.
 

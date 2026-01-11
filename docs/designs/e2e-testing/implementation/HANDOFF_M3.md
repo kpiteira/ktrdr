@@ -15,8 +15,8 @@ Each cure mapping follows this pattern:
 
 ### Three Cures Added
 
-| Symptom | Retries | Wait |
-|---------|---------|------|
+| Symptom | Max Retries | Wait After Cure |
+|---------|-------------|-----------------|
 | Docker Not Running | 2 | 15s |
 | Backend API Not Responding | 2 | 10s |
 | Wrong Port (Sandbox Issue) | 1 | 0s |
@@ -79,7 +79,7 @@ Task 3.3 is the integration test — manually verify the cure system works by:
 ### Key Observations
 
 1. **Sandbox port matters** — Must use `KTRDR_API_PORT` from `.env.sandbox` (8001), not default 8000
-2. **`restart` vs `down`** — `docker compose restart backend` fails silently if container doesn't exist (after `down`)
+2. **`restart` requires existing containers** — `docker compose restart backend` only works if the container exists; after `docker compose down` removes containers, use `docker compose up -d` to recreate them
 3. **Port conflicts** — Multiple KTRDR instances can cause port conflicts; `ktrdr sandbox up` handles this better than raw `docker compose up`
 
 ### Gotcha for Future Tests
