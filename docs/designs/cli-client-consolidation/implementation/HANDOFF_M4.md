@@ -82,18 +82,44 @@ def on_progress(percentage: int, message: str) -> None:
 
 ---
 
-## Next Task Notes (4.2: backtest_commands.py)
+## Task 4.2 Complete: Migrate backtest_commands.py
 
-**Pattern is identical** - look at model_commands.py as reference.
+### Migration Applied
 
-**Key imports:**
+Identical pattern to model_commands.py:
 ```python
-from ktrdr.cli.operation_adapters import BacktestingOperationAdapter
+from ktrdr.cli.client import AsyncCLIClient, CLIClientError
+
+async with AsyncCLIClient() as cli:
+    result = await cli.execute_operation(
+        adapter,
+        on_progress=on_progress,
+        poll_interval=0.3,
+    )
 ```
 
-**Check backtest_commands.py for:**
-- Uses of `AsyncOperationExecutor` → replace with `execute_operation`
-- Manual signal handler setup → remove
-- Inline polling loops → replace with single execute_operation call
+### Changes Made
 
-**BacktestingOperationAdapter already exists** in operation_adapters.py with proper endpoints and payload handling.
+1. **Replaced imports** - `AsyncOperationExecutor` → `AsyncCLIClient, CLIClientError`
+2. **Added Rich Progress imports** - `Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn`
+3. **Refactored `_run_backtest_async_impl`** - Now uses `async with AsyncCLIClient()` context manager
+4. **Added health check** - Uses `cli.health_check()` before operation
+5. **Added progress callback** - Uses `nonlocal task_id` pattern for Rich Progress updates
+6. **Added result handling** - Handles completed/failed/cancelled statuses
+7. **Extracted results display** - New `_display_backtest_results()` function for cleaner code
+
+### Gotcha: Result Summary Field
+
+Backtest results are in `result.get("result_summary", {}).get("metrics", {})` - not `result.get("results")`.
+
+---
+
+## M4 Milestone Complete
+
+All operation commands now use `AsyncCLIClient.execute_operation()`:
+- ✅ model_commands.py (Task 4.1)
+- ✅ backtest_commands.py (Task 4.2)
+
+**No remaining imports from `operation_executor.py` in:**
+- ktrdr/cli/model_commands.py
+- ktrdr/cli/backtest_commands.py
