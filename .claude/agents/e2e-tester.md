@@ -4,6 +4,7 @@ description: Use this agent to execute E2E tests and get detailed PASS/FAIL repo
 tools: Bash, Read, Grep, Write, Glob
 model: sonnet
 color: green
+permissionMode: bypassPermissions
 ---
 
 # E2E Test Executor
