@@ -57,7 +57,7 @@ class TestTrainingUsesExecuteOperation:
         # Verify execute_operation was called, not post/get polling
         assert (
             mock_client.execute_operation.called
-        ), "Training must use client.execute_operation() not inline polling"
+        ), "Training must use client.execute_operation()"
         # execute_operation should be called once
         assert mock_client.execute_operation.call_count == 1
 
@@ -160,16 +160,12 @@ class TestTrainingNoOperationExecutorImports:
 
         source = inspect.getsource(module)
 
-        # Should NOT have these imports
-        assert (
-            "from ktrdr.cli.operation_executor" not in source
-        ), "model_commands.py must not import from operation_executor"
-        assert (
-            "import operation_executor" not in source
-        ), "model_commands.py must not import operation_executor"
-        assert (
-            "AsyncOperationExecutor" not in source
-        ), "model_commands.py must not use AsyncOperationExecutor"
+        # Should NOT have these imports or usages
+        assert not (
+            "from ktrdr.cli.operation_executor" in source
+            or "import operation_executor" in source
+            or "AsyncOperationExecutor" in source
+        ), "model_commands.py must not import or use AsyncOperationExecutor"
 
 
 class TestTrainingProgressDisplay:

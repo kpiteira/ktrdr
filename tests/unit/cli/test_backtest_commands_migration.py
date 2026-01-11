@@ -147,16 +147,15 @@ class TestBacktestNoOperationExecutorImports:
 
         source = inspect.getsource(module)
 
-        # Should NOT have these imports
-        assert (
-            "from ktrdr.cli.operation_executor" not in source
-        ), "backtest_commands.py must not import from operation_executor"
-        assert (
-            "import operation_executor" not in source
-        ), "backtest_commands.py must not import operation_executor"
-        assert (
-            "AsyncOperationExecutor" not in source
-        ), "backtest_commands.py must not use AsyncOperationExecutor"
+        # Should NOT have these imports or use AsyncOperationExecutor
+        assert not any(
+            forbidden in source
+            for forbidden in (
+                "from ktrdr.cli.operation_executor",
+                "import operation_executor",
+                "AsyncOperationExecutor",
+            )
+        ), "backtest_commands.py must not import or use AsyncOperationExecutor"
 
 
 class TestBacktestProgressDisplay:

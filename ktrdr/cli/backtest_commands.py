@@ -246,11 +246,18 @@ async def _run_backtest_async_impl(
 
 
 def _display_backtest_results(result: dict, console: Console) -> None:
-    """Display backtest performance results."""
+    """Display backtest performance results.
+
+    If no metrics are present in the result, a notice is printed and the function
+    returns without displaying detailed metrics.
+    """
     result_summary = result.get("result_summary", {})
     metrics = result_summary.get("metrics", {})
 
     if not metrics:
+        console.print(
+            "[yellow]No performance metrics were returned for this backtest.[/yellow]"
+        )
         return
 
     console.print("📊 [bold green]Backtest Results:[/bold green]")
