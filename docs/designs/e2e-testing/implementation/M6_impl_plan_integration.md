@@ -138,7 +138,7 @@ For each milestone, determine what needs E2E validation:
    |------|---------|-------|
    | training/smoke | Verify training works | Existing test |
 
-   **New Test to Create (from e2e-test-architect):**
+   **New Test Specification (from e2e-test-architect):**
 
    If architect was invoked, include the full test specification:
    - Test name and purpose

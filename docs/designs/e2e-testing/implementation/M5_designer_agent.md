@@ -540,8 +540,7 @@ Manually verify both agents work by invoking them and checking output formats.
 ## Milestone 5 Completion Checklist
 
 ### All Tasks Complete
-- [ ] Task 5.1: e2e-test-designer agent definition (haiku, matching)
-- [ ] Task 5.1: e2e-test-architect agent definition (opus, design)
+- [ ] Task 5.1: e2e-test-designer and e2e-test-architect agent definitions (haiku + opus)
 - [ ] Task 5.2: SKILL.md updated with both agent references
 - [ ] Task 5.3: Both agents verified working
 

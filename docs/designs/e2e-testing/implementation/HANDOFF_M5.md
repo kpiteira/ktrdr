@@ -1,4 +1,4 @@
-# Handoff: Milestone 5 - Designer Agent
+# Handoff: Milestone 5 - Designer and Architect Agents
 
 ## Task 5.1 Complete: Two-Agent Test Design Architecture
 

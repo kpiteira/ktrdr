@@ -88,7 +88,7 @@ See [e2e-tester agent](../../agents/e2e-tester.md) for full details.
 
 | Domain | Module | Common Issues |
 |--------|--------|---------------|
-| [Training](troubleshooting/training.md) | training.md | Model collapse, 0 trades, NaN metrics, timeouts |
+| [Training](troubleshooting/training.md) | Training | Model collapse, 0 trades, NaN metrics, timeouts |
 
 ## Creating New Tests
 
