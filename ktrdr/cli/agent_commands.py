@@ -373,7 +373,8 @@ async def _monitor_agent_cycle(operation_id: str) -> dict:
                             return {"status": "lost"}
 
                         # Connection error - retry with backoff
-                        if "Connection" in error_str or "Timeout" in error_str:
+                        error_lower = error_str.lower()
+                        if "connect" in error_lower or "timeout" in error_lower:
                             progress.update(
                                 parent_task,
                                 description="[bold blue]Research Cycle[/] [yellow]⚠ Connection lost, retrying...[/]",

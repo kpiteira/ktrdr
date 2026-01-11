@@ -394,7 +394,7 @@ class TestErrorHandlingAndPolish:
     ):
         """Connection error triggers retry with exponential backoff."""
         from ktrdr.cli.agent_commands import _monitor_agent_cycle
-        from ktrdr.cli.client import CLIClientError
+        from ktrdr.cli.client import ConnectionError
 
         call_count = 0
 
@@ -405,8 +405,8 @@ class TestErrorHandlingAndPolish:
                 return parent_op_running
             elif call_count <= 3:
                 # Simulate connection error for 2 attempts
-                raise CLIClientError(
-                    "Connection error: Could not connect to API server",
+                raise ConnectionError(
+                    "Could not connect to API at http://localhost:8000",
                 )
             else:
                 return parent_op_completed
@@ -436,7 +436,7 @@ class TestErrorHandlingAndPolish:
     ):
         """'Connection lost, retrying...' message shown in progress bar during retry."""
         from ktrdr.cli.agent_commands import _monitor_agent_cycle
-        from ktrdr.cli.client import CLIClientError
+        from ktrdr.cli.client import ConnectionError
 
         call_count = 0
 
@@ -446,8 +446,8 @@ class TestErrorHandlingAndPolish:
             if call_count == 1:
                 return parent_op_running
             elif call_count == 2:
-                raise CLIClientError(
-                    "Connection error: Could not connect to API server",
+                raise ConnectionError(
+                    "Could not connect to API at http://localhost:8000",
                 )
             else:
                 return parent_op_completed
@@ -475,7 +475,7 @@ class TestErrorHandlingAndPolish:
     ):
         """404 response exits with 'operation not found' message."""
         from ktrdr.cli.agent_commands import _monitor_agent_cycle
-        from ktrdr.cli.client import CLIClientError
+        from ktrdr.cli.client import APIError
 
         call_count = 0
 
@@ -486,8 +486,8 @@ class TestErrorHandlingAndPolish:
                 return parent_op_running
             else:
                 # Operation disappeared (backend restart)
-                raise CLIClientError(
-                    "API request failed: 404 Not Found",
+                raise APIError(
+                    "Not Found",
                     status_code=404,
                 )
 
@@ -518,7 +518,7 @@ class TestErrorHandlingAndPolish:
     ):
         """Retry delay resets to 1s after a successful request."""
         from ktrdr.cli.agent_commands import _monitor_agent_cycle
-        from ktrdr.cli.client import CLIClientError
+        from ktrdr.cli.client import ConnectionError
 
         call_count = 0
         sleep_durations = []
@@ -530,19 +530,19 @@ class TestErrorHandlingAndPolish:
                 return parent_op_running
             elif call_count == 2:
                 # First connection error
-                raise CLIClientError(
-                    "Connection error")
+                raise ConnectionError(
+                    "Could not connect to API at http://localhost:8000")
             elif call_count == 3:
                 # Second connection error (should use 2s delay)
-                raise CLIClientError(
-                    "Connection error")
+                raise ConnectionError(
+                    "Could not connect to API at http://localhost:8000")
             elif call_count == 4:
                 # Success - delay should reset
                 return parent_op_running
             elif call_count == 5:
                 # Another error - should start from 1s again
-                raise CLIClientError(
-                    "Connection error")
+                raise ConnectionError(
+                    "Could not connect to API at http://localhost:8000")
             else:
                 return parent_op_completed
 

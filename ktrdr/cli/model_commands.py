@@ -280,7 +280,6 @@ async def _train_model_async(
                     "Make sure the API server is running at the configured URL"
                 )
                 sys.exit(1)
-                return
 
             if verbose:
                 symbols_str = ", ".join(symbols)
