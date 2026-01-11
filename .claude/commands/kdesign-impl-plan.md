@@ -336,6 +336,55 @@ Smoke test:
 
 ---
 
+### Step 4.6: E2E Test Design
+
+**For each milestone**, Claude determines what E2E tests should validate the milestone is complete. This uses the two-agent test design system.
+
+#### 4.6.1 Invoke e2e-test-designer
+
+For each milestone, send a structured request to the e2e-test-designer agent:
+
+```markdown
+## E2E Test Design Request
+
+**Milestone:** [name/number]
+**Capability:** [what user can do when complete]
+
+**Validation Requirements:**
+1. [Specific thing that must work]
+2. [Another specific thing]
+
+**Components Involved:**
+- [Component A]
+- [Component B]
+
+**Intent:** [Free-form: what we're really validating and why]
+**Expectations:** [What a passing test should demonstrate]
+```
+
+#### 4.6.2 Handle Designer Response
+
+**If designer returns existing tests:**
+- Include them in the E2E Validation section
+- Note coverage and any gaps identified
+
+**If designer returns "Architect Handoff Required":**
+- Invoke e2e-test-architect with the handoff context
+- Architect returns a detailed test specification
+- Include the full specification in the E2E Validation section
+- Add a task to create the test file before execution
+
+#### 4.6.3 Incorporate into Milestone Output
+
+Add an E2E Validation section to each milestone file (see "E2E Validation Section Format" below).
+
+**Why this matters:**
+- Most milestones will match existing tests (designer handles quickly)
+- New capabilities get proper test design (architect ensures quality)
+- Every milestone has specific, actionable E2E tests — not generic "run E2E tests"
+
+---
+
 ### Step 5: Review and Refine
 
 After generating all tasks, Claude presents summary:
@@ -677,7 +726,7 @@ Each `M[N]_[name].md` file contains:
 
 1. **Frontmatter** — References to design/architecture docs (from command params)
 2. **Milestone goal** — One sentence
-3. **E2E test scenario** — Full test script/commands
+3. **E2E Validation section** — Tests from designer/architect (see format below)
 4. **Tasks** — Detailed task specs
 5. **Completion checklist** — All gates that must pass
 
@@ -697,6 +746,64 @@ The frontmatter embeds the same paths provided to this command, enabling `/ktask
 
 This structure means `/ktask` only loads the milestone file it needs.
 
+### E2E Validation Section Format
+
+This section is populated by invoking the e2e-test-designer agent (Step 4.6):
+
+```markdown
+## E2E Validation
+
+### Tests to Run
+
+| Test | Purpose | Source |
+|------|---------|--------|
+| training/smoke | Verify training completes | Existing |
+| training/progress | Verify progress updates | New (architect) |
+
+### Coverage Notes
+
+[From designer output: what's covered, any gaps]
+
+### New Test Specification (if architect was invoked)
+
+If the designer handed off to the architect, include the full specification here:
+
+#### Test: [category]/[name]
+
+**Purpose:** [one sentence]
+**Duration:** [expected time]
+
+**Execution Steps:**
+
+| Step | Action | Expected Result | Evidence |
+|------|--------|-----------------|----------|
+| 1 | [action] | [result] | [capture] |
+
+**Success Criteria:**
+- [ ] [Specific, measurable criterion]
+
+**Sanity Checks:**
+
+| Check | Threshold | Failure Indicates |
+|-------|-----------|-------------------|
+| [metric] | [condition] | [meaning] |
+
+---
+
+### Pre-Execution Task (if new test)
+
+If a new test was designed, add a task to the milestone:
+- [ ] Create `.claude/skills/e2e-testing/tests/[category]/[name].md` from architect specification above
+
+### Execution
+
+After all tasks complete (including test file creation if needed):
+
+```
+Invoke e2e-tester agent with: [test-list]
+```
+```
+
 ---
 
 ## Integration with Other Commands
@@ -704,9 +811,16 @@ This structure means `/ktask` only loads the milestone file it needs.
 **Flow:**
 1. `/kdesign-validate` → Validates design, produces scenarios and milestone structure
 2. `/kdesign-impl-plan` → Expands milestones into detailed tasks (this command)
+   - Invokes `e2e-test-designer` (haiku) per milestone to find relevant tests
+   - If no match, invokes `e2e-test-architect` (opus) to design new tests
 3. `/ktask` → Executes individual tasks with TDD
+4. `e2e-tester` → Executes E2E tests at milestone completion
 
 The validation output (scenarios, decisions, milestone structure) feeds directly into implementation planning. If validation was done, reference it to maintain consistency.
+
+**Agent integration:**
+- `e2e-test-designer` (haiku, fast): Searches test catalog, returns matches or handoffs to architect
+- `e2e-test-architect` (opus, thorough): Designs new tests with steps, criteria, sanity checks
 
 ---
 
