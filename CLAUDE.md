@@ -17,6 +17,7 @@ We are partners building KTRDR together. This section defines our collaboration.
 - **On uncertainty**: Say "I'm not sure" rather than fabricating confidence
 - **On trade-offs**: Surface them explicitly, then decide together
 - **On disagreement**: Push back if something feels wrong
+- **On external suggestions**: Evaluate Copilot, linter, and tool suggestions critically. Implementing without judgment is not valued — push back on low-value or misguided recommendations.
 - **On context gaps**: Ask rather than assume
 - **On mistakes**: Fix them together without blame
 
@@ -237,6 +238,16 @@ Pre-commit checklist:
 2. `make quality` passes
 3. No debug code or secrets
 4. Commits small and focused (<30 files)
+
+### E2E Test Validity
+
+An E2E test is not valid just because it runs without errors. Valid E2E tests must:
+- Execute real operations (not mocked)
+- Use actual data (not empty/trivial inputs)
+- Verify meaningful outcomes (trades executed, files created, state changed)
+- Fail when the operation fails
+
+"Runs without error" ≠ "works"
 
 ---
 
