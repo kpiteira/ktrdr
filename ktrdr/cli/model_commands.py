@@ -29,6 +29,7 @@ from rich.table import Table
 from ktrdr.cli.api_client import check_api_connection, get_api_client
 from ktrdr.cli.client import AsyncCLIClient, CLIClientError
 from ktrdr.cli.commands import get_effective_api_url
+from ktrdr.cli.operation_adapters import TrainingOperationAdapter
 from ktrdr.cli.v3_utils import display_v3_dry_run, is_v3_strategy
 from ktrdr.config.strategy_loader import strategy_loader
 from ktrdr.config.validation import InputValidator
@@ -39,48 +40,6 @@ from ktrdr.logging import get_logger
 logger = get_logger(__name__)
 console = Console()
 error_console = Console(stderr=True)
-
-
-async def _wait_for_cancellation_completion(
-    cli: AsyncCLIClient, operation_id: str, console, timeout: int = 30
-):
-    """Wait for training cancellation to complete with timeout (IB pattern)."""
-    import time
-
-    start_time = time.time()
-
-    while time.time() - start_time < timeout:
-        try:
-            status_result = await cli.get(f"/operations/{operation_id}/status")
-            operation_data = status_result.get("data", {})
-            status = operation_data.get("status", "unknown")
-
-            if status == "cancelled":
-                console.print(
-                    "✅ [green]Training cancellation completed successfully[/green]"
-                )
-                return True
-            elif status in ["completed", "failed"]:
-                console.print(
-                    f"⚠️ [yellow]Training finished as '{status}' before cancellation could complete[/yellow]"
-                )
-                return True
-
-            # Show progress while waiting
-            elapsed = int(time.time() - start_time)
-            console.print(
-                f"⏳ Waiting for cancellation completion... ({elapsed}s/{timeout}s)"
-            )
-            await asyncio.sleep(2)
-
-        except Exception as e:
-            console.print(f"[red]Error checking cancellation status: {e}[/red]")
-            break
-
-    console.print(
-        f"⚠️ [yellow]Cancellation timeout after {timeout}s - training may still be running[/yellow]"
-    )
-    return False
 
 
 # Create the CLI app for model commands
@@ -267,7 +226,7 @@ async def _train_model_async(
     verbose: bool,
     detailed_analytics: bool,
 ):
-    """Async implementation of train model command using AsyncCLIClient."""
+    """Async implementation of train model command using AsyncCLIClient.execute_operation()."""
     try:
         # Use AsyncCLIClient for connection reuse and performance
         async with AsyncCLIClient() as cli:
@@ -297,7 +256,7 @@ async def _train_model_async(
                 console.print(f"💾 Models directory: {models_dir}")
                 return
 
-            # Call the training API endpoint using AsyncCLIClient
+            # Display training parameters
             console.print("🚀 [cyan]Starting model training via async API...[/cyan]")
             console.print("📋 Training parameters:")
             console.print(f"   Strategy: {strategy_file}")
@@ -312,285 +271,78 @@ async def _train_model_async(
                     "   Analytics: [green]✅ Detailed analytics enabled[/green]"
                 )
 
-            # Start the training via AsyncCLIClient
-            try:
-                # Extract strategy name from file path (remove .yaml extension)
-                strategy_name = Path(strategy_file).stem
+            # Extract strategy name from file path (remove .yaml extension)
+            strategy_name = Path(strategy_file).stem
 
-                # Use training API with improved connection reuse
-                result = await cli.post(
-                    "/trainings/start",
-                    json={
-                        "symbols": symbols,
-                        "timeframes": timeframes,
-                        "strategy_name": strategy_name,
-                        "start_date": start_date,
-                        "end_date": end_date,
-                        "detailed_analytics": detailed_analytics,
-                    },
-                )
-
-                if "task_id" not in result:
-                    console.print(
-                        f"❌ [red]API response missing task_id: {result}[/red]"
-                    )
-                    return
-
-                task_id = result["task_id"]
-                console.print(f"✅ Training started with ID: [bold]{task_id}[/bold]")
-
-            except CLIClientError as e:
-                console.print(f"❌ [red]Failed to start training: {str(e)}[/red]")
-                return
-
-        # Poll for progress with proper signal handling (IB pattern)
-        # Temporarily suppress httpx logging to keep progress display clean
-        import logging
-        import signal
-
-        httpx_logger = logging.getLogger("httpx")
-        original_level = httpx_logger.level
-        httpx_logger.setLevel(logging.WARNING)
-
-        # Set up cancellation handling like IB operations
-        cancelled = False
-        loop = asyncio.get_running_loop()
-
-        def signal_handler():
-            """Handle Ctrl+C for graceful training cancellation."""
-            nonlocal cancelled
-            cancelled = True
-            console.print(
-                "\n[yellow]🛑 Training cancellation requested... stopping training[/yellow]"
+            # Create the training adapter
+            adapter = TrainingOperationAdapter(
+                strategy_name=strategy_name,
+                symbols=symbols,
+                timeframes=timeframes,
+                start_date=start_date,
+                end_date=end_date,
+                validation_split=validation_split,
+                detailed_analytics=detailed_analytics,
             )
 
-        # Register signal handler with the event loop
-        loop.add_signal_handler(signal.SIGINT, signal_handler)
-
-        try:
-            with Progress(
+            # Set up progress display using Rich Progress
+            progress_bar = Progress(
                 SpinnerColumn(),
                 TextColumn("[progress.description]{task.description}"),
                 BarColumn(),
                 TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
                 TimeElapsedColumn(),
                 console=console,
-            ) as progress:
-                task = progress.add_task("Training model...", total=100)
+            )
+            task_id = None
 
-                while True:
-                    try:
-                        # Check for cancellation first (IB pattern)
-                        if cancelled:
-                            console.print(
-                                "[yellow]🛑 Sending cancellation to training service...[/yellow]"
-                            )
-                            try:
-                                cancel_response = await cli.post(
-                                    f"/operations/{task_id}/cancel",
-                                    json={
-                                        "reason": "User requested cancellation via CLI"
-                                    },
-                                )
-                                if cancel_response.get("success"):
-                                    console.print(
-                                        "✅ [yellow]Training cancellation sent successfully[/yellow]"
-                                    )
-                                    # Wait for cancellation to complete with timeout
-                                    await _wait_for_cancellation_completion(
-                                        cli, task_id, console
-                                    )
-                                else:
-                                    console.print(
-                                        f"[red]Training cancellation failed: {cancel_response}[/red]"
-                                    )
-                            except Exception as e:
-                                console.print(
-                                    f"[red]Training cancel request failed: {str(e)}[/red]"
-                                )
-                            return
-
-                        # Get status from operations framework using AsyncCLIClient
-                        status_result = await cli.get(f"/operations/{task_id}/status")
-                        operation_data = status_result.get("data", {})
-
-                        status = operation_data.get("status", "unknown")
-                        progress_info = operation_data.get("progress", {})
-                        progress_pct = progress_info.get("percentage", 0)
-
-                        # Extract epoch info from metadata and results
-                        metadata = operation_data.get("metadata", {})
-                        total_epochs = metadata.get("parameters", {}).get("epochs", 100)
-
-                        # For completed operations, get actual epochs from results
-                        if status == "completed" and operation_data.get(
-                            "result_summary"
-                        ):
-                            training_metrics = operation_data.get(
-                                "result_summary", {}
-                            ).get("training_metrics", {})
-                            current_epoch = training_metrics.get("epochs_trained", 0)
-                        else:
-                            # For running operations, parse epoch and bars from current_step
-                            current_step = (
-                                progress_info.get("current_step", "")
-                                if progress_info
-                                else ""
-                            )
-                            current_epoch = 0
-                            bars_info = ""
-
-                            # Parse "Epoch: N, Bars: X/Y" format
-                            if (
-                                current_step
-                                and "Epoch:" in current_step
-                                and "Bars:" in current_step
-                            ):
-                                try:
-                                    # Extract epoch number
-                                    epoch_part = (
-                                        current_step.split("Epoch:")[1]
-                                        .split(",")[0]
-                                        .strip()
-                                    )
-                                    current_epoch = int(epoch_part)
-
-                                    # Extract bars part "X/Y"
-                                    bars_part = current_step.split("Bars:")[1].strip()
-                                    # Remove any trailing text like "(Val Acc: 0.123)"
-                                    if bars_part and "(" in bars_part:
-                                        bars_part = bars_part.split("(")[0].strip()
-
-                                    # Parse current bars and total bars for this epoch
-                                    if bars_part and "/" in bars_part:
-                                        current_bars_str, total_bars_str = (
-                                            bars_part.split("/")
-                                        )
-                                        current_bars = int(
-                                            current_bars_str.replace(",", "")
-                                        )
-                                        total_bars_all_epochs = int(
-                                            total_bars_str.replace(",", "")
-                                        )
-
-                                        # Calculate bars per epoch and current bars in this epoch
-                                        bars_per_epoch = (
-                                            total_bars_all_epochs // total_epochs
-                                            if total_epochs > 0
-                                            else 0
-                                        )
-                                        bars_this_epoch = (
-                                            current_bars % bars_per_epoch
-                                            if bars_per_epoch > 0
-                                            else 0
-                                        )
-
-                                        bars_info = f", Bars: {bars_this_epoch:,}/{bars_per_epoch:,}"
-
-                                except (IndexError, ValueError, ZeroDivisionError):
-                                    current_epoch = 0
-                                    bars_info = ""
-
-                        # Update progress bar with epoch and bars info
-                        if current_epoch > 0:
-                            epoch_info = (
-                                f" (Epoch: {current_epoch}/{total_epochs}{bars_info})"
-                            )
-                        else:
-                            epoch_info = ""
-                        progress.update(
-                            task,
-                            completed=progress_pct,
-                            description=f"Status: {status}{epoch_info}",
-                        )
-
-                        if status == "completed":
-                            console.print(
-                                "✅ [green]Model training completed successfully![/green]"
-                            )
-                            break
-                        elif status == "failed":
-                            error_msg = operation_data.get("error", "Unknown error")
-                            console.print(f"❌ [red]Training failed: {error_msg}[/red]")
-                            return
-                        elif status == "cancelled":
-                            console.print(
-                                "✅ [yellow]Training cancelled successfully[/yellow]"
-                            )
-                            return
-
-                        # Wait before next poll
-                        await asyncio.sleep(3)
-
-                    except asyncio.CancelledError:
-                        console.print(
-                            "\n⚠️  [yellow]Training monitoring cancelled[/yellow]"
-                        )
-                        return
-                    except Exception as e:
-                        console.print(
-                            f"❌ [red]Error polling training status: {str(e)}[/red]"
-                        )
-                        return
-        finally:
-            # Remove signal handler and restore logging
-            try:
-                loop.remove_signal_handler(signal.SIGINT)
-            except (ValueError, OSError):
-                pass
-            httpx_logger.setLevel(original_level)
-
-            # Get real results from API using AsyncCLIClient
-            try:
-                performance_result = await cli.get(f"/trainings/{task_id}/performance")
-                training_metrics = performance_result.get("training_metrics", {})
-                test_metrics = performance_result.get("test_metrics", {})
-                model_info = performance_result.get("model_info", {})
-
-                # Display real results
-                console.print("📊 [bold green]Training Results:[/bold green]")
-                console.print(
-                    f"🎯 Test accuracy: {test_metrics.get('test_accuracy', 0) * 100:.1f}%"
-                )
-                console.print(
-                    f"📊 Precision: {test_metrics.get('precision', 0) * 100:.1f}%"
-                )
-                console.print(f"📊 Recall: {test_metrics.get('recall', 0) * 100:.1f}%")
-                console.print(
-                    f"📊 F1 Score: {test_metrics.get('f1_score', 0) * 100:.1f}%"
-                )
-                console.print(
-                    f"📈 Validation accuracy: {training_metrics.get('final_val_accuracy', 0) * 100:.1f}%"
-                )
-                console.print(
-                    f"📉 Final loss: {training_metrics.get('final_train_loss', 0):.4f}"
-                )
-                console.print(
-                    f"⏱️  Training time: {training_metrics.get('training_time_minutes', 0):.1f} minutes"
-                )
-
-                # Format model size from bytes
-                model_size_bytes = model_info.get("model_size_bytes", 0)
-                if model_size_bytes == 0:
-                    console.print("💾 Model size: 0 bytes")
-                elif model_size_bytes < 1024:
-                    console.print(f"💾 Model size: {model_size_bytes} bytes")
-                elif model_size_bytes < 1024 * 1024:
-                    console.print(f"💾 Model size: {model_size_bytes / 1024:.1f} KB")
-                else:
-                    console.print(
-                        f"💾 Model size: {model_size_bytes / (1024 * 1024):.1f} MB"
+            def on_progress(percentage: int, message: str) -> None:
+                """Progress callback for Rich progress display."""
+                nonlocal task_id
+                if task_id is not None:
+                    progress_bar.update(
+                        task_id, completed=percentage, description=message
                     )
 
-            except Exception as e:
-                console.print(
-                    f"❌ [red]Error retrieving training results: {str(e)}[/red]"
-                )
-                console.print(
-                    "✅ [green]Training completed, but unable to fetch detailed results[/green]"
-                )
+            # Execute the operation with progress display
+            try:
+                with progress_bar:
+                    task_id = progress_bar.add_task("Training model...", total=100)
+                    result = await cli.execute_operation(
+                        adapter,
+                        on_progress=on_progress,
+                        poll_interval=0.3,
+                    )
+            except CLIClientError as e:
+                console.print(f"❌ [red]Failed to start training: {str(e)}[/red]")
+                return
 
-            console.print("💾 Model training completed via API")
+            # Handle result based on final status
+            status = result.get("status", "unknown")
+            operation_id = result.get("operation_id", "")
+
+            if status == "completed":
+                console.print(
+                    "✅ [green]Model training completed successfully![/green]"
+                )
+                console.print(f"   Operation ID: [bold]{operation_id}[/bold]")
+
+                # Fetch and display performance results
+                await _display_training_results(cli, operation_id, console)
+
+            elif status == "failed":
+                error_msg = result.get(
+                    "error_message", result.get("error", "Unknown error")
+                )
+                console.print(f"❌ [red]Training failed: {error_msg}[/red]")
+
+            elif status == "cancelled":
+                console.print("✅ [yellow]Training cancelled successfully[/yellow]")
+
+            else:
+                console.print(
+                    f"⚠️ [yellow]Training ended with status: {status}[/yellow]"
+                )
 
     except CLIClientError:
         # Re-raise CLI errors without wrapping
@@ -609,6 +361,54 @@ async def _train_model_async(
                 "error": str(e),
             },
         ) from e
+
+
+async def _display_training_results(
+    cli: AsyncCLIClient,
+    operation_id: str,
+    console: Console,
+) -> None:
+    """Fetch and display training performance results."""
+    try:
+        performance_result = await cli.get(f"/trainings/{operation_id}/performance")
+        training_metrics = performance_result.get("training_metrics", {})
+        test_metrics = performance_result.get("test_metrics", {})
+        model_info = performance_result.get("model_info", {})
+
+        # Display real results
+        console.print("📊 [bold green]Training Results:[/bold green]")
+        console.print(
+            f"🎯 Test accuracy: {test_metrics.get('test_accuracy', 0) * 100:.1f}%"
+        )
+        console.print(f"📊 Precision: {test_metrics.get('precision', 0) * 100:.1f}%")
+        console.print(f"📊 Recall: {test_metrics.get('recall', 0) * 100:.1f}%")
+        console.print(f"📊 F1 Score: {test_metrics.get('f1_score', 0) * 100:.1f}%")
+        console.print(
+            f"📈 Validation accuracy: {training_metrics.get('final_val_accuracy', 0) * 100:.1f}%"
+        )
+        console.print(
+            f"📉 Final loss: {training_metrics.get('final_train_loss', 0):.4f}"
+        )
+        console.print(
+            f"⏱️  Training time: {training_metrics.get('training_time_minutes', 0):.1f} minutes"
+        )
+
+        # Format model size from bytes
+        model_size_bytes = model_info.get("model_size_bytes", 0)
+        if model_size_bytes == 0:
+            console.print("💾 Model size: 0 bytes")
+        elif model_size_bytes < 1024:
+            console.print(f"💾 Model size: {model_size_bytes} bytes")
+        elif model_size_bytes < 1024 * 1024:
+            console.print(f"💾 Model size: {model_size_bytes / 1024:.1f} KB")
+        else:
+            console.print(f"💾 Model size: {model_size_bytes / (1024 * 1024):.1f} MB")
+
+    except Exception as e:
+        console.print(f"❌ [red]Error retrieving training results: {str(e)}[/red]")
+        console.print(
+            "✅ [green]Training completed, but unable to fetch detailed results[/green]"
+        )
 
 
 @models_app.command("list")
