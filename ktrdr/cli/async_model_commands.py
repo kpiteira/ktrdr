@@ -1,7 +1,7 @@
-"""Model commands using unified AsyncOperationExecutor pattern.
+"""Model commands using AsyncCLIClient.execute_operation() pattern.
 
 This module provides model training commands using the unified async operations
-pattern with AsyncOperationExecutor and TrainingOperationAdapter.
+pattern with AsyncCLIClient and TrainingOperationAdapter.
 """
 
 import asyncio
@@ -11,9 +11,16 @@ from typing import Optional
 
 import typer
 from rich.console import Console
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
 
+from ktrdr.cli.client import AsyncCLIClient, CLIClientError
 from ktrdr.cli.operation_adapters import TrainingOperationAdapter
-from ktrdr.cli.operation_executor import AsyncOperationExecutor
 from ktrdr.cli.telemetry import trace_cli_command
 from ktrdr.cli.v3_utils import display_v3_dry_run, is_v3_strategy
 from ktrdr.config.strategy_loader import StrategyConfigurationLoader, strategy_loader
@@ -230,7 +237,7 @@ async def _train_model_async_impl(
     verbose: bool,
     detailed_analytics: bool,
 ) -> None:
-    """Async implementation of train model command using unified executor pattern."""
+    """Async implementation of train model command using AsyncCLIClient.execute_operation()."""
     # Reduce HTTP logging noise unless verbose mode
     if not verbose:
         import logging
@@ -254,101 +261,136 @@ async def _train_model_async_impl(
         console.print(f"💾 Models directory: {models_dir}")
         return
 
-    # Display training parameters
-    console.print("🚀 [cyan]Starting model training via async API...[/cyan]")
-    console.print("📋 Training parameters:")
-    console.print(f"   Strategy: {strategy_file}")
-    symbols_str = ", ".join(symbols)
-    console.print(f"   Symbols: {symbols_str}")
-    timeframes_str = ", ".join(timeframes)
-    console.print(f"   Timeframes: {timeframes_str}")
-    console.print(f"   Period: {start_date} to {end_date}")
-    console.print(f"   Validation split: {validation_split}")
-    if detailed_analytics:
-        console.print("   Analytics: [green]✅ Detailed analytics enabled[/green]")
-
-    # Extract strategy name from file path
-    strategy_name = Path(strategy_file).stem
-
-    # Create adapter with training-specific parameters
-    adapter = TrainingOperationAdapter(
-        strategy_name=strategy_name,
-        symbols=symbols,
-        timeframes=timeframes,
-        start_date=start_date,
-        end_date=end_date,
-        validation_split=validation_split,
-        detailed_analytics=detailed_analytics,
-    )
-
-    # Create executor for unified async operation handling
-    executor = AsyncOperationExecutor()
-
-    # Define training-specific progress message formatter
-    def format_training_progress(operation_data: dict) -> str:
-        """Format progress message with training-specific details.
-
-        The TrainingProgressRenderer on the backend already formats rich progress
-        messages and puts them in progress.current_step. We should use that first,
-        and only fall back to manual construction if it's not available.
-        """
-        status = operation_data.get("status", "unknown")
-        progress_info = operation_data.get("progress") or {}
-
-        # First, try to use the pre-formatted message from TrainingProgressRenderer
-        # This is in progress.current_step and should already contain epoch/batch/GPU info
-        rendered_message = progress_info.get("current_step")
-        if rendered_message and rendered_message != "Status: running":
-            # Use the backend-rendered message directly
-            return f"Status: {status} - {rendered_message}"
-
-        # Fallback: extract context and build message manually
-        progress_context = (
-            progress_info.get("context") if progress_info else None
-        ) or {}
-
-        # Debug: log what we're receiving
-        if verbose:
-            logger.debug(
-                f"Progress info: current_step={rendered_message}, context={progress_context}"
+    # Use AsyncCLIClient for connection reuse and performance
+    async with AsyncCLIClient() as cli:
+        # Check API connection
+        if not await cli.health_check():
+            error_console.print(
+                "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
             )
+            error_console.print(
+                "Make sure the API server is running at the configured URL"
+            )
+            sys.exit(1)
 
-        # Extract epoch information
-        metadata = operation_data.get("metadata") or {}
-        parameters = metadata.get("parameters") or {}
-        total_epochs = parameters.get("epochs", 100)
+        # Display training parameters
+        console.print("🚀 [cyan]Starting model training via async API...[/cyan]")
+        console.print("📋 Training parameters:")
+        console.print(f"   Strategy: {strategy_file}")
+        symbols_str = ", ".join(symbols)
+        console.print(f"   Symbols: {symbols_str}")
+        timeframes_str = ", ".join(timeframes)
+        console.print(f"   Timeframes: {timeframes_str}")
+        console.print(f"   Period: {start_date} to {end_date}")
+        console.print(f"   Validation split: {validation_split}")
+        if detailed_analytics:
+            console.print("   Analytics: [green]✅ Detailed analytics enabled[/green]")
 
-        # Get current epoch from progress context (match TrainingProgressBridge field names)
-        current_epoch = progress_context.get("epoch_index", 0)
-        current_batch = progress_context.get("batch_number", 0)
-        total_batches = progress_context.get("batch_total_per_epoch", 0)
-        total_epochs_from_context = progress_context.get("total_epochs", total_epochs)
+        # Extract strategy name from file path
+        strategy_name = Path(strategy_file).stem
 
-        # Build status message with epoch/batch info
-        status_msg = f"Status: {status}"
-        if current_epoch > 0:
-            status_msg += f" (Epoch: {current_epoch}/{total_epochs_from_context}"
-            if current_batch > 0 and total_batches > 0:
-                status_msg += f", Batch: {current_batch}/{total_batches}"
-            status_msg += ")"
+        # Create adapter with training-specific parameters
+        adapter = TrainingOperationAdapter(
+            strategy_name=strategy_name,
+            symbols=symbols,
+            timeframes=timeframes,
+            start_date=start_date,
+            end_date=end_date,
+            validation_split=validation_split,
+            detailed_analytics=detailed_analytics,
+        )
 
-        # Extract GPU info
-        resource_usage = progress_context.get("resource_usage") or {}
-        if resource_usage.get("gpu_used"):
-            gpu_name = resource_usage.get("gpu_name", "GPU")
-            gpu_util = resource_usage.get("gpu_utilization_percent")
-            if gpu_util is not None:
-                status_msg += f" 🖥️ {gpu_name}: {gpu_util:.0f}%"
+        # Set up progress display using Rich Progress
+        progress_bar = Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TimeElapsedColumn(),
+            console=console,
+        )
+        task_id = None
 
-        return status_msg
+        def on_progress(percentage: int, message: str) -> None:
+            """Progress callback for Rich progress display."""
+            nonlocal task_id
+            if task_id is not None:
+                progress_bar.update(task_id, completed=percentage, description=message)
 
-    # Execute operation - executor handles progress bar
-    success = await executor.execute_operation(
-        adapter=adapter,
-        console=console,
-        progress_callback=format_training_progress,
-        show_progress=True,
-    )
+        # Execute the operation with progress display
+        try:
+            with progress_bar:
+                task_id = progress_bar.add_task("Training model...", total=100)
+                result = await cli.execute_operation(
+                    adapter,
+                    on_progress=on_progress,
+                    poll_interval=0.3,
+                )
+        except CLIClientError as e:
+            console.print(f"❌ [red]Failed to start training: {str(e)}[/red]")
+            sys.exit(1)
 
-    # Exit with appropriate code
-    sys.exit(0 if success else 1)
+        # Handle result based on final status
+        status = result.get("status", "unknown")
+        operation_id = result.get("operation_id", "")
+
+        if status == "completed":
+            console.print("✅ [green]Training completed successfully![/green]")
+            console.print(f"   Operation ID: [bold]{operation_id}[/bold]")
+
+            # Display training results from result_summary
+            _display_training_results(result, console)
+            sys.exit(0)
+
+        elif status == "failed":
+            error_msg = result.get(
+                "error_message", result.get("error", "Unknown error")
+            )
+            console.print(f"❌ [red]Training failed: {error_msg}[/red]")
+            sys.exit(1)
+
+        elif status == "cancelled":
+            console.print("✅ [yellow]Training cancelled successfully[/yellow]")
+            sys.exit(0)
+
+        else:
+            console.print(f"⚠️ [yellow]Training ended with status: {status}[/yellow]")
+            sys.exit(1)
+
+
+def _display_training_results(result: dict, console: Console) -> None:
+    """Display training performance results.
+
+    If no metrics are present in the result, a notice is printed and the function
+    returns without displaying detailed metrics.
+    """
+    result_summary = result.get("result_summary", {})
+    training_metrics = result_summary.get("training_metrics", {})
+
+    if not training_metrics:
+        console.print(
+            "[yellow]No training metrics were returned for this operation.[/yellow]"
+        )
+        return
+
+    console.print("📊 [bold green]Training Results:[/bold green]")
+
+    # Epochs trained
+    epochs_trained = training_metrics.get("epochs_trained", 0)
+    if epochs_trained:
+        console.print(f"   Epochs Trained: {epochs_trained}")
+
+    # Final loss
+    final_loss = training_metrics.get("final_loss")
+    if final_loss is not None:
+        console.print(f"   Final Loss: {final_loss:.6f}")
+
+    # Final validation loss
+    final_val_loss = training_metrics.get("final_val_loss")
+    if final_val_loss is not None:
+        console.print(f"   Final Validation Loss: {final_val_loss:.6f}")
+
+    # Model path
+    model_path = result_summary.get("model_path")
+    if model_path:
+        console.print(f"   Model saved to: {model_path}")
