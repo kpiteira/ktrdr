@@ -100,8 +100,13 @@ echo "=== All pre-flight checks passed ==="
 
 **Cure:**
 ```bash
-# Recreate and restart Docker compose services (preserves volumes)
-docker compose up -d --force-recreate
+# Use sandbox-aware restart (handles compose file and env vars)
+if [ -f .env.sandbox ]; then
+  source .env.sandbox
+  docker compose -f docker-compose.sandbox.yml up -d --force-recreate
+else
+  docker compose up -d --force-recreate
+fi
 ```
 
 **Max Retries:** 2
@@ -117,13 +122,17 @@ docker compose up -d --force-recreate
 
 **Cure:**
 ```bash
-# Check if it's a port issue first
+# Load sandbox config if present
 [ -f .env.sandbox ] && source .env.sandbox
 export API_PORT=${KTRDR_API_PORT:-8000}
 echo "Using API_PORT=$API_PORT"
 
-# Start or restart backend (handles both stopped and removed containers)
-docker compose up -d backend
+# Start or restart backend (sandbox-aware)
+if [ -f .env.sandbox ]; then
+  docker compose -f docker-compose.sandbox.yml up -d backend
+else
+  docker compose up -d backend
+fi
 ```
 
 **Max Retries:** 2
