@@ -20,7 +20,7 @@ from rich.table import Table
 
 from ktrdr.async_infrastructure.cancellation import setup_cli_cancellation_handler
 from ktrdr.cli.api_client import check_api_connection, get_api_client
-from ktrdr.cli.async_cli_client import AsyncCLIClient, AsyncCLIClientError
+from ktrdr.cli.client import APIError, AsyncCLIClient, CLIClientError, ConnectionError
 from ktrdr.cli.error_handler import (
     display_ib_connection_required_message,
     handle_cli_error,
@@ -146,14 +146,12 @@ async def _show_data_async(
 
             # Get cached data via async API call
             try:
-                data = await cli._make_request(
-                    "GET", f"/data/{symbol}/{timeframe}", params=params
-                )
-            except AsyncCLIClientError as e:
-                if e.error_code == "CLI-ConnectionError":
+                data = await cli.get(f"/data/{symbol}/{timeframe}", params=params)
+            except CLIClientError as e:
+                if isinstance(e, ConnectionError):
                     display_ib_connection_required_message()
                     sys.exit(1)
-                elif e.error_code.startswith("CLI-404"):
+                elif isinstance(e, APIError) and e.status_code == 404:
                     console.print(f"ℹ️  No cached data found for {symbol} ({timeframe})")
                     if start_date or end_date:
                         console.print(
@@ -256,7 +254,7 @@ async def _show_data_async(
                     f"✅ Retrieved {len(df)} data points from cache via AsyncCLIClient"
                 )
 
-    except AsyncCLIClientError:
+    except CLIClientError:
         # Re-raise CLI errors without wrapping
         raise
     except Exception as e:

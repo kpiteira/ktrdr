@@ -13,7 +13,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from ktrdr.cli.async_cli_client import AsyncCLIClient, AsyncCLIClientError
+from ktrdr.cli.client import APIError, AsyncCLIClient, CLIClientError, ConnectionError
 from ktrdr.cli.error_handler import handle_cli_error
 from ktrdr.config.validation import InputValidator
 from ktrdr.errors import DataError
@@ -135,9 +135,9 @@ async def _show_data_async_impl(
 
             # Get cached data via async API call
             try:
-                data = await cli._make_request("GET", "/data/cached", params=params)
-            except AsyncCLIClientError as e:
-                if e.error_code == "CLI-ConnectionError":
+                data = await cli.get("/data/cached", params=params)
+            except CLIClientError as e:
+                if isinstance(e, ConnectionError):
                     console.print(
                         "[red]❌ Error: Could not connect to KTRDR API server[/red]"
                     )
@@ -145,7 +145,7 @@ async def _show_data_async_impl(
                         "Make sure the API server is running at the configured URL"
                     )
                     sys.exit(1)
-                elif e.error_code.startswith("CLI-404"):
+                elif isinstance(e, APIError) and e.status_code == 404:
                     console.print(f"ℹ️  No cached data found for {symbol} ({timeframe})")
                     if start_date or end_date:
                         console.print(
@@ -249,7 +249,7 @@ async def _show_data_async_impl(
                     f"✅ Retrieved {len(df)} data points from cache via AsyncCLIClient"
                 )
 
-    except AsyncCLIClientError:
+    except CLIClientError:
         # Re-raise CLI errors without wrapping
         raise
     except Exception as e:
@@ -267,9 +267,8 @@ def check_api_connection_async() -> bool:
     async def _check() -> bool:
         try:
             async with AsyncCLIClient() as cli:
-                await cli._make_request("GET", "/health")
-                return True
-        except AsyncCLIClientError:
+                return await cli.health_check()
+        except CLIClientError:
             return False
 
     return asyncio.run(_check())

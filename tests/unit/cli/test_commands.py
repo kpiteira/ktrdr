@@ -79,7 +79,7 @@ def test_data_show_basic(runner, sample_api_response):
         mock_cli.__aenter__.return_value = mock_cli
         mock_cli.__aexit__.return_value = None
         # Return full API response structure, not just the data field
-        mock_cli._make_request.return_value = sample_api_response
+        mock_cli.get.return_value = sample_api_response
         mock_cli_class.return_value = mock_cli
 
         result = runner.invoke(cli_app, ["data", "show", "AAPL"])
@@ -96,7 +96,7 @@ def test_data_show_basic(runner, sample_api_response):
 def test_data_show_with_rows(runner, mock_api_client, sample_api_response):
     """Test the data show command with custom number of rows."""
 
-    mock_api_client._make_request.return_value = sample_api_response
+    mock_api_client.get.return_value = sample_api_response
 
     result = runner.invoke(cli_app, ["data", "show", "AAPL", "--rows", "2"])
 
@@ -107,7 +107,7 @@ def test_data_show_with_rows(runner, mock_api_client, sample_api_response):
 def test_data_show_with_timeframe(runner, mock_api_client, sample_api_response):
     """Test the data show command with timeframe option."""
 
-    mock_api_client._make_request.return_value = sample_api_response
+    mock_api_client.get.return_value = sample_api_response
 
     result = runner.invoke(cli_app, ["data", "show", "AAPL", "--timeframe", "1h"])
 
@@ -123,7 +123,7 @@ def test_data_show_json_format(runner, sample_api_response):
         mock_cli.__aenter__.return_value = mock_cli
         mock_cli.__aexit__.return_value = None
         # Return full API response structure, not just the data field
-        mock_cli._make_request.return_value = sample_api_response
+        mock_cli.get.return_value = sample_api_response
         mock_cli_class.return_value = mock_cli
 
         result = runner.invoke(cli_app, ["data", "show", "AAPL", "--format", "json"])
@@ -135,16 +135,16 @@ def test_data_show_json_format(runner, sample_api_response):
 
 def test_data_show_no_data(runner):
     """Test the data show command when no data is found."""
-    from ktrdr.cli.async_cli_client import AsyncCLIClientError
+    from ktrdr.cli.client import APIError
 
     with patch("ktrdr.cli.data_commands.AsyncCLIClient") as mock_cli_class:
         # Set up AsyncCLIClient mock to raise 404 error
         mock_cli = AsyncMock()
         mock_cli.__aenter__.return_value = mock_cli
         mock_cli.__aexit__.return_value = None
-        mock_cli._make_request.side_effect = AsyncCLIClientError(
-            "API request failed: Not Found",
-            error_code="CLI-404",
+        mock_cli.get.side_effect = APIError(
+            "Not Found",
+            status_code=404,
         )
         mock_cli_class.return_value = mock_cli
 
@@ -157,9 +157,9 @@ def test_data_show_no_data(runner):
 
 def test_data_show_empty_data(runner, mock_api_client):
     """Test the data show command when data is empty but API call succeeds."""
-    # Mock _make_request to return empty data (should be handled gracefully)
+    # Mock get to return empty data (should be handled gracefully)
 
-    mock_api_client._make_request.return_value = {
+    mock_api_client.get.return_value = {
         "success": True,
         "data": {
             "dates": [],
@@ -180,16 +180,15 @@ def test_data_show_empty_data(runner, mock_api_client):
 
 def test_data_show_api_connection_error(runner):
     """Test the data show command when API connection fails."""
-    from ktrdr.cli.async_cli_client import AsyncCLIClientError
+    from ktrdr.cli.client import ConnectionError
 
     with patch("ktrdr.cli.data_commands.AsyncCLIClient") as mock_cli_class:
         # Set up AsyncCLIClient mock to raise connection error
         mock_cli = AsyncMock()
         mock_cli.__aenter__.return_value = mock_cli
         mock_cli.__aexit__.return_value = None
-        mock_cli._make_request.side_effect = AsyncCLIClientError(
-            "Could not connect to API server",
-            error_code="CLI-ConnectionError",
+        mock_cli.get.side_effect = ConnectionError(
+            "Could not connect to API at http://localhost:8000/api/v1",
         )
         mock_cli_class.return_value = mock_cli
 

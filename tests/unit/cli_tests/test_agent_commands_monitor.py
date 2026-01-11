@@ -143,7 +143,7 @@ class TestNestedChildProgress:
         from ktrdr.cli.agent_commands import _monitor_agent_cycle
 
         # Sequence: training phase with child -> completed
-        mock_client._make_request = AsyncMock(
+        mock_client.get = AsyncMock(
             side_effect=[
                 parent_op_training,
                 child_op_training,
@@ -157,7 +157,7 @@ class TestNestedChildProgress:
                     await _monitor_agent_cycle("op_parent_123")
 
         # Should have polled child operation
-        calls = mock_client._make_request.call_args_list
+        calls = mock_client.get.call_args_list
         child_poll_calls = [c for c in calls if "op_training_456" in str(c)]
         assert len(child_poll_calls) >= 1, "Should poll child training operation"
 
@@ -175,7 +175,7 @@ class TestNestedChildProgress:
         from ktrdr.cli.agent_commands import _monitor_agent_cycle
 
         # Sequence: backtesting phase with child -> completed
-        mock_client._make_request = AsyncMock(
+        mock_client.get = AsyncMock(
             side_effect=[
                 parent_op_backtesting,
                 child_op_backtest,
@@ -189,7 +189,7 @@ class TestNestedChildProgress:
                     await _monitor_agent_cycle("op_parent_123")
 
         # Should have polled child operation
-        calls = mock_client._make_request.call_args_list
+        calls = mock_client.get.call_args_list
         child_poll_calls = [c for c in calls if "op_backtest_789" in str(c)]
         assert len(child_poll_calls) >= 1, "Should poll child backtest operation"
 
@@ -206,7 +206,7 @@ class TestNestedChildProgress:
         from ktrdr.cli.agent_commands import _monitor_agent_cycle
 
         # Sequence: designing phase -> completed
-        mock_client._make_request = AsyncMock(
+        mock_client.get = AsyncMock(
             side_effect=[
                 parent_op_designing,
                 parent_op_completed,
@@ -219,7 +219,7 @@ class TestNestedChildProgress:
                     await _monitor_agent_cycle("op_parent_123")
 
         # Should only poll parent, not any child
-        calls = mock_client._make_request.call_args_list
+        calls = mock_client.get.call_args_list
         assert all(
             "/operations/op_parent_123" in str(c) for c in calls
         ), "Should only poll parent operation during design phase"
@@ -252,7 +252,7 @@ class TestNestedChildProgress:
         }
 
         # Sequence: training with child -> assessing (no child) -> completed
-        mock_client._make_request = AsyncMock(
+        mock_client.get = AsyncMock(
             side_effect=[
                 parent_op_training,
                 child_op_training,
@@ -287,7 +287,7 @@ class TestNestedChildProgress:
 
         call_count = 0
 
-        async def mock_request(method, path):
+        async def mock_request(path):
             nonlocal call_count
             call_count += 1
             if "op_training_456" in path:
@@ -298,7 +298,7 @@ class TestNestedChildProgress:
             else:
                 return parent_op_completed
 
-        mock_client._make_request = AsyncMock(side_effect=mock_request)
+        mock_client.get = AsyncMock(side_effect=mock_request)
 
         with patch("ktrdr.cli.agent_commands.AsyncCLIClient", return_value=mock_client):
             with patch("ktrdr.cli.agent_commands.console", mock_console):
@@ -321,7 +321,7 @@ class TestNestedChildProgress:
         """Child progress is extracted and displayed via progress.update."""
         from ktrdr.cli.agent_commands import _monitor_agent_cycle
 
-        mock_client._make_request = AsyncMock(
+        mock_client.get = AsyncMock(
             side_effect=[
                 parent_op_training,
                 child_op_training,
@@ -335,7 +335,7 @@ class TestNestedChildProgress:
                     await _monitor_agent_cycle("op_parent_123")
 
         # Verify we polled the child operation at least once
-        calls = mock_client._make_request.call_args_list
+        calls = mock_client.get.call_args_list
         child_calls = [c for c in calls if "op_training_456" in str(c)]
         assert len(child_calls) >= 1
 
@@ -394,26 +394,24 @@ class TestErrorHandlingAndPolish:
     ):
         """Connection error triggers retry with exponential backoff."""
         from ktrdr.cli.agent_commands import _monitor_agent_cycle
-        from ktrdr.cli.async_cli_client import AsyncCLIClientError
+        from ktrdr.cli.client import ConnectionError
 
         call_count = 0
 
-        async def mock_request(method, path):
+        async def mock_request(path):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
                 return parent_op_running
             elif call_count <= 3:
                 # Simulate connection error for 2 attempts
-                raise AsyncCLIClientError(
-                    "Could not connect to API server",
-                    error_code="CLI-ConnectionError",
-                    details={"error": "Connection refused"},
+                raise ConnectionError(
+                    "Could not connect to API at http://localhost:8000",
                 )
             else:
                 return parent_op_completed
 
-        mock_client._make_request = AsyncMock(side_effect=mock_request)
+        mock_client.get = AsyncMock(side_effect=mock_request)
 
         with patch("ktrdr.cli.agent_commands.AsyncCLIClient", return_value=mock_client):
             with patch("ktrdr.cli.agent_commands.console", mock_console):
@@ -438,24 +436,23 @@ class TestErrorHandlingAndPolish:
     ):
         """'Connection lost, retrying...' message shown in progress bar during retry."""
         from ktrdr.cli.agent_commands import _monitor_agent_cycle
-        from ktrdr.cli.async_cli_client import AsyncCLIClientError
+        from ktrdr.cli.client import ConnectionError
 
         call_count = 0
 
-        async def mock_request(method, path):
+        async def mock_request(path):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
                 return parent_op_running
             elif call_count == 2:
-                raise AsyncCLIClientError(
-                    "Could not connect to API server",
-                    error_code="CLI-ConnectionError",
+                raise ConnectionError(
+                    "Could not connect to API at http://localhost:8000",
                 )
             else:
                 return parent_op_completed
 
-        mock_client._make_request = AsyncMock(side_effect=mock_request)
+        mock_client.get = AsyncMock(side_effect=mock_request)
 
         with patch("ktrdr.cli.agent_commands.AsyncCLIClient", return_value=mock_client):
             with patch("ktrdr.cli.agent_commands.console", mock_console):
@@ -478,24 +475,23 @@ class TestErrorHandlingAndPolish:
     ):
         """404 response exits with 'operation not found' message."""
         from ktrdr.cli.agent_commands import _monitor_agent_cycle
-        from ktrdr.cli.async_cli_client import AsyncCLIClientError
+        from ktrdr.cli.client import APIError
 
         call_count = 0
 
-        async def mock_request(method, path):
+        async def mock_request(path):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
                 return parent_op_running
             else:
                 # Operation disappeared (backend restart)
-                raise AsyncCLIClientError(
-                    "API request failed: Not Found",
-                    error_code="CLI-404",
-                    details={"status_code": 404},
+                raise APIError(
+                    "Not Found",
+                    status_code=404,
                 )
 
-        mock_client._make_request = AsyncMock(side_effect=mock_request)
+        mock_client.get = AsyncMock(side_effect=mock_request)
 
         with patch("ktrdr.cli.agent_commands.AsyncCLIClient", return_value=mock_client):
             with patch("ktrdr.cli.agent_commands.console", mock_console):
@@ -522,33 +518,33 @@ class TestErrorHandlingAndPolish:
     ):
         """Retry delay resets to 1s after a successful request."""
         from ktrdr.cli.agent_commands import _monitor_agent_cycle
-        from ktrdr.cli.async_cli_client import AsyncCLIClientError
+        from ktrdr.cli.client import ConnectionError
 
         call_count = 0
         sleep_durations = []
 
-        async def mock_request(method, path):
+        async def mock_request(path):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
                 return parent_op_running
             elif call_count == 2:
                 # First connection error
-                raise AsyncCLIClientError(
-                    "Connection error", error_code="CLI-ConnectionError"
+                raise ConnectionError(
+                    "Could not connect to API at http://localhost:8000"
                 )
             elif call_count == 3:
                 # Second connection error (should use 2s delay)
-                raise AsyncCLIClientError(
-                    "Connection error", error_code="CLI-ConnectionError"
+                raise ConnectionError(
+                    "Could not connect to API at http://localhost:8000"
                 )
             elif call_count == 4:
                 # Success - delay should reset
                 return parent_op_running
             elif call_count == 5:
                 # Another error - should start from 1s again
-                raise AsyncCLIClientError(
-                    "Connection error", error_code="CLI-ConnectionError"
+                raise ConnectionError(
+                    "Could not connect to API at http://localhost:8000"
                 )
             else:
                 return parent_op_completed
@@ -556,7 +552,7 @@ class TestErrorHandlingAndPolish:
         async def mock_sleep(duration):
             sleep_durations.append(duration)
 
-        mock_client._make_request = AsyncMock(side_effect=mock_request)
+        mock_client.get = AsyncMock(side_effect=mock_request)
 
         with patch("ktrdr.cli.agent_commands.AsyncCLIClient", return_value=mock_client):
             with patch("ktrdr.cli.agent_commands.console", mock_console):
