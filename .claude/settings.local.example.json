@@ -1,0 +1,59 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git:*)",
+      "Bash(gh:*)",
+
+      "Bash(make test-unit:*)",
+      "Bash(make test-integration:*)",
+      "Bash(make test-e2e:*)",
+      "Bash(make quality:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(OTEL_SDK_DISABLED=true uv run pytest:*)",
+
+      "Bash(uv run:*)",
+      "Bash(uv run python:*)",
+      "Bash(uv run ktrdr:*)",
+      "Bash(python3:*)",
+      "Bash(timeout * uv run:*)",
+
+      "Bash(docker:*)",
+      "Bash(docker compose:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker info:*)",
+
+      "Bash(curl:*)",
+      "Bash(timeout * curl:*)",
+
+      "Bash(jq:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(sort:*)",
+      "Bash(uniq:*)",
+      "Bash(tee:*)",
+      "Bash(xargs:*)",
+      "Bash(echo:*)",
+      "Bash(mkdir:*)",
+      "Bash(chmod:*)",
+      "Bash(lsof:*)",
+      "Bash(source:*)",
+      "Bash(sleep:*)",
+      "Bash([ *)",
+
+      "Edit(.claude/**)",
+      "Write(.claude/**)",
+      "Read(.claude/**)",
+
+      "Skill(ktask)",
+      "Skill(kdesign)",
+      "Skill(kdesign-impl-plan)",
+      "Skill(kdesign-validate)"
+    ]
+  }
+}

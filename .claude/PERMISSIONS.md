@@ -118,5 +118,10 @@ When you find yourself repeatedly approving a command:
 
 ## Files
 
-- `settings.local.json` — Project-specific permissions (this repo)
+- `settings.local.json` — Project-specific permissions (gitignored, your local copy)
+- `settings.local.example.json` — Template checked into git
 - `~/.claude/settings.json` — Global permissions (all repos)
+
+## Sandbox Setup
+
+When creating a new sandbox with `ktrdr sandbox create`, the setup automatically copies `settings.local.example.json` to `settings.local.json` if it doesn't exist. This ensures new sandboxes get the standard permissions.
