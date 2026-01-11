@@ -141,8 +141,9 @@ class TestBacktestNoOperationExecutorImports:
     def test_no_import_from_operation_executor(self):
         """backtest_commands.py has no imports from operation_executor.py."""
         import inspect
+        import sys
 
-        import ktrdr.cli.backtest_commands as module
+        module = sys.modules["ktrdr.cli.backtest_commands"]
 
         source = inspect.getsource(module)
 

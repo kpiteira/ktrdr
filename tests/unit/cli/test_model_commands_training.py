@@ -154,8 +154,9 @@ class TestTrainingNoOperationExecutorImports:
     def test_no_import_from_operation_executor(self):
         """model_commands.py has no imports from operation_executor.py."""
         import inspect
+        import sys
 
-        import ktrdr.cli.model_commands as module
+        module = sys.modules["ktrdr.cli.model_commands"]
 
         source = inspect.getsource(module)
 
