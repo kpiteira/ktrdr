@@ -750,7 +750,7 @@ This structure means `/ktask` only loads the milestone file it needs.
 
 This section is populated by invoking the e2e-test-designer agent (Step 4.6):
 
-```markdown
+````markdown
 ## E2E Validation
 
 ### Tests to Run
@@ -802,7 +802,7 @@ After all tasks complete (including test file creation if needed):
 ```
 Invoke e2e-tester agent with: [test-list]
 ```
-```
+````
 
 ---
 
