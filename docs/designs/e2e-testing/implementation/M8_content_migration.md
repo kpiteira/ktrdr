@@ -5,379 +5,391 @@ architecture: ../ARCHITECTURE.md
 
 # Milestone 8: Content Migration
 
-**Goal:** Migrate curated content from M7 harvest into the e2e-testing skill structure.
+**Goal:** Validate all valuable E2E content, migrate to skill structure, archive sources.
 
 **Branch:** `feature/e2e-framework-m8`
 
 **Builds On:** M7 (Content Harvest) + Decision Point
 
-**PREREQUISITE:** Decision Point review with Karl must be completed before starting this milestone.
-
 ---
 
-## E2E Test Scenario
+## Approach
 
-**Purpose:** Verify migrated content is discoverable and usable.
+Iterative validation-first migration in batches:
 
-**Duration:** ~5 minutes
+```
+Phase 1: Process Validation (2-3 tests)
+    Prove the migration format works before scaling
 
-**Prerequisites:**
-- M7 complete (inventory exists)
-- Decision Point completed (curriculum agreed)
+Phase 2: Pre-Validated Content
+    Training tests (11) → migrate → check → archive
+    Data tests (6 non-IB) → migrate → check → archive
+    Troubleshooting (6 cures) → migrate → check → archive
 
-**Test Steps:**
-
-```markdown
-1. Invoke e2e-test-designer with various validation needs
-2. Designer finds appropriate tests from migrated content
-3. Invoke e2e-tester on migrated tests
-4. Tests execute correctly
-5. Old docs archived
+Phase 3: Unvalidated Content (by domain)
+    Backtest (13) → validate → fix if needed → migrate → check → archive
+    Agent (6) → validate → fix if needed → migrate → check → archive
 ```
 
-**Success Criteria:**
-- [ ] Designer finds migrated tests
-- [ ] Tester executes migrated tests successfully
-- [ ] No references to archived docs remain in workflow
+### Handling Validation Failures
+
+When a test doesn't pass validation:
+
+| Case | Action |
+|------|--------|
+| **Test is stale** (endpoint/schema changed) | Fix the test inline, then migrate |
+| **Backend bug** | Fix inline if small; discuss if large |
+| **Test is obsolete** (feature removed) | Document why, archive without migrating |
 
 ---
 
-## Decision Point Output Required
-
-Before starting M8, document the agreed curriculum:
-
-```markdown
-## Agreed Curriculum
+## Decision Point Output
 
 ### Tests to Migrate
 
-| Source | Destination | Priority |
-|--------|-------------|----------|
-| SCENARIOS.md 1.1 | tests/training/smoke.md | High |
-| SCENARIOS.md 1.2 | tests/training/progress.md | High |
-| SCENARIOS.md B1.1 | tests/backtest/smoke.md | High |
-| ... | ... | ... |
+**Training (11 tests) - Pre-validated:**
+
+| ID | Test | Destination |
+|----|------|-------------|
+| 1.1 | Local Training Smoke | tests/training/smoke.md |
+| 1.2 | Local Training Progress | tests/training/progress.md |
+| 1.3 | Local Training Cancellation | tests/training/cancellation.md |
+| 1.4 | Operations List & Filter | tests/training/operations-list.md |
+| 2.1 | Training Host Direct Start | tests/training/host-start.md |
+| 2.2 | Training Host GPU Allocation | tests/training/host-gpu.md |
+| 3.1 | Host Training Integration | tests/training/host-integration.md |
+| 3.2 | Host Training Two-Level Cache | tests/training/host-cache.md |
+| 3.3 | Host Training Completion | tests/training/host-completion.md |
+| 4.1 | Error - Invalid Strategy | tests/training/error-invalid-strategy.md |
+| 4.2 | Error - Operation Not Found | tests/training/error-not-found.md |
+
+**Data (6 tests) - Pre-validated (non-IB):**
+
+| ID | Test | Destination |
+|----|------|-------------|
+| D1.1 | Cache - Get Cached Data | tests/data/cache-get.md |
+| D1.2 | Cache - Cache Miss | tests/data/cache-miss.md |
+| D1.3 | Cache - Partial Range | tests/data/cache-partial.md |
+| D1.4 | Cache - Invalidation | tests/data/cache-invalidate.md |
+| D4.1 | Error - Invalid Symbol | tests/data/error-invalid-symbol.md |
+| D4.2 | Error - Invalid Timeframe | tests/data/error-invalid-timeframe.md |
+
+**Data (7 tests) - Require IB Gateway (skip or mock):**
+
+| ID | Test | Decision |
+|----|------|----------|
+| D2.1-D2.3 | IB Host Service | Skip (requires IB Gateway) |
+| D3.1-D3.3 | Backend + IB Integration | Skip (requires IB Gateway) |
+| D4.3 | Error - IB Connection | Skip (requires IB Gateway) |
+
+**Backtest (13 tests) - Need validation:**
+
+| ID | Test | Destination |
+|----|------|-------------|
+| B1.1 | Local Backtest Smoke | tests/backtest/smoke.md |
+| B1.2 | Local Backtest Results | tests/backtest/results.md |
+| B1.3 | Local Backtest Progress | tests/backtest/progress.md |
+| B2.1 | API Integration Start | tests/backtest/api-start.md |
+| B2.2 | API Integration Results | tests/backtest/api-results.md |
+| B2.3 | API Integration List | tests/backtest/api-list.md |
+| B3.1-B3.4 | Remote Backtest | tests/backtest/remote-*.md |
+| B4.1-B4.3 | Error handling | tests/backtest/error-*.md |
+
+**Agent (6 tests) - Need validation:**
+
+| ID | Test | Destination |
+|----|------|-------------|
+| A1 | Full Cycle Completion | tests/agent/full-cycle.md |
+| A2 | Duplicate Trigger Rejection | tests/agent/duplicate-trigger.md |
+| A3 | Cancellation Propagation | tests/agent/cancellation.md |
+| A4 | Status API Contract | tests/agent/status-api.md |
+| A5 | Metadata Storage | tests/agent/metadata.md |
+| A6 | Child Operation IDs | tests/agent/child-ops.md |
 
 ### Troubleshooting to Migrate
 
-| Source | Destination |
-|--------|-------------|
-| E2E_CHALLENGES_ANALYSIS.md | troubleshooting/training.md |
-| ... | ... |
+| Source | Pattern | Destination |
+|--------|---------|-------------|
+| E2E_CHALLENGES_ANALYSIS.md | 0 trades / 100% accuracy | troubleshooting/training.md |
+| E2E_CHALLENGES_ANALYSIS.md | Model collapse | troubleshooting/training.md |
+| E2E_CHALLENGES_ANALYSIS.md | Docker daemon issues | troubleshooting/environment.md |
+| E2E_CHALLENGES_ANALYSIS.md | Sandbox port confusion | troubleshooting/environment.md |
+| E2E_CHALLENGES_ANALYSIS.md | Data location issues | troubleshooting/data.md |
+| E2E_CHALLENGES_ANALYSIS.md | API schema differences | troubleshooting/common.md |
 
-### Content to Archive (Not Migrate)
+### Content to Archive
 
 | Document | Reason |
 |----------|--------|
-| ... | Outdated / Duplicated / Superseded |
+| SCENARIOS.md | Content migrated to tests/ |
+| TESTING_GUIDE.md | Content migrated to preflight/ and recipes/ |
 
-### Additional Tests Needed
+### Keep in Place
 
-| Test | Purpose | Building Blocks |
-|------|---------|-----------------|
-| ... | ... | ... |
-```
+| Document | Reason |
+|----------|--------|
+| E2E_CHALLENGES_ANALYSIS.md | Historical debugging record |
+| agent-orchestrator-e2e.md | Source for agent tests until migrated |
 
 ---
 
-## Task 8.1: Migrate Test Recipes
+## Phase 1: Process Validation
 
-**File(s):** `.claude/skills/e2e-testing/tests/{category}/{name}.md`
+**Goal:** Prove migration format works with 2-3 known-good tests.
+
+### Task 8.1: Pilot Migration (2-3 tests)
+
+**File(s):** `.claude/skills/e2e-testing/tests/training/{smoke,progress,cancellation}.md`
 
 **Type:** CODING
 
-**Task Categories:** Configuration
-
 **Description:**
-Migrate agreed test recipes from SCENARIOS.md into the skill structure.
+Migrate 3 training tests to validate the migration process before scaling.
+
+**Tests to migrate:**
+1. 1.1 Local Training Smoke (simplest)
+2. 1.2 Local Training Progress (has more complexity)
+3. 1.3 Local Training Cancellation (tests operations)
 
 **Migration Process:**
 
-For each test in the agreed curriculum:
+For each test:
 
-1. **Read source content** from SCENARIOS.md
-
-2. **Transform to new template:**
+1. **Read source** from SCENARIOS.md
+2. **Transform to template:**
    - Add standard frontmatter
    - Add pre-flight references
-   - Add sanity checks section (critical!)
-   - Update commands for sandbox compatibility (${KTRDR_API_PORT:-8000})
-   - Add troubleshooting section
+   - Add sanity checks section
+   - Update URLs for sandbox: `${KTRDR_API_PORT:-8000}`
+   - Add troubleshooting links
+3. **Write to** `tests/training/{name}.md`
+4. **Update SKILL.md** catalog
 
-3. **Write to destination** in tests/{category}/
+**Check step:**
 
-4. **Update SKILL.md catalog** with new entry
+```bash
+# Invoke designer - should find the migrated tests
+# Query: "training smoke test"
+# Expected: Returns tests/training/smoke.md
 
-**Example Migration:**
-
-**Source (SCENARIOS.md 1.2):**
-```markdown
-## 1.2: Local Training - Progress Monitoring
-
-**Category**: Backend Isolated
-**Duration**: ~62 seconds
-
-### Test Data
-{json}
-
-### Commands
-{commands}
-
-### Expected Results
-{results}
+# Invoke tester on migrated test
+# Expected: Test executes successfully
 ```
 
-**Destination (tests/training/progress.md):**
-```markdown
-# Test: training/progress
-
-**Purpose:** Validate progress updates during training
-**Duration:** ~60 seconds
-**Category:** Training
-
----
-
-## Pre-Flight Checks
-
-**Required modules:**
-- [common](../../preflight/common.md)
-
-**Test-specific checks:**
-- [ ] Large dataset available (EURUSD 5m, 2 years)
-
----
-
-## Test Data
-
-```json
-{same as source, but with sandbox-compatible URLs}
-```
-
-**Why this data:** Needs enough samples for progress updates (~147K samples, ~60s training)
-
----
-
-## Execution Steps
-
-{transformed from source}
-
----
-
-## Success Criteria
-
-{from source, structured as checklist}
-
----
-
-## Sanity Checks
-
-**CRITICAL:**
-- [ ] Accuracy < 99%
-- [ ] Progress updates received (at least 3)
-- [ ] Loss changes over time
-
----
-
-## Troubleshooting
-
-{link to troubleshooting/training.md}
-```
+**Archive step:**
+- Do NOT archive yet - wait until all tests migrated
 
 **Acceptance Criteria:**
-- [ ] All agreed tests migrated
-- [ ] Template structure followed
-- [ ] Sanity checks added
-- [ ] Sandbox-compatible (${KTRDR_API_PORT:-8000})
-- [ ] SKILL.md catalog updated
+- [ ] 3 tests migrated with correct template
+- [ ] Designer finds all 3 tests
+- [ ] Tester executes all 3 successfully
+- [ ] Sanity checks included
+- [ ] Sandbox-compatible URLs
 
 ---
 
-## Task 8.2: Migrate Troubleshooting Content
+## Phase 2: Pre-Validated Content
 
-**File(s):** `.claude/skills/e2e-testing/troubleshooting/{domain}.md`
+### Task 8.2: Migrate Remaining Training Tests (8 tests)
+
+**File(s):** `.claude/skills/e2e-testing/tests/training/*.md`
 
 **Type:** CODING
 
-**Task Categories:** Configuration
+**Description:**
+Migrate remaining 8 training tests using validated process from Task 8.1.
+
+**Tests:**
+- 1.4, 2.1, 2.2, 3.1, 3.2, 3.3, 4.1, 4.2
+
+**Check step:**
+- Designer finds all training tests
+- Tester executes a sample (e.g., 4.1 error handling)
+
+**Acceptance Criteria:**
+- [ ] All 11 training tests migrated
+- [ ] Designer finds all tests
+- [ ] Sample tests execute correctly
+
+---
+
+### Task 8.3: Migrate Data Tests (6 tests)
+
+**File(s):** `.claude/skills/e2e-testing/tests/data/*.md`
+
+**Type:** CODING
 
 **Description:**
-Migrate troubleshooting content from E2E_CHALLENGES_ANALYSIS.md and other sources.
+Migrate 6 non-IB data tests.
 
-**Migration Process:**
+**Tests:**
+- D1.1-D1.4 (cache operations)
+- D4.1-D4.2 (error handling)
 
-1. **Read E2E_CHALLENGES_ANALYSIS.md**
-2. **Transform each challenge to symptom→cure format**
-3. **Write to appropriate troubleshooting file**
+**Skip:** D2.x, D3.x, D4.3 (require IB Gateway)
 
-**Domain Files to Create/Update:**
+**Check step:**
+- Designer finds data tests
+- Tester executes cache test
 
-- `troubleshooting/training.md` (already exists from M4, extend)
-- `troubleshooting/backtest.md` (new)
-- `troubleshooting/data.md` (new)
-- `troubleshooting/environment.md` (Docker, sandbox issues)
+**Acceptance Criteria:**
+- [ ] 6 data tests migrated
+- [ ] Designer finds all tests
+- [ ] Cache test executes correctly
 
-**Example Migration:**
+---
 
-**Source (E2E_CHALLENGES_ANALYSIS.md Challenge 5):**
+### Task 8.4: Migrate Troubleshooting Content
+
+**File(s):** `.claude/skills/e2e-testing/troubleshooting/*.md`
+
+**Type:** CODING
+
+**Description:**
+Migrate 6 troubleshooting patterns from E2E_CHALLENGES_ANALYSIS.md.
+
+**Files to create/update:**
+- `troubleshooting/training.md` - 0 trades, model collapse
+- `troubleshooting/environment.md` - Docker, sandbox ports
+- `troubleshooting/data.md` - Data location issues
+- `troubleshooting/common.md` - API schema differences
+
+**Transform to symptom→cure format:**
+
 ```markdown
-## Challenge 5: Data Location Issues
-
-### Symptoms
-- `LocalDataLoader` returning `None`
-- "Data file not found" errors
-
-### Root Cause
-Data lives in different locations...
-
-### Resolution
-```python
-loader = LocalDataLoader(data_dir='/Users/karl/.ktrdr/shared/data')
-```
-```
-
-**Destination (troubleshooting/data.md):**
-```markdown
-## Data Not Found
+## [Problem Name]
 
 **Symptom:**
-- "Data file not found" errors
-- LocalDataLoader returns None
-- Tests fail with "no data for symbol"
+- Bullet list of observable symptoms
 
-**Cause:** Data path mismatch between environments:
-- Local: `./data/`
-- Shared: `~/.ktrdr/shared/data/`
-- Docker: `/app/data/` (mounted)
+**Cause:** Brief explanation
 
 **Cure:**
 ```bash
-# Check where data actually is
-ls ~/.ktrdr/shared/data/
-
-# Verify Docker mount
-docker compose exec backend ls /app/data/
-
-# If missing, copy to shared
-cp -r ./data/* ~/.ktrdr/shared/data/
+# Commands to fix
 ```
 
-**Prevention:**
-- Always use shared data directory
-- Verify data exists before running tests
+**Prevention:** How to avoid in future
 ```
+
+**Check step:**
+- Troubleshooting files referenced from test templates
+- Cures are actionable
 
 **Acceptance Criteria:**
-- [ ] All relevant troubleshooting content migrated
+- [ ] All 6 patterns migrated
 - [ ] Symptom→cure format used
 - [ ] Prevention tips included
-- [ ] Domain files organized logically
 
 ---
 
-## Task 8.3: Create Additional Pre-Flight Modules
+### Task 8.5: Create Pre-Flight Modules
 
-**File(s):** `.claude/skills/e2e-testing/preflight/{domain}.md`
+**File(s):** `.claude/skills/e2e-testing/preflight/{training,backtest,data}.md`
 
 **Type:** CODING
 
-**Task Categories:** Configuration
-
 **Description:**
-Create domain-specific pre-flight modules based on harvested content.
+Create domain-specific pre-flight modules.
 
-**Modules to Create:**
+**Modules:**
+- `preflight/training.md` - Strategy exists, training data available
+- `preflight/backtest.md` - Model exists, backtest worker available
+- `preflight/data.md` - Data directory accessible
 
-### preflight/training.md
-
-```markdown
-# Pre-Flight: Training
-
-**Used by:** Training E2E tests
-**Purpose:** Training-specific checks beyond common
-
----
-
-## Checks
-
-### 1. Strategy File Exists
-
-**Command:**
-```bash
-ls ~/.ktrdr/shared/strategies/${STRATEGY_NAME}.yaml
-```
-
-**Pass if:** File exists
-**Fail message:** "Strategy file not found"
-
-**Cure:**
-- Copy strategy to shared directory
-- Check strategy name spelling
-
----
-
-### 2. Training Data Available
-
-**Command:**
-```bash
-curl -s "http://localhost:${KTRDR_API_PORT:-8000}/api/v1/data/${SYMBOL}/${TIMEFRAME}" | jq '.data.dates | length'
-```
-
-**Pass if:** Returns count > 0
-**Fail message:** "No data for {symbol}/{timeframe}"
-
-**Cure:**
-- Load data: POST /api/v1/data/acquire/download
-- Check data directory
-```
-
-### preflight/backtest.md
-
-```markdown
-# Pre-Flight: Backtest
-
-**Used by:** Backtest E2E tests
-
----
-
-## Checks
-
-### 1. Model File Exists
-
-**Command:**
-```bash
-ls ~/.ktrdr/shared/models/${MODEL_PATH}
-```
-
-### 2. Backtest Worker Available
-
-**Command:**
-```bash
-curl -s "http://localhost:${KTRDR_API_PORT:-8000}/api/v1/workers" | jq '.workers[] | select(.type=="backtest")'
-```
-```
+**Check step:**
+- Pre-flight modules load correctly
+- Checks are executable
 
 **Acceptance Criteria:**
-- [ ] Training pre-flight module created
-- [ ] Backtest pre-flight module created
-- [ ] Cures included for each check
-- [ ] Modules referenced in test recipes
+- [ ] 3 pre-flight modules created
+- [ ] Each has executable checks
+- [ ] Cures included for failures
 
 ---
 
-## Task 8.4: Archive Old Documents
+## Phase 3: Unvalidated Content
 
-**File(s):** docs/testing/*.md
+### Task 8.6: Validate and Migrate Backtest Tests
+
+**File(s):** `.claude/skills/e2e-testing/tests/backtest/*.md`
+
+**Type:** MIXED (validation + coding)
+
+**Description:**
+Validate 13 backtest scenarios, fix issues, then migrate passing tests.
+
+**Process:**
+
+1. **Validate each scenario:**
+   - Run the test commands from SCENARIOS.md
+   - Record: PASS, FAIL (stale), FAIL (backend bug), OBSOLETE
+
+2. **For failures:**
+   - Stale test: Fix inline (update endpoint, schema)
+   - Backend bug: Fix if small, discuss if large
+   - Obsolete: Document reason, skip migration
+
+3. **Migrate passing tests:**
+   - Same process as training tests
+   - Update SKILL.md catalog
+
+4. **Check:**
+   - Designer finds backtest tests
+   - Tester executes sample
+
+**Batch if needed:** If >5 tests need fixes, split into sub-batches.
+
+**Acceptance Criteria:**
+- [ ] All 13 scenarios validated
+- [ ] Passing tests migrated
+- [ ] Failures documented (reason + fix or skip)
+- [ ] Designer finds backtest tests
+
+---
+
+### Task 8.7: Validate and Migrate Agent Tests
+
+**File(s):** `.claude/skills/e2e-testing/tests/agent/*.md`
+
+**Type:** MIXED (validation + coding)
+
+**Description:**
+Verify agent orchestrator is active, validate 6 scenarios, migrate if applicable.
+
+**Process:**
+
+1. **Check orchestrator status:**
+   ```bash
+   # Is agent orchestrator still in use?
+   grep -r "agent_research" ktrdr/
+   curl http://localhost:8000/api/v1/agent/status
+   ```
+
+2. **If active:** Validate and migrate tests
+3. **If deprecated:** Document, archive source without migrating
+
+**Acceptance Criteria:**
+- [ ] Orchestrator status confirmed
+- [ ] If active: tests migrated
+- [ ] If deprecated: documented
+
+---
+
+## Phase 4: Archive
+
+### Task 8.8: Archive Source Documents
+
+**File(s):** `docs/testing/archive/`
 
 **Type:** CODING
 
-**Task Categories:** Configuration
-
 **Description:**
-Archive old testing documents that have been superseded by the new skill structure.
+Archive source documents now that migration is complete.
 
-**Archive Process:**
+**Process:**
 
-1. **Create archive directory:**
+1. **Create archive:**
    ```bash
    mkdir -p docs/testing/archive
    ```
@@ -388,97 +400,81 @@ Archive old testing documents that have been superseded by the new skill structu
    mv docs/testing/TESTING_GUIDE.md docs/testing/archive/
    ```
 
-3. **Add archive README:**
+3. **Add README:**
    ```markdown
    # Archived Testing Documents
 
-   These documents have been superseded by the e2e-testing skill.
+   Superseded by `.claude/skills/e2e-testing/`
 
-   **New Location:** `.claude/skills/e2e-testing/`
-
-   **Why Archived:**
-   - Content migrated to skill structure
-   - Progressive disclosure now works
-   - Agents use skill, not these docs
-
-   **For Reference Only:**
-   - SCENARIOS.md - Original 37 test scenarios
-   - TESTING_GUIDE.md - Original building blocks
-
-   **Do Not Update:** These files are frozen. Update the skill instead.
+   **Do Not Update** - These files are frozen.
    ```
-
-4. **Keep in place (not archive):**
-   - E2E_CHALLENGES_ANALYSIS.md (historical record)
-   - Handoff documents (still useful for context)
 
 **Acceptance Criteria:**
 - [ ] Archive directory created
 - [ ] SCENARIOS.md archived
 - [ ] TESTING_GUIDE.md archived
-- [ ] Archive README explains why
-- [ ] Skill is now the source of truth
+- [ ] README explains why
+
+---
+
+## E2E Test Scenario
+
+**Purpose:** Verify complete migration is discoverable and usable.
+
+**Duration:** ~10 minutes
+
+**Test Steps:**
+
+```markdown
+1. Query designer for "training smoke test" → finds tests/training/smoke.md
+2. Query designer for "backtest error handling" → finds tests/backtest/error-*.md
+3. Query designer for "data cache" → finds tests/data/cache-*.md
+4. Execute tester on training/smoke.md → PASS
+5. Execute tester on backtest/smoke.md → PASS
+6. Verify archived docs not referenced in workflow
+```
+
+**Success Criteria:**
+- [ ] Designer finds tests across all domains
+- [ ] Tester executes tests successfully
+- [ ] Pre-flight checks work
+- [ ] Troubleshooting content accessible
+- [ ] No references to archived docs
 
 ---
 
 ## Milestone 8 Completion Checklist
 
 ### All Tasks Complete
-- [ ] Task 8.1: Test recipes migrated
-- [ ] Task 8.2: Troubleshooting content migrated
-- [ ] Task 8.3: Pre-flight modules created
-- [ ] Task 8.4: Old documents archived
+- [ ] Task 8.1: Pilot migration (3 tests)
+- [ ] Task 8.2: Remaining training tests (8 tests)
+- [ ] Task 8.3: Data tests (6 tests)
+- [ ] Task 8.4: Troubleshooting content (6 patterns)
+- [ ] Task 8.5: Pre-flight modules (3 modules)
+- [ ] Task 8.6: Backtest tests (up to 13 tests)
+- [ ] Task 8.7: Agent tests (up to 6 tests)
+- [ ] Task 8.8: Archive source documents
 
-### E2E Verification
-- [ ] Designer finds migrated tests for various needs
-- [ ] Tester executes migrated tests successfully
-- [ ] Pre-flight modules work correctly
-- [ ] No workflow references archived docs
+### Totals
+
+| Category | Migrated | Skipped | Fixed |
+|----------|----------|---------|-------|
+| Training | 11 | 0 | - |
+| Data | 6 | 7 (IB) | - |
+| Backtest | TBD | TBD | TBD |
+| Agent | TBD | TBD | TBD |
+| Troubleshooting | 6 | 0 | - |
+| Pre-flight | 3 | 0 | - |
 
 ### Quality Gates
 - [ ] `make quality` passes
-- [ ] All files committed to feature branch
-- [ ] SKILL.md catalog is complete
-- [ ] Progressive disclosure works (files loaded on-demand)
+- [ ] All files committed
+- [ ] SKILL.md catalog complete
+- [ ] Designer finds all migrated tests
+- [ ] Tester executes samples successfully
 
 ---
 
 ## Framework Complete
 
-After M8, the E2E testing framework is fully operational:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    PLANNING PHASE                            │
-│                                                              │
-│  /kdesign-impl-plan                                          │
-│       ↓                                                      │
-│  e2e-test-designer (haiku) ─── catalog lookup                │
-│       │                                                      │
-│       ├── match found ──→ recommend existing tests           │
-│       │                                                      │
-│       └── no match ──→ e2e-test-architect (opus)            │
-│                              ↓                               │
-│                        design new test                       │
-│       ↓                                                      │
-│  Milestone E2E Validation section                            │
-└─────────────────────────────────────────────────────────────┘
-                           ↓
-┌─────────────────────────────────────────────────────────────┐
-│                    EXECUTION PHASE                           │
-│                                                              │
-│  Claude implements milestone                                 │
-│       ↓                                                      │
-│  e2e-tester (sonnet) ─── with tests from plan               │
-│       ↓                                                      │
-│  Pre-flight → Execution → Sanity Checks → Report            │
-└─────────────────────────────────────────────────────────────┘
-
-Key Achievements:
-✅ Tests are discovered, not reinvented (haiku speed)
-✅ New tests are well-designed (opus quality)
-✅ Pre-flight catches environment issues
-✅ Sanity checks catch false positives
-✅ Failures are categorized and actionable
-✅ Institutional knowledge preserved
-```
+After M8, the E2E testing framework is fully operational with validated, migrated content.
