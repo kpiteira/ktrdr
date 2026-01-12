@@ -1,8 +1,8 @@
 """
-Dummy CLI commands using unified AsyncOperationExecutor pattern.
+Dummy CLI commands using unified AsyncCLIClient pattern.
 
 This module demonstrates the unified async operations pattern with
-AsyncOperationExecutor and DummyOperationAdapter.
+AsyncCLIClient.execute_operation() and DummyOperationAdapter.
 """
 
 import asyncio
@@ -10,14 +10,20 @@ import sys
 
 import typer
 from rich.console import Console
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
 
-from ktrdr.cli.api_client import check_api_connection
+from ktrdr.cli.client import AsyncCLIClient, CLIClientError
 from ktrdr.cli.error_handler import (
     display_ib_connection_required_message,
     handle_cli_error,
 )
 from ktrdr.cli.operation_adapters import DummyOperationAdapter
-from ktrdr.cli.operation_executor import AsyncOperationExecutor
 from ktrdr.logging import get_logger
 
 # Setup logging and console
@@ -47,10 +53,10 @@ def dummy_task(
     Run the most awesome dummy task ever!
 
     Features:
-    - 🎯 Perfect progress reporting via unified pattern
-    - 🛑 Instant cancellation with Ctrl+C
-    - 🚀 AsyncOperationExecutor handles ALL complexity
-    - ✨ Same pattern as all KTRDR async operations
+    - Perfect progress reporting via unified pattern
+    - Instant cancellation with Ctrl+C
+    - AsyncCLIClient handles ALL complexity
+    - Same pattern as all KTRDR async operations
 
     Simple: no parameters, just runs 200s (100 iterations)
     """
@@ -60,7 +66,7 @@ def dummy_task(
 
     except KeyboardInterrupt:
         if not quiet:
-            error_console.print("\n🛑 Cancelled by user")
+            error_console.print("\n[red]Cancelled by user[/red]")
         sys.exit(1)
     except Exception as e:
         handle_cli_error(e, verbose, quiet)
@@ -68,7 +74,7 @@ def dummy_task(
 
 
 async def _run_dummy_async(verbose: bool, quiet: bool, show_progress: bool):
-    """Async implementation using unified executor pattern."""
+    """Async implementation using AsyncCLIClient.execute_operation() pattern."""
     # Reduce HTTP logging noise unless verbose mode
     if not verbose:
         import logging
@@ -78,43 +84,83 @@ async def _run_dummy_async(verbose: bool, quiet: bool, show_progress: bool):
         httpx_logger.setLevel(logging.WARNING)
 
     try:
-        # Check API connection
-        if not await check_api_connection():
-            display_ib_connection_required_message()
-            sys.exit(1)
+        # Use AsyncCLIClient for connection reuse and performance
+        async with AsyncCLIClient() as cli:
+            # Check API connection
+            if not await cli.health_check():
+                display_ib_connection_required_message()
+                sys.exit(1)
 
-        if not quiet:
-            console.print("🚀 [bold]Running awesome dummy task![/bold]")
-            console.print("📋 Duration: 200s (100 iterations of 2s each)")
-            console.print()
+            if not quiet:
+                console.print("[bold]Running awesome dummy task![/bold]")
+                console.print("Duration: 200s (100 iterations of 2s each)")
+                console.print()
 
-        # Create adapter for dummy operation
-        adapter = DummyOperationAdapter(duration=200, iterations=100)
+            # Create adapter for dummy operation
+            adapter = DummyOperationAdapter(duration=200, iterations=100)
 
-        # Create executor for unified async operation handling
-        executor = AsyncOperationExecutor()
-
-        # Optional: Define custom progress message formatter
-        def format_progress(operation_data: dict) -> str:
-            """Format progress message for dummy operation."""
-            status = operation_data.get("status", "unknown")
-            progress_info = operation_data.get("progress", {})
-            current_step = progress_info.get("current_step", "Working...")
-            return f"Status: {status} - {current_step}"
-
-        # Execute operation - executor handles progress bar
-        success = await executor.execute_operation(
-            adapter=adapter,
-            console=console,
-            progress_callback=format_progress if show_progress else None,
-            show_progress=show_progress and not quiet,
-        )
-
-        # Handle unsuccessful completion
-        if not success and not quiet:
-            console.print(
-                "[yellow]⚠️  Dummy task did not complete successfully[/yellow]"
+            # Set up progress display using Rich Progress
+            progress_bar = Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                TimeElapsedColumn(),
+                console=console,
             )
+            task_id = None
+
+            def on_progress(percentage: int, message: str) -> None:
+                """Progress callback for Rich progress display."""
+                nonlocal task_id
+                if task_id is not None:
+                    progress_bar.update(
+                        task_id, completed=percentage, description=message
+                    )
+
+            # Execute operation with progress display
+            try:
+                if show_progress and not quiet:
+                    with progress_bar:
+                        task_id = progress_bar.add_task("Running dummy...", total=100)
+                        result = await cli.execute_operation(
+                            adapter,
+                            on_progress=on_progress,
+                            poll_interval=0.3,
+                        )
+                else:
+                    result = await cli.execute_operation(
+                        adapter,
+                        poll_interval=0.3,
+                    )
+            except CLIClientError as e:
+                if not quiet:
+                    console.print(f"[red]Failed to start dummy operation: {e}[/red]")
+                sys.exit(1)
+
+            # Handle result based on final status
+            status = result.get("status", "unknown")
+
+            if status == "completed":
+                if not quiet:
+                    console.print("[green]Dummy task completed successfully![/green]")
+
+            elif status == "failed":
+                if not quiet:
+                    error_msg = result.get(
+                        "error_message", result.get("error", "Unknown error")
+                    )
+                    console.print(f"[red]Dummy task failed: {error_msg}[/red]")
+
+            elif status == "cancelled":
+                if not quiet:
+                    console.print("[yellow]Dummy task cancelled[/yellow]")
+
+            else:
+                if not quiet:
+                    console.print(
+                        f"[yellow]Dummy task ended with status: {status}[/yellow]"
+                    )
 
     except Exception:
         if not verbose:

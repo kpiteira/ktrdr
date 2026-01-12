@@ -1,8 +1,8 @@
 """
-Tests for dummy CLI commands using AsyncOperationExecutor pattern.
+Tests for dummy CLI commands using AsyncCLIClient pattern.
 """
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -10,74 +10,73 @@ from ktrdr.cli.dummy_commands import _run_dummy_async
 
 
 @pytest.fixture
-def mock_check_api_connection():
-    """Mock API connection check to return True."""
-
-    async def async_check():
-        return True
-
-    with patch("ktrdr.cli.dummy_commands.check_api_connection", new=async_check):
-        yield
-
-
-@pytest.fixture
-def mock_executor():
-    """Mock AsyncOperationExecutor for testing."""
-    executor = AsyncMock()
-    executor.execute_operation = AsyncMock(return_value=True)
-    return executor
+def mock_cli_client():
+    """Mock AsyncCLIClient with successful defaults."""
+    mock_client = MagicMock()
+    mock_client.health_check = AsyncMock(return_value=True)
+    mock_client.execute_operation = AsyncMock(
+        return_value={"status": "completed", "operation_id": "op_test123"}
+    )
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+    return mock_client
 
 
 class TestDummyCommand:
-    """Test dummy CLI command using AsyncOperationExecutor pattern."""
+    """Test dummy CLI command using AsyncCLIClient pattern."""
 
     @pytest.mark.asyncio
-    async def test_dummy_async_success(self, mock_check_api_connection, mock_executor):
+    async def test_dummy_async_success(self, mock_cli_client):
         """Test successful dummy command execution."""
         with patch(
-            "ktrdr.cli.dummy_commands.AsyncOperationExecutor",
-            return_value=mock_executor,
+            "ktrdr.cli.dummy_commands.AsyncCLIClient",
+            return_value=mock_cli_client,
         ):
             with patch("ktrdr.cli.dummy_commands.console") as mock_console:
                 await _run_dummy_async(verbose=False, quiet=False, show_progress=True)
 
-                # Verify executor was called
-                assert mock_executor.execute_operation.called
+                # Verify health_check and execute_operation were called
+                assert mock_cli_client.health_check.called
+                assert mock_cli_client.execute_operation.called
 
-                # Check that we didn't print error message
-                # (success case should not print warning)
-                for call in mock_console.print.call_args_list:
-                    assert "⚠️" not in str(call)
+                # Check that success message was printed
+                mock_console.print.assert_any_call(
+                    "[green]Dummy task completed successfully![/green]"
+                )
 
     @pytest.mark.asyncio
-    async def test_dummy_async_api_connection_failure(self):
+    async def test_dummy_async_api_connection_failure(self, mock_cli_client):
         """Test dummy command with API connection failure."""
-
-        async def async_check_fail():
-            return False
+        # Mock health check failure
+        mock_cli_client.health_check = AsyncMock(return_value=False)
 
         with patch(
-            "ktrdr.cli.dummy_commands.check_api_connection", new=async_check_fail
+            "ktrdr.cli.dummy_commands.AsyncCLIClient",
+            return_value=mock_cli_client,
         ):
             with pytest.raises(SystemExit):
                 await _run_dummy_async(verbose=False, quiet=False, show_progress=True)
 
     @pytest.mark.asyncio
-    async def test_dummy_async_operation_failure(
-        self, mock_check_api_connection, mock_executor
-    ):
+    async def test_dummy_async_operation_failure(self, mock_cli_client):
         """Test dummy command with operation failure."""
-        # Mock executor returning False (operation failed)
-        mock_executor.execute_operation = AsyncMock(return_value=False)
+        # Mock failed execution - returns dict with status="failed"
+        mock_cli_client.execute_operation = AsyncMock(
+            return_value={
+                "status": "failed",
+                "operation_id": "op_test123",
+                "error_message": "Simulated failure",
+            }
+        )
 
         with patch(
-            "ktrdr.cli.dummy_commands.AsyncOperationExecutor",
-            return_value=mock_executor,
+            "ktrdr.cli.dummy_commands.AsyncCLIClient",
+            return_value=mock_cli_client,
         ):
             with patch("ktrdr.cli.dummy_commands.console") as mock_console:
                 await _run_dummy_async(verbose=False, quiet=False, show_progress=False)
 
-                # Check that warning was printed for unsuccessful completion
+                # Check that failure message was printed
                 mock_console.print.assert_any_call(
-                    "[yellow]⚠️  Dummy task did not complete successfully[/yellow]"
+                    "[red]Dummy task failed: Simulated failure[/red]"
                 )

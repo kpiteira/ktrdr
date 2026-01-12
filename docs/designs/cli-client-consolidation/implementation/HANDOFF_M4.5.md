@@ -145,3 +145,66 @@ For Task 4.5.3 (`dummy_commands.py`):
 - Replace `check_api_connection()` with `cli.health_check()`
 - Replace `AsyncOperationExecutor()` with `cli.execute_operation(adapter)`
 - Need to check what operation adapter is used
+
+---
+
+## Task 4.5.3 Complete: Migrate dummy_commands.py
+
+### Migration Applied
+
+Migrated `dummy_commands.py` from dual old clients to new unified `AsyncCLIClient`.
+
+**Old imports removed:**
+```python
+from ktrdr.cli.api_client import check_api_connection
+from ktrdr.cli.operation_executor import AsyncOperationExecutor
+```
+
+**New imports:**
+```python
+from ktrdr.cli.client import AsyncCLIClient, CLIClientError
+from rich.progress import (
+    BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+)
+```
+
+### Key Changes
+
+1. **Wrapped in `async with AsyncCLIClient() as cli:`** context manager
+2. **Replaced `check_api_connection()`** → `cli.health_check()`
+3. **Replaced `AsyncOperationExecutor.execute_operation()`** → `cli.execute_operation(adapter)`
+4. **Progress display** now managed by command (Rich Progress + callback)
+5. **Result handling** changed from boolean to dict with `status` field
+
+### Progress Display Pattern
+
+The dummy command follows the same pattern as training:
+```python
+progress_bar = Progress(...)
+task_id = None
+
+def on_progress(percentage: int, message: str) -> None:
+    nonlocal task_id
+    if task_id is not None:
+        progress_bar.update(task_id, completed=percentage, description=message)
+
+if show_progress and not quiet:
+    with progress_bar:
+        task_id = progress_bar.add_task("Running dummy...", total=100)
+        result = await cli.execute_operation(adapter, on_progress=on_progress)
+else:
+    result = await cli.execute_operation(adapter)
+```
+
+### Test Updates
+
+Updated both test files to mock `AsyncCLIClient` instead of old clients:
+- `test_dummy_commands.py` — basic functionality tests
+- `test_dummy_command_refactored.py` — comprehensive pattern tests
+
+### Next Task Notes
+
+For Task 4.5.4 (`model_commands.py` cleanup):
+- This file is NOT wired to the CLI (`async_model_commands.py` is used instead)
+- Check if any code is imported from it before deleting
+- `grep -r "from ktrdr.cli.model_commands" ktrdr/` should return nothing
