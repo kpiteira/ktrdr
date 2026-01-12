@@ -40,7 +40,9 @@ def _derive_otlp_endpoint_from_url(api_url: str | None) -> str:
         except Exception:
             pass  # Best-effort derivation; fall back to localhost
 
-    return "http://localhost:4317"
+    # Use sandbox-specific port if set, otherwise default
+    port = os.environ.get("KTRDR_JAEGER_OTLP_GRPC_PORT", "4317")
+    return f"http://localhost:{port}"
 
 
 def reconfigure_telemetry_for_url(api_url: str) -> None:
