@@ -70,15 +70,70 @@ See [e2e-tester agent](../../agents/e2e-tester.md) for full details.
 
 ## Test Catalog
 
+### Training Tests
+
 | Test | Category | Duration | Use When |
 |------|----------|----------|----------|
 | [training/smoke](tests/training/smoke.md) | Training | <30s | Any training changes |
+| [training/progress](tests/training/progress.md) | Training | ~60-90s | Progress tracking, metrics collection |
+| [training/cancellation](tests/training/cancellation.md) | Training | ~30s | Cancellation handling, cleanup |
+| [training/operations-list](tests/training/operations-list.md) | Training | ~5s | Operations API, list/filter |
+| [training/host-start](tests/training/host-start.md) | Training (Host) | ~5s | Host service standalone |
+| [training/host-gpu](tests/training/host-gpu.md) | Training (Host) | ~3s | GPU allocation |
+| [training/host-integration](tests/training/host-integration.md) | Training (Integration) | ~5s | Backend → host proxy |
+| [training/host-cache](tests/training/host-cache.md) | Training (Integration) | ~5s | Two-level operation ID mapping |
+| [training/host-completion](tests/training/host-completion.md) | Training (Integration) | ~5s | Full cycle through proxy |
+| [training/error-invalid-strategy](tests/training/error-invalid-strategy.md) | Training (Error) | ~1s | Error handling |
+| [training/error-not-found](tests/training/error-not-found.md) | Training (Error) | ~1s | Error handling |
+
+### Data Tests
+
+| Test | Category | Duration | Use When |
+|------|----------|----------|----------|
+| [data/cache-get](tests/data/cache-get.md) | Data | <3s | Cache loading, data retrieval |
+| [data/cache-range](tests/data/cache-range.md) | Data | <100ms | Metadata queries |
+| [data/cache-validate](tests/data/cache-validate.md) | Data | <1s | Data validation |
+| [data/cache-info](tests/data/cache-info.md) | Data | <500ms | Data inventory API |
+| [data/error-invalid-symbol](tests/data/error-invalid-symbol.md) | Data (Error) | <1s | Error handling |
+| [data/error-invalid-timeframe](tests/data/error-invalid-timeframe.md) | Data (Error) | <1s | Error handling |
+
+### Backtest Tests
+
+| Test | Category | Duration | Use When |
+|------|----------|----------|----------|
+| [backtest/smoke](tests/backtest/smoke.md) | Backtest | <10s | Any backtest changes |
+| [backtest/progress](tests/backtest/progress.md) | Backtest | ~20s | Progress tracking |
+| [backtest/cancellation](tests/backtest/cancellation.md) | Backtest | ~15s | Cancellation handling |
+| [backtest/api-start](tests/backtest/api-start.md) | Backtest (Integration) | ~10s | API workflow |
+| [backtest/api-results](tests/backtest/api-results.md) | Backtest (Integration) | ~15s | Progress via API |
+| [backtest/api-list](tests/backtest/api-list.md) | Backtest (Integration) | ~10s | API cancellation |
+| [backtest/remote-start](tests/backtest/remote-start.md) | Backtest (Remote) | ~10s | Remote service |
+| [backtest/remote-proxy](tests/backtest/remote-proxy.md) | Backtest (Remote) | ~10s | Backend → remote proxy |
+| [backtest/remote-progress](tests/backtest/remote-progress.md) | Backtest (Remote) | ~25s | Two-level progress |
+| [backtest/remote-cancel](tests/backtest/remote-cancel.md) | Backtest (Remote) | ~15s | Remote cancellation |
+| [backtest/error-invalid-strategy](tests/backtest/error-invalid-strategy.md) | Backtest (Error) | ~2s | Error handling |
+| [backtest/error-missing-data](tests/backtest/error-missing-data.md) | Backtest (Error) | ~2s | Error handling |
+| [backtest/error-model-not-found](tests/backtest/error-model-not-found.md) | Backtest (Error) | ~2s | Error handling |
+
+### Agent Tests
+
+| Test | Category | Duration | Use When |
+|------|----------|----------|----------|
+| [agent/full-cycle](tests/agent/full-cycle.md) | Agent | ~2min | Full orchestrator cycle |
+| [agent/duplicate-trigger](tests/agent/duplicate-trigger.md) | Agent | ~10s | Concurrency handling |
+| [agent/cancellation](tests/agent/cancellation.md) | Agent | ~15s | Cancellation propagation |
+| [agent/status-api](tests/agent/status-api.md) | Agent | ~10s | Status API contract |
+| [agent/metadata](tests/agent/metadata.md) | Agent | ~2min | Metadata storage |
+| [agent/child-ops](tests/agent/child-ops.md) | Agent | ~2min | Child operation tracking |
 
 ## Pre-Flight Modules
 
 | Module | Checks | Used By |
 |--------|--------|---------|
 | [common](preflight/common.md) | Docker, sandbox, API health | All tests |
+| [training](preflight/training.md) | Strategy, data, workers | Training tests |
+| [backtest](preflight/backtest.md) | Model, strategy, data, workers | Backtest tests |
+| [data](preflight/data.md) | Directory access, mounts | Data tests |
 
 ## Reusable Patterns
 
@@ -89,6 +144,9 @@ See [e2e-tester agent](../../agents/e2e-tester.md) for full details.
 | Domain | Module | Common Issues |
 |--------|--------|---------------|
 | [Training](troubleshooting/training.md) | Training | Model collapse, 0 trades, NaN metrics, timeouts |
+| [Data](troubleshooting/data.md) | Data | Location issues, missing symbols, timeframe mismatch |
+| [Environment](troubleshooting/environment.md) | Environment | Docker daemon, sandbox ports, resource exhaustion |
+| [Common](troubleshooting/common.md) | General | API schema, timeouts, permissions |
 
 ## Creating New Tests
 
