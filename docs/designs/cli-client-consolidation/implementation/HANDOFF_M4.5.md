@@ -208,3 +208,48 @@ For Task 4.5.4 (`model_commands.py` cleanup):
 - This file is NOT wired to the CLI (`async_model_commands.py` is used instead)
 - Check if any code is imported from it before deleting
 - `grep -r "from ktrdr.cli.model_commands" ktrdr/` should return nothing
+
+---
+
+## Task 4.5.4 Complete: Clean up model_commands.py
+
+### Decision: Delete model_commands.py
+
+**Rationale:**
+1. `async_model_commands.py` is the active implementation (wired in `ktrdr/cli/__init__.py`)
+2. `model_commands.py` was NOT imported anywhere in production code
+3. `model_commands.py` contained dead `list`, `test`, `predict` commands (unimplemented stubs)
+4. Mixed old/new imports would need cleanup anyway
+
+### Files Deleted
+- `ktrdr/cli/model_commands.py` — 871 lines of dead code
+- `tests/unit/cli/test_model_commands_training.py` — redundant with `test_async_model_commands_migration.py`
+
+### Test Updates
+
+Updated tests to import from `async_model_commands` instead of `model_commands`:
+- `tests/unit/cli/test_train_dry_run_v3.py`
+- `tests/integration/test_performance_benchmarks.py`
+- `tests/integration/test_migration_performance_validation.py`
+- `tests/integration/test_unified_cli_migration.py`
+
+### Gotcha: Single-Command Typer App
+
+`async_models_app` only has one command (`train`), so Typer treats it as a single-command app:
+- When invoking with CliRunner, don't include "train" as first arg
+- The command name is implicit when there's only one command
+
+```python
+# Old (model_commands.py with multiple commands):
+result = runner.invoke(models_app, ["train", strategy_path, ...])
+
+# New (async_model_commands.py with single command):
+result = runner.invoke(models_app, [strategy_path, ...])
+```
+
+### Next Task Notes
+
+For Task 4.5.5 (Final Verification):
+- Run comprehensive grep to verify zero old client imports
+- Run full unit test suite
+- Run E2E tests for all migrated commands
