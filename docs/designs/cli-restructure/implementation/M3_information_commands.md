@@ -638,6 +638,8 @@ ktrdr list --help
 
 ### E2E Test Scenario
 
+**E2E Test Recipe:** [cli/information-commands](../../../../.claude/skills/e2e-testing/tests/cli/information-commands.md)
+
 **Purpose:** Prove all information commands work correctly.
 
 **Duration:** ~1 minute

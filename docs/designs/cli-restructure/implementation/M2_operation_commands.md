@@ -753,6 +753,8 @@ ktrdr --help
 
 ### E2E Test Scenario
 
+**E2E Test Recipe:** [cli/operations-workflow](../../../../.claude/skills/e2e-testing/tests/cli/operations-workflow.md)
+
 **Purpose:** Prove all operation commands work together.
 
 **Duration:** ~2 minutes

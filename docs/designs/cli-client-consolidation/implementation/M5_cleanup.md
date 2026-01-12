@@ -11,6 +11,8 @@ architecture: ../ARCHITECTURE.md
 
 ## E2E Test Scenario
 
+**E2E Test Recipe:** [cli/client-migration](../../../../.claude/skills/e2e-testing/tests/cli/client-migration.md)
+
 ```bash
 # Verify no references to old clients
 grep -r "from ktrdr.cli.async_cli_client" ktrdr/

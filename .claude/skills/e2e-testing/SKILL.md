@@ -126,6 +126,16 @@ See [e2e-tester agent](../../agents/e2e-tester.md) for full details.
 | [agent/metadata](tests/agent/metadata.md) | Agent | ~2min | Metadata storage |
 | [agent/child-ops](tests/agent/child-ops.md) | Agent | ~2min | Child operation tracking |
 
+### CLI Tests
+
+| Test | Category | Duration | Use When |
+|------|----------|----------|----------|
+| [cli/client-migration](tests/cli/client-migration.md) | CLI (Migration) | ~2min | Client consolidation M5 cleanup |
+| [cli/train-command](tests/cli/train-command.md) | CLI (Restructure) | ~60s | CLI restructure M1 - train command |
+| [cli/operations-workflow](tests/cli/operations-workflow.md) | CLI (Restructure) | ~90s | CLI restructure M2 - operation commands |
+| [cli/information-commands](tests/cli/information-commands.md) | CLI (Restructure) | ~30s | CLI restructure M3 - list/show/validate |
+| [cli/performance](tests/cli/performance.md) | CLI (Restructure) | ~10s | CLI restructure M4 - startup performance |
+
 ## Pre-Flight Modules
 
 | Module | Checks | Used By |

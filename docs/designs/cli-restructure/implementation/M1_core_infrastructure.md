@@ -508,6 +508,8 @@ curl http://localhost:8000/api/v1/operations | jq
 
 ### E2E Test Scenario
 
+**E2E Test Recipe:** [cli/train-command](../../../../.claude/skills/e2e-testing/tests/cli/train-command.md)
+
 **Purpose:** Prove the new CLI architecture works end-to-end with one complete command.
 
 **Duration:** ~30 seconds

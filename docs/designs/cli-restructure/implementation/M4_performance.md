@@ -275,6 +275,8 @@ python -m ktrdr.cli.app train --help
 
 ### E2E Test Scenario
 
+**E2E Test Recipe:** [cli/performance](../../../../.claude/skills/e2e-testing/tests/cli/performance.md)
+
 **Purpose:** Prove CLI startup is <100ms.
 
 **Duration:** ~30 seconds (including cache clearing)
