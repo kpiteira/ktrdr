@@ -1,66 +1,12 @@
 """
-Tests for resume operation CLI command and API client method.
+Tests for resume operation CLI command.
 
 Task 4.6: Add Resume CLI Command
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
-
-from ktrdr.errors import DataError
-
-
-class TestKtrdrApiClientResumeOperation:
-    """Test KtrdrApiClient.resume_operation method."""
-
-    @pytest.mark.asyncio
-    async def test_resume_operation_success(self):
-        """Test successful resume operation returns response data."""
-        from ktrdr.cli.api_client import KtrdrApiClient
-
-        mock_response = {
-            "success": True,
-            "data": {
-                "operation_id": "op_test_123",
-                "status": "RUNNING",
-                "resumed_from": {
-                    "checkpoint_type": "training",
-                    "created_at": "2024-01-15T10:00:00Z",
-                    "epoch": 25,
-                },
-            },
-        }
-
-        client = KtrdrApiClient()
-        client._make_request = AsyncMock(return_value=mock_response)
-
-        result = await client.resume_operation("op_test_123")
-
-        assert result["success"] is True
-        assert result["data"]["operation_id"] == "op_test_123"
-        assert result["data"]["resumed_from"]["epoch"] == 25
-        client._make_request.assert_called_once_with(
-            "POST", "/operations/op_test_123/resume"
-        )
-
-    @pytest.mark.asyncio
-    async def test_resume_operation_failure_raises_data_error(self):
-        """Test failed resume raises DataError."""
-        from ktrdr.cli.api_client import KtrdrApiClient
-
-        mock_response = {
-            "success": False,
-            "error": {"message": "Resume failed"},
-        }
-
-        client = KtrdrApiClient()
-        client._make_request = AsyncMock(return_value=mock_response)
-
-        with pytest.raises(DataError) as exc_info:
-            await client.resume_operation("op_test_123")
-
-        assert "Failed to resume operation" in str(exc_info.value)
 
 
 class TestResumeOperationCommand:

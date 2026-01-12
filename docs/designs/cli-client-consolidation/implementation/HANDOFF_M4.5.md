@@ -247,9 +247,38 @@ result = runner.invoke(models_app, ["train", strategy_path, ...])
 result = runner.invoke(models_app, [strategy_path, ...])
 ```
 
-### Next Task Notes
+---
 
-For Task 4.5.5 (Final Verification):
-- Run comprehensive grep to verify zero old client imports
-- Run full unit test suite
-- Run E2E tests for all migrated commands
+## Task 4.5.5 Complete: Final Verification
+
+### Verification Results
+
+**1. No old client imports in production code:**
+```bash
+grep -r "from ktrdr.cli.async_cli_client" ktrdr/  # No matches
+grep -r "from ktrdr.cli.api_client" ktrdr/         # No matches
+grep -r "from ktrdr.cli.operation_executor" ktrdr/ # No matches
+```
+
+**2. Unit tests:** 3836 passed, 76 skipped (39.53s)
+
+**3. Quality checks:** All passed (ruff, black, mypy)
+
+**4. E2E tests:** All migrated commands reach API correctly:
+- `ktrdr dummy dummy` — Started, polled, handled result
+- `ktrdr data load AAPL ...` — Started, polled, handled result
+- `ktrdr models train ...` — Started, polled, handled result
+
+### Test Cleanup Performed
+
+Deleted obsolete tests that were testing old client infrastructure:
+- `tests/integration/cli/test_unified_operations.py` — tested `AsyncOperationExecutor`
+- `tests/unit/cli/test_operation_executor.py` — tested `AsyncOperationExecutor`
+- Removed `TestKtrdrApiClientResumeOperation` class from `test_resume_command.py`
+
+### Migration Complete
+
+All CLI command files now use the unified `AsyncCLIClient` pattern:
+- `ktrdr/cli/client/` — New unified client implementation
+- No imports from `api_client.py` or `operation_executor.py` in production code
+- Old client files can be deleted in M5 (cleanup phase)
