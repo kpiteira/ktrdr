@@ -18,6 +18,11 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from ktrdr.cli.helpers.secrets import (
+    OnePasswordError,
+    check_1password_authenticated,
+    fetch_secrets_from_1password,
+)
 from ktrdr.cli.sandbox_gate import CheckStatus, run_gate
 from ktrdr.cli.sandbox_ports import check_ports_available, get_ports
 from ktrdr.cli.sandbox_registry import (
@@ -43,6 +48,41 @@ error_console = Console(stderr=True)
 # Shared data directory configuration
 SHARED_DIR = Path.home() / ".ktrdr" / "shared"
 SHARED_SUBDIRS = ["data", "models", "strategies"]
+
+# 1Password item for sandbox secrets
+SANDBOX_SECRETS_ITEM = "ktrdr-sandbox-dev"
+
+# Mapping from 1Password field labels to environment variable names
+SANDBOX_SECRETS_MAPPING = {
+    "db_password": "DB_PASSWORD",
+    "jwt_secret": "JWT_SECRET",
+    "anthropic_api_key": "ANTHROPIC_API_KEY",
+    "grafana_password": "GF_ADMIN_PASSWORD",
+}
+
+
+def fetch_sandbox_secrets() -> dict[str, str]:
+    """Fetch sandbox secrets from 1Password.
+
+    Returns:
+        Dict mapping environment variable names to secret values.
+        Empty dict if 1Password is unavailable or not authenticated.
+    """
+    if not check_1password_authenticated():
+        return {}
+
+    try:
+        secrets = fetch_secrets_from_1password(SANDBOX_SECRETS_ITEM)
+    except OnePasswordError:
+        return {}
+
+    # Map 1Password field labels to env var names
+    env_secrets = {}
+    for field_label, env_var in SANDBOX_SECRETS_MAPPING.items():
+        if field_label in secrets:
+            env_secrets[env_var] = secrets[field_label]
+
+    return env_secrets
 
 
 def get_dir_stats(path: Path) -> tuple[int, str]:
@@ -471,8 +511,15 @@ def up(
     ),
     build: bool = typer.Option(False, "--build", help="Force rebuild images"),
     timeout: int = typer.Option(120, "--timeout", help="Gate timeout in seconds"),
+    no_secrets: bool = typer.Option(
+        False, "--no-secrets", help="Skip 1Password secrets (use defaults)"
+    ),
 ) -> None:
-    """Start the sandbox stack."""
+    """Start the sandbox stack.
+
+    Secrets are fetched from 1Password item 'ktrdr-sandbox-dev' and injected
+    into the Docker environment. Use --no-secrets to skip this and use defaults.
+    """
     cwd = Path.cwd()
     env = load_env_sandbox(cwd)
 
@@ -501,6 +548,26 @@ def up(
         error_console.print("\nUse 'lsof -i :<port>' to identify the process.")
         raise typer.Exit(3)
 
+    # Fetch secrets from 1Password
+    secrets_env: dict[str, str] = {}
+    if no_secrets:
+        console.print("[dim]Skipping 1Password secrets (--no-secrets)[/dim]")
+    else:
+        console.print("Fetching secrets from 1Password...")
+        secrets_env = fetch_sandbox_secrets()
+        if secrets_env:
+            secret_names = ", ".join(sorted(secrets_env.keys()))
+            console.print(f"  [green]✓[/green] Loaded: {secret_names}")
+        else:
+            error_console.print(
+                "[yellow]Warning:[/yellow] Could not fetch secrets from 1Password"
+            )
+            error_console.print("  Possible causes:")
+            error_console.print("    - 1Password CLI (op) not installed")
+            error_console.print("    - Not signed in (run: op signin)")
+            error_console.print(f"    - Item '{SANDBOX_SECRETS_ITEM}' not found")
+            error_console.print("  [dim]Using default/empty values for secrets[/dim]")
+
     # Build compose command
     try:
         compose_file = find_compose_file(cwd)
@@ -513,8 +580,10 @@ def up(
         cmd.append("--build")
 
     # Set environment for compose
+    # Order matters: os.environ < .env.sandbox < 1Password secrets
     compose_env = os.environ.copy()
     compose_env.update(env)
+    compose_env.update(secrets_env)  # Secrets override defaults
 
     console.print(f"Running: docker compose -f {compose_file.name} up -d")
 

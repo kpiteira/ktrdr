@@ -2,16 +2,28 @@
 # For running multiple isolated KTRDR stacks in parallel.
 #
 # Usage:
-#   export COMPOSE_PROJECT_NAME=ktrdr-test-1
-#   export KTRDR_API_PORT=8001
-#   export KTRDR_DB_PORT=5433
-#   # ... other port vars ...
+#   ktrdr sandbox up  # Recommended - handles secrets automatically
+#
+# Manual usage (not recommended):
 #   docker compose -f docker-compose.sandbox.yml up -d
 #
-# All ports are parameterized with defaults matching the main docker-compose.yml.
-# When no env vars are set, this file behaves identically to docker-compose.yml.
+# =============================================================================
+# SECRETS MANAGEMENT
+# =============================================================================
+# Secrets (DB_PASSWORD, JWT_SECRET, ANTHROPIC_API_KEY, GF_ADMIN_PASSWORD) are
+# fetched from 1Password at startup by 'ktrdr sandbox up'.
 #
-# Port Variables (all have defaults matching current docker-compose.yml):
+# 1Password item: ktrdr-sandbox-dev
+# Required fields: db_password, jwt_secret, anthropic_api_key, grafana_password
+#
+# The defaults below are INSECURE fallbacks for --no-secrets mode only.
+# They allow the stack to start for CI/testing but should never be used
+# for actual development work.
+#
+# =============================================================================
+# PORT VARIABLES
+# =============================================================================
+# All ports are parameterized with defaults matching the main docker-compose.yml.
 #   KTRDR_API_PORT, KTRDR_DB_PORT, KTRDR_GRAFANA_PORT,
 #   KTRDR_JAEGER_UI_PORT, KTRDR_JAEGER_OTLP_GRPC_PORT, KTRDR_JAEGER_OTLP_HTTP_PORT,
 #   KTRDR_PROMETHEUS_PORT, KTRDR_WORKER_PORT_1-4
@@ -29,6 +41,7 @@ services:
     environment:
       POSTGRES_DB: ${DB_NAME:-ktrdr}
       POSTGRES_USER: ${DB_USER:-ktrdr}
+      # INSECURE default - use 1Password via 'ktrdr sandbox up'
       POSTGRES_PASSWORD: ${DB_PASSWORD:-localdev}
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -97,11 +110,12 @@ services:
       # IB Host Service (runs natively on Mac)
       - USE_IB_HOST_SERVICE=${USE_IB_HOST_SERVICE:-true}
       - IB_HOST_SERVICE_URL=http://host.docker.internal:5001
-      # JWT for API auth
+      # JWT for API auth (INSECURE default - use 1Password via 'ktrdr sandbox up')
       - JWT_SECRET=${JWT_SECRET:-local-dev-secret-minimum-32-characters-long}
       # Agent configuration
       - AGENT_ENABLED=${AGENT_ENABLED:-false}
       - AGENT_TRIGGER_INTERVAL_SECONDS=${AGENT_TRIGGER_INTERVAL_SECONDS:-300}
+      # From 1Password - empty default disables agents
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - AGENT_TRAINING_START_DATE=${AGENT_TRAINING_START_DATE:-2015-01-01}
       - AGENT_TRAINING_END_DATE=${AGENT_TRAINING_END_DATE:-2019-12-31}
@@ -177,6 +191,7 @@ services:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
       - GF_SECURITY_ALLOW_EMBEDDING=true
+      # INSECURE default - use 1Password via 'ktrdr sandbox up'
       - GF_SECURITY_ADMIN_PASSWORD=${GF_ADMIN_PASSWORD:-admin}
     volumes:
       - ./deploy/shared/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro

@@ -205,3 +205,75 @@ Each sandbox gets a "slot" (1-10) with dedicated ports:
 | 3 | 8003 | 5435 | 3003 | 16689 | 5030-5033 |
 
 The CLI auto-detects which sandbox you're in and uses the correct ports.
+
+---
+
+## Secrets Management
+
+Sandbox secrets are managed via 1Password for security and easy rotation.
+
+### 1Password Setup (One-Time)
+
+1. Install the 1Password CLI:
+   ```bash
+   brew install 1password-cli
+   ```
+
+2. Sign in:
+   ```bash
+   op signin
+   ```
+
+3. Create a 1Password item named `ktrdr-sandbox-dev` with these fields:
+
+   | Field | Type | Description |
+   |-------|------|-------------|
+   | `db_password` | password | PostgreSQL password |
+   | `jwt_secret` | password | JWT signing secret (min 32 chars) |
+   | `anthropic_api_key` | password | Anthropic API key for agents |
+   | `grafana_password` | password | Grafana admin password |
+
+   All fields should be type "password" (CONCEALED in 1Password).
+
+### How It Works
+
+When you run `ktrdr sandbox up`:
+
+1. Checks if 1Password CLI is authenticated
+2. Fetches secrets from `ktrdr-sandbox-dev` item
+3. Injects them as environment variables into Docker
+
+```bash
+# Normal usage - secrets from 1Password
+uv run ktrdr sandbox up
+
+# Output shows loaded secrets:
+# Fetching secrets from 1Password...
+#   ✓ Loaded: ANTHROPIC_API_KEY, DB_PASSWORD, GF_ADMIN_PASSWORD, JWT_SECRET
+```
+
+### Skipping Secrets (CI/Testing)
+
+For CI environments or quick testing without 1Password:
+
+```bash
+uv run ktrdr sandbox up --no-secrets
+```
+
+This uses insecure defaults (acceptable for isolated testing only).
+
+### Rotating Secrets
+
+1. Update the values in 1Password
+2. Restart the sandbox:
+   ```bash
+   uv run ktrdr sandbox down
+   uv run ktrdr sandbox up
+   ```
+
+Note: Changing `db_password` requires resetting the database volume since PostgreSQL stores the password at initialization:
+
+```bash
+uv run ktrdr sandbox down --volumes
+uv run ktrdr sandbox up
+```
