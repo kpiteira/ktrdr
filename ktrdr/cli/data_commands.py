@@ -685,8 +685,6 @@ async def _load_data_async(
                             )
                         return
 
-                    operation_data = final_response.get("data", {})
-
                     # Process final response using common handler
                     return await _process_data_load_response(
                         final_response,

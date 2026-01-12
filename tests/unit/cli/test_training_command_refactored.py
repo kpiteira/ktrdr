@@ -258,7 +258,7 @@ epochs: 10
                 mock_progress_instance.add_task.return_value = 0
                 MockProgress.return_value = mock_progress_instance
 
-                with pytest.raises(SystemExit):
+                with pytest.raises(SystemExit) as exc_info:
                     await _train_model_async_impl(
                         strategy_file=str(mock_strategy_path),
                         symbols=["AAPL"],
@@ -272,6 +272,9 @@ epochs: 10
                         verbose=False,
                         detailed_analytics=False,
                     )
+
+                # Verify successful exit code
+                assert exc_info.value.code == 0
 
         # Verify execute_operation was called with correct arguments
         assert mock_client.execute_operation.called
