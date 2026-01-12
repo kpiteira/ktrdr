@@ -57,3 +57,58 @@ These commands work and use the NEW unified client:
 1. Complete M4.5 (migrate remaining commands)
 2. Re-run Task 5.0 verification
 3. Proceed with M5 deletion tasks
+
+---
+
+## Task 5.1 Complete: Delete async_cli_client.py
+
+### What Was Done
+- Verified no production code imports `async_cli_client.py` (grep confirmed)
+- Deleted `ktrdr/cli/async_cli_client.py` (297 lines removed)
+- All tests pass (3836 passed)
+- Quality checks pass
+
+### Next Task Notes
+For Task 5.2 (`api_client.py`):
+- Same pattern: grep first, then delete
+- Also check for `get_api_client` helper
+- File is larger (~500 lines) - more code removed
+
+---
+
+## Task 5.2 Complete: Delete api_client.py
+
+### What Was Done
+- Verified no production code imports `api_client.py` (grep confirmed)
+- Verified `get_api_client` only existed in the file itself
+- Deleted `ktrdr/cli/api_client.py` (870 lines removed)
+- All tests pass (3836 passed)
+- Quality checks pass
+
+### Next Task Notes
+For Task 5.3 (`operation_executor.py`):
+- Same pattern: grep first, then delete
+- Check for both module import and class import patterns
+
+---
+
+## Task 5.3 Complete: Delete operation_executor.py
+
+### What Was Done
+- Verified no production code imports `operation_executor.py` (grep confirmed)
+- Deleted `ktrdr/cli/operation_executor.py` (539 lines removed)
+- All tests pass (3836 passed)
+- Quality checks pass
+
+### Cumulative Code Removed
+| Task | File | Lines |
+|------|------|-------|
+| 5.1 | async_cli_client.py | 297 |
+| 5.2 | api_client.py | 870 |
+| 5.3 | operation_executor.py | 539 |
+| **Total** | | **1,706** |
+
+### Next Task Notes
+Task 5.4 is Post-Deletion Verification (E2E testing). This is the FINAL task in M5 and requires:
+- Running all CLI commands to verify nothing broke
+- Full E2E test with Docker + IB host service
