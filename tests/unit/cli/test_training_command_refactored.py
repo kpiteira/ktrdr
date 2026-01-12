@@ -1,23 +1,25 @@
 """
-Tests for refactored training command using AsyncOperationExecutor pattern.
+Tests for refactored training command using AsyncCLIClient.execute_operation() pattern.
 
 Tests verify that the training command properly:
 - Validates strategy files and inputs
 - Creates TrainingOperationAdapter with correct parameters
-- Calls AsyncOperationExecutor.execute_operation
+- Calls AsyncCLIClient.execute_operation
 - Handles success, failure, and cancellation scenarios
+
+NOTE: These tests were updated as part of M4.5 migration from
+AsyncOperationExecutor to AsyncCLIClient.
 """
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from ktrdr.cli.operation_adapters import TrainingOperationAdapter
-from ktrdr.cli.operation_executor import AsyncOperationExecutor
 
 
 class TestTrainingCommandRefactored:
-    """Test refactored training command using executor pattern."""
+    """Test refactored training command using AsyncCLIClient pattern."""
 
     @pytest.fixture
     def mock_strategy_path(self, tmp_path):
@@ -57,143 +59,170 @@ epochs: 10
             yield mock_loader
 
     @pytest.fixture
-    def mock_executor(self):
-        """Mock AsyncOperationExecutor."""
-        executor = AsyncMock(spec=AsyncOperationExecutor)
-        executor.execute_operation = AsyncMock(return_value=True)
-        return executor
+    def mock_client(self):
+        """Mock AsyncCLIClient."""
+        client = AsyncMock()
+        client.health_check.return_value = True
+        client.execute_operation.return_value = {
+            "status": "completed",
+            "operation_id": "op_test123",
+            "result_summary": {"training_metrics": {"epochs_trained": 10}},
+        }
+        return client
 
     @pytest.mark.asyncio
     async def test_training_command_creates_adapter_correctly(
-        self, mock_strategy_path, mock_strategy_loader, mock_executor
+        self, mock_strategy_path, mock_strategy_loader, mock_client
     ):
         """Test that training command creates TrainingOperationAdapter with correct parameters."""
         from ktrdr.cli.async_model_commands import _train_model_async_impl
 
-        # Mock sys.exit to prevent test from exiting
-        with patch("ktrdr.cli.async_model_commands.sys.exit"):
-            with patch(
-                "ktrdr.cli.async_model_commands.AsyncOperationExecutor",
-                return_value=mock_executor,
-            ):
-                # Call the async implementation
-                await _train_model_async_impl(
-                    strategy_file=str(mock_strategy_path),
-                    symbols=["AAPL", "GOOGL"],
-                    timeframes=["1h", "1d"],
-                    start_date="2024-01-01",
-                    end_date="2024-06-01",
-                    models_dir="models",
-                    validation_split=0.2,
-                    data_mode="local",
-                    dry_run=False,
-                    verbose=False,
-                    detailed_analytics=True,
-                )
+        with patch("ktrdr.cli.async_model_commands.AsyncCLIClient") as MockClient:
+            MockClient.return_value.__aenter__.return_value = mock_client
+            MockClient.return_value.__aexit__.return_value = None
 
-                # Verify executor.execute_operation was called
-                assert mock_executor.execute_operation.called
+            with patch("ktrdr.cli.async_model_commands.Progress") as MockProgress:
+                mock_progress_instance = MagicMock()
+                mock_progress_instance.__enter__.return_value = mock_progress_instance
+                mock_progress_instance.__exit__.return_value = None
+                mock_progress_instance.add_task.return_value = 0
+                MockProgress.return_value = mock_progress_instance
 
-                # Get the adapter that was passed to execute_operation
-                call_args = mock_executor.execute_operation.call_args
-                adapter = call_args[1]["adapter"]  # Keyword arg
+                with pytest.raises(SystemExit) as exc_info:
+                    await _train_model_async_impl(
+                        strategy_file=str(mock_strategy_path),
+                        symbols=["AAPL", "GOOGL"],
+                        timeframes=["1h", "1d"],
+                        start_date="2024-01-01",
+                        end_date="2024-06-01",
+                        models_dir="models",
+                        validation_split=0.2,
+                        data_mode="local",
+                        dry_run=False,
+                        verbose=False,
+                        detailed_analytics=True,
+                    )
+                assert exc_info.value.code == 0
 
-                # Verify it's a TrainingOperationAdapter
-                assert isinstance(adapter, TrainingOperationAdapter)
+        # Verify execute_operation was called
+        assert mock_client.execute_operation.called
 
-                # Verify adapter has correct parameters
-                assert adapter.strategy_name == "test_strategy"
-                assert adapter.symbols == ["AAPL", "GOOGL"]
-                assert adapter.timeframes == ["1h", "1d"]
-                assert adapter.start_date == "2024-01-01"
-                assert adapter.end_date == "2024-06-01"
-                assert adapter.validation_split == 0.2
-                assert adapter.detailed_analytics is True
+        # Get the adapter that was passed to execute_operation
+        call_args = mock_client.execute_operation.call_args
+        adapter = call_args[0][0]  # First positional arg
+
+        # Verify it's a TrainingOperationAdapter
+        assert isinstance(adapter, TrainingOperationAdapter)
+
+        # Verify adapter has correct parameters
+        assert adapter.strategy_name == "test_strategy"
+        assert adapter.symbols == ["AAPL", "GOOGL"]
+        assert adapter.timeframes == ["1h", "1d"]
+        assert adapter.start_date == "2024-01-01"
+        assert adapter.end_date == "2024-06-01"
+        assert adapter.validation_split == 0.2
+        assert adapter.detailed_analytics is True
 
     @pytest.mark.asyncio
     async def test_training_command_handles_success(
-        self, mock_strategy_path, mock_strategy_loader, mock_executor
+        self, mock_strategy_path, mock_strategy_loader, mock_client
     ):
         """Test that training command handles successful completion correctly."""
         from ktrdr.cli.async_model_commands import _train_model_async_impl
 
         # Mock successful execution
-        mock_executor.execute_operation = AsyncMock(return_value=True)
+        mock_client.execute_operation.return_value = {
+            "status": "completed",
+            "operation_id": "op_test123",
+        }
 
-        # Mock sys.exit to capture the exit code
-        with patch("ktrdr.cli.async_model_commands.sys.exit") as mock_exit:
-            with patch(
-                "ktrdr.cli.async_model_commands.AsyncOperationExecutor",
-                return_value=mock_executor,
-            ):
-                await _train_model_async_impl(
-                    strategy_file=str(mock_strategy_path),
-                    symbols=["AAPL"],
-                    timeframes=["1h"],
-                    start_date="2024-01-01",
-                    end_date="2024-06-01",
-                    models_dir="models",
-                    validation_split=0.2,
-                    data_mode="local",
-                    dry_run=False,
-                    verbose=False,
-                    detailed_analytics=False,
-                )
+        with patch("ktrdr.cli.async_model_commands.AsyncCLIClient") as MockClient:
+            MockClient.return_value.__aenter__.return_value = mock_client
+            MockClient.return_value.__aexit__.return_value = None
 
-                # Verify execute_operation was called once
-                assert mock_executor.execute_operation.call_count == 1
+            with patch("ktrdr.cli.async_model_commands.Progress") as MockProgress:
+                mock_progress_instance = MagicMock()
+                mock_progress_instance.__enter__.return_value = mock_progress_instance
+                mock_progress_instance.__exit__.return_value = None
+                mock_progress_instance.add_task.return_value = 0
+                MockProgress.return_value = mock_progress_instance
 
-                # Verify sys.exit was called with 0 (success)
-                mock_exit.assert_called_once_with(0)
+                with pytest.raises(SystemExit) as exc_info:
+                    await _train_model_async_impl(
+                        strategy_file=str(mock_strategy_path),
+                        symbols=["AAPL"],
+                        timeframes=["1h"],
+                        start_date="2024-01-01",
+                        end_date="2024-06-01",
+                        models_dir="models",
+                        validation_split=0.2,
+                        data_mode="local",
+                        dry_run=False,
+                        verbose=False,
+                        detailed_analytics=False,
+                    )
+
+        # Verify execute_operation was called once
+        assert mock_client.execute_operation.call_count == 1
+
+        # Verify sys.exit was called with 0 (success)
+        assert exc_info.value.code == 0
 
     @pytest.mark.asyncio
     async def test_training_command_handles_failure(
-        self, mock_strategy_path, mock_strategy_loader, mock_executor
+        self, mock_strategy_path, mock_strategy_loader, mock_client
     ):
         """Test that training command handles failure correctly."""
         from ktrdr.cli.async_model_commands import _train_model_async_impl
 
         # Mock failed execution
-        mock_executor.execute_operation = AsyncMock(return_value=False)
+        mock_client.execute_operation.return_value = {
+            "status": "failed",
+            "operation_id": "op_test123",
+            "error_message": "Training failed",
+        }
 
-        # Mock sys.exit to capture the exit code
-        with patch("ktrdr.cli.async_model_commands.sys.exit") as mock_exit:
-            with patch(
-                "ktrdr.cli.async_model_commands.AsyncOperationExecutor",
-                return_value=mock_executor,
-            ):
-                await _train_model_async_impl(
-                    strategy_file=str(mock_strategy_path),
-                    symbols=["AAPL"],
-                    timeframes=["1h"],
-                    start_date="2024-01-01",
-                    end_date="2024-06-01",
-                    models_dir="models",
-                    validation_split=0.2,
-                    data_mode="local",
-                    dry_run=False,
-                    verbose=False,
-                    detailed_analytics=False,
-                )
+        with patch("ktrdr.cli.async_model_commands.AsyncCLIClient") as MockClient:
+            MockClient.return_value.__aenter__.return_value = mock_client
+            MockClient.return_value.__aexit__.return_value = None
 
-                # Verify execute_operation was called
-                assert mock_executor.execute_operation.called
+            with patch("ktrdr.cli.async_model_commands.Progress") as MockProgress:
+                mock_progress_instance = MagicMock()
+                mock_progress_instance.__enter__.return_value = mock_progress_instance
+                mock_progress_instance.__exit__.return_value = None
+                mock_progress_instance.add_task.return_value = 0
+                MockProgress.return_value = mock_progress_instance
 
-                # Verify sys.exit was called with 1 (failure)
-                mock_exit.assert_called_once_with(1)
+                with pytest.raises(SystemExit) as exc_info:
+                    await _train_model_async_impl(
+                        strategy_file=str(mock_strategy_path),
+                        symbols=["AAPL"],
+                        timeframes=["1h"],
+                        start_date="2024-01-01",
+                        end_date="2024-06-01",
+                        models_dir="models",
+                        validation_split=0.2,
+                        data_mode="local",
+                        dry_run=False,
+                        verbose=False,
+                        detailed_analytics=False,
+                    )
+
+        # Verify execute_operation was called
+        assert mock_client.execute_operation.called
+
+        # Verify sys.exit was called with 1 (failure)
+        assert exc_info.value.code == 1
 
     @pytest.mark.asyncio
     async def test_training_command_dry_run_skips_execution(
-        self, mock_strategy_path, mock_strategy_loader, mock_executor
+        self, mock_strategy_path, mock_strategy_loader, mock_client
     ):
         """Test that dry run mode doesn't execute training."""
         from ktrdr.cli.async_model_commands import _train_model_async_impl
 
-        with patch(
-            "ktrdr.cli.async_model_commands.AsyncOperationExecutor",
-            return_value=mock_executor,
-        ):
-            # Dry run should not call executor
+        with patch("ktrdr.cli.async_model_commands.AsyncCLIClient") as MockClient:
+            # Dry run should not call executor at all
             await _train_model_async_impl(
                 strategy_file=str(mock_strategy_path),
                 symbols=["AAPL"],
@@ -208,66 +237,55 @@ epochs: 10
                 detailed_analytics=False,
             )
 
-            # Verify execute_operation was NOT called
-            assert not mock_executor.execute_operation.called
+            # Verify AsyncCLIClient was NOT called (no context manager entered)
+            assert not MockClient.called
 
     @pytest.mark.asyncio
-    async def test_training_command_uses_executor_progress_callback(
-        self, mock_strategy_path, mock_strategy_loader, mock_executor
+    async def test_training_command_uses_progress_callback(
+        self, mock_strategy_path, mock_strategy_loader, mock_client
     ):
-        """Test that training command passes progress callback to executor."""
+        """Test that training command passes progress callback to execute_operation."""
         from ktrdr.cli.async_model_commands import _train_model_async_impl
 
-        with patch("ktrdr.cli.async_model_commands.sys.exit"):
-            with patch(
-                "ktrdr.cli.async_model_commands.AsyncOperationExecutor",
-                return_value=mock_executor,
-            ):
-                await _train_model_async_impl(
-                    strategy_file=str(mock_strategy_path),
-                    symbols=["AAPL"],
-                    timeframes=["1h"],
-                    start_date="2024-01-01",
-                    end_date="2024-06-01",
-                    models_dir="models",
-                    validation_split=0.2,
-                    data_mode="local",
-                    dry_run=False,
-                    verbose=False,
-                    detailed_analytics=False,
-                )
+        with patch("ktrdr.cli.async_model_commands.AsyncCLIClient") as MockClient:
+            MockClient.return_value.__aenter__.return_value = mock_client
+            MockClient.return_value.__aexit__.return_value = None
 
-                # Verify execute_operation was called with correct arguments
-                assert mock_executor.execute_operation.called
-                call_args = mock_executor.execute_operation.call_args
+            with patch("ktrdr.cli.async_model_commands.Progress") as MockProgress:
+                mock_progress_instance = MagicMock()
+                mock_progress_instance.__enter__.return_value = mock_progress_instance
+                mock_progress_instance.__exit__.return_value = None
+                mock_progress_instance.add_task.return_value = 0
+                MockProgress.return_value = mock_progress_instance
 
-                # Should have adapter, console, progress_callback, and show_progress
-                assert "adapter" in call_args[1]
-                assert "console" in call_args[1]
-                assert "progress_callback" in call_args[1]
-                assert "show_progress" in call_args[1]
+                with pytest.raises(SystemExit) as exc_info:
+                    await _train_model_async_impl(
+                        strategy_file=str(mock_strategy_path),
+                        symbols=["AAPL"],
+                        timeframes=["1h"],
+                        start_date="2024-01-01",
+                        end_date="2024-06-01",
+                        models_dir="models",
+                        validation_split=0.2,
+                        data_mode="local",
+                        dry_run=False,
+                        verbose=False,
+                        detailed_analytics=False,
+                    )
 
-                # Progress callback should be callable and return a string
-                assert callable(call_args[1]["progress_callback"])
+                # Verify successful exit code
+                assert exc_info.value.code == 0
 
-                # Test callback returns formatted string
-                # Use field names that match TrainingProgressBridge implementation
-                test_operation_data = {
-                    "status": "running",
-                    "progress": {
-                        "percentage": 50,
-                        "context": {
-                            "epoch_index": 5,  # Actual field name from TrainingProgressBridge
-                            "batch_number": 100,  # Actual field name from TrainingProgressBridge
-                            "batch_total_per_epoch": 200,  # Actual field name
-                            "total_epochs": 10,  # Total epochs in context
-                        },
-                    },
-                    "metadata": {"parameters": {"epochs": 10}},
-                }
-                result = call_args[1]["progress_callback"](test_operation_data)
-                assert isinstance(result, str)
-                assert "Epoch: 5/10" in result
+        # Verify execute_operation was called with correct arguments
+        assert mock_client.execute_operation.called
+        call_kwargs = mock_client.execute_operation.call_args[1]
+
+        # Should have on_progress and poll_interval
+        assert "on_progress" in call_kwargs
+        assert "poll_interval" in call_kwargs
+
+        # Progress callback should be callable
+        assert callable(call_kwargs["on_progress"])
 
     @pytest.mark.asyncio
     async def test_training_command_validates_strategy_file_exists(

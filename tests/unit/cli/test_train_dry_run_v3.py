@@ -14,7 +14,7 @@ from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
 
-from ktrdr.cli.model_commands import models_app
+from ktrdr.cli.async_model_commands import async_models_app as models_app
 
 
 @pytest.fixture
@@ -129,10 +129,10 @@ class TestTrainDryRunV3:
         self, runner: CliRunner, v3_strategy_file: Path
     ):
         """Test that dry-run detects v3 strategy and shows v3 info."""
+        # async_models_app has only one command, so invoke without "train" prefix
         result = runner.invoke(
             models_app,
             [
-                "train",
                 str(v3_strategy_file),
                 "--start-date",
                 "2024-01-01",
@@ -154,7 +154,6 @@ class TestTrainDryRunV3:
         result = runner.invoke(
             models_app,
             [
-                "train",
                 str(v3_strategy_file),
                 "--start-date",
                 "2024-01-01",
@@ -177,7 +176,6 @@ class TestTrainDryRunV3:
         result = runner.invoke(
             models_app,
             [
-                "train",
                 str(v3_strategy_file),
                 "--start-date",
                 "2024-01-01",
@@ -203,7 +201,6 @@ class TestTrainDryRunV3:
         result = runner.invoke(
             models_app,
             [
-                "train",
                 str(v3_strategy_file),
                 "--start-date",
                 "2024-01-01",
@@ -234,7 +231,6 @@ class TestTrainDryRunV3:
         result = runner.invoke(
             models_app,
             [
-                "train",
                 str(v3_strategy_file),
                 "--start-date",
                 "2024-01-01",
@@ -263,7 +259,6 @@ class TestTrainDryRunV3:
         result = runner.invoke(
             models_app,
             [
-                "train",
                 str(v2_strategy_file),
                 "--start-date",
                 "2024-01-01",
@@ -284,11 +279,10 @@ class TestTrainDryRunV3:
         self, runner: CliRunner, v3_strategy_file: Path
     ):
         """Test that dry-run does not execute actual training."""
-        with patch("ktrdr.cli.model_commands.AsyncCLIClient") as mock_client_cls:
+        with patch("ktrdr.cli.async_model_commands.AsyncCLIClient") as mock_client_cls:
             result = runner.invoke(
                 models_app,
                 [
-                    "train",
                     str(v3_strategy_file),
                     "--start-date",
                     "2024-01-01",
@@ -349,7 +343,6 @@ training:
         result = runner.invoke(
             models_app,
             [
-                "train",
                 str(invalid_strategy),
                 "--start-date",
                 "2024-01-01",

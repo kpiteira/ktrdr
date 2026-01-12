@@ -14,8 +14,8 @@ import pytest
 from typer.testing import CliRunner
 
 from ktrdr.cli.async_cli_client import AsyncCLIClient
+from ktrdr.cli.async_model_commands import async_models_app as models_app
 from ktrdr.cli.data_commands import data_app
-from ktrdr.cli.model_commands import models_app
 
 
 class PerformanceBenchmarker:
