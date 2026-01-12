@@ -26,20 +26,26 @@ This aligns with CLAUDE.md: *"Push back if something feels wrong"*
 
 ## Workflow
 
-### Step 1: Fetch Review Comments
+### Step 1: Fetch ALL Review Comments
+
+**IMPORTANT**: Reviews come from TWO different sources. You must check BOTH:
 
 ```bash
 # Get PR number from current branch
 PR_NUMBER=$(gh pr view --json number -q '.number' 2>/dev/null)
 
-# Fetch all review comments
+# 1. Fetch inline review comments (Copilot posts here)
 gh api repos/{owner}/{repo}/pulls/$PR_NUMBER/comments
+
+# 2. Fetch issue comments (Claude posts here via GitHub Actions)
+gh pr view $PR_NUMBER --comments --json comments
 ```
 
-Or if user provides PR number directly:
-```bash
-gh api repos/{owner}/{repo}/pulls/194/comments
-```
+**Why two sources?**
+- **Pull request comments** (`/pulls/.../comments`): Inline code review comments attached to specific lines. Copilot uses this.
+- **Issue comments** (`--comments`): General PR comments not attached to code lines. Claude (via GitHub Actions) posts here.
+
+If you only check one source, you WILL miss reviews. Always check both.
 
 ### Step 2: Assess Each Comment
 
@@ -209,6 +215,8 @@ Shall I proceed with implementing the valuable changes and drafting push-back re
 - Be more context-aware but sometimes over-thorough
 - Suggest documentation where code is self-documenting
 - Sometimes miss that simpler is better
+- **Miss structural/syntactic bugs** while praising high-level architecture
+- Give false confidence ("LGTM") while bugs exist — don't treat approval as validation
 
 ---
 
