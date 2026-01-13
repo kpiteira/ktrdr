@@ -370,9 +370,10 @@ For each milestone, send a structured request to the e2e-test-designer agent:
 
 **If designer returns "Architect Handoff Required":**
 - Invoke e2e-test-architect with the handoff context
-- Architect returns a detailed test specification
-- Include the full specification in the E2E Validation section
-- Add a task to create the test file before execution
+- Architect designs the test specification
+- **If reusable**: Architect writes directly to catalog (`.claude/skills/e2e-testing/tests/[category]/[name].md`)
+- **If one-off**: Architect returns spec for embedding in milestone's E2E Validation section
+- Final milestone task is "Execute E2E Test" (VALIDATION type) — not "create test file"
 
 #### 4.6.3 Incorporate into Milestone Output
 
@@ -790,18 +791,25 @@ If the designer handed off to the architect, include the full specification here
 
 ---
 
-### Pre-Execution Task (if new test)
+### Final Validation Task
 
-If a new test was designed, add a task to the milestone:
-- [ ] Create `.claude/skills/e2e-testing/tests/[category]/[name].md` from architect specification above
+The last task in every milestone is an **Execute E2E Test** task with type VALIDATION:
 
-### Execution
+```markdown
+## Task N.X: Execute E2E Test
 
-After all tasks complete (including test file creation if needed):
+**Type:** VALIDATION
+**Estimated time:** 5 min
 
+**Description:**
+Run the E2E test(s) using the e2e-tester agent to validate the milestone is complete.
+
+**Acceptance Criteria:**
+- [ ] E2E test passes (all success criteria met)
+- [ ] No regressions in existing functionality
 ```
-Invoke e2e-tester agent with: [test-list]
-```
+
+**Note:** The architect either wrote the test to the catalog (reusable) or embedded the spec above (one-off). Either way, the final task is execution, not file creation.
 ````
 
 ---

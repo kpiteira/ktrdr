@@ -46,15 +46,12 @@ architecture: docs/designs/feature-name/ARCHITECTURE.md
 ```
 1. Setup       → Retrieve task, verify branch, classify type
 2. Research    → Read docs, check handoffs, summarize approach
-3. Implement   → TDD cycle (coding tasks only)
-4. Verify      → Integration test, acceptance criteria, quality gates
-5. E2E Test    → MILESTONE COMPLETE: Run E2E scenario (MANDATORY)
-6. Complete    → HANDOFF UPDATE (MANDATORY), task summary
+3. Implement   → TDD cycle (CODING tasks) or E2E execution (VALIDATION tasks)
+4. Verify      → Acceptance criteria, quality gates
+5. Complete    → HANDOFF UPDATE (MANDATORY), task summary
 ```
 
-**Two steps are MANDATORY and must not be skipped:**
-- **E2E Test (Step 5)**: When completing ANY task that is the LAST task in a milestone
-- **Handoff Update (Step 6)**: After EVERY task (not just milestones)
+**Handoff updates are MANDATORY** after every task (not just milestones).
 
 ---
 
@@ -63,13 +60,11 @@ architecture: docs/designs/feature-name/ARCHITECTURE.md
 ### Retrieve Task
 
 Extract the task from the implementation plan. Display:
+
 - Task title and description
 - Acceptance criteria
-- Files to create/modify
-- **Is this the last task in the milestone?** (If YES, you MUST run E2E tests)
-- E2E test scenario location (if this completes a milestone)
-
-**IMPORTANT**: If this is the last task in a milestone, IMMEDIATELY note that you will need to run E2E tests after implementation. Add a reminder to yourself in the task notes.
+- Files to create/modify (for CODING tasks)
+- E2E test reference (for VALIDATION tasks)
 
 If validation output is provided, review key decisions to ensure consistency with resolved gaps.
 
@@ -89,6 +84,7 @@ State the classification explicitly:
 - **CODING** — Implementation work. TDD is required.
 - **RESEARCH** — Investigation, analysis, documentation. No TDD.
 - **MIXED** — Research first, then TDD for implementation portion.
+- **VALIDATION** — E2E test execution. Run the test, report results.
 
 ### Check Handoffs
 
@@ -160,7 +156,7 @@ Show output: "✅ Tests and quality checks passing"
 
 ## 4. Verification
 
-### Integration Smoke Test
+### Integration Smoke Test (CODING tasks)
 
 Unit tests verify components in isolation. Integration tests verify they work together. Passing unit tests ≠ working system.
 
@@ -175,34 +171,23 @@ After unit tests pass (for changes affecting system behavior):
 5. **Report**: "✅ Integration test passed" or "❌ Issue found: [description]"
 
 **Skip integration testing for:**
+
 - Pure refactoring with no behavior change
 - Documentation-only changes
 - Test-only changes
 
 If integration test fails, investigate and fix before proceeding. The issue is likely architectural, not just code.
 
-### Milestone E2E Test (MANDATORY FOR LAST TASK IN MILESTONE)
+### E2E Test Execution (VALIDATION tasks)
 
-**REQUIRED**: When you complete the LAST task in a milestone, you MUST run the milestone's E2E test scenario.
+For tasks with type VALIDATION, this IS the implementation step. Run the E2E test scenario from the milestone's E2E Validation section.
 
-**How to identify:**
-- Check the implementation plan - is this the final task listed for the milestone?
-- Does the task description say "completes milestone M1/M2/etc"?
-- Is there an E2E test scenario in the milestone documentation?
-
-**If YES to any above:**
-
-1. **Locate E2E test**: Find the test scenario in the milestone plan (usually at end of file)
-2. **Run the test**: Execute the full scenario step-by-step
-3. **Report results**: Document pass/fail for each test step
-4. **Fix failures**: Do NOT proceed if E2E tests fail - investigate and fix
-
-**This is NOT optional.** E2E tests validate the full user journey and catch integration issues that unit tests miss.
-
-**Example locations for E2E tests:**
-- End of milestone implementation file (e.g., `M1_config_loading.md`)
-- Dedicated `E2E_TESTS.md` file in the design directory
-- `## E2E Test Scenario` section in the plan
+1. **Locate E2E test**: Find the test in the E2E Validation section of the milestone file
+   - May reference a catalog test (e.g., `training/smoke`)
+   - May have embedded spec (designed by e2e-test-architect)
+2. **Run the test**: Execute the full scenario step-by-step using **e2e-tester** agent
+3. **Report results**: Document pass/fail for each success criterion
+4. **Fix failures**: If E2E tests fail, investigate — the issue is in previously implemented tasks
 
 ### Acceptance Criteria Validation
 
@@ -224,12 +209,12 @@ If any criterion is not met, continue working before proceeding.
 
 All must pass before completion:
 
-- [ ] All unit tests pass: `make test-unit`
-- [ ] Quality checks pass: `make quality`
+- [ ] All unit tests pass: `make test-unit` (CODING tasks)
+- [ ] Quality checks pass: `make quality` (CODING tasks)
+- [ ] E2E test passed (VALIDATION tasks)
 - [ ] Code is documented (docstrings explaining "why")
 - [ ] All work is committed with clear messages
 - [ ] No security vulnerabilities introduced
-- [ ] **E2E test passed** (if this is the last task in a milestone)
 - [ ] **Handoff document updated** (EVERY task - see Completion section)
 
 ---
@@ -317,10 +302,7 @@ When given multiple tasks (a milestone or phase):
 2. Each task follows the full workflow above
 3. **Update handoff after EACH task** (not just at the end)
 4. Commit after each task (not just at the end)
-5. **MANDATORY: Run the milestone's E2E test after completing the LAST task**
-   - This is NOT optional
-   - Do NOT skip this step
-   - E2E tests are in the milestone plan documentation
+5. The final task in each milestone is a VALIDATION task — it runs the E2E test
 
 ---
 
@@ -330,12 +312,12 @@ When given multiple tasks (a milestone or phase):
 |-------|-------------|--------|
 | Setup | Retrieve, branch, classify, handoffs | Task details displayed |
 | Research | Read docs, find patterns | 2-4 sentence summary |
-| RED | Write tests, run, verify fail | "✅ Tests failing as expected" |
-| GREEN | Implement, run tests | "✅ All tests passing" |
-| REFACTOR | Clean up, quality checks | "✅ Tests and quality passing" |
+| RED | Write tests, run, verify fail (CODING) | "✅ Tests failing as expected" |
+| GREEN | Implement, run tests (CODING) | "✅ All tests passing" |
+| REFACTOR | Clean up, quality checks (CODING) | "✅ Tests and quality passing" |
+| E2E | Run milestone E2E scenario (VALIDATION) | "✅ E2E test passed" |
 | Integration | Start system, execute flow, check logs | "✅ Integration passed" |
 | Acceptance | Validate each criterion | Checklist with status |
-| Quality | Tests, quality, commits, **E2E (if milestone)** | All gates passed |
-| **E2E Test** | **Run milestone E2E scenario (last task only)** | **"✅ E2E test passed"** |
+| Quality | Tests, quality, commits | All gates passed |
 | **Handoff** | **Update HANDOFF_*.md (EVERY task)** | **Section added to handoff** |
 | Summary | Write task completion summary | Task summary with changes/decisions |
