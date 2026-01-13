@@ -200,7 +200,7 @@ $ ktrdr ops --json
 **Alternatives considered:**
 - Separate implementations per operation type
 
-**Rationale:** Reduces code duplication, ensures consistent UX (progress display, cancellation, `--json` output). The existing `AsyncOperationExecutor` pattern can be extended.
+**Rationale:** Reduces code duplication, ensures consistent UX (progress display, cancellation, `--json` output). The existing `AsyncCLIClient.execute_operation()` pattern can be extended.
 
 ### 5. Hard Deprecation (No Aliases)
 

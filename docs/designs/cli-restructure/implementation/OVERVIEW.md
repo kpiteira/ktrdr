@@ -41,13 +41,13 @@ These patterns from ARCHITECTURE.md must be followed in all tasks:
 ## What We're NOT Doing
 
 - No horizontal splitting (each command file is self-contained)
-- No new polling logic (reuse `AsyncOperationExecutor`)
+- No new polling logic (reuse `AsyncCLIClient.execute_operation()`)
 - No CLI-side strategy parsing (backend handles resolution)
 - No deprecation aliases (old commands removed completely)
 
 ## Key Implementation Notes
 
-1. **Preserve existing UX** — The progress display code in `operation_executor.py` and `agent_commands.py` works well. We're restructuring commands, not rewriting monitoring.
+1. **Preserve existing UX** — The progress display code in `client/operations.py` and `agent_commands.py` works well. We're restructuring commands, not rewriting monitoring.
 
 2. **Parallel development** — M1 creates new files alongside existing code. No modifications to existing commands until M5.
 
