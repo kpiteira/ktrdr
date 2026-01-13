@@ -8,7 +8,7 @@ ktrdr/cli/
 ├── state.py                 # CLIState (json_mode, verbose, api_url)
 ├── output.py                # Human/JSON output formatting
 ├── operation_runner.py      # Unified start/follow for all operations
-├── api_client.py            # Simplified HTTP client
+├── client/                  # HTTP client module (AsyncCLIClient, SyncCLIClient)
 ├── telemetry.py             # Lazy telemetry init (not at import time)
 │
 ├── commands/                # Lazy-loaded command implementations

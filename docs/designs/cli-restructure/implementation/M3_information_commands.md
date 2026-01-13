@@ -32,7 +32,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 from ktrdr.cli.state import CLIState
-from ktrdr.cli.async_cli_client import AsyncCLIClient
+from ktrdr.cli.client import AsyncCLIClient
 from ktrdr.cli.output import print_error
 
 console = Console()
@@ -52,7 +52,7 @@ def list_strategies(ctx: typer.Context):
 
 async def _list_strategies(state: CLIState):
     async with AsyncCLIClient(base_url=state.api_url) as client:
-        result = await client._make_request("GET", "/strategies")
+        result = await client.get( "/strategies")
 
     strategies = result.get("data", [])
 
@@ -92,7 +92,7 @@ def list_models(ctx: typer.Context):
 
 async def _list_models(state: CLIState):
     async with AsyncCLIClient(base_url=state.api_url) as client:
-        result = await client._make_request("GET", "/models")
+        result = await client.get( "/models")
 
     models = result.get("data", [])
 
@@ -130,7 +130,7 @@ def list_checkpoints(ctx: typer.Context):
 
 async def _list_checkpoints(state: CLIState):
     async with AsyncCLIClient(base_url=state.api_url) as client:
-        result = await client._make_request("GET", "/checkpoints")
+        result = await client.get( "/checkpoints")
 
     checkpoints = result.get("data", [])
 
@@ -203,7 +203,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 from ktrdr.cli.state import CLIState
-from ktrdr.cli.async_cli_client import AsyncCLIClient
+from ktrdr.cli.client import AsyncCLIClient
 from ktrdr.cli.output import print_error
 
 console = Console()
@@ -242,8 +242,7 @@ def show_data(
 async def _show_data(state: CLIState, symbol: str, timeframe: str):
     """Fetch and display market data."""
     async with AsyncCLIClient(base_url=state.api_url) as client:
-        result = await client._make_request(
-            "GET",
+        result = await client.get(
             f"/data/{symbol}/{timeframe}",
             params={"limit": 20},  # Last 20 bars
         )
@@ -295,7 +294,7 @@ def show_features(
 async def _show_features(state: CLIState, strategy: str):
     """Fetch and display strategy features."""
     async with AsyncCLIClient(base_url=state.api_url) as client:
-        result = await client._make_request("GET", f"/strategies/{strategy}/features")
+        result = await client.get( f"/strategies/{strategy}/features")
 
     features = result.get("data", {}).get("features", [])
 
@@ -363,7 +362,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 from ktrdr.cli.state import CLIState
-from ktrdr.cli.async_cli_client import AsyncCLIClient
+from ktrdr.cli.client import AsyncCLIClient
 from ktrdr.cli.output import print_error, print_success
 
 console = Console()
@@ -426,7 +425,7 @@ def _validate_local(state: CLIState, path: str):
 async def _validate_api(state: CLIState, name: str):
     """Validate a deployed strategy via API."""
     async with AsyncCLIClient(base_url=state.api_url) as client:
-        result = await client._make_request("POST", f"/strategies/validate/{name}")
+        result = await client.post(f"/strategies/validate/{name}")
 
     valid = result.get("valid", False)
     errors = result.get("errors", [])

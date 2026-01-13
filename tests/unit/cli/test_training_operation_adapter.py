@@ -56,7 +56,7 @@ class TestTrainingOperationAdapter:
             timeframes=["1h"],
         )
 
-        assert adapter.get_start_endpoint() == "/trainings/start"
+        assert adapter.get_start_endpoint() == "/api/v1/trainings/start"
 
     def test_get_start_payload_with_all_fields(self):
         """Test payload construction with all fields."""

@@ -158,17 +158,16 @@ print_success('Test', {'key': 'value'}, CLIState(json_mode=True))
 **Task Categories:** Cross-Component, Wiring/DI, Background/Async
 
 **Description:**
-Create a simplified wrapper around `AsyncOperationExecutor` that provides the fire-and-follow interface. This is the unified entry point for all operation commands.
+Create a simplified wrapper around `AsyncCLIClient` that provides the fire-and-follow interface. This is the unified entry point for all operation commands.
 
 **Implementation Notes:**
 ```python
 import asyncio
-from typing import Literal
 from rich.console import Console
+from ktrdr.cli.client import AsyncCLIClient
+from ktrdr.cli.client.operations import OperationAdapter
 from ktrdr.cli.state import CLIState
 from ktrdr.cli.output import print_operation_started, print_error
-from ktrdr.cli.operation_executor import AsyncOperationExecutor
-from ktrdr.cli.operation_adapters import OperationAdapter
 
 class OperationRunner:
     """Unified start/follow for all operation types."""
@@ -195,38 +194,26 @@ class OperationRunner:
         adapter: OperationAdapter,
         follow: bool,
     ) -> None:
-        executor = AsyncOperationExecutor(base_url=self.state.api_url)
-
-        if follow:
-            # Use existing progress display
-            success = await executor.execute_operation(
-                adapter=adapter,
-                console=self.console,
-                show_progress=True,
-            )
-            if not success:
-                raise SystemExit(1)
-        else:
-            # Fire-and-forget: just start and print ID
-            import httpx
-            async with httpx.AsyncClient() as client:
-                # Start operation
+        async with AsyncCLIClient(base_url=self.state.api_url) as client:
+            if follow:
+                # Use existing progress display via execute_operation
+                result = await client.execute_operation(adapter, on_progress=...)
+                if result.get("status") == "failed":
+                    raise SystemExit(1)
+            else:
+                # Fire-and-forget: just POST and print ID
                 endpoint = adapter.get_start_endpoint()
                 payload = adapter.get_start_payload()
-                url = f"{self.state.api_url}/api/v1{endpoint}"
-
-                response = await client.post(url, json=payload, timeout=30.0)
-                response.raise_for_status()
-
-                operation_id = adapter.parse_start_response(response.json())
+                response = await client.post(endpoint, json=payload)
+                operation_id = adapter.parse_start_response(response)
                 print_operation_started(
-                    operation_type=adapter.__class__.__name__.replace("OperationAdapter", "").lower(),
+                    operation_type=...,
                     operation_id=operation_id,
                     state=self.state,
                 )
 ```
 
-- Reuses existing `AsyncOperationExecutor` for `--follow` mode
+- Reuses existing `AsyncCLIClient.execute_operation()` for `--follow` mode
 - Fire-and-forget mode is simpler: just POST and print ID
 - Delegates all domain logic to adapters
 
@@ -238,7 +225,7 @@ class OperationRunner:
 - [ ] `test_operation_runner_json_output()` — verify JSON structure in fire mode
 
 *Integration Tests:*
-- [ ] `test_operation_runner_wiring()` — verify `AsyncOperationExecutor` integration
+- [ ] `test_operation_runner_wiring()` — verify `AsyncCLIClient` integration
 - [ ] `test_operation_runner_api_url_passed()` — verify state.api_url used
 
 *Smoke Test:*
@@ -257,7 +244,7 @@ print('OperationRunner initialized')
 **Acceptance Criteria:**
 - [ ] `OperationRunner` class with `start()` method
 - [ ] Fire-and-forget mode returns immediately with operation ID
-- [ ] Follow mode delegates to `AsyncOperationExecutor`
+- [ ] Follow mode delegates to `AsyncCLIClient.execute_operation()`
 - [ ] Respects `CLIState.json_mode` for output
 - [ ] Respects `CLIState.api_url` for backend
 - [ ] Unit tests pass

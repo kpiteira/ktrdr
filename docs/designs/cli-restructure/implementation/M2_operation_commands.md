@@ -315,7 +315,7 @@ import typer
 from rich.console import Console
 from ktrdr.cli.state import CLIState
 from ktrdr.cli.output import print_error
-from ktrdr.cli.operation_executor import AsyncOperationExecutor
+from ktrdr.cli.client import AsyncCLIClient
 
 console = Console()
 
@@ -342,26 +342,28 @@ async def _follow_operation(state: CLIState, operation_id: str):
         Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
     )
 
-    executor = AsyncOperationExecutor(base_url=state.api_url)
+    async with AsyncCLIClient(base_url=state.api_url) as client:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("{task.description}"),
+            BarColumn(),
+            TextColumn("{task.percentage:>3.0f}%"),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            task_id = progress.add_task("Following...", total=100)
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("{task.description}"),
-        BarColumn(),
-        TextColumn("{task.percentage:>3.0f}%"),
-        TimeElapsedColumn(),
-        console=console,
-    ) as progress:
-        task_id = progress.add_task("Following...", total=100)
+            # Poll until terminal state
+            while True:
+                result = await client.get(f"/operations/{operation_id}")
+                status = result.get("data", {}).get("status")
+                progress_pct = result.get("data", {}).get("progress", {}).get("percentage", 0)
+                progress.update(task_id, completed=progress_pct)
 
-        import httpx
-        async with httpx.AsyncClient() as client:
-            final_status = await executor._poll_until_complete(
-                operation_id=operation_id,
-                http_client=client,
-                progress=progress,
-                task_id=task_id,
-            )
+                if status in ("completed", "failed", "cancelled"):
+                    final_status = result.get("data", {})
+                    break
+                await asyncio.sleep(0.3)
 
     status = final_status.get("status")
     if status == "completed":
@@ -622,8 +624,8 @@ async def _resume_operation(state: CLIState, checkpoint_id: str, follow: bool):
     operation_type = result.get("operation_type", "operation")
 
     if follow:
-        # Use standard follow logic
-        from ktrdr.cli.operation_executor import AsyncOperationExecutor
+        # Use standard follow logic with AsyncCLIClient
+        from ktrdr.cli.client import AsyncCLIClient
         from rich.progress import (
             Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
         )
@@ -633,26 +635,28 @@ async def _resume_operation(state: CLIState, checkpoint_id: str, follow: bool):
         console.print(f"  Checkpoint: {checkpoint_id}")
         console.print()
 
-        executor = AsyncOperationExecutor(base_url=state.api_url)
+        async with AsyncCLIClient(base_url=state.api_url) as client:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("{task.description}"),
+                BarColumn(),
+                TextColumn("{task.percentage:>3.0f}%"),
+                TimeElapsedColumn(),
+                console=console,
+            ) as progress:
+                task_id = progress.add_task("Resuming...", total=100)
 
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("{task.description}"),
-            BarColumn(),
-            TextColumn("{task.percentage:>3.0f}%"),
-            TimeElapsedColumn(),
-            console=console,
-        ) as progress:
-            task_id = progress.add_task("Resuming...", total=100)
+                # Poll until terminal state
+                while True:
+                    result = await client.get(f"/operations/{operation_id}")
+                    status = result.get("data", {}).get("status")
+                    progress_pct = result.get("data", {}).get("progress", {}).get("percentage", 0)
+                    progress.update(task_id, completed=progress_pct)
 
-            import httpx
-            async with httpx.AsyncClient() as http_client:
-                final_status = await executor._poll_until_complete(
-                    operation_id=operation_id,
-                    http_client=http_client,
-                    progress=progress,
-                    task_id=task_id,
-                )
+                    if status in ("completed", "failed", "cancelled"):
+                        final_status = result.get("data", {})
+                        break
+                    await asyncio.sleep(0.3)
 
         status = final_status.get("status")
         if status == "completed":

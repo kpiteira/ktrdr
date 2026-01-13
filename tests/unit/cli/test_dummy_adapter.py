@@ -31,10 +31,10 @@ class TestDummyOperationAdapter:
         assert adapter.iterations == 150
 
     def test_get_start_endpoint(self):
-        """Test that correct endpoint is returned (without /api/v1 prefix)."""
+        """Test that correct endpoint is returned with /api/v1 prefix."""
         adapter = DummyOperationAdapter()
 
-        assert adapter.get_start_endpoint() == "/dummy/start"
+        assert adapter.get_start_endpoint() == "/api/v1/dummy/start"
 
     def test_get_start_payload(self):
         """Test payload construction - should be empty for dummy."""

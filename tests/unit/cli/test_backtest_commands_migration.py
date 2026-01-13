@@ -88,7 +88,7 @@ class TestBacktestUsesExecuteOperation:
         assert hasattr(adapter, "parse_start_response")
 
         # Verify adapter is configured correctly
-        assert adapter.get_start_endpoint() == "/backtests/start"
+        assert adapter.get_start_endpoint() == "/api/v1/backtests/start"
         payload = adapter.get_start_payload()
         assert payload["strategy_name"] == "momentum"
         assert payload["symbol"] == "MSFT"

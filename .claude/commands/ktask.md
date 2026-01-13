@@ -294,6 +294,31 @@ If task-specific instructions contradict this command, follow the task instructi
 
 ---
 
+## CLI Test Patterns
+
+When writing tests for CLI commands (`tests/unit/cli/`):
+
+**ALWAYS use the `runner` fixture** for tests that check command output:
+
+```python
+# ✅ CORRECT - uses fixture that strips ANSI codes
+def test_help_shows_flags(self, runner) -> None:
+    result = runner.invoke(app, ["--help"])
+    assert "--json" in result.output
+
+# ❌ WRONG - creates raw CliRunner, ANSI codes will break assertions in CI
+def test_help_shows_flags(self) -> None:
+    runner = CliRunner()
+    result = runner.invoke(app, ["--help"])
+    assert "--json" in result.output  # FAILS in CI due to ANSI codes
+```
+
+The `runner` fixture (from `tests/unit/cli/conftest.py`) provides `CleanCliRunner` which automatically strips ANSI escape codes from output. Rich/Typer applies color codes in CI that break string assertions.
+
+See `tests/unit/cli/CLAUDE.md` for full CLI testing guidelines.
+
+---
+
 ## Multiple Tasks
 
 When given multiple tasks (a milestone or phase):
