@@ -2,18 +2,13 @@
 
 Tests the main Typer app entry point that processes global flags
 (--json, --verbose, --url, --port) and stores CLIState in context.
-"""
 
-import re
+NOTE: Tests that check help text should use the `runner` fixture from conftest.py,
+which provides CleanCliRunner that automatically strips ANSI codes.
+"""
 
 import typer
 from typer.testing import CliRunner
-
-
-def strip_ansi(text: str) -> str:
-    """Remove ANSI escape codes from text for reliable string matching in CI."""
-    ansi_pattern = re.compile(r"\x1b\[[0-9;]*m")
-    return ansi_pattern.sub("", text)
 
 
 class TestAppDefaultState:
@@ -298,27 +293,23 @@ class TestAppStatePassedToCommand:
 class TestAppHelp:
     """Tests for help text."""
 
-    def test_app_help_shows_global_flags(self) -> None:
+    def test_app_help_shows_global_flags(self, runner) -> None:
         """--help shows all global flags."""
         from ktrdr.cli.app import app
 
-        runner = CliRunner()
         result = runner.invoke(app, ["--help"])
 
         assert result.exit_code == 0
-        # Strip ANSI codes for reliable matching in CI
-        output = strip_ansi(result.output)
-        # Check for global flags
-        assert "--json" in output
-        assert "--verbose" in output or "-v" in output
-        assert "--url" in output or "-u" in output
-        assert "--port" in output or "-p" in output
+        # runner fixture strips ANSI codes automatically
+        assert "--json" in result.output
+        assert "--verbose" in result.output or "-v" in result.output
+        assert "--url" in result.output or "-u" in result.output
+        assert "--port" in result.output or "-p" in result.output
 
-    def test_app_help_shows_description(self) -> None:
+    def test_app_help_shows_description(self, runner) -> None:
         """--help shows app description."""
         from ktrdr.cli.app import app
 
-        runner = CliRunner()
         result = runner.invoke(app, ["--help"])
 
         assert result.exit_code == 0
@@ -329,32 +320,28 @@ class TestAppHelp:
 class TestTrainCommandRegistration:
     """Tests for train command registration in app."""
 
-    def test_train_command_registered(self) -> None:
+    def test_train_command_registered(self, runner) -> None:
         """Train command appears in --help output."""
         from ktrdr.cli.app import app
 
-        runner = CliRunner()
         result = runner.invoke(app, ["--help"])
 
         assert result.exit_code == 0
         # Train command should be listed in help output
         assert "train" in result.output.lower()
 
-    def test_train_command_help(self) -> None:
+    def test_train_command_help(self, runner) -> None:
         """Train command has its own help text."""
         from ktrdr.cli.app import app
 
-        runner = CliRunner()
         result = runner.invoke(app, ["train", "--help"])
 
         assert result.exit_code == 0
-        # Strip ANSI codes for reliable matching in CI
-        output = strip_ansi(result.output)
-        # Should show train-specific options
-        assert "--start" in output
-        assert "--end" in output
-        assert "--follow" in output or "-f" in output
-        assert "strategy" in output.lower()
+        # runner fixture strips ANSI codes automatically
+        assert "--start" in result.output
+        assert "--end" in result.output
+        assert "--follow" in result.output or "-f" in result.output
+        assert "strategy" in result.output.lower()
 
 
 class TestAppUrlNormalization:
