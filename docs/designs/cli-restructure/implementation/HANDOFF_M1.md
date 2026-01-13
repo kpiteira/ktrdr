@@ -67,3 +67,22 @@ Running notes for M1 CLI restructure implementation.
 - Task 1.5 implements the `train` command which will use `ctx.obj` to get `CLIState`
 - Pattern: `state: CLIState = ctx.obj`
 - `OperationRunner(state)` accepts the state for API URL and output formatting
+
+---
+
+## Task 1.5 Complete: Implement Train Command
+
+### Gotchas
+- **Module naming conflict:** Creating `ktrdr/cli/commands/` directory shadowed the existing `ktrdr/cli/commands.py` module. Solution: Renamed `commands.py` to `_commands_base.py` and re-exported symbols from `commands/__init__.py` for backward compatibility.
+- **TrainingOperationAdapter requires symbols/timeframes:** The current adapter requires explicit `symbols` and `timeframes` parameters. Implementation uses hardcoded defaults (`["AAPL"]`, `["1h"]`) with TODO comments for future strategy config lookup via API.
+- **Test cleanup pattern:** Always use `finally` block to clean up registered commands: `app.registered_commands = [cmd for cmd in app.registered_commands if cmd.name != "train"]`
+
+### Emergent Patterns
+- Command functions receive state via `ctx.obj`: `state: CLIState = ctx.obj`
+- Error handling: Wrap in try/except, call `print_error(str(e), state)`, then `raise typer.Exit(1) from None`
+- Test mocking: Patch both `OperationRunner` and `TrainingOperationAdapter` at the command module level (`ktrdr.cli.commands.train.OperationRunner`)
+
+### Next Task Notes
+- Task 1.6 wires the train command into `app.py` and creates `commands/__init__.py`
+- Wire up: `from ktrdr.cli.commands.train import train; app.command()(train)`
+- The `commands/__init__.py` already exists with backward-compat exports - just add train command registration to `app.py`
