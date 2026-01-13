@@ -86,3 +86,23 @@ Running notes for M1 CLI restructure implementation.
 - Task 1.6 wires the train command into `app.py` and creates `commands/__init__.py`
 - Wire up: `from ktrdr.cli.commands.train import train; app.command()(train)`
 - The `commands/__init__.py` already exists with backward-compat exports - just add train command registration to `app.py`
+
+---
+
+## Task 1.6 Complete: Wire Up and Test
+
+### Gotchas
+- **Operation adapter endpoints need `/api/v1` prefix:** The `AsyncCLIClient` uses explicit URLs without auto-appending `/api/v1`. All `OperationAdapter.get_start_endpoint()` methods must return full paths like `/api/v1/trainings/start`, not relative paths like `/trainings/start`.
+- **Operations polling endpoint too:** The `execute_operation()` function in `ktrdr/cli/client/operations.py` was using `/operations/{id}` - changed to `/api/v1/operations/{id}`.
+- **App entry point needs `__main__` block:** Added `if __name__ == "__main__": app()` to enable `python -m ktrdr.cli.app` invocation.
+
+### Emergent Patterns
+- Command registration: `app.command()(train)` - call `command()` on app, then call the result with the function
+- URL pattern: When client is instantiated with explicit base_url (from CLIState.api_url), no `/api/v1` is appended. Adapters must include full API paths.
+
+### M1 Complete Notes
+- The new CLI architecture is proven end-to-end
+- Fire-and-forget mode works (immediate return with operation ID)
+- Follow mode works (polls and shows progress)
+- JSON output works (parseable by jq)
+- Training failures are due to hardcoded symbols/timeframes in adapter not matching strategy - this is documented and expected to be fixed in M2

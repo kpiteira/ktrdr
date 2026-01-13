@@ -316,6 +316,35 @@ class TestAppHelp:
         assert "ktrdr" in result.output.lower() or "trading" in result.output.lower()
 
 
+class TestTrainCommandRegistration:
+    """Tests for train command registration in app."""
+
+    def test_train_command_registered(self) -> None:
+        """Train command appears in --help output."""
+        from ktrdr.cli.app import app
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["--help"])
+
+        assert result.exit_code == 0
+        # Train command should be listed in help output
+        assert "train" in result.output.lower()
+
+    def test_train_command_help(self) -> None:
+        """Train command has its own help text."""
+        from ktrdr.cli.app import app
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["train", "--help"])
+
+        assert result.exit_code == 0
+        # Should show train-specific options
+        assert "--start" in result.output
+        assert "--end" in result.output
+        assert "--follow" in result.output or "-f" in result.output
+        assert "strategy" in result.output.lower()
+
+
 class TestAppUrlNormalization:
     """Tests for URL normalization behavior."""
 

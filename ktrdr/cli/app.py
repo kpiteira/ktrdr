@@ -13,6 +13,7 @@ from typing import Optional
 import typer
 
 from ktrdr.cli.commands import normalize_api_url
+from ktrdr.cli.commands.train import train
 from ktrdr.cli.sandbox_detect import resolve_api_url
 from ktrdr.cli.state import CLIState
 
@@ -65,3 +66,11 @@ def main(
         api_url=normalized_url,
     )
     ctx.obj = state
+
+
+# Register commands
+app.command()(train)
+
+
+if __name__ == "__main__":
+    app()

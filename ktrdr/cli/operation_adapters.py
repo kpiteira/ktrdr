@@ -166,7 +166,7 @@ class TrainingOperationAdapter(OperationAdapter):
 
     def get_start_endpoint(self) -> str:
         """Return the training start endpoint."""
-        return "/trainings/start"
+        return "/api/v1/trainings/start"
 
     def get_start_payload(self) -> dict[str, Any]:
         """Construct training request payload."""
@@ -303,7 +303,7 @@ class DummyOperationAdapter(OperationAdapter):
 
     def get_start_endpoint(self) -> str:
         """Return the dummy start endpoint."""
-        return "/dummy/start"
+        return "/api/v1/dummy/start"
 
     def get_start_payload(self) -> dict[str, Any]:
         """
@@ -403,7 +403,7 @@ class BacktestingOperationAdapter(OperationAdapter):
 
     def get_start_endpoint(self) -> str:
         """Return the backtesting start endpoint."""
-        return "/backtests/start"
+        return "/api/v1/backtests/start"
 
     def get_start_payload(self) -> dict[str, Any]:
         """Construct backtesting request payload."""
