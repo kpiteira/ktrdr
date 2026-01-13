@@ -49,3 +49,21 @@ Running notes for M1 CLI restructure implementation.
 ### Next Task Notes
 - Task 1.4 creates `app.py` entry point which will instantiate `CLIState` and pass to commands
 - Commands access state via `ctx.obj` (Typer context)
+
+---
+
+## Task 1.4 Complete: Create New App Entry Point
+
+### Gotchas
+- **Test command registration cleanup:** When dynamically registering test commands in Typer tests, always clean up via `app.registered_commands = [cmd for cmd in app.registered_commands if cmd.name != "test-cmd"]` in a `finally` block to avoid polluting subsequent tests.
+- **Sandbox detection in tests:** Default URL tests may pick up `.env.sandbox` port (e.g., 8001 instead of 8000). Tests should check `"localhost"` presence rather than specific port 8000.
+- **Typer context type hints:** Test command functions must use `typer.Context` (not `pytest.FixtureRequest`) as the type hint for the context parameter.
+
+### Emergent Patterns
+- State capture pattern: Use `nonlocal` in test commands to capture state for assertions
+- Help output validation: Use `CliRunner().invoke(app, ["--help"]).output` to verify help text
+
+### Next Task Notes
+- Task 1.5 implements the `train` command which will use `ctx.obj` to get `CLIState`
+- Pattern: `state: CLIState = ctx.obj`
+- `OperationRunner(state)` accepts the state for API URL and output formatting
