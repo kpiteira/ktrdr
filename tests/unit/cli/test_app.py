@@ -4,8 +4,16 @@ Tests the main Typer app entry point that processes global flags
 (--json, --verbose, --url, --port) and stores CLIState in context.
 """
 
+import re
+
 import typer
 from typer.testing import CliRunner
+
+
+def strip_ansi(text: str) -> str:
+    """Remove ANSI escape codes from text for reliable string matching in CI."""
+    ansi_pattern = re.compile(r"\x1b\[[0-9;]*m")
+    return ansi_pattern.sub("", text)
 
 
 class TestAppDefaultState:
@@ -298,11 +306,13 @@ class TestAppHelp:
         result = runner.invoke(app, ["--help"])
 
         assert result.exit_code == 0
+        # Strip ANSI codes for reliable matching in CI
+        output = strip_ansi(result.output)
         # Check for global flags
-        assert "--json" in result.output
-        assert "--verbose" in result.output or "-v" in result.output
-        assert "--url" in result.output or "-u" in result.output
-        assert "--port" in result.output or "-p" in result.output
+        assert "--json" in output
+        assert "--verbose" in output or "-v" in output
+        assert "--url" in output or "-u" in output
+        assert "--port" in output or "-p" in output
 
     def test_app_help_shows_description(self) -> None:
         """--help shows app description."""
@@ -338,11 +348,13 @@ class TestTrainCommandRegistration:
         result = runner.invoke(app, ["train", "--help"])
 
         assert result.exit_code == 0
+        # Strip ANSI codes for reliable matching in CI
+        output = strip_ansi(result.output)
         # Should show train-specific options
-        assert "--start" in result.output
-        assert "--end" in result.output
-        assert "--follow" in result.output or "-f" in result.output
-        assert "strategy" in result.output.lower()
+        assert "--start" in output
+        assert "--end" in output
+        assert "--follow" in output or "-f" in output
+        assert "strategy" in output.lower()
 
 
 class TestAppUrlNormalization:
