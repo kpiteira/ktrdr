@@ -13,6 +13,68 @@ architecture: ../ARCHITECTURE.md
 
 ---
 
+## Preservation Requirements
+
+### List Strategies Command
+
+**`ktrdr list strategies` replaces `ktrdr strategies list` from `strategy_commands.py`.**
+
+**Behavior to preserve:**
+- `@trace_cli_command("list_strategies")` telemetry
+- Table with name, version, symbols, timeframes
+- Handle both v2 and v3 strategy formats
+
+### List Models Command
+
+**`ktrdr list models` is NEW functionality.** No old command, but should match `list strategies` UX.
+
+### List Checkpoints Command
+
+**`ktrdr list checkpoints` relates to `ktrdr operations list --resumable`.**
+
+**Behavior to preserve:**
+- Show checkpoint summary (epoch, bar index, etc.)
+- Link to operation ID
+
+### Validate Command
+
+**`ktrdr validate` replaces `ktrdr strategies validate` from `strategy_commands.py`.**
+
+| Old Option | New Option | Notes |
+|------------|------------|-------|
+| `--quiet`, `-q` | `--quiet`, `-q` | Keep as-is |
+
+**Behavior to preserve:**
+- `@trace_cli_command("validate")` telemetry
+- Support both v2 and v3 strategy formats
+- v3: Display resolved NN input features
+- v2: Show validation results
+- Support both strategy names (via API) and local paths (prefixed with `./` or `/`)
+
+### Show Command
+
+**`ktrdr show` is NEW functionality** combining several capabilities:
+- `ktrdr show <symbol> [timeframe]` — Show market data (new)
+- `ktrdr show features <strategy>` — Replaces `ktrdr strategies features`
+
+For `show features`:
+**Behavior to preserve:**
+- `@trace_cli_command("show_features")` telemetry
+- Display resolved NN input features for v3 strategies
+- Show indicator → fuzzy set → feature mapping
+
+### Migrate Command
+
+**`ktrdr migrate` replaces `ktrdr strategies migrate` from `strategy_commands.py`.**
+
+**Behavior to preserve:**
+- `@trace_cli_command("migrate")` telemetry
+- Convert v2 strategy to v3 format
+- Preserve original file, create new `_v3.yaml` file
+- Show migration summary
+
+---
+
 ## Task 3.1: Implement List Command
 
 **File:** `ktrdr/cli/commands/list_cmd.py`

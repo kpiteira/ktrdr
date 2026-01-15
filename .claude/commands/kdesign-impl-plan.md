@@ -230,10 +230,10 @@ For each approved milestone, Claude generates detailed tasks. Each task must tra
 **What to do:**
 [Specific description of the change]
 
-**Code sketch:** (if helpful)
+**Code sketch:** (optional, structure only)
 ```python
-# Key parts of what this looks like
-# NOTE: Must align with [architectural pattern]
+# Shows patterns and wiring, NOT complete implementation
+# Implementer must read existing code to understand full functionality
 ```
 
 **Tests:**

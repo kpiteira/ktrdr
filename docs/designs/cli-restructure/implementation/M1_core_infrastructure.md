@@ -13,6 +13,55 @@ architecture: ../ARCHITECTURE.md
 
 ---
 
+## Preservation Requirements
+
+**The `ktrdr train` command replaces `ktrdr models train` from `async_model_commands.py`.**
+
+### Options to Preserve
+
+| Old Option | New Option | Notes |
+|------------|------------|-------|
+| `--start-date` | `--start` | Name shortened per design |
+| `--end-date` | `--end` | Name shortened per design |
+| `--models-dir` | `--models-dir` | Keep as-is |
+| `--validation-split` | `--validation-split` | Keep as-is |
+| `--data-mode` | `--data-mode` | Keep as-is |
+| `--dry-run` | `--dry-run` | Keep as-is |
+| `--verbose`, `-v` | Global `--verbose` | Moved to global flag |
+| `--detailed-analytics` | `--detailed-analytics` | Keep as-is |
+
+### Behavior to Preserve
+
+1. **Telemetry**: `@trace_cli_command("train")` decorator
+2. **Health check**: Verify API connection before starting
+3. **Parameter display**: Show training parameters before starting
+4. **Progress display**: Rich Progress bar with spinner, percentage, elapsed time
+5. **Ctrl+C handling**: Cancel operation on interrupt (not just detach)
+6. **Results display on completion**:
+   - Epochs trained
+   - Final loss
+   - Final validation loss
+   - Model path saved
+7. **Error handling**: Proper exit codes (0 success, 1 failure)
+8. **Symbol/timeframe extraction**: From strategy config via API (not hardcoded)
+
+### What Changes (per design)
+
+1. **Argument**: Strategy name instead of file path (backend resolves)
+2. **Default behavior**: Fire-and-forget (returns immediately with operation ID)
+3. **New option**: `--follow`/`-f` to get old "always follow" behavior
+
+### E2E Verification
+
+The E2E test must verify:
+- [ ] `ktrdr train <strategy> --start X --end Y` returns operation ID immediately
+- [ ] `ktrdr train <strategy> --start X --end Y --follow` shows progress and results
+- [ ] Ctrl+C during `--follow` cancels the operation
+- [ ] All old options work (`--dry-run`, `--models-dir`, etc.)
+- [ ] Results display shows epochs, loss, model path on completion
+
+---
+
 ## Task 1.1: Create CLIState Dataclass
 
 **File:** `ktrdr/cli/state.py`
