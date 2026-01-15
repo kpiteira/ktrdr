@@ -1130,7 +1130,9 @@ def shell(
     # Exit code 126 means command not found/executable - try sh instead
     if result.returncode == 126:
         cmd = ["docker", "compose", "-f", str(compose_file), "exec", service, "sh"]
-        subprocess.run(cmd, env=compose_env)
+        sh_result = subprocess.run(cmd, env=compose_env)
+        if sh_result.returncode != 0:
+            raise typer.Exit(sh_result.returncode)
 
 
 @sandbox_app.command("init-shared")

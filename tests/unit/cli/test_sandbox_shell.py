@@ -142,3 +142,29 @@ class TestSandboxShell:
             # Second call tried sh
             second_call = mock_run.call_args_list[1]
             assert "sh" in second_call[0][0]
+
+    def test_shell_both_shells_fail(
+        self, tmp_path: Path, sandbox_env: dict[str, str], compose_file: Path
+    ) -> None:
+        """Verify exit code propagated when both bash and sh fail."""
+        import typer
+
+        from ktrdr.cli.sandbox import shell
+
+        with (
+            patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path),
+            patch("ktrdr.cli.sandbox.load_env_sandbox", return_value=sandbox_env),
+            patch("ktrdr.cli.sandbox.find_compose_file", return_value=compose_file),
+            patch("ktrdr.cli.sandbox.subprocess.run") as mock_run,
+        ):
+            # bash fails with 126, sh fails with 1 (e.g., container not running)
+            mock_run.side_effect = [
+                MagicMock(returncode=126),
+                MagicMock(returncode=1),
+            ]
+
+            with pytest.raises(typer.Exit) as exc_info:
+                shell(service="backend")
+
+            # Should propagate the sh exit code
+            assert exc_info.value.exit_code == 1
