@@ -123,29 +123,45 @@ class TestOperationRunnerJSON:
 class TestOperationRunnerFollowMode:
     """Tests for follow mode (follow=True)."""
 
-    def test_operation_runner_follow_mode_calls_execute(
+    def test_operation_runner_follow_mode_polls_until_complete(
         self, capsys: pytest.CaptureFixture
     ) -> None:
-        """Follow mode calls execute_operation on the client."""
+        """Follow mode polls operation status until completed."""
         from ktrdr.cli.operation_runner import OperationRunner
 
         state = CLIState(json_mode=False)
         runner = OperationRunner(state)
-        adapter = MockAdapter()
+        adapter = MockAdapter(operation_id="op_follow")
 
         with patch("ktrdr.cli.operation_runner.AsyncCLIClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=None)
-            mock_client.execute_operation = AsyncMock(
-                return_value={"status": "completed", "operation_id": "op_follow"}
+            # Start operation returns operation_id
+            mock_client.post = AsyncMock(
+                return_value={"data": {"operation_id": "op_follow"}}
+            )
+            # Polling returns completed status
+            mock_client.get = AsyncMock(
+                return_value={
+                    "data": {
+                        "status": "completed",
+                        "operation_id": "op_follow",
+                        "progress": {"percentage": 100},
+                    }
+                }
             )
             mock_client_class.return_value = mock_client
 
             runner.start(adapter, follow=True)
 
-            # Verify execute_operation was called
-            mock_client.execute_operation.assert_called_once()
+            # Verify post was called to start operation
+            mock_client.post.assert_called_once()
+            # Verify get was called to poll status
+            mock_client.get.assert_called()
+
+        captured = capsys.readouterr()
+        assert "completed" in captured.out.lower()
 
     def test_operation_runner_follow_mode_exits_on_failure(
         self, capsys: pytest.CaptureFixture
@@ -155,14 +171,23 @@ class TestOperationRunnerFollowMode:
 
         state = CLIState(json_mode=False)
         runner = OperationRunner(state)
-        adapter = MockAdapter()
+        adapter = MockAdapter(operation_id="op_fail")
 
         with patch("ktrdr.cli.operation_runner.AsyncCLIClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=None)
-            mock_client.execute_operation = AsyncMock(
-                return_value={"status": "failed", "error": "Test failure"}
+            mock_client.post = AsyncMock(
+                return_value={"data": {"operation_id": "op_fail"}}
+            )
+            mock_client.get = AsyncMock(
+                return_value={
+                    "data": {
+                        "status": "failed",
+                        "error_message": "Test failure",
+                        "progress": {"percentage": 50},
+                    }
+                }
             )
             mock_client_class.return_value = mock_client
 
