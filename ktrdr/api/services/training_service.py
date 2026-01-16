@@ -15,6 +15,7 @@ from ktrdr.api.services.operations_service import get_operations_service
 from ktrdr.api.services.training import (
     TrainingOperationContext,
     build_training_context,
+    extract_symbols_timeframes_from_strategy,
 )
 from ktrdr.api.services.training.training_progress_renderer import (
     TrainingProgressRenderer,
@@ -156,8 +157,8 @@ class TrainingService(ServiceOrchestrator[None]):
     @trace_service_method("training.start")
     async def start_training(
         self,
-        symbols: list[str],
-        timeframes: list[str],
+        symbols: Optional[list[str]],
+        timeframes: Optional[list[str]],
         strategy_name: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
@@ -166,10 +167,36 @@ class TrainingService(ServiceOrchestrator[None]):
     ) -> dict[str, Any]:
         """Start neural network training task.
 
+        When symbols/timeframes are None, they are extracted from the strategy
+        configuration file. This allows users to run `ktrdr train <strategy>`
+        without specifying symbols/timeframes explicitly.
+
         Task 3.10 Fix: For distributed operations, bypass start_managed_operation.
         The worker creates the operation in DB (not the backend) to avoid duplicate
         key errors. Backend just dispatches to worker and registers a proxy.
         """
+        # Task 1.7: Extract symbols/timeframes from strategy config if not provided
+        resolved_symbols = symbols
+        resolved_timeframes = timeframes
+
+        if resolved_symbols is None or resolved_timeframes is None:
+            logger.info(
+                f"Extracting symbols/timeframes from strategy config: {strategy_name}"
+            )
+            config_symbols, config_timeframes = (
+                extract_symbols_timeframes_from_strategy(strategy_name)
+            )
+
+            if resolved_symbols is None:
+                resolved_symbols = config_symbols
+                logger.info(f"Using symbols from strategy config: {resolved_symbols}")
+
+            if resolved_timeframes is None:
+                resolved_timeframes = config_timeframes
+                logger.info(
+                    f"Using timeframes from strategy config: {resolved_timeframes}"
+                )
+
         # Task 3.10: Generate operation_id here if not provided
         # The worker creates the operation in its DB (distributed-only mode)
         operation_id = task_id or self.operations_service.generate_operation_id(
@@ -179,8 +206,8 @@ class TrainingService(ServiceOrchestrator[None]):
         context = build_training_context(
             operation_id=operation_id,
             strategy_name=strategy_name,
-            symbols=symbols,
-            timeframes=timeframes,
+            symbols=resolved_symbols,
+            timeframes=resolved_timeframes,
             start_date=start_date,
             end_date=end_date,
             detailed_analytics=detailed_analytics,
@@ -189,7 +216,7 @@ class TrainingService(ServiceOrchestrator[None]):
 
         logger.info(
             f"Starting training (distributed mode): {operation_id} "
-            f"for {', '.join(symbols)} using {strategy_name}"
+            f"for {', '.join(resolved_symbols)} using {strategy_name}"
         )
 
         # Task 3.10: Dispatch directly to worker (no start_managed_operation)

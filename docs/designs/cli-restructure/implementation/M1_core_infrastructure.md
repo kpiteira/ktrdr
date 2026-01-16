@@ -13,6 +13,55 @@ architecture: ../ARCHITECTURE.md
 
 ---
 
+## Preservation Requirements
+
+**The `ktrdr train` command replaces `ktrdr models train` from `async_model_commands.py`.**
+
+### Options to Preserve
+
+| Old Option | New Option | Notes |
+|------------|------------|-------|
+| `--start-date` | `--start` | Name shortened per design |
+| `--end-date` | `--end` | Name shortened per design |
+| `--models-dir` | `--models-dir` | Keep as-is |
+| `--validation-split` | `--validation-split` | Keep as-is |
+| `--data-mode` | `--data-mode` | Keep as-is |
+| `--dry-run` | `--dry-run` | Keep as-is |
+| `--verbose`, `-v` | Global `--verbose` | Moved to global flag |
+| `--detailed-analytics` | `--detailed-analytics` | Keep as-is |
+
+### Behavior to Preserve
+
+1. **Telemetry**: `@trace_cli_command("train")` decorator
+2. **Health check**: Verify API connection before starting
+3. **Parameter display**: Show training parameters before starting
+4. **Progress display**: Rich Progress bar with spinner, percentage, elapsed time
+5. **Ctrl+C handling**: Cancel operation on interrupt (not just detach)
+6. **Results display on completion**:
+   - Epochs trained
+   - Final loss
+   - Final validation loss
+   - Model path saved
+7. **Error handling**: Proper exit codes (0 success, 1 failure)
+8. **Symbol/timeframe extraction**: From strategy config via API (not hardcoded)
+
+### What Changes (per design)
+
+1. **Argument**: Strategy name instead of file path (backend resolves)
+2. **Default behavior**: Fire-and-forget (returns immediately with operation ID)
+3. **New option**: `--follow`/`-f` to get old "always follow" behavior
+
+### E2E Verification
+
+The E2E test must verify:
+- [ ] `ktrdr train <strategy> --start X --end Y` returns operation ID immediately
+- [ ] `ktrdr train <strategy> --start X --end Y --follow` shows progress and results
+- [ ] Ctrl+C during `--follow` cancels the operation
+- [ ] All old options work (`--dry-run`, `--models-dir`, etc.)
+- [ ] Results display shows epochs, loss, model path on completion
+
+---
+
 ## Task 1.1: Create CLIState Dataclass
 
 **File:** `ktrdr/cli/state.py`
@@ -488,6 +537,66 @@ curl http://localhost:8000/api/v1/operations | jq
 - [ ] Command executes successfully against running backend
 - [ ] Operation created and trackable
 - [ ] All M1 tests pass
+
+---
+
+## Task 1.7: Make Symbols/Timeframes Optional in Training API
+
+**Files:** `ktrdr/api/endpoints/training.py`, `ktrdr/cli/operation_adapters.py`, `ktrdr/cli/commands/train.py`
+**Type:** CODING
+**Estimated time:** 1 hour
+
+**Task Categories:** API Endpoint, Cross-Component
+
+**Description:**
+Make `symbols` and `timeframes` optional in the training API. When not provided, the backend should read them from the strategy configuration. When provided, they override the strategy defaults.
+
+Currently symbols/timeframes are required, forcing the CLI to pass hardcoded values. This degrades the UX since users expect `ktrdr train <strategy>` to just work without specifying symbols.
+
+**Implementation Notes:**
+
+1. **Backend API change** (`ktrdr/api/endpoints/training.py`):
+```python
+class TrainingRequest(BaseModel):
+    strategy_name: str
+    symbols: list[str] | None = None      # Optional, defaults to strategy config
+    timeframes: list[str] | None = None   # Optional, defaults to strategy config
+    ...
+```
+
+2. **Backend logic**: When symbols/timeframes are None, fetch from strategy config before starting training.
+
+3. **CLI adapter change** (`ktrdr/cli/operation_adapters.py`):
+```python
+class TrainingOperationAdapter(OperationAdapter):
+    def __init__(
+        self,
+        strategy_name: str,
+        symbols: list[str] | None = None,    # Now optional
+        timeframes: list[str] | None = None,  # Now optional
+        ...
+    ):
+```
+
+4. **CLI command change** (`ktrdr/cli/commands/train.py`):
+   - Remove hardcoded `symbols=["AAPL"]` and `timeframes=["1h"]`
+   - Add optional `--symbols` and `--timeframes` options for override
+
+**Testing Requirements:**
+
+*Unit Tests:*
+- [ ] `test_training_request_symbols_optional()` — verify API accepts request without symbols
+- [ ] `test_training_adapter_symbols_optional()` — verify adapter works without symbols
+
+*Integration Tests:*
+- [ ] `test_train_uses_strategy_config()` — start training without symbols, verify strategy config used
+- [ ] `test_train_symbols_override()` — start training with symbols, verify override works
+
+**Acceptance Criteria:**
+- [ ] `ktrdr train <strategy> --start X --end Y` works without specifying symbols/timeframes
+- [ ] Backend reads symbols/timeframes from strategy config when not provided
+- [ ] `--symbols` and `--timeframes` options work as overrides
+- [ ] Existing tests still pass
 
 ---
 

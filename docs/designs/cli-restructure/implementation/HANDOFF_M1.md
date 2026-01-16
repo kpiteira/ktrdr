@@ -105,4 +105,40 @@ Running notes for M1 CLI restructure implementation.
 - Fire-and-forget mode works (immediate return with operation ID)
 - Follow mode works (polls and shows progress)
 - JSON output works (parseable by jq)
-- Training failures are due to hardcoded symbols/timeframes in adapter not matching strategy - this is documented and expected to be fixed in M2
+- ~~Training failures are due to hardcoded symbols/timeframes in adapter not matching strategy - this is documented and expected to be fixed in M2~~ **FIXED in Task 1.7**
+
+---
+
+## Task 1.7 Complete: Make Symbols/Timeframes Optional in Training API
+
+### Gotchas
+- **Strategy config format varies:** `training_data.symbols` can use `mode: single` (with `.symbol` field) or `mode: multi_symbol` (with `.list` field). Same for `timeframes`. The extraction helper handles both.
+- **Integration test mocking issues:** Tests using `@patch("ktrdr.api.endpoints.training.get_training_service")` have pre-existing structural issues - the patch doesn't override FastAPI's dependency injection cache. These failures are unrelated to Task 1.7 changes.
+- **Pydantic validation behavior:** When `symbols` is optional and not provided, extra fields like `symbol` are silently ignored. Updated tests to use empty list `[]` (still validates) rather than wrong field name.
+
+### Emergent Patterns
+- **Strategy config extraction helper:** `extract_symbols_timeframes_from_strategy()` in `context.py` - reusable for any feature needing strategy metadata without full context build
+- **Payload omission for None:** In `TrainingOperationAdapter.get_start_payload()`, only include `symbols`/`timeframes` if not None - allows backend to use defaults
+- **CLI CSV parsing:** `_parse_csv_list()` helper converts comma-separated string to list or None - clean pattern for multi-value options
+
+### Implementation Notes
+1. **API Layer:** `TrainingRequest` now has `symbols: Optional[list[str]] = None` - validators check non-empty only if provided
+2. **Service Layer:** `TrainingService.start_training()` calls `extract_symbols_timeframes_from_strategy()` when symbols/timeframes are None
+3. **CLI Adapter:** Omits symbols/timeframes from payload when None (backend fills in)
+4. **CLI Command:** Removed hardcoded `["AAPL"]`, `["1h"]` - now passes None unless `--symbols`/`--timeframes` override provided
+
+### M1 Milestone Complete
+All 7 tasks complete:
+- [x] Task 1.1: CLIState dataclass
+- [x] Task 1.2: Output helpers
+- [x] Task 1.3: OperationRunner wrapper
+- [x] Task 1.4: New app entry point
+- [x] Task 1.5: Train command
+- [x] Task 1.6: Wire up and test
+- [x] Task 1.7: Optional symbols/timeframes
+
+**E2E Verified:**
+- `ktrdr train v3_minimal --start 2024-01-01 --end 2024-06-01` works without specifying symbols
+- Backend extracts `EURUSD`/`1h` from strategy config
+- Training completes successfully (6.2s)
+- Model saved to `models/v3_minimal/1h_v6`

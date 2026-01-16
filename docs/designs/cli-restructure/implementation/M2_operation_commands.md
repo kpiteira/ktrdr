@@ -13,6 +13,110 @@ architecture: ../ARCHITECTURE.md
 
 ---
 
+## Preservation Requirements
+
+### Backtest Command
+
+**`ktrdr backtest` replaces `ktrdr backtest run` from `backtest_commands.py`.**
+
+| Old Option | New Option | Notes |
+|------------|------------|-------|
+| `<symbol>` argument | Fetch from strategy | No longer positional arg |
+| `<timeframe>` argument | Fetch from strategy | No longer positional arg |
+| `--start-date` | `--start` | Name shortened |
+| `--end-date` | `--end` | Name shortened |
+| `--capital`, `-c` | `--capital`, `-c` | Keep shorthand |
+| `--commission` | `--commission` | Keep as-is |
+| `--slippage` | `--slippage` | Keep as-is |
+| `--model-path`, `-m` | `--model-path`, `-m` | Keep as-is |
+| `--verbose`, `-v` | Global `--verbose` | Moved to global flag |
+
+**Behavior to preserve:**
+- `@trace_cli_command("backtest")` telemetry
+- Health check before starting
+- Parameter display before starting
+- Progress bar with Rich Progress
+- Ctrl+C cancels operation
+- Results display: total return, sharpe ratio, max drawdown, total trades, win rate
+
+### Research Command
+
+**`ktrdr research` replaces `ktrdr agent trigger` from `agent_commands.py`.**
+
+| Old Option | New Option | Notes |
+|------------|------------|-------|
+| `--model`, `-m` | `--model`, `-m` | Keep as-is |
+| `--monitor`/`--follow`, `-f` | `--follow`, `-f` | Standardize name |
+| `--bypass`, `-b` | `--bypass`, `-b` | Keep as-is (for testing) |
+
+**Behavior to preserve:**
+- `@trace_cli_command("research")` telemetry
+- Fire-and-forget returns operation ID immediately
+- `--follow` shows nested progress (parent + child operations)
+- **Ctrl+C sends DELETE to cancel operation** (critical!)
+- Completion summary shows strategy, verdict, metrics
+
+### Status Command
+
+**`ktrdr status [op-id]` replaces `ktrdr operations status <op-id>` from `operations_commands.py`.**
+
+**NEW behavior:** Without argument shows system dashboard.
+
+**Behavior to preserve (when op-id provided):**
+- Detailed operation info (type, status, progress, metadata)
+- Children tree for agent_research operations
+- Error message display for failed operations
+- `--verbose` for extra detail
+
+### Ops Command
+
+**`ktrdr ops` replaces `ktrdr operations list` from `operations_commands.py`.**
+
+| Old Option | New Option | Notes |
+|------------|------------|-------|
+| `--status`, `-s` | `--status`, `-s` | Keep as-is |
+| `--type`, `-t` | `--type`, `-t` | Keep as-is |
+| `--limit`, `-l` | `--limit`, `-l` | Keep as-is |
+| `--active`, `-a` | `--active`, `-a` | Keep as-is |
+| `--resumable`, `-r` | `--resumable`, `-r` | Keep as-is |
+| `--verbose`, `-v` | Global `--verbose` | Moved to global flag |
+
+**Behavior to preserve:**
+- Rich table with ID, type, status, progress, checkpoint, symbol, duration
+- Checkpoint summary display
+- Filtering by status/type/active/resumable
+
+### Cancel Command
+
+**`ktrdr cancel` replaces `ktrdr operations cancel` from `operations_commands.py`.**
+
+| Old Option | New Option | Notes |
+|------------|------------|-------|
+| `--reason`, `-r` | `--reason`, `-r` | Keep as-is |
+| `--force`, `-f` | `--force`, `-f` | Keep as-is |
+| `--verbose`, `-v` | Global `--verbose` | Moved to global flag |
+
+**Behavior to preserve:**
+- Cancellation confirmation message
+- Handle already-completed operations gracefully
+
+### Resume Command
+
+**`ktrdr resume` replaces `ktrdr operations resume` from `operations_commands.py`.**
+
+**Behavior to preserve:**
+- Resume from checkpoint
+- Display resumed-from info (epoch, checkpoint type)
+- Handle no-checkpoint case gracefully
+
+### Follow Command
+
+**`ktrdr follow` is NEW functionality.** No old command to preserve.
+
+But: Ctrl+C should **detach** (not cancel) since user didn't start the operation.
+
+---
+
 ## Task 2.1: Implement Backtest Command
 
 **File:** `ktrdr/cli/commands/backtest.py`

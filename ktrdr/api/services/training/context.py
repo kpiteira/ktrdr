@@ -212,6 +212,104 @@ def _load_strategy_config(strategy_path: Path) -> dict[str, Any]:
     return data
 
 
+def extract_symbols_timeframes_from_strategy(
+    strategy_name: str,
+    strategy_search_paths: Iterable[Path] | None = None,
+) -> tuple[list[str], list[str]]:
+    """
+    Extract symbols and timeframes from strategy config file.
+
+    Used by TrainingService when symbols/timeframes are not explicitly provided
+    by the user - the backend reads them from the strategy configuration.
+
+    Args:
+        strategy_name: Name of the strategy file (without .yaml extension)
+        strategy_search_paths: Optional custom paths to search for strategy files
+
+    Returns:
+        Tuple of (symbols, timeframes) lists extracted from strategy config
+
+    Raises:
+        ValidationError: If strategy file not found or missing required config
+        ConfigurationError: If training_data section is malformed
+    """
+    strategy_path = _resolve_strategy_path(strategy_name, strategy_search_paths)
+    strategy_config = _load_strategy_config(strategy_path)
+
+    # Extract from training_data section (v3 format)
+    training_data = strategy_config.get("training_data", {})
+
+    symbols = _extract_symbols_from_config(training_data)
+    timeframes = _extract_timeframes_from_config(training_data)
+
+    if not symbols:
+        raise ConfigurationError(
+            message=f"Strategy '{strategy_name}' has no symbols configured",
+            error_code="STRATEGY-NoSymbols",
+            context={"strategy_name": strategy_name},
+            suggestion="Add training_data.symbols section to the strategy YAML",
+        )
+
+    if not timeframes:
+        raise ConfigurationError(
+            message=f"Strategy '{strategy_name}' has no timeframes configured",
+            error_code="STRATEGY-NoTimeframes",
+            context={"strategy_name": strategy_name},
+            suggestion="Add training_data.timeframes section to the strategy YAML",
+        )
+
+    logger.info(
+        f"Extracted from strategy '{strategy_name}': "
+        f"symbols={symbols}, timeframes={timeframes}"
+    )
+
+    return symbols, timeframes
+
+
+def _extract_symbols_from_config(training_data: dict[str, Any]) -> list[str]:
+    """Extract symbols list from training_data configuration."""
+    symbols_config = training_data.get("symbols", {})
+
+    if not symbols_config:
+        return []
+
+    mode = symbols_config.get("mode", "single")
+
+    if mode == "single":
+        # Single symbol: training_data.symbols.symbol
+        symbol = symbols_config.get("symbol")
+        return [symbol] if symbol else []
+
+    elif mode == "multi_symbol":
+        # Multi symbol: training_data.symbols.list
+        symbol_list = symbols_config.get("list", [])
+        return list(symbol_list) if symbol_list else []
+
+    return []
+
+
+def _extract_timeframes_from_config(training_data: dict[str, Any]) -> list[str]:
+    """Extract timeframes list from training_data configuration."""
+    timeframes_config = training_data.get("timeframes", {})
+
+    if not timeframes_config:
+        return []
+
+    mode = timeframes_config.get("mode", "single")
+
+    if mode == "single":
+        # Single timeframe: training_data.timeframes.timeframe
+        timeframe = timeframes_config.get("timeframe")
+        return [timeframe] if timeframe else []
+
+    elif mode == "multi_timeframe":
+        # Multi timeframe: training_data.timeframes.list
+        timeframe_list = timeframes_config.get("list", [])
+        return list(timeframe_list) if timeframe_list else []
+
+    return []
+
+
 def _is_v3_format(strategy_config: dict[str, Any]) -> bool:
     """Check if strategy config is v3 format."""
     return (

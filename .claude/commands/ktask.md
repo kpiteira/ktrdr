@@ -55,6 +55,21 @@ architecture: docs/designs/feature-name/ARCHITECTURE.md
 
 ---
 
+## Code Samples Are Structure, Not Implementation
+
+**Implementation plans contain code samples. These show patterns and wiring — not complete functionality.**
+
+When you see code in a plan, your job is to:
+1. Understand the *structure* it demonstrates
+2. Read the *existing code* (if replacing something) to understand what functionality exists
+3. Implement the new structure with full functionality
+
+If the code sample looks simpler than the existing code, that's expected — the sample shows skeleton, you provide the meat.
+
+**Copying code samples verbatim is not implementation. It's transcription.**
+
+---
+
 ## 1. Setup
 
 ### Retrieve Task
@@ -100,13 +115,14 @@ Look for `HANDOFF_*.md` in the implementation plan directory. If present, read a
 Before writing any code:
 
 1. **Read context documents** — Design doc and architecture doc (from frontmatter or params), relevant sections of implementation plan
-2. **Identify existing patterns** — Find similar code in the codebase to follow
-3. **Locate dependencies** — Files, classes, functions that will be involved
-4. **Note integration points** — How this task connects to other components
+2. **Read code being replaced** — If this task replaces or restructures existing code, read it first. Understand what functionality exists before you design anything.
+3. **Identify patterns to follow** — Find similar code in the codebase for style and conventions
+4. **Locate dependencies** — Files, classes, functions that will be involved
+5. **Note integration points** — How this task connects to other components
 
 **Output:** Brief summary (2-4 sentences) covering:
 - Design intent
-- Architecture approach  
+- Architecture approach
 - Implementation approach
 
 Do not write implementation code during this phase.

@@ -14,6 +14,27 @@ The KTRDR CLI has grown organically with inconsistencies that hurt usability: du
 6. **Unified operation handling** — Same code path for train, backtest, research
 7. **Clean break** — Remove deprecated/duplicate commands, update all documentation
 
+## Constraints: Preserving Existing Experience
+
+**This restructure changes command STRUCTURE, not command BEHAVIOR.**
+
+The following must be preserved exactly from existing commands:
+
+1. **All command-line options** — If `ktrdr models train` has `--verbose`, `--dry-run`, `--models-dir`, then `ktrdr train` must have them too (unless explicitly deprecated in "Removed Commands")
+2. **Ctrl+C behavior** — Operations started with `--follow` must cancel on Ctrl+C (not just detach)
+3. **Results display** — Training shows epochs/loss/model path on completion; backtest shows sharpe/drawdown/trades
+4. **Error messages** — Same error handling and user-facing messages
+5. **Telemetry** — `@trace_cli_command` decorators preserved
+6. **Option shorthands** — If `-c` was shorthand for `--capital`, keep it
+
+**Implementation note:** When implementing new commands, the implementer MUST:
+1. Read the existing command being replaced
+2. Document all options, behaviors, and outputs from the existing command
+3. Implement the new command with ALL existing functionality
+4. Only add new functionality (like fire-and-forget mode) on top
+
+**The UX examples in this document show the EXPECTED output. Implementations must match.**
+
 ## Non-Goals (Out of Scope)
 
 1. **`research <strategy>` feature** — Skipping design phase requires backend agent changes (separate design)
