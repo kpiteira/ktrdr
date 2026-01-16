@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import httpx
@@ -147,7 +147,7 @@ class WorkerRegistry:
             worker.endpoint_url = endpoint_url
             worker.capabilities = capabilities or {}
             worker.status = WorkerStatus.AVAILABLE
-            worker.last_healthy_at = datetime.utcnow()
+            worker.last_healthy_at = datetime.now(UTC)
             logger.info(f"Worker {worker_id} re-registered")
         else:
             # Check for stale workers with the same endpoint_url (worker restarted with new ID)
@@ -169,7 +169,7 @@ class WorkerRegistry:
                 endpoint_url=endpoint_url,
                 status=WorkerStatus.AVAILABLE,
                 capabilities=capabilities or {},
-                last_healthy_at=datetime.utcnow(),
+                last_healthy_at=datetime.now(UTC),
             )
             self._workers[worker_id] = worker
             logger.info(f"Worker {worker_id} registered ({worker_type})")
@@ -335,7 +335,7 @@ class WorkerRegistry:
         worker = available_workers[0]
 
         # Update selection timestamp
-        worker.metadata["last_selected"] = datetime.utcnow().timestamp()
+        worker.metadata["last_selected"] = datetime.now(UTC).timestamp()
 
         # Add selection result to telemetry
         if span and span.is_recording():
@@ -567,8 +567,8 @@ class WorkerRegistry:
 
                     # Reset failure counter and update timestamps
                     worker.health_check_failures = 0
-                    worker.last_health_check = datetime.utcnow()
-                    worker.last_healthy_at = datetime.utcnow()
+                    worker.last_health_check = datetime.now(UTC)
+                    worker.last_healthy_at = datetime.now(UTC)
 
                     # Update Prometheus metrics
                     update_worker_metrics(self._workers)
@@ -585,7 +585,7 @@ class WorkerRegistry:
 
         # Health check failed - increment failure counter
         worker.health_check_failures += 1
-        worker.last_health_check = datetime.utcnow()
+        worker.last_health_check = datetime.now(UTC)
 
         # Mark as unavailable if threshold exceeded
         if worker.health_check_failures >= 3:
@@ -614,7 +614,7 @@ class WorkerRegistry:
             >>> # After 5+ minutes of being unavailable...
             >>> registry._cleanup_dead_workers()  # Worker is removed
         """
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         to_remove = []
 
         for worker_id, worker in self._workers.items():

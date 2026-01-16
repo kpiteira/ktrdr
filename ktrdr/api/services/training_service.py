@@ -4,7 +4,7 @@ Training Service
 Provides neural network training functionality for the API layer.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -583,7 +583,7 @@ class TrainingService(ServiceOrchestrator[None]):
             raise ValidationError("Trained model file not found")
 
         # Generate model ID
-        model_id = f"model_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+        model_id = f"model_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
 
         # Calculate model size
         model_size_mb = None
@@ -598,7 +598,7 @@ class TrainingService(ServiceOrchestrator[None]):
             "model_name": model_name,
             "model_path": str(model_path),
             "task_id": task_id,
-            "saved_at": datetime.utcnow().isoformat() + "Z",
+            "saved_at": datetime.now(UTC).isoformat() + "Z",
             "model_size_mb": model_size_mb,
         }
 
@@ -625,7 +625,7 @@ class TrainingService(ServiceOrchestrator[None]):
             _loaded_models[model_name] = {
                 "model": "loaded_model_placeholder",
                 "info": model_info,
-                "loaded_at": datetime.utcnow().isoformat(),
+                "loaded_at": datetime.now(UTC).isoformat(),
             }
             model_loaded = True
         else:
@@ -661,7 +661,7 @@ class TrainingService(ServiceOrchestrator[None]):
             raise ValidationError(f"Model '{model_name}' is not loaded. Load it first.")
 
         # Use test_date or default to latest available
-        test_date = test_date or datetime.utcnow().strftime("%Y-%m-%d")
+        test_date = test_date or datetime.now(UTC).strftime("%Y-%m-%d")
 
         # In a real implementation, this would generate actual predictions
         logger.info(f"Model {model_name} prediction for {symbol} on {test_date}")

@@ -7,7 +7,7 @@ components with GPU acceleration and host-level resource management.
 
 import asyncio
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any, Optional
 
 from opentelemetry import trace
@@ -42,8 +42,8 @@ class TrainingSession:
         self.session_id = session_id
         self.config = config
         self.status = "initializing"
-        self.start_time = datetime.utcnow()
-        self.last_updated = datetime.utcnow()
+        self.start_time = datetime.now(UTC)
+        self.last_updated = datetime.now(UTC)
 
         # Task 2.3: Pull-based operations tracking
         self.operation_id: Optional[str] = None
@@ -97,7 +97,7 @@ class TrainingSession:
         ModelTrainer/TrainingPipeline is execution-agnostic and calculates all progress data.
         This method just stores the data and passes it through in get_progress_dict().
         """
-        self.last_updated = datetime.utcnow()
+        self.last_updated = datetime.now(UTC)
 
         # Store complete progress data from ModelTrainer (single source of truth)
         self._last_progress_data = {
@@ -614,7 +614,7 @@ class TrainingService:
 
         try:
             session.status = "running"
-            session.last_updated = datetime.utcnow()
+            session.last_updated = datetime.now(UTC)
 
             logger.info(f"Starting training for session {session.session_id}")
 
@@ -690,7 +690,7 @@ class TrainingService:
                     f"Error stopping monitoring for session {session.session_id}: {str(e)}"
                 )
 
-            session.last_updated = datetime.utcnow()
+            session.last_updated = datetime.now(UTC)
 
     async def _run_real_training(self, session: TrainingSession):
         """
@@ -925,7 +925,7 @@ class TrainingService:
             try:
                 await asyncio.sleep(60)  # Check every minute
 
-                current_time = datetime.utcnow()
+                current_time = datetime.now(UTC)
                 timeout_threshold = timedelta(minutes=self.session_timeout_minutes)
 
                 sessions_to_cleanup = []

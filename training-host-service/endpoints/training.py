@@ -5,7 +5,7 @@ Provides GPU-accelerated training functionality.
 """
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException
@@ -252,7 +252,7 @@ async def list_training_sessions():
         return {
             "total_sessions": len(sessions),
             "sessions": sessions,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
     except Exception as e:
@@ -272,7 +272,7 @@ async def evaluate_model(request: EvaluationRequest):
     """
     try:
         evaluation_id = str(uuid.uuid4())
-        start_time = datetime.utcnow()
+        start_time = datetime.now(UTC)
 
         # Note: GPU availability is managed by the worker via WorkerAPIBase
         # Worker self-registers with GPU capabilities to backend
@@ -282,7 +282,7 @@ async def evaluate_model(request: EvaluationRequest):
         # For now, return mock results
         results = {"accuracy": 0.85, "loss": 0.23, "f1_score": 0.82}
 
-        end_time = datetime.utcnow()
+        end_time = datetime.now(UTC)
         evaluation_time = (end_time - start_time).total_seconds()
 
         logger.info(f"Model evaluation {evaluation_id} completed successfully")

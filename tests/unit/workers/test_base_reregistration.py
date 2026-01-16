@@ -4,7 +4,7 @@ This module tests the re-registration monitor that detects missed health
 checks and re-registers with the backend.
 """
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -263,14 +263,14 @@ class TestMonitorHealthChecks:
         worker = MockWorker()
 
         # Set last health check to be older than timeout
-        worker._last_health_check_received = datetime.utcnow() - timedelta(seconds=35)
+        worker._last_health_check_received = datetime.now(UTC) - timedelta(seconds=35)
 
         # Mock _ensure_registered to track if it's called
         worker._ensure_registered = AsyncMock()
 
         # Run one iteration of the monitor logic
         elapsed = (
-            datetime.utcnow() - worker._last_health_check_received
+            datetime.now(UTC) - worker._last_health_check_received
         ).total_seconds()
         if elapsed > worker._health_check_timeout:
             await worker._ensure_registered()
@@ -283,14 +283,14 @@ class TestMonitorHealthChecks:
         worker = MockWorker()
 
         # Set last health check to be recent (within timeout)
-        worker._last_health_check_received = datetime.utcnow() - timedelta(seconds=10)
+        worker._last_health_check_received = datetime.now(UTC) - timedelta(seconds=10)
 
         # Mock _ensure_registered
         worker._ensure_registered = AsyncMock()
 
         # Simulate monitor check
         elapsed = (
-            datetime.utcnow() - worker._last_health_check_received
+            datetime.now(UTC) - worker._last_health_check_received
         ).total_seconds()
         if elapsed > worker._health_check_timeout:
             await worker._ensure_registered()
@@ -310,7 +310,7 @@ class TestMonitorHealthChecks:
         # Simulate monitor check
         if worker._last_health_check_received is not None:
             elapsed = (
-                datetime.utcnow() - worker._last_health_check_received
+                datetime.now(UTC) - worker._last_health_check_received
             ).total_seconds()
             if elapsed > worker._health_check_timeout:
                 await worker._ensure_registered()

@@ -591,7 +591,7 @@ class HostTrainingOrchestrator:
         Returns:
             Tuple of (start_date, end_date) as strings
         """
-        from datetime import datetime, timedelta
+        from datetime import UTC, datetime, timedelta
 
         # Runtime overrides
         start_date = self._session.config.get("start_date")
@@ -599,7 +599,7 @@ class HostTrainingOrchestrator:
 
         # Fallback to 1 year if not provided
         if not start_date or not end_date:
-            end_date_dt = datetime.utcnow()
+            end_date_dt = datetime.now(UTC)
             start_date_dt = end_date_dt - timedelta(days=365)
             start_date = start_date_dt.strftime("%Y-%m-%d")
             end_date = end_date_dt.strftime("%Y-%m-%d")

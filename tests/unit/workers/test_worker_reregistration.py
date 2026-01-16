@@ -5,7 +5,7 @@ if no health check had ever been received.
 """
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -75,7 +75,7 @@ class TestReregistrationMonitor:
     ):
         """Test that monitor checks registration when health check times out."""
         # Set last health check to 40 seconds ago (past the 30s timeout)
-        mock_worker._last_health_check_received = datetime.utcnow() - timedelta(
+        mock_worker._last_health_check_received = datetime.now(UTC) - timedelta(
             seconds=40
         )
 
@@ -97,7 +97,7 @@ class TestReregistrationMonitor:
     async def test_monitor_skips_when_health_check_recent(self, mock_worker):
         """Test that monitor does NOT check registration when health check is recent."""
         # Set last health check to 5 seconds ago (well within timeout)
-        mock_worker._last_health_check_received = datetime.utcnow() - timedelta(
+        mock_worker._last_health_check_received = datetime.now(UTC) - timedelta(
             seconds=5
         )
 
@@ -119,7 +119,7 @@ class TestReregistrationMonitor:
     async def test_monitor_resets_timer_after_timeout_check(self, mock_worker):
         """Test that monitor resets the health check timer after checking registration."""
         # Set last health check to 40 seconds ago
-        old_time = datetime.utcnow() - timedelta(seconds=40)
+        old_time = datetime.now(UTC) - timedelta(seconds=40)
         mock_worker._last_health_check_received = old_time
 
         async def run_monitor_once():

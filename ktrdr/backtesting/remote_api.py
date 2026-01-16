@@ -19,7 +19,7 @@ Usage (DEPRECATED):
 
 import logging
 import os
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Optional
 
 from fastapi import FastAPI, HTTPException, Query
@@ -149,7 +149,7 @@ async def root():
         "service": "Backtesting Remote Service",
         "version": "1.0.0",
         "status": "running",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "mode": "local",  # This service always runs in local mode
         "note": "Runs BacktestingService in LOCAL mode (backend treats this as remote)",
     }
@@ -176,7 +176,7 @@ async def health_check():
     return {
         "healthy": True,
         "service": "backtest-remote",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "status": "operational",
         "worker_status": worker_status,  # 'busy' or 'idle' - used by backend health checks
         "current_operation": current_operation,
