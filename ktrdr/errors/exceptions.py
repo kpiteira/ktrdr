@@ -21,6 +21,9 @@ class KtrdrError(Exception):
         error_code: Optional error code for reference and documentation
         details: Optional dictionary with additional error details
         suggestion: Optional suggestion text for how to fix the error
+        operation_id: Optional operation ID for context
+        operation_type: Optional operation type (e.g., 'training', 'backtest')
+        stage: Optional stage of operation where error occurred (e.g., 'validation', 'execution')
     """
 
     def __init__(
@@ -29,6 +32,9 @@ class KtrdrError(Exception):
         error_code: Optional[str] = None,
         details: Optional[dict[str, Any]] = None,
         suggestion: Optional[str] = None,
+        operation_id: Optional[str] = None,
+        operation_type: Optional[str] = None,
+        stage: Optional[str] = None,
     ) -> None:
         """
         Initialize a new KtrdrError.
@@ -38,11 +44,17 @@ class KtrdrError(Exception):
             error_code: Optional error code for reference and documentation
             details: Optional dictionary with additional error details
             suggestion: Optional suggestion text for how to fix the error
+            operation_id: Optional operation ID for context
+            operation_type: Optional operation type (e.g., 'training', 'backtest')
+            stage: Optional stage of operation where error occurred
         """
         self.message = message
         self.error_code = error_code
         self.details = details or {}
         self.suggestion = suggestion
+        self.operation_id = operation_id
+        self.operation_type = operation_type
+        self.stage = stage
         super().__init__(message)
 
 
@@ -369,6 +381,9 @@ class ConfigurationError(KtrdrError):
         context: Optional[dict[str, Any]] = None,
         details: Optional[dict[str, Any]] = None,
         suggestion: str = "",
+        operation_id: Optional[str] = None,
+        operation_type: Optional[str] = None,
+        stage: Optional[str] = None,
     ) -> None:
         """
         Initialize a configuration error with comprehensive information.
@@ -379,10 +394,20 @@ class ConfigurationError(KtrdrError):
             context: Where error occurred (file, section, field)
             details: Structured data about the error
             suggestion: How to fix the error
+            operation_id: Optional operation ID for context
+            operation_type: Optional operation type
+            stage: Optional stage of operation where error occurred
         """
-        super().__init__(message, error_code, details)
+        super().__init__(
+            message,
+            error_code,
+            details,
+            suggestion,
+            operation_id,
+            operation_type,
+            stage,
+        )
         self.context = context or {}
-        self.suggestion = suggestion
 
     def to_dict(self) -> dict[str, Any]:
         """

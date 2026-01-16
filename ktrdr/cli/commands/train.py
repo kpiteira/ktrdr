@@ -167,5 +167,17 @@ def train(
         runner.start(adapter, follow=follow)
 
     except Exception as e:
-        print_error(str(e), state)
+        # Enhance exception with operation context
+        from ktrdr.errors.exceptions import KtrdrError
+
+        if not isinstance(e, KtrdrError):
+            enhanced_error = KtrdrError(
+                message=str(e),
+                operation_type="training",
+                stage="validation",
+                suggestion="Verify strategy configuration and date range parameters",
+            )
+            print_error(str(e), state, enhanced_error)
+        else:
+            print_error(str(e), state, e)
         raise typer.Exit(1) from None

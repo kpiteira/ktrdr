@@ -40,21 +40,66 @@ def print_success(
         console.print(f"[green]{message}[/green]")
 
 
-def print_error(message: str, state: CLIState) -> None:
-    """Print error message (human) or JSON response.
+def print_error(message: str, state: CLIState, error: Exception | None = None) -> None:
+    """Print error message (human) or JSON response with optional exception context.
 
-    In human mode, prints to stderr with red formatting.
+    In human mode, prints to stderr with red formatting and additional context if available.
     In JSON mode, prints to stdout for parsability.
 
     Args:
         message: The error message to display.
         state: CLI state with json_mode flag.
+        error: Optional exception object with additional context.
     """
     if state.json_mode:
         # JSON goes to stdout for easy parsing
-        print(json.dumps({"status": "error", "message": message}))
+        output = {"status": "error", "message": message}
+
+        # Add operation context if available from exception
+        if error and isinstance(error, Exception):
+            if hasattr(error, "operation_id") and error.operation_id:
+                output["operation_id"] = error.operation_id
+            if hasattr(error, "operation_type") and error.operation_type:
+                output["operation_type"] = error.operation_type
+            if hasattr(error, "stage") and error.stage:
+                output["stage"] = error.stage
+            if hasattr(error, "error_code") and error.error_code:
+                output["error_code"] = error.error_code
+            if hasattr(error, "suggestion") and error.suggestion:
+                output["suggestion"] = error.suggestion
+
+        print(json.dumps(output))
     else:
-        error_console.print(f"[red bold]Error:[/red bold] {message}")
+        # Build human-readable error message with context
+        parts = []
+
+        # Add operation context if available
+        if error and isinstance(error, Exception):
+            if hasattr(error, "operation_type") and error.operation_type:
+                if hasattr(error, "operation_id") and error.operation_id:
+                    parts.append(
+                        f"Operation: {error.operation_type} ({error.operation_id})"
+                    )
+                else:
+                    parts.append(f"Operation: {error.operation_type}")
+
+            if hasattr(error, "stage") and error.stage:
+                parts.append(f"Stage: {error.stage}")
+
+        # Main error message
+        error_prefix = "[red bold]Error:[/red bold]"
+        if parts:
+            error_console.print(error_prefix)
+            for part in parts:
+                error_console.print(f"  [yellow]{part}[/yellow]")
+            error_console.print(f"  {message}")
+        else:
+            error_console.print(f"{error_prefix} {message}")
+
+        # Add suggestion if available
+        if error and isinstance(error, Exception):
+            if hasattr(error, "suggestion") and error.suggestion:
+                error_console.print(f"\n[cyan]💡 Suggestion:[/cyan] {error.suggestion}")
 
 
 def print_operation_started(
