@@ -163,10 +163,10 @@ class TestTrainingEndpoints:
 
     @pytest.mark.api
     def test_start_training_validation_error(self, client, mock_training_service):
-        """Test starting training with invalid parameters."""
-        # No need to patch for validation errors - they're caught by Pydantic before service call
+        """Test starting training with invalid parameters - empty symbols list."""
+        # Empty symbols list should fail validation (if provided, must be non-empty)
         payload = {
-            "symbol": "",  # Invalid field name - should be "symbols"
+            "symbols": [],  # Empty list - should fail validation
             "timeframes": ["1h"],
             "strategy_name": "rsi_mean_reversion",
         }
@@ -243,10 +243,10 @@ class TestTrainingEndpoints:
 
     @pytest.mark.api
     def test_training_config_validation(self, client, mock_training_service):
-        """Test training configuration validation."""
-        # Test with missing required fields
+        """Test training configuration validation - empty symbol in list."""
+        # Test with empty symbol in list (symbols are optional but if provided must be valid)
         payload = {
-            "symbol": "",  # Empty symbol should be invalid
+            "symbols": [""],  # Empty string in list should be invalid
             "timeframes": ["1h"],
             "strategy_name": "rsi_mean_reversion",
         }

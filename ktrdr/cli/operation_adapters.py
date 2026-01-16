@@ -137,8 +137,8 @@ class TrainingOperationAdapter(OperationAdapter):
     def __init__(
         self,
         strategy_name: str,
-        symbols: list[str],
-        timeframes: list[str],
+        symbols: Optional[list[str]] = None,
+        timeframes: Optional[list[str]] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         validation_split: float = 0.2,
@@ -149,8 +149,8 @@ class TrainingOperationAdapter(OperationAdapter):
 
         Args:
             strategy_name: Name of the strategy to train
-            symbols: List of trading symbols
-            timeframes: List of timeframes
+            symbols: List of trading symbols (optional - backend reads from strategy config if None)
+            timeframes: List of timeframes (optional - backend reads from strategy config if None)
             start_date: Training start date (YYYY-MM-DD)
             end_date: Training end date (YYYY-MM-DD)
             validation_split: Validation data split ratio
@@ -169,13 +169,20 @@ class TrainingOperationAdapter(OperationAdapter):
         return "/api/v1/trainings/start"
 
     def get_start_payload(self) -> dict[str, Any]:
-        """Construct training request payload."""
+        """Construct training request payload.
+
+        Omits symbols/timeframes if None - backend will read from strategy config.
+        """
         payload: dict[str, Any] = {
             "strategy_name": self.strategy_name,
-            "symbols": self.symbols,
-            "timeframes": self.timeframes,
             "detailed_analytics": self.detailed_analytics,
         }
+
+        # Only include symbols/timeframes if provided (allows backend to use strategy defaults)
+        if self.symbols is not None:
+            payload["symbols"] = self.symbols
+        if self.timeframes is not None:
+            payload["timeframes"] = self.timeframes
 
         # Add optional date range if provided
         if self.start_date:

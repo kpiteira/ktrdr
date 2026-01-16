@@ -95,8 +95,8 @@ class TrainingConfig(BaseModel):
 class TrainingRequest(BaseModel):
     """Request model for starting neural network training."""
 
-    symbols: list[str]
-    timeframes: list[str]
+    symbols: Optional[list[str]] = None
+    timeframes: Optional[list[str]] = None
     strategy_name: str
     start_date: Optional[str] = None
     end_date: Optional[str] = None
@@ -105,10 +105,15 @@ class TrainingRequest(BaseModel):
 
     @field_validator("symbols")
     @classmethod
-    def validate_symbols(cls, v: list[str]) -> list[str]:
-        """Validate that symbols list is not empty and contains valid symbols."""
-        if not v or len(v) == 0:
-            raise ValueError("At least one symbol must be specified")
+    def validate_symbols(cls, v: Optional[list[str]]) -> Optional[list[str]]:
+        """Validate symbols list if provided (non-empty, valid symbols)."""
+        if v is None:
+            return None
+
+        if len(v) == 0:
+            raise ValueError(
+                "At least one symbol must be specified when symbols are provided"
+            )
 
         valid_symbols = []
         for symbol in v:
@@ -120,10 +125,15 @@ class TrainingRequest(BaseModel):
 
     @field_validator("timeframes")
     @classmethod
-    def validate_timeframes(cls, v: list[str]) -> list[str]:
-        """Validate that timeframes list is not empty and contains valid timeframes."""
-        if not v or len(v) == 0:
-            raise ValueError("At least one timeframe must be specified")
+    def validate_timeframes(cls, v: Optional[list[str]]) -> Optional[list[str]]:
+        """Validate timeframes list if provided (non-empty, valid timeframes)."""
+        if v is None:
+            return None
+
+        if len(v) == 0:
+            raise ValueError(
+                "At least one timeframe must be specified when timeframes are provided"
+            )
 
         valid_timeframes = []
         for timeframe in v:
