@@ -26,6 +26,7 @@ from ktrdr.errors.exceptions import (
     SystemError,
     UnauthorizedAccessError,
     ValidationError,
+    WorkerUnavailableError,
 )
 from ktrdr.errors.graceful import (
     FallbackNotAvailableError,
@@ -63,6 +64,7 @@ __all__ = [
     "InvalidInputError",
     "UnauthorizedAccessError",
     "ConnectionError",
+    "WorkerUnavailableError",
     "ConfigurationError",
     "MissingConfigurationError",
     "InvalidConfigurationError",

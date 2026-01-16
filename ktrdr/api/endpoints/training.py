@@ -69,7 +69,12 @@ from pydantic import BaseModel, field_validator
 from ktrdr import get_logger
 from ktrdr.api.endpoints.workers import get_worker_registry
 from ktrdr.api.services.training_service import TrainingService
-from ktrdr.errors import ConfigurationError, DataError, ValidationError
+from ktrdr.errors import (
+    ConfigurationError,
+    DataError,
+    ValidationError,
+    WorkerUnavailableError,
+)
 
 logger = get_logger(__name__)
 
@@ -271,6 +276,10 @@ async def start_training(
             estimated_duration_minutes=result.get("estimated_duration_minutes"),
         )
 
+    except WorkerUnavailableError as e:
+        # Return 503 with diagnostic context for worker unavailability
+        logger.warning(f"No training workers available: {e.details}")
+        raise HTTPException(status_code=503, detail=e.to_response_dict()) from e
     except ConfigurationError as e:
         # Log error with full context before responding
         logger.error(f"Configuration error: {e.format_user_message()}")

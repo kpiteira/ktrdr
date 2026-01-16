@@ -18,6 +18,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from ktrdr.api.services.orphan_detector import OrphanOperationDetector
+from ktrdr.api.uptime import set_start_time
 from ktrdr.checkpoint.cleanup_service import CheckpointCleanupService
 from ktrdr.config.settings import get_orphan_detector_settings
 from ktrdr.logging import get_logger
@@ -179,6 +180,9 @@ async def lifespan(app: FastAPI):
 
     # Startup
     logger.info("Starting KTRDR API...")
+
+    # Record start time for uptime tracking (used in error responses)
+    set_start_time()
 
     # Run startup reconciliation (M1: Operations Persistence)
     await _run_startup_reconciliation()

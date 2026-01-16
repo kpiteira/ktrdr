@@ -20,7 +20,7 @@ from ktrdr import get_logger
 from ktrdr.api.endpoints.workers import get_worker_registry
 from ktrdr.api.models.backtesting import BacktestStartRequest, BacktestStartResponse
 from ktrdr.backtesting.backtesting_service import BacktestingService
-from ktrdr.errors import DataError, ValidationError
+from ktrdr.errors import DataError, ValidationError, WorkerUnavailableError
 
 logger = get_logger(__name__)
 
@@ -99,6 +99,10 @@ async def start_backtest(
             mode=result.get("mode"),
         )
 
+    except WorkerUnavailableError as e:
+        # Return 503 with diagnostic context for worker unavailability
+        logger.warning(f"No backtest workers available: {e.details}")
+        raise HTTPException(status_code=503, detail=e.to_response_dict()) from e
     except ValidationError as e:
         logger.error(f"Validation error starting backtest: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e)) from e

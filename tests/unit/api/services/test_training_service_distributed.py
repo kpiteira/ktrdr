@@ -10,6 +10,7 @@ import pytest
 
 from ktrdr.api.models.workers import WorkerEndpoint, WorkerStatus, WorkerType
 from ktrdr.api.services.training_service import TrainingService
+from ktrdr.errors import WorkerUnavailableError
 
 
 class TestTrainingServiceDistributedOnly:
@@ -89,7 +90,7 @@ class TestTrainingServiceDistributedOnly:
         assert selected_worker.capabilities.get("gpu") is False
 
     def test_select_training_worker_no_workers_available(self):
-        """Should raise clear error when no workers available."""
+        """Should raise WorkerUnavailableError when no workers available."""
         # Create mock WorkerRegistry with no workers
         mock_registry = MagicMock()
         mock_registry.list_workers.return_value = []
@@ -97,9 +98,12 @@ class TestTrainingServiceDistributedOnly:
         # Create service with registry
         service = TrainingService(worker_registry=mock_registry)
 
-        # Should raise clear error
-        with pytest.raises(RuntimeError, match="No training workers available"):
+        # Should raise WorkerUnavailableError with context
+        with pytest.raises(WorkerUnavailableError) as exc_info:
             service._select_training_worker(context={})
+
+        assert exc_info.value.worker_type == "training"
+        assert exc_info.value.registered_count == 0
 
     def test_select_training_worker_multiple_gpus(self):
         """Should select from multiple GPU workers (round-robin via registry)."""
@@ -166,7 +170,7 @@ class TestTrainingServiceDistributedOnly:
         assert selected_worker.capabilities.get("gpu") is False
 
     def test_worker_selection_requires_workers(self):
-        """_select_training_worker should raise clear error when no workers available."""
+        """_select_training_worker should raise WorkerUnavailableError when no workers available."""
         # Create mock WorkerRegistry with no workers
         mock_registry = MagicMock()
         mock_registry.list_workers.return_value = []
@@ -174,9 +178,11 @@ class TestTrainingServiceDistributedOnly:
         # Create service with empty registry
         service = TrainingService(worker_registry=mock_registry)
 
-        # Should raise clear error
-        with pytest.raises(RuntimeError, match="No training workers available"):
+        # Should raise WorkerUnavailableError with context
+        with pytest.raises(WorkerUnavailableError) as exc_info:
             service._select_training_worker(context={})
+
+        assert exc_info.value.worker_type == "training"
 
     def test_training_service_logs_gpu_first_cpu_fallback_mode(self):
         """TrainingService should log GPU-first CPU-fallback initialization."""

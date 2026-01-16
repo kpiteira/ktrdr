@@ -13,6 +13,7 @@ import pytest
 from ktrdr.api.models.workers import WorkerStatus, WorkerType
 from ktrdr.api.services.worker_registry import WorkerRegistry
 from ktrdr.backtesting.backtesting_service import BacktestingService
+from ktrdr.errors import WorkerUnavailableError
 
 
 @pytest.fixture
@@ -297,7 +298,7 @@ class TestBacktestingServiceWorkerRegistry:
 
     @pytest.mark.asyncio
     async def test_worker_dispatch_raises_when_no_workers_available(self):
-        """Test backtest dispatch raises error when no workers available (distributed-only mode)."""
+        """Test backtest dispatch raises WorkerUnavailableError when no workers available."""
         # Create registry with no workers
         registry = WorkerRegistry()
 
@@ -310,10 +311,7 @@ class TestBacktestingServiceWorkerRegistry:
         mock_ops = MagicMock()
         service.operations_service = mock_ops
 
-        with pytest.raises(
-            RuntimeError,
-            match="No available backtest workers",
-        ):
+        with pytest.raises(WorkerUnavailableError) as exc_info:
             await service.run_backtest_on_worker(
                 operation_id=operation_id,
                 symbol="AAPL",
@@ -324,6 +322,9 @@ class TestBacktestingServiceWorkerRegistry:
                 end_date=datetime(2024, 12, 31),
                 initial_capital=100000.0,
             )
+
+        assert exc_info.value.worker_type == "backtesting"
+        assert exc_info.value.registered_count == 0
 
     @pytest.mark.asyncio
     async def test_cleanup_worker_marks_available(self):

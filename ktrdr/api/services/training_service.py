@@ -20,9 +20,10 @@ from ktrdr.api.services.training import (
 from ktrdr.api.services.training.training_progress_renderer import (
     TrainingProgressRenderer,
 )
+from ktrdr.api.uptime import get_uptime_seconds
 from ktrdr.async_infrastructure.service_orchestrator import ServiceOrchestrator
 from ktrdr.backtesting.model_loader import ModelLoader
-from ktrdr.errors import ValidationError
+from ktrdr.errors import ValidationError, WorkerUnavailableError
 from ktrdr.monitoring.service_telemetry import trace_service_method
 from ktrdr.training.model_storage import ModelStorage
 
@@ -74,7 +75,7 @@ class TrainingService(ServiceOrchestrator[None]):
         Priority:
         1. Try GPU workers first (10x-100x faster)
         2. Fallback to CPU workers if no GPU available
-        3. Raise error if no workers available
+        3. Raise WorkerUnavailableError if no workers available
 
         Args:
             context: Training operation context (currently unused, for future filtering)
@@ -83,18 +84,26 @@ class TrainingService(ServiceOrchestrator[None]):
             Selected WorkerEndpoint with optimal capabilities
 
         Raises:
-            RuntimeError: If no training workers are available
+            WorkerUnavailableError: If no training workers are available (HTTP 503)
         """
         from ktrdr.api.models.workers import WorkerStatus
 
-        # Get all training workers
+        # Get all training workers (any status for counting)
+        all_registered = self.worker_registry.list_workers(
+            worker_type=WorkerType.TRAINING
+        )
+        registered_count = len(all_registered)
+
+        # Get available workers
         all_workers = self.worker_registry.list_workers(
             worker_type=WorkerType.TRAINING, status=WorkerStatus.AVAILABLE
         )
 
         if not all_workers:
-            raise RuntimeError(
-                "No training workers available. Start GPU or CPU training workers."
+            raise WorkerUnavailableError(
+                worker_type="training",
+                registered_count=registered_count,
+                backend_uptime_seconds=get_uptime_seconds(),
             )
 
         # Try GPU workers first (10x-100x faster)
@@ -115,9 +124,12 @@ class TrainingService(ServiceOrchestrator[None]):
             logger.info("Selected CPU worker for training (GPU unavailable)")
             return cpu_workers[0]
 
-        # No workers available (all might be busy)
-        raise RuntimeError(
-            "No training workers available. Start GPU or CPU training workers."
+        # No available workers (all might be busy)
+        raise WorkerUnavailableError(
+            worker_type="training",
+            registered_count=registered_count,
+            backend_uptime_seconds=get_uptime_seconds(),
+            hint="All training workers are currently busy. Retry in a few seconds.",
         )
 
     def _get_service_name(self) -> str:
