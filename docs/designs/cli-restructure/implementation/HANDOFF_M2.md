@@ -17,3 +17,20 @@ Running notes for M2 CLI restructure implementation.
 ### Next Task Notes
 - Task 2.2 (research command) has different async pattern - uses `asyncio.run()` internally rather than OperationRunner since agent trigger has special nested progress UX.
 - The command should be wired up in Task 2.8 along with all other M2 commands.
+
+---
+
+## Task 2.2 Complete: Implement Research Command
+
+### Gotchas
+- **AsyncCLIClient uses `json=` not `json_data=`:** The `_make_request()` method takes `json` as keyword argument, not `json_data`. MyPy caught this type error.
+- **Import from agent_commands.py for monitoring:** The `_monitor_agent_cycle` function is reused directly from `ktrdr.cli.agent_commands` to preserve the nested progress bar UX.
+
+### Emergent Patterns
+- **Different pattern than train/backtest:** Research command uses async pattern (`asyncio.run()`) + direct API calls instead of OperationRunner. This is because agent operations have special nested progress display that's already implemented in `_monitor_agent_cycle()`.
+- **Fire-and-forget uses `print_operation_started()`:** The output module provides standardized operation start messages with follow-up hints.
+- **Test mocking for async context managers:** Tests use `AsyncMock()` and set up `__aenter__` / `__aexit__` returns on mock client.
+
+### Next Task Notes
+- Task 2.3 (status command) will follow similar async pattern with `asyncio.run()`.
+- Status command has dual mode: no argument shows dashboard, with argument shows specific operation.
