@@ -229,6 +229,81 @@ class ServiceUnavailableError(ConnectionError):
     pass
 
 
+class WorkerUnavailableError(ServiceUnavailableError):
+    """Exception raised when no workers are available for an operation.
+
+    This exception is raised when:
+    - No workers of the required type are registered
+    - All workers are busy
+    - Workers haven't re-registered after backend restart
+
+    The exception includes diagnostic context to help callers understand
+    if this is a transient startup issue.
+
+    Attributes:
+        worker_type: Type of worker that was requested (e.g., "training", "backtesting")
+        registered_count: Number of workers currently registered
+        backend_uptime_seconds: How long the backend has been running
+        hint: Helpful message about what to do
+
+    Example:
+        >>> raise WorkerUnavailableError(
+        ...     worker_type="training",
+        ...     registered_count=0,
+        ...     backend_uptime_seconds=5.2,
+        ... )
+    """
+
+    def __init__(
+        self,
+        worker_type: str,
+        registered_count: int = 0,
+        backend_uptime_seconds: float = 0.0,
+        hint: Optional[str] = None,
+    ) -> None:
+        """Initialize a WorkerUnavailableError with diagnostic context.
+
+        Args:
+            worker_type: Type of worker that was requested
+            registered_count: Number of workers currently registered
+            backend_uptime_seconds: How long the backend has been running
+            hint: Optional hint message (auto-generated if not provided)
+        """
+        self.worker_type = worker_type
+        self.registered_count = registered_count
+        self.backend_uptime_seconds = backend_uptime_seconds
+        self.hint = hint or (
+            "Workers auto-register after startup. "
+            "Retry in a few seconds, or check worker container logs."
+        )
+
+        message = f"No {worker_type} workers available"
+        super().__init__(
+            message=message,
+            error_code="WORKER_UNAVAILABLE",
+            details={
+                "worker_type": worker_type,
+                "registered_workers": registered_count,
+                "backend_uptime_seconds": backend_uptime_seconds,
+                "hint": self.hint,
+            },
+        )
+
+    def to_response_dict(self) -> dict:
+        """Format for HTTP error response body.
+
+        Returns:
+            Dictionary suitable for HTTPException detail parameter.
+        """
+        return {
+            "error": self.message,
+            "worker_type": self.worker_type,
+            "registered_workers": self.registered_count,
+            "backend_uptime_seconds": self.backend_uptime_seconds,
+            "hint": self.hint,
+        }
+
+
 class NetworkError(ConnectionError):
     """Exception raised for general network connectivity issues."""
 

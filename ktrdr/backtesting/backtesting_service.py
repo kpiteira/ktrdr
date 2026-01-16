@@ -18,7 +18,9 @@ from ktrdr.api.models.operations import OperationType
 from ktrdr.api.models.workers import WorkerType
 from ktrdr.api.services.adapters.operation_service_proxy import OperationServiceProxy
 from ktrdr.api.services.operations_service import get_operations_service
+from ktrdr.api.uptime import get_uptime_seconds
 from ktrdr.async_infrastructure import ServiceOrchestrator
+from ktrdr.errors import WorkerUnavailableError
 
 if TYPE_CHECKING:
     from ktrdr.api.services.worker_registry import WorkerRegistry
@@ -283,16 +285,27 @@ class BacktestingService(ServiceOrchestrator[None]):
         max_retries = 3
         attempted_workers: list[str] = []
 
+        # Get registered worker count for error context
+        all_registered = self.worker_registry.list_workers(
+            worker_type=WorkerType.BACKTESTING
+        )
+        registered_count = len(all_registered)
+
         for attempt in range(max_retries):
             worker = self.worker_registry.select_worker(WorkerType.BACKTESTING)
             if not worker:
                 if attempt == 0:
-                    raise RuntimeError(
-                        "No available backtest workers. All workers are busy or unavailable."
+                    raise WorkerUnavailableError(
+                        worker_type="backtesting",
+                        registered_count=registered_count,
+                        backend_uptime_seconds=get_uptime_seconds(),
                     )
                 # All workers have been tried, none available
-                raise RuntimeError(
-                    f"All backtest workers are busy. Tried {len(attempted_workers)} workers: {attempted_workers}"
+                raise WorkerUnavailableError(
+                    worker_type="backtesting",
+                    registered_count=registered_count,
+                    backend_uptime_seconds=get_uptime_seconds(),
+                    hint=f"All backtest workers are busy. Tried {len(attempted_workers)} workers.",
                 )
 
             # Skip workers we've already tried
@@ -381,15 +394,19 @@ class BacktestingService(ServiceOrchestrator[None]):
                             continue  # Retry with new worker
                         else:
                             # No more unique workers available
-                            raise RuntimeError(
-                                f"All workers busy or unavailable after {retry_attempt + 1} attempts. "
-                                f"Tried workers: {attempted_workers}"
+                            raise WorkerUnavailableError(
+                                worker_type="backtesting",
+                                registered_count=registered_count,
+                                backend_uptime_seconds=get_uptime_seconds(),
+                                hint=f"All workers busy after {retry_attempt + 1} attempts. Tried: {attempted_workers}",
                             ) from e
                     else:
                         # Last retry failed
-                        raise RuntimeError(
-                            f"All workers busy after {max_retries} attempts. "
-                            f"Tried workers: {attempted_workers}"
+                        raise WorkerUnavailableError(
+                            worker_type="backtesting",
+                            registered_count=registered_count,
+                            backend_uptime_seconds=get_uptime_seconds(),
+                            hint=f"All workers busy after {max_retries} attempts. Tried: {attempted_workers}",
                         ) from e
                 else:
                     # Other HTTP error, don't retry
