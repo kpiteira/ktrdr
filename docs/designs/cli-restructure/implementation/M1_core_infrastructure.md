@@ -540,6 +540,66 @@ curl http://localhost:8000/api/v1/operations | jq
 
 ---
 
+## Task 1.7: Make Symbols/Timeframes Optional in Training API
+
+**Files:** `ktrdr/api/endpoints/training.py`, `ktrdr/cli/operation_adapters.py`, `ktrdr/cli/commands/train.py`
+**Type:** CODING
+**Estimated time:** 1 hour
+
+**Task Categories:** API Endpoint, Cross-Component
+
+**Description:**
+Make `symbols` and `timeframes` optional in the training API. When not provided, the backend should read them from the strategy configuration. When provided, they override the strategy defaults.
+
+Currently symbols/timeframes are required, forcing the CLI to pass hardcoded values. This degrades the UX since users expect `ktrdr train <strategy>` to just work without specifying symbols.
+
+**Implementation Notes:**
+
+1. **Backend API change** (`ktrdr/api/endpoints/training.py`):
+```python
+class TrainingRequest(BaseModel):
+    strategy_name: str
+    symbols: list[str] | None = None      # Optional, defaults to strategy config
+    timeframes: list[str] | None = None   # Optional, defaults to strategy config
+    ...
+```
+
+2. **Backend logic**: When symbols/timeframes are None, fetch from strategy config before starting training.
+
+3. **CLI adapter change** (`ktrdr/cli/operation_adapters.py`):
+```python
+class TrainingOperationAdapter(OperationAdapter):
+    def __init__(
+        self,
+        strategy_name: str,
+        symbols: list[str] | None = None,    # Now optional
+        timeframes: list[str] | None = None,  # Now optional
+        ...
+    ):
+```
+
+4. **CLI command change** (`ktrdr/cli/commands/train.py`):
+   - Remove hardcoded `symbols=["AAPL"]` and `timeframes=["1h"]`
+   - Add optional `--symbols` and `--timeframes` options for override
+
+**Testing Requirements:**
+
+*Unit Tests:*
+- [ ] `test_training_request_symbols_optional()` — verify API accepts request without symbols
+- [ ] `test_training_adapter_symbols_optional()` — verify adapter works without symbols
+
+*Integration Tests:*
+- [ ] `test_train_uses_strategy_config()` — start training without symbols, verify strategy config used
+- [ ] `test_train_symbols_override()` — start training with symbols, verify override works
+
+**Acceptance Criteria:**
+- [ ] `ktrdr train <strategy> --start X --end Y` works without specifying symbols/timeframes
+- [ ] Backend reads symbols/timeframes from strategy config when not provided
+- [ ] `--symbols` and `--timeframes` options work as overrides
+- [ ] Existing tests still pass
+
+---
+
 ## Milestone 1 Verification
 
 ### E2E Test Scenario
