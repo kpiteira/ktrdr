@@ -1090,6 +1090,51 @@ def logs(
         pass  # Normal exit from follow mode
 
 
+@sandbox_app.command()
+def shell(
+    service: str = typer.Argument(
+        "backend", help="Service name to shell into (e.g., backend, db)"
+    ),
+) -> None:
+    """Open an interactive shell in a sandbox container.
+
+    Opens a bash shell (or falls back to sh) in the specified container.
+    Defaults to the backend container if no service is specified.
+    """
+    cwd = Path.cwd()
+    env = load_env_sandbox(cwd)
+
+    if not env:
+        error_console.print(
+            "[red]Error:[/red] Not in a sandbox directory (.env.sandbox not found)"
+        )
+        error_console.print(
+            "Run 'ktrdr sandbox create <name>' or 'ktrdr sandbox init' first."
+        )
+        raise typer.Exit(1)
+
+    try:
+        compose_file = find_compose_file(cwd)
+    except FileNotFoundError as e:
+        error_console.print("[red]Error:[/red] No docker-compose file found")
+        raise typer.Exit(1) from e
+
+    compose_env = os.environ.copy()
+    compose_env.update(env)
+
+    # Try bash first, fall back to sh if unavailable
+    cmd = ["docker", "compose", "-f", str(compose_file), "exec", service, "bash"]
+
+    result = subprocess.run(cmd, env=compose_env)
+
+    # Exit code 126 means command not found/executable - try sh instead
+    if result.returncode == 126:
+        cmd = ["docker", "compose", "-f", str(compose_file), "exec", service, "sh"]
+        sh_result = subprocess.run(cmd, env=compose_env)
+        if sh_result.returncode != 0:
+            raise typer.Exit(sh_result.returncode)
+
+
 @sandbox_app.command("init-shared")
 def init_shared(
     from_path: Optional[Path] = typer.Option(
