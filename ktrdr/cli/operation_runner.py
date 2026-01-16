@@ -228,6 +228,8 @@ class OperationRunner:
                 try:
                     loop.remove_signal_handler(signal.SIGINT)
                 except Exception:
+                    # Best-effort cleanup: ignore errors when removing signal handler
+                    # during shutdown, since failure here is non-critical.
                     pass
 
         # Handle result based on final status
