@@ -117,7 +117,7 @@ class TestAsyncModelCommandsMigration:
         assert hasattr(adapter, "parse_start_response")
 
         # Verify adapter is configured correctly
-        assert adapter.get_start_endpoint() == "/api/v1/trainings/start"
+        assert adapter.get_start_endpoint() == "/trainings/start"
         payload = adapter.get_start_payload()
         assert payload["strategy_name"] == "test"  # Extracted from path
         assert payload["symbols"] == ["AAPL"]

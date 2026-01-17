@@ -38,7 +38,7 @@ class OperationAdapter(ABC):
                 self.param2 = param2
 
             def get_start_endpoint(self) -> str:
-                return "/api/v1/my-operation/start"
+                return "/my-operation/start"
 
             def get_start_payload(self) -> dict[str, Any]:
                 return {"param1": self.param1, "param2": self.param2}
@@ -60,8 +60,8 @@ class OperationAdapter(ABC):
         """
         Return HTTP endpoint to start this operation.
 
-        This should be the full path relative to the API base URL,
-        e.g., "/api/v1/trainings/start" or "/api/v1/data/load"
+        This should be the endpoint path without the /api/v1 prefix,
+        e.g., "/trainings/start" or "/data/load"
 
         Returns:
             Endpoint path string
@@ -166,7 +166,7 @@ class TrainingOperationAdapter(OperationAdapter):
 
     def get_start_endpoint(self) -> str:
         """Return the training start endpoint."""
-        return "/api/v1/trainings/start"
+        return "/trainings/start"
 
     def get_start_payload(self) -> dict[str, Any]:
         """Construct training request payload.
@@ -225,7 +225,7 @@ class TrainingOperationAdapter(OperationAdapter):
         try:
             # Get performance data from training endpoint
             response = await http_client.get(
-                f"/api/v1/trainings/{operation_id}/performance"
+                f"/trainings/{operation_id}/performance"
             )
             response.raise_for_status()
             perf_data = response.json()
@@ -310,7 +310,7 @@ class DummyOperationAdapter(OperationAdapter):
 
     def get_start_endpoint(self) -> str:
         """Return the dummy start endpoint."""
-        return "/api/v1/dummy/start"
+        return "/dummy/start"
 
     def get_start_payload(self) -> dict[str, Any]:
         """
@@ -410,7 +410,7 @@ class BacktestingOperationAdapter(OperationAdapter):
 
     def get_start_endpoint(self) -> str:
         """Return the backtesting start endpoint."""
-        return "/api/v1/backtests/start"
+        return "/backtests/start"
 
     def get_start_payload(self) -> dict[str, Any]:
         """Construct backtesting request payload."""
