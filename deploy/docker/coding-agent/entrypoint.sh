@@ -1,10 +1,10 @@
 #!/bin/bash
-# KTRDR Sandbox Entrypoint
+# KTRDR Coding Agent Entrypoint
 # Validates environment and keeps container running for exec commands
 
 set -e
 
-echo "=== KTRDR Sandbox Starting ==="
+echo "=== KTRDR Coding Agent Starting ==="
 echo ""
 
 # Ensure workspace is owned by ubuntu user (required for Claude Code yolo mode)
@@ -23,14 +23,14 @@ if su - ubuntu -c "claude auth status" 2>/dev/null | grep -q "Logged in"; then
     echo "Claude: Authenticated"
 else
     echo "WARNING: Claude Code is not authenticated."
-    echo "         Run: docker exec -it ktrdr-sandbox su - ubuntu -c 'claude login'"
+    echo "         Run: docker exec -it ktrdr-coding-agent su - ubuntu -c 'claude login'"
     echo ""
 fi
 
 # Check if workspace has a git repository
 if [ ! -d "/workspace/.git" ]; then
     echo "WARNING: /workspace is empty or has no git repository."
-    echo "         Run sandbox-init.sh to clone the repository."
+    echo "         Run coding-agent-init.sh to clone the repository."
     echo ""
 fi
 
@@ -53,11 +53,11 @@ else
 fi
 
 echo ""
-echo "=== Sandbox Ready ==="
+echo "=== Coding Agent Ready ==="
 echo ""
 
 # If arguments were passed, run them instead of sleeping
-# This allows: docker run sandbox python3 --version
+# This allows: docker run coding-agent python3 --version
 if [ $# -gt 0 ]; then
     exec "$@"
 fi

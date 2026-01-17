@@ -132,3 +132,37 @@ Remaining `sandbox` references in test files are intentional:
 - `deploy/environments/sandbox/` → `deploy/environments/coding-agent/`
 - `deploy/docker/sandbox/` → `deploy/docker/coding-agent/`
 - Update docker-compose.yml service name, container name, image name, volume names
+
+---
+
+## Task 1.8 Complete: Rename Docker configuration
+
+**Summary:** Renamed Docker configuration directories and updated all internal references.
+
+### Directories Renamed (git mv)
+- `deploy/environments/sandbox/` → `deploy/environments/coding-agent/`
+- `deploy/docker/sandbox/` → `deploy/docker/coding-agent/`
+
+### docker-compose.yml Updates
+- Service name: `sandbox` → `coding-agent`
+- Container name: `ktrdr-sandbox` → `ktrdr-coding-agent`
+- Image name: `ktrdr-sandbox:latest` → `ktrdr-coding-agent:latest`
+- Dockerfile path: `deploy/docker/sandbox/` → `deploy/docker/coding-agent/`
+- COMPOSE_PROJECT_NAME: `sandbox` → `coding-agent`
+- Volume names: `sandbox-*` → `coding-agent-*` (5 volumes)
+- Volume external names: `ktrdr-sandbox-*` → `ktrdr-coding-agent-*`
+- Comments and script references updated
+
+### Dockerfile Updates
+- Header comment: "Sandbox" → "Coding Agent"
+- LABEL title: "KTRDR Sandbox" → "KTRDR Coding Agent"
+- COPY path for entrypoint.sh updated
+
+### entrypoint.sh Updates
+- Header comment: "Sandbox" → "Coding Agent"
+- Echo messages: "Sandbox Starting/Ready" → "Coding Agent Starting/Ready"
+- Docker exec reference: `ktrdr-sandbox` → `ktrdr-coding-agent`
+- Script reference: `sandbox-init.sh` → `coding-agent-init.sh`
+
+### Milestone 1 Complete
+All 8 tasks completed. Ready for E2E verification.
