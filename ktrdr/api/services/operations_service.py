@@ -505,8 +505,11 @@ class OperationsService:
                     operation.operation_type.value, "completed", duration
                 )
 
-            # Clean up cache after completion - workers should be stateless
-            await self.remove_from_cache(operation_id)
+            # Clean up cache after completion when repository is configured.
+            # Workers always have a repository, so this keeps them stateless.
+            # For cache-only deployments (tests), keep in cache so get_operation() still works.
+            if self._repository:
+                self._remove_from_cache_unlocked(operation_id)
 
             logger.info(f"Completed operation: {operation_id}")
 
@@ -567,8 +570,11 @@ class OperationsService:
                     operation.operation_type.value, "failed", duration
                 )
 
-            # Clean up cache after failure - workers should be stateless
-            await self.remove_from_cache(operation_id)
+            # Clean up cache after failure when repository is configured.
+            # Workers always have a repository, so this keeps them stateless.
+            # For cache-only deployments (tests), keep in cache so get_operation() still works.
+            if self._repository:
+                self._remove_from_cache_unlocked(operation_id)
 
             logger.error(f"Failed operation: {operation_id} - {error_message}")
 
@@ -770,8 +776,11 @@ class OperationsService:
                     operation.operation_type.value, "cancelled", duration
                 )
 
-            # Clean up cache after cancellation - workers should be stateless
-            await self.remove_from_cache(operation_id)
+            # Clean up cache after cancellation when repository is configured.
+            # Workers always have a repository, so this keeps them stateless.
+            # For cache-only deployments (tests), keep in cache so get_operation() still works.
+            if self._repository:
+                self._remove_from_cache_unlocked(operation_id)
 
             logger.info(
                 f"Cancelled operation: {operation_id} (task_cancelled: {cancelled_task}, "
@@ -1318,12 +1327,57 @@ class OperationsService:
 
             return len(operations_to_remove)
 
-    async def remove_from_cache(self, operation_id: str) -> bool:
+    def _remove_from_cache_unlocked(self, operation_id: str) -> bool:
         """
-        Remove an operation from the cache.
+        Remove an operation from the cache (internal, caller must hold lock).
 
         This method is called after operations finish (complete/fail/cancel) to ensure
         workers remain stateless and don't accumulate finished operations in memory.
+
+        IMPORTANT: This method does NOT acquire the lock. Callers must already hold
+        self._lock before calling this method to avoid race conditions.
+
+        Args:
+            operation_id: Operation identifier to remove
+
+        Returns:
+            True if operation was removed, False if it wasn't found
+        """
+        if operation_id not in self._cache:
+            logger.debug(f"Operation {operation_id} not in cache, nothing to remove")
+            return False
+
+        # Remove from cache
+        del self._cache[operation_id]
+
+        # Clean up any remaining references
+        if operation_id in self._operation_tasks:
+            del self._operation_tasks[operation_id]
+
+        if operation_id in self._local_bridges:
+            del self._local_bridges[operation_id]
+
+        if operation_id in self._metrics_cursors:
+            del self._metrics_cursors[operation_id]
+
+        if operation_id in self._remote_proxies:
+            del self._remote_proxies[operation_id]
+
+        if operation_id in self._last_refresh:
+            del self._last_refresh[operation_id]
+
+        logger.debug(
+            f"Removed operation {operation_id} from cache and cleaned up references"
+        )
+        return True
+
+    async def remove_from_cache(self, operation_id: str) -> bool:
+        """
+        Remove an operation from the cache (public, acquires lock).
+
+        This is the public API for external callers who need to remove an operation
+        from cache. For internal use within methods that already hold the lock,
+        use _remove_from_cache_unlocked() instead.
 
         Args:
             operation_id: Operation identifier to remove
@@ -1332,31 +1386,7 @@ class OperationsService:
             True if operation was removed, False if it wasn't found
         """
         async with self._lock:
-            if operation_id not in self._cache:
-                logger.debug(f"Operation {operation_id} not in cache, nothing to remove")
-                return False
-
-            # Remove from cache
-            del self._cache[operation_id]
-
-            # Clean up any remaining references
-            if operation_id in self._operation_tasks:
-                del self._operation_tasks[operation_id]
-
-            if operation_id in self._local_bridges:
-                del self._local_bridges[operation_id]
-
-            if operation_id in self._metrics_cursors:
-                del self._metrics_cursors[operation_id]
-
-            if operation_id in self._remote_proxies:
-                del self._remote_proxies[operation_id]
-
-            if operation_id in self._last_refresh:
-                del self._last_refresh[operation_id]
-
-            logger.debug(f"Removed operation {operation_id} from cache and cleaned up references")
-            return True
+            return self._remove_from_cache_unlocked(operation_id)
 
     def register_local_bridge(self, operation_id: str, bridge: Any) -> None:
         """

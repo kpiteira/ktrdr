@@ -465,3 +465,244 @@ class TestOperationsServiceCacheNaming:
         # Verify _cache exists and is a dict
         assert hasattr(service, "_cache")
         assert isinstance(service._cache, dict)
+
+
+class TestOperationsServiceCacheCleanup:
+    """Test that cache is cleaned up after operations complete (Issue #136).
+
+    Workers should remain stateless - finished operations are removed from cache
+    but remain retrievable from the repository (database).
+    """
+
+    @pytest.mark.asyncio
+    async def test_complete_operation_removes_from_cache_with_repository(
+        self, mock_repository, sample_metadata
+    ):
+        """complete_operation removes operation from cache when repository is configured.
+
+        This ensures workers remain stateless after operations finish.
+        The operation should still be retrievable from the repository.
+        """
+        service = OperationsService(repository=mock_repository)
+
+        # Create operation in cache
+        operation = OperationInfo(
+            operation_id="op_cache_cleanup_complete",
+            operation_type=OperationType.TRAINING,
+            status=OperationStatus.RUNNING,
+            created_at=datetime.now(timezone.utc),
+            metadata=sample_metadata,
+            progress=OperationProgress(percentage=50.0),
+        )
+        service._cache["op_cache_cleanup_complete"] = operation
+
+        # Complete the operation
+        await service.complete_operation("op_cache_cleanup_complete", {"result": "ok"})
+
+        # Verify operation was removed from cache
+        assert "op_cache_cleanup_complete" not in service._cache
+
+        # Verify repository.update was called to persist final state
+        mock_repository.update.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_fail_operation_removes_from_cache_with_repository(
+        self, mock_repository, sample_metadata
+    ):
+        """fail_operation removes operation from cache when repository is configured."""
+        service = OperationsService(repository=mock_repository)
+
+        # Create operation in cache
+        operation = OperationInfo(
+            operation_id="op_cache_cleanup_fail",
+            operation_type=OperationType.TRAINING,
+            status=OperationStatus.RUNNING,
+            created_at=datetime.now(timezone.utc),
+            metadata=sample_metadata,
+            progress=OperationProgress(percentage=50.0),
+        )
+        service._cache["op_cache_cleanup_fail"] = operation
+
+        # Fail the operation
+        await service.fail_operation("op_cache_cleanup_fail", "Test failure")
+
+        # Verify operation was removed from cache
+        assert "op_cache_cleanup_fail" not in service._cache
+
+    @pytest.mark.asyncio
+    async def test_cancel_operation_removes_from_cache_with_repository(
+        self, mock_repository, sample_metadata
+    ):
+        """cancel_operation removes operation from cache when repository is configured."""
+        service = OperationsService(repository=mock_repository)
+
+        # Create operation in cache
+        operation = OperationInfo(
+            operation_id="op_cache_cleanup_cancel",
+            operation_type=OperationType.TRAINING,
+            status=OperationStatus.RUNNING,
+            created_at=datetime.now(timezone.utc),
+            metadata=sample_metadata,
+            progress=OperationProgress(percentage=50.0),
+        )
+        service._cache["op_cache_cleanup_cancel"] = operation
+
+        # Cancel the operation
+        await service.cancel_operation("op_cache_cleanup_cancel", "User requested")
+
+        # Verify operation was removed from cache
+        assert "op_cache_cleanup_cancel" not in service._cache
+
+    @pytest.mark.asyncio
+    async def test_cache_cleanup_removes_all_related_data_structures(
+        self, mock_repository, sample_metadata
+    ):
+        """Cache cleanup should remove all related data (bridges, proxies, cursors, etc.)."""
+        service = OperationsService(repository=mock_repository)
+
+        operation_id = "op_full_cleanup_test"
+
+        # Create operation in cache
+        operation = OperationInfo(
+            operation_id=operation_id,
+            operation_type=OperationType.TRAINING,
+            status=OperationStatus.RUNNING,
+            created_at=datetime.now(timezone.utc),
+            metadata=sample_metadata,
+            progress=OperationProgress(percentage=50.0),
+        )
+        service._cache[operation_id] = operation
+
+        # Simulate related data structures being populated
+        # Create a properly configured mock bridge that returns expected structures
+        mock_bridge = MagicMock()
+        mock_bridge.get_status.return_value = {"percentage": 100.0, "message": "Done"}
+        mock_bridge.get_metrics.return_value = ([], 0)  # (metrics_list, cursor)
+
+        service._local_bridges[operation_id] = mock_bridge
+        service._metrics_cursors[operation_id] = 0
+        service._remote_proxies[operation_id] = (MagicMock(), "host_op_123")
+        service._last_refresh[operation_id] = 0
+
+        # Complete the operation (should clean up everything)
+        await service.complete_operation(operation_id, {"result": "ok"})
+
+        # Verify ALL related data was cleaned up
+        assert operation_id not in service._cache
+        assert operation_id not in service._local_bridges
+        assert operation_id not in service._metrics_cursors
+        assert operation_id not in service._remote_proxies
+        assert operation_id not in service._last_refresh
+
+    @pytest.mark.asyncio
+    async def test_complete_operation_keeps_cache_without_repository(
+        self, sample_metadata
+    ):
+        """Without repository, complete_operation keeps operation in cache.
+
+        This maintains backward compatibility for tests and cache-only deployments.
+        """
+        service = OperationsService()  # No repository
+
+        # Create operation in cache
+        operation = OperationInfo(
+            operation_id="op_no_repo_complete",
+            operation_type=OperationType.TRAINING,
+            status=OperationStatus.RUNNING,
+            created_at=datetime.now(timezone.utc),
+            metadata=sample_metadata,
+            progress=OperationProgress(percentage=50.0),
+        )
+        service._cache["op_no_repo_complete"] = operation
+
+        # Complete the operation
+        await service.complete_operation("op_no_repo_complete", {"result": "ok"})
+
+        # Verify operation is STILL in cache (no repository to fall back to)
+        assert "op_no_repo_complete" in service._cache
+        assert service._cache["op_no_repo_complete"].status == OperationStatus.COMPLETED
+
+    @pytest.mark.asyncio
+    async def test_get_operation_retrieves_from_repository_after_cache_cleanup(
+        self, mock_repository, sample_metadata
+    ):
+        """After cache cleanup, get_operation should retrieve from repository."""
+        # Set up mock repository to return the operation on get()
+        completed_operation = OperationInfo(
+            operation_id="op_retrieve_from_db",
+            operation_type=OperationType.TRAINING,
+            status=OperationStatus.COMPLETED,
+            created_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(timezone.utc),
+            metadata=sample_metadata,
+            progress=OperationProgress(percentage=100.0),
+            result_summary={"result": "ok"},
+        )
+        mock_repository.get.return_value = completed_operation
+
+        service = OperationsService(repository=mock_repository)
+
+        # Create operation in cache
+        operation = OperationInfo(
+            operation_id="op_retrieve_from_db",
+            operation_type=OperationType.TRAINING,
+            status=OperationStatus.RUNNING,
+            created_at=datetime.now(timezone.utc),
+            metadata=sample_metadata,
+            progress=OperationProgress(percentage=50.0),
+        )
+        service._cache["op_retrieve_from_db"] = operation
+
+        # Complete the operation (removes from cache)
+        await service.complete_operation("op_retrieve_from_db", {"result": "ok"})
+
+        # Verify removed from cache
+        assert "op_retrieve_from_db" not in service._cache
+
+        # Now retrieve - should come from repository
+        retrieved = await service.get_operation("op_retrieve_from_db")
+
+        # Verify we got the operation from repository
+        mock_repository.get.assert_called_with("op_retrieve_from_db")
+        assert retrieved is completed_operation
+        assert retrieved.status == OperationStatus.COMPLETED
+
+    @pytest.mark.asyncio
+    async def test_public_remove_from_cache_method_acquires_lock(
+        self, mock_repository, sample_metadata
+    ):
+        """Public remove_from_cache() method should work for external callers."""
+        service = OperationsService(repository=mock_repository)
+
+        operation_id = "op_public_remove"
+
+        # Create operation in cache
+        operation = OperationInfo(
+            operation_id=operation_id,
+            operation_type=OperationType.TRAINING,
+            status=OperationStatus.COMPLETED,
+            created_at=datetime.now(timezone.utc),
+            metadata=sample_metadata,
+            progress=OperationProgress(percentage=100.0),
+        )
+        service._cache[operation_id] = operation
+
+        # Call public method (should work without deadlock)
+        result = await service.remove_from_cache(operation_id)
+
+        # Verify it worked
+        assert result is True
+        assert operation_id not in service._cache
+
+    @pytest.mark.asyncio
+    async def test_remove_from_cache_returns_false_for_missing_operation(
+        self, mock_repository
+    ):
+        """remove_from_cache returns False when operation not in cache."""
+        service = OperationsService(repository=mock_repository)
+
+        # Try to remove non-existent operation
+        result = await service.remove_from_cache("nonexistent_op")
+
+        # Should return False (nothing to remove)
+        assert result is False
