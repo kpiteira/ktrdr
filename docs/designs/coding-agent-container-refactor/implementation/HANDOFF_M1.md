@@ -14,8 +14,20 @@
 - Tests in `test_sandbox.py` will fail until Task 1.2 updates them
 - Git recognizes rename (history preserved)
 
-### Next Task Notes (1.2)
-- Rename `tests/test_sandbox.py` → `tests/test_coding_agent_container.py`
-- Update all imports from `orchestrator.sandbox` to `orchestrator.coding_agent_container`
-- Update class names: `TestSandboxManagerStructure` → `TestCodingAgentContainerStructure`
-- Search and replace: `SandboxManager` → `CodingAgentContainer`, `SandboxError` → `CodingAgentError`
+---
+
+## Task 1.2 Complete: Rename test file
+
+**Summary:** Test file renamed and all references updated. All 30 tests pass.
+
+### Changes Made
+- `tests/test_sandbox.py` → `tests/test_coding_agent_container.py`
+- All imports updated to `orchestrator.coding_agent_container`
+- Test class names updated: `TestSandboxExec` → `TestCodingAgentContainerExec`, etc.
+- All `SandboxManager`/`SandboxError` references updated
+
+### Next Task Notes (1.3)
+- Update `orchestrator/runner.py`
+- Change import on line ~30
+- Update function parameters from `sandbox: SandboxManager` to `container: CodingAgentContainer`
+- Update all usages of `sandbox.` to `container.`
