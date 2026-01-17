@@ -37,7 +37,7 @@ Running notes for M3 CLI restructure implementation.
 ### Emergent Patterns
 
 - **Subcommand-only approach works best:** When a command has both default behavior AND subcommands, make everything explicit subcommands. Don't mix callback positional args with subcommands.
-- **Feature resolution is local-only:** The `/strategies/{name}/features` API endpoint doesn't exist. Features command uses local file loading via `StrategyConfigurationLoader().load_v3_strategy()` and `FeatureResolver().resolve()`.
+- **API endpoint created for features:** Added `GET /strategies/{name}/features` endpoint that uses `FeatureResolver` to resolve and return features. CLI is now properly thin and calls this endpoint.
 
 ### Next Task Notes
 
