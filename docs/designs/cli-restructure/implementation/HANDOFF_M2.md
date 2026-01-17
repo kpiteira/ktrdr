@@ -4,6 +4,31 @@ Running notes for M2 CLI restructure implementation.
 
 ---
 
+## ⚠️ CRITICAL: Do NOT Reimplement From Scratch
+
+**Before writing any new command, READ the existing working code first:**
+
+1. **Find existing code that does similar things:**
+   - `agent_commands.py` - async API calls with `AsyncCLIClient`
+   - `operations_commands.py` - sync API calls with `SyncCLIClient`
+   - `sandbox_gate.py` - defensive response handling patterns
+
+2. **Copy patterns exactly from working code, not from design docs:**
+   - Design docs show idealized patterns that may not match reality
+   - Existing code has battle-tested handling for edge cases
+   - Check actual API endpoint implementations for response formats
+
+3. **Key patterns to copy:**
+   - `AsyncCLIClient()` without `base_url` parameter
+   - Public methods `get()`, `post()` not private `_make_request()`
+   - Response handling that matches actual API (some wrap in `{"data": ...}`, some don't)
+
+4. **Verify with real backend, not just unit tests:**
+   - Unit tests with mocks can both be wrong
+   - Run `ktrdr <command>` against running backend to confirm
+
+---
+
 ## Task 2.1 Complete: Implement Backtest Command
 
 ### Gotchas
