@@ -167,14 +167,14 @@ class TestRunTask:
     """Test run_task function behavior."""
 
     @pytest.mark.asyncio
-    async def test_invokes_sandbox_with_prompt(self):
-        """run_task should invoke sandbox with constructed prompt."""
+    async def test_invokes_container_with_prompt(self):
+        """run_task should invoke container with constructed prompt."""
         from orchestrator.runner import run_task
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("Task completed")
         )
 
@@ -182,10 +182,10 @@ class TestRunTask:
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            await run_task(task, sandbox, config, task.plan_file)
+            await run_task(task, container, config, task.plan_file)
 
-        sandbox.invoke_claude.assert_called_once()
-        call_args = sandbox.invoke_claude.call_args
+        container.invoke_claude.assert_called_once()
+        call_args = container.invoke_claude.call_args
         prompt = call_args[1]["prompt"]
         assert task.id in prompt
 
@@ -196,8 +196,8 @@ class TestRunTask:
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
-        sandbox.invoke_claude_streaming = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude_streaming = AsyncMock(
             return_value=make_claude_result("Task completed")
         )
 
@@ -208,9 +208,9 @@ class TestRunTask:
             pass
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            await run_task(task, sandbox, config, task.plan_file, on_tool_use=callback)
+            await run_task(task, container, config, task.plan_file, on_tool_use=callback)
 
-        sandbox.invoke_claude_streaming.assert_called_once()
+        container.invoke_claude_streaming.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_interprets_result_with_brain(self):
@@ -219,8 +219,8 @@ class TestRunTask:
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("Task completed successfully")
         )
 
@@ -230,7 +230,7 @@ class TestRunTask:
         )
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            result = await run_task(task, sandbox, config, task.plan_file)
+            result = await run_task(task, container, config, task.plan_file)
 
         mock_brain.interpret_result.assert_called_once_with("Task completed successfully")
         assert result.status == "completed"
@@ -242,8 +242,8 @@ class TestRunTask:
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(return_value=make_claude_result("Need help"))
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(return_value=make_claude_result("Need help"))
 
         mock_brain = MagicMock()
         mock_brain.interpret_result.return_value = make_interpretation_result(
@@ -254,7 +254,7 @@ class TestRunTask:
         )
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            result = await run_task(task, sandbox, config, task.plan_file)
+            result = await run_task(task, container, config, task.plan_file)
 
         assert result.status == "needs_human"
         assert result.question == "Which option?"
@@ -266,8 +266,8 @@ class TestRunTask:
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("Done", cost=0.05)
         )
 
@@ -275,28 +275,28 @@ class TestRunTask:
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            result = await run_task(task, sandbox, config, task.plan_file)
+            result = await run_task(task, container, config, task.plan_file)
 
         assert result.cost_usd == 0.05
         assert result.task_id == task.id
 
     @pytest.mark.asyncio
-    async def test_passes_model_to_sandbox(self):
-        """run_task should pass model parameter to sandbox."""
+    async def test_passes_model_to_container(self):
+        """run_task should pass model parameter to container."""
         from orchestrator.runner import run_task
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(return_value=make_claude_result("Done"))
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(return_value=make_claude_result("Done"))
 
         mock_brain = MagicMock()
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            await run_task(task, sandbox, config, task.plan_file, model="opus")
+            await run_task(task, container, config, task.plan_file, model="opus")
 
-        call_args = sandbox.invoke_claude.call_args
+        call_args = container.invoke_claude.call_args
         assert call_args[1]["model"] == "opus"
 
     @pytest.mark.asyncio
@@ -306,18 +306,18 @@ class TestRunTask:
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(return_value=make_claude_result("Done"))
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(return_value=make_claude_result("Done"))
 
         mock_brain = MagicMock()
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
             await run_task(
-                task, sandbox, config, task.plan_file, session_id="prev-session"
+                task, container, config, task.plan_file, session_id="prev-session"
             )
 
-        call_args = sandbox.invoke_claude.call_args
+        call_args = container.invoke_claude.call_args
         assert call_args[1]["session_id"] == "prev-session"
 
 
@@ -372,8 +372,8 @@ class TestRunE2ETestsInRunner:
         """Should invoke Claude with E2E scenario."""
         from orchestrator.runner import run_e2e_tests
 
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("E2E tests completed")
         )
         config = OrchestratorConfig()
@@ -394,13 +394,13 @@ class TestRunE2ETestsInRunner:
             await run_e2e_tests(
                 milestone_id="M5",
                 e2e_scenario="Run pytest tests/",
-                sandbox=sandbox,
+                container=container,
                 config=config,
                 tracer=tracer,
             )
 
-        sandbox.invoke_claude.assert_called_once()
-        call_kwargs = sandbox.invoke_claude.call_args[1]
+        container.invoke_claude.assert_called_once()
+        call_kwargs = container.invoke_claude.call_args[1]
         assert "pytest tests/" in call_kwargs["prompt"]
         assert "M5" in call_kwargs["prompt"]
 
@@ -409,8 +409,8 @@ class TestRunE2ETestsInRunner:
         """Should use HaikuBrain for E2E result interpretation."""
         from orchestrator.runner import run_e2e_tests
 
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("All tests pass ✓")
         )
         config = OrchestratorConfig()
@@ -431,7 +431,7 @@ class TestRunE2ETestsInRunner:
             result = await run_e2e_tests(
                 milestone_id="M5",
                 e2e_scenario="Test scenario",
-                sandbox=sandbox,
+                container=container,
                 config=config,
                 tracer=tracer,
             )
@@ -445,8 +445,8 @@ class TestRunE2ETestsInRunner:
         """Should map HaikuBrain 'completed' status to E2E 'passed'."""
         from orchestrator.runner import run_e2e_tests
 
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(return_value=make_claude_result("Done"))
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(return_value=make_claude_result("Done"))
         config = OrchestratorConfig()
         tracer = MagicMock()
         tracer.start_as_current_span.return_value.__enter__ = MagicMock(
@@ -465,7 +465,7 @@ class TestRunE2ETestsInRunner:
             result = await run_e2e_tests(
                 milestone_id="M5",
                 e2e_scenario="Test",
-                sandbox=sandbox,
+                container=container,
                 config=config,
                 tracer=tracer,
             )
@@ -477,8 +477,8 @@ class TestRunE2ETestsInRunner:
         """Should map HaikuBrain 'failed' status to E2E 'failed'."""
         from orchestrator.runner import run_e2e_tests
 
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("Error: test failed")
         )
         config = OrchestratorConfig()
@@ -499,7 +499,7 @@ class TestRunE2ETestsInRunner:
             result = await run_e2e_tests(
                 milestone_id="M5",
                 e2e_scenario="Test",
-                sandbox=sandbox,
+                container=container,
                 config=config,
                 tracer=tracer,
             )
@@ -512,8 +512,8 @@ class TestRunE2ETestsInRunner:
         """Should map HaikuBrain 'needs_help' status to E2E 'unclear'."""
         from orchestrator.runner import run_e2e_tests
 
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("I'm not sure what to do")
         )
         config = OrchestratorConfig()
@@ -534,7 +534,7 @@ class TestRunE2ETestsInRunner:
             result = await run_e2e_tests(
                 milestone_id="M5",
                 e2e_scenario="Test",
-                sandbox=sandbox,
+                container=container,
                 config=config,
                 tracer=tracer,
             )
@@ -546,8 +546,8 @@ class TestRunE2ETestsInRunner:
         """Should record execution duration in result."""
         from orchestrator.runner import run_e2e_tests
 
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(return_value=make_claude_result("Done"))
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(return_value=make_claude_result("Done"))
         config = OrchestratorConfig()
         tracer = MagicMock()
         tracer.start_as_current_span.return_value.__enter__ = MagicMock(
@@ -564,7 +564,7 @@ class TestRunE2ETestsInRunner:
             result = await run_e2e_tests(
                 milestone_id="M5",
                 e2e_scenario="Test",
-                sandbox=sandbox,
+                container=container,
                 config=config,
                 tracer=tracer,
             )
@@ -586,8 +586,8 @@ class TestApplyE2EFixInRunner:
         """Should invoke Claude with fix plan."""
         from orchestrator.runner import apply_e2e_fix
 
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("FIX_APPLIED: yes")
         )
         config = OrchestratorConfig()
@@ -601,13 +601,13 @@ class TestApplyE2EFixInRunner:
 
         await apply_e2e_fix(
             fix_plan="Add 'app.include_router(new_router)' to main.py",
-            sandbox=sandbox,
+            container=container,
             config=config,
             tracer=tracer,
         )
 
-        sandbox.invoke_claude.assert_called_once()
-        call_kwargs = sandbox.invoke_claude.call_args[1]
+        container.invoke_claude.assert_called_once()
+        call_kwargs = container.invoke_claude.call_args[1]
         assert "app.include_router" in call_kwargs["prompt"]
 
     @pytest.mark.asyncio
@@ -615,8 +615,8 @@ class TestApplyE2EFixInRunner:
         """Should return True when fix is applied successfully."""
         from orchestrator.runner import apply_e2e_fix
 
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("Fix complete.\n\nFIX_APPLIED: yes")
         )
         config = OrchestratorConfig()
@@ -630,7 +630,7 @@ class TestApplyE2EFixInRunner:
 
         result = await apply_e2e_fix(
             fix_plan="Add router to main.py",
-            sandbox=sandbox,
+            container=container,
             config=config,
             tracer=tracer,
         )
@@ -642,8 +642,8 @@ class TestApplyE2EFixInRunner:
         """Should return False when fix cannot be applied."""
         from orchestrator.runner import apply_e2e_fix
 
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("FIX_APPLIED: no\nREASON: File not found")
         )
         config = OrchestratorConfig()
@@ -657,7 +657,7 @@ class TestApplyE2EFixInRunner:
 
         result = await apply_e2e_fix(
             fix_plan="Add router to main.py",
-            sandbox=sandbox,
+            container=container,
             config=config,
             tracer=tracer,
         )

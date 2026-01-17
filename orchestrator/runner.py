@@ -2,7 +2,7 @@
 
 This module is the single coordination point for task execution.
 Handles task execution by constructing prompts, invoking Claude Code
-in the sandbox, and parsing structured output using HaikuBrain.
+in the coding agent container, and parsing structured output using HaikuBrain.
 
 Consolidation notes (M4):
 - Task execution moved from task_runner.py (Task 4.1)
@@ -27,7 +27,7 @@ from orchestrator.config import OrchestratorConfig
 from orchestrator.discord_notifier import format_escalation_needed, send_discord_message
 from orchestrator.models import Task, TaskResult
 from orchestrator.notifications import send_notification
-from orchestrator.sandbox import SandboxManager
+from orchestrator.coding_agent_container import CodingAgentContainer
 
 # Console for output
 console = Console()
@@ -358,7 +358,7 @@ async def escalate_and_wait(
 
 async def run_task(
     task: Task,
-    sandbox: SandboxManager,
+    container: CodingAgentContainer,
     config: OrchestratorConfig,
     plan_path: str,
     human_guidance: str | None = None,
@@ -366,11 +366,11 @@ async def run_task(
     model: str | None = None,
     session_id: str | None = None,
 ) -> TaskResult:
-    """Execute a task via Claude Code in the sandbox.
+    """Execute a task via Claude Code in the coding agent container.
 
     Args:
         task: The task to execute
-        sandbox: Sandbox manager for Claude invocation
+        container: Coding agent container for Claude invocation
         config: Orchestrator configuration
         plan_path: Path to the milestone plan file (for /ktask invocation)
         human_guidance: Optional guidance from human (for retry after escalation)
@@ -390,7 +390,7 @@ async def run_task(
 
     if on_tool_use is not None:
         # Use streaming mode for real-time progress
-        claude_result = await sandbox.invoke_claude_streaming(
+        claude_result = await container.invoke_claude_streaming(
             prompt=prompt,
             on_tool_use=on_tool_use,
             max_turns=config.max_turns,
@@ -400,7 +400,7 @@ async def run_task(
         )
     else:
         # Use standard mode (no streaming)
-        claude_result = await sandbox.invoke_claude(
+        claude_result = await container.invoke_claude(
             prompt=prompt,
             max_turns=config.max_turns,
             timeout=config.task_timeout_seconds,
@@ -470,7 +470,7 @@ def _estimate_tokens(cost_usd: float) -> int:
 
 async def run_task_with_escalation(
     task: Task,
-    sandbox: SandboxManager,
+    container: CodingAgentContainer,
     config: OrchestratorConfig,
     plan_path: str,
     tracer: trace.Tracer,
@@ -488,7 +488,7 @@ async def run_task_with_escalation(
 
     Args:
         task: The task to execute
-        sandbox: Sandbox manager for Claude invocation
+        container: Coding agent container for Claude invocation
         config: Orchestrator configuration
         plan_path: Path to the milestone plan file
         tracer: OpenTelemetry tracer for creating spans
@@ -506,7 +506,7 @@ async def run_task_with_escalation(
     while True:
         # Execute the task
         result = await run_task(
-            task, sandbox, config, plan_path, guidance, on_tool_use, model, session_id
+            task, container, config, plan_path, guidance, on_tool_use, model, session_id
         )
 
         # Track session for continuation after escalation
@@ -642,7 +642,7 @@ class E2EResult:
 async def run_e2e_tests(
     milestone_id: str,
     e2e_scenario: str,
-    sandbox: SandboxManager,
+    container: CodingAgentContainer,
     config: OrchestratorConfig,
     tracer: trace.Tracer,
 ) -> E2EResult:
@@ -654,7 +654,7 @@ async def run_e2e_tests(
     Args:
         milestone_id: Identifier for the milestone being tested
         e2e_scenario: The E2E test scenario text (from plan markdown)
-        sandbox: Sandbox manager for Claude invocation
+        container: Coding agent container for Claude invocation
         config: Orchestrator configuration
         tracer: OpenTelemetry tracer for creating spans
 
@@ -667,7 +667,7 @@ async def run_e2e_tests(
         span.set_attribute("milestone.id", milestone_id)
 
         start_time = time.time()
-        claude_result = await sandbox.invoke_claude(
+        claude_result = await container.invoke_claude(
             prompt=prompt,
             max_turns=30,  # E2E tests need fewer turns than full tasks
             timeout=config.task_timeout_seconds,
@@ -768,7 +768,7 @@ def _extract_fix_plan(output: str) -> str | None:
 
 async def apply_e2e_fix(
     fix_plan: str,
-    sandbox: SandboxManager,
+    container: CodingAgentContainer,
     config: OrchestratorConfig,
     tracer: trace.Tracer,
 ) -> bool:
@@ -779,7 +779,7 @@ async def apply_e2e_fix(
 
     Args:
         fix_plan: The fix plan text from E2E failure analysis
-        sandbox: Sandbox manager for Claude invocation
+        container: Coding agent container for Claude invocation
         config: Orchestrator configuration (unused but kept for consistency)
         tracer: OpenTelemetry tracer for creating spans
 
@@ -791,7 +791,7 @@ async def apply_e2e_fix(
     with tracer.start_as_current_span("orchestrator.e2e_fix") as span:
         span.set_attribute("fix.plan", fix_plan[:200])
 
-        result = await sandbox.invoke_claude(
+        result = await container.invoke_claude(
             prompt=prompt,
             max_turns=20,
             timeout=300,

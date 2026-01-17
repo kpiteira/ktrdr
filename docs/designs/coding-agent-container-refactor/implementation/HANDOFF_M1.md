@@ -26,8 +26,22 @@
 - Test class names updated: `TestSandboxExec` → `TestCodingAgentContainerExec`, etc.
 - All `SandboxManager`/`SandboxError` references updated
 
-### Next Task Notes (1.3)
-- Update `orchestrator/runner.py`
-- Change import on line ~30
-- Update function parameters from `sandbox: SandboxManager` to `container: CodingAgentContainer`
-- Update all usages of `sandbox.` to `container.`
+---
+
+## Task 1.3 Complete: Update orchestrator/runner.py imports
+
+**Summary:** Updated imports and all parameter/variable names. Also updated test_runner.py to match. 44 tests pass.
+
+### Changes Made
+- Import: `orchestrator.sandbox.SandboxManager` → `orchestrator.coding_agent_container.CodingAgentContainer`
+- 4 functions updated: `run_task`, `run_task_with_escalation`, `run_e2e_tests`, `apply_e2e_fix`
+- Parameter names: `sandbox: SandboxManager` → `container: CodingAgentContainer`
+- All `sandbox.invoke_claude*` calls → `container.invoke_claude*`
+- Module docstring updated
+
+### Gotcha
+- **test_runner.py also needed updates** - the tests use keyword arguments (`sandbox=`) and variable names (`sandbox = MagicMock()`) that needed changing to `container`
+
+### Next Task Notes (1.4)
+- Update `orchestrator/milestone_runner.py`
+- Similar pattern: import, instantiation, function parameters, usages
