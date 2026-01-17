@@ -104,3 +104,30 @@ This violates DRY and is error-prone (can get out of sync).
 
 - Task 3.5 wires up all M3 commands. Migrate command uses `cli_app.command("migrate")(migrate_cmd)` (same pattern as validate).
 - All M3 commands now implemented: list_app, show_app, validate_cmd, migrate_cmd.
+
+---
+
+## Task 3.5 Complete: Wire Up Information Commands
+
+### Gotchas
+
+- **M3 commands were already wired up:** Tasks 3.1-3.4 each wired up their commands in both `app.py` (test entry point) and `__init__.py` (actual CLI entry point). Task 3.5 just needed to verify and add tests.
+- **Test pollution was the real issue:** Tests in `test_list_cmd.py`, `test_show.py`, `test_validate.py`, and `test_migrate.py` manually register commands with `add_typer()` or `app.command()`, then remove them in cleanup. This removes the commands that were already registered at module import time.
+- **autouse fixture needed for restoration:** Added `_restore_m3_commands()` function in `conftest.py` that restores all M3 commands if they were removed by a test.
+
+### Emergent Patterns
+
+- **Test isolation via autouse fixture:** The `cleanup_app_commands` autouse fixture in `tests/unit/cli/conftest.py` now:
+  1. Removes known test-only commands (test-cmd, capture-*, etc.)
+  2. Restores M3 commands (list, show, validate, migrate) if they were removed
+  3. Runs both before AND after each test to handle pollution from previous tests
+
+### Files Changed
+
+- `tests/unit/cli/test_app.py`: Added `TestM3CommandsRegistration` class with 5 tests
+- `tests/unit/cli/conftest.py`: Added `_cleanup_test_commands()`, `_restore_m3_commands()`, enhanced `cleanup_app_commands` fixture
+
+### Next Task Notes
+
+- M3 is complete. The M3 E2E validation test should be run to verify all commands work end-to-end with the backend.
+- M4 will implement alias commands and deprecation notices for old command paths.
