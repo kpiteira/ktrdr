@@ -23,13 +23,16 @@ Running notes for M2 CLI restructure implementation.
 ## Task 2.2 Complete: Implement Research Command
 
 ### Gotchas
-- **AsyncCLIClient uses `json=` not `json_data=`:** The `_make_request()` method takes `json` as keyword argument, not `json_data`. MyPy caught this type error.
+- **CRITICAL: Use `AsyncCLIClient()` without base_url:** Do NOT pass `base_url=state.api_url`. The `resolve_url()` function auto-appends `/api/v1` only when no explicit URL is passed to the client. Passing `base_url` bypasses this and causes 404 errors.
+- **CRITICAL: Use public methods `get()` and `post()`, not `_make_request()`:** The existing CLI code uses the public convenience methods, not the private method. Copy existing patterns from `agent_commands.py` and `operations_commands.py`.
+- **AsyncCLIClient uses `json=` not `json_data=`:** The `post()` method takes `json` as keyword argument, not `json_data`. MyPy caught this type error.
 - **Import from agent_commands.py for monitoring:** The `_monitor_agent_cycle` function is reused directly from `ktrdr.cli.agent_commands` to preserve the nested progress bar UX.
 
 ### Emergent Patterns
 - **Different pattern than train/backtest:** Research command uses async pattern (`asyncio.run()`) + direct API calls instead of OperationRunner. This is because agent operations have special nested progress display that's already implemented in `_monitor_agent_cycle()`.
 - **Fire-and-forget uses `print_operation_started()`:** The output module provides standardized operation start messages with follow-up hints.
 - **Test mocking for async context managers:** Tests use `AsyncMock()` and set up `__aenter__` / `__aexit__` returns on mock client.
+- **Test assertions for client methods:** When testing `client.get()` calls, assert on `calls[0][0] == ("/endpoint",)` not `calls[0][0] == ("GET", "/endpoint")` since the HTTP method is implicit.
 
 ### Next Task Notes
 - Task 2.3 (status command) will follow similar async pattern with `asyncio.run()`.

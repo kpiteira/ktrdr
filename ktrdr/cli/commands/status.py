@@ -50,16 +50,16 @@ def status(
 
 async def _show_dashboard(state: CLIState) -> None:
     """Show system dashboard with operations and workers summary."""
-    async with AsyncCLIClient(base_url=state.api_url) as client:
+    async with AsyncCLIClient() as client:
         # Fetch operations
-        ops_result = await client._make_request("GET", "/operations")
+        ops_result = await client.get("/operations")
         ops = ops_result.get("data", [])
 
         running = len([o for o in ops if o.get("status") == "running"])
         completed = len([o for o in ops if o.get("status") == "completed"])
 
         # Fetch workers
-        workers_result = await client._make_request("GET", "/workers")
+        workers_result = await client.get("/workers")
         workers = workers_result.get("data", {}).get("workers", [])
 
     if state.json_mode:
@@ -78,8 +78,8 @@ async def _show_dashboard(state: CLIState) -> None:
 
 async def _show_operation_status(state: CLIState, operation_id: str) -> None:
     """Show specific operation status."""
-    async with AsyncCLIClient(base_url=state.api_url) as client:
-        result = await client._make_request("GET", f"/operations/{operation_id}")
+    async with AsyncCLIClient() as client:
+        result = await client.get(f"/operations/{operation_id}")
 
     op = result.get("data", {})
 

@@ -40,7 +40,7 @@ class TestStatusDashboard:
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
                 # Dashboard fetches operations and workers
-                mock_client._make_request.side_effect = [
+                mock_client.get.side_effect = [
                     {
                         "data": [
                             {"status": "running"},
@@ -76,7 +76,7 @@ class TestStatusDashboard:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
-                mock_client._make_request.side_effect = [
+                mock_client.get.side_effect = [
                     {"data": []},
                     {"data": {"workers": []}},
                 ]
@@ -85,10 +85,10 @@ class TestStatusDashboard:
                 runner.invoke(app, ["status"])
 
                 # Should have made two API calls
-                assert mock_client._make_request.call_count == 2
-                calls = mock_client._make_request.call_args_list
-                assert calls[0][0] == ("GET", "/operations")
-                assert calls[1][0] == ("GET", "/workers")
+                assert mock_client.get.call_count == 2
+                calls = mock_client.get.call_args_list
+                assert calls[0][0] == ("/operations",)
+                assert calls[1][0] == ("/workers",)
 
         finally:
             app.registered_commands = [
@@ -107,7 +107,7 @@ class TestStatusDashboard:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
-                mock_client._make_request.side_effect = [
+                mock_client.get.side_effect = [
                     {"data": [{"status": "running"}]},
                     {"data": {"workers": [{"id": "w1"}]}},
                 ]
@@ -144,7 +144,7 @@ class TestStatusOperation:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
-                mock_client._make_request.return_value = {
+                mock_client.get.return_value = {
                     "data": {
                         "operation_id": "op_test123",
                         "operation_type": "training",
@@ -177,7 +177,7 @@ class TestStatusOperation:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
-                mock_client._make_request.return_value = {
+                mock_client.get.return_value = {
                     "data": {
                         "operation_id": "op_abc",
                         "operation_type": "backtest",
@@ -189,9 +189,7 @@ class TestStatusOperation:
                 runner.invoke(app, ["status", "op_abc"])
 
                 # Should have fetched the specific operation
-                mock_client._make_request.assert_called_once_with(
-                    "GET", "/operations/op_abc"
-                )
+                mock_client.get.assert_called_once_with("/operations/op_abc")
 
         finally:
             app.registered_commands = [
@@ -210,7 +208,7 @@ class TestStatusOperation:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
-                mock_client._make_request.return_value = {
+                mock_client.get.return_value = {
                     "data": {
                         "operation_id": "op_json_test",
                         "operation_type": "training",
@@ -246,7 +244,7 @@ class TestStatusOperation:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
-                mock_client._make_request.return_value = {
+                mock_client.get.return_value = {
                     "data": {
                         "operation_id": "op_progress",
                         "operation_type": "training",
@@ -282,7 +280,7 @@ class TestStatusErrors:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
-                mock_client._make_request.side_effect = Exception("Connection failed")
+                mock_client.get.side_effect = Exception("Connection failed")
                 mock_client_class.return_value = mock_client
 
                 result = runner.invoke(app, ["status"])
@@ -306,7 +304,7 @@ class TestStatusErrors:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
-                mock_client._make_request.side_effect = Exception("404 Not Found")
+                mock_client.get.side_effect = Exception("404 Not Found")
                 mock_client_class.return_value = mock_client
 
                 result = runner.invoke(app, ["status", "op_nonexistent"])

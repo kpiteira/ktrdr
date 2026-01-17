@@ -98,7 +98,7 @@ class TestResearchCommandAPI:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
-                mock_client._make_request.return_value = {
+                mock_client.post.return_value = {
                     "triggered": True,
                     "operation_id": "op_test123",
                 }
@@ -107,10 +107,9 @@ class TestResearchCommandAPI:
                 runner.invoke(app, ["research", "build momentum strategy"])
 
                 # Verify API was called
-                mock_client._make_request.assert_called_once()
-                call_args = mock_client._make_request.call_args
-                assert call_args[0][0] == "POST"
-                assert call_args[0][1] == "/agent/trigger"
+                mock_client.post.assert_called_once()
+                call_args = mock_client.post.call_args
+                assert call_args[0][0] == "/agent/trigger"
 
         finally:
             app.registered_commands = [
@@ -131,7 +130,7 @@ class TestResearchCommandAPI:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
-                mock_client._make_request.return_value = {
+                mock_client.post.return_value = {
                     "triggered": True,
                     "operation_id": "op_test123",
                 }
@@ -139,7 +138,7 @@ class TestResearchCommandAPI:
 
                 runner.invoke(app, ["research", "analyze volatility patterns"])
 
-                call_args = mock_client._make_request.call_args
+                call_args = mock_client.post.call_args
                 json = call_args[1]["json"]
                 assert json["brief"] == "analyze volatility patterns"
 
@@ -162,7 +161,7 @@ class TestResearchCommandAPI:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
-                mock_client._make_request.return_value = {
+                mock_client.post.return_value = {
                     "triggered": True,
                     "operation_id": "op_test123",
                 }
@@ -170,7 +169,7 @@ class TestResearchCommandAPI:
 
                 runner.invoke(app, ["research", "test strategy", "--model", "haiku"])
 
-                call_args = mock_client._make_request.call_args
+                call_args = mock_client.post.call_args
                 json = call_args[1]["json"]
                 assert json["model"] == "haiku"
 
@@ -193,7 +192,7 @@ class TestResearchCommandAPI:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
-                mock_client._make_request.return_value = {
+                mock_client.post.return_value = {
                     "triggered": True,
                     "operation_id": "op_test123",
                 }
@@ -201,7 +200,7 @@ class TestResearchCommandAPI:
 
                 runner.invoke(app, ["research", "test strategy", "-m", "sonnet"])
 
-                call_args = mock_client._make_request.call_args
+                call_args = mock_client.post.call_args
                 json = call_args[1]["json"]
                 assert json["model"] == "sonnet"
 
@@ -228,7 +227,7 @@ class TestResearchCommandOutput:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
-                mock_client._make_request.return_value = {
+                mock_client.post.return_value = {
                     "triggered": True,
                     "operation_id": "op_research_abc123",
                 }
@@ -258,7 +257,7 @@ class TestResearchCommandOutput:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
-                mock_client._make_request.return_value = {
+                mock_client.post.return_value = {
                     "triggered": True,
                     "operation_id": "op_test",
                 }
@@ -297,7 +296,7 @@ class TestResearchCommandFollow:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
-                mock_client._make_request.return_value = {
+                mock_client.post.return_value = {
                     "triggered": True,
                     "operation_id": "op_follow_test",
                 }
@@ -330,7 +329,7 @@ class TestResearchCommandFollow:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
-                mock_client._make_request.return_value = {
+                mock_client.post.return_value = {
                     "triggered": True,
                     "operation_id": "op_shorthand_test",
                 }
@@ -367,7 +366,7 @@ class TestResearchCommandErrors:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
-                mock_client._make_request.return_value = {
+                mock_client.post.return_value = {
                     "triggered": False,
                     "reason": "active_cycle_exists",
                 }
@@ -401,7 +400,7 @@ class TestResearchCommandErrors:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
-                mock_client._make_request.side_effect = Exception("Connection failed")
+                mock_client.post.side_effect = Exception("Connection failed")
                 mock_client_class.return_value = mock_client
 
                 result = runner.invoke(app, ["research", "test goal"])

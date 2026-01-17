@@ -71,8 +71,8 @@ async def _research_async(
     if model:
         json_data["model"] = model
 
-    async with AsyncCLIClient(base_url=state.api_url) as client:
-        result = await client._make_request("POST", "/agent/trigger", json=json_data)
+    async with AsyncCLIClient() as client:
+        result = await client.post("/agent/trigger", json=json_data)
 
     if not result.get("triggered"):
         reason = result.get("reason", "unknown")
