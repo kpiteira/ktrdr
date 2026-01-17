@@ -83,3 +83,21 @@ Running notes for M2 CLI restructure implementation.
 ### Next Task Notes
 - Task 2.4 (follow command) is similar to status but with polling loop and Rich progress display.
 - Follow command should handle Ctrl+C gracefully (detach, not cancel - user didn't start the operation).
+
+---
+
+## Task 2.4 Complete: Implement Follow Command
+
+### Gotchas
+- **Ctrl+C detaches, not cancels:** Unlike train/backtest where `--follow` + Ctrl+C cancels the operation (because user started it), the follow command detaches cleanly. User didn't start the operation, so they shouldn't be able to cancel it just by pressing Ctrl+C.
+- **KeyboardInterrupt handling at command level:** The `KeyboardInterrupt` is caught in the main `follow()` function, not in the async helper. This ensures clean exit with friendly message.
+
+### Emergent Patterns
+- **Polling loop with terminal state check:** The pattern `while True: ... if status in ("completed", "failed", "cancelled"): break` is reusable for any operation polling.
+- **Rich Progress with asyncio:** Use `with Progress(...) as progress:` inside async function, then `await asyncio.sleep()` for polling interval. Progress updates work fine with async code.
+- **Three terminal states:** Operations end in one of: `completed`, `failed`, `cancelled`. Each gets distinct user-facing message style (green/red/yellow).
+
+### Next Task Notes
+- Task 2.5 (ops command) lists all operations in a table. Similar async pattern, but no polling - single fetch + table render.
+- Task 2.6 (cancel command) is a simple DELETE request, similar to status operation mode but with DELETE verb.
+- Task 2.7 (resume command) requires checkpoint API endpoint - may need backend verification.
