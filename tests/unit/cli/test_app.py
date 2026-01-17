@@ -317,8 +317,29 @@ class TestAppHelp:
         assert "ktrdr" in result.output.lower() or "trading" in result.output.lower()
 
 
-class TestTrainCommandRegistration:
-    """Tests for train command registration in app."""
+class TestM2CommandsRegistration:
+    """Tests for all M2 commands registration in app.
+
+    M2 commands: train, backtest, research, status, follow, ops, cancel, resume
+    """
+
+    def test_all_m2_commands_registered(self, runner) -> None:
+        """All 8 M2 commands appear in --help output."""
+        from ktrdr.cli.app import app
+
+        result = runner.invoke(app, ["--help"])
+
+        assert result.exit_code == 0
+        help_lower = result.output.lower()
+        # All 8 commands should be listed
+        assert "train" in help_lower
+        assert "backtest" in help_lower
+        assert "research" in help_lower
+        assert "status" in help_lower
+        assert "follow" in help_lower
+        assert "ops" in help_lower
+        assert "cancel" in help_lower
+        assert "resume" in help_lower
 
     def test_train_command_registered(self, runner) -> None:
         """Train command appears in --help output."""
@@ -327,7 +348,6 @@ class TestTrainCommandRegistration:
         result = runner.invoke(app, ["--help"])
 
         assert result.exit_code == 0
-        # Train command should be listed in help output
         assert "train" in result.output.lower()
 
     def test_train_command_help(self, runner) -> None:
@@ -337,11 +357,81 @@ class TestTrainCommandRegistration:
         result = runner.invoke(app, ["train", "--help"])
 
         assert result.exit_code == 0
-        # runner fixture strips ANSI codes automatically
         assert "--start" in result.output
         assert "--end" in result.output
         assert "--follow" in result.output or "-f" in result.output
         assert "strategy" in result.output.lower()
+
+    def test_backtest_command_help(self, runner) -> None:
+        """Backtest command has its own help text."""
+        from ktrdr.cli.app import app
+
+        result = runner.invoke(app, ["backtest", "--help"])
+
+        assert result.exit_code == 0
+        assert "--start" in result.output
+        assert "--end" in result.output
+        assert "--capital" in result.output or "-c" in result.output
+
+    def test_research_command_help(self, runner) -> None:
+        """Research command has its own help text."""
+        from ktrdr.cli.app import app
+
+        result = runner.invoke(app, ["research", "--help"])
+
+        assert result.exit_code == 0
+        assert "--model" in result.output or "-m" in result.output
+        assert "--follow" in result.output or "-f" in result.output
+        assert "goal" in result.output.lower()
+
+    def test_status_command_help(self, runner) -> None:
+        """Status command has its own help text."""
+        from ktrdr.cli.app import app
+
+        result = runner.invoke(app, ["status", "--help"])
+
+        assert result.exit_code == 0
+        # Status takes optional operation_id
+        assert "operation" in result.output.lower() or "status" in result.output.lower()
+
+    def test_follow_command_help(self, runner) -> None:
+        """Follow command has its own help text."""
+        from ktrdr.cli.app import app
+
+        result = runner.invoke(app, ["follow", "--help"])
+
+        assert result.exit_code == 0
+        assert "operation" in result.output.lower()
+
+    def test_ops_command_help(self, runner) -> None:
+        """Ops command has its own help text."""
+        from ktrdr.cli.app import app
+
+        result = runner.invoke(app, ["ops", "--help"])
+
+        assert result.exit_code == 0
+        # Ops lists operations
+        assert "operation" in result.output.lower() or "list" in result.output.lower()
+
+    def test_cancel_command_help(self, runner) -> None:
+        """Cancel command has its own help text."""
+        from ktrdr.cli.app import app
+
+        result = runner.invoke(app, ["cancel", "--help"])
+
+        assert result.exit_code == 0
+        assert "operation" in result.output.lower()
+        assert "--reason" in result.output or "-r" in result.output
+
+    def test_resume_command_help(self, runner) -> None:
+        """Resume command has its own help text."""
+        from ktrdr.cli.app import app
+
+        result = runner.invoke(app, ["resume", "--help"])
+
+        assert result.exit_code == 0
+        assert "operation" in result.output.lower()
+        assert "--follow" in result.output or "-f" in result.output
 
 
 class TestAppUrlNormalization:

@@ -155,3 +155,19 @@ Running notes for M2 CLI restructure implementation.
 ### Next Task Notes
 - Task 2.8 wires up ALL M2 commands. Need to register: backtest, research, status, follow, ops, cancel, resume.
 - Commands register in `ktrdr/cli/__init__.py` with `cli_app.command()(func)`.
+
+---
+
+## Task 2.8 Complete: Wire Up All Commands
+
+### Gotchas
+- **Two CLI apps exist:** `ktrdr/cli/__init__.py` registers on `cli_app` (legacy entry point), while `ktrdr/cli/app.py` has its own `app` (new entry point). Task 2.8 updates BOTH to ensure tests and runtime work.
+- **Tests import from `ktrdr.cli.app`:** The test file imports `from ktrdr.cli.app import app`, so commands must be registered in `app.py`, not just `__init__.py`.
+
+### Emergent Patterns
+- **Alphabetical import ordering:** Commands are imported in alphabetical order (backtest, cancel, follow, ops, research, resume, status, train) for consistency.
+- **Registration matches import order:** Same alphabetical order for `app.command()` calls.
+
+### Next Task Notes
+- M2 is complete. All 8 commands (train, backtest, research, status, follow, ops, cancel, resume) are registered and accessible via `ktrdr --help`.
+- Ready for M2 E2E validation (Task 2.9 if it exists, or milestone-level validation).

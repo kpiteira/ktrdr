@@ -132,7 +132,11 @@ from ktrdr.cli.commands import cli_app  # noqa: E402
 
 # New M2 commands - registered directly on cli_app
 from ktrdr.cli.commands.backtest import backtest  # noqa: E402
+from ktrdr.cli.commands.cancel import cancel  # noqa: E402
+from ktrdr.cli.commands.follow import follow  # noqa: E402
+from ktrdr.cli.commands.ops import ops  # noqa: E402
 from ktrdr.cli.commands.research import research  # noqa: E402
+from ktrdr.cli.commands.resume import resume  # noqa: E402
 from ktrdr.cli.commands.status import status  # noqa: E402
 from ktrdr.cli.commands.train import train  # noqa: E402
 from ktrdr.cli.data_commands import data_app  # noqa: E402
@@ -153,6 +157,10 @@ cli_app.command()(train)
 cli_app.command()(backtest)
 cli_app.command()(research)
 cli_app.command()(status)
+cli_app.command()(follow)
+cli_app.command()(ops)
+cli_app.command()(cancel)
+cli_app.command()(resume)
 
 # Register command subgroups following industry best practices
 cli_app.add_typer(agent_app, name="agent", help="Research agent management commands")
