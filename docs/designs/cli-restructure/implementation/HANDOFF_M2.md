@@ -34,3 +34,16 @@ Running notes for M2 CLI restructure implementation.
 ### Next Task Notes
 - Task 2.3 (status command) will follow similar async pattern with `asyncio.run()`.
 - Status command has dual mode: no argument shows dashboard, with argument shows specific operation.
+
+---
+
+## Task 2.3 Complete: Implement Status Command
+
+### Emergent Patterns
+- **Dual-mode command pattern:** Status command branches on optional argument - no arg shows dashboard, with arg shows operation details. Same pattern can be used for future commands that have both list/summary and detail views.
+- **Dashboard fetches multiple endpoints:** Dashboard mode makes two parallel-capable API calls (`/operations` and `/workers`). Currently sequential but could be parallelized with `asyncio.gather()` if performance matters.
+- **JSON output uses `json.dumps()` directly:** For simple JSON output, `print(json.dumps(data))` is sufficient rather than using output module helpers.
+
+### Next Task Notes
+- Task 2.4 (follow command) is similar to status but with polling loop and Rich progress display.
+- Follow command should handle Ctrl+C gracefully (detach, not cancel - user didn't start the operation).
