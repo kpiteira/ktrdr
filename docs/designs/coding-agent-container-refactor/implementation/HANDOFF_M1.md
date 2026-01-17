@@ -164,5 +164,25 @@ Remaining `sandbox` references in test files are intentional:
 - Docker exec reference: `ktrdr-sandbox` → `ktrdr-coding-agent`
 - Script reference: `sandbox-init.sh` → `coding-agent-init.sh`
 
+---
+
+## Additional Fix: Rename verification scripts
+
+**Summary:** E2E verification found 3 additional verification scripts that weren't in the original plan. Renamed and updated them for consistency.
+
+### Files Renamed (git mv)
+- `verify-sandbox-dockerfile.sh` → `verify-coding-agent-dockerfile.sh`
+- `verify-sandbox-entrypoint.sh` → `verify-coding-agent-entrypoint.sh`
+- `verify-sandbox-compose.sh` → `verify-coding-agent-compose.sh`
+
+### Content Updates
+- Path: `deploy/docker/sandbox/` → `deploy/docker/coding-agent/`
+- Path: `deploy/environments/sandbox/` → `deploy/environments/coding-agent/`
+- IMAGE_NAME: `ktrdr-sandbox-*` → `ktrdr-coding-agent-*`
+- CONTAINER_NAME: `ktrdr-sandbox` → `ktrdr-coding-agent`
+- Comments: "Sandbox" → "Coding Agent"
+
+---
+
 ### Milestone 1 Complete
-All 8 tasks completed. Ready for E2E verification.
+All tasks completed. E2E verification passed.

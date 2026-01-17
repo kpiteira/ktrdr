@@ -1,15 +1,15 @@
 #!/bin/bash
-# Verification script for Task 1.2: Sandbox Entrypoint
+# Verification script for Task 1.2: Coding Agent Entrypoint
 # This script validates all acceptance criteria
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-ENTRYPOINT="$PROJECT_ROOT/deploy/docker/sandbox/entrypoint.sh"
-DOCKERFILE="$PROJECT_ROOT/deploy/docker/sandbox/Dockerfile"
-IMAGE_NAME="ktrdr-sandbox-entrypoint-test"
-CONTAINER_NAME="ktrdr-sandbox-entrypoint-test"
+ENTRYPOINT="$PROJECT_ROOT/deploy/docker/coding-agent/entrypoint.sh"
+DOCKERFILE="$PROJECT_ROOT/deploy/docker/coding-agent/Dockerfile"
+IMAGE_NAME="ktrdr-coding-agent-entrypoint-test"
+CONTAINER_NAME="ktrdr-coding-agent-entrypoint-test"
 
 cleanup() {
     docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
@@ -17,7 +17,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "=== Task 1.2: Sandbox Entrypoint Verification ==="
+echo "=== Task 1.2: Coding Agent Entrypoint Verification ==="
 echo ""
 
 # Check 1: Entrypoint exists and is executable

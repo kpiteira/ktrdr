@@ -1,13 +1,13 @@
 #!/bin/bash
-# Verification script for Task 1.3: Sandbox Docker Compose
+# Verification script for Task 1.3: Coding Agent Docker Compose
 # This script validates all acceptance criteria
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-COMPOSE_FILE="$PROJECT_ROOT/deploy/environments/sandbox/docker-compose.yml"
-CONTAINER_NAME="ktrdr-sandbox"
+COMPOSE_FILE="$PROJECT_ROOT/deploy/environments/coding-agent/docker-compose.yml"
+CONTAINER_NAME="ktrdr-coding-agent"
 
 cleanup() {
     echo ""
@@ -16,7 +16,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "=== Task 1.3: Sandbox Docker Compose Verification ==="
+echo "=== Task 1.3: Coding Agent Docker Compose Verification ==="
 echo ""
 
 # Check 1: Compose file exists
