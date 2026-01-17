@@ -79,7 +79,7 @@ async def execute_operation(
     logger.debug(f"Operation started: {operation_id}")
 
     # Poll until terminal state
-    status_endpoint = f"/api/v1/operations/{operation_id}"
+    status_endpoint = f"/operations/{operation_id}"
     unexpected_status_count = 0
 
     try:
