@@ -40,9 +40,14 @@ def _derive_otlp_endpoint_from_url(api_url: str | None) -> str:
         except Exception:
             pass  # Best-effort derivation; fall back to localhost
 
-    # Use sandbox-specific port if set, otherwise default
-    port = os.environ.get("KTRDR_JAEGER_OTLP_GRPC_PORT", "4317")
-    return f"http://localhost:{port}"
+    # Use sandbox-specific port (checks os.environ → .env.sandbox → default)
+    try:
+        from ktrdr.cli.sandbox_detect import get_sandbox_var
+
+        port = get_sandbox_var("KTRDR_JAEGER_OTLP_GRPC_PORT", "4317")
+        return f"http://localhost:{port}"
+    except Exception:
+        return "http://localhost:4317"
 
 
 def reconfigure_telemetry_for_url(api_url: str) -> None:
@@ -124,6 +129,16 @@ from ktrdr.cli.async_model_commands import async_models_app as models_app  # noq
 from ktrdr.cli.backtest_commands import backtest_app  # noqa: E402
 from ktrdr.cli.checkpoints_commands import checkpoints_app  # noqa: E402
 from ktrdr.cli.commands import cli_app  # noqa: E402
+
+# New M2 commands - registered directly on cli_app
+from ktrdr.cli.commands.backtest import backtest  # noqa: E402
+from ktrdr.cli.commands.cancel import cancel  # noqa: E402
+from ktrdr.cli.commands.follow import follow  # noqa: E402
+from ktrdr.cli.commands.ops import ops  # noqa: E402
+from ktrdr.cli.commands.research import research  # noqa: E402
+from ktrdr.cli.commands.resume import resume  # noqa: E402
+from ktrdr.cli.commands.status import status  # noqa: E402
+from ktrdr.cli.commands.train import train  # noqa: E402
 from ktrdr.cli.data_commands import data_app  # noqa: E402
 from ktrdr.cli.deploy_commands import deploy_app  # noqa: E402
 from ktrdr.cli.dummy_commands import dummy_app  # noqa: E402
@@ -136,6 +151,16 @@ from ktrdr.cli.strategy_commands import strategies_app  # noqa: E402
 
 # Temporarily disabled while updating multi-timeframe for pure fuzzy
 # from ktrdr.cli.multi_timeframe_commands import multi_timeframe_app
+
+# Register new top-level commands (M1/M2 CLI restructure)
+cli_app.command()(train)
+cli_app.command()(backtest)
+cli_app.command()(research)
+cli_app.command()(status)
+cli_app.command()(follow)
+cli_app.command()(ops)
+cli_app.command()(cancel)
+cli_app.command()(resume)
 
 # Register command subgroups following industry best practices
 cli_app.add_typer(agent_app, name="agent", help="Research agent management commands")

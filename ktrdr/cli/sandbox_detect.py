@@ -149,3 +149,36 @@ def get_sandbox_context(cwd: Optional[Path] = None) -> Optional[dict[str, str]]:
     if env_file:
         return parse_dotenv_file(env_file)
     return None
+
+
+def get_sandbox_var(name: str, default: str | None = None) -> str | None:
+    """Get a sandbox environment variable with proper fallback chain.
+
+    Lookup priority:
+    1. os.environ (explicit env var)
+    2. .env.sandbox file (sandbox-specific config)
+    3. default value
+
+    This centralizes the lookup pattern so callers don't need to implement
+    the fallback logic themselves.
+
+    Args:
+        name: Environment variable name (e.g., "KTRDR_JAEGER_OTLP_GRPC_PORT")
+        default: Default value if not found anywhere
+
+    Returns:
+        The value from highest priority source, or default if not found.
+    """
+    import os
+
+    # Priority 1: Explicit env var
+    if value := os.environ.get(name):
+        return value
+
+    # Priority 2: .env.sandbox file
+    if sandbox_env := get_sandbox_context():
+        if value := sandbox_env.get(name):
+            return value
+
+    # Priority 3: Default
+    return default

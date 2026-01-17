@@ -18,7 +18,7 @@ class ConcreteAdapter(OperationAdapter):
     """Valid concrete implementation for testing."""
 
     def get_start_endpoint(self) -> str:
-        return "/api/v1/test/start"
+        return "/test/start"
 
     def get_start_payload(self) -> dict[str, Any]:
         return {"test": "payload"}
@@ -39,7 +39,7 @@ class IncompleteAdapter(OperationAdapter):
     """Incomplete adapter missing required methods."""
 
     def get_start_endpoint(self) -> str:
-        return "/api/v1/incomplete/start"
+        return "/incomplete/start"
 
     # Missing other required methods
 
@@ -155,7 +155,7 @@ class TestOperationAdapterInterface:
                 self.call_count = 0
 
             def get_start_endpoint(self) -> str:
-                return f"/api/v1/{self.custom_param}/start"
+                return f"/{self.custom_param}/start"
 
             def get_start_payload(self) -> dict[str, Any]:
                 self.call_count += 1

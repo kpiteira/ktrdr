@@ -13,6 +13,13 @@ from typing import Optional
 import typer
 
 from ktrdr.cli.commands import normalize_api_url
+from ktrdr.cli.commands.backtest import backtest
+from ktrdr.cli.commands.cancel import cancel
+from ktrdr.cli.commands.follow import follow
+from ktrdr.cli.commands.ops import ops
+from ktrdr.cli.commands.research import research
+from ktrdr.cli.commands.resume import resume
+from ktrdr.cli.commands.status import status
 from ktrdr.cli.commands.train import train
 from ktrdr.cli.sandbox_detect import resolve_api_url
 from ktrdr.cli.state import CLIState
@@ -68,8 +75,15 @@ def main(
     ctx.obj = state
 
 
-# Register commands
+# Register M2 top-level commands
 app.command()(train)
+app.command()(backtest)
+app.command()(research)
+app.command()(status)
+app.command()(follow)
+app.command()(ops)
+app.command()(cancel)
+app.command()(resume)
 
 
 if __name__ == "__main__":

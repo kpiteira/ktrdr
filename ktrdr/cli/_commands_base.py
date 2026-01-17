@@ -20,6 +20,7 @@ from rich.console import Console
 
 from ktrdr import get_logger
 from ktrdr.cli.sandbox_detect import resolve_api_url
+from ktrdr.cli.state import CLIState
 
 # Default API port
 DEFAULT_API_PORT = 8000
@@ -31,13 +32,14 @@ _cli_state: dict[str, Optional[str]] = {"api_url": None}
 
 def normalize_api_url(url: str) -> str:
     """
-    Normalize an API URL by adding protocol and port if missing.
+    Normalize an API URL by adding protocol, port, and /api/v1 if missing.
 
     Args:
         url: Raw URL (e.g., "backend.example.com" or "http://backend.example.com:8000")
 
     Returns:
-        Normalized URL with protocol and port (e.g., "http://backend.example.com:8000")
+        Normalized URL with protocol, port, and API path
+        (e.g., "http://backend.example.com:8000/api/v1")
     """
     if not url:
         return url
@@ -53,7 +55,13 @@ def normalize_api_url(url: str) -> str:
         netloc = f"{parsed.hostname}:{DEFAULT_API_PORT}"
         url = f"{parsed.scheme}://{netloc}{parsed.path}"
 
-    return url.rstrip("/")
+    url = url.rstrip("/")
+
+    # Auto-append /api/v1 if no API path present
+    if "/api/" not in url:
+        url = f"{url}/api/v1"
+
+    return url
 
 
 def get_api_url_override() -> Optional[str]:
@@ -89,6 +97,7 @@ error_console = Console(stderr=True)
 
 @cli_app.callback()
 def main(
+    ctx: typer.Context,
     url: Optional[str] = typer.Option(
         None,
         "--url",
@@ -120,10 +129,10 @@ def main(
         explicit_url=url,
         explicit_port=port,
     )
+    normalized_url = normalize_api_url(resolved_url)
 
-    # Only set state if different from default (to avoid unnecessary reconfiguration)
+    # Set legacy global state for backward compatibility
     if resolved_url != "http://localhost:8000":
-        normalized_url = normalize_api_url(resolved_url)
         _cli_state["api_url"] = normalized_url
 
         # Reconfigure telemetry to send traces to the same host as the API
@@ -131,6 +140,13 @@ def main(
         from ktrdr.cli import reconfigure_telemetry_for_url
 
         reconfigure_telemetry_for_url(normalized_url)
+
+    # Set new CLIState on context for M1/M2 commands
+    ctx.obj = CLIState(
+        json_mode=False,  # Legacy CLI doesn't have --json at root level
+        verbose=False,  # Legacy CLI doesn't have --verbose at root level
+        api_url=normalized_url,
+    )
 
 
 # All commands have been migrated to subcommand modules

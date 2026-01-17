@@ -205,7 +205,7 @@ class OperationRunner:
 
                 # Poll until terminal state or cancelled
                 while not cancelled:
-                    result = await client.get(f"/api/v1/operations/{operation_id}")
+                    result = await client.get(f"/operations/{operation_id}")
                     op_data = result.get("data", {})
                     status = op_data.get("status")
 
@@ -226,10 +226,10 @@ class OperationRunner:
                         f"\n[yellow]Cancelling {operation_type}...[/yellow]"
                     )
                     try:
-                        await client.delete(f"/api/v1/operations/{operation_id}")
+                        await client.delete(f"/operations/{operation_id}")
                         # Wait briefly for cancellation to process
                         await asyncio.sleep(0.5)
-                        result = await client.get(f"/api/v1/operations/{operation_id}")
+                        result = await client.get(f"/operations/{operation_id}")
                         op_data = result.get("data", {})
                         status = op_data.get("status")
                     except Exception:

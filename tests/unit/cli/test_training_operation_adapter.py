@@ -56,7 +56,7 @@ class TestTrainingOperationAdapter:
             timeframes=["1h"],
         )
 
-        assert adapter.get_start_endpoint() == "/api/v1/trainings/start"
+        assert adapter.get_start_endpoint() == "/trainings/start"
 
     def test_get_start_payload_with_all_fields(self):
         """Test payload construction with all fields."""
@@ -178,7 +178,7 @@ class TestTrainingOperationAdapter:
 
         # Verify HTTP request was made
         http_client.get.assert_called_once_with(
-            "/api/v1/trainings/training-123/performance"
+            "/trainings/training-123/performance"
         )
 
         # Verify console.print was called (at least for success message and table)

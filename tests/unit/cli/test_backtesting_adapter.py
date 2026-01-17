@@ -77,7 +77,7 @@ class TestBacktestingOperationAdapter:
         )
 
         endpoint = adapter.get_start_endpoint()
-        assert endpoint == "/api/v1/backtests/start"
+        assert endpoint == "/backtests/start"
         assert isinstance(endpoint, str)
         assert endpoint.startswith("/")
 
