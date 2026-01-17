@@ -124,6 +124,12 @@ from ktrdr.cli.async_model_commands import async_models_app as models_app  # noq
 from ktrdr.cli.backtest_commands import backtest_app  # noqa: E402
 from ktrdr.cli.checkpoints_commands import checkpoints_app  # noqa: E402
 from ktrdr.cli.commands import cli_app  # noqa: E402
+
+# New M2 commands - registered directly on cli_app
+from ktrdr.cli.commands.backtest import backtest  # noqa: E402
+from ktrdr.cli.commands.research import research  # noqa: E402
+from ktrdr.cli.commands.status import status  # noqa: E402
+from ktrdr.cli.commands.train import train  # noqa: E402
 from ktrdr.cli.data_commands import data_app  # noqa: E402
 from ktrdr.cli.deploy_commands import deploy_app  # noqa: E402
 from ktrdr.cli.dummy_commands import dummy_app  # noqa: E402
@@ -136,6 +142,12 @@ from ktrdr.cli.strategy_commands import strategies_app  # noqa: E402
 
 # Temporarily disabled while updating multi-timeframe for pure fuzzy
 # from ktrdr.cli.multi_timeframe_commands import multi_timeframe_app
+
+# Register new top-level commands (M1/M2 CLI restructure)
+cli_app.command()(train)
+cli_app.command()(backtest)
+cli_app.command()(research)
+cli_app.command()(status)
 
 # Register command subgroups following industry best practices
 cli_app.add_typer(agent_app, name="agent", help="Research agent management commands")
