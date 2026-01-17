@@ -17,6 +17,7 @@ from ktrdr.cli.commands.backtest import backtest
 from ktrdr.cli.commands.cancel import cancel
 from ktrdr.cli.commands.follow import follow
 from ktrdr.cli.commands.list_cmd import list_app
+from ktrdr.cli.commands.migrate import migrate_cmd
 from ktrdr.cli.commands.ops import ops
 from ktrdr.cli.commands.research import research
 from ktrdr.cli.commands.resume import resume
@@ -92,6 +93,7 @@ app.command()(resume)
 app.add_typer(list_app)  # ktrdr list strategies/models/checkpoints
 app.add_typer(show_app)  # ktrdr show data/features
 app.command("validate")(validate_cmd)  # ktrdr validate <name|path>
+app.command("migrate")(migrate_cmd)  # ktrdr migrate <path>
 
 
 if __name__ == "__main__":

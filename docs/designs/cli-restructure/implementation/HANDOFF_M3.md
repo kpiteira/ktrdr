@@ -82,3 +82,25 @@ This violates DRY and is error-prone (can get out of sync).
 
 - Task 3.4 (migrate command) is similar to validate but focuses on v2→v3 conversion. Uses local-only validation (no API call needed).
 - Task 3.5 wires up all M3 commands in `ktrdr/cli/__init__.py` (the actual entry point) using `cli_app.add_typer()` for subcommand groups and `cli_app.command("name")(func)` for direct commands.
+
+---
+
+## Task 3.4 Complete: Implement Migrate Command
+
+### Gotchas
+
+- **Local-only command:** Unlike validate, migrate doesn't need API calls — uses `migrate_v2_to_v3` from `ktrdr.config.strategy_migration` directly.
+- **V3 detection uses same pattern as validate:** Check `isinstance(config.get("indicators"), dict) and "nn_inputs" in config`.
+- **Default output path:** Creates `{name}_v3.yaml` in same directory as input file (not overwriting original).
+- **Parent directory creation:** Uses `output_path.parent.mkdir(parents=True, exist_ok=True)` to handle custom output paths.
+
+### Emergent Patterns
+
+- **Simplified command structure:** No API calls means simpler implementation — just file I/O + migration function call.
+- **Consistent JSON output format:** Uses `{"status": "migrated"|"skipped", ...}` pattern for machine readability.
+- **Graceful skip for already-v3:** Returns success (exit 0) with informative message, not an error.
+
+### Next Task Notes
+
+- Task 3.5 wires up all M3 commands. Migrate command uses `cli_app.command("migrate")(migrate_cmd)` (same pattern as validate).
+- All M3 commands now implemented: list_app, show_app, validate_cmd, migrate_cmd.

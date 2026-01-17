@@ -137,6 +137,7 @@ from ktrdr.cli.commands.follow import follow  # noqa: E402
 
 # M3 commands - information commands
 from ktrdr.cli.commands.list_cmd import list_app  # noqa: E402
+from ktrdr.cli.commands.migrate import migrate_cmd  # noqa: E402
 from ktrdr.cli.commands.ops import ops  # noqa: E402
 from ktrdr.cli.commands.research import research  # noqa: E402
 from ktrdr.cli.commands.resume import resume  # noqa: E402
@@ -171,6 +172,7 @@ cli_app.command()(resume)
 cli_app.add_typer(list_app)  # ktrdr list strategies/models/checkpoints
 cli_app.add_typer(show_app)  # ktrdr show data/features
 cli_app.command("validate")(validate_cmd)  # ktrdr validate <name|path>
+cli_app.command("migrate")(migrate_cmd)  # ktrdr migrate <path>
 
 # Register command subgroups following industry best practices
 cli_app.add_typer(agent_app, name="agent", help="Research agent management commands")
