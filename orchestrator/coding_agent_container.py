@@ -1,7 +1,7 @@
-"""Sandbox manager for Docker container interaction.
+"""Coding agent container manager for Docker container interaction.
 
 Provides methods to execute commands and invoke Claude Code in the
-sandboxed environment via docker exec.
+coding agent container environment via docker exec.
 """
 
 import json
@@ -56,25 +56,25 @@ def format_tool_call(tool_name: str, tool_input: dict) -> str:
         return f"→ {tool_name}..."
 
 
-class SandboxError(Exception):
-    """Exception raised for sandbox-related errors."""
+class CodingAgentError(Exception):
+    """Exception raised for coding agent container errors."""
 
     pass
 
 
 @dataclass
-class SandboxManager:
-    """Manages interaction with the sandbox Docker container.
+class CodingAgentContainer:
+    """Manages interaction with the coding agent Docker container.
 
     Provides methods to execute commands and invoke Claude Code
-    in the isolated sandbox environment.
+    in the isolated coding agent container environment.
     """
 
     container_name: str = "ktrdr-sandbox"
     workspace_path: str = "/workspace"
 
     async def exec(self, command: str, timeout: int = 300) -> str:
-        """Execute a command in the sandbox container.
+        """Execute a command in the coding agent container.
 
         Args:
             command: Shell command to execute
@@ -84,7 +84,7 @@ class SandboxManager:
             Command stdout output
 
         Raises:
-            SandboxError: If command exits with non-zero status
+            CodingAgentError: If command exits with non-zero status
             subprocess.TimeoutExpired: If command exceeds timeout
         """
         result = subprocess.run(
@@ -95,7 +95,7 @@ class SandboxManager:
         )
 
         if result.returncode != 0:
-            raise SandboxError(f"Command failed: {result.stderr}")
+            raise CodingAgentError(f"Command failed: {result.stderr}")
 
         return result.stdout
 
@@ -108,7 +108,7 @@ class SandboxManager:
         model: str | None = None,
         session_id: str | None = None,
     ) -> ClaudeResult:
-        """Invoke Claude Code in the sandbox with JSON output.
+        """Invoke Claude Code in the coding agent container with JSON output.
 
         Args:
             prompt: The prompt to send to Claude Code
@@ -122,7 +122,7 @@ class SandboxManager:
             ClaudeResult with parsed response
 
         Raises:
-            SandboxError: If JSON parsing fails
+            CodingAgentError: If JSON parsing fails
             subprocess.TimeoutExpired: If invocation exceeds timeout
         """
         tools = allowed_tools or ["Bash", "Read", "Write", "Edit", "Glob", "Grep"]
@@ -171,7 +171,7 @@ class SandboxManager:
         try:
             output = json.loads(result.stdout)
         except json.JSONDecodeError as e:
-            raise SandboxError(f"Failed to parse Claude JSON output: {e}") from e
+            raise CodingAgentError(f"Failed to parse Claude JSON output: {e}") from e
 
         return ClaudeResult(
             is_error=output.get("is_error", False),
