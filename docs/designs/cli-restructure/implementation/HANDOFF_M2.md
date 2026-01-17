@@ -39,6 +39,10 @@ Running notes for M2 CLI restructure implementation.
 
 ## Task 2.3 Complete: Implement Status Command
 
+### Gotchas
+- **Commands must be registered on `cli_app`, not just in `app.py`:** The entry point `ktrdr.cli:app` resolves to `cli_app` from `_commands_base.py`, not `app.py`. Commands need to be imported and registered in `ktrdr/cli/__init__.py` with `cli_app.command()(func)`.
+- **Callback must set `ctx.obj = CLIState`:** The legacy callback in `_commands_base.py` didn't set `ctx.obj`. New commands expect `ctx.obj` to be a `CLIState` object, so the callback was updated to set this.
+
 ### Emergent Patterns
 - **Dual-mode command pattern:** Status command branches on optional argument - no arg shows dashboard, with arg shows operation details. Same pattern can be used for future commands that have both list/summary and detail views.
 - **Dashboard fetches multiple endpoints:** Dashboard mode makes two parallel-capable API calls (`/operations` and `/workers`). Currently sequential but could be parallelized with `asyncio.gather()` if performance matters.
