@@ -68,3 +68,21 @@
 - Update `orchestrator/cli.py`
 - Similar pattern: import, instantiation, usages
 - Line 28 has the import, line 124 and 382 have instantiations
+
+---
+
+## Task 1.5 Complete: Update orchestrator/cli.py imports
+
+**Summary:** Updated imports and all variable names. Also updated 4 mock patches in test_cli.py. 53 tests pass.
+
+### Changes Made
+- Import: `orchestrator.sandbox.SandboxManager` → `orchestrator.coding_agent_container.CodingAgentContainer`
+- `format_tool_call` import path also changed
+- Variable: `sandbox = SandboxManager()` → `container = CodingAgentContainer()`
+- Two instantiation sites updated (lines 124 and 382)
+- Comment updated: "Create sandbox for PR creation" → "Create container for PR creation"
+- 4 mock patches in test_cli.py updated
+
+### Next Task Notes (1.6)
+- Task 1.6 is "Update test mocks" but we've already done the mock updates as part of each task
+- May be mostly complete; verify no remaining `SandboxManager` patches in test files
