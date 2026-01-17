@@ -117,6 +117,26 @@ class StrategyValidationResponse(BaseModel):
     message: str
 
 
+class FeatureInfo(BaseModel):
+    """Information about a resolved NN input feature."""
+
+    feature_id: str
+    timeframe: str
+    fuzzy_set: str
+    membership: str
+    indicator_id: str
+    indicator_output: Optional[str] = None
+
+
+class StrategyFeaturesResponse(BaseModel):
+    """Response model for strategy features."""
+
+    success: bool = True
+    strategy_name: str
+    features: list[FeatureInfo]
+    count: int
+
+
 @router.get("/", response_model=StrategiesResponse)
 async def list_strategies() -> StrategiesResponse:
     """
@@ -708,3 +728,73 @@ async def validate_strategy(strategy_name: str) -> StrategyValidationResponse:
             available_indicators=sorted(set(BUILT_IN_INDICATORS.keys())),
             message="Validation failed due to system error",
         )
+
+
+@router.get("/{strategy_name}/features", response_model=StrategyFeaturesResponse)
+async def get_strategy_features(strategy_name: str) -> StrategyFeaturesResponse:
+    """
+    Get resolved NN input features for a v3 strategy.
+
+    This endpoint loads a v3 strategy and resolves the nn_inputs specification
+    into concrete feature definitions. This is useful for understanding what
+    features will be generated from a strategy's fuzzy sets and indicators.
+
+    Args:
+        strategy_name: Name of the strategy file (without .yaml extension)
+
+    Returns:
+        List of resolved features with their identifiers and metadata
+    """
+    from ktrdr.config.feature_resolver import FeatureResolver
+    from ktrdr.config.strategy_loader import StrategyConfigurationLoader
+
+    try:
+        # Load strategy file
+        strategy_file = Path(f"strategies/{strategy_name}.yaml")
+        if not strategy_file.exists():
+            raise HTTPException(
+                status_code=404, detail=f"Strategy file not found: {strategy_name}.yaml"
+            )
+
+        # Load as v3 strategy
+        loader = StrategyConfigurationLoader()
+        try:
+            config = loader.load_v3_strategy(strategy_file)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Strategy '{strategy_name}' is not v3 format or invalid: {e}",
+            ) from e
+
+        # Resolve features
+        resolver = FeatureResolver()
+        resolved_features = resolver.resolve(config)
+
+        # Convert to response format
+        features = [
+            FeatureInfo(
+                feature_id=f.feature_id,
+                timeframe=f.timeframe,
+                fuzzy_set=f.fuzzy_set_id,
+                membership=f.membership_name,
+                indicator_id=f.indicator_id,
+                indicator_output=f.indicator_output,
+            )
+            for f in resolved_features
+        ]
+
+        return StrategyFeaturesResponse(
+            success=True,
+            strategy_name=strategy_name,
+            features=features,
+            count=len(features),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting features for strategy {strategy_name}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get strategy features: {str(e)}",
+        ) from e

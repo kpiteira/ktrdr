@@ -201,137 +201,136 @@ class TestShowFeaturesCommand:
                 g for g in app.registered_groups if g.typer_instance != show_app
             ]
 
-    def test_show_features_loads_strategy(self, runner, tmp_path) -> None:
-        """Show features loads and resolves strategy features."""
+    def test_show_features_fetches_from_api(self, runner) -> None:
+        """Show features fetches from /strategies/{name}/features endpoint."""
         from ktrdr.cli.app import app
         from ktrdr.cli.commands.show import show_app
 
         app.add_typer(show_app)
 
-        # Create a minimal v3 strategy file (v3 format uses indicators as dict)
-        strategy_file = tmp_path / "test_strategy.yaml"
-        strategy_file.write_text(
-            """
-name: test_strategy
-version: "3.0"
-description: Test strategy
-
-indicators:
-  rsi_14:
-    type: rsi
-    period: 14
-
-fuzzy_sets:
-  rsi_momentum:
-    indicator: rsi_14
-    oversold: [0, 25, 40]
-    overbought: [60, 75, 100]
-
-nn_inputs:
-  - fuzzy_set: rsi_momentum
-    timeframes: ["1h"]
-
-model:
-  type: mlp
-  architecture:
-    hidden_layers: [32, 16]
-    dropout: 0.2
-
-decisions:
-  output_format: classification
-
-training:
-  epochs: 10
-  batch_size: 32
-  learning_rate: 0.001
-
-training_data:
-  symbols:
-    mode: single
-    symbol: AAPL
-  timeframes:
-    mode: single
-    timeframe: "1h"
-  history_required: 100
-"""
-        )
-
         try:
-            result = runner.invoke(app, ["show", "features", str(strategy_file)])
+            with patch("ktrdr.cli.commands.show.AsyncCLIClient") as mock_client_class:
+                mock_client = AsyncMock()
+                mock_client.__aenter__.return_value = mock_client
+                mock_client.__aexit__.return_value = None
+                mock_client.get.return_value = {
+                    "success": True,
+                    "strategy_name": "momentum",
+                    "features": [
+                        {
+                            "feature_id": "1h_rsi_momentum_oversold",
+                            "timeframe": "1h",
+                            "fuzzy_set": "rsi_momentum",
+                            "membership": "oversold",
+                            "indicator_id": "rsi_14",
+                            "indicator_output": None,
+                        }
+                    ],
+                    "count": 1,
+                }
+                mock_client_class.return_value = mock_client
 
-            assert result.exit_code == 0
-            # Should show strategy name and features
-            assert "test_strategy" in result.output
+                result = runner.invoke(app, ["show", "features", "momentum"])
+
+                assert result.exit_code == 0
+                mock_client.get.assert_called_once()
+                call_args = mock_client.get.call_args
+                assert "/strategies/momentum/features" in call_args[0][0]
+                # Should show strategy name
+                assert "momentum" in result.output
 
         finally:
             app.registered_groups = [
                 g for g in app.registered_groups if g.typer_instance != show_app
             ]
 
-    def test_show_features_json_output(self, runner, tmp_path) -> None:
+    def test_show_features_displays_table(self, runner) -> None:
+        """Show features displays table with feature details."""
+        from ktrdr.cli.app import app
+        from ktrdr.cli.commands.show import show_app
+
+        app.add_typer(show_app)
+
+        try:
+            with patch("ktrdr.cli.commands.show.AsyncCLIClient") as mock_client_class:
+                mock_client = AsyncMock()
+                mock_client.__aenter__.return_value = mock_client
+                mock_client.__aexit__.return_value = None
+                mock_client.get.return_value = {
+                    "success": True,
+                    "strategy_name": "test_strategy",
+                    "features": [
+                        {
+                            "feature_id": "1h_rsi_momentum_oversold",
+                            "timeframe": "1h",
+                            "fuzzy_set": "rsi_momentum",
+                            "membership": "oversold",
+                            "indicator_id": "rsi_14",
+                            "indicator_output": None,
+                        },
+                        {
+                            "feature_id": "1h_rsi_momentum_overbought",
+                            "timeframe": "1h",
+                            "fuzzy_set": "rsi_momentum",
+                            "membership": "overbought",
+                            "indicator_id": "rsi_14",
+                            "indicator_output": None,
+                        },
+                    ],
+                    "count": 2,
+                }
+                mock_client_class.return_value = mock_client
+
+                result = runner.invoke(app, ["show", "features", "test_strategy"])
+
+                assert result.exit_code == 0
+                # Should show strategy name and features
+                assert "test_strategy" in result.output
+                assert "2" in result.output  # count
+
+        finally:
+            app.registered_groups = [
+                g for g in app.registered_groups if g.typer_instance != show_app
+            ]
+
+    def test_show_features_json_output(self, runner) -> None:
         """Show features with --json outputs JSON."""
         from ktrdr.cli.app import app
         from ktrdr.cli.commands.show import show_app
 
         app.add_typer(show_app)
 
-        # Create a minimal v3 strategy file (v3 format uses indicators as dict)
-        strategy_file = tmp_path / "test_strategy.yaml"
-        strategy_file.write_text(
-            """
-name: test_strategy
-version: "3.0"
-description: Test strategy
-
-indicators:
-  rsi_14:
-    type: rsi
-    period: 14
-
-fuzzy_sets:
-  rsi_momentum:
-    indicator: rsi_14
-    oversold: [0, 25, 40]
-    overbought: [60, 75, 100]
-
-nn_inputs:
-  - fuzzy_set: rsi_momentum
-    timeframes: ["1h"]
-
-model:
-  type: mlp
-  architecture:
-    hidden_layers: [32, 16]
-    dropout: 0.2
-
-decisions:
-  output_format: classification
-
-training:
-  epochs: 10
-  batch_size: 32
-  learning_rate: 0.001
-
-training_data:
-  symbols:
-    mode: single
-    symbol: AAPL
-  timeframes:
-    mode: single
-    timeframe: "1h"
-  history_required: 100
-"""
-        )
-
         try:
-            result = runner.invoke(
-                app, ["--json", "show", "features", str(strategy_file)]
-            )
+            with patch("ktrdr.cli.commands.show.AsyncCLIClient") as mock_client_class:
+                mock_client = AsyncMock()
+                mock_client.__aenter__.return_value = mock_client
+                mock_client.__aexit__.return_value = None
+                mock_client.get.return_value = {
+                    "success": True,
+                    "strategy_name": "test_strategy",
+                    "features": [
+                        {
+                            "feature_id": "1h_rsi_momentum_oversold",
+                            "timeframe": "1h",
+                            "fuzzy_set": "rsi_momentum",
+                            "membership": "oversold",
+                            "indicator_id": "rsi_14",
+                            "indicator_output": None,
+                        }
+                    ],
+                    "count": 1,
+                }
+                mock_client_class.return_value = mock_client
 
-            assert result.exit_code == 0
-            data = json.loads(result.output)
-            assert "strategy" in data
-            assert "features" in data
+                result = runner.invoke(
+                    app, ["--json", "show", "features", "test_strategy"]
+                )
+
+                assert result.exit_code == 0
+                data = json.loads(result.output)
+                assert "strategy_name" in data
+                assert "features" in data
+                assert data["count"] == 1
 
         finally:
             app.registered_groups = [
@@ -366,40 +365,24 @@ class TestShowCommandErrors:
                 g for g in app.registered_groups if g.typer_instance != show_app
             ]
 
-    def test_show_features_handles_missing_file(self, runner) -> None:
-        """Show features handles missing strategy file."""
+    def test_show_features_handles_api_error(self, runner) -> None:
+        """Show features handles API errors."""
         from ktrdr.cli.app import app
         from ktrdr.cli.commands.show import show_app
 
         app.add_typer(show_app)
 
         try:
-            result = runner.invoke(
-                app, ["show", "features", "/nonexistent/strategy.yaml"]
-            )
+            with patch("ktrdr.cli.commands.show.AsyncCLIClient") as mock_client_class:
+                mock_client = AsyncMock()
+                mock_client.__aenter__.return_value = mock_client
+                mock_client.__aexit__.return_value = None
+                mock_client.get.side_effect = Exception("Strategy not found")
+                mock_client_class.return_value = mock_client
 
-            assert result.exit_code == 1
+                result = runner.invoke(app, ["show", "features", "nonexistent"])
 
-        finally:
-            app.registered_groups = [
-                g for g in app.registered_groups if g.typer_instance != show_app
-            ]
-
-    def test_show_features_handles_invalid_strategy(self, runner, tmp_path) -> None:
-        """Show features handles invalid strategy format."""
-        from ktrdr.cli.app import app
-        from ktrdr.cli.commands.show import show_app
-
-        app.add_typer(show_app)
-
-        # Create an invalid strategy file
-        strategy_file = tmp_path / "invalid_strategy.yaml"
-        strategy_file.write_text("not: valid: yaml: strategy")
-
-        try:
-            result = runner.invoke(app, ["show", "features", str(strategy_file)])
-
-            assert result.exit_code == 1
+                assert result.exit_code == 1
 
         finally:
             app.registered_groups = [

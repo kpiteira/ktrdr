@@ -3,13 +3,12 @@
 Implements the `ktrdr show` command for displaying market data and strategy features.
 
 Subcommands:
-- `ktrdr show <symbol> [timeframe]` - Show market data
+- `ktrdr show data <symbol> [timeframe]` - Show market data
 - `ktrdr show features <strategy>` - Show strategy features
 """
 
 import asyncio
 import json
-from pathlib import Path
 
 import typer
 from rich.console import Console
@@ -35,7 +34,7 @@ def show_callback(ctx: typer.Context) -> None:
         ktrdr show data AAPL 1d
 
     For strategy features:
-        ktrdr show features ./strategies/momentum.yaml
+        ktrdr show features momentum
     """
     # If a subcommand was invoked, let it run
     if ctx.invoked_subcommand is not None:
@@ -51,7 +50,7 @@ def show_callback(ctx: typer.Context) -> None:
     console.print("Examples:")
     console.print("  ktrdr show data AAPL")
     console.print("  ktrdr show data AAPL 1d")
-    console.print("  ktrdr show features ./strategies/momentum.yaml")
+    console.print("  ktrdr show features momentum")
 
 
 @show_app.command("data")
@@ -128,7 +127,7 @@ async def _show_data(state: CLIState, symbol: str, timeframe: str) -> None:
 @trace_cli_command("show_features")
 def show_features(
     ctx: typer.Context,
-    strategy: str = typer.Argument(..., help="Strategy path or name"),
+    strategy: str = typer.Argument(..., help="Strategy name"),
 ) -> None:
     """Show resolved features for a strategy.
 
@@ -136,64 +135,43 @@ def show_features(
     fuzzy sets and indicators.
 
     Examples:
-        ktrdr show features ./strategies/momentum.yaml
-        ktrdr show features strategies/my_strategy.yaml
+        ktrdr show features momentum
+        ktrdr show features v3_minimal
     """
     state: CLIState = ctx.obj
 
     try:
-        _show_features_local(state, strategy)
+        asyncio.run(_show_features(state, strategy))
     except Exception as e:
         print_error(str(e), state)
         raise typer.Exit(1) from None
 
 
-def _show_features_local(state: CLIState, strategy_path: str) -> None:
-    """Load and display strategy features from local file."""
-    from ktrdr.config.feature_resolver import FeatureResolver
-    from ktrdr.config.strategy_loader import StrategyConfigurationLoader
+async def _show_features(state: CLIState, strategy: str) -> None:
+    """Fetch and display strategy features from API."""
+    async with AsyncCLIClient() as client:
+        result = await client.get(f"/strategies/{strategy}/features")
 
-    path = Path(strategy_path)
-    if not path.exists():
-        raise FileNotFoundError(f"Strategy file not found: {strategy_path}")
-
-    # Load strategy - must be v3 format
-    loader = StrategyConfigurationLoader()
-    config = loader.load_v3_strategy(path)
-
-    # Resolve features
-    resolver = FeatureResolver()
-    features = resolver.resolve(config)
+    # API returns {"success": true, "strategy_name": ..., "features": [...], "count": N}
+    features = result.get("features", [])
+    strategy_name = result.get("strategy_name", strategy)
+    count = result.get("count", len(features))
 
     if state.json_mode:
-        # Output JSON format
-        features_data = [
-            {
-                "feature_id": f.feature_id,
-                "timeframe": f.timeframe,
-                "fuzzy_set": f.fuzzy_set_id,
-                "membership": f.membership_name,
-            }
-            for f in features
-        ]
-        print(
-            json.dumps(
-                {
-                    "strategy": config.name,
-                    "features": features_data,
-                    "count": len(features),
-                }
-            )
-        )
+        print(json.dumps(result))
+        return
+
+    if not features:
+        console.print(f"No features found for strategy '{strategy_name}'")
         return
 
     # Display header
-    console.print(f"Strategy: [cyan]{config.name}[/cyan]")
-    console.print(f"Features ({len(features)} total):")
+    console.print(f"Strategy: [cyan]{strategy_name}[/cyan]")
+    console.print(f"Features ({count} total):")
     console.print()
 
     # Display features in a table
-    table = Table(title=f"Features: {config.name}")
+    table = Table(title=f"Features: {strategy_name}")
     table.add_column("Feature ID", style="cyan")
     table.add_column("Timeframe")
     table.add_column("Fuzzy Set")
@@ -201,10 +179,10 @@ def _show_features_local(state: CLIState, strategy_path: str) -> None:
 
     for f in features:
         table.add_row(
-            f.feature_id,
-            f.timeframe,
-            f.fuzzy_set_id,
-            f.membership_name,
+            f.get("feature_id", ""),
+            f.get("timeframe", ""),
+            f.get("fuzzy_set", ""),
+            f.get("membership", ""),
         )
 
     console.print(table)
