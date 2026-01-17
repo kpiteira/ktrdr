@@ -97,6 +97,8 @@ class OperationRunner:
             client: Async HTTP client.
             adapter: Operation adapter.
         """
+        operation_type = self._get_operation_type(adapter)
+
         try:
             # POST to start endpoint
             endpoint = adapter.get_start_endpoint()
@@ -106,9 +108,6 @@ class OperationRunner:
             # Extract operation ID
             operation_id = adapter.parse_start_response(response)
 
-            # Derive operation type from adapter class name
-            operation_type = self._get_operation_type(adapter)
-
             # Print started message
             print_operation_started(
                 operation_type=operation_type,
@@ -116,7 +115,23 @@ class OperationRunner:
                 state=self.state,
             )
         except Exception as e:
-            print_error(str(e), self.state)
+            # Enhance exception with operation context if not already present
+            if hasattr(e, "operation_type") and not e.operation_type:
+                e.operation_type = operation_type
+            elif not hasattr(e, "operation_type"):
+                # For exceptions that don't support operation context, wrap the message
+                from ktrdr.errors.exceptions import KtrdrError
+
+                enhanced_error = KtrdrError(
+                    message=str(e),
+                    operation_type=operation_type,
+                    stage="initialization",
+                    suggestion="Check API connectivity and request parameters",
+                )
+                print_error(str(e), self.state, enhanced_error)
+                raise SystemExit(1) from None
+
+            print_error(str(e), self.state, e)
             raise SystemExit(1) from None
 
     async def _execute_with_progress(
@@ -170,6 +185,7 @@ class OperationRunner:
                 progress_bar.update(task_id, completed=percentage, description=message)
 
         operation_type = self._get_operation_type(adapter)
+        operation_id = None
 
         try:
             # Start the operation
@@ -220,7 +236,26 @@ class OperationRunner:
                         pass  # Continue with last known status
 
         except Exception as e:
-            print_error(str(e), self.state)
+            # Enhance exception with operation context
+            if hasattr(e, "operation_type") and not e.operation_type:
+                e.operation_type = operation_type
+            if hasattr(e, "operation_id") and not e.operation_id and operation_id:
+                e.operation_id = operation_id
+            elif not hasattr(e, "operation_type"):
+                # For exceptions that don't support operation context, wrap the message
+                from ktrdr.errors.exceptions import KtrdrError
+
+                enhanced_error = KtrdrError(
+                    message=str(e),
+                    operation_type=operation_type,
+                    operation_id=operation_id,
+                    stage="execution",
+                    suggestion="Check operation logs with: ktrdr operations status <operation_id>",
+                )
+                print_error(str(e), self.state, enhanced_error)
+                raise SystemExit(1) from None
+
+            print_error(str(e), self.state, e)
             raise SystemExit(1) from None
         finally:
             # Cleanup signal handler
@@ -242,11 +277,23 @@ class OperationRunner:
             # Display results if available
             self._display_results(op_data, operation_type)
         elif status == "failed":
-            error_msg = op_data.get(
-                "error_message", op_data.get("error", "Unknown error")
+            error_msg = str(
+                op_data.get("error_message", op_data.get("error", "Unknown error"))
+            )
+            # Create error with context
+            from ktrdr.errors.exceptions import KtrdrError
+
+            error_with_context = KtrdrError(
+                message=error_msg,
+                operation_type=operation_type,
+                operation_id=operation_id,
+                stage="completion",
+                suggestion=f"Check full operation details with: ktrdr operations status {operation_id}",
             )
             print_error(
-                f"{operation_type.capitalize()} failed: {error_msg}", self.state
+                f"{operation_type.capitalize()} failed: {error_msg}",
+                self.state,
+                error_with_context,
             )
             raise SystemExit(1)
         elif status == "cancelled":

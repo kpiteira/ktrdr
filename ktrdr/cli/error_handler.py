@@ -79,6 +79,19 @@ def handle_cli_error(e: Exception, verbose: bool = False, quiet: bool = False) -
         logger.error(f"CLI error: {str(e)}")
         sys.exit(1)
 
+    # Build contextual error information
+    context_parts = []
+
+    # Extract operation context if available
+    if hasattr(e, "operation_type") and e.operation_type:
+        if hasattr(e, "operation_id") and e.operation_id:
+            context_parts.append(f"Operation: {e.operation_type} ({e.operation_id})")
+        else:
+            context_parts.append(f"Operation: {e.operation_type}")
+
+    if hasattr(e, "stage") and e.stage:
+        context_parts.append(f"Stage: {e.stage}")
+
     # Check if this is a DataError with API response details
     if isinstance(e, DataError) and hasattr(e, "details"):
         details = e.details
@@ -94,6 +107,10 @@ def handle_cli_error(e: Exception, verbose: bool = False, quiet: bool = False) -
                 )
 
                 if problem_type and clear_message:
+                    if context_parts:
+                        error_console.print("\n[yellow]Context:[/yellow]")
+                        for part in context_parts:
+                            error_console.print(f"  {part}")
                     error_console.print(f"\n{clear_message}")
                     if verbose:
                         error_console.print(
@@ -113,9 +130,19 @@ def handle_cli_error(e: Exception, verbose: bool = False, quiet: bool = False) -
             e, operation_context
         )
 
+        # Display context if available
+        if context_parts:
+            error_console.print("\n[yellow]Context:[/yellow]")
+            for part in context_parts:
+                error_console.print(f"  {part}")
+
         # Display formatted error with nice formatting
         error_console.print("[bold red]Service Error:[/bold red]")
         error_console.print(formatted_error)
+
+        # Add suggestion if available
+        if hasattr(e, "suggestion") and e.suggestion:
+            error_console.print(f"\n[cyan]💡 Suggestion:[/cyan] {e.suggestion}")
 
         if verbose:
             logger.error(f"Service error: {str(e)}", exc_info=True)
@@ -159,8 +186,18 @@ def handle_cli_error(e: Exception, verbose: bool = False, quiet: bool = False) -
                 mock_service_error
             )
 
+            # Display context if available
+            if context_parts:
+                error_console.print("\n[yellow]Context:[/yellow]")
+                for part in context_parts:
+                    error_console.print(f"  {part}")
+
             error_console.print("[bold red]Service Error:[/bold red]")
             error_console.print(formatted_error)
+
+            # Add suggestion if available
+            if hasattr(e, "suggestion") and e.suggestion:
+                error_console.print(f"\n[cyan]💡 Suggestion:[/cyan] {e.suggestion}")
 
             if verbose:
                 logger.error(f"Data provider error: {str(e)}", exc_info=True)
@@ -172,13 +209,40 @@ def handle_cli_error(e: Exception, verbose: bool = False, quiet: bool = False) -
 
     # Check for validation errors
     if isinstance(e, ValidationError):
+        # Display context if available
+        if context_parts:
+            error_console.print("\n[yellow]Context:[/yellow]")
+            for part in context_parts:
+                error_console.print(f"  {part}")
+
         error_console.print(f"[bold red]Validation error:[/bold red] {str(e)}")
+
+        # Show details if available
+        if hasattr(e, "details") and e.details:
+            error_console.print("\n[yellow]Details:[/yellow]")
+            for key, value in e.details.items():
+                error_console.print(f"  {key}: {value}")
+
+        # Add suggestion if available
+        if hasattr(e, "suggestion") and e.suggestion:
+            error_console.print(f"\n[cyan]💡 Suggestion:[/cyan] {e.suggestion}")
+
         if verbose:
             logger.error(f"Validation error: {str(e)}")
         return
 
     # Fallback to standard error handling
+    if context_parts:
+        error_console.print("\n[yellow]Context:[/yellow]")
+        for part in context_parts:
+            error_console.print(f"  {part}")
+
     error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
+
+    # Add suggestion if available
+    if hasattr(e, "suggestion") and e.suggestion:
+        error_console.print(f"\n[cyan]💡 Suggestion:[/cyan] {e.suggestion}")
+
     if verbose:
         logger.error(f"CLI command error: {str(e)}", exc_info=True)
 

@@ -144,8 +144,12 @@ class AsyncCLIClient:
                     attempt += 1
                     continue
                 raise ConnectionError(
-                    message=f"Could not connect to API at {url}",
-                    details={"url": url, "error": str(e)},
+                    message=f"Could not connect to API at {url}. Is the API server running?",
+                    details={
+                        "url": url,
+                        "error": str(e),
+                        "suggestion": f"Ensure API server is running at {self.config.base_url}",
+                    },
                 ) from e
 
             except httpx.TimeoutException as e:
@@ -155,8 +159,12 @@ class AsyncCLIClient:
                     attempt += 1
                     continue
                 raise TimeoutError(
-                    message=f"Request timed out after {timeout or self.config.timeout}s",
-                    details={"url": url, "timeout": timeout or self.config.timeout},
+                    message=f"Request timed out after {timeout or self.config.timeout}s. The API server may be overloaded.",
+                    details={
+                        "url": url,
+                        "timeout": timeout or self.config.timeout,
+                        "suggestion": "Try again or increase timeout with longer wait",
+                    },
                 ) from e
 
     async def get(

@@ -137,6 +137,7 @@ def parse_response(response: httpx.Response) -> dict[str, Any]:
                 details={
                     "error": str(e),
                     "response_text": response.text[:500] if response.text else "",
+                    "suggestion": "API server may be misconfigured or returning invalid data",
                 },
             ) from e
 
@@ -154,10 +155,31 @@ def parse_response(response: httpx.Response) -> dict[str, Any]:
     else:
         error_message = str(error_data) if error_data else "Unknown error"
 
+    # Add suggestions based on status code
+    suggestion = None
+    if response.status_code == 400:
+        suggestion = "Check request parameters and try again"
+    elif response.status_code == 401:
+        suggestion = "Authentication required - check credentials"
+    elif response.status_code == 403:
+        suggestion = "Permission denied - verify access rights"
+    elif response.status_code == 404:
+        suggestion = "Resource not found - verify endpoint path"
+    elif response.status_code == 422:
+        suggestion = "Validation failed - check required fields and data types"
+    elif response.status_code == 429:
+        suggestion = "Rate limited - wait and retry"
+    elif response.status_code >= 500:
+        suggestion = "Server error - check API server logs or retry later"
+
+    details = error_data if isinstance(error_data, dict) else {"raw": error_data}
+    if suggestion:
+        details["suggestion"] = suggestion
+
     raise APIError(
         message=error_message,
         status_code=response.status_code,
-        details=error_data if isinstance(error_data, dict) else {"raw": error_data},
+        details=details,
     )
 
 
