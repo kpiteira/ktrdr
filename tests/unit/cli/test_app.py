@@ -143,7 +143,7 @@ class TestAppUrlOverride:
             )
             assert result.exit_code == 0, f"Command failed: {result.output}"
             assert captured_state is not None
-            assert captured_state.api_url == "http://custom.example.com:9000"
+            assert captured_state.api_url == "http://custom.example.com:9000/api/v1"
         finally:
             app.registered_commands = [
                 cmd for cmd in app.registered_commands if cmd.name != "capture-url"
@@ -168,7 +168,7 @@ class TestAppUrlOverride:
             )
             assert result.exit_code == 0, f"Command failed: {result.output}"
             assert captured_state is not None
-            assert captured_state.api_url == "http://short.example.com:8080"
+            assert captured_state.api_url == "http://short.example.com:8080/api/v1"
         finally:
             app.registered_commands = [
                 cmd for cmd in app.registered_commands if cmd.name != "capture-u"
@@ -195,7 +195,7 @@ class TestAppPortOverride:
             result = runner.invoke(app, ["--port", "8001", "capture-port"])
             assert result.exit_code == 0, f"Command failed: {result.output}"
             assert captured_state is not None
-            assert captured_state.api_url == "http://localhost:8001"
+            assert captured_state.api_url == "http://localhost:8001/api/v1"
         finally:
             app.registered_commands = [
                 cmd for cmd in app.registered_commands if cmd.name != "capture-port"
@@ -218,7 +218,7 @@ class TestAppPortOverride:
             result = runner.invoke(app, ["-p", "8002", "capture-p"])
             assert result.exit_code == 0, f"Command failed: {result.output}"
             assert captured_state is not None
-            assert captured_state.api_url == "http://localhost:8002"
+            assert captured_state.api_url == "http://localhost:8002/api/v1"
         finally:
             app.registered_commands = [
                 cmd for cmd in app.registered_commands if cmd.name != "capture-p"
@@ -255,7 +255,7 @@ class TestAppUrlPrecedence:
             assert result.exit_code == 0, f"Command failed: {result.output}"
             assert captured_state is not None
             # --url should win over --port
-            assert captured_state.api_url == "http://explicit.example.com:9999"
+            assert captured_state.api_url == "http://explicit.example.com:9999/api/v1"
         finally:
             app.registered_commands = [
                 cmd

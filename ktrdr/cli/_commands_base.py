@@ -32,13 +32,14 @@ _cli_state: dict[str, Optional[str]] = {"api_url": None}
 
 def normalize_api_url(url: str) -> str:
     """
-    Normalize an API URL by adding protocol and port if missing.
+    Normalize an API URL by adding protocol, port, and /api/v1 if missing.
 
     Args:
         url: Raw URL (e.g., "backend.example.com" or "http://backend.example.com:8000")
 
     Returns:
-        Normalized URL with protocol and port (e.g., "http://backend.example.com:8000")
+        Normalized URL with protocol, port, and API path
+        (e.g., "http://backend.example.com:8000/api/v1")
     """
     if not url:
         return url
@@ -54,7 +55,13 @@ def normalize_api_url(url: str) -> str:
         netloc = f"{parsed.hostname}:{DEFAULT_API_PORT}"
         url = f"{parsed.scheme}://{netloc}{parsed.path}"
 
-    return url.rstrip("/")
+    url = url.rstrip("/")
+
+    # Auto-append /api/v1 if no API path present
+    if "/api/" not in url:
+        url = f"{url}/api/v1"
+
+    return url
 
 
 def get_api_url_override() -> Optional[str]:
