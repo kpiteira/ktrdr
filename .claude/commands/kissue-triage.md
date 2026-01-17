@@ -22,7 +22,8 @@ This command persists research to GitHub so it's not repeated across sessions.
 Project: **ktrdr issues** (Project #2)
 URL: https://github.com/users/kpiteira/projects/2
 
-**Custom Fields:**
+**Fields:**
+- **Status**: Todo, In Progress, Done (default GitHub field)
 - **Priority**: P1 (critical), P2 (important), P3 (nice-to-have)
 - **Size**: S (< 1 hour), M (1-4 hours), L (> 4 hours)
 - **Subsystems**: Affected areas (training, backtest, CLI, data, workers, observability)
@@ -99,28 +100,47 @@ Identify which subsystems are affected:
 
 Determine which E2E tests would validate the fix:
 
-1. Use the **e2e-test-designer** agent to search the catalog
+1. Use the **e2e-test-designer** agent to search the catalog (if available)
 2. Match subsystems to test categories:
    - training → `training/smoke`, `training/resume`
    - backtest → `backtest/smoke`, `backtest/full`
    - data → `data/load`, `data/cache`
 3. If no existing test applies, note "None required" or "New test needed"
+4. If e2e-test-designer is unavailable, manually check `.claude/skills/e2e-testing/` for test catalog
 
 ### Step 3: Update GitHub Project
 
-For each evaluated issue, update the project fields:
+For each evaluated issue, update the project fields.
+
+**First, get field IDs and option IDs:**
+
+```bash
+# Get all field definitions including option IDs
+gh project field-list 2 --owner kpiteira --format json | jq '.fields[] | select(.name == "Priority" or .name == "Size" or .name == "Subsystems" or .name == "E2E Tests" or .name == "Triaged") | {name, id, options}'
+```
+
+**Then update each field:**
 
 ```bash
 # Get the item ID for the issue
 ITEM_ID=$(gh project item-list 2 --owner kpiteira --format json | jq -r '.items[] | select(.content.number == <issue-number>) | .id')
 
-# Update fields
-gh project item-edit --project-id PVT_kwHOABLkcs4BMzRq --id $ITEM_ID --field-id <priority-field-id> --single-select-option-id <option-id>
-gh project item-edit --project-id PVT_kwHOABLkcs4BMzRq --id $ITEM_ID --field-id <size-field-id> --single-select-option-id <option-id>
-gh project item-edit --project-id PVT_kwHOABLkcs4BMzRq --id $ITEM_ID --field-id <subsystems-field-id> --text "training, CLI"
-gh project item-edit --project-id PVT_kwHOABLkcs4BMzRq --id $ITEM_ID --field-id <e2e-field-id> --text "training/smoke"
-gh project item-edit --project-id PVT_kwHOABLkcs4BMzRq --id $ITEM_ID --field-id <triaged-field-id> --date $(date +%Y-%m-%d)
+# Get the project ID
+PROJECT_ID=$(gh project list --owner kpiteira --format json | jq -r '.projects[] | select(.number == 2) | .id')
+
+# Update single-select fields (Priority, Size) using option IDs from field-list output
+gh project item-edit --project-id $PROJECT_ID --id $ITEM_ID --field-id <priority-field-id> --single-select-option-id <P1|P2|P3-option-id>
+gh project item-edit --project-id $PROJECT_ID --id $ITEM_ID --field-id <size-field-id> --single-select-option-id <S|M|L-option-id>
+
+# Update text fields
+gh project item-edit --project-id $PROJECT_ID --id $ITEM_ID --field-id <subsystems-field-id> --text "training, CLI"
+gh project item-edit --project-id $PROJECT_ID --id $ITEM_ID --field-id <e2e-field-id> --text "training/smoke"
+
+# Update date field
+gh project item-edit --project-id $PROJECT_ID --id $ITEM_ID --field-id <triaged-field-id> --date $(date +%Y-%m-%d)
 ```
+
+**Note:** Field IDs and option IDs are project-specific. Use `gh project field-list` to discover them for your project.
 
 ### Step 4: Report Results
 

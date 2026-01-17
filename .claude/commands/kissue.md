@@ -288,10 +288,22 @@ Which issue would you like to implement?
 
 If blocked during implementation:
 
-- Do not create a PR
-- Document the blocker
-- Keep Status as "In Progress"
-- Ask for guidance
+1. **Do not create a PR** - incomplete work shouldn't be submitted
+2. **Document the blocker** - describe what's preventing progress
+3. **Keep Status as "In Progress"** in the GitHub Project
+4. **Ask for guidance** - present the blocker and options to the user
+
+**Common blockers and responses:**
+
+| Blocker | Response |
+|---------|----------|
+| Tests won't pass | Investigate root cause, ask for help if unclear |
+| Acceptance criteria ambiguous | Ask user for clarification before continuing |
+| Scope larger than expected | Discuss whether to split into multiple issues |
+| Dependency on other work | Note the dependency, ask whether to proceed or wait |
+| E2E tests failing | Investigate whether it's the fix or existing issue |
+
+**Recovery:** If returning to a blocked issue later, check git branch status and project item status first.
 
 ---
 
