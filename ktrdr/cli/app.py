@@ -16,11 +16,14 @@ from ktrdr.cli.commands import normalize_api_url
 from ktrdr.cli.commands.backtest import backtest
 from ktrdr.cli.commands.cancel import cancel
 from ktrdr.cli.commands.follow import follow
+from ktrdr.cli.commands.list_cmd import list_app
 from ktrdr.cli.commands.ops import ops
 from ktrdr.cli.commands.research import research
 from ktrdr.cli.commands.resume import resume
+from ktrdr.cli.commands.show import show_app
 from ktrdr.cli.commands.status import status
 from ktrdr.cli.commands.train import train
+from ktrdr.cli.commands.validate import validate_cmd
 from ktrdr.cli.sandbox_detect import resolve_api_url
 from ktrdr.cli.state import CLIState
 
@@ -84,6 +87,11 @@ app.command()(follow)
 app.command()(ops)
 app.command()(cancel)
 app.command()(resume)
+
+# Register M3 commands
+app.add_typer(list_app)  # ktrdr list strategies/models/checkpoints
+app.add_typer(show_app)  # ktrdr show data/features
+app.command("validate")(validate_cmd)  # ktrdr validate <name|path>
 
 
 if __name__ == "__main__":

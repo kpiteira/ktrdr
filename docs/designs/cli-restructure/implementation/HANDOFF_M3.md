@@ -43,3 +43,26 @@ Running notes for M3 CLI restructure implementation.
 
 - Task 3.3 (validate command) supports both API validation (by name) and local file validation (paths starting with `./` or `/`). The local validation path is intentional for pre-deployment testing.
 - Task 3.5 wires up show_app with `app.add_typer(show_app)`, same pattern as list_app.
+
+---
+
+## Task 3.3 Complete: Implement Validate Command
+
+### Gotchas
+
+- **Command registration requires explicit name:** Using `app.command()(validate_cmd)` creates a command named `validate-cmd` (from function name). Must use `app.command("validate")(validate_cmd)` to get the expected `validate` name.
+- **Two CLI entry points:** The `ktrdr` command uses `cli_app` from `ktrdr/cli/__init__.py`, not `app` from `ktrdr/cli/app.py`. M3 commands must be registered in both places (app.py for tests, __init__.py for actual CLI).
+- **API validation uses POST:** The `/strategies/validate/{name}` endpoint uses POST, not GET. Returns `{valid, strategy_name, issues, message}`.
+- **Local path detection:** Check for `./` or `/` prefix to detect local paths. Names without prefix go to API.
+- **V3 format detection:** Check `isinstance(config.get("indicators"), dict) and "nn_inputs" in config`.
+
+### Emergent Patterns
+
+- **Test cleanup pattern:** Use helper functions `_register_validate_cmd(app)` and `_cleanup_validate_cmd(app)` to manage command registration/cleanup in tests.
+- **Dual mode pattern:** For commands that work differently based on input type (name vs path), use simple prefix detection in the main function, then delegate to specialized handlers.
+- **Patch location matters:** When imports are inside functions, patch at the source module (`ktrdr.config.strategy_loader.StrategyConfigurationLoader`), not at the usage module.
+
+### Next Task Notes
+
+- Task 3.4 (migrate command) is similar to validate but focuses on v2→v3 conversion. Uses local-only validation (no API call needed).
+- Task 3.5 wires up all M3 commands in `ktrdr/cli/__init__.py` (the actual entry point) using `cli_app.add_typer()` for subcommand groups and `cli_app.command("name")(func)` for direct commands.
