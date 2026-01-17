@@ -1,8 +1,8 @@
 #!/bin/bash
-# KTRDR Sandbox Initialization Script
+# KTRDR Coding Agent Initialization Script
 # First-time setup: builds image, starts container, clones repo
 #
-# Usage: ./scripts/sandbox-init.sh
+# Usage: ./scripts/coding-agent-init.sh
 #
 # This script is idempotent - safe to run multiple times.
 # It will skip steps that are already complete.
@@ -11,11 +11,11 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-COMPOSE_FILE="$PROJECT_ROOT/deploy/environments/sandbox/docker-compose.yml"
-CONTAINER_NAME="ktrdr-sandbox"
+COMPOSE_FILE="$PROJECT_ROOT/deploy/environments/coding-agent/docker-compose.yml"
+CONTAINER_NAME="ktrdr-coding-agent"
 REPO_URL="https://github.com/kpiteira/ktrdr.git"
 
-echo "=== KTRDR Sandbox Initialization ==="
+echo "=== KTRDR Coding Agent Initialization ==="
 echo ""
 
 # Check prerequisites
@@ -56,14 +56,14 @@ if [ ! -d "$SHARED_DATA_DIR" ]; then
     mkdir -p "$SHARED_DATA_DIR"
 fi
 
-# Step 1: Build sandbox image
-echo "Step 1: Building sandbox image..."
+# Step 1: Build coding agent image
+echo "Step 1: Building coding agent image..."
 docker compose -f "$COMPOSE_FILE" build
 echo "  Done."
 
 # Step 2: Start container
 echo ""
-echo "Step 2: Starting sandbox container..."
+echo "Step 2: Starting coding agent container..."
 docker compose -f "$COMPOSE_FILE" up -d
 echo "  Done."
 
@@ -131,7 +131,7 @@ else
 fi
 
 echo ""
-echo "=== Sandbox Initialization Complete ==="
+echo "=== Coding Agent Initialization Complete ==="
 echo ""
 
 # Step 6: Check Claude Code authentication
@@ -142,7 +142,7 @@ if docker exec "$CONTAINER_NAME" test -f /home/ubuntu/.claude/credentials.json 2
 else
     echo "  Claude Code: NOT logged in"
     echo ""
-    echo "  You need to authenticate Claude Code in the sandbox."
+    echo "  You need to authenticate Claude Code in the coding agent container."
     read -p "  Run 'claude login' now? [Y/n] " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Nn]$ ]]; then
@@ -177,6 +177,6 @@ echo ""
 echo "=== Setup Summary ==="
 echo ""
 echo "Next steps:"
-echo "  ./scripts/sandbox-shell.sh     # Interactive shell"
-echo "  ./scripts/sandbox-claude.sh    # Run Claude Code"
-echo "  ./scripts/sandbox-reset.sh     # Reset workspace"
+echo "  ./scripts/coding-agent-shell.sh     # Interactive shell"
+echo "  ./scripts/coding-agent-claude.sh    # Run Claude Code"
+echo "  ./scripts/coding-agent-reset.sh     # Reset workspace"

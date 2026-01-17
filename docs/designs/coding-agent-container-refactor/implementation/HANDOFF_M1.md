@@ -107,3 +107,28 @@ Remaining `sandbox` references in test files are intentional:
 ### Next Task Notes (1.7)
 - Rename shell scripts: sandbox-*.sh → coding-agent-*.sh
 - Update internal container name references from ktrdr-sandbox to ktrdr-coding-agent
+
+---
+
+## Task 1.7 Complete: Rename scripts
+
+**Summary:** Renamed all 4 sandbox scripts and updated all internal references.
+
+### Files Renamed (git mv)
+- `sandbox-init.sh` → `coding-agent-init.sh`
+- `sandbox-reset.sh` → `coding-agent-reset.sh`
+- `sandbox-shell.sh` → `coding-agent-shell.sh`
+- `sandbox-claude.sh` → `coding-agent-claude.sh`
+
+### Content Updates
+- CONTAINER_NAME: `ktrdr-sandbox` → `ktrdr-coding-agent`
+- COMPOSE_FILE path: `sandbox` → `coding-agent`
+- Comments: "Sandbox" → "Coding Agent"
+- Echo statements: "Sandbox" → "Coding Agent"
+- Script references updated to new names
+
+### Next Task Notes (1.8)
+- Rename Docker configuration directories
+- `deploy/environments/sandbox/` → `deploy/environments/coding-agent/`
+- `deploy/docker/sandbox/` → `deploy/docker/coding-agent/`
+- Update docker-compose.yml service name, container name, image name, volume names

@@ -1,8 +1,8 @@
 #!/bin/bash
-# KTRDR Sandbox Reset Script
+# KTRDR Coding Agent Reset Script
 # Resets workspace to clean git state while preserving models/strategies
 #
-# Usage: ./scripts/sandbox-reset.sh
+# Usage: ./scripts/coding-agent-reset.sh
 #
 # What gets reset:
 #   - /workspace: Reset to clean git state (untracked files removed, modified files restored)
@@ -15,23 +15,23 @@
 
 set -e
 
-CONTAINER_NAME="ktrdr-sandbox"
+CONTAINER_NAME="ktrdr-coding-agent"
 START_TIME=$(date +%s)
 
-echo "=== KTRDR Sandbox Reset ==="
+echo "=== KTRDR Coding Agent Reset ==="
 echo ""
 
 # Check if container is running
 if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     echo "ERROR: Container $CONTAINER_NAME is not running"
-    echo "       Run ./scripts/sandbox-init.sh first"
+    echo "       Run ./scripts/coding-agent-init.sh first"
     exit 1
 fi
 
 # Check if workspace has git repo
 if ! docker exec "$CONTAINER_NAME" test -d /workspace/.git; then
     echo "ERROR: /workspace has no git repository"
-    echo "       Run ./scripts/sandbox-init.sh first"
+    echo "       Run ./scripts/coding-agent-init.sh first"
     exit 1
 fi
 
@@ -87,7 +87,7 @@ END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))
 
 echo ""
-echo "=== Sandbox Reset Complete (${DURATION}s) ==="
+echo "=== Coding Agent Reset Complete (${DURATION}s) ==="
 
 # Warn if reset took too long
 if [ "$DURATION" -gt 30 ]; then
