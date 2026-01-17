@@ -58,7 +58,10 @@ class TestCodingAgentContainerExec:
     @pytest.mark.asyncio
     async def test_exec_raises_on_nonzero_exit(self):
         """exec() should raise CodingAgentError on non-zero exit."""
-        from orchestrator.coding_agent_container import CodingAgentError, CodingAgentContainer
+        from orchestrator.coding_agent_container import (
+            CodingAgentContainer,
+            CodingAgentError,
+        )
 
         manager = CodingAgentContainer()
 
@@ -111,8 +114,8 @@ class TestCodingAgentContainerInvokeClaude:
     @pytest.mark.asyncio
     async def test_invoke_claude_returns_claude_result(self):
         """invoke_claude() should return parsed ClaudeResult."""
-        from orchestrator.models import ClaudeResult
         from orchestrator.coding_agent_container import CodingAgentContainer
+        from orchestrator.models import ClaudeResult
 
         manager = CodingAgentContainer()
 
@@ -240,7 +243,10 @@ class TestCodingAgentContainerInvokeClaude:
     @pytest.mark.asyncio
     async def test_invoke_claude_raises_on_invalid_json(self):
         """invoke_claude() should raise on invalid JSON output."""
-        from orchestrator.coding_agent_container import CodingAgentError, CodingAgentContainer
+        from orchestrator.coding_agent_container import (
+            CodingAgentContainer,
+            CodingAgentError,
+        )
 
         manager = CodingAgentContainer()
 
@@ -366,8 +372,8 @@ class TestInvokeClaudeStreaming:
     @pytest.mark.asyncio
     async def test_returns_claude_result_from_result_event(self):
         """invoke_claude_streaming() should return ClaudeResult from result event."""
-        from orchestrator.models import ClaudeResult
         from orchestrator.coding_agent_container import CodingAgentContainer
+        from orchestrator.models import ClaudeResult
 
         manager = CodingAgentContainer()
 

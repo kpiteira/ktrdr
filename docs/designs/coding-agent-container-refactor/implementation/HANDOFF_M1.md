@@ -45,3 +45,26 @@
 ### Next Task Notes (1.4)
 - Update `orchestrator/milestone_runner.py`
 - Similar pattern: import, instantiation, function parameters, usages
+
+---
+
+## Task 1.4 Complete: Update orchestrator/milestone_runner.py imports
+
+**Summary:** Updated imports and all parameter/variable names. Also updated test_milestone_runner.py mocks to match. 32 tests pass.
+
+### Changes Made
+- Import: `orchestrator.sandbox.SandboxManager` → `orchestrator.coding_agent_container.CodingAgentContainer`
+- Variable: `sandbox = SandboxManager(...)` → `container = CodingAgentContainer(...)`
+- Functions updated: `run_milestone`, `_get_current_branch`, `create_milestone_pr`
+- Parameter names: `sandbox: SandboxManager` → `container: CodingAgentContainer`
+- All `sandbox.` usages → `container.`
+- Docstrings updated ("sandbox" → "coding agent container")
+
+### Gotcha
+- **test_milestone_runner.py also needed updates** - Many mock patches (`patch("orchestrator.milestone_runner.SandboxManager")`) and variable names (`sandbox: MagicMock`) needed changing
+- **Import ordering issues from earlier tasks** - Had to run `ruff --fix` on runner.py and test_coding_agent_container.py to fix import sorting issues introduced in Tasks 1.2 and 1.3
+
+### Next Task Notes (1.5)
+- Update `orchestrator/cli.py`
+- Similar pattern: import, instantiation, usages
+- Line 28 has the import, line 124 and 382 have instantiations

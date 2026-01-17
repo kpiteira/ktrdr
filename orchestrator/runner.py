@@ -23,11 +23,11 @@ from rich.prompt import Prompt
 
 from ktrdr.llm.haiku_brain import HaikuBrain
 from orchestrator import telemetry
+from orchestrator.coding_agent_container import CodingAgentContainer
 from orchestrator.config import OrchestratorConfig
 from orchestrator.discord_notifier import format_escalation_needed, send_discord_message
 from orchestrator.models import Task, TaskResult
 from orchestrator.notifications import send_notification
-from orchestrator.coding_agent_container import CodingAgentContainer
 
 # Console for output
 console = Console()

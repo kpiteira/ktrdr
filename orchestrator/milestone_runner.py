@@ -16,6 +16,7 @@ from rich.prompt import Prompt
 
 from ktrdr.llm.haiku_brain import HaikuBrain
 from orchestrator import telemetry
+from orchestrator.coding_agent_container import CodingAgentContainer
 from orchestrator.config import OrchestratorConfig
 from orchestrator.discord_notifier import (
     format_milestone_completed,
@@ -32,7 +33,6 @@ from orchestrator.runner import (
     run_e2e_tests,
     run_task_with_escalation,
 )
-from orchestrator.sandbox import SandboxManager
 from orchestrator.state import OrchestratorState
 
 # Maximum E2E fix attempts before stopping (prevents runaway fix cycles)
@@ -141,8 +141,8 @@ async def run_milestone(
         for t in extracted
     ]
 
-    # Initialize sandbox
-    sandbox = SandboxManager(
+    # Initialize coding agent container
+    container = CodingAgentContainer(
         container_name=config.sandbox_container,
         workspace_path=config.workspace_path,
     )
@@ -154,7 +154,7 @@ async def run_milestone(
 
     if state is None:
         # Get current branch for PR base (before /ktask creates a new branch)
-        starting_branch = _get_current_branch(sandbox)
+        starting_branch = _get_current_branch(container)
 
         state = OrchestratorState(
             milestone_id=milestone_id,
@@ -195,7 +195,7 @@ async def run_milestone(
                 # Run the task with escalation handling (HaikuBrain decides retry/escalate)
                 result = await run_task_with_escalation(
                     task,
-                    sandbox,
+                    container,
                     config,
                     plan_path,
                     tracer,
@@ -277,7 +277,7 @@ async def run_milestone(
 
                 while True:
                     e2e_result = await run_e2e_tests(
-                        milestone_id, e2e_scenario, sandbox, config, tracer
+                        milestone_id, e2e_scenario, container, config, tracer
                     )
 
                     # Accumulate E2E costs
@@ -328,7 +328,7 @@ async def run_milestone(
                             if apply:
                                 console.print("Applying fix...")
                                 success = await apply_e2e_fix(
-                                    e2e_result.fix_suggestion, sandbox, config, tracer
+                                    e2e_result.fix_suggestion, container, config, tracer
                                 )
 
                                 if success:
@@ -493,8 +493,8 @@ def _extract_recommendation(raw_output: str) -> str | None:
     return None
 
 
-def _get_current_branch(sandbox: SandboxManager) -> str:
-    """Get the current git branch from the sandbox.
+def _get_current_branch(container: CodingAgentContainer) -> str:
+    """Get the current git branch from the coding agent container.
 
     Returns:
         Branch name, or "main" if detection fails.
@@ -506,10 +506,10 @@ def _get_current_branch(sandbox: SandboxManager) -> str:
             [
                 "docker",
                 "exec",
-                sandbox.container_name,
+                container.container_name,
                 "git",
                 "-C",
-                sandbox.workspace_path,
+                container.workspace_path,
                 "branch",
                 "--show-current",
             ],
@@ -573,7 +573,7 @@ def parse_e2e_scenario(plan_content: str) -> str | None:
 
 
 async def create_milestone_pr(
-    sandbox: SandboxManager,
+    container: CodingAgentContainer,
     milestone_id: str,
     completed_tasks: list[str],
     total_cost_usd: float,
@@ -585,7 +585,7 @@ async def create_milestone_pr(
     made across the completed tasks.
 
     Args:
-        sandbox: SandboxManager for invoking Claude
+        container: CodingAgentContainer for invoking Claude
         milestone_id: The milestone identifier
         completed_tasks: List of completed task IDs
         total_cost_usd: Total cost of the milestone
@@ -607,4 +607,4 @@ Include:
 
 The PR should summarize the entire milestone's work, not individual tasks."""
 
-    return await sandbox.invoke_claude(prompt=prompt, max_turns=10)
+    return await container.invoke_claude(prompt=prompt, max_turns=10)
