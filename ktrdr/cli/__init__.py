@@ -40,9 +40,22 @@ def _derive_otlp_endpoint_from_url(api_url: str | None) -> str:
         except Exception:
             pass  # Best-effort derivation; fall back to localhost
 
-    # Use sandbox-specific port if set, otherwise default
-    port = os.environ.get("KTRDR_JAEGER_OTLP_GRPC_PORT", "4317")
-    return f"http://localhost:{port}"
+    # Use sandbox-specific port if set in env var
+    if port := os.environ.get("KTRDR_JAEGER_OTLP_GRPC_PORT"):
+        return f"http://localhost:{port}"
+
+    # Check .env.sandbox file directly (avoids env var pollution)
+    try:
+        from ktrdr.cli.sandbox_detect import get_sandbox_context
+
+        if sandbox_env := get_sandbox_context():
+            if port := sandbox_env.get("KTRDR_JAEGER_OTLP_GRPC_PORT"):
+                return f"http://localhost:{port}"
+    except Exception:
+        pass  # Best-effort; fall back to default
+
+    # Default port
+    return "http://localhost:4317"
 
 
 def reconfigure_telemetry_for_url(api_url: str) -> None:
