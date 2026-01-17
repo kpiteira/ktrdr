@@ -5,323 +5,283 @@ architecture: ../ARCHITECTURE.md
 
 # Milestone 3: Docker Run with Volume Mount
 
+**Branch:** `docs/coding-agent-container-refactor`
+**Builds on:** Milestone 2 (Environment Validation)
+**E2E Test:** Claude in container can curl sandbox API using port from .env.sandbox
+
 ## Goal
 
-CodingAgentContainer uses `docker run` with explicit volume mount. Remove docker socket and named volume for workspace. Container mounts code folder directly.
-
-## E2E Validation
-
-**Test:** Claude in container can curl sandbox API using port from `.env.sandbox`
-
-```bash
-# Prerequisites: In code folder with sandbox running
-cd ~/ktrdr--orchestrator-1
-ktrdr sandbox up
-
-# Start container with new approach
-docker run -d --name ktrdr-coding-agent \
-  -v $(pwd):/workspace \
-  --add-host=host.docker.internal:host-gateway \
-  ktrdr-coding-agent:latest
-
-# Verify .env.sandbox is accessible
-docker exec ktrdr-coding-agent cat /workspace/.env.sandbox
-
-# Verify can reach sandbox API (port from .env.sandbox)
-docker exec ktrdr-coding-agent bash -c 'source /workspace/.env.sandbox && curl -s http://host.docker.internal:${KTRDR_API_PORT}/health'
-
-# Cleanup
-docker rm -f ktrdr-coding-agent
-```
-
-**Success Criteria:**
-- [ ] Container starts with code folder mounted as `/workspace`
-- [ ] `/workspace/.env.sandbox` is readable
-- [ ] Can reach CLI sandbox API from inside container
-- [ ] No docker socket mounted (verify with `docker inspect`)
+CodingAgentContainer uses `docker run` with explicit volume mount. Remove docker socket and named volume for workspace. Container mounts code folder directly, reads connection info from `/workspace/.env.sandbox`.
 
 ---
 
 ## Task 3.1: Update CodingAgentContainer.start() to use docker run
 
-**File:** `orchestrator/coding_agent_container.py`
+**File(s):** `orchestrator/coding_agent_container.py`
 **Type:** CODING
 **Estimated time:** 45 min
 
+**Task Categories:** External, Configuration
+
 **Description:**
-Replace the current container startup (which assumes container already exists) with explicit `docker run` that mounts the code folder.
+Add `start()` method that uses `docker run` with volume mount. Add `stop()` method. Update default container_name to `ktrdr-coding-agent`. Add `image_name` attribute. The `start()` method accepts a `code_folder: Path` parameter, removes any existing container, then starts fresh with the code folder mounted as `/workspace`.
 
-**Changes:**
-
-```python
-async def start(self, code_folder: Path) -> None:
-    """
-    Start container with code folder mounted as /workspace.
-    Removes existing container if present.
-
-    Args:
-        code_folder: Path to the code folder (repo root with .env.sandbox)
-    """
-    # Remove existing container if any
-    subprocess.run(
-        ["docker", "rm", "-f", self.container_name],
-        capture_output=True,
-    )
-
-    # Start fresh container with volume mount
-    result = subprocess.run(
-        [
-            "docker", "run", "-d",
-            "--name", self.container_name,
-            "-v", f"{code_folder}:/workspace",
-            "--add-host=host.docker.internal:host-gateway",
-            self.image_name,
-        ],
-        capture_output=True,
-        text=True,
-    )
-
-    if result.returncode != 0:
-        raise CodingAgentError(f"Failed to start container: {result.stderr}")
-
-async def stop(self) -> None:
-    """Stop and remove the container."""
-    subprocess.run(
-        ["docker", "rm", "-f", self.container_name],
-        capture_output=True,
-    )
-```
-
-**Also update:**
+**Implementation Notes:**
 - Add `image_name: str = "ktrdr-coding-agent:latest"` as class attribute
-- Update `container_name` default to `"ktrdr-coding-agent"`
+- Change `container_name` default from `ktrdr-sandbox` to `ktrdr-coding-agent`
+- `start()` runs: `docker rm -f {container_name}` then `docker run -d --name {container_name} -v {code_folder}:/workspace --add-host=host.docker.internal:host-gateway {image_name}`
+- `stop()` runs: `docker rm -f {container_name}`
+- Raise `CodingAgentError` on docker failure
+
+**Testing Requirements:**
+
+*Unit Tests:*
+- [ ] start() calls docker run with correct volume mount
+- [ ] start() removes existing container first
+- [ ] start() raises CodingAgentError on failure
+- [ ] stop() removes container
+
+*Integration Tests:*
+- [ ] Container actually starts (requires Docker)
+
+*Smoke Test:*
+```bash
+python -c "
+from pathlib import Path
+from orchestrator.coding_agent_container import CodingAgentContainer
+import asyncio
+c = CodingAgentContainer()
+asyncio.run(c.start(Path.cwd()))
+print('Started')
+asyncio.run(c.stop())
+print('Stopped')
+"
+```
 
 **Acceptance Criteria:**
 - [ ] `start()` accepts `code_folder: Path` parameter
-- [ ] Uses `docker run` with `-v` flag
-- [ ] Includes `--add-host` for host.docker.internal
+- [ ] Uses `docker run` with `-v` flag for volume mount
+- [ ] Includes `--add-host=host.docker.internal:host-gateway`
 - [ ] `stop()` removes container
 - [ ] Raises `CodingAgentError` on failure
+- [ ] Default container_name is `ktrdr-coding-agent`
 
 ---
 
 ## Task 3.2: Update docker-compose.yml to remove docker socket
 
-**File:** `deploy/environments/coding-agent/docker-compose.yml`
+**File(s):** `deploy/environments/coding-agent/docker-compose.yml`
 **Type:** CODING
 **Estimated time:** 20 min
 
+**Task Categories:** Configuration
+
 **Description:**
-Remove the docker socket mount and named workspace volume. The compose file is now only used for building the image, not for running the container.
+Remove the docker socket mount and named workspace volume. The compose file is now only used for building the image. Add comments explaining this. Keep Claude credentials volume and shared data mount.
 
-**Changes:**
+**Implementation Notes:**
+- Remove: `- /var/run/docker.sock:/var/run/docker.sock`
+- Remove: `- sandbox-workspace:/workspace` (now named `coding-agent-workspace`)
+- Remove the workspace volume definition
+- Keep: `- coding-agent-claude-credentials:/home/ubuntu/.claude`
+- Keep: `- ${HOME}/Documents/ktrdr-shared/data:/shared/data:ro`
+- Update header comments to explain file is for building only
 
-```yaml
-services:
-  coding-agent:
-    build:
-      context: ../../../
-      dockerfile: deploy/docker/coding-agent/Dockerfile
-    image: ktrdr-coding-agent:latest
-    # Container is started via `docker run`, not compose
-    # This file is kept for building the image only
+**Testing Requirements:**
 
-    # REMOVED: Docker socket mount (security improvement)
-    # REMOVED: Named workspace volume (now mounts code folder directly)
+*Unit Tests:*
+- [ ] N/A for Docker config
 
-    volumes:
-      # Keep shared data mount (read-only)
-      - ${HOME}/Documents/ktrdr-shared/data:/shared/data:ro
-      # Keep Claude credentials persistent
-      - coding-agent-claude-credentials:/home/ubuntu/.claude
+*Integration Tests:*
+- [ ] Image still builds successfully
 
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-volumes:
-  coding-agent-claude-credentials:
-    name: ktrdr-coding-agent-claude-credentials
+*Smoke Test:*
+```bash
+docker compose -f deploy/environments/coding-agent/docker-compose.yml config | grep -c "docker.sock"
+# Should return 0 (no docker socket mount)
 ```
 
 **Acceptance Criteria:**
 - [ ] Docker socket mount removed
 - [ ] Named workspace volume removed
-- [ ] Can still build image: `docker compose build`
-- [ ] Comments explain this is for image building only
+- [ ] Comments explain file is for image building only
+- [ ] Image builds: `docker compose -f deploy/environments/coding-agent/docker-compose.yml build`
 
 ---
 
 ## Task 3.3: Update scripts to use docker run
 
-**Files:** `scripts/coding-agent-init.sh`, `scripts/coding-agent-shell.sh`
+**File(s):** `scripts/coding-agent-init.sh`, `scripts/coding-agent-shell.sh`
 **Type:** CODING
 **Estimated time:** 30 min
 
+**Task Categories:** Configuration
+
 **Description:**
-Update scripts to match the new container startup approach.
+Update init script to only build the image (not start container). Update shell script to check if container is running and give helpful error if not.
 
-**Changes in coding-agent-init.sh:**
-- Build image using docker compose (for the build context)
-- Don't start container (that's orchestrator's job now)
-- Update comments to explain new workflow
+**Implementation Notes:**
+- coding-agent-init.sh: Remove container startup, just build image
+- coding-agent-init.sh: Update instructions to explain orchestrator starts container
+- coding-agent-shell.sh: Check `docker ps` for container, error if not running
+- coding-agent-shell.sh: Provide example docker run command in error message
 
-**Changes in coding-agent-shell.sh:**
-- Check if container is running, if not give helpful error
-- Or: start container with current directory as workspace
+**Testing Requirements:**
 
+*Unit Tests:*
+- [ ] N/A for scripts
+
+*Integration Tests:*
+- [ ] N/A for scripts
+
+*Smoke Test:*
 ```bash
-#!/bin/bash
-# Interactive shell in the coding agent container
-# Usage: ./scripts/coding-agent-shell.sh
-
-CONTAINER_NAME="ktrdr-coding-agent"
-
-# Check if container is running
-if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
-    echo "Container not running."
-    echo "Start it with: docker run -d --name $CONTAINER_NAME -v \$(pwd):/workspace ktrdr-coding-agent:latest"
-    exit 1
-fi
-
-docker exec -it -u ubuntu -w /workspace "$CONTAINER_NAME" bash
+# After init (image built), shell should error if no container:
+docker rm -f ktrdr-coding-agent 2>/dev/null
+./scripts/coding-agent-shell.sh 2>&1 | grep -i "not running"
+# Should show error about container not running
 ```
 
 **Acceptance Criteria:**
-- [ ] Scripts work with new startup approach
-- [ ] Clear error messages when container not running
-- [ ] `coding-agent-init.sh` builds image but doesn't start container
+- [ ] coding-agent-init.sh builds image but doesn't start container
+- [ ] coding-agent-shell.sh errors clearly when container not running
+- [ ] Error message includes example docker run command
 
 ---
 
 ## Task 3.4: Wire code_folder through orchestrator
 
-**Files:** `orchestrator/milestone_runner.py`, `orchestrator/cli.py`
+**File(s):** `orchestrator/milestone_runner.py`, `orchestrator/cli.py`
 **Type:** CODING
 **Estimated time:** 30 min
 
+**Task Categories:** Wiring/DI, Cross-Component
+
 **Description:**
-Pass the `code_folder` from `validate_environment()` to `CodingAgentContainer.start()`.
+Pass the `code_folder` from `validate_environment()` to `CodingAgentContainer.start()`. Add try/finally to ensure container is stopped. Update the flow to: validate → start container → run tasks → stop container.
 
-**Changes in milestone_runner.py:**
+**Implementation Notes:**
+- In milestone_runner.py: `code_folder = validate_environment()` then `await container.start(code_folder)`
+- Wrap task execution in try/finally with `await container.stop()` in finally
+- In cli.py: similar pattern for any commands that use the container
+- Update tests to mock both `validate_environment` and `container.start()`
 
-```python
-async def run_milestone(...):
-    code_folder = validate_environment()
-    container = CodingAgentContainer(...)
+**Testing Requirements:**
 
-    # Start container with code folder mounted
-    await container.start(code_folder)
+*Unit Tests:*
+- [ ] code_folder passed to container.start()
+- [ ] container.stop() called in finally block
+- [ ] Tests mock start() and stop()
 
-    try:
-        # ... rest of milestone execution
-    finally:
-        await container.stop()
-```
+*Integration Tests:*
+- [ ] Wiring test: container started with correct path
 
-**Changes in cli.py:**
-
-```python
-# Similar pattern - start container before invoking Claude
+*Smoke Test:*
+```bash
+# Verify the wiring by checking container mounts after orchestrator starts it
+# (manual verification during development)
 ```
 
 **Acceptance Criteria:**
 - [ ] `code_folder` passed to `container.start()`
-- [ ] Container stopped in finally block
+- [ ] Container stopped in finally block (cleanup)
 - [ ] Tests updated to mock `start()` and `stop()`
+- [ ] No resource leaks (container always stopped)
 
 ---
 
 ## Task 3.5: Update tests for new container lifecycle
 
-**File:** `orchestrator/tests/test_coding_agent_container.py`
+**File(s):** `orchestrator/tests/test_coding_agent_container.py`
 **Type:** CODING
 **Estimated time:** 30 min
 
+**Task Categories:** Cross-Component
+
 **Description:**
-Update tests for the new `start()` and `stop()` methods.
+Add tests for `start()` and `stop()` methods. Test volume mount arguments, container removal before start, error handling, and stop cleanup.
 
-**New tests:**
+**Implementation Notes:**
+- Use `unittest.mock.patch` for subprocess.run
+- Test that docker run includes `-v {path}:/workspace`
+- Test that docker rm -f is called before docker run
+- Test CodingAgentError raised on non-zero exit
+- Follow existing test patterns in the file
 
-```python
-class TestContainerLifecycle:
-    """Test container start/stop methods."""
+**Testing Requirements:**
 
-    @pytest.mark.asyncio
-    async def test_start_runs_docker_with_volume_mount(self, tmp_path):
-        """start() should run docker with code folder mounted."""
-        container = CodingAgentContainer()
+*Unit Tests:*
+- [ ] test_start_runs_docker_with_volume_mount
+- [ ] test_start_removes_existing_container_first
+- [ ] test_start_raises_on_failure
+- [ ] test_stop_removes_container
 
-        with patch("orchestrator.coding_agent_container.subprocess.run") as mock_run:
-            mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
-            await container.start(tmp_path)
+*Integration Tests:*
+- [ ] N/A (mocked)
 
-        # Check docker run was called with correct args
-        calls = mock_run.call_args_list
-        docker_run_call = [c for c in calls if "run" in c[0][0]][0]
-        assert "-v" in docker_run_call[0][0]
-        assert f"{tmp_path}:/workspace" in docker_run_call[0][0]
-
-    @pytest.mark.asyncio
-    async def test_start_removes_existing_container_first(self, tmp_path):
-        """start() should remove any existing container."""
-        container = CodingAgentContainer()
-
-        with patch("orchestrator.coding_agent_container.subprocess.run") as mock_run:
-            mock_run.return_value = Mock(returncode=0)
-            await container.start(tmp_path)
-
-        # First call should be docker rm
-        first_call = mock_run.call_args_list[0]
-        assert "rm" in first_call[0][0]
-        assert "-f" in first_call[0][0]
-
-    @pytest.mark.asyncio
-    async def test_start_raises_on_failure(self, tmp_path):
-        """start() should raise CodingAgentError on docker failure."""
-        container = CodingAgentContainer()
-
-        with patch("orchestrator.coding_agent_container.subprocess.run") as mock_run:
-            # First call (rm) succeeds, second (run) fails
-            mock_run.side_effect = [
-                Mock(returncode=0),
-                Mock(returncode=1, stderr="Error: port already in use"),
-            ]
-
-            with pytest.raises(CodingAgentError) as exc_info:
-                await container.start(tmp_path)
-
-            assert "port already in use" in str(exc_info.value)
-
-    @pytest.mark.asyncio
-    async def test_stop_removes_container(self):
-        """stop() should remove the container."""
-        container = CodingAgentContainer()
-
-        with patch("orchestrator.coding_agent_container.subprocess.run") as mock_run:
-            mock_run.return_value = Mock(returncode=0)
-            await container.stop()
-
-        mock_run.assert_called_once()
-        call_args = mock_run.call_args[0][0]
-        assert "rm" in call_args
-        assert "-f" in call_args
+*Smoke Test:*
+```bash
+cd orchestrator && uv run pytest tests/test_coding_agent_container.py -v -k "start or stop"
 ```
 
 **Acceptance Criteria:**
-- [ ] Tests for `start()` with volume mount
-- [ ] Tests for container removal before start
-- [ ] Tests for error handling
-- [ ] Tests for `stop()`
-- [ ] All tests pass
+- [ ] All 4 lifecycle tests implemented and passing
+- [ ] Tests verify correct docker arguments
+- [ ] Tests verify error handling
+- [ ] Tests run fast with mocking
 
 ---
 
-## Milestone 3 Completion Checklist
+## Milestone 3 Verification
 
-- [ ] All 5 tasks complete
+### E2E Test Scenario
+
+**Purpose:** Verify container mounts code folder and can reach CLI sandbox services
+**Duration:** ~1 minute
+**Prerequisites:** Docker running, coding-agent image built, CLI sandbox running
+
+**Test Steps:**
+
+```bash
+# 1. Setup: Ensure sandbox running
+cd ~/ktrdr--orchestrator-1
+ktrdr sandbox up
+
+# 2. Start container with volume mount
+docker run -d --name ktrdr-coding-agent \
+  -v $(pwd):/workspace \
+  --add-host=host.docker.internal:host-gateway \
+  ktrdr-coding-agent:latest
+
+# 3. Verify .env.sandbox is accessible
+docker exec ktrdr-coding-agent cat /workspace/.env.sandbox
+# Expected: File contents displayed
+
+# 4. Verify can reach sandbox API
+docker exec ktrdr-coding-agent bash -c 'source /workspace/.env.sandbox && curl -s http://host.docker.internal:${KTRDR_API_PORT}/health'
+# Expected: Health response from API
+
+# 5. Verify no docker socket mounted
+docker inspect ktrdr-coding-agent --format '{{range .Mounts}}{{.Source}}{{"\n"}}{{end}}' | grep -c docker.sock
+# Expected: 0 (no docker socket)
+
+# 6. Cleanup
+docker rm -f ktrdr-coding-agent
+```
+
+**Success Criteria:**
+- [ ] Container starts with code folder mounted as `/workspace`
+- [ ] `/workspace/.env.sandbox` is readable in container
+- [ ] Container can reach CLI sandbox API via host.docker.internal
+- [ ] No docker.sock mount present (security)
+
+### Completion Checklist
+
+- [ ] All 5 tasks complete and committed
+- [ ] Unit tests pass: `cd orchestrator && uv run pytest tests/test_coding_agent_container.py -v`
 - [ ] All orchestrator tests pass: `cd orchestrator && uv run pytest tests/ -v`
-- [ ] Manual test: container mounts code folder correctly
-- [ ] Manual test: can reach sandbox API from container
-- [ ] `docker inspect ktrdr-coding-agent` shows no docker.sock mount
+- [ ] E2E test passes (above)
+- [ ] Previous milestone E2E tests still pass
 - [ ] Quality gates pass: `make quality`
+- [ ] No regressions introduced
 - [ ] Commit with message: "feat(orchestrator): use docker run with volume mount, remove docker socket"
