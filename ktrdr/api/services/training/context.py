@@ -266,48 +266,46 @@ def extract_symbols_timeframes_from_strategy(
     return symbols, timeframes
 
 
-def _extract_symbols_from_config(training_data: dict[str, Any]) -> list[str]:
-    """Extract symbols list from training_data configuration."""
-    symbols_config = training_data.get("symbols", {})
+def _extract_config_list(config: dict[str, Any], singular_key: str) -> list[str]:
+    """
+    Extract a list of values from a config section.
 
-    if not symbols_config:
+    Handles both single and multi modes by checking actual keys present,
+    rather than relying on the 'mode' field. This is more robust and
+    handles edge cases where mode might be missing or incorrect.
+
+    Args:
+        config: The config section (e.g., symbols or timeframes dict)
+        singular_key: The key for single-value mode (e.g., "symbol" or "timeframe")
+
+    Returns:
+        List of extracted values, empty if none found
+    """
+    if not config:
         return []
 
-    mode = symbols_config.get("mode", "single")
+    # Check for list first (multi mode takes precedence)
+    if "list" in config:
+        value_list = config.get("list", [])
+        if value_list:
+            return list(value_list)
 
-    if mode == "single":
-        # Single symbol: training_data.symbols.symbol
-        symbol = symbols_config.get("symbol")
-        return [symbol] if symbol else []
-
-    elif mode == "multi_symbol":
-        # Multi symbol: training_data.symbols.list
-        symbol_list = symbols_config.get("list", [])
-        return list(symbol_list) if symbol_list else []
+    # Fall back to singular key
+    singular_value = config.get(singular_key)
+    if singular_value:
+        return [singular_value]
 
     return []
+
+
+def _extract_symbols_from_config(training_data: dict[str, Any]) -> list[str]:
+    """Extract symbols list from training_data configuration."""
+    return _extract_config_list(training_data.get("symbols", {}), "symbol")
 
 
 def _extract_timeframes_from_config(training_data: dict[str, Any]) -> list[str]:
     """Extract timeframes list from training_data configuration."""
-    timeframes_config = training_data.get("timeframes", {})
-
-    if not timeframes_config:
-        return []
-
-    mode = timeframes_config.get("mode", "single")
-
-    if mode == "single":
-        # Single timeframe: training_data.timeframes.timeframe
-        timeframe = timeframes_config.get("timeframe")
-        return [timeframe] if timeframe else []
-
-    elif mode == "multi_timeframe":
-        # Multi timeframe: training_data.timeframes.list
-        timeframe_list = timeframes_config.get("list", [])
-        return list(timeframe_list) if timeframe_list else []
-
-    return []
+    return _extract_config_list(training_data.get("timeframes", {}), "timeframe")
 
 
 def _is_v3_format(strategy_config: dict[str, Any]) -> bool:
