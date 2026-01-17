@@ -505,6 +505,9 @@ class OperationsService:
                     operation.operation_type.value, "completed", duration
                 )
 
+            # Clean up cache after completion - workers should be stateless
+            await self.remove_from_cache(operation_id)
+
             logger.info(f"Completed operation: {operation_id}")
 
     async def fail_operation(
@@ -563,6 +566,9 @@ class OperationsService:
                 record_operation_duration(
                     operation.operation_type.value, "failed", duration
                 )
+
+            # Clean up cache after failure - workers should be stateless
+            await self.remove_from_cache(operation_id)
 
             logger.error(f"Failed operation: {operation_id} - {error_message}")
 
@@ -763,6 +769,9 @@ class OperationsService:
                 record_operation_duration(
                     operation.operation_type.value, "cancelled", duration
                 )
+
+            # Clean up cache after cancellation - workers should be stateless
+            await self.remove_from_cache(operation_id)
 
             logger.info(
                 f"Cancelled operation: {operation_id} (task_cancelled: {cancelled_task}, "
@@ -1308,6 +1317,46 @@ class OperationsService:
                 logger.info(f"Cleaned up {len(operations_to_remove)} old operations")
 
             return len(operations_to_remove)
+
+    async def remove_from_cache(self, operation_id: str) -> bool:
+        """
+        Remove an operation from the cache.
+
+        This method is called after operations finish (complete/fail/cancel) to ensure
+        workers remain stateless and don't accumulate finished operations in memory.
+
+        Args:
+            operation_id: Operation identifier to remove
+
+        Returns:
+            True if operation was removed, False if it wasn't found
+        """
+        async with self._lock:
+            if operation_id not in self._cache:
+                logger.debug(f"Operation {operation_id} not in cache, nothing to remove")
+                return False
+
+            # Remove from cache
+            del self._cache[operation_id]
+
+            # Clean up any remaining references
+            if operation_id in self._operation_tasks:
+                del self._operation_tasks[operation_id]
+
+            if operation_id in self._local_bridges:
+                del self._local_bridges[operation_id]
+
+            if operation_id in self._metrics_cursors:
+                del self._metrics_cursors[operation_id]
+
+            if operation_id in self._remote_proxies:
+                del self._remote_proxies[operation_id]
+
+            if operation_id in self._last_refresh:
+                del self._last_refresh[operation_id]
+
+            logger.debug(f"Removed operation {operation_id} from cache and cleaned up references")
+            return True
 
     def register_local_bridge(self, operation_id: str, bridge: Any) -> None:
         """
