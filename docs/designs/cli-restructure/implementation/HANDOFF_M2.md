@@ -101,3 +101,23 @@ Running notes for M2 CLI restructure implementation.
 - Task 2.5 (ops command) lists all operations in a table. Similar async pattern, but no polling - single fetch + table render.
 - Task 2.6 (cancel command) is a simple DELETE request, similar to status operation mode but with DELETE verb.
 - Task 2.7 (resume command) requires checkpoint API endpoint - may need backend verification.
+
+---
+
+## Task 2.5 Complete: Implement Ops Command
+
+### Gotchas
+- **CRITICAL: Preserve all behavior from operations_commands.py:** The M2 spec explicitly lists columns to preserve: ID, type, status, progress, checkpoint, symbol, duration. Don't simplify.
+- **Checkpoint fetching is per-operation:** For each operation returned, the command must fetch `/checkpoints/{operation_id}` to get checkpoint info. This adds N+1 API calls but preserves existing behavior.
+- **Progress can be in two formats:** Check both `op.get("progress_percentage")` (flat) and `op.get("progress", {}).get("percentage")` (nested).
+- **CLIClientError vs Exception:** Checkpoint fetch may fail with `CLIClientError` (404) or general `Exception`. Handle both gracefully - just mark as no checkpoint.
+
+### Emergent Patterns
+- **Copy helper functions from existing code:** `_format_duration()` and `_format_checkpoint_summary()` were copied directly from `operations_commands.py`.
+- **Filter params as strings:** API expects query params as strings, so use `"true"` not `True` for boolean filters like `active_only`.
+- **Status color coding:** Consistent pattern: running=green, completed=bright_green, failed=red, cancelled=yellow.
+- **All 5 filter options preserved:** `--status`, `--type`, `--limit`, `--active`, `--resumable` - all from original command.
+
+### Next Task Notes
+- Task 2.6 (cancel command) is straightforward DELETE request. Pattern similar to status but with `client.delete()` instead of `client.get()`.
+- Task 2.7 (resume command) takes a checkpoint ID, not operation ID - different from other commands.
