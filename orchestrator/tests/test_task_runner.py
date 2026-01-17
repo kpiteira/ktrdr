@@ -72,8 +72,8 @@ class TestRunTaskPromptConstruction:
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("Task completed")
         )
 
@@ -81,9 +81,9 @@ class TestRunTaskPromptConstruction:
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            await run_task(task, sandbox, config, task.plan_file)
+            await run_task(task, container, config, task.plan_file)
 
-        call_args = sandbox.invoke_claude.call_args
+        call_args = container.invoke_claude.call_args
         prompt = call_args[1]["prompt"]
         # /ktask invocation: /ktask impl: <plan_path> task: <task_id>
         assert task.id in prompt
@@ -96,8 +96,8 @@ class TestRunTaskPromptConstruction:
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("Task completed")
         )
 
@@ -106,10 +106,10 @@ class TestRunTaskPromptConstruction:
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
             await run_task(
-                task, sandbox, config, task.plan_file, human_guidance="Use option A"
+                task, container, config, task.plan_file, human_guidance="Use option A"
             )
 
-        call_args = sandbox.invoke_claude.call_args
+        call_args = container.invoke_claude.call_args
         prompt = call_args[1]["prompt"]
         assert "Use option A" in prompt
 
@@ -120,8 +120,8 @@ class TestRunTaskPromptConstruction:
 
         task = make_task()
         config = OrchestratorConfig(max_turns=100)
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("Task completed")
         )
 
@@ -129,9 +129,9 @@ class TestRunTaskPromptConstruction:
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            await run_task(task, sandbox, config, task.plan_file)
+            await run_task(task, container, config, task.plan_file)
 
-        call_kwargs = sandbox.invoke_claude.call_args[1]
+        call_kwargs = container.invoke_claude.call_args[1]
         assert call_kwargs["max_turns"] == 100
 
     @pytest.mark.asyncio
@@ -141,8 +141,8 @@ class TestRunTaskPromptConstruction:
 
         task = make_task()
         config = OrchestratorConfig(task_timeout_seconds=1200)
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("Task completed")
         )
 
@@ -150,9 +150,9 @@ class TestRunTaskPromptConstruction:
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            await run_task(task, sandbox, config, task.plan_file)
+            await run_task(task, container, config, task.plan_file)
 
-        call_kwargs = sandbox.invoke_claude.call_args[1]
+        call_kwargs = container.invoke_claude.call_args[1]
         assert call_kwargs["timeout"] == 1200
 
 
@@ -166,8 +166,8 @@ class TestRunTaskStatusParsing:
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("Task done successfully.")
         )
 
@@ -177,7 +177,7 @@ class TestRunTaskStatusParsing:
         )
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            result = await run_task(task, sandbox, config, task.plan_file)
+            result = await run_task(task, container, config, task.plan_file)
 
         assert result.status == "completed"
 
@@ -188,8 +188,8 @@ class TestRunTaskStatusParsing:
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("Could not complete.")
         )
 
@@ -199,7 +199,7 @@ class TestRunTaskStatusParsing:
         )
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            result = await run_task(task, sandbox, config, task.plan_file)
+            result = await run_task(task, container, config, task.plan_file)
 
         assert result.status == "failed"
 
@@ -210,8 +210,8 @@ class TestRunTaskStatusParsing:
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("Need clarification.")
         )
 
@@ -224,7 +224,7 @@ class TestRunTaskStatusParsing:
         )
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            result = await run_task(task, sandbox, config, task.plan_file)
+            result = await run_task(task, container, config, task.plan_file)
 
         assert result.status == "needs_human"
 
@@ -239,8 +239,8 @@ class TestRunTaskErrorExtraction:
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("Import error in module")
         )
 
@@ -250,7 +250,7 @@ class TestRunTaskErrorExtraction:
         )
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            result = await run_task(task, sandbox, config, task.plan_file)
+            result = await run_task(task, container, config, task.plan_file)
 
         assert result.error is not None
         assert "Import error" in result.error
@@ -266,8 +266,8 @@ class TestRunTaskNeedsHumanExtraction:
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("Should I use Redis or PostgreSQL?")
         )
 
@@ -277,7 +277,7 @@ class TestRunTaskNeedsHumanExtraction:
         )
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            result = await run_task(task, sandbox, config, task.plan_file)
+            result = await run_task(task, container, config, task.plan_file)
 
         assert result.question is not None
         assert "Redis" in result.question
@@ -289,8 +289,8 @@ class TestRunTaskNeedsHumanExtraction:
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("Which option?")
         )
 
@@ -300,7 +300,7 @@ class TestRunTaskNeedsHumanExtraction:
         )
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            result = await run_task(task, sandbox, config, task.plan_file)
+            result = await run_task(task, container, config, task.plan_file)
 
         assert result.options is not None
         assert "A" in result.options
@@ -313,8 +313,8 @@ class TestRunTaskNeedsHumanExtraction:
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("Which option?")
         )
 
@@ -327,7 +327,7 @@ class TestRunTaskNeedsHumanExtraction:
         )
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            result = await run_task(task, sandbox, config, task.plan_file)
+            result = await run_task(task, container, config, task.plan_file)
 
         assert result.recommendation is not None
         assert "Option A" in result.recommendation
@@ -343,8 +343,8 @@ class TestRunTaskResultFields:
 
         task = make_task(task_id="3.5")
         config = OrchestratorConfig()
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("Task completed")
         )
 
@@ -352,7 +352,7 @@ class TestRunTaskResultFields:
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            result = await run_task(task, sandbox, config, task.plan_file)
+            result = await run_task(task, container, config, task.plan_file)
 
         assert result.task_id == "3.5"
 
@@ -363,8 +363,8 @@ class TestRunTaskResultFields:
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("Task completed", cost=0.12)
         )
 
@@ -372,7 +372,7 @@ class TestRunTaskResultFields:
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            result = await run_task(task, sandbox, config, task.plan_file)
+            result = await run_task(task, container, config, task.plan_file)
 
         assert result.cost_usd == 0.12
 
@@ -383,8 +383,8 @@ class TestRunTaskResultFields:
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("Task completed")
         )
 
@@ -392,7 +392,7 @@ class TestRunTaskResultFields:
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            result = await run_task(task, sandbox, config, task.plan_file)
+            result = await run_task(task, container, config, task.plan_file)
 
         assert result.session_id == "test-session-123"
 
@@ -403,15 +403,15 @@ class TestRunTaskResultFields:
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
+        container = MagicMock()
         output_text = "Detailed task output here."
-        sandbox.invoke_claude = AsyncMock(return_value=make_claude_result(output_text))
+        container.invoke_claude = AsyncMock(return_value=make_claude_result(output_text))
 
         mock_brain = MagicMock()
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            result = await run_task(task, sandbox, config, task.plan_file)
+            result = await run_task(task, container, config, task.plan_file)
 
         assert "Detailed task output" in result.output
 
@@ -422,8 +422,8 @@ class TestRunTaskResultFields:
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("Task completed")
         )
 
@@ -431,7 +431,7 @@ class TestRunTaskResultFields:
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            result = await run_task(task, sandbox, config, task.plan_file)
+            result = await run_task(task, container, config, task.plan_file)
 
         assert result.duration_seconds >= 0
 
@@ -446,11 +446,11 @@ class TestRunTaskHaikuBrainInterpretation:
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
+        container = MagicMock()
 
         # Output without STATUS marker - requires semantic understanding
         output_text = "Task finished successfully. All tests pass."
-        sandbox.invoke_claude = AsyncMock(return_value=make_claude_result(output_text))
+        container.invoke_claude = AsyncMock(return_value=make_claude_result(output_text))
 
         mock_brain = MagicMock()
         mock_brain.interpret_result.return_value = make_interpretation_result(
@@ -458,7 +458,7 @@ class TestRunTaskHaikuBrainInterpretation:
         )
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            result = await run_task(task, sandbox, config, task.plan_file)
+            result = await run_task(task, container, config, task.plan_file)
 
         # HaikuBrain should have been used
         mock_brain.interpret_result.assert_called_once_with(output_text)
@@ -471,8 +471,8 @@ class TestRunTaskHaikuBrainInterpretation:
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("Which approach should I use?")
         )
 
@@ -485,7 +485,7 @@ class TestRunTaskHaikuBrainInterpretation:
         )
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            result = await run_task(task, sandbox, config, task.plan_file)
+            result = await run_task(task, container, config, task.plan_file)
 
         # Status should be mapped to needs_human
         assert result.status == "needs_human"
@@ -500,8 +500,8 @@ class TestRunTaskHaikuBrainInterpretation:
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("Tests failed with error")
         )
 
@@ -513,7 +513,7 @@ class TestRunTaskHaikuBrainInterpretation:
         )
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            result = await run_task(task, sandbox, config, task.plan_file)
+            result = await run_task(task, container, config, task.plan_file)
 
         assert result.status == "failed"
         assert result.error == "Import error in module"
@@ -525,11 +525,11 @@ class TestRunTaskHaikuBrainInterpretation:
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
+        container = MagicMock()
 
         # Large output (10k+ chars)
         large_output = "A" * 15000
-        sandbox.invoke_claude = AsyncMock(
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result(large_output)
         )
 
@@ -539,7 +539,7 @@ class TestRunTaskHaikuBrainInterpretation:
         )
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            await run_task(task, sandbox, config, task.plan_file)
+            await run_task(task, container, config, task.plan_file)
 
         # Full output should be passed (no truncation)
         call_args = mock_brain.interpret_result.call_args[0]
@@ -556,14 +556,14 @@ class TestRunTaskStreaming:
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
+        container = MagicMock()
 
         # Setup streaming method
-        sandbox.invoke_claude_streaming = AsyncMock(
+        container.invoke_claude_streaming = AsyncMock(
             return_value=make_claude_result("Task completed")
         )
         # Also setup non-streaming for comparison
-        sandbox.invoke_claude = AsyncMock(
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("Task completed")
         )
 
@@ -576,12 +576,12 @@ class TestRunTaskStreaming:
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            await run_task(task, sandbox, config, task.plan_file, on_tool_use=on_tool)
+            await run_task(task, container, config, task.plan_file, on_tool_use=on_tool)
 
         # Should have used streaming method
-        sandbox.invoke_claude_streaming.assert_called_once()
+        container.invoke_claude_streaming.assert_called_once()
         # Should NOT have used non-streaming method
-        sandbox.invoke_claude.assert_not_called()
+        container.invoke_claude.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_uses_non_streaming_when_no_callback(self):
@@ -590,12 +590,12 @@ class TestRunTaskStreaming:
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
+        container = MagicMock()
 
-        sandbox.invoke_claude_streaming = AsyncMock(
+        container.invoke_claude_streaming = AsyncMock(
             return_value=make_claude_result("Task completed")
         )
-        sandbox.invoke_claude = AsyncMock(
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("Task completed")
         )
 
@@ -603,23 +603,23 @@ class TestRunTaskStreaming:
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            await run_task(task, sandbox, config, task.plan_file)
+            await run_task(task, container, config, task.plan_file)
 
         # Should have used non-streaming method
-        sandbox.invoke_claude.assert_called_once()
+        container.invoke_claude.assert_called_once()
         # Should NOT have used streaming method
-        sandbox.invoke_claude_streaming.assert_not_called()
+        container.invoke_claude_streaming.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_streaming_passes_callback_to_sandbox(self):
-        """Callback should be passed through to sandbox streaming method."""
+    async def test_streaming_passes_callback_to_container(self):
+        """Callback should be passed through to container streaming method."""
         from orchestrator.runner import run_task
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
+        container = MagicMock()
 
-        sandbox.invoke_claude_streaming = AsyncMock(
+        container.invoke_claude_streaming = AsyncMock(
             return_value=make_claude_result("Task completed")
         )
 
@@ -630,10 +630,10 @@ class TestRunTaskStreaming:
         mock_brain.interpret_result.return_value = make_interpretation_result()
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
-            await run_task(task, sandbox, config, task.plan_file, on_tool_use=my_callback)
+            await run_task(task, container, config, task.plan_file, on_tool_use=my_callback)
 
         # Verify callback was passed
-        call_kwargs = sandbox.invoke_claude_streaming.call_args[1]
+        call_kwargs = container.invoke_claude_streaming.call_args[1]
         assert "on_tool_use" in call_kwargs
         assert call_kwargs["on_tool_use"] == my_callback
 
@@ -644,9 +644,9 @@ class TestRunTaskStreaming:
 
         task = make_task()
         config = OrchestratorConfig(max_turns=75, task_timeout_seconds=900)
-        sandbox = MagicMock()
+        container = MagicMock()
 
-        sandbox.invoke_claude_streaming = AsyncMock(
+        container.invoke_claude_streaming = AsyncMock(
             return_value=make_claude_result("Task completed")
         )
 
@@ -655,10 +655,10 @@ class TestRunTaskStreaming:
 
         with patch("orchestrator.runner.get_brain", return_value=mock_brain):
             await run_task(
-                task, sandbox, config, task.plan_file, on_tool_use=lambda n, i: None
+                task, container, config, task.plan_file, on_tool_use=lambda n, i: None
             )
 
-        call_kwargs = sandbox.invoke_claude_streaming.call_args[1]
+        call_kwargs = container.invoke_claude_streaming.call_args[1]
         assert call_kwargs["max_turns"] == 75
         assert call_kwargs["timeout"] == 900
 
@@ -673,8 +673,8 @@ class TestRunTaskWithEscalation:
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("Task completed")
         )
 
@@ -691,7 +691,7 @@ class TestRunTaskWithEscalation:
             patch("orchestrator.runner.get_brain", return_value=mock_brain),
         ):
             result = await run_task_with_escalation(
-                task, sandbox, config, task.plan_file, mock_tracer
+                task, container, config, task.plan_file, mock_tracer
             )
 
         assert result.status == "completed"
@@ -703,10 +703,10 @@ class TestRunTaskWithEscalation:
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
+        container = MagicMock()
 
         # First call returns needs_human, second returns completed
-        sandbox.invoke_claude = AsyncMock(
+        container.invoke_claude = AsyncMock(
             side_effect=[
                 make_claude_result("Which approach?"),
                 make_claude_result("Task completed"),
@@ -740,7 +740,7 @@ class TestRunTaskWithEscalation:
             mock_escalate.return_value = "Use option A"
 
             result = await run_task_with_escalation(
-                task, sandbox, config, task.plan_file, mock_tracer
+                task, container, config, task.plan_file, mock_tracer
             )
 
         # Should have called escalate_and_wait
@@ -755,7 +755,7 @@ class TestRunTaskWithEscalation:
 
         task = make_task()
         config = OrchestratorConfig()
-        sandbox = MagicMock()
+        container = MagicMock()
 
         # Track calls to verify guidance is passed
         calls = []
@@ -766,7 +766,7 @@ class TestRunTaskWithEscalation:
                 return make_claude_result("Which option?")
             return make_claude_result("Task completed")
 
-        sandbox.invoke_claude = mock_invoke
+        container.invoke_claude = mock_invoke
 
         mock_tracer = MagicMock()
         mock_span = MagicMock()
@@ -791,7 +791,7 @@ class TestRunTaskWithEscalation:
             mock_escalate.return_value = "Use option B"
 
             await run_task_with_escalation(
-                task, sandbox, config, task.plan_file, mock_tracer
+                task, container, config, task.plan_file, mock_tracer
             )
 
         # Second call should have guidance in prompt
@@ -806,7 +806,7 @@ class TestRunTaskWithEscalation:
 
         task = make_task(task_id="4.1")
         config = OrchestratorConfig()
-        sandbox = MagicMock()
+        container = MagicMock()
 
         # Track calls to verify guidance is passed
         calls = []
@@ -817,7 +817,7 @@ class TestRunTaskWithEscalation:
                 return make_claude_result("Import error occurred")
             return make_claude_result("Task completed")
 
-        sandbox.invoke_claude = mock_invoke
+        container.invoke_claude = mock_invoke
 
         mock_tracer = MagicMock()
 
@@ -838,7 +838,7 @@ class TestRunTaskWithEscalation:
             patch("orchestrator.runner.get_brain", return_value=mock_brain),
         ):
             result = await run_task_with_escalation(
-                task, sandbox, config, task.plan_file, mock_tracer
+                task, container, config, task.plan_file, mock_tracer
             )
 
         # Should have called should_retry_or_escalate
@@ -864,7 +864,7 @@ class TestRunTaskWithEscalation:
 
         task = make_task(task_id="4.1")
         config = OrchestratorConfig()
-        sandbox = MagicMock()
+        container = MagicMock()
 
         call_count = 0
 
@@ -876,7 +876,7 @@ class TestRunTaskWithEscalation:
                 return make_claude_result("Task completed after human help")
             return make_claude_result("Same import error")
 
-        sandbox.invoke_claude = mock_invoke
+        container.invoke_claude = mock_invoke
 
         mock_tracer = MagicMock()
         mock_span = MagicMock()
@@ -922,7 +922,7 @@ class TestRunTaskWithEscalation:
             mock_escalate.return_value = "Human provided guidance"
 
             result = await run_task_with_escalation(
-                task, sandbox, config, task.plan_file, mock_tracer
+                task, container, config, task.plan_file, mock_tracer
             )
 
         # Should have tried 4 times (3 fails + 1 success after human help)
@@ -942,7 +942,7 @@ class TestRunTaskWithEscalation:
 
         task = make_task(task_id="4.1")
         config = OrchestratorConfig()
-        sandbox = MagicMock()
+        container = MagicMock()
 
         call_count = 0
 
@@ -951,7 +951,7 @@ class TestRunTaskWithEscalation:
             call_count += 1
             return make_claude_result(f"Attempt {call_count}")
 
-        sandbox.invoke_claude = mock_invoke
+        container.invoke_claude = mock_invoke
 
         mock_tracer = MagicMock()
 
@@ -980,7 +980,7 @@ class TestRunTaskWithEscalation:
             patch("orchestrator.runner.get_brain", return_value=mock_brain),
         ):
             result = await run_task_with_escalation(
-                task, sandbox, config, task.plan_file, mock_tracer
+                task, container, config, task.plan_file, mock_tracer
             )
 
         # Should have tried 3 times (2 failures + 1 success)
@@ -998,8 +998,8 @@ class TestRunTaskWithEscalation:
 
         task = make_task(task_id="4.1")
         config = OrchestratorConfig()
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("I need human clarification")
         )
 
@@ -1034,7 +1034,7 @@ class TestRunTaskWithEscalation:
             mock_escalate.return_value = "Use PostgreSQL"
 
             await run_task_with_escalation(
-                task, sandbox, config, task.plan_file, mock_tracer
+                task, container, config, task.plan_file, mock_tracer
             )
 
         # Should have escalated
@@ -1051,12 +1051,12 @@ class TestRunTaskWithEscalation:
 
         task = make_task(task_id="4.1")
         config = OrchestratorConfig()
-        sandbox = MagicMock()
+        container = MagicMock()
 
         async def mock_invoke(**kwargs):
             return make_claude_result("Error output")
 
-        sandbox.invoke_claude = mock_invoke
+        container.invoke_claude = mock_invoke
 
         mock_tracer = MagicMock()
 
@@ -1089,7 +1089,7 @@ class TestRunTaskWithEscalation:
             patch("orchestrator.runner.get_brain", return_value=mock_brain),
         ):
             await run_task_with_escalation(
-                task, sandbox, config, task.plan_file, mock_tracer
+                task, container, config, task.plan_file, mock_tracer
             )
 
         # First call: 1 attempt, 1 error in history

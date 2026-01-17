@@ -86,3 +86,24 @@
 ### Next Task Notes (1.6)
 - Task 1.6 is "Update test mocks" but we've already done the mock updates as part of each task
 - May be mostly complete; verify no remaining `SandboxManager` patches in test files
+
+---
+
+## Task 1.6 Complete: Update test mocks
+
+**Summary:** Updated remaining test mocks and variable names in test_e2e_runner.py, test_task_runner.py, and test_coding_agent_container.py. Fixed 19 failing tests. All 526 orchestrator tests now pass.
+
+### Changes Made
+- **test_e2e_runner.py**: Changed all `sandbox = MagicMock()` to `container = MagicMock()`, updated `sandbox.invoke_claude` to `container.invoke_claude`, changed `sandbox=sandbox` keyword args to `container=container`
+- **test_task_runner.py**: Same pattern - variable names, method calls, and positional args updated
+- **test_coding_agent_container.py**: Renamed test methods `test_sandbox_manager_*` → `test_coding_agent_container_*` and `test_sandbox_error_*` → `test_coding_agent_error_*`
+
+### Note
+Remaining `sandbox` references in test files are intentional:
+- `test_config.py`: References to `sandbox_container` config field (unchanged)
+- `test_health.py`: References to "sandbox" health check (renamed in later milestone)
+- `test_coding_agent_container.py`: Default container_name "ktrdr-sandbox" (changed in M3)
+
+### Next Task Notes (1.7)
+- Rename shell scripts: sandbox-*.sh → coding-agent-*.sh
+- Update internal container name references from ktrdr-sandbox to ktrdr-coding-agent

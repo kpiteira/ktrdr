@@ -14,13 +14,13 @@ import pytest
 class TestCodingAgentContainerStructure:
     """Test CodingAgentContainer class structure."""
 
-    def test_sandbox_manager_is_dataclass(self):
+    def test_coding_agent_container_is_dataclass(self):
         """CodingAgentContainer should be a dataclass."""
         from orchestrator.coding_agent_container import CodingAgentContainer
 
         assert is_dataclass(CodingAgentContainer)
 
-    def test_sandbox_manager_defaults(self):
+    def test_coding_agent_container_defaults(self):
         """CodingAgentContainer should have sensible defaults."""
         from orchestrator.coding_agent_container import CodingAgentContainer
 
@@ -287,13 +287,13 @@ class TestCodingAgentContainerInvokeClaude:
 class TestCodingAgentError:
     """Test CodingAgentError exception."""
 
-    def test_sandbox_error_exists(self):
+    def test_coding_agent_error_exists(self):
         """CodingAgentError should be importable."""
         from orchestrator.coding_agent_container import CodingAgentError
 
         assert issubclass(CodingAgentError, Exception)
 
-    def test_sandbox_error_message(self):
+    def test_coding_agent_error_message(self):
         """CodingAgentError should accept message."""
         from orchestrator.coding_agent_container import CodingAgentError
 
