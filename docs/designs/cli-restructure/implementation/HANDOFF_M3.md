@@ -4,6 +4,22 @@ Running notes for M3 CLI restructure implementation.
 
 ---
 
+## Known Technical Debt
+
+**Dual Command Registration:** M2/M3 commands are registered in BOTH:
+- `ktrdr/cli/__init__.py` (actual CLI entry point via `cli_app`)
+- `ktrdr/cli/app.py` (test entry point, intended to be the new clean app)
+
+This violates DRY and is error-prone (can get out of sync).
+
+**Resolution:** M5 Task 5.3 will consolidate to `app.py` as single source of truth:
+- `__init__.py` will just do `from ktrdr.cli.app import app`
+- `pyproject.toml` will point to `ktrdr.cli.app:app`
+
+**Until then:** When adding new commands, register in BOTH places to maintain consistency.
+
+---
+
 ## Task 3.1 Complete: Implement List Command
 
 ### Gotchas
