@@ -121,3 +121,20 @@ Running notes for M2 CLI restructure implementation.
 ### Next Task Notes
 - Task 2.6 (cancel command) is straightforward DELETE request. Pattern similar to status but with `client.delete()` instead of `client.get()`.
 - Task 2.7 (resume command) takes a checkpoint ID, not operation ID - different from other commands.
+
+---
+
+## Task 2.6 Complete: Implement Cancel Command
+
+### Gotchas
+- **Payload only sent when options provided:** The DELETE request only includes a JSON body when `--reason` or `--force` is specified. Without options, the payload is `None`.
+- **API returns `{"success": True, "data": {...}}`:** The cancellation endpoint wraps response in standard format. Extract data with `result.get("data", {})`.
+
+### Emergent Patterns
+- **Same async pattern as other M2 commands:** Uses `asyncio.run()` + `AsyncCLIClient().delete()` for consistency with ops/status/follow.
+- **Options preserved from old command:** `--reason/-r` and `--force/-f` with same shorthands as `operations_commands.py`.
+- **Simple success output:** Yellow message "Cancelled operation: {op_id}" plus optional cancelled_at and reason display.
+
+### Next Task Notes
+- Task 2.7 (resume command) takes a checkpoint ID, not operation ID. Check if `/checkpoints/{id}/resume` endpoint exists in backend.
+- Task 2.8 wires up all commands - cancel needs to be registered in `ktrdr/cli/__init__.py`.
