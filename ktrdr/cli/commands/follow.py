@@ -68,6 +68,9 @@ async def _follow_operation(state: CLIState, operation_id: str) -> None:
         ) as progress:
             task_id = progress.add_task("Following...", total=100)
 
+            # Initialize final_status before loop (will be set when terminal state reached)
+            final_status: dict = {}
+
             # Poll until terminal state
             while True:
                 result = await client.get(f"/operations/{operation_id}")

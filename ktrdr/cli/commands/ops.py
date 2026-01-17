@@ -162,7 +162,6 @@ async def _list_operations(
         operations = result.get("data", [])
 
         # Fetch checkpoint info for each operation (preserves existing behavior)
-        resumable_count = 0
         for op in operations:
             try:
                 checkpoint_response = await client.get(
@@ -174,7 +173,6 @@ async def _list_operations(
                     op["checkpoint_summary"] = _format_checkpoint_summary(
                         checkpoint_data.get("state", {})
                     )
-                    resumable_count += 1
                 else:
                     op["checkpoint_summary"] = None
             except CLIClientError:
