@@ -48,7 +48,7 @@ class TestStatusDashboard:
                             {"status": "completed"},
                         ]
                     },
-                    {"data": {"workers": [{"id": "w1"}, {"id": "w2"}]}},
+                    [{"id": "w1"}, {"id": "w2"}],
                 ]
                 mock_client_class.return_value = mock_client
 
@@ -78,7 +78,7 @@ class TestStatusDashboard:
                 mock_client.__aexit__.return_value = None
                 mock_client.get.side_effect = [
                     {"data": []},
-                    {"data": {"workers": []}},
+                    [],  # workers endpoint returns list directly
                 ]
                 mock_client_class.return_value = mock_client
 
@@ -109,7 +109,7 @@ class TestStatusDashboard:
                 mock_client.__aexit__.return_value = None
                 mock_client.get.side_effect = [
                     {"data": [{"status": "running"}]},
-                    {"data": {"workers": [{"id": "w1"}]}},
+                    [{"id": "w1"}],  # workers endpoint returns list directly
                 ]
                 mock_client_class.return_value = mock_client
 

@@ -58,9 +58,9 @@ async def _show_dashboard(state: CLIState) -> None:
         running = len([o for o in ops if o.get("status") == "running"])
         completed = len([o for o in ops if o.get("status") == "completed"])
 
-        # Fetch workers
+        # Fetch workers - API returns list directly, not wrapped
         workers_result = await client.get("/workers")
-        workers = workers_result.get("data", {}).get("workers", [])
+        workers: list = workers_result if isinstance(workers_result, list) else []
 
     if state.json_mode:
         print(

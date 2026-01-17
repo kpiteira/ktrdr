@@ -51,6 +51,10 @@ Running notes for M2 CLI restructure implementation.
 - **Dashboard fetches multiple endpoints:** Dashboard mode makes two parallel-capable API calls (`/operations` and `/workers`). Currently sequential but could be parallelized with `asyncio.gather()` if performance matters.
 - **JSON output uses `json.dumps()` directly:** For simple JSON output, `print(json.dumps(data))` is sufficient rather than using output module helpers.
 
+### Additional Gotchas (post-review)
+- **CRITICAL: Workers endpoint returns list directly:** The `/workers` endpoint returns `[...]` not `{"data": {"workers": [...]}}`. Use `workers_result if isinstance(workers_result, list) else []` to handle correctly. See `sandbox_gate.py:235-236` for reference.
+- **Different API response formats:** Operations endpoint uses `{"success": ..., "data": ...}` wrapper. Agent endpoints and workers endpoint return data directly. Always check actual API implementation.
+
 ### Next Task Notes
 - Task 2.4 (follow command) is similar to status but with polling loop and Rich progress display.
 - Follow command should handle Ctrl+C gracefully (detach, not cancel - user didn't start the operation).
