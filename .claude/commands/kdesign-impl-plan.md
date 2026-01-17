@@ -688,14 +688,22 @@ Watch for these during planning:
 
 **One file per milestone.** This keeps context manageable — when implementing Milestone 3, you don't need Milestones 1-2 in context.
 
+Implementation plans live in an `implementation/` subfolder next to the design documents:
+
 ```
-docs/implementation/[feature-name]/
-  OVERVIEW.md           # Summary, dependency graph, milestone index
-  M1_[name].md          # Milestone 1: tasks, E2E test, checklist
-  M2_[name].md          # Milestone 2: tasks, E2E test, checklist
-  M3_[name].md          # Milestone 3: ...
-  ...
+docs/designs/[feature-name]/
+  DESIGN.md             # From /kdesign
+  ARCHITECTURE.md       # From /kdesign
+  SCENARIOS.md          # From /kdesign-validate
+  implementation/       # From this command
+    OVERVIEW.md         # Summary, dependency graph, milestone index
+    M1_[name].md        # Milestone 1: tasks, E2E test, checklist
+    M2_[name].md        # Milestone 2: tasks, E2E test, checklist
+    M3_[name].md        # Milestone 3: ...
+    ...
 ```
+
+This keeps all artifacts for a feature together and makes the relationship clear.
 
 ### OVERVIEW.md Contents
 
