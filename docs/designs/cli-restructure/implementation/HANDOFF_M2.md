@@ -138,3 +138,20 @@ Running notes for M2 CLI restructure implementation.
 ### Next Task Notes
 - Task 2.7 (resume command) takes a checkpoint ID, not operation ID. Check if `/checkpoints/{id}/resume` endpoint exists in backend.
 - Task 2.8 wires up all commands - cancel needs to be registered in `ktrdr/cli/__init__.py`.
+
+---
+
+## Task 2.7 Complete: Implement Resume Command
+
+### Gotchas
+- **CRITICAL: Design doc vs backend mismatch:** The M2 design says `ktrdr resume <checkpoint-id>` with endpoint `/checkpoints/{id}/resume`, but this endpoint doesn't exist. The actual backend uses `/operations/{operation_id}/resume`. Implementation follows actual backend.
+- **Response includes `resumed_from` dict:** API returns `{"data": {..., "resumed_from": {"epoch": N, "checkpoint_type": "..."}}}`. Extract epoch and checkpoint type from this.
+
+### Emergent Patterns
+- **Same async pattern as other M2 commands:** Uses `asyncio.run()` + `AsyncCLIClient().post()` for consistency.
+- **Follow option reuses polling pattern:** The `--follow` option reuses the same Progress display + polling loop from follow.py.
+- **Green success message:** "Resumed operation: {op_id}" with epoch/checkpoint type details below.
+
+### Next Task Notes
+- Task 2.8 wires up ALL M2 commands. Need to register: backtest, research, status, follow, ops, cancel, resume.
+- Commands register in `ktrdr/cli/__init__.py` with `cli_app.command()(func)`.
