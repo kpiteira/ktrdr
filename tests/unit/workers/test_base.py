@@ -300,7 +300,7 @@ class TestHealthCheckTracking:
 
     def test_health_endpoint_updates_last_health_check_received(self):
         """Test health endpoint updates _last_health_check_received timestamp."""
-        from datetime import datetime
+        from datetime import UTC, datetime
 
         worker = MockWorker()
         client = TestClient(worker.app)
@@ -309,9 +309,9 @@ class TestHealthCheckTracking:
         assert worker._last_health_check_received is None
 
         # Call health endpoint
-        before_call = datetime.utcnow()
+        before_call = datetime.now(UTC)
         response = client.get("/health")
-        after_call = datetime.utcnow()
+        after_call = datetime.now(UTC)
 
         assert response.status_code == 200
 

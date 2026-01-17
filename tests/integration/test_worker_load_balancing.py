@@ -8,7 +8,7 @@ This test suite verifies:
 """
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -221,7 +221,7 @@ class TestWorkerLoadBalancing:
         # Simulate worker-2 becoming unhealthy
         worker_2 = registry.get_worker("worker-2")
         worker_2.status = WorkerStatus.TEMPORARILY_UNAVAILABLE
-        worker_2.last_healthy_at = datetime.utcnow() - timedelta(seconds=2)
+        worker_2.last_healthy_at = datetime.now(UTC) - timedelta(seconds=2)
 
         # Run cleanup
         registry._cleanup_dead_workers()

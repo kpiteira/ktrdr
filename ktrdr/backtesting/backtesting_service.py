@@ -23,6 +23,7 @@ from ktrdr.async_infrastructure import ServiceOrchestrator
 from ktrdr.errors import WorkerUnavailableError
 
 if TYPE_CHECKING:
+    from ktrdr.api.models.workers import WorkerEndpoint
     from ktrdr.api.services.worker_registry import WorkerRegistry
     from ktrdr.config.models import StrategyConfigurationV3
     from ktrdr.models.model_metadata import ModelMetadataV3
@@ -80,6 +81,53 @@ class BacktestingService(ServiceOrchestrator[None]):
     def _get_env_var_prefix(self) -> str:
         """Get environment variable prefix (not used in distributed-only mode)."""
         return ""
+
+    def _select_backtest_worker(
+        self, excluded_workers: Optional[list[str]] = None
+    ) -> "WorkerEndpoint":
+        """
+        Select an available backtest worker.
+
+        Encapsulates worker selection logic and error handling, matching the
+        pattern used in TrainingService._select_training_worker().
+
+        Args:
+            excluded_workers: List of worker_ids to exclude from selection
+                (e.g., workers that have already been tried and returned 503)
+
+        Returns:
+            Selected WorkerEndpoint
+
+        Raises:
+            WorkerUnavailableError: If no backtest workers are available (HTTP 503)
+        """
+        # Get registered worker count for error context
+        all_registered = self.worker_registry.list_workers(
+            worker_type=WorkerType.BACKTESTING
+        )
+        registered_count = len(all_registered)
+
+        # Select worker (registry handles load balancing)
+        worker = self.worker_registry.select_worker(WorkerType.BACKTESTING)
+
+        if not worker:
+            raise WorkerUnavailableError(
+                worker_type="backtesting",
+                registered_count=registered_count,
+                backend_uptime_seconds=get_uptime_seconds(),
+            )
+
+        # Check if this worker should be excluded
+        if excluded_workers and worker.worker_id in excluded_workers:
+            # All available workers have been tried
+            raise WorkerUnavailableError(
+                worker_type="backtesting",
+                registered_count=registered_count,
+                backend_uptime_seconds=get_uptime_seconds(),
+                hint=f"All workers busy. Tried: {excluded_workers}",
+            )
+
+        return worker
 
     async def health_check(self) -> dict[str, Any]:
         """
@@ -279,52 +327,19 @@ class BacktestingService(ServiceOrchestrator[None]):
         Raises:
             RuntimeError: If no workers are available
         """
-        # (1) Select worker from registry with retry on 503 (worker busy)
-        worker_id: Optional[str] = None
-        remote_url: str
+        # (1) Select worker from registry
         max_retries = 3
         attempted_workers: list[str] = []
 
-        # Get registered worker count for error context
-        all_registered = self.worker_registry.list_workers(
-            worker_type=WorkerType.BACKTESTING
+        worker = self._select_backtest_worker()
+        worker_id = worker.worker_id
+        remote_url = worker.endpoint_url
+        attempted_workers.append(worker_id)
+
+        logger.info(
+            f"Selected worker {worker_id} for operation {operation_id} "
+            f"(symbol={symbol}, timeframe={timeframe})"
         )
-        registered_count = len(all_registered)
-
-        for attempt in range(max_retries):
-            worker = self.worker_registry.select_worker(WorkerType.BACKTESTING)
-            if not worker:
-                if attempt == 0:
-                    raise WorkerUnavailableError(
-                        worker_type="backtesting",
-                        registered_count=registered_count,
-                        backend_uptime_seconds=get_uptime_seconds(),
-                    )
-                # All workers have been tried, none available
-                raise WorkerUnavailableError(
-                    worker_type="backtesting",
-                    registered_count=registered_count,
-                    backend_uptime_seconds=get_uptime_seconds(),
-                    hint=f"All backtest workers are busy. Tried {len(attempted_workers)} workers.",
-                )
-
-            # Skip workers we've already tried
-            if worker.worker_id in attempted_workers:
-                continue
-
-            worker_id = worker.worker_id
-            remote_url = worker.endpoint_url
-            attempted_workers.append(worker_id)
-
-            logger.info(
-                f"Selected worker {worker_id} for operation {operation_id} "
-                f"(symbol={symbol}, timeframe={timeframe}, attempt={attempt + 1}/{max_retries})"
-            )
-            break  # Worker selected, exit retry loop to try dispatching
-        else:
-            raise RuntimeError(
-                f"Could not select unique worker after {max_retries} attempts"
-            )
 
         # (2) Dispatch to worker with retry on 503
         # Extract strategy_name from strategy_config_path (e.g., "strategies/test.yaml" -> "test")
@@ -383,31 +398,18 @@ class BacktestingService(ServiceOrchestrator[None]):
 
                     if retry_attempt < max_retries - 1:
                         # Select a different worker for next attempt
-                        worker = self.worker_registry.select_worker(
-                            WorkerType.BACKTESTING
+                        # _select_backtest_worker raises WorkerUnavailableError if all tried
+                        worker = self._select_backtest_worker(
+                            excluded_workers=attempted_workers
                         )
-                        if worker and worker.worker_id not in attempted_workers:
-                            worker_id = worker.worker_id
-                            remote_url = worker.endpoint_url
-                            attempted_workers.append(worker_id)
-                            logger.info(f"Retrying with worker {worker_id}")
-                            continue  # Retry with new worker
-                        else:
-                            # No more unique workers available
-                            raise WorkerUnavailableError(
-                                worker_type="backtesting",
-                                registered_count=registered_count,
-                                backend_uptime_seconds=get_uptime_seconds(),
-                                hint=f"All workers busy after {retry_attempt + 1} attempts. Tried: {attempted_workers}",
-                            ) from e
+                        worker_id = worker.worker_id
+                        remote_url = worker.endpoint_url
+                        attempted_workers.append(worker_id)
+                        logger.info(f"Retrying with worker {worker_id}")
+                        continue  # Retry with new worker
                     else:
-                        # Last retry failed
-                        raise WorkerUnavailableError(
-                            worker_type="backtesting",
-                            registered_count=registered_count,
-                            backend_uptime_seconds=get_uptime_seconds(),
-                            hint=f"All workers busy after {max_retries} attempts. Tried: {attempted_workers}",
-                        ) from e
+                        # Last retry failed - let _select_backtest_worker raise the error
+                        self._select_backtest_worker(excluded_workers=attempted_workers)
                 else:
                     # Other HTTP error, don't retry
                     raise

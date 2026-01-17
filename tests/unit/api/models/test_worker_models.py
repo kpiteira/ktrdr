@@ -1,6 +1,6 @@
 """Unit tests for worker data models."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 from pydantic import ValidationError
@@ -68,7 +68,7 @@ class TestWorkerEndpoint:
 
     def test_create_worker_endpoint_with_all_fields(self):
         """Test creating a WorkerEndpoint with all fields."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         worker = WorkerEndpoint(
             worker_id="test-worker-2",
             worker_type=WorkerType.GPU_HOST,
@@ -129,7 +129,7 @@ class TestWorkerEndpoint:
 
     def test_to_dict_with_datetimes(self):
         """Test to_dict() method with datetime fields."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         worker = WorkerEndpoint(
             worker_id="test-worker-5",
             worker_type=WorkerType.GPU_HOST,

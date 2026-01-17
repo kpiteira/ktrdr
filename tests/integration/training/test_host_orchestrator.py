@@ -2,7 +2,7 @@
 
 import asyncio
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Optional
 from unittest.mock import Mock, patch
@@ -27,8 +27,8 @@ class MockTrainingSession:
         self.session_id = session_id
         self.config = config
         self.status = "initializing"
-        self.start_time = datetime.utcnow()
-        self.last_updated = datetime.utcnow()
+        self.start_time = datetime.now(UTC)
+        self.last_updated = datetime.now(UTC)
 
         # Progress tracking
         self.current_epoch = 0
@@ -65,7 +65,7 @@ class MockTrainingSession:
         self.current_epoch = epoch
         self.current_batch = batch
         self.metrics = metrics
-        self.last_updated = datetime.utcnow()
+        self.last_updated = datetime.now(UTC)
 
     def get_progress_dict(self) -> dict[str, Any]:
         """Get progress as dictionary."""

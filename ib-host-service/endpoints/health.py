@@ -4,7 +4,7 @@ Health check endpoints for IB Connector Host Service
 Provides health monitoring and connection status information.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Optional
 
 from fastapi import APIRouter
@@ -70,7 +70,7 @@ async def basic_health_check():
     Returns overall service health and IB connection status.
     """
     try:
-        current_time = datetime.utcnow()
+        current_time = datetime.now(UTC)
 
         # Get connection pool for status
         pool = await get_connection_pool()
@@ -104,7 +104,7 @@ async def basic_health_check():
         logger.error(f"Health check failed: {str(e)}")
         return HealthResponse(
             healthy=False,
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             ib_status={"connected": False, "connection_count": 0},
             connection_info={"service_running": False},
             error=str(e),
@@ -120,7 +120,7 @@ async def detailed_health_check():
     error rates, and service uptime.
     """
     try:
-        current_time = datetime.utcnow()
+        current_time = datetime.now(UTC)
 
         # Get connection pool
         pool = await get_connection_pool()
@@ -158,7 +158,7 @@ async def detailed_health_check():
         logger.error(f"Detailed health check failed: {str(e)}")
         return DetailedHealthResponse(
             healthy=False,
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             ib_gateway_connected=False,
             active_connections=0,
             total_requests=0,

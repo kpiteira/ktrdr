@@ -12,7 +12,7 @@ endpoints that the containerized backend can call.
 import logging
 import os
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import uvicorn
@@ -108,7 +108,7 @@ async def root():
         "service": "IB Connector Host Service",
         "version": "1.0.0",
         "status": "running",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
 
@@ -118,7 +118,7 @@ async def health_check():
     return {
         "healthy": True,
         "service": "ib-connector",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "status": "operational",
     }
 

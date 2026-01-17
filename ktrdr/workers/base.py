@@ -14,7 +14,7 @@ Source: training-host-service/
 import asyncio
 import os
 import signal
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Optional
 
 from fastapi import FastAPI, HTTPException, Path, Query
@@ -435,7 +435,7 @@ class WorkerAPIBase:
             """Health check endpoint - reports worker busy/idle status."""
             # Track when backend health-checked us (Task 1.6)
             # This enables detection of backend restart in re-registration monitor
-            self._last_health_check_received = datetime.utcnow()
+            self._last_health_check_received = datetime.now(UTC)
 
             try:
                 active_ops, _, _ = await self._operations_service.list_operations(
@@ -445,7 +445,7 @@ class WorkerAPIBase:
                 return {
                     "healthy": True,
                     "service": f"{self.worker_type.value}-worker",
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                     "status": "operational",
                     "worker_status": "busy" if active_ops else "idle",
                     "current_operation": (
@@ -485,7 +485,7 @@ class WorkerAPIBase:
                 "service": f"{self.worker_type.value.title()} Worker Service",
                 "version": "1.0.0",
                 "status": "running",
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "worker_id": self.worker_id,
             }
 
@@ -564,12 +564,12 @@ class WorkerAPIBase:
             max_duration: Maximum seconds to poll before giving up
         """
 
-        start_time = datetime.utcnow()
+        start_time = datetime.now(UTC)
         attempt = 0
 
         logger.info(f"Polling for backend restart (max {max_duration}s)")
 
-        while (datetime.utcnow() - start_time).total_seconds() < max_duration:
+        while (datetime.now(UTC) - start_time).total_seconds() < max_duration:
             attempt += 1
 
             try:
@@ -579,7 +579,7 @@ class WorkerAPIBase:
                     logger.info(
                         f"✅ Re-registered after backend restart (attempt {attempt})"
                     )
-                    self._last_health_check_received = datetime.utcnow()
+                    self._last_health_check_received = datetime.now(UTC)
 
                     # CRITICAL FIX: Clear shutdown event after successful re-registration
                     # When backend restarts, workers may receive SIGTERM but survive.
@@ -970,7 +970,7 @@ class WorkerAPIBase:
             status=status,  # type: ignore[arg-type]
             result=result,
             error_message=error_message,
-            completed_at=datetime.utcnow(),
+            completed_at=datetime.now(UTC),
         )
         self._completed_operations.append(report)
         logger.debug(f"Recorded completed operation: {operation_id} ({status})")
@@ -1005,7 +1005,7 @@ class WorkerAPIBase:
                     continue
 
                 elapsed = (
-                    datetime.utcnow() - self._last_health_check_received
+                    datetime.now(UTC) - self._last_health_check_received
                 ).total_seconds()
 
                 if elapsed > self._health_check_timeout:
@@ -1014,7 +1014,7 @@ class WorkerAPIBase:
                     )
                     await self._ensure_registered()
                     # Reset the timer after checking
-                    self._last_health_check_received = datetime.utcnow()
+                    self._last_health_check_received = datetime.now(UTC)
 
             except asyncio.CancelledError:
                 logger.info("Re-registration monitor stopped")

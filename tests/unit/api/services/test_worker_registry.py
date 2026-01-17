@@ -1,7 +1,7 @@
 """Unit tests for WorkerRegistry."""
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -227,13 +227,13 @@ class TestWorkerRegistry:
         """Test that registering a worker sets last_healthy_at timestamp."""
         registry = WorkerRegistry()
 
-        before = datetime.utcnow()
+        before = datetime.now(UTC)
         result = await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://localhost:5003",
         )
-        after = datetime.utcnow()
+        after = datetime.now(UTC)
 
         assert result.worker.last_healthy_at is not None
         assert before <= result.worker.last_healthy_at <= after
@@ -831,7 +831,7 @@ class TestDeadWorkerCleanup:
         result.worker.status = WorkerStatus.TEMPORARILY_UNAVAILABLE
 
         # Set last_healthy_at to 6 minutes ago
-        result.worker.last_healthy_at = datetime.utcnow() - timedelta(minutes=6)
+        result.worker.last_healthy_at = datetime.now(UTC) - timedelta(minutes=6)
 
         # Run cleanup
         registry._cleanup_dead_workers()
@@ -856,7 +856,7 @@ class TestDeadWorkerCleanup:
         result.worker.status = WorkerStatus.TEMPORARILY_UNAVAILABLE
 
         # Set last_healthy_at to 4 minutes ago (below threshold)
-        result.worker.last_healthy_at = datetime.utcnow() - timedelta(minutes=4)
+        result.worker.last_healthy_at = datetime.now(UTC) - timedelta(minutes=4)
 
         # Run cleanup
         registry._cleanup_dead_workers()
@@ -881,7 +881,7 @@ class TestDeadWorkerCleanup:
         result.worker.status = WorkerStatus.AVAILABLE
 
         # Set last_healthy_at to 10 minutes ago (way past threshold)
-        result.worker.last_healthy_at = datetime.utcnow() - timedelta(minutes=10)
+        result.worker.last_healthy_at = datetime.now(UTC) - timedelta(minutes=10)
 
         # Run cleanup
         registry._cleanup_dead_workers()
@@ -906,7 +906,7 @@ class TestDeadWorkerCleanup:
         result.worker.status = WorkerStatus.BUSY
 
         # Set last_healthy_at to 10 minutes ago (way past threshold)
-        result.worker.last_healthy_at = datetime.utcnow() - timedelta(minutes=10)
+        result.worker.last_healthy_at = datetime.now(UTC) - timedelta(minutes=10)
 
         # Run cleanup
         registry._cleanup_dead_workers()
@@ -950,7 +950,7 @@ class TestDeadWorkerCleanup:
                 endpoint_url=f"http://worker-{i}:5003",
             )
             result.worker.status = WorkerStatus.TEMPORARILY_UNAVAILABLE
-            result.worker.last_healthy_at = datetime.utcnow() - timedelta(minutes=6)
+            result.worker.last_healthy_at = datetime.now(UTC) - timedelta(minutes=6)
 
         # Register 1 healthy worker
         await registry.register_worker(
@@ -982,7 +982,7 @@ class TestDeadWorkerCleanup:
             endpoint_url="http://worker-1:5003",
         )
         result.worker.status = WorkerStatus.TEMPORARILY_UNAVAILABLE
-        result.worker.last_healthy_at = datetime.utcnow() - timedelta(seconds=2)
+        result.worker.last_healthy_at = datetime.now(UTC) - timedelta(seconds=2)
 
         # Mock health_check_worker to prevent it from updating timestamps
         async def mock_health_check(worker_id):
@@ -1044,7 +1044,7 @@ class TestReconciliation:
             operation_id="op-123",
             status="COMPLETED",
             result={"model_path": "/path/to/model.pt"},
-            completed_at=datetime.utcnow(),
+            completed_at=datetime.now(UTC),
         )
 
         # Register worker with completed operation
@@ -1082,7 +1082,7 @@ class TestReconciliation:
             operation_id="op-123",
             status="COMPLETED",
             result={},
-            completed_at=datetime.utcnow(),
+            completed_at=datetime.now(UTC),
         )
 
         await registry.register_worker(
@@ -1117,7 +1117,7 @@ class TestReconciliation:
             operation_id="op-456",
             status="FAILED",
             error_message="Out of memory",
-            completed_at=datetime.utcnow(),
+            completed_at=datetime.now(UTC),
         )
 
         await registry.register_worker(
@@ -1148,7 +1148,7 @@ class TestReconciliation:
             operation_id="unknown-op",
             status="COMPLETED",
             result={},
-            completed_at=datetime.utcnow(),
+            completed_at=datetime.now(UTC),
         )
 
         # Should not raise, just log warning
@@ -1328,7 +1328,7 @@ class TestReconciliation:
         completed_report = CompletedOperationReport(
             operation_id="completed-op",
             status="COMPLETED",
-            completed_at=datetime.utcnow(),
+            completed_at=datetime.now(UTC),
         )
 
         await registry.register_worker(
