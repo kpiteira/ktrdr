@@ -120,7 +120,6 @@ class TestRunMilestoneBasic:
             ),
             patch("orchestrator.milestone_runner.CodingAgentContainer"),
             patch("orchestrator.milestone_runner.validate_environment"),
-            patch("orchestrator.milestone_runner.validate_environment"),
         ):
             configure_haiku_mock(mock_brain_class)
             result = await run_milestone(
@@ -154,7 +153,6 @@ class TestRunMilestoneBasic:
             ),
             patch("orchestrator.milestone_runner.CodingAgentContainer"),
             patch("orchestrator.milestone_runner.validate_environment"),
-            patch("orchestrator.milestone_runner.validate_environment"),
         ):
             configure_haiku_mock(mock_brain_class)
             await run_milestone(
@@ -184,7 +182,6 @@ class TestRunMilestoneBasic:
                 mock_run_task_with_escalation,
             ),
             patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
             patch("orchestrator.milestone_runner.validate_environment"),
         ):
             configure_haiku_mock(mock_brain_class)
@@ -238,7 +235,6 @@ class TestRunMilestoneResume:
             ),
             patch("orchestrator.milestone_runner.CodingAgentContainer"),
             patch("orchestrator.milestone_runner.validate_environment"),
-            patch("orchestrator.milestone_runner.validate_environment"),
         ):
             configure_haiku_mock(mock_brain_class)
             await run_milestone(
@@ -279,7 +275,6 @@ class TestRunMilestoneResume:
                 mock_run_task_with_escalation,
             ),
             patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
             patch("orchestrator.milestone_runner.validate_environment"),
         ):
             configure_haiku_mock(mock_brain_class)
@@ -346,7 +341,6 @@ class TestRunMilestoneStatusHandling:
             ),
             patch("orchestrator.milestone_runner.CodingAgentContainer"),
             patch("orchestrator.milestone_runner.validate_environment"),
-            patch("orchestrator.milestone_runner.validate_environment"),
         ):
             configure_haiku_mock(mock_brain_class)
             result = await run_milestone(
@@ -405,7 +399,6 @@ class TestRunMilestoneStatusHandling:
                 AsyncMock(side_effect=mock_task_with_escalation),
             ),
             patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
             patch("orchestrator.milestone_runner.validate_environment"),
         ):
             configure_haiku_mock(mock_brain_class)
@@ -487,7 +480,6 @@ class TestTaskCompleteCallback:
             ),
             patch("orchestrator.milestone_runner.CodingAgentContainer"),
             patch("orchestrator.milestone_runner.validate_environment"),
-            patch("orchestrator.milestone_runner.validate_environment"),
         ):
             configure_haiku_mock(mock_brain_class)
             await run_milestone(
@@ -554,7 +546,6 @@ class TestTaskCompleteCallback:
             ),
             patch("orchestrator.milestone_runner.CodingAgentContainer"),
             patch("orchestrator.milestone_runner.validate_environment"),
-            patch("orchestrator.milestone_runner.validate_environment"),
         ):
             configure_haiku_mock(mock_brain_class)
             await run_milestone(
@@ -583,7 +574,6 @@ class TestTaskCompleteCallback:
                 mock_run_task_with_escalation,
             ),
             patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
             patch("orchestrator.milestone_runner.validate_environment"),
         ):
             # Should not raise - callback is optional
@@ -706,7 +696,6 @@ class TestLoopDetectionIntegration:
             ),
             patch("orchestrator.milestone_runner.CodingAgentContainer"),
             patch("orchestrator.milestone_runner.validate_environment"),
-            patch("orchestrator.milestone_runner.validate_environment"),
         ):
             configure_haiku_mock(mock_brain_class)
             await run_milestone(
@@ -766,7 +755,6 @@ class TestLoopDetectionIntegration:
                 AsyncMock(side_effect=first_run_mock),
             ),
             patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
             patch("orchestrator.milestone_runner.validate_environment"),
         ):
             configure_haiku_mock(mock_brain_class)
@@ -831,7 +819,6 @@ class TestLoopDetectionIntegration:
             ),
             patch("orchestrator.milestone_runner.CodingAgentContainer"),
             patch("orchestrator.milestone_runner.validate_environment"),
-            patch("orchestrator.milestone_runner.validate_environment"),
         ):
             configure_haiku_mock(mock_brain_class)
             result = await run_milestone(
@@ -889,7 +876,6 @@ class TestLoopDetectionIntegration:
                 AsyncMock(side_effect=check_tasks_mock),
             ),
             patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
             patch("orchestrator.milestone_runner.validate_environment"),
         ):
             configure_haiku_mock(mock_brain_class)
