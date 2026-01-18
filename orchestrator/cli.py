@@ -17,6 +17,7 @@ from orchestrator import telemetry
 from orchestrator.coding_agent_container import CodingAgentContainer, format_tool_call
 from orchestrator.config import OrchestratorConfig
 from orchestrator.discord_notifier import format_test_notification, send_discord_message
+from orchestrator.environment import validate_environment
 from orchestrator.health import CHECK_ORDER, get_health
 from orchestrator.lock import MilestoneLock
 from orchestrator.milestone_runner import (
@@ -92,6 +93,9 @@ async def _run_task(
     plan_file: str, task_id: str, guidance: str | None, model: str | None = None
 ) -> None:
     """Internal async implementation of task execution."""
+    # Validate environment before proceeding
+    _code_folder = validate_environment()  # noqa: F841 - used in M3
+
     config = OrchestratorConfig.from_env()
     tracer, meter = setup_telemetry(config)
     create_metrics(meter)

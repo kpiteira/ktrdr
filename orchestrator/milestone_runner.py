@@ -25,6 +25,7 @@ from orchestrator.discord_notifier import (
     format_task_failed,
     send_discord_message,
 )
+from orchestrator.environment import validate_environment
 from orchestrator.models import ClaudeResult, Task, TaskResult
 from orchestrator.runner import (
     EscalationInfo,
@@ -116,6 +117,9 @@ async def run_milestone(
     Returns:
         MilestoneResult with final status and aggregated metrics
     """
+    # Validate environment before proceeding
+    _code_folder = validate_environment()  # noqa: F841 - used in M3
+
     config = config or OrchestratorConfig.from_env()
     tracer = tracer or trace.get_tracer("orchestrator")
 
