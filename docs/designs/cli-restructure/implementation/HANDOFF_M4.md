@@ -78,10 +78,61 @@ def show_data(ctx: typer.Context, ...):
 - Deferring OTEL saves ~200ms
 - Combined: should achieve <100ms target
 
+---
+
+## Task 4.2 Complete: Implement Lazy Command Registration
+
+### What Was Implemented
+
+1. **`ktrdr/cli/__init__.py`** - Complete rewrite with `__getattr__` lazy loading
+   - `cli_app` and `app` are now loaded lazily via `__getattr__`
+   - Command registration happens in `_get_cli_app()` only when app is accessed
+   - Telemetry setup deferred to `_setup_telemetry()` called when app is accessed
+
+2. **`ktrdr/cli/telemetry.py`** - Lazy OTEL imports
+   - `opentelemetry.trace` now imported inside wrapper function, not at module level
+   - In test mode (`PYTEST_CURRENT_TEST` set), tracing is skipped entirely
+
+3. **All command modules** - Heavy imports deferred to function body:
+   - `commands/train.py`, `commands/backtest.py`, `commands/cancel.py`
+   - `commands/follow.py`, `commands/ops.py`, `commands/research.py`
+   - `commands/resume.py`, `commands/status.py`, `commands/show.py`
+   - `commands/validate.py`, `commands/migrate.py`, `commands/list_cmd.py`
+
+### Performance Results
+
+| Metric | Before | After | Target |
+|--------|--------|-------|--------|
+| Import time (best of 3) | ~500ms | ~80ms | <150ms |
+| Cold start | ~1100ms | ~164ms | <100ms |
+
+**Target achieved for import time; cold start is ~164ms which is close to target.**
+
+### Gotchas
+
+1. **Test mock paths changed** - Since imports are now inside functions, mocks must target the source module:
+   ```python
+   # OLD (broken)
+   @patch('ktrdr.cli.commands.train.OperationRunner')
+
+   # NEW (correct)
+   @patch('ktrdr.cli.operation_runner.OperationRunner')
+   ```
+
+2. **TYPE_CHECKING for module-level helpers** - Files with module-level helper functions that use `CLIState` in signatures (like `validate.py`, `migrate.py`) need:
+   ```python
+   from typing import TYPE_CHECKING
+   if TYPE_CHECKING:
+       from ktrdr.cli.state import CLIState
+   ```
+
+3. **Python imports trigger `__init__.py`** - Any `from ktrdr.cli.foo import bar` triggers `ktrdr/cli/__init__.py`. The `__getattr__` pattern prevents this from loading heavy code.
+
 ### Next Task Notes
 
-For Task 4.2 (Lazy Command Registration):
-- Focus on `ktrdr/cli/__init__.py` first - it's the main offender
-- The `ktrdr/cli/app.py` entry point is already reasonably fast
-- Each command file needs to defer its heavy imports inside the command function
-- Test with: `time python -c "from ktrdr.cli.app import app"`
+For Task 4.3 (Defer Telemetry Initialization):
+- Much of this was already done as part of 4.2
+- `ktrdr/cli/telemetry.py` already uses lazy OTEL imports
+- `ktrdr/cli/__init__.py` already defers telemetry setup
+- Main remaining work: verify `--help` doesn't trigger telemetry
+- Test: `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 ktrdr --help` should be fast
