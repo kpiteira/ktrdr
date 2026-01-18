@@ -1,24 +1,17 @@
-# KTRDR Coding Agent Environment
-# Docker image definition for Claude Code autonomous task execution
+# KTRDR Coding Agent Container
 #
-# NOTE: This file is used for BUILDING THE IMAGE only.
-# The container is started by the orchestrator using `docker run` with
-# explicit volume mounts. Do not use `docker compose up` to run the container.
+# This file is used for BUILDING the image only.
+# The container is started via `docker run` by the orchestrator.
 #
-# Usage:
-#   ./scripts/coding-agent-init.sh      # Build image (does not start container)
-#   docker compose build                # Rebuild image only
+# Build: docker compose -f deploy/environments/coding-agent/docker-compose.yml build
 #
-# The orchestrator starts the container with:
+# The orchestrator starts containers with explicit volume mounts:
 #   docker run -d --name ktrdr-coding-agent \
 #     -v /path/to/code:/workspace \
 #     --add-host=host.docker.internal:host-gateway \
 #     ktrdr-coding-agent:latest
 #
-# Requires:
-#   - GH_TOKEN environment variable (for GitHub CLI PR creation)
-#   - ~/Documents/ktrdr-shared/data/ directory with market data
-#   - Claude Code login (run `claude login` in coding agent first time)
+# See also: scripts/coding-agent-init.sh
 
 services:
   coding-agent:
@@ -26,52 +19,3 @@ services:
       context: ../../../
       dockerfile: deploy/docker/coding-agent/Dockerfile
     image: ktrdr-coding-agent:latest
-    container_name: ktrdr-coding-agent
-    restart: unless-stopped
-
-    environment:
-      - TERM=xterm-256color
-      # GitHub token for PR creation (passed from host environment)
-      - GH_TOKEN=${GH_TOKEN}
-      # Prefix all containers created by coding agent with "coding-agent-" to avoid
-      # conflicts with host development containers
-      - COMPOSE_PROJECT_NAME=coding-agent
-
-    volumes:
-      # Shared market data (read-only)
-      - ${HOME}/Documents/ktrdr-shared/data:/shared/data:ro
-
-      # Named volumes for persistent storage
-      # Note: /workspace is mounted at runtime via docker run -v
-      - coding-agent-claude-credentials:/home/ubuntu/.claude
-      - coding-agent-models:/env/models
-      - coding-agent-strategies:/env/strategies
-      - coding-agent-logs:/env/logs
-
-    # Enable host access for communicating with host services
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-    # Join ktrdr network for service communication
-    networks:
-      - ktrdr-network
-
-    # Keep container running for exec commands
-    stdin_open: true
-    tty: true
-
-networks:
-  ktrdr-network:
-    # Use existing network if available, create if not
-    name: ktrdr-network
-    external: false
-
-volumes:
-  coding-agent-claude-credentials:
-    name: ktrdr-coding-agent-claude-credentials
-  coding-agent-models:
-    name: ktrdr-coding-agent-models
-  coding-agent-strategies:
-    name: ktrdr-coding-agent-strategies
-  coding-agent-logs:
-    name: ktrdr-coding-agent-logs
