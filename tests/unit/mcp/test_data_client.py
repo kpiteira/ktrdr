@@ -42,7 +42,7 @@ class TestGetCachedData:
                 limit=50,
             )
 
-            # Verify the request was made correctly
+            # Verify the request was made correctly - limit is now passed to backend
             mock_request.assert_called_once_with(
                 "GET",
                 "/data/AAPL/1h",
@@ -50,6 +50,7 @@ class TestGetCachedData:
                     "start_date": "2024-01-01",
                     "end_date": "2024-01-02",
                     "trading_hours_only": True,
+                    "limit": 50,
                 },
             )
 
@@ -58,14 +59,15 @@ class TestGetCachedData:
             assert len(result["data"]["dates"]) == 2
 
     @pytest.mark.asyncio
-    async def test_get_cached_data_with_limit_truncation(self, data_client):
-        """Test that limit parameter truncates results client-side"""
+    async def test_get_cached_data_with_limit_passed_to_backend(self, data_client):
+        """Test that limit parameter is passed to backend for server-side pagination"""
+        # Backend now handles limiting, so mock response reflects already-limited data
         mock_response = {
             "success": True,
             "data": {
-                "dates": ["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04"],
-                "ohlcv": [[100, 105, 99, 103, 1000]] * 4,
-                "metadata": {"points": 4},
+                "dates": ["2024-01-03", "2024-01-04"],
+                "ohlcv": [[100, 105, 99, 103, 1000]] * 2,
+                "metadata": {"points": 2, "limited": True, "original_points": 4},
             },
         }
 
@@ -78,10 +80,17 @@ class TestGetCachedData:
                 symbol="AAPL", timeframe="1h", limit=2
             )
 
-            # Verify truncation happened
+            # Verify limit was passed to backend
+            mock_request.assert_called_once_with(
+                "GET",
+                "/data/AAPL/1h",
+                params={"limit": 2},
+            )
+
+            # Verify response is returned as-is (backend handled limiting)
             assert len(result["data"]["dates"]) == 2
             assert result["data"]["metadata"]["points"] == 2
-            assert result["data"]["metadata"]["limited_by_client"] is True
+            assert result["data"]["metadata"]["limited"] is True
 
 
 class TestGetSymbols:

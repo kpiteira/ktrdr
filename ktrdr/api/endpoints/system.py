@@ -8,10 +8,11 @@ Provides endpoints to monitor:
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from ktrdr import metadata
 from ktrdr.api.models.base import ApiResponse
+from ktrdr.api.services.ib_service import IbService
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
@@ -20,8 +21,15 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 
+def get_ib_service() -> IbService:
+    """Dependency to get IB service instance."""
+    return IbService()
+
+
 @router.get("/ib-status")
-async def get_ib_status() -> dict[str, Any]:
+async def get_ib_status(
+    ib_service: IbService = Depends(get_ib_service),
+) -> dict[str, Any]:
     """
     Get Interactive Brokers connection status.
 
@@ -29,30 +37,35 @@ async def get_ib_status() -> dict[str, Any]:
     active connections, and pool metrics.
     """
     try:
-        # Get connection pool statistics
-        # TODO: Implement with new IB architecture
-        pool_stats = {"note": "New IB architecture - pool stats not yet implemented"}
+        # Get real IB status via IbService (which queries the IB host service)
+        status = await ib_service.get_status()
 
-        # Extract available connections once to ensure type consistency
-        available_connections = pool_stats.get("available_connections", 0)
+        # Extract connection info
+        connection = status.connection
+        metrics = status.connection_metrics
 
         return {
             "success": True,
             "connection_pool": {
-                "available_connections": available_connections,
-                "total_connections": pool_stats.get("total_connections", 0),
-                "failed_connections": pool_stats.get("failed_connections", 0),
-                "host": pool_stats.get("host", ""),
-                "port": pool_stats.get("port", 0),
-                "uptime_seconds": pool_stats.get("uptime_seconds", 0),
-                "created_at": pool_stats.get("created_at", ""),
+                "available_connections": 1 if connection.connected else 0,
+                "total_connections": metrics.total_connections,
+                "failed_connections": metrics.failed_connections,
+                "host": connection.host,
+                "port": connection.port,
+                "uptime_seconds": metrics.uptime_seconds or 0,
+                "created_at": (
+                    connection.connection_time.isoformat()
+                    if connection.connection_time
+                    else ""
+                ),
             },
-            "status": (
-                "available"
-                if isinstance(available_connections, int) and available_connections > 0
-                else "initializing"
+            "status": "available" if connection.connected else "disconnected",
+            "ib_available": status.ib_available,
+            "timestamp": (
+                connection.connection_time.isoformat()
+                if connection.connection_time
+                else ""
             ),
-            "timestamp": pool_stats.get("timestamp", ""),
         }
 
     except Exception as e:
@@ -63,7 +76,9 @@ async def get_ib_status() -> dict[str, Any]:
 
 
 @router.get("/system-status")
-async def get_system_status() -> dict[str, Any]:
+async def get_system_status(
+    ib_service: IbService = Depends(get_ib_service),
+) -> dict[str, Any]:
     """
     Get overall system status.
 
@@ -71,14 +86,14 @@ async def get_system_status() -> dict[str, Any]:
     and their current state.
     """
     try:
-        # Get IB connection status from pool
-        # TODO: Implement with new IB architecture
-        pool_stats = {"note": "New IB architecture - pool stats not yet implemented"}
-        available_conns = pool_stats.get("available_connections", 0)
-        ib_connected = isinstance(available_conns, int) and available_conns > 0
+        # Get real IB status via IbService
+        status = await ib_service.get_status()
+        ib_connected = status.connection.connected
+        ib_available = status.ib_available
 
         # Determine overall health
-        overall_health = "healthy" if ib_connected else "degraded"
+        # System is healthy if IB is available, degraded otherwise
+        overall_health = "healthy" if ib_available else "degraded"
 
         return {
             "status": "ok",
@@ -86,11 +101,13 @@ async def get_system_status() -> dict[str, Any]:
             "services": {
                 "ib_connection": {
                     "status": "connected" if ib_connected else "disconnected",
-                    "healthy": ib_connected,
+                    "healthy": ib_available,
+                    "host": status.connection.host,
                 },
             },
             "summary": {
                 "ib_connected": ib_connected,
+                "ib_available": ib_available,
             },
         }
 
@@ -102,7 +119,9 @@ async def get_system_status() -> dict[str, Any]:
 
 
 @router.get("/status")
-async def get_system_status_standardized() -> ApiResponse:
+async def get_system_status_standardized(
+    ib_service: IbService = Depends(get_ib_service),
+) -> ApiResponse:
     """
     Get overall system status in standardized API format.
 
@@ -110,14 +129,13 @@ async def get_system_status_standardized() -> ApiResponse:
     but in the standardized API response format expected by tests.
     """
     try:
-        # Get IB connection status from pool
-        # TODO: Implement with new IB architecture
-        pool_stats = {"note": "New IB architecture - pool stats not yet implemented"}
-        available_conns = pool_stats.get("available_connections", 0)
-        ib_connected = isinstance(available_conns, int) and available_conns > 0
+        # Get real IB status via IbService
+        status = await ib_service.get_status()
+        ib_connected = status.connection.connected
+        ib_available = status.ib_available
 
-        # Calculate uptime
-        uptime_seconds = pool_stats.get("pool_uptime_seconds", 0)
+        # Calculate uptime from connection metrics
+        uptime_seconds = status.connection_metrics.uptime_seconds or 0
 
         return ApiResponse(
             success=True,
@@ -125,15 +143,17 @@ async def get_system_status_standardized() -> ApiResponse:
                 "version": metadata.VERSION,
                 "environment": "development",  # Could be made configurable
                 "uptime_seconds": uptime_seconds,
-                "health": "healthy" if ib_connected else "degraded",
+                "health": "healthy" if ib_available else "degraded",
                 "services": {
                     "ib_connection": {
                         "status": "connected" if ib_connected else "disconnected",
-                        "healthy": ib_connected,
+                        "healthy": ib_available,
+                        "host": status.connection.host,
                     },
                 },
                 "summary": {
                     "ib_connected": ib_connected,
+                    "ib_available": ib_available,
                 },
             },
             error=None,

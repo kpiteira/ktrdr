@@ -28,24 +28,12 @@ class DataAPIClient(BaseAPIClient):
             params["trading_hours_only"] = trading_hours_only
         if include_extended:
             params["include_extended"] = include_extended
+        if limit:
+            params["limit"] = limit
 
         response = await self._request(
             "GET", f"/data/{symbol}/{timeframe}", params=params
         )
-
-        # TODO: Replace client-side limiting with proper backend pagination
-        # This is a temporary workaround - backend should handle pagination with limit/offset
-        # like operations_client.list_operations() does
-        if limit and "data" in response and "dates" in response["data"]:
-            data = response["data"]
-            if len(data["dates"]) > limit:
-                data["dates"] = data["dates"][-limit:]
-                data["ohlcv"] = data["ohlcv"][-limit:] if data["ohlcv"] else []
-                if data.get("points"):
-                    data["points"] = data["points"][-limit:]
-                if "metadata" in data:
-                    data["metadata"]["points"] = len(data["dates"])
-                    data["metadata"]["limited_by_client"] = True
 
         return response
 
