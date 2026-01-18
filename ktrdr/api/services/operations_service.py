@@ -432,11 +432,6 @@ class OperationsService:
         # - Complete/Fail (once)
         # Progress updates stay in-memory; clients pull via proxy for live progress.
 
-        # 🔧 TEMP DEBUG: Log ALL progress updates at INFO level
-        logger.info(
-            f"📊 Operation {operation_id} progress: {progress.percentage:.1f}% - {progress.current_step or 'Loading'}"
-        )
-
     async def complete_operation(
         self,
         operation_id: str,
