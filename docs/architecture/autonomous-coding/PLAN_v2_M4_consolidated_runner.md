@@ -223,7 +223,7 @@ uv run python -c "
 import orchestrator
 from orchestrator.haiku_brain import HaikuBrain
 from orchestrator.runner import run_milestone  # or wherever it ended up
-from orchestrator.sandbox import SandboxManager
+from orchestrator.sandbox import CodingAgentContainer
 from orchestrator.state import OrchestratorState
 from orchestrator.config import OrchestratorConfig
 from orchestrator.notifications import send_notification

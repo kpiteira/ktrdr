@@ -27,8 +27,8 @@ uv run orchestrator task orchestrator/test_plans/hello_world.md 1.1
 # [timestamp] Task 1.1: COMPLETED (45s, 3.2k tokens, $0.02)
 
 # 3. Verify task was executed
-docker exec ktrdr-sandbox cat /workspace/hello.py
-docker exec ktrdr-sandbox python /workspace/hello.py
+docker exec ktrdr-coding-agent cat /workspace/hello.py
+docker exec ktrdr-coding-agent python /workspace/hello.py
 # Expect: "Hello, World!"
 
 # 4. Verify trace in Jaeger
@@ -87,7 +87,7 @@ import os
 @dataclass
 class OrchestratorConfig:
     # Sandbox
-    sandbox_container: str = "ktrdr-sandbox"
+    coding_agent_container: str = "ktrdr-coding-agent"
     workspace_path: str = "/workspace"
 
     # Claude Code
@@ -232,8 +232,8 @@ import json
 from dataclasses import dataclass
 
 @dataclass
-class SandboxManager:
-    container_name: str = "ktrdr-sandbox"
+class CodingAgentContainer:
+    container_name: str = "ktrdr-coding-agent"
     workspace_path: str = "/workspace"
 
     async def exec(self, command: str, timeout: int = 300) -> str:
@@ -301,7 +301,7 @@ Execute a single task via Claude Code and parse the result.
 ```python
 async def run_task(
     task: Task,
-    sandbox: SandboxManager,
+    sandbox: CodingAgentContainer,
     config: OrchestratorConfig,
     human_guidance: str | None = None,
 ) -> TaskResult:
@@ -463,7 +463,7 @@ async def _run_task(plan_file: str, task_id: str, guidance: str | None):
         console.print(f"[red]Task {task_id} not found in {plan_file}[/red]")
         return
 
-    sandbox = SandboxManager()
+    sandbox = CodingAgentContainer()
 
     with tracer.start_as_current_span("orchestrator.task") as span:
         span.set_attribute("task.id", task_id)
@@ -618,7 +618,7 @@ orchestrator health
 uv run orchestrator task orchestrator/test_plans/hello_world.md 1.1
 
 # Verify
-docker exec ktrdr-sandbox python /workspace/hello.py
+docker exec ktrdr-coding-agent python /workspace/hello.py
 # Expect: Hello, World!
 
 # Check Jaeger
@@ -632,7 +632,7 @@ open http://localhost:16686
 uv run orchestrator task orchestrator/test_plans/health_check.md 1.1
 
 # Verify file created
-docker exec ktrdr-sandbox cat /workspace/orchestrator/health.py
+docker exec ktrdr-coding-agent cat /workspace/orchestrator/health.py
 ```
 
 **Checklist:**

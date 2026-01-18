@@ -152,7 +152,7 @@ class TaskResult:
 
 async def run_task(
     task: Task,
-    sandbox: SandboxManager,
+    sandbox: CodingAgentContainer,
     human_guidance: str | None = None,
 ) -> TaskResult:
     """Execute a task via Claude Code in the sandbox."""
@@ -161,7 +161,7 @@ async def run_task(
 **Claude Code Invocation**:
 
 ```bash
-docker exec ktrdr-sandbox claude -p \
+docker exec ktrdr-coding-agent claude -p \
   --output-format json \
   --permission-mode acceptEdits \
   --max-turns 50 \
@@ -248,7 +248,7 @@ class E2EResult:
 
 async def run_e2e_tests(
     milestone: Milestone,
-    sandbox: SandboxManager,
+    sandbox: CodingAgentContainer,
 ) -> E2EResult:
     """Execute milestone E2E tests via Claude Code."""
 ```
@@ -256,7 +256,7 @@ async def run_e2e_tests(
 **Claude Code Invocation**:
 
 ```bash
-docker exec ktrdr-sandbox claude -p \
+docker exec ktrdr-coding-agent claude -p \
   --output-format json \
   --permission-mode acceptEdits \
   --max-turns 30 \
@@ -329,7 +329,7 @@ cost_counter = meter.create_counter("orchestrator_cost_usd_total")
 task_duration = meter.create_histogram("orchestrator_task_duration_seconds")
 
 @tracer.start_as_current_span("orchestrator.task")
-async def run_task(task: Task, sandbox: SandboxManager) -> TaskResult:
+async def run_task(task: Task, sandbox: CodingAgentContainer) -> TaskResult:
     span = trace.get_current_span()
     span.set_attribute("task.id", task.id)
     span.set_attribute("milestone.id", task.milestone_id)
@@ -360,7 +360,7 @@ async def run_task(task: Task, sandbox: SandboxManager) -> TaskResult:
 **Interface**:
 
 ```python
-class SandboxManager:
+class CodingAgentContainer:
     async def ensure_running(self) -> None:
         """Ensure sandbox container is running."""
 

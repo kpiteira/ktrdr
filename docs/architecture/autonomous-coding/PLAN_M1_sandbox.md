@@ -20,37 +20,37 @@ Claude Code runs in isolated Docker container with access to shared market data 
 docker compose -f deploy/environments/sandbox/docker-compose.yml up -d
 
 # 1. Verify Claude Code runs
-docker exec ktrdr-sandbox claude -p "echo hello" --output-format json
+docker exec ktrdr-coding-agent claude -p "echo hello" --output-format json
 # Expect: JSON with result
 
 # 2. Verify .claude/ commands available (tracked in git, from clone)
-docker exec ktrdr-sandbox ls /workspace/.claude/commands/
+docker exec ktrdr-coding-agent ls /workspace/.claude/commands/
 # Expect: ktask.md, etc.
 
 # 3. Verify shared data accessible
-docker exec ktrdr-sandbox ls /shared/data/ | head -3
+docker exec ktrdr-coding-agent ls /shared/data/ | head -3
 # Expect: EURUSD_1d.csv, etc.
 
 # 4. Verify env-local volumes work
-docker exec ktrdr-sandbox touch /env/models/test-model.pt
-docker exec ktrdr-sandbox touch /env/strategies/test-strategy.yaml
-docker exec ktrdr-sandbox ls /env/models/ /env/strategies/
+docker exec ktrdr-coding-agent touch /env/models/test-model.pt
+docker exec ktrdr-coding-agent touch /env/strategies/test-strategy.yaml
+docker exec ktrdr-coding-agent ls /env/models/ /env/strategies/
 # Expect: files exist
 
 # 5. Make a workspace change
-docker exec ktrdr-sandbox bash -c "echo 'dirty' > /workspace/dirty.txt"
+docker exec ktrdr-coding-agent bash -c "echo 'dirty' > /workspace/dirty.txt"
 
 # 6. Reset workspace
 ./scripts/sandbox-reset.sh
 
 # 7. Verify reset behavior
-docker exec ktrdr-sandbox cat /workspace/dirty.txt        # Should FAIL (cleared)
-docker exec ktrdr-sandbox ls /env/models/test-model.pt    # Should EXIST (kept)
-docker exec ktrdr-sandbox ls /env/strategies/             # Should EXIST (kept)
-docker exec ktrdr-sandbox ls /shared/data/ | head -1      # Should EXIST (RO mount)
+docker exec ktrdr-coding-agent cat /workspace/dirty.txt        # Should FAIL (cleared)
+docker exec ktrdr-coding-agent ls /env/models/test-model.pt    # Should EXIST (kept)
+docker exec ktrdr-coding-agent ls /env/strategies/             # Should EXIST (kept)
+docker exec ktrdr-coding-agent ls /shared/data/ | head -1      # Should EXIST (RO mount)
 
 # 8. Verify docker-in-docker works (sandbox can run ktrdr services)
-docker exec ktrdr-sandbox docker ps
+docker exec ktrdr-coding-agent docker ps
 # Expect: Can see host Docker containers
 ```
 
@@ -166,14 +166,14 @@ docker compose -f deploy/environments/sandbox/docker-compose.yml build
 docker compose -f deploy/environments/sandbox/docker-compose.yml up -d
 
 # Clone repo (first time only)
-docker exec ktrdr-sandbox bash -c '
+docker exec ktrdr-coding-agent bash -c '
   if [ ! -d /workspace/.git ]; then
     git clone https://github.com/kpiteira/ktrdr2.git /workspace
   fi
 '
 
 # Create env directories
-docker exec ktrdr-sandbox mkdir -p /env/models /env/strategies /env/logs
+docker exec ktrdr-coding-agent mkdir -p /env/models /env/strategies /env/logs
 
 echo "Sandbox initialized successfully"
 ```
@@ -211,7 +211,7 @@ START_TIME=$(date +%s)
 echo "Resetting sandbox workspace..."
 
 # Reset git state
-docker exec ktrdr-sandbox bash -c '
+docker exec ktrdr-coding-agent bash -c '
   cd /workspace
   git clean -fdx
   git checkout .
@@ -219,7 +219,7 @@ docker exec ktrdr-sandbox bash -c '
 '
 
 # Clear logs only
-docker exec ktrdr-sandbox bash -c 'rm -rf /env/logs/* 2>/dev/null || true'
+docker exec ktrdr-coding-agent bash -c 'rm -rf /env/logs/* 2>/dev/null || true'
 
 END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))
@@ -251,7 +251,7 @@ Interactive shell access to sandbox for debugging.
 
 ```bash
 #!/bin/bash
-docker exec -it ktrdr-sandbox "${@:-bash}"
+docker exec -it ktrdr-coding-agent "${@:-bash}"
 ```
 
 **Acceptance Criteria:**
@@ -276,7 +276,7 @@ Run Claude Code command in sandbox.
 
 ```bash
 #!/bin/bash
-docker exec -it -w /workspace ktrdr-sandbox claude "$@"
+docker exec -it -w /workspace ktrdr-coding-agent claude "$@"
 ```
 
 **Acceptance Criteria:**
@@ -302,31 +302,31 @@ sleep 5  # Wait for container
 
 # Test 1: Claude runs
 echo "Test 1: Claude Code runs..."
-docker exec ktrdr-sandbox claude -p "say hello" --output-format json | jq '.result'
+docker exec ktrdr-coding-agent claude -p "say hello" --output-format json | jq '.result'
 
 # Test 2: .claude/ available
 echo "Test 2: .claude/ commands available..."
-docker exec ktrdr-sandbox ls /workspace/.claude/commands/ktask.md
+docker exec ktrdr-coding-agent ls /workspace/.claude/commands/ktask.md
 
 # Test 3: Shared data accessible
 echo "Test 3: Shared data accessible..."
-docker exec ktrdr-sandbox ls /shared/data/ | head -3
+docker exec ktrdr-coding-agent ls /shared/data/ | head -3
 
 # Test 4: Env volumes work
 echo "Test 4: Env volumes work..."
-docker exec ktrdr-sandbox touch /env/models/test.pt
-docker exec ktrdr-sandbox touch /env/strategies/test.yaml
+docker exec ktrdr-coding-agent touch /env/models/test.pt
+docker exec ktrdr-coding-agent touch /env/strategies/test.yaml
 
 # Test 5: Reset behavior
 echo "Test 5: Reset preserves artifacts..."
-docker exec ktrdr-sandbox touch /workspace/dirty.txt
+docker exec ktrdr-coding-agent touch /workspace/dirty.txt
 ./scripts/sandbox-reset.sh
-docker exec ktrdr-sandbox test ! -f /workspace/dirty.txt  # Should not exist
-docker exec ktrdr-sandbox test -f /env/models/test.pt     # Should exist
+docker exec ktrdr-coding-agent test ! -f /workspace/dirty.txt  # Should not exist
+docker exec ktrdr-coding-agent test -f /env/models/test.pt     # Should exist
 
 # Test 6: Docker-in-docker
 echo "Test 6: Docker-in-docker works..."
-docker exec ktrdr-sandbox docker ps
+docker exec ktrdr-coding-agent docker ps
 
 echo "=== M1 Verification PASSED ==="
 ```

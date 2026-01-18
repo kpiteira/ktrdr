@@ -132,7 +132,7 @@ class E2EResult:
 async def run_e2e_tests(
     milestone_id: str,
     e2e_scenario: str,
-    sandbox: SandboxManager,
+    sandbox: CodingAgentContainer,
     config: OrchestratorConfig,
     tracer: trace.Tracer,
 ) -> E2EResult:
@@ -223,7 +223,7 @@ Apply fixes suggested by Claude and re-run E2E.
 ```python
 async def apply_e2e_fix(
     fix_plan: str,
-    sandbox: SandboxManager,
+    sandbox: CodingAgentContainer,
     config: OrchestratorConfig,
     tracer: trace.Tracer,
 ) -> bool:

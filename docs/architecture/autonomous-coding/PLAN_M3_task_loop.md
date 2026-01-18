@@ -276,7 +276,7 @@ async def run_milestone(
             started_at=datetime.now(),
         )
 
-    sandbox = SandboxManager()
+    sandbox = CodingAgentContainer()
     start_index = state.get_next_task_index()
 
     with tracer.start_as_current_span("orchestrator.milestone") as milestone_span:
