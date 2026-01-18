@@ -160,12 +160,12 @@ class TestTrainCommandOptionalParams:
         try:
             runner = CliRunner()
 
-            with patch("ktrdr.cli.commands.train.OperationRunner") as mock_runner_class:
+            with patch("ktrdr.cli.operation_runner.OperationRunner") as mock_runner_class:
                 mock_runner = MagicMock()
                 mock_runner_class.return_value = mock_runner
 
                 with patch(
-                    "ktrdr.cli.commands.train.TrainingOperationAdapter"
+                    "ktrdr.cli.operation_adapters.TrainingOperationAdapter"
                 ) as mock_adapter_class:
                     runner.invoke(
                         app,
@@ -205,12 +205,12 @@ class TestTrainCommandOptionalParams:
         try:
             runner = CliRunner()
 
-            with patch("ktrdr.cli.commands.train.OperationRunner") as mock_runner_class:
+            with patch("ktrdr.cli.operation_runner.OperationRunner") as mock_runner_class:
                 mock_runner = MagicMock()
                 mock_runner_class.return_value = mock_runner
 
                 with patch(
-                    "ktrdr.cli.commands.train.TrainingOperationAdapter"
+                    "ktrdr.cli.operation_adapters.TrainingOperationAdapter"
                 ) as mock_adapter_class:
                     runner.invoke(
                         app,
@@ -248,12 +248,12 @@ class TestTrainCommandOptionalParams:
         try:
             runner = CliRunner()
 
-            with patch("ktrdr.cli.commands.train.OperationRunner") as mock_runner_class:
+            with patch("ktrdr.cli.operation_runner.OperationRunner") as mock_runner_class:
                 mock_runner = MagicMock()
                 mock_runner_class.return_value = mock_runner
 
                 with patch(
-                    "ktrdr.cli.commands.train.TrainingOperationAdapter"
+                    "ktrdr.cli.operation_adapters.TrainingOperationAdapter"
                 ) as mock_adapter_class:
                     runner.invoke(
                         app,

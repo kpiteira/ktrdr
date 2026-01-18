@@ -136,3 +136,39 @@ For Task 4.3 (Defer Telemetry Initialization):
 - `ktrdr/cli/__init__.py` already defers telemetry setup
 - Main remaining work: verify `--help` doesn't trigger telemetry
 - Test: `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 ktrdr --help` should be fast
+
+---
+
+## Task 4.3 Complete: Defer Telemetry Initialization
+
+### What Was Implemented
+
+1. **`tests/unit/cli/test_telemetry_lazy.py`** - New test file with 6 tests verifying:
+   - Importing `ktrdr.cli.telemetry` doesn't load OTEL
+   - Importing `ktrdr.cli.app` doesn't load OTEL
+   - Running `--help` doesn't trigger telemetry
+   - Decorator skips tracing in test mode
+   - Function metadata is preserved by decorator
+   - Async functions work with decorator
+
+2. **`tests/unit/cli/test_telemetry.py`** - Enabled previously skipped tests:
+   - Fixed `reset_tracer` fixture to properly reset OTEL state between tests
+   - All 6 tracing tests now pass
+
+### Gotchas
+
+1. **OpenTelemetry `_TRACER_PROVIDER_SET_ONCE`** - Resetting `trace._TRACER_PROVIDER = None` isn't enough. Must also reset `trace._TRACER_PROVIDER_SET_ONCE = Once()` to allow setting a new provider:
+   ```python
+   from opentelemetry.util._once import Once
+   trace._TRACER_PROVIDER = None
+   trace._TRACER_PROVIDER_SET_ONCE = Once()
+   ```
+
+2. **Additional mock path fix needed** - Found `tests/unit/api/endpoints/test_training_optional_params.py` still had old mock paths. Updated to use source module paths.
+
+### Test Results
+
+- `test_telemetry.py`: 6 passed
+- `test_telemetry_lazy.py`: 6 passed
+- Full CLI suite: 685 passed
+- Full unit suite: 4117 passed (~41s with parallel execution)
