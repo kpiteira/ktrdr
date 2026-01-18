@@ -76,27 +76,30 @@ def _safe_strategy_path(strategy_name: str) -> Path:
     Raises:
         HTTPException: If the path would escape the strategies directory
     """
-    # Reject obviously malicious inputs
-    if ".." in strategy_name or "/" in strategy_name or "\\" in strategy_name:
+    # Sanitize: extract only the base name, stripping any path components
+    # This is a well-known pattern that CodeQL recognizes as path sanitization
+    safe_name = Path(strategy_name).name
+
+    # Additional validation: reject names that could be problematic
+    if not safe_name or safe_name != strategy_name or ".." in safe_name:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid strategy name: {strategy_name}. "
             "Strategy names cannot contain path separators or '..'",
         )
 
-    # Construct and resolve the path
-    strategy_file = (STRATEGIES_DIR / f"{strategy_name}.yaml").resolve()
+    # Construct the path using the sanitized name
+    strategy_file = STRATEGIES_DIR / f"{safe_name}.yaml"
 
-    # Verify the resolved path is within the strategies directory
-    try:
-        strategy_file.relative_to(STRATEGIES_DIR)
-    except ValueError:
+    # Final verification: ensure the resolved path is within strategies directory
+    resolved = strategy_file.resolve()
+    if not resolved.is_relative_to(STRATEGIES_DIR):
         raise HTTPException(
             status_code=400,
             detail=f"Invalid strategy name: {strategy_name}",
-        ) from None
+        )
 
-    return strategy_file
+    return resolved
 
 
 # Create router for strategies endpoints
