@@ -51,6 +51,12 @@ def trace_cli_command(command_name: str) -> Callable[[F], F]:
             if _is_testing:
                 return func(*args, **kwargs)
 
+            # Initialize telemetry infrastructure (OTLP exporter, httpx instrumentation)
+            # This is a no-op if already initialized
+            from ktrdr.cli import init_telemetry_if_needed
+
+            init_telemetry_if_needed()
+
             # Lazy import OpenTelemetry
             from opentelemetry import trace
             from opentelemetry.trace import Status, StatusCode
@@ -97,6 +103,12 @@ def trace_cli_command(command_name: str) -> Callable[[F], F]:
             # Skip tracing in test mode
             if _is_testing:
                 return await func(*args, **kwargs)
+
+            # Initialize telemetry infrastructure (OTLP exporter, httpx instrumentation)
+            # This is a no-op if already initialized
+            from ktrdr.cli import init_telemetry_if_needed
+
+            init_telemetry_if_needed()
 
             # Lazy import OpenTelemetry
             from opentelemetry import trace

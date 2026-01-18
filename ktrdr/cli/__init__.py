@@ -233,8 +233,9 @@ def _get_cli_app():
         help="Manage isolated development sandbox instances",
     )
 
-    # Initialize telemetry now that we're about to run commands
-    _setup_telemetry()
+    # Note: Telemetry is initialized lazily via init_telemetry_if_needed()
+    # called from trace_cli_command decorator when commands execute.
+    # This keeps --help fast by avoiding OTEL setup.
 
     return base_app
 
@@ -266,4 +267,19 @@ if TYPE_CHECKING:
     cli_app: Typer
     app: Typer
 
-__all__ = ["cli_app", "app", "reconfigure_telemetry_for_url"]
+
+def init_telemetry_if_needed() -> None:
+    """Initialize telemetry if not already initialized.
+
+    Called lazily from trace_cli_command decorator when commands execute.
+    This keeps --help fast by avoiding OTEL setup until actual commands run.
+    """
+    _setup_telemetry()
+
+
+__all__ = [
+    "cli_app",
+    "app",
+    "reconfigure_telemetry_for_url",
+    "init_telemetry_if_needed",
+]

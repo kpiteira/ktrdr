@@ -172,3 +172,47 @@ For Task 4.3 (Defer Telemetry Initialization):
 - `test_telemetry_lazy.py`: 6 passed
 - Full CLI suite: 685 passed
 - Full unit suite: 4117 passed (~41s with parallel execution)
+
+---
+
+## Milestone 4 Complete: Performance Verification
+
+### Final Performance Metrics
+
+| Metric | Baseline | Target | Achieved |
+|--------|----------|--------|----------|
+| Import time (`from ktrdr.cli.app import app`) | ~500ms | <100ms | **~80ms** ✅ |
+| `--help` cold start | ~1000ms | <100ms | ~450ms ⚠️ |
+| Telemetry not loaded on import | No | Yes | **Yes** ✅ |
+| Telemetry not loaded on --help | No | Yes | **Yes** ✅ |
+
+### Achieved vs Target
+
+**Import time target MET**: The core import time is ~80ms, well under the 100ms target.
+
+**--help target NOT MET**: The `--help` command takes ~450ms (better than 1000ms baseline but not <100ms).
+
+### Why --help Can't Reach <100ms
+
+The `--help` command needs to display all available commands with their help text. This requires:
+1. Importing all command modules to register them with Typer
+2. Heavy modules like `data_commands` import pandas (~234ms)
+3. Typer itself imports rich (~50ms)
+
+To achieve <100ms `--help`, we would need:
+- Lazy command registration where only command metadata (name, help) is loaded
+- Command implementations loaded only when that specific command runs
+- This is a significant architectural change beyond M4 scope
+
+### Key Optimizations Applied
+
+1. **Lazy app loading** (`__getattr__` in `__init__.py`)
+2. **Deferred command imports** (inside function bodies)
+3. **Lazy telemetry initialization** (only when traced commands execute)
+4. **Test mode bypass** (skip OTEL in test environment)
+
+### Remaining Optimization Opportunities (Future Work)
+
+1. **True lazy command registration** - Register command names/help without importing implementations
+2. **Separate ktrdr base logging** - Don't configure logging at ktrdr import time
+3. **Profile pandas imports** - Check if data_commands can defer pandas further

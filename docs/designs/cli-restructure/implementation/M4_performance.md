@@ -321,9 +321,12 @@ python -m ktrdr.cli.app train momentum --start 2024-01-01 --end 2024-06-01
 
 | Metric | Baseline | Target | Actual |
 |--------|----------|--------|--------|
-| `--help` cold start | ~1000ms | <100ms | TBD |
-| `--help` warm start | ~800ms | <50ms | TBD |
-| `train --help` | ~1000ms | <200ms | TBD |
+| Import time | ~500ms | <100ms | **~80ms** ✅ |
+| `--help` cold start | ~1000ms | <100ms | ~450ms ⚠️ |
+| `--help` warm start | ~800ms | <50ms | ~300ms |
+| Telemetry on import | Yes | No | **No** ✅ |
+
+**Note:** `--help` target not fully met due to Typer requiring command imports to display help. See HANDOFF_M4.md for details.
 
 ### Completion Checklist
 

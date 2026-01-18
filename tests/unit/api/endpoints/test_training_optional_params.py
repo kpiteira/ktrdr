@@ -160,7 +160,9 @@ class TestTrainCommandOptionalParams:
         try:
             runner = CliRunner()
 
-            with patch("ktrdr.cli.operation_runner.OperationRunner") as mock_runner_class:
+            with patch(
+                "ktrdr.cli.operation_runner.OperationRunner"
+            ) as mock_runner_class:
                 mock_runner = MagicMock()
                 mock_runner_class.return_value = mock_runner
 
@@ -205,7 +207,9 @@ class TestTrainCommandOptionalParams:
         try:
             runner = CliRunner()
 
-            with patch("ktrdr.cli.operation_runner.OperationRunner") as mock_runner_class:
+            with patch(
+                "ktrdr.cli.operation_runner.OperationRunner"
+            ) as mock_runner_class:
                 mock_runner = MagicMock()
                 mock_runner_class.return_value = mock_runner
 
@@ -248,7 +252,9 @@ class TestTrainCommandOptionalParams:
         try:
             runner = CliRunner()
 
-            with patch("ktrdr.cli.operation_runner.OperationRunner") as mock_runner_class:
+            with patch(
+                "ktrdr.cli.operation_runner.OperationRunner"
+            ) as mock_runner_class:
                 mock_runner = MagicMock()
                 mock_runner_class.return_value = mock_runner
 
