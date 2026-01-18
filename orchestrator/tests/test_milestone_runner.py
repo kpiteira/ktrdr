@@ -62,7 +62,7 @@ def mock_run_task_with_escalation() -> AsyncMock:
 
     async def _run_task_with_escalation(
         task: Task,
-        sandbox: MagicMock,
+        container: MagicMock,
         config: MagicMock,
         plan_path: str,
         tracer,
@@ -118,7 +118,7 @@ class TestRunMilestoneBasic:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
         ):
             configure_haiku_mock(mock_brain_class)
             result = await run_milestone(
@@ -150,7 +150,7 @@ class TestRunMilestoneBasic:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
         ):
             configure_haiku_mock(mock_brain_class)
             await run_milestone(
@@ -179,7 +179,7 @@ class TestRunMilestoneBasic:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
         ):
             configure_haiku_mock(mock_brain_class)
             result = await run_milestone(
@@ -230,7 +230,7 @@ class TestRunMilestoneResume:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
         ):
             configure_haiku_mock(mock_brain_class)
             await run_milestone(
@@ -270,7 +270,7 @@ class TestRunMilestoneResume:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
         ):
             configure_haiku_mock(mock_brain_class)
             await run_milestone(
@@ -295,7 +295,7 @@ class TestRunMilestoneStatusHandling:
 
         async def mock_task_with_escalation(
             task: Task,
-            sandbox: MagicMock,
+            container: MagicMock,
             config: MagicMock,
             plan_path: str,
             tracer,
@@ -334,7 +334,7 @@ class TestRunMilestoneStatusHandling:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_with_escalation),
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
         ):
             configure_haiku_mock(mock_brain_class)
             result = await run_milestone(
@@ -355,7 +355,7 @@ class TestRunMilestoneStatusHandling:
 
         async def mock_task_with_escalation(
             task: Task,
-            sandbox: MagicMock,
+            container: MagicMock,
             config: MagicMock,
             plan_path: str,
             tracer,
@@ -392,7 +392,7 @@ class TestRunMilestoneStatusHandling:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_with_escalation),
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
         ):
             configure_haiku_mock(mock_brain_class)
             result = await run_milestone(
@@ -447,7 +447,7 @@ class TestTaskCompleteCallback:
 
         async def mock_task_with_escalation(
             task: Task,
-            sandbox: MagicMock,
+            container: MagicMock,
             config: MagicMock,
             plan_path: str,
             tracer,
@@ -471,7 +471,7 @@ class TestTaskCompleteCallback:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_with_escalation),
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
         ):
             configure_haiku_mock(mock_brain_class)
             await run_milestone(
@@ -501,7 +501,7 @@ class TestTaskCompleteCallback:
 
         async def mock_task_with_escalation(
             task: Task,
-            sandbox: MagicMock,
+            container: MagicMock,
             config: MagicMock,
             plan_path: str,
             tracer,
@@ -536,7 +536,7 @@ class TestTaskCompleteCallback:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_with_escalation),
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
         ):
             configure_haiku_mock(mock_brain_class)
             await run_milestone(
@@ -564,7 +564,7 @@ class TestTaskCompleteCallback:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
         ):
             # Should not raise - callback is optional
             configure_haiku_mock(mock_brain_class)
@@ -585,8 +585,8 @@ class TestCreateMilestonePR:
         from orchestrator.milestone_runner import create_milestone_pr
         from orchestrator.models import ClaudeResult
 
-        mock_sandbox = MagicMock()
-        mock_sandbox.invoke_claude = AsyncMock(
+        mock_container = MagicMock()
+        mock_container.invoke_claude = AsyncMock(
             return_value=ClaudeResult(
                 is_error=False,
                 result="PR created: https://github.com/user/repo/pull/123",
@@ -598,15 +598,15 @@ class TestCreateMilestonePR:
         )
 
         result = await create_milestone_pr(
-            sandbox=mock_sandbox,
+            container=mock_container,
             milestone_id="health_check",
             completed_tasks=["1.1", "1.2", "1.3"],
             total_cost_usd=0.15,
         )
 
         # Verify Claude was invoked
-        mock_sandbox.invoke_claude.assert_called_once()
-        call_args = mock_sandbox.invoke_claude.call_args
+        mock_container.invoke_claude.assert_called_once()
+        call_args = mock_container.invoke_claude.call_args
 
         # Verify prompt contains key information
         prompt = call_args.kwargs.get("prompt") or call_args.args[0]
@@ -624,8 +624,8 @@ class TestCreateMilestonePR:
         from orchestrator.milestone_runner import create_milestone_pr
         from orchestrator.models import ClaudeResult
 
-        mock_sandbox = MagicMock()
-        mock_sandbox.invoke_claude = AsyncMock(
+        mock_container = MagicMock()
+        mock_container.invoke_claude = AsyncMock(
             return_value=ClaudeResult(
                 is_error=True,
                 result="Error: Failed to create PR",
@@ -637,7 +637,7 @@ class TestCreateMilestonePR:
         )
 
         result = await create_milestone_pr(
-            sandbox=mock_sandbox,
+            container=mock_container,
             milestone_id="test",
             completed_tasks=["1.1"],
             total_cost_usd=0.05,
@@ -658,7 +658,7 @@ class TestLoopDetectionIntegration:
 
         async def mock_task_with_escalation(
             task: Task,
-            sandbox: MagicMock,
+            container: MagicMock,
             config: MagicMock,
             plan_path: str,
             tracer,
@@ -684,7 +684,7 @@ class TestLoopDetectionIntegration:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_with_escalation),
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
         ):
             configure_haiku_mock(mock_brain_class)
             await run_milestone(
@@ -706,7 +706,7 @@ class TestLoopDetectionIntegration:
 
         async def first_run_mock(
             task: Task,
-            sandbox: MagicMock,
+            container: MagicMock,
             config: MagicMock,
             plan_path: str,
             tracer,
@@ -743,7 +743,7 @@ class TestLoopDetectionIntegration:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=first_run_mock),
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
         ):
             configure_haiku_mock(mock_brain_class)
             await run_milestone(
@@ -766,7 +766,7 @@ class TestLoopDetectionIntegration:
 
         async def failed_task_mock(
             task: Task,
-            sandbox: MagicMock,
+            container: MagicMock,
             config: MagicMock,
             plan_path: str,
             tracer,
@@ -805,7 +805,7 @@ class TestLoopDetectionIntegration:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=failed_task_mock),
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
         ):
             configure_haiku_mock(mock_brain_class)
             result = await run_milestone(
@@ -837,7 +837,7 @@ class TestLoopDetectionIntegration:
 
         async def check_tasks_mock(
             task: Task,
-            sandbox: MagicMock,
+            container: MagicMock,
             config: MagicMock,
             plan_path: str,
             tracer,
@@ -862,7 +862,7 @@ class TestLoopDetectionIntegration:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=check_tasks_mock),
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
         ):
             configure_haiku_mock(mock_brain_class)
             await run_milestone(
@@ -895,7 +895,7 @@ class TestDiscordNotificationIntegration:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
             patch(
                 "orchestrator.milestone_runner.send_discord_message",
                 new_callable=AsyncMock,
@@ -929,7 +929,7 @@ class TestDiscordNotificationIntegration:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
             patch(
                 "orchestrator.milestone_runner.send_discord_message",
                 new_callable=AsyncMock,
@@ -956,7 +956,7 @@ class TestDiscordNotificationIntegration:
 
         async def mock_task_with_failure(
             task: Task,
-            sandbox: MagicMock,
+            container: MagicMock,
             config: MagicMock,
             plan_path: str,
             tracer,
@@ -989,7 +989,7 @@ class TestDiscordNotificationIntegration:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_with_failure),
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
             patch(
                 "orchestrator.milestone_runner.send_discord_message",
                 new_callable=AsyncMock,
@@ -1022,7 +1022,7 @@ class TestDiscordNotificationIntegration:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
             patch(
                 "orchestrator.milestone_runner.send_discord_message",
                 new_callable=AsyncMock,
@@ -1054,7 +1054,7 @@ class TestDiscordNotificationIntegration:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
             patch(
                 "orchestrator.milestone_runner.send_discord_message",
                 new_callable=AsyncMock,
@@ -1095,7 +1095,7 @@ class TestDiscordNotificationIntegration:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
             patch(
                 "orchestrator.milestone_runner.send_discord_message",
                 side_effect=track_discord_message,
@@ -1132,7 +1132,7 @@ class TestDiscordNotificationIntegration:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
             patch(
                 "orchestrator.discord_notifier.httpx.AsyncClient.post",
                 new_callable=AsyncMock,
@@ -1195,7 +1195,7 @@ pytest tests/ -v
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
             patch(
                 "orchestrator.milestone_runner.run_e2e_tests",
                 AsyncMock(return_value=mock_e2e_result),
@@ -1230,7 +1230,7 @@ pytest tests/ -v
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
             patch(
                 "orchestrator.milestone_runner.run_e2e_tests",
                 AsyncMock(),
@@ -1256,7 +1256,7 @@ pytest tests/ -v
 
         async def mock_task_success(
             task: Task,
-            sandbox: MagicMock,
+            container: MagicMock,
             config: MagicMock,
             plan_path: str,
             tracer,
@@ -1288,7 +1288,7 @@ pytest tests/ -v
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_success),
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
             patch(
                 "orchestrator.milestone_runner.run_e2e_tests",
                 AsyncMock(return_value=mock_e2e_result),
@@ -1316,7 +1316,7 @@ pytest tests/ -v
 
         async def mock_task_success(
             task: Task,
-            sandbox: MagicMock,
+            container: MagicMock,
             config: MagicMock,
             plan_path: str,
             tracer,
@@ -1366,7 +1366,7 @@ pytest tests/ -v
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_success),
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
             patch(
                 "orchestrator.milestone_runner.run_e2e_tests",
                 AsyncMock(side_effect=mock_run_e2e),
@@ -1402,7 +1402,7 @@ pytest tests/ -v
 
         async def mock_task_success(
             task: Task,
-            sandbox: MagicMock,
+            container: MagicMock,
             config: MagicMock,
             plan_path: str,
             tracer,
@@ -1443,7 +1443,7 @@ pytest tests/ -v
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_success),
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
             patch(
                 "orchestrator.milestone_runner.run_e2e_tests",
                 AsyncMock(side_effect=mock_run_e2e),
@@ -1476,7 +1476,7 @@ pytest tests/ -v
 
         async def mock_task_success(
             task: Task,
-            sandbox: MagicMock,
+            container: MagicMock,
             config: MagicMock,
             plan_path: str,
             tracer,
@@ -1506,7 +1506,7 @@ pytest tests/ -v
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_success),
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
             patch(
                 "orchestrator.milestone_runner.run_e2e_tests",
                 AsyncMock(return_value=mock_e2e_result),
@@ -1535,7 +1535,7 @@ pytest tests/ -v
 
         async def mock_task_success(
             task: Task,
-            sandbox: MagicMock,
+            container: MagicMock,
             config: MagicMock,
             plan_path: str,
             tracer,
@@ -1565,7 +1565,7 @@ pytest tests/ -v
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_success),
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
             patch(
                 "orchestrator.milestone_runner.run_e2e_tests",
                 AsyncMock(return_value=mock_e2e_result),
@@ -1591,7 +1591,7 @@ pytest tests/ -v
 
         async def mock_task_with_failure(
             task: Task,
-            sandbox: MagicMock,
+            container: MagicMock,
             config: MagicMock,
             plan_path: str,
             tracer,
@@ -1626,7 +1626,7 @@ pytest tests/ -v
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_with_failure),
             ),
-            patch("orchestrator.milestone_runner.SandboxManager"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer"),
             patch(
                 "orchestrator.milestone_runner.run_e2e_tests",
                 AsyncMock(),

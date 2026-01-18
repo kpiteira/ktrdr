@@ -1,6 +1,6 @@
-"""Tests for sandbox manager module.
+"""Tests for coding agent container module.
 
-These tests verify sandbox container interaction via mocked subprocess calls.
+These tests verify coding agent container interaction via mocked subprocess calls.
 """
 
 import json
@@ -11,33 +11,33 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
-class TestSandboxManagerStructure:
-    """Test SandboxManager class structure."""
+class TestCodingAgentContainerStructure:
+    """Test CodingAgentContainer class structure."""
 
-    def test_sandbox_manager_is_dataclass(self):
-        """SandboxManager should be a dataclass."""
-        from orchestrator.sandbox import SandboxManager
+    def test_coding_agent_container_is_dataclass(self):
+        """CodingAgentContainer should be a dataclass."""
+        from orchestrator.coding_agent_container import CodingAgentContainer
 
-        assert is_dataclass(SandboxManager)
+        assert is_dataclass(CodingAgentContainer)
 
-    def test_sandbox_manager_defaults(self):
-        """SandboxManager should have sensible defaults."""
-        from orchestrator.sandbox import SandboxManager
+    def test_coding_agent_container_defaults(self):
+        """CodingAgentContainer should have sensible defaults."""
+        from orchestrator.coding_agent_container import CodingAgentContainer
 
-        manager = SandboxManager()
+        manager = CodingAgentContainer()
         assert manager.container_name == "ktrdr-sandbox"
         assert manager.workspace_path == "/workspace"
 
 
-class TestSandboxExec:
+class TestCodingAgentContainerExec:
     """Test exec() method for running commands."""
 
     @pytest.mark.asyncio
     async def test_exec_runs_docker_command(self):
         """exec() should run docker exec with the command."""
-        from orchestrator.sandbox import SandboxManager
+        from orchestrator.coding_agent_container import CodingAgentContainer
 
-        manager = SandboxManager()
+        manager = CodingAgentContainer()
 
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
@@ -57,10 +57,13 @@ class TestSandboxExec:
 
     @pytest.mark.asyncio
     async def test_exec_raises_on_nonzero_exit(self):
-        """exec() should raise SandboxError on non-zero exit."""
-        from orchestrator.sandbox import SandboxError, SandboxManager
+        """exec() should raise CodingAgentError on non-zero exit."""
+        from orchestrator.coding_agent_container import (
+            CodingAgentContainer,
+            CodingAgentError,
+        )
 
-        manager = SandboxManager()
+        manager = CodingAgentContainer()
 
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
@@ -69,7 +72,7 @@ class TestSandboxExec:
                 stderr="command not found",
             )
 
-            with pytest.raises(SandboxError) as exc_info:
+            with pytest.raises(CodingAgentError) as exc_info:
                 await manager.exec("invalid_command")
 
             assert "command not found" in str(exc_info.value)
@@ -77,9 +80,9 @@ class TestSandboxExec:
     @pytest.mark.asyncio
     async def test_exec_timeout_raises_exception(self):
         """exec() should raise TimeoutError on timeout."""
-        from orchestrator.sandbox import SandboxManager
+        from orchestrator.coding_agent_container import CodingAgentContainer
 
-        manager = SandboxManager()
+        manager = CodingAgentContainer()
 
         with patch("subprocess.run") as mock_run:
             mock_run.side_effect = subprocess.TimeoutExpired(
@@ -92,9 +95,9 @@ class TestSandboxExec:
     @pytest.mark.asyncio
     async def test_exec_uses_custom_timeout(self):
         """exec() should pass timeout to subprocess."""
-        from orchestrator.sandbox import SandboxManager
+        from orchestrator.coding_agent_container import CodingAgentContainer
 
-        manager = SandboxManager()
+        manager = CodingAgentContainer()
 
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
@@ -105,16 +108,16 @@ class TestSandboxExec:
             assert call_kwargs["timeout"] == 120
 
 
-class TestSandboxInvokeClaude:
+class TestCodingAgentContainerInvokeClaude:
     """Test invoke_claude() method."""
 
     @pytest.mark.asyncio
     async def test_invoke_claude_returns_claude_result(self):
         """invoke_claude() should return parsed ClaudeResult."""
+        from orchestrator.coding_agent_container import CodingAgentContainer
         from orchestrator.models import ClaudeResult
-        from orchestrator.sandbox import SandboxManager
 
-        manager = SandboxManager()
+        manager = CodingAgentContainer()
 
         claude_output = {
             "type": "result",
@@ -146,9 +149,9 @@ class TestSandboxInvokeClaude:
     @pytest.mark.asyncio
     async def test_invoke_claude_uses_json_output_format(self):
         """invoke_claude() should use --output-format json."""
-        from orchestrator.sandbox import SandboxManager
+        from orchestrator.coding_agent_container import CodingAgentContainer
 
-        manager = SandboxManager()
+        manager = CodingAgentContainer()
 
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
@@ -166,9 +169,9 @@ class TestSandboxInvokeClaude:
     @pytest.mark.asyncio
     async def test_invoke_claude_passes_max_turns(self):
         """invoke_claude() should pass max_turns to CLI."""
-        from orchestrator.sandbox import SandboxManager
+        from orchestrator.coding_agent_container import CodingAgentContainer
 
-        manager = SandboxManager()
+        manager = CodingAgentContainer()
 
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
@@ -188,9 +191,9 @@ class TestSandboxInvokeClaude:
     @pytest.mark.asyncio
     async def test_invoke_claude_passes_allowed_tools(self):
         """invoke_claude() should pass allowed tools to CLI."""
-        from orchestrator.sandbox import SandboxManager
+        from orchestrator.coding_agent_container import CodingAgentContainer
 
-        manager = SandboxManager()
+        manager = CodingAgentContainer()
 
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
@@ -213,9 +216,9 @@ class TestSandboxInvokeClaude:
     @pytest.mark.asyncio
     async def test_invoke_claude_handles_error_response(self):
         """invoke_claude() should handle error responses."""
-        from orchestrator.sandbox import SandboxManager
+        from orchestrator.coding_agent_container import CodingAgentContainer
 
-        manager = SandboxManager()
+        manager = CodingAgentContainer()
 
         claude_output = {
             "type": "result",
@@ -240,9 +243,12 @@ class TestSandboxInvokeClaude:
     @pytest.mark.asyncio
     async def test_invoke_claude_raises_on_invalid_json(self):
         """invoke_claude() should raise on invalid JSON output."""
-        from orchestrator.sandbox import SandboxError, SandboxManager
+        from orchestrator.coding_agent_container import (
+            CodingAgentContainer,
+            CodingAgentError,
+        )
 
-        manager = SandboxManager()
+        manager = CodingAgentContainer()
 
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
@@ -251,7 +257,7 @@ class TestSandboxInvokeClaude:
                 stderr="",
             )
 
-            with pytest.raises(SandboxError) as exc_info:
+            with pytest.raises(CodingAgentError) as exc_info:
                 await manager.invoke_claude("Do something")
 
             assert (
@@ -261,9 +267,9 @@ class TestSandboxInvokeClaude:
     @pytest.mark.asyncio
     async def test_invoke_claude_timeout(self):
         """invoke_claude() should respect timeout."""
-        from orchestrator.sandbox import SandboxManager
+        from orchestrator.coding_agent_container import CodingAgentContainer
 
-        manager = SandboxManager()
+        manager = CodingAgentContainer()
 
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
@@ -278,20 +284,20 @@ class TestSandboxInvokeClaude:
             assert call_kwargs["timeout"] == 1200
 
 
-class TestSandboxError:
-    """Test SandboxError exception."""
+class TestCodingAgentError:
+    """Test CodingAgentError exception."""
 
-    def test_sandbox_error_exists(self):
-        """SandboxError should be importable."""
-        from orchestrator.sandbox import SandboxError
+    def test_coding_agent_error_exists(self):
+        """CodingAgentError should be importable."""
+        from orchestrator.coding_agent_container import CodingAgentError
 
-        assert issubclass(SandboxError, Exception)
+        assert issubclass(CodingAgentError, Exception)
 
-    def test_sandbox_error_message(self):
-        """SandboxError should accept message."""
-        from orchestrator.sandbox import SandboxError
+    def test_coding_agent_error_message(self):
+        """CodingAgentError should accept message."""
+        from orchestrator.coding_agent_container import CodingAgentError
 
-        error = SandboxError("Test error message")
+        error = CodingAgentError("Test error message")
         assert "Test error message" in str(error)
 
 
@@ -301,9 +307,9 @@ class TestInvokeClaudeStreaming:
     @pytest.mark.asyncio
     async def test_uses_stream_json_output_format(self):
         """invoke_claude_streaming() should use --output-format stream-json."""
-        from orchestrator.sandbox import SandboxManager
+        from orchestrator.coding_agent_container import CodingAgentContainer
 
-        manager = SandboxManager()
+        manager = CodingAgentContainer()
 
         # Stream events: assistant with tool_use content, then result
         stream_output = (
@@ -332,9 +338,9 @@ class TestInvokeClaudeStreaming:
     @pytest.mark.asyncio
     async def test_calls_callback_for_tool_use_events(self):
         """invoke_claude_streaming() should call callback for each tool_use event."""
-        from orchestrator.sandbox import SandboxManager
+        from orchestrator.coding_agent_container import CodingAgentContainer
 
-        manager = SandboxManager()
+        manager = CodingAgentContainer()
 
         stream_output = (
             '{"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Read", "input": {"file_path": "config.py"}}]}}\n'
@@ -366,10 +372,10 @@ class TestInvokeClaudeStreaming:
     @pytest.mark.asyncio
     async def test_returns_claude_result_from_result_event(self):
         """invoke_claude_streaming() should return ClaudeResult from result event."""
+        from orchestrator.coding_agent_container import CodingAgentContainer
         from orchestrator.models import ClaudeResult
-        from orchestrator.sandbox import SandboxManager
 
-        manager = SandboxManager()
+        manager = CodingAgentContainer()
 
         stream_output = (
             '{"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Read", "input": {"file_path": "test.py"}}]}}\n'
@@ -399,9 +405,9 @@ class TestInvokeClaudeStreaming:
     @pytest.mark.asyncio
     async def test_handles_error_result(self):
         """invoke_claude_streaming() should handle error results."""
-        from orchestrator.sandbox import SandboxManager
+        from orchestrator.coding_agent_container import CodingAgentContainer
 
-        manager = SandboxManager()
+        manager = CodingAgentContainer()
 
         stream_output = '{"type": "result", "is_error": true, "result": "Something failed", "total_cost_usd": 0.01, "duration_ms": 1000, "num_turns": 1, "session_id": "err123"}\n'
 
@@ -423,9 +429,9 @@ class TestInvokeClaudeStreaming:
     @pytest.mark.asyncio
     async def test_handles_malformed_json_gracefully(self):
         """invoke_claude_streaming() should skip malformed JSON lines."""
-        from orchestrator.sandbox import SandboxManager
+        from orchestrator.coding_agent_container import CodingAgentContainer
 
-        manager = SandboxManager()
+        manager = CodingAgentContainer()
 
         stream_output = (
             "not valid json\n"
@@ -456,9 +462,9 @@ class TestInvokeClaudeStreaming:
     @pytest.mark.asyncio
     async def test_passes_parameters_correctly(self):
         """invoke_claude_streaming() should pass max_turns and tools."""
-        from orchestrator.sandbox import SandboxManager
+        from orchestrator.coding_agent_container import CodingAgentContainer
 
-        manager = SandboxManager()
+        manager = CodingAgentContainer()
 
         stream_output = '{"type": "result", "is_error": false, "result": "Done", "total_cost_usd": 0.01, "duration_ms": 1000, "num_turns": 1, "session_id": "test"}\n'
 
@@ -493,9 +499,9 @@ class TestInvokeClaudeStreaming:
     @pytest.mark.asyncio
     async def test_default_result_when_no_result_event(self):
         """invoke_claude_streaming() should return default result if no result event."""
-        from orchestrator.sandbox import SandboxManager
+        from orchestrator.coding_agent_container import CodingAgentContainer
 
-        manager = SandboxManager()
+        manager = CodingAgentContainer()
 
         # No result event, just tool uses
         stream_output = (
@@ -525,7 +531,7 @@ class TestFormatToolCall:
 
     def test_format_read_shows_filename(self):
         """format_tool_call should show filename for Read."""
-        from orchestrator.sandbox import format_tool_call
+        from orchestrator.coding_agent_container import format_tool_call
 
         result = format_tool_call("Read", {"file_path": "/path/to/config.py"})
         assert "config.py" in result
@@ -533,7 +539,7 @@ class TestFormatToolCall:
 
     def test_format_write_shows_filename(self):
         """format_tool_call should show filename for Write."""
-        from orchestrator.sandbox import format_tool_call
+        from orchestrator.coding_agent_container import format_tool_call
 
         result = format_tool_call("Write", {"file_path": "/path/to/output.py"})
         assert "output.py" in result
@@ -541,7 +547,7 @@ class TestFormatToolCall:
 
     def test_format_edit_shows_filename(self):
         """format_tool_call should show filename for Edit."""
-        from orchestrator.sandbox import format_tool_call
+        from orchestrator.coding_agent_container import format_tool_call
 
         result = format_tool_call("Edit", {"file_path": "/path/to/module.py"})
         assert "module.py" in result
@@ -549,7 +555,7 @@ class TestFormatToolCall:
 
     def test_format_bash_shows_truncated_command(self):
         """format_tool_call should show first 50 chars of Bash command."""
-        from orchestrator.sandbox import format_tool_call
+        from orchestrator.coding_agent_container import format_tool_call
 
         long_command = (
             "pytest tests/unit/ tests/integration/ -v --tb=short --cov=orchestrator"
@@ -563,7 +569,7 @@ class TestFormatToolCall:
 
     def test_format_bash_short_command_not_truncated(self):
         """format_tool_call should not truncate short commands."""
-        from orchestrator.sandbox import format_tool_call
+        from orchestrator.coding_agent_container import format_tool_call
 
         result = format_tool_call("Bash", {"command": "ls -la"})
         assert "ls -la" in result
@@ -571,7 +577,7 @@ class TestFormatToolCall:
 
     def test_format_grep_shows_pattern(self):
         """format_tool_call should show pattern for Grep."""
-        from orchestrator.sandbox import format_tool_call
+        from orchestrator.coding_agent_container import format_tool_call
 
         result = format_tool_call("Grep", {"pattern": "def test_"})
         assert "def test_" in result
@@ -579,14 +585,14 @@ class TestFormatToolCall:
 
     def test_format_glob_shows_pattern(self):
         """format_tool_call should show pattern for Glob."""
-        from orchestrator.sandbox import format_tool_call
+        from orchestrator.coding_agent_container import format_tool_call
 
         result = format_tool_call("Glob", {"pattern": "**/*.py"})
         assert "**/*.py" in result
 
     def test_format_unknown_tool(self):
         """format_tool_call should handle unknown tools."""
-        from orchestrator.sandbox import format_tool_call
+        from orchestrator.coding_agent_container import format_tool_call
 
         result = format_tool_call("UnknownTool", {"some": "param"})
         assert "UnknownTool" in result

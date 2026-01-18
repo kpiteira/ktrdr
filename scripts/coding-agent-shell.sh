@@ -1,18 +1,18 @@
 #!/bin/bash
-# KTRDR Sandbox Shell Script
-# Opens an interactive shell in the sandbox container
+# KTRDR Coding Agent Shell Script
+# Opens an interactive shell in the coding agent container
 #
 # Usage:
-#   ./scripts/sandbox-shell.sh           # Opens bash
-#   ./scripts/sandbox-shell.sh python3   # Runs python3
-#   ./scripts/sandbox-shell.sh ls -la    # Runs ls -la
+#   ./scripts/coding-agent-shell.sh           # Opens bash
+#   ./scripts/coding-agent-shell.sh python3   # Runs python3
+#   ./scripts/coding-agent-shell.sh ls -la    # Runs ls -la
 
-CONTAINER_NAME="ktrdr-sandbox"
+CONTAINER_NAME="ktrdr-coding-agent"
 
 # Check if container is running
 if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     echo "ERROR: Container $CONTAINER_NAME is not running"
-    echo "       Run ./scripts/sandbox-init.sh first"
+    echo "       Run ./scripts/coding-agent-init.sh first"
     exit 1
 fi
 

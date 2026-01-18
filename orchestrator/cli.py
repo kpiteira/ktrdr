@@ -14,6 +14,7 @@ from rich.table import Table
 
 from ktrdr.llm.haiku_brain import HaikuBrain
 from orchestrator import telemetry
+from orchestrator.coding_agent_container import CodingAgentContainer, format_tool_call
 from orchestrator.config import OrchestratorConfig
 from orchestrator.discord_notifier import format_test_notification, send_discord_message
 from orchestrator.health import CHECK_ORDER, get_health
@@ -25,7 +26,6 @@ from orchestrator.milestone_runner import (
 )
 from orchestrator.models import Task, TaskResult
 from orchestrator.runner import run_task
-from orchestrator.sandbox import SandboxManager, format_tool_call
 from orchestrator.state import OrchestratorState
 from orchestrator.telemetry import create_metrics, setup_telemetry
 
@@ -121,7 +121,7 @@ async def _run_task(
         console.print(f"[red]Task {task_id} not found in {plan_file}[/red]")
         return
 
-    sandbox = SandboxManager()
+    container = CodingAgentContainer()
 
     with tracer.start_as_current_span("orchestrator.task") as span:
         span.set_attribute("task.id", task_id)
@@ -132,7 +132,7 @@ async def _run_task(
 
         result = await run_task(
             target_task,
-            sandbox,
+            container,
             config,
             plan_file,
             human_guidance=guidance,
@@ -378,14 +378,14 @@ async def _prompt_for_pr(result: MilestoneResult, config: OrchestratorConfig) ->
     if click.confirm("\nCreate PR for this milestone?", default=True):
         console.print("[bold]Invoking Claude to create PR...[/bold]")
 
-        # Create sandbox for PR creation
-        sandbox = SandboxManager(
+        # Create container for PR creation
+        container = CodingAgentContainer(
             container_name=config.sandbox_container,
             workspace_path=config.workspace_path,
         )
 
         pr_result = await create_milestone_pr(
-            sandbox=sandbox,
+            container=container,
             milestone_id=result.state.milestone_id,
             completed_tasks=result.state.completed_tasks,
             total_cost_usd=result.total_cost_usd,

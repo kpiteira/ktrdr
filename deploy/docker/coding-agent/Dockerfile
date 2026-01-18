@@ -1,4 +1,4 @@
-# KTRDR Sandbox Dockerfile
+# KTRDR Coding Agent Dockerfile
 # Isolated environment for Claude Code to run with full permissions
 #
 # This container provides:
@@ -17,7 +17,7 @@
 
 FROM ubuntu:24.04
 
-LABEL org.opencontainers.image.title="KTRDR Sandbox"
+LABEL org.opencontainers.image.title="KTRDR Coding Agent"
 LABEL org.opencontainers.image.description="Isolated environment for Claude Code autonomous coding"
 
 # Prevent interactive prompts during package installation
@@ -78,7 +78,7 @@ RUN npm install -g @anthropic-ai/claude-code
 RUN mkdir -p /workspace /env/models /env/strategies /env/logs /shared/data
 
 # Copy and setup entrypoint
-COPY deploy/docker/sandbox/entrypoint.sh /entrypoint.sh
+COPY deploy/docker/coding-agent/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Set working directory

@@ -110,8 +110,8 @@ class TestRunE2ETests:
         """Should invoke Claude with E2E scenario."""
         from orchestrator.runner import run_e2e_tests
 
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("E2E_STATUS: passed")
         )
         config = OrchestratorConfig()
@@ -126,15 +126,15 @@ class TestRunE2ETests:
         await run_e2e_tests(
             milestone_id="M5",
             e2e_scenario="Run pytest tests/",
-            sandbox=sandbox,
+            container=container,
             config=config,
             tracer=tracer,
         )
 
         # Should have invoked Claude
-        sandbox.invoke_claude.assert_called_once()
+        container.invoke_claude.assert_called_once()
         # Prompt should contain the scenario
-        call_kwargs = sandbox.invoke_claude.call_args[1]
+        call_kwargs = container.invoke_claude.call_args[1]
         assert "pytest tests/" in call_kwargs["prompt"]
         assert "M5" in call_kwargs["prompt"]
 
@@ -143,8 +143,8 @@ class TestRunE2ETests:
         """Should return E2EResult with passed status."""
         from orchestrator.runner import run_e2e_tests
 
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("E2E_STATUS: passed", cost=0.08)
         )
         config = OrchestratorConfig()
@@ -159,7 +159,7 @@ class TestRunE2ETests:
         result = await run_e2e_tests(
             milestone_id="M5",
             e2e_scenario="Test scenario",
-            sandbox=sandbox,
+            container=container,
             config=config,
             tracer=tracer,
         )
@@ -173,8 +173,8 @@ class TestRunE2ETests:
         """Should return E2EResult with diagnosis for failures."""
         from orchestrator.runner import run_e2e_tests
 
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result(
                 "E2E_STATUS: failed\n"
                 "DIAGNOSIS: Endpoint returns 404\n"
@@ -195,7 +195,7 @@ class TestRunE2ETests:
         result = await run_e2e_tests(
             milestone_id="M5",
             e2e_scenario="Test scenario",
-            sandbox=sandbox,
+            container=container,
             config=config,
             tracer=tracer,
         )
@@ -212,8 +212,8 @@ class TestRunE2ETests:
         """Should use task_timeout_seconds from config."""
         from orchestrator.runner import run_e2e_tests
 
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("E2E_STATUS: passed")
         )
         config = OrchestratorConfig(task_timeout_seconds=1200)
@@ -228,12 +228,12 @@ class TestRunE2ETests:
         await run_e2e_tests(
             milestone_id="M5",
             e2e_scenario="Test scenario",
-            sandbox=sandbox,
+            container=container,
             config=config,
             tracer=tracer,
         )
 
-        call_kwargs = sandbox.invoke_claude.call_args[1]
+        call_kwargs = container.invoke_claude.call_args[1]
         assert call_kwargs["timeout"] == 1200
 
     @pytest.mark.asyncio
@@ -241,8 +241,8 @@ class TestRunE2ETests:
         """Should use 30 max turns for E2E tests."""
         from orchestrator.runner import run_e2e_tests
 
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("E2E_STATUS: passed")
         )
         config = OrchestratorConfig()
@@ -257,12 +257,12 @@ class TestRunE2ETests:
         await run_e2e_tests(
             milestone_id="M5",
             e2e_scenario="Test scenario",
-            sandbox=sandbox,
+            container=container,
             config=config,
             tracer=tracer,
         )
 
-        call_kwargs = sandbox.invoke_claude.call_args[1]
+        call_kwargs = container.invoke_claude.call_args[1]
         assert call_kwargs["max_turns"] == 30
 
     @pytest.mark.asyncio
@@ -270,8 +270,8 @@ class TestRunE2ETests:
         """Should record execution duration in result."""
         from orchestrator.runner import run_e2e_tests
 
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("E2E_STATUS: passed")
         )
         config = OrchestratorConfig()
@@ -286,7 +286,7 @@ class TestRunE2ETests:
         result = await run_e2e_tests(
             milestone_id="M5",
             e2e_scenario="Test scenario",
-            sandbox=sandbox,
+            container=container,
             config=config,
             tracer=tracer,
         )
@@ -299,8 +299,8 @@ class TestRunE2ETests:
         from orchestrator.runner import run_e2e_tests
 
         output = "Detailed E2E execution log...\n\nE2E_STATUS: passed"
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(return_value=make_claude_result(output))
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(return_value=make_claude_result(output))
         config = OrchestratorConfig()
         tracer = MagicMock()
         tracer.start_as_current_span.return_value.__enter__ = MagicMock(
@@ -313,7 +313,7 @@ class TestRunE2ETests:
         result = await run_e2e_tests(
             milestone_id="M5",
             e2e_scenario="Test scenario",
-            sandbox=sandbox,
+            container=container,
             config=config,
             tracer=tracer,
         )
@@ -329,8 +329,8 @@ class TestRunE2ETestsTracing:
         """Should create a span for E2E test execution."""
         from orchestrator.runner import run_e2e_tests
 
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("E2E_STATUS: passed")
         )
         config = OrchestratorConfig()
@@ -346,7 +346,7 @@ class TestRunE2ETestsTracing:
         await run_e2e_tests(
             milestone_id="M5",
             e2e_scenario="Test scenario",
-            sandbox=sandbox,
+            container=container,
             config=config,
             tracer=tracer,
         )
@@ -358,8 +358,8 @@ class TestRunE2ETestsTracing:
         """Should set milestone.id and e2e.status on span."""
         from orchestrator.runner import run_e2e_tests
 
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("E2E_STATUS: passed")
         )
         config = OrchestratorConfig()
@@ -375,7 +375,7 @@ class TestRunE2ETestsTracing:
         await run_e2e_tests(
             milestone_id="M5",
             e2e_scenario="Test scenario",
-            sandbox=sandbox,
+            container=container,
             config=config,
             tracer=tracer,
         )
@@ -417,8 +417,8 @@ class TestApplyE2EFix:
         """Should invoke Claude with fix plan."""
         from orchestrator.runner import apply_e2e_fix
 
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("FIX_APPLIED: yes")
         )
         config = OrchestratorConfig()
@@ -433,15 +433,15 @@ class TestApplyE2EFix:
 
         await apply_e2e_fix(
             fix_plan="Add 'app.include_router(new_router)' to main.py",
-            sandbox=sandbox,
+            container=container,
             config=config,
             tracer=tracer,
         )
 
         # Should have invoked Claude
-        sandbox.invoke_claude.assert_called_once()
+        container.invoke_claude.assert_called_once()
         # Prompt should contain the fix plan
-        call_kwargs = sandbox.invoke_claude.call_args[1]
+        call_kwargs = container.invoke_claude.call_args[1]
         assert "app.include_router" in call_kwargs["prompt"]
 
     @pytest.mark.asyncio
@@ -449,8 +449,8 @@ class TestApplyE2EFix:
         """Should return True when fix is applied successfully."""
         from orchestrator.runner import apply_e2e_fix
 
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("Fix complete.\n\nFIX_APPLIED: yes")
         )
         config = OrchestratorConfig()
@@ -464,7 +464,7 @@ class TestApplyE2EFix:
 
         result = await apply_e2e_fix(
             fix_plan="Add router to main.py",
-            sandbox=sandbox,
+            container=container,
             config=config,
             tracer=tracer,
         )
@@ -476,8 +476,8 @@ class TestApplyE2EFix:
         """Should return False when fix cannot be applied."""
         from orchestrator.runner import apply_e2e_fix
 
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("FIX_APPLIED: no\nREASON: File not found")
         )
         config = OrchestratorConfig()
@@ -491,7 +491,7 @@ class TestApplyE2EFix:
 
         result = await apply_e2e_fix(
             fix_plan="Add router to main.py",
-            sandbox=sandbox,
+            container=container,
             config=config,
             tracer=tracer,
         )
@@ -503,8 +503,8 @@ class TestApplyE2EFix:
         """Should return False when output has no FIX_APPLIED marker."""
         from orchestrator.runner import apply_e2e_fix
 
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("I made some changes...")
         )
         config = OrchestratorConfig()
@@ -518,7 +518,7 @@ class TestApplyE2EFix:
 
         result = await apply_e2e_fix(
             fix_plan="Add router",
-            sandbox=sandbox,
+            container=container,
             config=config,
             tracer=tracer,
         )
@@ -530,8 +530,8 @@ class TestApplyE2EFix:
         """Should use 20 max turns for fixes."""
         from orchestrator.runner import apply_e2e_fix
 
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("FIX_APPLIED: yes")
         )
         config = OrchestratorConfig()
@@ -545,12 +545,12 @@ class TestApplyE2EFix:
 
         await apply_e2e_fix(
             fix_plan="Fix something",
-            sandbox=sandbox,
+            container=container,
             config=config,
             tracer=tracer,
         )
 
-        call_kwargs = sandbox.invoke_claude.call_args[1]
+        call_kwargs = container.invoke_claude.call_args[1]
         assert call_kwargs["max_turns"] == 20
 
     @pytest.mark.asyncio
@@ -558,8 +558,8 @@ class TestApplyE2EFix:
         """Should use 300 second timeout for fixes."""
         from orchestrator.runner import apply_e2e_fix
 
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("FIX_APPLIED: yes")
         )
         config = OrchestratorConfig()
@@ -573,12 +573,12 @@ class TestApplyE2EFix:
 
         await apply_e2e_fix(
             fix_plan="Fix something",
-            sandbox=sandbox,
+            container=container,
             config=config,
             tracer=tracer,
         )
 
-        call_kwargs = sandbox.invoke_claude.call_args[1]
+        call_kwargs = container.invoke_claude.call_args[1]
         assert call_kwargs["timeout"] == 300
 
 
@@ -590,8 +590,8 @@ class TestApplyE2EFixTracing:
         """Should create a span for E2E fix execution."""
         from orchestrator.runner import apply_e2e_fix
 
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("FIX_APPLIED: yes")
         )
         config = OrchestratorConfig()
@@ -606,7 +606,7 @@ class TestApplyE2EFixTracing:
 
         await apply_e2e_fix(
             fix_plan="Fix something",
-            sandbox=sandbox,
+            container=container,
             config=config,
             tracer=tracer,
         )
@@ -618,8 +618,8 @@ class TestApplyE2EFixTracing:
         """Should set fix.plan attribute on span (truncated)."""
         from orchestrator.runner import apply_e2e_fix
 
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("FIX_APPLIED: yes")
         )
         config = OrchestratorConfig()
@@ -634,7 +634,7 @@ class TestApplyE2EFixTracing:
 
         await apply_e2e_fix(
             fix_plan="Add router to main.py line 45",
-            sandbox=sandbox,
+            container=container,
             config=config,
             tracer=tracer,
         )
@@ -650,8 +650,8 @@ class TestApplyE2EFixTracing:
         """Should truncate fix.plan attribute to 200 chars."""
         from orchestrator.runner import apply_e2e_fix
 
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("FIX_APPLIED: yes")
         )
         config = OrchestratorConfig()
@@ -668,7 +668,7 @@ class TestApplyE2EFixTracing:
 
         await apply_e2e_fix(
             fix_plan=long_fix_plan,
-            sandbox=sandbox,
+            container=container,
             config=config,
             tracer=tracer,
         )
@@ -683,8 +683,8 @@ class TestApplyE2EFixTracing:
         """Should set fix.success attribute on span."""
         from orchestrator.runner import apply_e2e_fix
 
-        sandbox = MagicMock()
-        sandbox.invoke_claude = AsyncMock(
+        container = MagicMock()
+        container.invoke_claude = AsyncMock(
             return_value=make_claude_result("FIX_APPLIED: yes")
         )
         config = OrchestratorConfig()
@@ -699,7 +699,7 @@ class TestApplyE2EFixTracing:
 
         await apply_e2e_fix(
             fix_plan="Fix something",
-            sandbox=sandbox,
+            container=container,
             config=config,
             tracer=tracer,
         )

@@ -147,7 +147,7 @@ class TestTaskCommandExecution:
                     ) as mock_run:
                         mock_run.return_value = make_task_result()
 
-                        with patch("orchestrator.cli.SandboxManager"):
+                        with patch("orchestrator.cli.CodingAgentContainer"):
                             with patch("orchestrator.cli.telemetry") as mock_tel:
                                 mock_tel.tasks_counter = MagicMock()
                                 mock_tel.tokens_counter = MagicMock()
@@ -200,7 +200,7 @@ class TestTaskCommandExecution:
                             cost=0.02,
                         )
 
-                        with patch("orchestrator.cli.SandboxManager"):
+                        with patch("orchestrator.cli.CodingAgentContainer"):
                             with patch("orchestrator.cli.telemetry") as mock_tel:
                                 mock_tel.tasks_counter = MagicMock()
                                 mock_tel.tokens_counter = MagicMock()
@@ -246,7 +246,7 @@ class TestTaskCommandTelemetry:
                     ) as mock_run:
                         mock_run.return_value = make_task_result()
 
-                        with patch("orchestrator.cli.SandboxManager"):
+                        with patch("orchestrator.cli.CodingAgentContainer"):
                             runner.invoke(cli, ["task", f.name, "2.1"])
 
         mock_telemetry.assert_called_once()
@@ -291,7 +291,7 @@ class TestTaskCommandTelemetry:
                     ) as mock_run:
                         mock_run.return_value = make_task_result()
 
-                        with patch("orchestrator.cli.SandboxManager"):
+                        with patch("orchestrator.cli.CodingAgentContainer"):
                             with patch("orchestrator.cli.telemetry") as mock_tel:
                                 mock_tel.tasks_counter = MagicMock()
                                 mock_tel.tokens_counter = MagicMock()

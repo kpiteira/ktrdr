@@ -1,0 +1,77 @@
+# KTRDR Coding Agent Environment
+# Isolated container for Claude Code autonomous task execution
+#
+# Usage:
+#   ./scripts/coding-agent-init.sh      # First-time setup (clones repo)
+#   docker compose up -d                # Start coding agent
+#   ./scripts/coding-agent-reset.sh     # Reset workspace to clean state
+#   ./scripts/coding-agent-shell.sh     # Interactive shell
+#   ./scripts/coding-agent-claude.sh    # Run Claude Code command
+#
+# Requires:
+#   - GH_TOKEN environment variable (for GitHub CLI PR creation)
+#   - ~/Documents/ktrdr-shared/data/ directory with market data
+#   - Claude Code login (run `claude login` in coding agent first time)
+
+services:
+  coding-agent:
+    build:
+      context: ../../../
+      dockerfile: deploy/docker/coding-agent/Dockerfile
+    image: ktrdr-coding-agent:latest
+    container_name: ktrdr-coding-agent
+    restart: unless-stopped
+
+    environment:
+      - TERM=xterm-256color
+      # GitHub token for PR creation (passed from host environment)
+      - GH_TOKEN=${GH_TOKEN}
+      # Prefix all containers created by coding agent with "coding-agent-" to avoid
+      # conflicts with host development containers
+      - COMPOSE_PROJECT_NAME=coding-agent
+
+    volumes:
+      # Docker socket for running ktrdr services from inside coding agent
+      # SECURITY: This grants full Docker daemon access. Only run in trusted
+      # development environments, never with untrusted code or in production.
+      - /var/run/docker.sock:/var/run/docker.sock
+
+      # Shared market data (read-only)
+      - ${HOME}/Documents/ktrdr-shared/data:/shared/data:ro
+
+      # Named volumes for persistent storage
+      - coding-agent-workspace:/workspace
+      - coding-agent-claude-credentials:/home/ubuntu/.claude
+      - coding-agent-models:/env/models
+      - coding-agent-strategies:/env/strategies
+      - coding-agent-logs:/env/logs
+
+    # Enable host access for communicating with host services
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    # Join ktrdr network for service communication
+    networks:
+      - ktrdr-network
+
+    # Keep container running for exec commands
+    stdin_open: true
+    tty: true
+
+networks:
+  ktrdr-network:
+    # Use existing network if available, create if not
+    name: ktrdr-network
+    external: false
+
+volumes:
+  coding-agent-workspace:
+    name: ktrdr-coding-agent-workspace
+  coding-agent-claude-credentials:
+    name: ktrdr-coding-agent-claude-credentials
+  coding-agent-models:
+    name: ktrdr-coding-agent-models
+  coding-agent-strategies:
+    name: ktrdr-coding-agent-strategies
+  coding-agent-logs:
+    name: ktrdr-coding-agent-logs

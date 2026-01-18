@@ -1,20 +1,20 @@
 #!/bin/bash
-# Verification script for Task 1.1: Sandbox Dockerfile
+# Verification script for Task 1.1: Coding Agent Dockerfile
 # This script validates all acceptance criteria
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-DOCKERFILE="$PROJECT_ROOT/deploy/docker/sandbox/Dockerfile"
-IMAGE_NAME="ktrdr-sandbox-test"
+DOCKERFILE="$PROJECT_ROOT/deploy/docker/coding-agent/Dockerfile"
+IMAGE_NAME="ktrdr-coding-agent-test"
 
 # Helper to run commands without entrypoint (for clean version output)
 run_cmd() {
     docker run --rm --entrypoint "" "$IMAGE_NAME" "$@"
 }
 
-echo "=== Task 1.1: Sandbox Dockerfile Verification ==="
+echo "=== Task 1.1: Coding Agent Dockerfile Verification ==="
 echo ""
 
 # Check 1: Dockerfile exists
