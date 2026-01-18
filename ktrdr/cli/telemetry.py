@@ -1,19 +1,21 @@
-"""OpenTelemetry instrumentation for CLI commands."""
+"""OpenTelemetry instrumentation for CLI commands.
+
+PERFORMANCE NOTE: This module uses lazy imports to avoid loading OpenTelemetry
+at module import time. OTEL is only imported when a traced function is called.
+This keeps `ktrdr --help` fast (<100ms).
+"""
 
 import asyncio
 import functools
 import json
+import os
 from typing import Any, Callable, TypeVar
-
-from opentelemetry import trace
-from opentelemetry.trace import Status, StatusCode
-
-from ktrdr import get_logger
-
-logger = get_logger(__name__)
 
 # Type variable for generic decorator
 F = TypeVar("F", bound=Callable[..., Any])
+
+# Skip tracing in test mode for faster test execution
+_is_testing = os.environ.get("PYTEST_CURRENT_TEST") is not None
 
 
 def trace_cli_command(command_name: str) -> Callable[[F], F]:
@@ -24,6 +26,9 @@ def trace_cli_command(command_name: str) -> Callable[[F], F]:
     - cli.command: Command name
     - cli.args: Command arguments (JSON serialized)
     - operation.id: Operation ID if returned in result
+
+    PERFORMANCE NOTE: OpenTelemetry is imported lazily when the decorated
+    function is first called, not at decoration time.
 
     Args:
         command_name: Name of the CLI command (e.g., "data_load", "train")
@@ -42,6 +47,20 @@ def trace_cli_command(command_name: str) -> Callable[[F], F]:
         @functools.wraps(func)
         def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
             """Wrapper for synchronous functions."""
+            # Skip tracing in test mode
+            if _is_testing:
+                return func(*args, **kwargs)
+
+            # Initialize telemetry infrastructure (OTLP exporter, httpx instrumentation)
+            # This is a no-op if already initialized
+            from ktrdr.cli import init_telemetry_if_needed
+
+            init_telemetry_if_needed()
+
+            # Lazy import OpenTelemetry
+            from opentelemetry import trace
+            from opentelemetry.trace import Status, StatusCode
+
             # Get tracer dynamically to support test fixtures
             tracer = trace.get_tracer(__name__)
             span_name = f"cli.{command_name}"
@@ -54,9 +73,10 @@ def trace_cli_command(command_name: str) -> Callable[[F], F]:
                 try:
                     args_dict = {"args": args, "kwargs": kwargs}
                     span.set_attribute("cli.args", json.dumps(args_dict, default=str))
-                except (TypeError, ValueError) as e:
-                    logger.debug(f"Could not serialize CLI args: {e}")
-                    span.set_attribute("cli.args", str(args_dict))
+                except (TypeError, ValueError):
+                    span.set_attribute(
+                        "cli.args", str({"args": args, "kwargs": kwargs})
+                    )
 
                 try:
                     # Execute command
@@ -80,6 +100,20 @@ def trace_cli_command(command_name: str) -> Callable[[F], F]:
         @functools.wraps(func)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
             """Wrapper for asynchronous functions."""
+            # Skip tracing in test mode
+            if _is_testing:
+                return await func(*args, **kwargs)
+
+            # Initialize telemetry infrastructure (OTLP exporter, httpx instrumentation)
+            # This is a no-op if already initialized
+            from ktrdr.cli import init_telemetry_if_needed
+
+            init_telemetry_if_needed()
+
+            # Lazy import OpenTelemetry
+            from opentelemetry import trace
+            from opentelemetry.trace import Status, StatusCode
+
             # Get tracer dynamically to support test fixtures
             tracer = trace.get_tracer(__name__)
             span_name = f"cli.{command_name}"
@@ -92,9 +126,10 @@ def trace_cli_command(command_name: str) -> Callable[[F], F]:
                 try:
                     args_dict = {"args": args, "kwargs": kwargs}
                     span.set_attribute("cli.args", json.dumps(args_dict, default=str))
-                except (TypeError, ValueError) as e:
-                    logger.debug(f"Could not serialize CLI args: {e}")
-                    span.set_attribute("cli.args", str(args_dict))
+                except (TypeError, ValueError):
+                    span.set_attribute(
+                        "cli.args", str({"args": args, "kwargs": kwargs})
+                    )
 
                 try:
                     # Execute async command

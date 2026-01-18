@@ -35,7 +35,7 @@ class TestFollowProgress:
         app.command()(follow)
 
         try:
-            with patch("ktrdr.cli.commands.follow.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -77,7 +77,7 @@ class TestFollowProgress:
         app.command()(follow)
 
         try:
-            with patch("ktrdr.cli.commands.follow.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -111,9 +111,7 @@ class TestFollowProgress:
                 mock_client_class.return_value = mock_client
 
                 # Patch asyncio.sleep to avoid real delays
-                with patch(
-                    "ktrdr.cli.commands.follow.asyncio.sleep", new_callable=AsyncMock
-                ):
+                with patch("asyncio.sleep", new_callable=AsyncMock):
                     result = runner.invoke(app, ["follow", "op_abc"])
 
                 assert result.exit_code == 0
@@ -133,7 +131,7 @@ class TestFollowProgress:
         app.command()(follow)
 
         try:
-            with patch("ktrdr.cli.commands.follow.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -168,7 +166,7 @@ class TestFollowTerminalStates:
         app.command()(follow)
 
         try:
-            with patch("ktrdr.cli.commands.follow.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -199,7 +197,7 @@ class TestFollowTerminalStates:
         app.command()(follow)
 
         try:
-            with patch("ktrdr.cli.commands.follow.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -232,7 +230,7 @@ class TestFollowTerminalStates:
         app.command()(follow)
 
         try:
-            with patch("ktrdr.cli.commands.follow.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -267,7 +265,7 @@ class TestFollowErrors:
         app.command()(follow)
 
         try:
-            with patch("ktrdr.cli.commands.follow.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -291,7 +289,7 @@ class TestFollowErrors:
         app.command()(follow)
 
         try:
-            with patch("ktrdr.cli.commands.follow.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None

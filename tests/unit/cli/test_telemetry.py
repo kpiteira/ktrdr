@@ -1,4 +1,11 @@
-"""Tests for CLI OpenTelemetry instrumentation."""
+"""Tests for CLI OpenTelemetry instrumentation.
+
+These tests verify that the @trace_cli_command decorator correctly creates
+spans when tracing is enabled (i.e., when NOT in test mode).
+
+To test actual tracing, we temporarily disable test mode by manipulating
+the _is_testing flag in the telemetry module.
+"""
 
 import json
 
@@ -8,27 +15,59 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
-# Skip all tests in this module until Phase 6.1 (CLI instrumentation) is implemented
-pytestmark = pytest.mark.skip(
-    reason="Phase 6.1 not implemented - waiting for CLI telemetry decorators"
-)
-
 
 @pytest.fixture(autouse=True)
 def reset_tracer():
-    """Reset tracer provider before each test."""
-    # Store original provider
-    original_provider = trace.get_tracer_provider()
+    """Reset tracer provider before and after each test."""
+    from opentelemetry.util._once import Once
+
+    # Store original state
+    original_provider = trace._TRACER_PROVIDER
+    original_once = trace._TRACER_PROVIDER_SET_ONCE
+
+    # Reset BEFORE test to allow new provider setup
+    trace._TRACER_PROVIDER = None
+    trace._TRACER_PROVIDER_SET_ONCE = Once()
 
     yield
 
-    # Restore original provider
+    # Restore original state after test
     trace._TRACER_PROVIDER = original_provider
+    trace._TRACER_PROVIDER_SET_ONCE = original_once
 
 
 @pytest.fixture
-def tracer_setup(reset_tracer):
-    """Setup in-memory span exporter for testing."""
+def enable_tracing():
+    """Temporarily disable test mode to enable actual tracing.
+
+    The telemetry module skips tracing when PYTEST_CURRENT_TEST is set.
+    This fixture temporarily disables that check to test tracing behavior.
+    """
+    import ktrdr.cli.telemetry as telemetry_module
+
+    # Store original value
+    original_is_testing = telemetry_module._is_testing
+
+    # Disable test mode
+    telemetry_module._is_testing = False
+
+    yield
+
+    # Restore test mode
+    telemetry_module._is_testing = original_is_testing
+
+
+@pytest.fixture
+def tracer_setup(reset_tracer, enable_tracing):
+    """Setup in-memory span exporter for testing.
+
+    This fixture:
+    1. Disables test mode (via enable_tracing) so tracing is active
+    2. Sets up an in-memory exporter to capture spans
+    3. Configures the tracer provider
+
+    Note: reset_tracer already clears _TRACER_PROVIDER and _TRACER_PROVIDER_SET_ONCE
+    """
     # Create in-memory exporter to capture spans
     exporter = InMemorySpanExporter()
 
@@ -36,8 +75,7 @@ def tracer_setup(reset_tracer):
     provider = TracerProvider()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
 
-    # Set as global tracer provider (bypassing warning)
-    trace._TRACER_PROVIDER = None
+    # Set as global tracer provider (reset_tracer already cleared the state)
     trace.set_tracer_provider(provider)
 
     yield exporter

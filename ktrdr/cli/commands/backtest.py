@@ -3,18 +3,14 @@
 Implements the `ktrdr backtest <strategy>` command that starts a backtesting
 operation using the OperationRunner wrapper. Supports fire-and-forget
 (default) or follow mode with --follow flag.
+
+PERFORMANCE NOTE: Heavy imports (operation_runner, operation_adapters) are
+deferred inside the function body to keep CLI startup fast.
 """
 
 import typer
-from rich.console import Console
 
-from ktrdr.cli.operation_adapters import BacktestingOperationAdapter
-from ktrdr.cli.operation_runner import OperationRunner
-from ktrdr.cli.output import print_error
-from ktrdr.cli.state import CLIState
 from ktrdr.cli.telemetry import trace_cli_command
-
-console = Console()
 
 
 @trace_cli_command("backtest")
@@ -77,7 +73,16 @@ def backtest(
 
         ktrdr --json backtest momentum --start 2024-01-01 --end 2024-06-01
     """
+    # Lazy imports for fast CLI startup
+    from rich.console import Console
+
+    from ktrdr.cli.operation_adapters import BacktestingOperationAdapter
+    from ktrdr.cli.operation_runner import OperationRunner
+    from ktrdr.cli.output import print_error
+    from ktrdr.cli.state import CLIState
+
     state: CLIState = ctx.obj
+    console = Console()
 
     try:
         # Display backtest parameters
