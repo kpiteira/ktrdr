@@ -43,8 +43,25 @@
 - Updated header comments to clearly explain the file is for building only
 - File now contains only: header comments, `build:` block, and `image:` tag
 
-### Next Task Notes (4.4)
-- Task 4.4 adds integration test for full orchestrator flow
-- Test should mock `subprocess.run` for sandbox status and `CodingAgentContainer` methods
-- Use `pytest.mark.integration` decorator
-- File: `orchestrator/tests/test_integration.py`
+---
+
+## Task 4.4 Complete: Add integration test for full flow
+
+**Summary:** Added 3 integration tests verifying the complete orchestrator lifecycle (validate → start → invoke → stop). Tests use proper mocking and run in <0.1s each.
+
+### Tests Added
+- `test_full_flow_with_valid_environment` — Verifies all components called correctly
+- `test_container_stopped_even_on_task_failure` — Ensures cleanup on failure
+- `test_flow_uses_correct_component_order` — Validates component ordering
+
+### Patterns Used
+- `@pytest.mark.integration` for test categorization
+- `AsyncMock` for container lifecycle methods
+- Call tracking via closures to verify execution order
+
+### Milestone 4 Complete
+All 4 tasks done:
+- 4.1: Removed orphaned sandbox references
+- 4.2: Updated autonomous-coding documentation
+- 4.3: Cleaned up docker-compose.yml
+- 4.4: Added integration tests
