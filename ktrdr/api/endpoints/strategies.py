@@ -46,6 +46,7 @@ All errors return JSON with this structure:
     }
 """
 
+import re
 from pathlib import Path
 from typing import Any, Optional
 
@@ -63,9 +64,17 @@ logger = get_logger(__name__)
 # Base directory for strategy files (resolved to absolute path)
 STRATEGIES_DIR = Path("strategies").resolve()
 
+# Pattern for valid strategy names: alphanumeric, underscores, hyphens only
+# This is a strict whitelist that prevents any path traversal characters
+VALID_STRATEGY_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
+
 
 def _safe_strategy_path(strategy_name: str) -> Path:
     """Safely resolve a strategy file path, preventing path traversal attacks.
+
+    Uses strict whitelist validation: only alphanumeric characters, underscores,
+    and hyphens are allowed. This prevents all path traversal attacks by
+    rejecting any input containing path separators, dots, or special characters.
 
     Args:
         strategy_name: The strategy name (without .yaml extension)
@@ -74,32 +83,19 @@ def _safe_strategy_path(strategy_name: str) -> Path:
         Resolved Path to the strategy file
 
     Raises:
-        HTTPException: If the path would escape the strategies directory
+        HTTPException: If the strategy name contains invalid characters
     """
-    # Sanitize: extract only the base name, stripping any path components
-    # This is a well-known pattern that CodeQL recognizes as path sanitization
-    safe_name = Path(strategy_name).name
-
-    # Additional validation: reject names that could be problematic
-    if not safe_name or safe_name != strategy_name or ".." in safe_name:
+    # Strict whitelist validation - only allow safe characters
+    if not strategy_name or not VALID_STRATEGY_NAME_PATTERN.match(strategy_name):
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid strategy name: {strategy_name}. "
-            "Strategy names cannot contain path separators or '..'",
+            detail=f"Invalid strategy name: '{strategy_name}'. "
+            "Strategy names can only contain letters, numbers, underscores, and hyphens.",
         )
 
-    # Construct the path using the sanitized name
-    strategy_file = STRATEGIES_DIR / f"{safe_name}.yaml"
-
-    # Final verification: ensure the resolved path is within strategies directory
-    resolved = strategy_file.resolve()
-    if not resolved.is_relative_to(STRATEGIES_DIR):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid strategy name: {strategy_name}",
-        )
-
-    return resolved
+    # At this point, strategy_name is guaranteed to contain no path separators
+    # or other special characters - it's safe to use in a path
+    return STRATEGIES_DIR / f"{strategy_name}.yaml"
 
 
 # Create router for strategies endpoints
