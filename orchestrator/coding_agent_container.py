@@ -93,6 +93,9 @@ class CodingAgentContainer:
             text=True,
         )
 
+        # Ensure absolute path for Docker volume mount
+        absolute_path = code_folder.resolve()
+
         # Start fresh container with volume mount
         result = subprocess.run(
             [
@@ -102,7 +105,7 @@ class CodingAgentContainer:
                 "--name",
                 self.container_name,
                 "-v",
-                f"{code_folder}:/workspace",
+                f"{absolute_path}:/workspace",
                 "--add-host=host.docker.internal:host-gateway",
                 self.image_name,
             ],
@@ -116,17 +119,16 @@ class CodingAgentContainer:
     async def stop(self) -> None:
         """Stop and remove the coding agent container.
 
-        Raises:
-            CodingAgentError: If docker rm fails
+        This is a best-effort cleanup operation. It does not raise exceptions
+        if the container doesn't exist or removal fails, since it's typically
+        called in finally blocks where we don't want to mask original errors.
         """
-        result = subprocess.run(
+        subprocess.run(
             ["docker", "rm", "-f", self.container_name],
             capture_output=True,
             text=True,
         )
-
-        if result.returncode != 0:
-            raise CodingAgentError(f"Failed to stop container: {result.stderr}")
+        # Best-effort: don't raise on failure since this is cleanup code
 
     async def exec(self, command: str, timeout: int = 300) -> str:
         """Execute a command in the coding agent container.

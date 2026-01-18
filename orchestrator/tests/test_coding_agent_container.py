@@ -713,6 +713,46 @@ class TestCodingAgentContainerLifecycle:
             assert "ktrdr-coding-agent" in cmd
 
     @pytest.mark.asyncio
+    async def test_stop_is_best_effort_on_failure(self):
+        """stop() should not raise when container doesn't exist (best-effort cleanup)."""
+        from orchestrator.coding_agent_container import CodingAgentContainer
+
+        container = CodingAgentContainer()
+
+        with patch("subprocess.run") as mock_run:
+            # Simulate container not existing
+            mock_run.return_value = MagicMock(
+                returncode=1, stdout="", stderr="No such container"
+            )
+
+            # Should not raise - best-effort cleanup
+            await container.stop()
+
+            # Should still have attempted removal
+            mock_run.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_start_resolves_to_absolute_path(self):
+        """start() should resolve code_folder to absolute path for Docker."""
+        from orchestrator.coding_agent_container import CodingAgentContainer
+
+        container = CodingAgentContainer()
+        relative_path = Path("relative/path")
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+            await container.start(relative_path)
+
+            # docker run call should use absolute path
+            run_call = mock_run.call_args_list[1]
+            cmd = run_call[0][0]
+            volume_idx = cmd.index("-v")
+            volume_arg = cmd[volume_idx + 1]
+            # Should be absolute (starts with /)
+            assert volume_arg.startswith("/"), f"Expected absolute path, got: {volume_arg}"
+
+    @pytest.mark.asyncio
     async def test_start_uses_image_name(self):
         """start() should use the image_name attribute."""
         from orchestrator.coding_agent_container import CodingAgentContainer
