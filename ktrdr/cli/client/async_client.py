@@ -67,7 +67,10 @@ class AsyncCLIClient:
         Returns:
             Self with active HTTP client
         """
-        self._client = httpx.AsyncClient(timeout=self.config.timeout)
+        self._client = httpx.AsyncClient(
+            timeout=self.config.timeout,
+            follow_redirects=True,  # Follow FastAPI trailing slash redirects
+        )
         return self
 
     async def __aexit__(

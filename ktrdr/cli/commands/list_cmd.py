@@ -157,8 +157,8 @@ async def _list_models(state: CLIState) -> None:
 
         table.add_row(
             m.get("model_name", ""),
-            m.get("symbol", ""),
-            m.get("timeframe", ""),
+            m.get("symbol") or "-",
+            m.get("timeframe") or "-",
             created,
             accuracy_display,
         )
