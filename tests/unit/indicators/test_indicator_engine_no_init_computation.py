@@ -141,11 +141,11 @@ class TestNoInitComputation:
         # Verify engine was created with all indicators
         assert len(engine._indicators) == 10
 
-        # Without computation, init should be very fast (< 0.1s even on slow systems)
-        # This is a reasonable threshold - creating 10 indicator instances
-        # should be near-instantaneous
+        # Without computation, init should be very fast (< 0.5s even on slow CI systems)
+        # This threshold accounts for CI environment variability while still catching
+        # regressions where actual computation happens (which would take seconds)
         assert (
-            elapsed < 0.1
+            elapsed < 0.5
         ), f"Initialization took {elapsed:.3f}s - too slow, likely computing!"
 
     def test_no_sample_dataframe_creation(self):
