@@ -12,6 +12,18 @@ from orchestrator.models import Task, TaskResult
 from orchestrator.state import OrchestratorState
 
 
+def create_mock_container_class():
+    """Create a mock CodingAgentContainer class with async start/stop.
+
+    Use this in tests to properly mock the container lifecycle methods.
+    """
+    mock_container = MagicMock()
+    mock_container.start = AsyncMock()
+    mock_container.stop = AsyncMock()
+    mock_class = MagicMock(return_value=mock_container)
+    return mock_class
+
+
 @pytest.fixture
 def sample_tasks() -> list[Task]:
     """Sample tasks for testing."""
@@ -118,8 +130,8 @@ class TestRunMilestoneBasic:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
         ):
             configure_haiku_mock(mock_brain_class)
             result = await run_milestone(
@@ -151,8 +163,8 @@ class TestRunMilestoneBasic:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
         ):
             configure_haiku_mock(mock_brain_class)
             await run_milestone(
@@ -181,8 +193,8 @@ class TestRunMilestoneBasic:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
         ):
             configure_haiku_mock(mock_brain_class)
             result = await run_milestone(
@@ -233,8 +245,8 @@ class TestRunMilestoneResume:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
         ):
             configure_haiku_mock(mock_brain_class)
             await run_milestone(
@@ -274,8 +286,8 @@ class TestRunMilestoneResume:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
         ):
             configure_haiku_mock(mock_brain_class)
             await run_milestone(
@@ -339,8 +351,8 @@ class TestRunMilestoneStatusHandling:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_with_escalation),
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
         ):
             configure_haiku_mock(mock_brain_class)
             result = await run_milestone(
@@ -398,8 +410,8 @@ class TestRunMilestoneStatusHandling:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_with_escalation),
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
         ):
             configure_haiku_mock(mock_brain_class)
             result = await run_milestone(
@@ -478,8 +490,8 @@ class TestTaskCompleteCallback:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_with_escalation),
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
         ):
             configure_haiku_mock(mock_brain_class)
             await run_milestone(
@@ -544,8 +556,8 @@ class TestTaskCompleteCallback:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_with_escalation),
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
         ):
             configure_haiku_mock(mock_brain_class)
             await run_milestone(
@@ -573,8 +585,8 @@ class TestTaskCompleteCallback:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
         ):
             # Should not raise - callback is optional
             configure_haiku_mock(mock_brain_class)
@@ -694,8 +706,8 @@ class TestLoopDetectionIntegration:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_with_escalation),
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
         ):
             configure_haiku_mock(mock_brain_class)
             await run_milestone(
@@ -754,8 +766,8 @@ class TestLoopDetectionIntegration:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=first_run_mock),
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
         ):
             configure_haiku_mock(mock_brain_class)
             await run_milestone(
@@ -817,8 +829,8 @@ class TestLoopDetectionIntegration:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=failed_task_mock),
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
         ):
             configure_haiku_mock(mock_brain_class)
             result = await run_milestone(
@@ -875,8 +887,8 @@ class TestLoopDetectionIntegration:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=check_tasks_mock),
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
         ):
             configure_haiku_mock(mock_brain_class)
             await run_milestone(
@@ -909,8 +921,8 @@ class TestDiscordNotificationIntegration:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
             patch(
                 "orchestrator.milestone_runner.send_discord_message",
                 new_callable=AsyncMock,
@@ -944,8 +956,8 @@ class TestDiscordNotificationIntegration:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
             patch(
                 "orchestrator.milestone_runner.send_discord_message",
                 new_callable=AsyncMock,
@@ -1005,8 +1017,8 @@ class TestDiscordNotificationIntegration:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_with_failure),
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
             patch(
                 "orchestrator.milestone_runner.send_discord_message",
                 new_callable=AsyncMock,
@@ -1039,8 +1051,8 @@ class TestDiscordNotificationIntegration:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
             patch(
                 "orchestrator.milestone_runner.send_discord_message",
                 new_callable=AsyncMock,
@@ -1072,8 +1084,8 @@ class TestDiscordNotificationIntegration:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
             patch(
                 "orchestrator.milestone_runner.send_discord_message",
                 new_callable=AsyncMock,
@@ -1114,8 +1126,8 @@ class TestDiscordNotificationIntegration:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
             patch(
                 "orchestrator.milestone_runner.send_discord_message",
                 side_effect=track_discord_message,
@@ -1152,8 +1164,8 @@ class TestDiscordNotificationIntegration:
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
             patch(
                 "orchestrator.discord_notifier.httpx.AsyncClient.post",
                 new_callable=AsyncMock,
@@ -1216,8 +1228,8 @@ pytest tests/ -v
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
             patch(
                 "orchestrator.milestone_runner.run_e2e_tests",
                 AsyncMock(return_value=mock_e2e_result),
@@ -1252,8 +1264,8 @@ pytest tests/ -v
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 mock_run_task_with_escalation,
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
             patch(
                 "orchestrator.milestone_runner.run_e2e_tests",
                 AsyncMock(),
@@ -1311,8 +1323,8 @@ pytest tests/ -v
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_success),
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
             patch(
                 "orchestrator.milestone_runner.run_e2e_tests",
                 AsyncMock(return_value=mock_e2e_result),
@@ -1390,8 +1402,8 @@ pytest tests/ -v
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_success),
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
             patch(
                 "orchestrator.milestone_runner.run_e2e_tests",
                 AsyncMock(side_effect=mock_run_e2e),
@@ -1468,8 +1480,8 @@ pytest tests/ -v
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_success),
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
             patch(
                 "orchestrator.milestone_runner.run_e2e_tests",
                 AsyncMock(side_effect=mock_run_e2e),
@@ -1532,8 +1544,8 @@ pytest tests/ -v
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_success),
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
             patch(
                 "orchestrator.milestone_runner.run_e2e_tests",
                 AsyncMock(return_value=mock_e2e_result),
@@ -1592,8 +1604,8 @@ pytest tests/ -v
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_success),
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
             patch(
                 "orchestrator.milestone_runner.run_e2e_tests",
                 AsyncMock(return_value=mock_e2e_result),
@@ -1654,8 +1666,8 @@ pytest tests/ -v
                 "orchestrator.milestone_runner.run_task_with_escalation",
                 AsyncMock(side_effect=mock_task_with_failure),
             ),
-            patch("orchestrator.milestone_runner.CodingAgentContainer"),
-            patch("orchestrator.milestone_runner.validate_environment"),
+            patch("orchestrator.milestone_runner.CodingAgentContainer", create_mock_container_class()),
+            patch("orchestrator.milestone_runner.validate_environment", return_value=Path("/test")),
             patch(
                 "orchestrator.milestone_runner.run_e2e_tests",
                 AsyncMock(),

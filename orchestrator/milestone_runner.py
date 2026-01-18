@@ -118,7 +118,7 @@ async def run_milestone(
         MilestoneResult with final status and aggregated metrics
     """
     # Validate environment before proceeding
-    _code_folder = validate_environment()  # noqa: F841 - used in M3
+    code_folder = validate_environment()
 
     config = config or OrchestratorConfig.from_env()
     tracer = tracer or trace.get_tracer("orchestrator")
@@ -151,260 +151,267 @@ async def run_milestone(
         workspace_path=config.workspace_path,
     )
 
-    # Load or create state
-    state = None
-    if resume:
-        state = OrchestratorState.load(state_dir, milestone_id)
+    # Start container with code folder mounted
+    await container.start(code_folder)
 
-    if state is None:
-        # Get current branch for PR base (before /ktask creates a new branch)
-        starting_branch = _get_current_branch(container)
+    try:
+        # Load or create state
+        state = None
+        if resume:
+            state = OrchestratorState.load(state_dir, milestone_id)
 
-        state = OrchestratorState(
-            milestone_id=milestone_id,
-            plan_path=plan_path,
-            started_at=datetime.now(),
-            starting_branch=starting_branch,
-        )
+        if state is None:
+            # Get current branch for PR base (before /ktask creates a new branch)
+            starting_branch = _get_current_branch(container)
 
-    # Determine starting point
-    start_index = state.get_next_task_index() if resume else 0
-
-    # Tracking variables
-    total_cost = 0.0
-    total_tokens = 0
-    total_duration = 0.0
-    final_status: Literal["completed", "failed", "needs_human", "e2e_failed"] = "completed"
-
-    # Create milestone span
-    with tracer.start_as_current_span("orchestrator.milestone") as milestone_span:
-        milestone_span.set_attribute("milestone.id", milestone_id)
-        milestone_span.set_attribute("milestone.total_tasks", len(tasks))
-        milestone_span.set_attribute("milestone.resume", resume)
-        milestone_span.set_attribute("milestone.start_index", start_index)
-
-        # Send Discord notification: Milestone started
-        if config.discord_enabled:
-            await _send_discord_notification(
-                config.discord_webhook_url,
-                format_milestone_started(milestone_id, len(tasks)),
+            state = OrchestratorState(
+                milestone_id=milestone_id,
+                plan_path=plan_path,
+                started_at=datetime.now(),
+                starting_branch=starting_branch,
             )
 
-        # Execute tasks sequentially
-        for _i, task in enumerate(tasks[start_index:], start=start_index):
-            with tracer.start_as_current_span("orchestrator.task") as task_span:
-                task_span.set_attribute("task.id", task.id)
-                task_span.set_attribute("task.title", task.title)
+        # Determine starting point
+        start_index = state.get_next_task_index() if resume else 0
 
-                # Run the task with escalation handling (HaikuBrain decides retry/escalate)
-                result = await run_task_with_escalation(
-                    task,
-                    container,
-                    config,
-                    plan_path,
-                    tracer,
-                    notify=notify,
-                    on_tool_use=on_tool_use,
-                    model=model,
+        # Tracking variables
+        total_cost = 0.0
+        total_tokens = 0
+        total_duration = 0.0
+        final_status: Literal["completed", "failed", "needs_human", "e2e_failed"] = "completed"
+
+        # Create milestone span
+        with tracer.start_as_current_span("orchestrator.milestone") as milestone_span:
+            milestone_span.set_attribute("milestone.id", milestone_id)
+            milestone_span.set_attribute("milestone.total_tasks", len(tasks))
+            milestone_span.set_attribute("milestone.resume", resume)
+            milestone_span.set_attribute("milestone.start_index", start_index)
+
+            # Send Discord notification: Milestone started
+            if config.discord_enabled:
+                await _send_discord_notification(
+                    config.discord_webhook_url,
+                    format_milestone_started(milestone_id, len(tasks)),
                 )
 
-                # Record telemetry
-                task_span.set_attribute("task.status", result.status)
-                task_span.set_attribute("claude.tokens", result.tokens_used)
-                task_span.set_attribute("claude.cost_usd", result.cost_usd)
-                task_span.set_attribute(
-                    "task.duration_seconds", result.duration_seconds
-                )
+            # Execute tasks sequentially
+            for _i, task in enumerate(tasks[start_index:], start=start_index):
+                with tracer.start_as_current_span("orchestrator.task") as task_span:
+                    task_span.set_attribute("task.id", task.id)
+                    task_span.set_attribute("task.title", task.title)
 
-                # Update metrics (if initialized)
-                _record_metrics(
-                    milestone_id, result.status, result.tokens_used, result.cost_usd
-                )
-
-                # Accumulate totals
-                total_cost += result.cost_usd
-                total_tokens += result.tokens_used
-                total_duration += result.duration_seconds
-
-                # Handle result based on status
-                if result.status == "completed":
-                    state.mark_task_completed(task.id, asdict(result))
-                    state.save(state_dir)
-
-                    # Send Discord notification: Task completed
-                    if config.discord_enabled:
-                        await _send_discord_notification(
-                            config.discord_webhook_url,
-                            format_task_completed(
-                                task.id,
-                                task.title,
-                                result.duration_seconds,
-                                result.cost_usd,
-                            ),
-                        )
-
-                    # Invoke callback for task summary display
-                    if on_task_complete is not None:
-                        on_task_complete(task, result)
-
-                elif result.status == "needs_human":
-                    state.save(state_dir)
-                    final_status = "needs_human"
-                    break
-
-                elif result.status == "failed":
-                    state.failed_tasks.append(task.id)
-                    state.save(state_dir)
-
-                    # Send Discord notification: Task failed
-                    if config.discord_enabled:
-                        await _send_discord_notification(
-                            config.discord_webhook_url,
-                            format_task_failed(
-                                task.id,
-                                task.title,
-                                result.error or "Task failed",
-                            ),
-                        )
-
-                    final_status = "failed"
-                    break
-
-        # Run E2E tests if all tasks completed successfully
-        if final_status == "completed":
-            # Read plan content and parse E2E scenario
-            plan_content = Path(plan_path).read_text()
-            e2e_scenario = parse_e2e_scenario(plan_content)
-
-            if e2e_scenario:
-                console.print("\n[bold]Running E2E tests...[/bold]")
-
-                while True:
-                    e2e_result = await run_e2e_tests(
-                        milestone_id, e2e_scenario, container, config, tracer
+                    # Run the task with escalation handling (HaikuBrain decides retry/escalate)
+                    result = await run_task_with_escalation(
+                        task,
+                        container,
+                        config,
+                        plan_path,
+                        tracer,
+                        notify=notify,
+                        on_tool_use=on_tool_use,
+                        model=model,
                     )
 
-                    # Accumulate E2E costs
-                    total_cost += e2e_result.cost_usd
-                    total_tokens += e2e_result.tokens_used
-                    total_duration += e2e_result.duration_seconds
+                    # Record telemetry
+                    task_span.set_attribute("task.status", result.status)
+                    task_span.set_attribute("claude.tokens", result.tokens_used)
+                    task_span.set_attribute("claude.cost_usd", result.cost_usd)
+                    task_span.set_attribute(
+                        "task.duration_seconds", result.duration_seconds
+                    )
 
-                    if e2e_result.status == "passed":
-                        console.print(
-                            f"E2E: [bold green]PASSED[/bold green] "
-                            f"({e2e_result.duration_seconds:.0f}s)"
-                        )
-                        state.e2e_status = "passed"
+                    # Update metrics (if initialized)
+                    _record_metrics(
+                        milestone_id, result.status, result.tokens_used, result.cost_usd
+                    )
+
+                    # Accumulate totals
+                    total_cost += result.cost_usd
+                    total_tokens += result.tokens_used
+                    total_duration += result.duration_seconds
+
+                    # Handle result based on status
+                    if result.status == "completed":
+                        state.mark_task_completed(task.id, asdict(result))
                         state.save(state_dir)
+
+                        # Send Discord notification: Task completed
+                        if config.discord_enabled:
+                            await _send_discord_notification(
+                                config.discord_webhook_url,
+                                format_task_completed(
+                                    task.id,
+                                    task.title,
+                                    result.duration_seconds,
+                                    result.cost_usd,
+                                ),
+                            )
+
+                        # Invoke callback for task summary display
+                        if on_task_complete is not None:
+                            on_task_complete(task, result)
+
+                    elif result.status == "needs_human":
+                        state.save(state_dir)
+                        final_status = "needs_human"
                         break
 
-                    elif e2e_result.status == "failed":
-                        console.print("E2E: [bold red]FAILED[/bold red]")
+                    elif result.status == "failed":
+                        state.failed_tasks.append(task.id)
+                        state.save(state_dir)
 
-                        # Track E2E attempt count for loop detection
-                        state.e2e_attempt_count += 1
-
-                        if state.e2e_attempt_count >= MAX_E2E_FIX_ATTEMPTS:
-                            reason = (
-                                f"E2E tests failed {state.e2e_attempt_count} times. "
-                                "Stopping to prevent resource waste."
+                        # Send Discord notification: Task failed
+                        if config.discord_enabled:
+                            await _send_discord_notification(
+                                config.discord_webhook_url,
+                                format_task_failed(
+                                    task.id,
+                                    task.title,
+                                    result.error or "Task failed",
+                                ),
                             )
-                            console.print(f"[bold red]LOOP DETECTED:[/bold red] {reason}")
+
+                        final_status = "failed"
+                        break
+
+            # Run E2E tests if all tasks completed successfully
+            if final_status == "completed":
+                # Read plan content and parse E2E scenario
+                plan_content = Path(plan_path).read_text()
+                e2e_scenario = parse_e2e_scenario(plan_content)
+
+                if e2e_scenario:
+                    console.print("\n[bold]Running E2E tests...[/bold]")
+
+                    while True:
+                        e2e_result = await run_e2e_tests(
+                            milestone_id, e2e_scenario, container, config, tracer
+                        )
+
+                        # Accumulate E2E costs
+                        total_cost += e2e_result.cost_usd
+                        total_tokens += e2e_result.tokens_used
+                        total_duration += e2e_result.duration_seconds
+
+                        if e2e_result.status == "passed":
+                            console.print(
+                                f"E2E: [bold green]PASSED[/bold green] "
+                                f"({e2e_result.duration_seconds:.0f}s)"
+                            )
+                            state.e2e_status = "passed"
+                            state.save(state_dir)
+                            break
+
+                        elif e2e_result.status == "failed":
+                            console.print("E2E: [bold red]FAILED[/bold red]")
+
+                            # Track E2E attempt count for loop detection
+                            state.e2e_attempt_count += 1
+
+                            if state.e2e_attempt_count >= MAX_E2E_FIX_ATTEMPTS:
+                                reason = (
+                                    f"E2E tests failed {state.e2e_attempt_count} times. "
+                                    "Stopping to prevent resource waste."
+                                )
+                                console.print(f"[bold red]LOOP DETECTED:[/bold red] {reason}")
+                                state.e2e_status = "failed"
+                                state.save(state_dir)
+                                final_status = "e2e_failed"
+                                break
+
+                            # Show diagnosis
+                            if e2e_result.diagnosis:
+                                console.print(
+                                    Panel(
+                                        e2e_result.diagnosis,
+                                        title="Claude's Diagnosis",
+                                        border_style="red",
+                                    )
+                                )
+
+                            if e2e_result.is_fixable and e2e_result.fix_suggestion:
+                                # Prompt for fix
+                                apply = prompt_for_fix(e2e_result.fix_suggestion)
+
+                                if apply:
+                                    console.print("Applying fix...")
+                                    success = await apply_e2e_fix(
+                                        e2e_result.fix_suggestion, container, config, tracer
+                                    )
+
+                                    if success:
+                                        console.print("Fix applied. Re-running E2E...")
+                                        continue  # Re-run E2E
+                                    else:
+                                        console.print("[red]Fix could not be applied[/red]")
+
+                            # Not fixable or fix declined - escalate
+                            info = EscalationInfo(
+                                task_id="e2e",
+                                question=e2e_result.diagnosis or "E2E test failed",
+                                options=_extract_options(e2e_result.raw_output),
+                                recommendation=_extract_recommendation(
+                                    e2e_result.raw_output
+                                ),
+                                raw_output=e2e_result.raw_output,
+                            )
+                            await escalate_and_wait(info, tracer, notify)
                             state.e2e_status = "failed"
                             state.save(state_dir)
                             final_status = "e2e_failed"
                             break
 
-                        # Show diagnosis
-                        if e2e_result.diagnosis:
-                            console.print(
-                                Panel(
-                                    e2e_result.diagnosis,
-                                    title="Claude's Diagnosis",
-                                    border_style="red",
-                                )
+                        else:  # unclear
+                            console.print("E2E: [bold yellow]UNCLEAR[/bold yellow]")
+                            # Escalate for human interpretation
+                            info = EscalationInfo(
+                                task_id="e2e",
+                                question="E2E test result unclear. Please review the output.",
+                                options=None,
+                                recommendation=None,
+                                raw_output=e2e_result.raw_output,
                             )
+                            await escalate_and_wait(info, tracer, notify)
+                            state.e2e_status = "failed"
+                            state.save(state_dir)
+                            final_status = "e2e_failed"
+                            break
 
-                        if e2e_result.is_fixable and e2e_result.fix_suggestion:
-                            # Prompt for fix
-                            apply = prompt_for_fix(e2e_result.fix_suggestion)
-
-                            if apply:
-                                console.print("Applying fix...")
-                                success = await apply_e2e_fix(
-                                    e2e_result.fix_suggestion, container, config, tracer
-                                )
-
-                                if success:
-                                    console.print("Fix applied. Re-running E2E...")
-                                    continue  # Re-run E2E
-                                else:
-                                    console.print("[red]Fix could not be applied[/red]")
-
-                        # Not fixable or fix declined - escalate
-                        info = EscalationInfo(
-                            task_id="e2e",
-                            question=e2e_result.diagnosis or "E2E test failed",
-                            options=_extract_options(e2e_result.raw_output),
-                            recommendation=_extract_recommendation(
-                                e2e_result.raw_output
-                            ),
-                            raw_output=e2e_result.raw_output,
-                        )
-                        await escalate_and_wait(info, tracer, notify)
-                        state.e2e_status = "failed"
-                        state.save(state_dir)
-                        final_status = "e2e_failed"
-                        break
-
-                    else:  # unclear
-                        console.print("E2E: [bold yellow]UNCLEAR[/bold yellow]")
-                        # Escalate for human interpretation
-                        info = EscalationInfo(
-                            task_id="e2e",
-                            question="E2E test result unclear. Please review the output.",
-                            options=None,
-                            recommendation=None,
-                            raw_output=e2e_result.raw_output,
-                        )
-                        await escalate_and_wait(info, tracer, notify)
-                        state.e2e_status = "failed"
-                        state.save(state_dir)
-                        final_status = "e2e_failed"
-                        break
-
-        # Record final milestone attributes
-        milestone_span.set_attribute("milestone.status", final_status)
-        milestone_span.set_attribute("milestone.total_cost_usd", total_cost)
-        milestone_span.set_attribute("milestone.total_tokens", total_tokens)
-        milestone_span.set_attribute(
-            "milestone.completed_tasks", len(state.completed_tasks)
-        )
-        milestone_span.set_attribute("milestone.failed_tasks", len(state.failed_tasks))
-
-        # Send Discord notification: Milestone completed
-        if config.discord_enabled:
-            await _send_discord_notification(
-                config.discord_webhook_url,
-                format_milestone_completed(
-                    milestone_id,
-                    len(state.completed_tasks),
-                    len(tasks),
-                    total_cost,
-                    total_duration,
-                ),
+            # Record final milestone attributes
+            milestone_span.set_attribute("milestone.status", final_status)
+            milestone_span.set_attribute("milestone.total_cost_usd", total_cost)
+            milestone_span.set_attribute("milestone.total_tokens", total_tokens)
+            milestone_span.set_attribute(
+                "milestone.completed_tasks", len(state.completed_tasks)
             )
+            milestone_span.set_attribute("milestone.failed_tasks", len(state.failed_tasks))
 
-    return MilestoneResult(
-        status=final_status,
-        state=state,
-        total_tasks=len(tasks),
-        completed_tasks=len(state.completed_tasks),
-        failed_tasks=len(state.failed_tasks),
-        total_cost_usd=total_cost,
-        total_tokens=total_tokens,
-        total_duration_seconds=total_duration,
-    )
+            # Send Discord notification: Milestone completed
+            if config.discord_enabled:
+                await _send_discord_notification(
+                    config.discord_webhook_url,
+                    format_milestone_completed(
+                        milestone_id,
+                        len(state.completed_tasks),
+                        len(tasks),
+                        total_cost,
+                        total_duration,
+                    ),
+                )
+
+        return MilestoneResult(
+            status=final_status,
+            state=state,
+            total_tasks=len(tasks),
+            completed_tasks=len(state.completed_tasks),
+            failed_tasks=len(state.failed_tasks),
+            total_cost_usd=total_cost,
+            total_tokens=total_tokens,
+            total_duration_seconds=total_duration,
+        )
+    finally:
+        # Always stop container to prevent resource leaks
+        await container.stop()
 
 
 def _record_metrics(
