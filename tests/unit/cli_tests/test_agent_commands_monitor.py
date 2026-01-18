@@ -140,7 +140,9 @@ class TestNestedChildProgress:
         parent_op_completed,
     ):
         """Child task is added when training_op_id is present."""
-        from ktrdr.cli.agent_commands import _monitor_agent_cycle
+        from ktrdr.cli.helpers.agent_monitor import (
+            monitor_agent_cycle as _monitor_agent_cycle,
+        )
 
         # Sequence: training phase with child -> completed
         mock_client.get = AsyncMock(
@@ -151,8 +153,10 @@ class TestNestedChildProgress:
             ]
         )
 
-        with patch("ktrdr.cli.agent_commands.AsyncCLIClient", return_value=mock_client):
-            with patch("ktrdr.cli.agent_commands.console", mock_console):
+        with patch(
+            "ktrdr.cli.helpers.agent_monitor.AsyncCLIClient", return_value=mock_client
+        ):
+            with patch("ktrdr.cli.helpers.agent_monitor.console", mock_console):
                 with patch("rich.progress.Progress", return_value=mock_progress):
                     await _monitor_agent_cycle("op_parent_123")
 
@@ -172,7 +176,9 @@ class TestNestedChildProgress:
         parent_op_completed,
     ):
         """Child task is added when backtest_op_id is present."""
-        from ktrdr.cli.agent_commands import _monitor_agent_cycle
+        from ktrdr.cli.helpers.agent_monitor import (
+            monitor_agent_cycle as _monitor_agent_cycle,
+        )
 
         # Sequence: backtesting phase with child -> completed
         mock_client.get = AsyncMock(
@@ -183,8 +189,10 @@ class TestNestedChildProgress:
             ]
         )
 
-        with patch("ktrdr.cli.agent_commands.AsyncCLIClient", return_value=mock_client):
-            with patch("ktrdr.cli.agent_commands.console", mock_console):
+        with patch(
+            "ktrdr.cli.helpers.agent_monitor.AsyncCLIClient", return_value=mock_client
+        ):
+            with patch("ktrdr.cli.helpers.agent_monitor.console", mock_console):
                 with patch("rich.progress.Progress", return_value=mock_progress):
                     await _monitor_agent_cycle("op_parent_123")
 
@@ -203,7 +211,9 @@ class TestNestedChildProgress:
         parent_op_completed,
     ):
         """No child task during design phase (no child_op_id)."""
-        from ktrdr.cli.agent_commands import _monitor_agent_cycle
+        from ktrdr.cli.helpers.agent_monitor import (
+            monitor_agent_cycle as _monitor_agent_cycle,
+        )
 
         # Sequence: designing phase -> completed
         mock_client.get = AsyncMock(
@@ -213,8 +223,10 @@ class TestNestedChildProgress:
             ]
         )
 
-        with patch("ktrdr.cli.agent_commands.AsyncCLIClient", return_value=mock_client):
-            with patch("ktrdr.cli.agent_commands.console", mock_console):
+        with patch(
+            "ktrdr.cli.helpers.agent_monitor.AsyncCLIClient", return_value=mock_client
+        ):
+            with patch("ktrdr.cli.helpers.agent_monitor.console", mock_console):
                 with patch("rich.progress.Progress", return_value=mock_progress):
                     await _monitor_agent_cycle("op_parent_123")
 
@@ -235,7 +247,9 @@ class TestNestedChildProgress:
         parent_op_completed,
     ):
         """Child task is removed when transitioning to phase without child op."""
-        from ktrdr.cli.agent_commands import _monitor_agent_cycle
+        from ktrdr.cli.helpers.agent_monitor import (
+            monitor_agent_cycle as _monitor_agent_cycle,
+        )
 
         # Parent in assessing phase (no child op)
         parent_op_assessing = {
@@ -261,8 +275,10 @@ class TestNestedChildProgress:
             ]
         )
 
-        with patch("ktrdr.cli.agent_commands.AsyncCLIClient", return_value=mock_client):
-            with patch("ktrdr.cli.agent_commands.console", mock_console):
+        with patch(
+            "ktrdr.cli.helpers.agent_monitor.AsyncCLIClient", return_value=mock_client
+        ):
+            with patch("ktrdr.cli.helpers.agent_monitor.console", mock_console):
                 with patch("rich.progress.Progress", return_value=mock_progress):
                     result = await _monitor_agent_cycle("op_parent_123")
 
@@ -283,7 +299,9 @@ class TestNestedChildProgress:
         parent_op_completed,
     ):
         """Missing child operation doesn't crash the monitor."""
-        from ktrdr.cli.agent_commands import _monitor_agent_cycle
+        from ktrdr.cli.helpers.agent_monitor import (
+            monitor_agent_cycle as _monitor_agent_cycle,
+        )
 
         call_count = 0
 
@@ -300,8 +318,10 @@ class TestNestedChildProgress:
 
         mock_client.get = AsyncMock(side_effect=mock_request)
 
-        with patch("ktrdr.cli.agent_commands.AsyncCLIClient", return_value=mock_client):
-            with patch("ktrdr.cli.agent_commands.console", mock_console):
+        with patch(
+            "ktrdr.cli.helpers.agent_monitor.AsyncCLIClient", return_value=mock_client
+        ):
+            with patch("ktrdr.cli.helpers.agent_monitor.console", mock_console):
                 with patch("rich.progress.Progress", return_value=mock_progress):
                     # Should not raise
                     result = await _monitor_agent_cycle("op_parent_123")
@@ -319,7 +339,9 @@ class TestNestedChildProgress:
         parent_op_completed,
     ):
         """Child progress is extracted and displayed via progress.update."""
-        from ktrdr.cli.agent_commands import _monitor_agent_cycle
+        from ktrdr.cli.helpers.agent_monitor import (
+            monitor_agent_cycle as _monitor_agent_cycle,
+        )
 
         mock_client.get = AsyncMock(
             side_effect=[
@@ -329,8 +351,10 @@ class TestNestedChildProgress:
             ]
         )
 
-        with patch("ktrdr.cli.agent_commands.AsyncCLIClient", return_value=mock_client):
-            with patch("ktrdr.cli.agent_commands.console", mock_console):
+        with patch(
+            "ktrdr.cli.helpers.agent_monitor.AsyncCLIClient", return_value=mock_client
+        ):
+            with patch("ktrdr.cli.helpers.agent_monitor.console", mock_console):
                 with patch("rich.progress.Progress", return_value=mock_progress):
                     await _monitor_agent_cycle("op_parent_123")
 
@@ -393,8 +417,10 @@ class TestErrorHandlingAndPolish:
         parent_op_completed,
     ):
         """Connection error triggers retry with exponential backoff."""
-        from ktrdr.cli.agent_commands import _monitor_agent_cycle
         from ktrdr.cli.client import ConnectionError
+        from ktrdr.cli.helpers.agent_monitor import (
+            monitor_agent_cycle as _monitor_agent_cycle,
+        )
 
         call_count = 0
 
@@ -413,8 +439,10 @@ class TestErrorHandlingAndPolish:
 
         mock_client.get = AsyncMock(side_effect=mock_request)
 
-        with patch("ktrdr.cli.agent_commands.AsyncCLIClient", return_value=mock_client):
-            with patch("ktrdr.cli.agent_commands.console", mock_console):
+        with patch(
+            "ktrdr.cli.helpers.agent_monitor.AsyncCLIClient", return_value=mock_client
+        ):
+            with patch("ktrdr.cli.helpers.agent_monitor.console", mock_console):
                 with patch("rich.progress.Progress", return_value=mock_progress):
                     with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
                         result = await _monitor_agent_cycle("op_parent_123")
@@ -435,8 +463,10 @@ class TestErrorHandlingAndPolish:
         parent_op_completed,
     ):
         """'Connection lost, retrying...' message shown in progress bar during retry."""
-        from ktrdr.cli.agent_commands import _monitor_agent_cycle
         from ktrdr.cli.client import ConnectionError
+        from ktrdr.cli.helpers.agent_monitor import (
+            monitor_agent_cycle as _monitor_agent_cycle,
+        )
 
         call_count = 0
 
@@ -454,8 +484,10 @@ class TestErrorHandlingAndPolish:
 
         mock_client.get = AsyncMock(side_effect=mock_request)
 
-        with patch("ktrdr.cli.agent_commands.AsyncCLIClient", return_value=mock_client):
-            with patch("ktrdr.cli.agent_commands.console", mock_console):
+        with patch(
+            "ktrdr.cli.helpers.agent_monitor.AsyncCLIClient", return_value=mock_client
+        ):
+            with patch("ktrdr.cli.helpers.agent_monitor.console", mock_console):
                 with patch("rich.progress.Progress", return_value=mock_progress):
                     with patch("asyncio.sleep", new_callable=AsyncMock):
                         await _monitor_agent_cycle("op_parent_123")
@@ -474,8 +506,10 @@ class TestErrorHandlingAndPolish:
         self, mock_client, mock_progress, mock_console, parent_op_running
     ):
         """404 response exits with 'operation not found' message."""
-        from ktrdr.cli.agent_commands import _monitor_agent_cycle
         from ktrdr.cli.client import APIError
+        from ktrdr.cli.helpers.agent_monitor import (
+            monitor_agent_cycle as _monitor_agent_cycle,
+        )
 
         call_count = 0
 
@@ -493,8 +527,10 @@ class TestErrorHandlingAndPolish:
 
         mock_client.get = AsyncMock(side_effect=mock_request)
 
-        with patch("ktrdr.cli.agent_commands.AsyncCLIClient", return_value=mock_client):
-            with patch("ktrdr.cli.agent_commands.console", mock_console):
+        with patch(
+            "ktrdr.cli.helpers.agent_monitor.AsyncCLIClient", return_value=mock_client
+        ):
+            with patch("ktrdr.cli.helpers.agent_monitor.console", mock_console):
                 with patch("rich.progress.Progress", return_value=mock_progress):
                     with patch("asyncio.sleep", new_callable=AsyncMock):
                         result = await _monitor_agent_cycle("op_parent_123")
@@ -517,8 +553,10 @@ class TestErrorHandlingAndPolish:
         parent_op_completed,
     ):
         """Retry delay resets to 1s after a successful request."""
-        from ktrdr.cli.agent_commands import _monitor_agent_cycle
         from ktrdr.cli.client import ConnectionError
+        from ktrdr.cli.helpers.agent_monitor import (
+            monitor_agent_cycle as _monitor_agent_cycle,
+        )
 
         call_count = 0
         sleep_durations = []
@@ -554,8 +592,10 @@ class TestErrorHandlingAndPolish:
 
         mock_client.get = AsyncMock(side_effect=mock_request)
 
-        with patch("ktrdr.cli.agent_commands.AsyncCLIClient", return_value=mock_client):
-            with patch("ktrdr.cli.agent_commands.console", mock_console):
+        with patch(
+            "ktrdr.cli.helpers.agent_monitor.AsyncCLIClient", return_value=mock_client
+        ):
+            with patch("ktrdr.cli.helpers.agent_monitor.console", mock_console):
                 with patch("rich.progress.Progress", return_value=mock_progress):
                     with patch("asyncio.sleep", side_effect=mock_sleep):
                         await _monitor_agent_cycle("op_parent_123")
@@ -573,7 +613,9 @@ class TestErrorHandlingAndPolish:
 
     def test_cancellation_summary_includes_child_state(self, mock_console):
         """Cancellation summary includes child operation state when available."""
-        from ktrdr.cli.agent_commands import _show_completion_summary
+        from ktrdr.cli.helpers.agent_monitor import (
+            show_completion_summary as _show_completion_summary,
+        )
 
         # Cancelled operation data
         op_data = {
@@ -586,7 +628,7 @@ class TestErrorHandlingAndPolish:
             },
         }
 
-        with patch("ktrdr.cli.agent_commands.console", mock_console):
+        with patch("ktrdr.cli.helpers.agent_monitor.console", mock_console):
             _show_completion_summary(op_data, child_state="Epoch 67/100")
 
         # Should have printed cancellation info with phase and child state
@@ -609,7 +651,9 @@ class TestErrorHandlingAndPolish:
 
     def test_cancellation_summary_without_child_state(self, mock_console):
         """Cancellation summary works without child state."""
-        from ktrdr.cli.agent_commands import _show_completion_summary
+        from ktrdr.cli.helpers.agent_monitor import (
+            show_completion_summary as _show_completion_summary,
+        )
 
         # Cancelled operation data (during design phase - no child)
         op_data = {
@@ -621,7 +665,7 @@ class TestErrorHandlingAndPolish:
             },
         }
 
-        with patch("ktrdr.cli.agent_commands.console", mock_console):
+        with patch("ktrdr.cli.helpers.agent_monitor.console", mock_console):
             _show_completion_summary(op_data)  # No child_state arg
 
         # Should have printed cancellation info

@@ -10,6 +10,7 @@ which provides CleanCliRunner that automatically strips ANSI codes.
 import subprocess
 import sys
 
+import pytest
 import typer
 from typer.testing import CliRunner
 
@@ -617,3 +618,313 @@ class TestAppUrlNormalization:
                 for cmd in app.registered_commands
                 if cmd.name != "capture-port-norm"
             ]
+
+
+class TestOldCommandFilesRemoved:
+    """Tests for M5 Task 5.3: Verify old command files are removed.
+
+    These tests ensure that:
+    1. Old command modules are not importable
+    2. Old command subgroups are not registered
+    3. New CLI still works after removal
+    """
+
+    def test_model_commands_not_importable(self) -> None:
+        """ktrdr.cli.model_commands should not exist (deleted)."""
+        import importlib
+
+        with pytest.raises(ModuleNotFoundError):
+            importlib.import_module("ktrdr.cli.model_commands")
+
+    def test_strategy_commands_not_importable(self) -> None:
+        """ktrdr.cli.strategy_commands should not exist (deleted)."""
+        import importlib
+
+        with pytest.raises(ModuleNotFoundError):
+            importlib.import_module("ktrdr.cli.strategy_commands")
+
+    def test_backtest_commands_not_importable(self) -> None:
+        """ktrdr.cli.backtest_commands should not exist (deleted)."""
+        import importlib
+
+        with pytest.raises(ModuleNotFoundError):
+            importlib.import_module("ktrdr.cli.backtest_commands")
+
+    def test_indicator_commands_not_importable(self) -> None:
+        """ktrdr.cli.indicator_commands should not exist (deleted)."""
+        import importlib
+
+        with pytest.raises(ModuleNotFoundError):
+            importlib.import_module("ktrdr.cli.indicator_commands")
+
+    def test_fuzzy_commands_not_importable(self) -> None:
+        """ktrdr.cli.fuzzy_commands should not exist (deleted)."""
+        import importlib
+
+        with pytest.raises(ModuleNotFoundError):
+            importlib.import_module("ktrdr.cli.fuzzy_commands")
+
+    def test_dummy_commands_not_importable(self) -> None:
+        """ktrdr.cli.dummy_commands should not exist (deleted)."""
+        import importlib
+
+        with pytest.raises(ModuleNotFoundError):
+            importlib.import_module("ktrdr.cli.dummy_commands")
+
+    def test_operations_commands_not_importable(self) -> None:
+        """ktrdr.cli.operations_commands should not exist (deleted)."""
+        import importlib
+
+        with pytest.raises(ModuleNotFoundError):
+            importlib.import_module("ktrdr.cli.operations_commands")
+
+
+class TestOldSubgroupsRemoved:
+    """Tests for M5 Task 5.3: Verify old subgroups are not registered."""
+
+    def test_models_subgroup_not_registered(self, runner) -> None:
+        """'models' subgroup should not appear in help."""
+        from ktrdr.cli.app import app
+
+        result = runner.invoke(app, ["--help"])
+        assert result.exit_code == 0
+        # 'models' should NOT be a command group
+        # (but 'models' might appear in description text, so check for command pattern)
+        # Look for pattern like "models  " which would indicate a command
+        lines = [line.strip() for line in result.output.lower().split("\n")]
+        command_lines = [
+            line for line in lines if line.startswith("models") and "  " in line
+        ]
+        assert not command_lines, "models subgroup should not be registered"
+
+    def test_strategies_subgroup_not_registered(self, runner) -> None:
+        """'strategies' subgroup should not appear in help."""
+        from ktrdr.cli.app import app
+
+        result = runner.invoke(app, ["--help"])
+        assert result.exit_code == 0
+        lines = [line.strip() for line in result.output.lower().split("\n")]
+        command_lines = [
+            line for line in lines if line.startswith("strategies") and "  " in line
+        ]
+        assert not command_lines, "strategies subgroup should not be registered"
+
+    def test_operations_subgroup_not_registered(self, runner) -> None:
+        """'operations' subgroup should not appear in help."""
+        from ktrdr.cli.app import app
+
+        result = runner.invoke(app, ["--help"])
+        assert result.exit_code == 0
+        lines = [line.strip() for line in result.output.lower().split("\n")]
+        command_lines = [
+            line for line in lines if line.startswith("operations") and "  " in line
+        ]
+        assert not command_lines, "operations subgroup should not be registered"
+
+    def test_agent_subgroup_not_registered(self, runner) -> None:
+        """'agent' subgroup should not appear in help."""
+        from ktrdr.cli.app import app
+
+        result = runner.invoke(app, ["--help"])
+        assert result.exit_code == 0
+        lines = [line.strip() for line in result.output.lower().split("\n")]
+        command_lines = [
+            line for line in lines if line.startswith("agent") and "  " in line
+        ]
+        assert not command_lines, "agent subgroup should not be registered"
+
+    def test_indicators_subgroup_not_registered(self, runner) -> None:
+        """'indicators' subgroup should not appear in help."""
+        from ktrdr.cli.app import app
+
+        result = runner.invoke(app, ["--help"])
+        assert result.exit_code == 0
+        lines = [line.strip() for line in result.output.lower().split("\n")]
+        command_lines = [
+            line for line in lines if line.startswith("indicators") and "  " in line
+        ]
+        assert not command_lines, "indicators subgroup should not be registered"
+
+    def test_fuzzy_subgroup_not_registered(self, runner) -> None:
+        """'fuzzy' subgroup should not appear in help."""
+        from ktrdr.cli.app import app
+
+        result = runner.invoke(app, ["--help"])
+        assert result.exit_code == 0
+        lines = [line.strip() for line in result.output.lower().split("\n")]
+        command_lines = [
+            line for line in lines if line.startswith("fuzzy") and "  " in line
+        ]
+        assert not command_lines, "fuzzy subgroup should not be registered"
+
+    def test_dummy_subgroup_not_registered(self, runner) -> None:
+        """'dummy' subgroup should not appear in help."""
+        from ktrdr.cli.app import app
+
+        result = runner.invoke(app, ["--help"])
+        assert result.exit_code == 0
+        lines = [line.strip() for line in result.output.lower().split("\n")]
+        command_lines = [
+            line for line in lines if line.startswith("dummy") and "  " in line
+        ]
+        assert not command_lines, "dummy subgroup should not be registered"
+
+
+class TestSubgroupsPreserved:
+    """Tests for M5 Task 5.3: Verify kept subgroups still work.
+
+    NOTE: These tests use get_app_with_subgroups() instead of importing app directly,
+    because subgroups are loaded lazily to maintain fast CLI startup (<100ms).
+    The subgroups are only registered when the CLI is actually run via ktrdr.cli.app.
+    """
+
+    def test_sandbox_subgroup_registered(self, runner) -> None:
+        """'sandbox' subgroup should still be registered."""
+        from ktrdr.cli.app import get_app_with_subgroups
+
+        app = get_app_with_subgroups()
+        result = runner.invoke(app, ["--help"])
+        assert result.exit_code == 0
+        assert "sandbox" in result.output.lower()
+
+    def test_sandbox_status_command_works(self, runner) -> None:
+        """'sandbox status' command should work."""
+        from ktrdr.cli.app import get_app_with_subgroups
+
+        app = get_app_with_subgroups()
+        result = runner.invoke(app, ["sandbox", "status"])
+        # May succeed or fail based on env, but should not error on command parsing
+        assert result.exit_code in (0, 1), f"Unexpected error: {result.output}"
+        # If it failed, check it's a runtime error not a command error
+        if result.exit_code == 1:
+            # Should contain sandbox-related output, not "No such command"
+            assert "no such command" not in result.output.lower()
+
+    def test_ib_subgroup_registered(self, runner) -> None:
+        """'ib' subgroup should still be registered."""
+        from ktrdr.cli.app import get_app_with_subgroups
+
+        app = get_app_with_subgroups()
+        result = runner.invoke(app, ["--help"])
+        assert result.exit_code == 0
+        assert "ib" in result.output.lower()
+
+    def test_deploy_subgroup_registered(self, runner) -> None:
+        """'deploy' subgroup should still be registered."""
+        from ktrdr.cli.app import get_app_with_subgroups
+
+        app = get_app_with_subgroups()
+        result = runner.invoke(app, ["--help"])
+        assert result.exit_code == 0
+        assert "deploy" in result.output.lower()
+
+    def test_data_subgroup_registered(self, runner) -> None:
+        """'data' subgroup should still be registered."""
+        from ktrdr.cli.app import get_app_with_subgroups
+
+        app = get_app_with_subgroups()
+        result = runner.invoke(app, ["--help"])
+        assert result.exit_code == 0
+        assert "data" in result.output.lower()
+
+    def test_checkpoints_subgroup_registered(self, runner) -> None:
+        """'checkpoints' subgroup should still be registered."""
+        from ktrdr.cli.app import get_app_with_subgroups
+
+        app = get_app_with_subgroups()
+        result = runner.invoke(app, ["--help"])
+        assert result.exit_code == 0
+        assert "checkpoints" in result.output.lower()
+
+
+class TestCleanErrorMessages:
+    """Tests for M5 Task 5.4: Verify clean error messages for old commands.
+
+    Old commands (models, strategies, agent, operations) should produce
+    clean "No such command" errors, not stack traces or crashes.
+    """
+
+    def test_unknown_command_error_clean(self, runner) -> None:
+        """Unknown command produces clean error, not crash/stack trace."""
+        from ktrdr.cli.app import get_app_with_subgroups
+
+        app = get_app_with_subgroups()
+        result = runner.invoke(app, ["nonexistent-command"])
+
+        # Should fail but cleanly
+        assert result.exit_code == 2  # Typer uses exit code 2 for usage errors
+        assert "no such command" in result.output.lower()
+        # Should NOT have a traceback
+        assert "Traceback" not in result.output
+
+    def test_models_command_clean_error(self, runner) -> None:
+        """'ktrdr models' produces clean 'No such command' error."""
+        from ktrdr.cli.app import get_app_with_subgroups
+
+        app = get_app_with_subgroups()
+        result = runner.invoke(app, ["models", "train"])
+
+        assert result.exit_code == 2
+        assert "no such command" in result.output.lower()
+        assert "models" in result.output.lower()
+        assert "Traceback" not in result.output
+
+    def test_strategies_command_clean_error(self, runner) -> None:
+        """'ktrdr strategies' produces clean 'No such command' error."""
+        from ktrdr.cli.app import get_app_with_subgroups
+
+        app = get_app_with_subgroups()
+        result = runner.invoke(app, ["strategies", "backtest"])
+
+        assert result.exit_code == 2
+        assert "no such command" in result.output.lower()
+        assert "strategies" in result.output.lower()
+        assert "Traceback" not in result.output
+
+    def test_agent_command_clean_error(self, runner) -> None:
+        """'ktrdr agent' produces clean 'No such command' error."""
+        from ktrdr.cli.app import get_app_with_subgroups
+
+        app = get_app_with_subgroups()
+        result = runner.invoke(app, ["agent", "trigger"])
+
+        assert result.exit_code == 2
+        assert "no such command" in result.output.lower()
+        assert "agent" in result.output.lower()
+        assert "Traceback" not in result.output
+
+    def test_operations_command_clean_error(self, runner) -> None:
+        """'ktrdr operations' produces clean 'No such command' error."""
+        from ktrdr.cli.app import get_app_with_subgroups
+
+        app = get_app_with_subgroups()
+        result = runner.invoke(app, ["operations", "list"])
+
+        assert result.exit_code == 2
+        assert "no such command" in result.output.lower()
+        assert "operations" in result.output.lower()
+        assert "Traceback" not in result.output
+
+    def test_backtest_run_command_clean_error(self, runner) -> None:
+        """'ktrdr backtest run' produces clean error (run is not a subcommand)."""
+        from ktrdr.cli.app import get_app_with_subgroups
+
+        app = get_app_with_subgroups()
+        # Note: 'backtest' IS a valid command now, but 'backtest run' should fail
+        # because 'backtest' takes arguments, not subcommands
+        result = runner.invoke(app, ["backtest", "run"])
+
+        # Either "unexpected" argument or "no such command" depending on typer version
+        assert result.exit_code != 0
+        assert "Traceback" not in result.output
+
+    def test_error_shows_help_hint(self, runner) -> None:
+        """Error message includes help suggestion."""
+        from ktrdr.cli.app import get_app_with_subgroups
+
+        app = get_app_with_subgroups()
+        result = runner.invoke(app, ["nonexistent"])
+
+        assert result.exit_code == 2
+        # Typer typically shows "Try 'ktrdr --help' for help."
+        assert "--help" in result.output or "help" in result.output.lower()

@@ -50,8 +50,8 @@ def research(
 
     from rich.console import Console
 
-    from ktrdr.cli.agent_commands import _monitor_agent_cycle
     from ktrdr.cli.client import AsyncCLIClient
+    from ktrdr.cli.helpers.agent_monitor import monitor_agent_cycle
     from ktrdr.cli.output import print_error, print_operation_started
     from ktrdr.cli.state import CLIState
 
@@ -83,7 +83,7 @@ def research(
             console.print()
 
             # Reuse existing nested progress UX from agent_commands.py
-            await _monitor_agent_cycle(operation_id)
+            await monitor_agent_cycle(operation_id)
         else:
             # Fire-and-forget mode: print operation ID and return
             print_operation_started("research", operation_id, state)

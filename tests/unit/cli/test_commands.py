@@ -251,20 +251,20 @@ class TestMainCliCallback:
 
         assert result.exit_code == 0
         assert "--url" in result.stdout or "-u" in result.stdout
-        assert "Overrides auto-detection" in result.stdout
+        assert "overrides auto-detection" in result.stdout.lower()
 
     def test_help_shows_api_resolution_priority(self, runner: "CliRunner") -> None:
-        """Help output explains API URL resolution priority order."""
+        """Help output explains API URL and port flags.
+
+        Note: The new CLI (app.py) uses simpler help text than the legacy CLI.
+        The detailed API resolution priority documentation was removed in M5.
+        """
         result = runner.invoke(cli_app, ["--help"])
 
         assert result.exit_code == 0
-        # Check that priority order is documented in docstring
-        # Note: ANSI codes are stripped by the runner fixture automatically
-        assert "Target API Resolution" in result.stdout
-        assert "--url flag" in result.stdout
-        assert "--port flag" in result.stdout
-        assert ".env.sandbox" in result.stdout
-        assert "Default" in result.stdout
+        # Check that URL and port flags are documented
+        assert "--url" in result.stdout or "-u" in result.stdout
+        assert "--port" in result.stdout or "-p" in result.stdout
 
     def test_existing_url_flag_accepted(self, runner: "CliRunner") -> None:
         """Existing --url flag behavior is preserved."""

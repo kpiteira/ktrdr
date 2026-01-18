@@ -145,99 +145,17 @@ def _get_cli_app():
     """Get the fully configured CLI app with all commands registered.
 
     This is called lazily when `cli_app` or `app` is accessed from this module.
-    It imports all command modules and registers them on the app.
+    The app is now defined in ktrdr.cli.app and this module just re-exports it.
+
+    Uses get_app_with_subgroups() to ensure all subgroups (sandbox, ib, deploy,
+    data, checkpoints) are registered. This is slower than just importing app,
+    but necessary for the CLI to have all commands available.
     """
-    # Import the base app from commands module
-    # Import all command modules
-    from ktrdr.cli.agent_commands import agent_app
-    from ktrdr.cli.async_model_commands import async_models_app as models_app
-    from ktrdr.cli.backtest_commands import backtest_app
-    from ktrdr.cli.checkpoints_commands import checkpoints_app
-    from ktrdr.cli.commands import cli_app as base_app
-    from ktrdr.cli.commands.backtest import backtest
-    from ktrdr.cli.commands.cancel import cancel
-    from ktrdr.cli.commands.follow import follow
-    from ktrdr.cli.commands.list_cmd import list_app
-    from ktrdr.cli.commands.migrate import migrate_cmd
-    from ktrdr.cli.commands.ops import ops
-    from ktrdr.cli.commands.research import research
-    from ktrdr.cli.commands.resume import resume
-    from ktrdr.cli.commands.show import show_app
-    from ktrdr.cli.commands.status import status
-    from ktrdr.cli.commands.train import train
-    from ktrdr.cli.commands.validate import validate_cmd
-    from ktrdr.cli.data_commands import data_app
-    from ktrdr.cli.deploy_commands import deploy_app
-    from ktrdr.cli.dummy_commands import dummy_app
-    from ktrdr.cli.fuzzy_commands import fuzzy_app
-    from ktrdr.cli.ib_commands import ib_app
-    from ktrdr.cli.indicator_commands import indicators_app
-    from ktrdr.cli.operations_commands import operations_app
-    from ktrdr.cli.sandbox import sandbox_app
-    from ktrdr.cli.strategy_commands import strategies_app
+    # Import the fully configured app from app.py
+    # app.py is the single source of truth for command registration
+    from ktrdr.cli.app import get_app_with_subgroups
 
-    # Register new top-level commands (M1/M2 CLI restructure)
-    base_app.command()(train)
-    base_app.command()(backtest)
-    base_app.command()(research)
-    base_app.command()(status)
-    base_app.command()(follow)
-    base_app.command()(ops)
-    base_app.command()(cancel)
-    base_app.command()(resume)
-
-    # Register M3 information commands
-    base_app.add_typer(list_app)  # ktrdr list strategies/models/checkpoints
-    base_app.add_typer(show_app)  # ktrdr show data/features
-    base_app.command("validate")(validate_cmd)  # ktrdr validate <name|path>
-    base_app.command("migrate")(migrate_cmd)  # ktrdr migrate <path>
-
-    # Register command subgroups following industry best practices
-    base_app.add_typer(
-        agent_app, name="agent", help="Research agent management commands"
-    )
-    base_app.add_typer(
-        checkpoints_app, name="checkpoints", help="Checkpoint management commands"
-    )
-    base_app.add_typer(data_app, name="data", help="Data management commands")
-    base_app.add_typer(
-        backtest_app,
-        name="backtest",
-        help="Backtesting commands for trading strategies",
-    )
-    base_app.add_typer(
-        dummy_app, name="dummy", help="Dummy service commands with beautiful UX"
-    )
-    base_app.add_typer(
-        operations_app, name="operations", help="Operations management commands"
-    )
-    base_app.add_typer(
-        indicators_app, name="indicators", help="Technical indicator commands"
-    )
-    base_app.add_typer(
-        ib_app, name="ib", help="Interactive Brokers integration commands"
-    )
-    base_app.add_typer(
-        models_app, name="models", help="Neural network model management commands"
-    )
-    base_app.add_typer(
-        strategies_app, name="strategies", help="Manage trading strategies (v3 format)"
-    )
-    base_app.add_typer(fuzzy_app, name="fuzzy", help="Fuzzy logic operations commands")
-    base_app.add_typer(
-        deploy_app, name="deploy", help="Deploy KTRDR services to pre-production"
-    )
-    base_app.add_typer(
-        sandbox_app,
-        name="sandbox",
-        help="Manage isolated development sandbox instances",
-    )
-
-    # Note: Telemetry is initialized lazily via init_telemetry_if_needed()
-    # called from trace_cli_command decorator when commands execute.
-    # This keeps --help fast by avoiding OTEL setup.
-
-    return base_app
+    return get_app_with_subgroups()
 
 
 # Cache for the lazily-loaded app
@@ -277,9 +195,20 @@ def init_telemetry_if_needed() -> None:
     _setup_telemetry()
 
 
+def main() -> None:
+    """Entry point for the ktrdr CLI.
+
+    This function is used as the entry point in pyproject.toml.
+    It ensures the app with all subgroups is loaded and executed.
+    """
+    cli_app = _get_cli_app()
+    cli_app()
+
+
 __all__ = [
     "cli_app",
     "app",
+    "main",
     "reconfigure_telemetry_for_url",
     "init_telemetry_if_needed",
 ]

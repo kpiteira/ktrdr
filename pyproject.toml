@@ -75,7 +75,7 @@ dev = [
 ]
 
 [project.scripts]
-ktrdr = "ktrdr.cli:app"
+ktrdr = "ktrdr.cli:main"
 orchestrator = "orchestrator.cli:main"
 
 [dependency-groups]
