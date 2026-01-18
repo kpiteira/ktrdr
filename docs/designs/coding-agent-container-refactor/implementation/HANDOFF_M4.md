@@ -32,7 +32,19 @@
 - `ARCHITECTURE.md` — `SandboxManager` → `CodingAgentContainer`, container name
 - `ARCHITECTURE_v2_haiku_brain.md` — Container name reference
 
-### Next Task Notes (4.3)
-- Task 4.3 cleans up Docker artifacts
-- Check `deploy/environments/coding-agent/docker-compose.yml`
-- Add header comment explaining file is for building only
+---
+
+## Task 4.3 Complete: Clean up unused Docker artifacts
+
+**Summary:** Stripped docker-compose.yml to build-only essentials. Removed all runtime configuration (volumes, networks, environment, restart policy) since the orchestrator uses `docker run` with explicit flags.
+
+### What Changed
+- Removed 62 lines of runtime config that's now handled by `CodingAgentContainer.start()`
+- Updated header comments to clearly explain the file is for building only
+- File now contains only: header comments, `build:` block, and `image:` tag
+
+### Next Task Notes (4.4)
+- Task 4.4 adds integration test for full orchestrator flow
+- Test should mock `subprocess.run` for sandbox status and `CodingAgentContainer` methods
+- Use `pytest.mark.integration` decorator
+- File: `orchestrator/tests/test_integration.py`
