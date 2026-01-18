@@ -391,7 +391,7 @@ async def _prompt_for_pr(result: MilestoneResult, config: OrchestratorConfig) ->
 
         # Create container for PR creation
         container = CodingAgentContainer(
-            container_name=config.sandbox_container,
+            container_name=config.coding_agent_container,
             workspace_path=config.workspace_path,
         )
 

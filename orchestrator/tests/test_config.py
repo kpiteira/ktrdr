@@ -11,12 +11,12 @@ from unittest.mock import patch
 class TestOrchestratorConfigDefaults:
     """Test that config loads with sensible defaults."""
 
-    def test_sandbox_container_default(self):
-        """Default sandbox container should be ktrdr-sandbox."""
+    def test_coding_agent_container_default(self):
+        """Default coding agent container should be ktrdr-coding-agent."""
         from orchestrator.config import OrchestratorConfig
 
         config = OrchestratorConfig()
-        assert config.sandbox_container == "ktrdr-sandbox"
+        assert config.coding_agent_container == "ktrdr-coding-agent"
 
     def test_workspace_path_default(self):
         """Default workspace path should be /workspace."""
@@ -149,7 +149,7 @@ class TestOrchestratorConfigTypeHints:
 
         annotations = OrchestratorConfig.__annotations__
         expected_fields = [
-            "sandbox_container",
+            "coding_agent_container",
             "workspace_path",
             "max_turns",
             "task_timeout_seconds",

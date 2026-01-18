@@ -120,7 +120,7 @@ def check_sandbox(timeout: float = DEFAULT_TIMEOUT) -> CheckResult:
         CheckResult with status and message
     """
     config = OrchestratorConfig.from_env()
-    container_name = config.sandbox_container
+    container_name = config.coding_agent_container
 
     try:
         result = subprocess.run(
@@ -178,7 +178,7 @@ def check_claude_auth(timeout: float = DEFAULT_TIMEOUT) -> CheckResult:
         CheckResult with status and message
     """
     config = OrchestratorConfig.from_env()
-    container_name = config.sandbox_container
+    container_name = config.coding_agent_container
 
     # Check both possible locations for credentials
     check_cmd = (
@@ -233,7 +233,7 @@ def check_github_token(timeout: float = DEFAULT_TIMEOUT) -> CheckResult:
         CheckResult with status and message
     """
     config = OrchestratorConfig.from_env()
-    container_name = config.sandbox_container
+    container_name = config.coding_agent_container
 
     try:
         result = subprocess.run(
