@@ -60,6 +60,45 @@ from ktrdr.training.model_storage import ModelStorage
 
 logger = get_logger(__name__)
 
+# Base directory for strategy files (resolved to absolute path)
+STRATEGIES_DIR = Path("strategies").resolve()
+
+
+def _safe_strategy_path(strategy_name: str) -> Path:
+    """Safely resolve a strategy file path, preventing path traversal attacks.
+
+    Args:
+        strategy_name: The strategy name (without .yaml extension)
+
+    Returns:
+        Resolved Path to the strategy file
+
+    Raises:
+        HTTPException: If the path would escape the strategies directory
+    """
+    # Reject obviously malicious inputs
+    if ".." in strategy_name or "/" in strategy_name or "\\" in strategy_name:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid strategy name: {strategy_name}. "
+            "Strategy names cannot contain path separators or '..'",
+        )
+
+    # Construct and resolve the path
+    strategy_file = (STRATEGIES_DIR / f"{strategy_name}.yaml").resolve()
+
+    # Verify the resolved path is within the strategies directory
+    try:
+        strategy_file.relative_to(STRATEGIES_DIR)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid strategy name: {strategy_name}",
+        ) from None
+
+    return strategy_file
+
+
 # Create router for strategies endpoints
 router = APIRouter(prefix="/strategies")
 
@@ -660,8 +699,8 @@ async def validate_strategy(strategy_name: str) -> StrategyValidationResponse:
         Validation response with issues found and available indicators
     """
     try:
-        # Load strategy file
-        strategy_file = Path(f"strategies/{strategy_name}.yaml")
+        # Load strategy file (with path traversal protection)
+        strategy_file = _safe_strategy_path(strategy_name)
         if not strategy_file.exists():
             raise HTTPException(
                 status_code=404, detail=f"Strategy file not found: {strategy_name}.yaml"
@@ -749,8 +788,8 @@ async def get_strategy_features(strategy_name: str) -> StrategyFeaturesResponse:
     from ktrdr.config.strategy_loader import StrategyConfigurationLoader
 
     try:
-        # Load strategy file
-        strategy_file = Path(f"strategies/{strategy_name}.yaml")
+        # Load strategy file (with path traversal protection)
+        strategy_file = _safe_strategy_path(strategy_name)
         if not strategy_file.exists():
             raise HTTPException(
                 status_code=404, detail=f"Strategy file not found: {strategy_name}.yaml"
