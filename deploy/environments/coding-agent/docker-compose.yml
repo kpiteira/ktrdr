@@ -1,12 +1,19 @@
 # KTRDR Coding Agent Environment
-# Isolated container for Claude Code autonomous task execution
+# Docker image definition for Claude Code autonomous task execution
+#
+# NOTE: This file is used for BUILDING THE IMAGE only.
+# The container is started by the orchestrator using `docker run` with
+# explicit volume mounts. Do not use `docker compose up` to run the container.
 #
 # Usage:
-#   ./scripts/coding-agent-init.sh      # First-time setup (clones repo)
-#   docker compose up -d                # Start coding agent
-#   ./scripts/coding-agent-reset.sh     # Reset workspace to clean state
-#   ./scripts/coding-agent-shell.sh     # Interactive shell
-#   ./scripts/coding-agent-claude.sh    # Run Claude Code command
+#   ./scripts/coding-agent-init.sh      # Build image (does not start container)
+#   docker compose build                # Rebuild image only
+#
+# The orchestrator starts the container with:
+#   docker run -d --name ktrdr-coding-agent \
+#     -v /path/to/code:/workspace \
+#     --add-host=host.docker.internal:host-gateway \
+#     ktrdr-coding-agent:latest
 #
 # Requires:
 #   - GH_TOKEN environment variable (for GitHub CLI PR creation)
@@ -31,16 +38,11 @@ services:
       - COMPOSE_PROJECT_NAME=coding-agent
 
     volumes:
-      # Docker socket for running ktrdr services from inside coding agent
-      # SECURITY: This grants full Docker daemon access. Only run in trusted
-      # development environments, never with untrusted code or in production.
-      - /var/run/docker.sock:/var/run/docker.sock
-
       # Shared market data (read-only)
       - ${HOME}/Documents/ktrdr-shared/data:/shared/data:ro
 
       # Named volumes for persistent storage
-      - coding-agent-workspace:/workspace
+      # Note: /workspace is mounted at runtime via docker run -v
       - coding-agent-claude-credentials:/home/ubuntu/.claude
       - coding-agent-models:/env/models
       - coding-agent-strategies:/env/strategies
@@ -65,8 +67,6 @@ networks:
     external: false
 
 volumes:
-  coding-agent-workspace:
-    name: ktrdr-coding-agent-workspace
   coding-agent-claude-credentials:
     name: ktrdr-coding-agent-claude-credentials
   coding-agent-models:

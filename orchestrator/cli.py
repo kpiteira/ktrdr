@@ -94,7 +94,7 @@ async def _run_task(
 ) -> None:
     """Internal async implementation of task execution."""
     # Validate environment before proceeding
-    _code_folder = validate_environment()  # noqa: F841 - used in M3
+    code_folder = validate_environment()
 
     config = OrchestratorConfig.from_env()
     tracer, meter = setup_telemetry(config)
@@ -127,59 +127,66 @@ async def _run_task(
 
     container = CodingAgentContainer()
 
-    with tracer.start_as_current_span("orchestrator.task") as span:
-        span.set_attribute("task.id", task_id)
-        span.set_attribute("task.title", target_task.title)
+    # Start container with code folder mounted
+    await container.start(code_folder)
 
-        console.print(f"[bold]Task {task_id}:[/bold] {target_task.title}")
-        console.print("Invoking Claude Code...")
+    try:
+        with tracer.start_as_current_span("orchestrator.task") as span:
+            span.set_attribute("task.id", task_id)
+            span.set_attribute("task.title", target_task.title)
 
-        result = await run_task(
-            target_task,
-            container,
-            config,
-            plan_file,
-            human_guidance=guidance,
-            model=model,
-        )
+            console.print(f"[bold]Task {task_id}:[/bold] {target_task.title}")
+            console.print("Invoking Claude Code...")
 
-        # Record telemetry on span
-        span.set_attribute("task.status", result.status)
-        span.set_attribute("claude.tokens", result.tokens_used)
-        span.set_attribute("claude.cost_usd", result.cost_usd)
-        span.set_attribute("claude.session_id", result.session_id)
+            result = await run_task(
+                target_task,
+                container,
+                config,
+                plan_file,
+                human_guidance=guidance,
+                model=model,
+            )
 
-        # Update metrics
-        telemetry.tasks_counter.add(1, {"status": result.status})
-        telemetry.tokens_counter.add(result.tokens_used)
-        telemetry.cost_counter.add(result.cost_usd)
+            # Record telemetry on span
+            span.set_attribute("task.status", result.status)
+            span.set_attribute("claude.tokens", result.tokens_used)
+            span.set_attribute("claude.cost_usd", result.cost_usd)
+            span.set_attribute("claude.session_id", result.session_id)
 
-        # Output result
-        status_color = {
-            "completed": "green",
-            "failed": "red",
-            "needs_human": "yellow",
-        }
-        color = status_color[result.status]
-        console.print(
-            f"Task {task_id}: "
-            f"[bold {color}]{result.status.upper()}[/bold {color}] "
-            f"({result.duration_seconds:.0f}s, "
-            f"{result.tokens_used / 1000:.1f}k tokens, "
-            f"${result.cost_usd:.2f})"
-        )
+            # Update metrics
+            telemetry.tasks_counter.add(1, {"status": result.status})
+            telemetry.tokens_counter.add(result.tokens_used)
+            telemetry.cost_counter.add(result.cost_usd)
 
-        # Show additional info for non-completed status
-        if result.status == "needs_human" and result.question:
-            console.print(f"\n[yellow]Question:[/yellow] {result.question}")
-            if result.options:
-                console.print(f"[yellow]Options:[/yellow] {', '.join(result.options)}")
-            if result.recommendation:
-                console.print(
-                    f"[yellow]Recommendation:[/yellow] {result.recommendation}"
-                )
-        elif result.status == "failed" and result.error:
-            console.print(f"\n[red]Error:[/red] {result.error}")
+            # Output result
+            status_color = {
+                "completed": "green",
+                "failed": "red",
+                "needs_human": "yellow",
+            }
+            color = status_color[result.status]
+            console.print(
+                f"Task {task_id}: "
+                f"[bold {color}]{result.status.upper()}[/bold {color}] "
+                f"({result.duration_seconds:.0f}s, "
+                f"{result.tokens_used / 1000:.1f}k tokens, "
+                f"${result.cost_usd:.2f})"
+            )
+
+            # Show additional info for non-completed status
+            if result.status == "needs_human" and result.question:
+                console.print(f"\n[yellow]Question:[/yellow] {result.question}")
+                if result.options:
+                    console.print(f"[yellow]Options:[/yellow] {', '.join(result.options)}")
+                if result.recommendation:
+                    console.print(
+                        f"[yellow]Recommendation:[/yellow] {result.recommendation}"
+                    )
+            elif result.status == "failed" and result.error:
+                console.print(f"\n[red]Error:[/red] {result.error}")
+    finally:
+        # Always stop container to prevent resource leaks
+        await container.stop()
 
 
 # Model aliases for the --model flag

@@ -70,8 +70,65 @@ class CodingAgentContainer:
     in the isolated coding agent container environment.
     """
 
-    container_name: str = "ktrdr-sandbox"
+    container_name: str = "ktrdr-coding-agent"
     workspace_path: str = "/workspace"
+    image_name: str = "ktrdr-coding-agent:latest"
+
+    async def start(self, code_folder: Path) -> None:
+        """Start the coding agent container with the code folder mounted.
+
+        Removes any existing container first, then starts a fresh container
+        with the specified code folder mounted at /workspace.
+
+        Args:
+            code_folder: Path to the code folder to mount as /workspace
+
+        Raises:
+            CodingAgentError: If docker commands fail
+        """
+        # Remove any existing container (ignore errors if it doesn't exist)
+        subprocess.run(
+            ["docker", "rm", "-f", self.container_name],
+            capture_output=True,
+            text=True,
+        )
+
+        # Ensure absolute path for Docker volume mount
+        absolute_path = code_folder.resolve()
+
+        # Start fresh container with volume mount
+        result = subprocess.run(
+            [
+                "docker",
+                "run",
+                "-d",
+                "--name",
+                self.container_name,
+                "-v",
+                f"{absolute_path}:/workspace",
+                "--add-host=host.docker.internal:host-gateway",
+                self.image_name,
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+        if result.returncode != 0:
+            raise CodingAgentError(f"Failed to start container: {result.stderr}")
+
+    async def stop(self) -> None:
+        """Stop and remove the coding agent container.
+
+        This is a best-effort cleanup operation. It does not raise exceptions
+        if the container doesn't exist or removal fails, since it's typically
+        called in finally blocks where we don't want to mask original errors.
+        """
+        subprocess.run(
+            ["docker", "rm", "-f", self.container_name],
+            capture_output=True,
+            text=True,
+        )
+        # Best-effort: don't raise on failure since this is cleanup code
 
     async def exec(self, command: str, timeout: int = 300) -> str:
         """Execute a command in the coding agent container.

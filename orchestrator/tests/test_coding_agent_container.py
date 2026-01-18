@@ -6,6 +6,7 @@ These tests verify coding agent container interaction via mocked subprocess call
 import json
 import subprocess
 from dataclasses import is_dataclass
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -25,8 +26,9 @@ class TestCodingAgentContainerStructure:
         from orchestrator.coding_agent_container import CodingAgentContainer
 
         manager = CodingAgentContainer()
-        assert manager.container_name == "ktrdr-sandbox"
+        assert manager.container_name == "ktrdr-coding-agent"
         assert manager.workspace_path == "/workspace"
+        assert manager.image_name == "ktrdr-coding-agent:latest"
 
 
 class TestCodingAgentContainerExec:
@@ -52,7 +54,7 @@ class TestCodingAgentContainerExec:
             call_args = mock_run.call_args
             assert "docker" in call_args[0][0]
             assert "exec" in call_args[0][0]
-            assert "ktrdr-sandbox" in call_args[0][0]
+            assert "ktrdr-coding-agent" in call_args[0][0]
             assert result == "hello world\n"
 
     @pytest.mark.asyncio
@@ -597,3 +599,206 @@ class TestFormatToolCall:
         result = format_tool_call("UnknownTool", {"some": "param"})
         assert "UnknownTool" in result
         assert "→" in result
+
+
+class TestCodingAgentContainerLifecycle:
+    """Tests for container start() and stop() lifecycle methods."""
+
+    @pytest.mark.asyncio
+    async def test_start_runs_docker_with_volume_mount(self):
+        """start() should run docker with -v flag for volume mount."""
+        from orchestrator.coding_agent_container import CodingAgentContainer
+
+        container = CodingAgentContainer()
+        code_folder = Path("/home/user/myproject")
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+            await container.start(code_folder)
+
+            # Should have called docker rm first, then docker run
+            assert mock_run.call_count == 2
+
+            # Second call should be docker run with volume mount
+            run_call = mock_run.call_args_list[1]
+            cmd = run_call[0][0]
+            assert "docker" in cmd
+            assert "run" in cmd
+            assert "-v" in cmd
+            # Check volume mount format: /path:/workspace
+            volume_idx = cmd.index("-v")
+            volume_arg = cmd[volume_idx + 1]
+            assert str(code_folder) in volume_arg
+            assert ":/workspace" in volume_arg
+
+    @pytest.mark.asyncio
+    async def test_start_includes_host_gateway(self):
+        """start() should include --add-host=host.docker.internal:host-gateway."""
+        from orchestrator.coding_agent_container import CodingAgentContainer
+
+        container = CodingAgentContainer()
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+            await container.start(Path("/home/user/myproject"))
+
+            # Check docker run call
+            run_call = mock_run.call_args_list[1]
+            cmd = run_call[0][0]
+            assert "--add-host=host.docker.internal:host-gateway" in cmd
+
+    @pytest.mark.asyncio
+    async def test_start_removes_existing_container_first(self):
+        """start() should run docker rm -f before docker run."""
+        from orchestrator.coding_agent_container import CodingAgentContainer
+
+        container = CodingAgentContainer()
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+            await container.start(Path("/home/user/myproject"))
+
+            # First call should be docker rm -f
+            rm_call = mock_run.call_args_list[0]
+            cmd = rm_call[0][0]
+            assert "docker" in cmd
+            assert "rm" in cmd
+            assert "-f" in cmd
+            assert "ktrdr-coding-agent" in cmd
+
+    @pytest.mark.asyncio
+    async def test_start_raises_on_failure(self):
+        """start() should raise CodingAgentError on docker failure."""
+        from orchestrator.coding_agent_container import (
+            CodingAgentContainer,
+            CodingAgentError,
+        )
+
+        container = CodingAgentContainer()
+
+        with patch("subprocess.run") as mock_run:
+            # rm succeeds, run fails
+            mock_run.side_effect = [
+                MagicMock(returncode=0, stdout="", stderr=""),  # rm
+                MagicMock(returncode=1, stdout="", stderr="image not found"),  # run
+            ]
+
+            with pytest.raises(CodingAgentError) as exc_info:
+                await container.start(Path("/home/user/myproject"))
+
+            assert "image not found" in str(exc_info.value) or "docker" in str(
+                exc_info.value
+            ).lower()
+
+    @pytest.mark.asyncio
+    async def test_stop_removes_container(self):
+        """stop() should run docker rm -f."""
+        from orchestrator.coding_agent_container import CodingAgentContainer
+
+        container = CodingAgentContainer()
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+            await container.stop()
+
+            mock_run.assert_called_once()
+            cmd = mock_run.call_args[0][0]
+            assert "docker" in cmd
+            assert "rm" in cmd
+            assert "-f" in cmd
+            assert "ktrdr-coding-agent" in cmd
+
+    @pytest.mark.asyncio
+    async def test_stop_is_best_effort_on_failure(self):
+        """stop() should not raise when container doesn't exist (best-effort cleanup)."""
+        from orchestrator.coding_agent_container import CodingAgentContainer
+
+        container = CodingAgentContainer()
+
+        with patch("subprocess.run") as mock_run:
+            # Simulate container not existing
+            mock_run.return_value = MagicMock(
+                returncode=1, stdout="", stderr="No such container"
+            )
+
+            # Should not raise - best-effort cleanup
+            await container.stop()
+
+            # Should still have attempted removal
+            mock_run.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_start_resolves_to_absolute_path(self):
+        """start() should resolve code_folder to absolute path for Docker."""
+        from orchestrator.coding_agent_container import CodingAgentContainer
+
+        container = CodingAgentContainer()
+        relative_path = Path("relative/path")
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+            await container.start(relative_path)
+
+            # docker run call should use absolute path
+            run_call = mock_run.call_args_list[1]
+            cmd = run_call[0][0]
+            volume_idx = cmd.index("-v")
+            volume_arg = cmd[volume_idx + 1]
+            # Should be absolute (starts with /)
+            assert volume_arg.startswith("/"), f"Expected absolute path, got: {volume_arg}"
+
+    @pytest.mark.asyncio
+    async def test_start_uses_image_name(self):
+        """start() should use the image_name attribute."""
+        from orchestrator.coding_agent_container import CodingAgentContainer
+
+        container = CodingAgentContainer(image_name="custom-image:v1")
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+            await container.start(Path("/home/user/myproject"))
+
+            # docker run call should use the custom image
+            run_call = mock_run.call_args_list[1]
+            cmd = run_call[0][0]
+            assert "custom-image:v1" in cmd
+
+    @pytest.mark.asyncio
+    async def test_start_uses_detached_mode(self):
+        """start() should use -d flag for detached mode."""
+        from orchestrator.coding_agent_container import CodingAgentContainer
+
+        container = CodingAgentContainer()
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+            await container.start(Path("/home/user/myproject"))
+
+            run_call = mock_run.call_args_list[1]
+            cmd = run_call[0][0]
+            assert "-d" in cmd
+
+    @pytest.mark.asyncio
+    async def test_start_uses_container_name(self):
+        """start() should use --name flag with container_name."""
+        from orchestrator.coding_agent_container import CodingAgentContainer
+
+        container = CodingAgentContainer(container_name="my-test-container")
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+            await container.start(Path("/home/user/myproject"))
+
+            run_call = mock_run.call_args_list[1]
+            cmd = run_call[0][0]
+            assert "--name" in cmd
+            name_idx = cmd.index("--name")
+            assert cmd[name_idx + 1] == "my-test-container"

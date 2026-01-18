@@ -13,6 +13,18 @@ from click.testing import CliRunner
 from orchestrator.models import TaskResult
 
 
+def create_mock_container_class():
+    """Create a mock CodingAgentContainer class with async start/stop.
+
+    Use this in tests to properly mock the container lifecycle methods.
+    """
+    mock_container = MagicMock()
+    mock_container.start = AsyncMock()
+    mock_container.stop = AsyncMock()
+    mock_class = MagicMock(return_value=mock_container)
+    return mock_class
+
+
 def make_task_result(
     task_id: str = "2.1",
     status: str = "completed",
@@ -100,7 +112,7 @@ class TestTaskCommandExecution:
             f.write(content)
             f.flush()
 
-            with patch("orchestrator.cli.validate_environment"):
+            with patch("orchestrator.cli.validate_environment", return_value=Path("/test")):
                 with patch("orchestrator.cli.setup_telemetry") as mock_telemetry:
                     mock_telemetry.return_value = (MagicMock(), MagicMock())
                     with patch("orchestrator.cli.create_metrics"):
@@ -130,7 +142,7 @@ class TestTaskCommandExecution:
             f.write(content)
             f.flush()
 
-            with patch("orchestrator.cli.validate_environment"):
+            with patch("orchestrator.cli.validate_environment", return_value=Path("/test")):
                 with patch("orchestrator.cli.setup_telemetry") as mock_telemetry:
                     mock_tracer = MagicMock()
                     mock_span = MagicMock()
@@ -149,7 +161,7 @@ class TestTaskCommandExecution:
                         ) as mock_run:
                             mock_run.return_value = make_task_result()
 
-                            with patch("orchestrator.cli.CodingAgentContainer"):
+                            with patch("orchestrator.cli.CodingAgentContainer", create_mock_container_class()):
                                 with patch("orchestrator.cli.telemetry") as mock_tel:
                                     mock_tel.tasks_counter = MagicMock()
                                     mock_tel.tokens_counter = MagicMock()
@@ -180,7 +192,7 @@ class TestTaskCommandExecution:
             f.write(content)
             f.flush()
 
-            with patch("orchestrator.cli.validate_environment"):
+            with patch("orchestrator.cli.validate_environment", return_value=Path("/test")):
                 with patch("orchestrator.cli.setup_telemetry") as mock_telemetry:
                     mock_tracer = MagicMock()
                     mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
@@ -203,7 +215,7 @@ class TestTaskCommandExecution:
                                 cost=0.02,
                             )
 
-                            with patch("orchestrator.cli.CodingAgentContainer"):
+                            with patch("orchestrator.cli.CodingAgentContainer", create_mock_container_class()):
                                 with patch("orchestrator.cli.telemetry") as mock_tel:
                                     mock_tel.tasks_counter = MagicMock()
                                     mock_tel.tokens_counter = MagicMock()
@@ -239,7 +251,7 @@ class TestTaskCommandTelemetry:
             f.write(content)
             f.flush()
 
-            with patch("orchestrator.cli.validate_environment"):
+            with patch("orchestrator.cli.validate_environment", return_value=Path("/test")):
                 with patch("orchestrator.cli.setup_telemetry") as mock_telemetry:
                     mock_telemetry.return_value = (MagicMock(), MagicMock())
 
@@ -250,7 +262,7 @@ class TestTaskCommandTelemetry:
                         ) as mock_run:
                             mock_run.return_value = make_task_result()
 
-                            with patch("orchestrator.cli.CodingAgentContainer"):
+                            with patch("orchestrator.cli.CodingAgentContainer", create_mock_container_class()):
                                 runner.invoke(cli, ["task", f.name, "2.1"])
 
         mock_telemetry.assert_called_once()
@@ -278,7 +290,7 @@ class TestTaskCommandTelemetry:
 
             mock_span = MagicMock()
 
-            with patch("orchestrator.cli.validate_environment"):
+            with patch("orchestrator.cli.validate_environment", return_value=Path("/test")):
                 with patch("orchestrator.cli.setup_telemetry") as mock_telemetry:
                     mock_tracer = MagicMock()
                     mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
@@ -296,7 +308,7 @@ class TestTaskCommandTelemetry:
                         ) as mock_run:
                             mock_run.return_value = make_task_result()
 
-                            with patch("orchestrator.cli.CodingAgentContainer"):
+                            with patch("orchestrator.cli.CodingAgentContainer", create_mock_container_class()):
                                 with patch("orchestrator.cli.telemetry") as mock_tel:
                                     mock_tel.tasks_counter = MagicMock()
                                     mock_tel.tokens_counter = MagicMock()
