@@ -12,7 +12,16 @@ CONTAINER_NAME="ktrdr-coding-agent"
 # Check if container is running
 if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     echo "ERROR: Container $CONTAINER_NAME is not running"
-    echo "       Run ./scripts/coding-agent-init.sh first"
+    echo ""
+    echo "The container is started by the orchestrator, or you can start it manually:"
+    echo ""
+    echo "  docker run -d --name ktrdr-coding-agent \\"
+    echo "    -v \$(pwd):/workspace \\"
+    echo "    --add-host=host.docker.internal:host-gateway \\"
+    echo "    ktrdr-coding-agent:latest"
+    echo ""
+    echo "If the image doesn't exist, build it first with:"
+    echo "  ./scripts/coding-agent-init.sh"
     exit 1
 fi
 
