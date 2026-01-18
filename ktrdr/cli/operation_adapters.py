@@ -224,9 +224,7 @@ class TrainingOperationAdapter(OperationAdapter):
         # Fetch detailed performance metrics
         try:
             # Get performance data from training endpoint
-            response = await http_client.get(
-                f"/trainings/{operation_id}/performance"
-            )
+            response = await http_client.get(f"/trainings/{operation_id}/performance")
             response.raise_for_status()
             perf_data = response.json()
 

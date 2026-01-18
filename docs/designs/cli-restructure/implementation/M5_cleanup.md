@@ -208,6 +208,8 @@ Update `pyproject.toml` entry point (if different):
 ktrdr = "ktrdr.cli.app:app"
 ```
 
+**IMPORTANT - Dual Registration Debt:** Currently, M2/M3 commands are registered in BOTH `ktrdr/cli/__init__.py` AND `ktrdr/cli/app.py`. This violates DRY and is error-prone. This task MUST consolidate to `app.py` as the single source of truth. See HANDOFF_M3.md "Known Technical Debt" section for details.
+
 **Testing Requirements:**
 
 *Unit Tests:*

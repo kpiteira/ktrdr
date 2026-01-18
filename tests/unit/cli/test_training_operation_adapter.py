@@ -177,9 +177,7 @@ class TestTrainingOperationAdapter:
         await adapter.display_results(final_status, console, http_client)
 
         # Verify HTTP request was made
-        http_client.get.assert_called_once_with(
-            "/trainings/training-123/performance"
-        )
+        http_client.get.assert_called_once_with("/trainings/training-123/performance")
 
         # Verify console.print was called (at least for success message and table)
         assert console.print.call_count >= 2

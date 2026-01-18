@@ -434,6 +434,72 @@ class TestM2CommandsRegistration:
         assert "--follow" in result.output or "-f" in result.output
 
 
+class TestM3CommandsRegistration:
+    """Tests for all M3 commands registration in app.
+
+    M3 commands: list (strategies/models/checkpoints), show (data/features),
+    validate, migrate
+    """
+
+    def test_all_m3_commands_registered(self, runner) -> None:
+        """All M3 commands appear in --help output."""
+        from ktrdr.cli.app import app
+
+        result = runner.invoke(app, ["--help"])
+
+        assert result.exit_code == 0
+        help_lower = result.output.lower()
+        # All M3 commands should be listed
+        assert "list" in help_lower
+        assert "show" in help_lower
+        assert "validate" in help_lower
+        assert "migrate" in help_lower
+
+    def test_list_subcommands_registered(self, runner) -> None:
+        """List command has strategies, models, checkpoints subcommands."""
+        from ktrdr.cli.app import app
+
+        result = runner.invoke(app, ["list", "--help"])
+
+        assert result.exit_code == 0
+        help_lower = result.output.lower()
+        assert "strategies" in help_lower
+        assert "models" in help_lower
+        assert "checkpoints" in help_lower
+
+    def test_show_subcommands_registered(self, runner) -> None:
+        """Show command has data and features subcommands."""
+        from ktrdr.cli.app import app
+
+        result = runner.invoke(app, ["show", "--help"])
+
+        assert result.exit_code == 0
+        help_lower = result.output.lower()
+        assert "data" in help_lower
+        assert "features" in help_lower
+
+    def test_validate_command_help(self, runner) -> None:
+        """Validate command has its own help text."""
+        from ktrdr.cli.app import app
+
+        result = runner.invoke(app, ["validate", "--help"])
+
+        assert result.exit_code == 0
+        # Validate takes a target argument (name or path)
+        assert "target" in result.output.lower() or "name" in result.output.lower()
+
+    def test_migrate_command_help(self, runner) -> None:
+        """Migrate command has its own help text."""
+        from ktrdr.cli.app import app
+
+        result = runner.invoke(app, ["migrate", "--help"])
+
+        assert result.exit_code == 0
+        # Migrate takes a path argument and has output option
+        assert "path" in result.output.lower()
+        assert "--output" in result.output or "-o" in result.output
+
+
 class TestAppUrlNormalization:
     """Tests for URL normalization behavior."""
 

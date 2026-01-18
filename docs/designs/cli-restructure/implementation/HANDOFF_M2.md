@@ -4,6 +4,12 @@ Running notes for M2 CLI restructure implementation.
 
 ---
 
+## ⚠️ Known Technical Debt
+
+**Dual Command Registration:** Commands are registered in both `ktrdr/cli/__init__.py` and `ktrdr/cli/app.py`. See HANDOFF_M3.md "Known Technical Debt" section for details. This will be resolved in M5 Task 5.3.
+
+---
+
 ## ⚠️ CRITICAL: Do NOT Reimplement From Scratch
 
 **Before writing any new command, READ the existing working code first:**

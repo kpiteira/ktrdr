@@ -46,6 +46,7 @@ All errors return JSON with this structure:
     }
 """
 
+import os
 from pathlib import Path
 from typing import Any, Optional
 
@@ -59,6 +60,46 @@ from ktrdr.indicators.indicator_factory import BUILT_IN_INDICATORS
 from ktrdr.training.model_storage import ModelStorage
 
 logger = get_logger(__name__)
+
+# Base directory for strategy files (resolved to absolute path)
+STRATEGIES_DIR = os.path.abspath("strategies")
+
+
+def _safe_strategy_path(strategy_name: str) -> str:
+    """Safely resolve a strategy file path, preventing path traversal attacks.
+
+    Uses os.path.abspath() normalization combined with startswith() prefix check,
+    which is the sanitization pattern recognized by CodeQL for path injection.
+
+    Args:
+        strategy_name: The strategy name (without .yaml extension)
+
+    Returns:
+        Absolute path string to the strategy file
+
+    Raises:
+        HTTPException: If the path would escape the strategies directory
+    """
+    if not strategy_name:
+        raise HTTPException(
+            status_code=400,
+            detail="Strategy name cannot be empty",
+        )
+
+    # Normalize the path using os.path.abspath (CodeQL-recognized sanitizer)
+    strategy_file = os.path.abspath(
+        os.path.join(STRATEGIES_DIR, f"{strategy_name}.yaml")
+    )
+
+    # Verify path stays within STRATEGIES_DIR (CodeQL-recognized guard)
+    if not strategy_file.startswith(STRATEGIES_DIR + os.sep):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid strategy name: '{strategy_name}'",
+        )
+
+    return strategy_file
+
 
 # Create router for strategies endpoints
 router = APIRouter(prefix="/strategies")
@@ -115,6 +156,26 @@ class StrategyValidationResponse(BaseModel):
     issues: list[ValidationIssue]
     available_indicators: list[str]
     message: str
+
+
+class FeatureInfo(BaseModel):
+    """Information about a resolved NN input feature."""
+
+    feature_id: str
+    timeframe: str
+    fuzzy_set: str
+    membership: str
+    indicator_id: str
+    indicator_output: Optional[str] = None
+
+
+class StrategyFeaturesResponse(BaseModel):
+    """Response model for strategy features."""
+
+    success: bool = True
+    strategy_name: str
+    features: list[FeatureInfo]
+    count: int
 
 
 @router.get("/", response_model=StrategiesResponse)
@@ -640,9 +701,9 @@ async def validate_strategy(strategy_name: str) -> StrategyValidationResponse:
         Validation response with issues found and available indicators
     """
     try:
-        # Load strategy file
-        strategy_file = Path(f"strategies/{strategy_name}.yaml")
-        if not strategy_file.exists():
+        # Load strategy file (with path traversal protection)
+        strategy_file = _safe_strategy_path(strategy_name)
+        if not os.path.exists(strategy_file):
             raise HTTPException(
                 status_code=404, detail=f"Strategy file not found: {strategy_name}.yaml"
             )
@@ -708,3 +769,73 @@ async def validate_strategy(strategy_name: str) -> StrategyValidationResponse:
             available_indicators=sorted(set(BUILT_IN_INDICATORS.keys())),
             message="Validation failed due to system error",
         )
+
+
+@router.get("/{strategy_name}/features", response_model=StrategyFeaturesResponse)
+async def get_strategy_features(strategy_name: str) -> StrategyFeaturesResponse:
+    """
+    Get resolved NN input features for a v3 strategy.
+
+    This endpoint loads a v3 strategy and resolves the nn_inputs specification
+    into concrete feature definitions. This is useful for understanding what
+    features will be generated from a strategy's fuzzy sets and indicators.
+
+    Args:
+        strategy_name: Name of the strategy file (without .yaml extension)
+
+    Returns:
+        List of resolved features with their identifiers and metadata
+    """
+    from ktrdr.config.feature_resolver import FeatureResolver
+    from ktrdr.config.strategy_loader import StrategyConfigurationLoader
+
+    try:
+        # Load strategy file (with path traversal protection)
+        strategy_file = _safe_strategy_path(strategy_name)
+        if not os.path.exists(strategy_file):
+            raise HTTPException(
+                status_code=404, detail=f"Strategy file not found: {strategy_name}.yaml"
+            )
+
+        # Load as v3 strategy
+        loader = StrategyConfigurationLoader()
+        try:
+            config = loader.load_v3_strategy(strategy_file)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Strategy '{strategy_name}' is not v3 format or invalid: {e}",
+            ) from e
+
+        # Resolve features
+        resolver = FeatureResolver()
+        resolved_features = resolver.resolve(config)
+
+        # Convert to response format
+        features = [
+            FeatureInfo(
+                feature_id=f.feature_id,
+                timeframe=f.timeframe,
+                fuzzy_set=f.fuzzy_set_id,
+                membership=f.membership_name,
+                indicator_id=f.indicator_id,
+                indicator_output=f.indicator_output,
+            )
+            for f in resolved_features
+        ]
+
+        return StrategyFeaturesResponse(
+            success=True,
+            strategy_name=strategy_name,
+            features=features,
+            count=len(features),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting features for strategy {strategy_name}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get strategy features: {str(e)}",
+        ) from e

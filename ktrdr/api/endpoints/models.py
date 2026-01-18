@@ -108,8 +108,8 @@ class ModelSummary(BaseModel):
 
     model_id: str
     model_name: str
-    symbol: str
-    timeframe: str
+    symbol: Optional[str] = None
+    timeframe: Optional[str] = None
     created_at: str
     training_accuracy: Optional[float] = None
     test_accuracy: Optional[float] = None
@@ -244,12 +244,12 @@ async def list_trained_models(
             summary = ModelSummary(
                 model_id=model["model_id"],
                 model_name=model["model_name"],
-                symbol=model["symbol"],
-                timeframe=model["timeframe"],
+                symbol=model.get("symbol"),
+                timeframe=model.get("timeframe"),
                 created_at=model["created_at"],
                 training_accuracy=model.get("training_accuracy"),
                 test_accuracy=model.get("test_accuracy"),
-                description=model["description"],
+                description=model.get("description", ""),
             )
             model_summaries.append(summary)
 
