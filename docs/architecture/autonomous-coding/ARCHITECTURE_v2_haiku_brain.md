@@ -395,7 +395,7 @@ Key flags:
 
 **Purpose:** Isolated execution environment for Claude Code
 
-**Configuration:** `SANDBOX_CONTAINER` config (default: `ktrdr-sandbox`)
+**Configuration:** `coding_agent_container` config (default: `ktrdr-coding-agent`)
 
 **Invocation:** `docker exec {container} claude --print "{prompt}" --model {model}`
 

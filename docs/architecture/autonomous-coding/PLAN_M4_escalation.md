@@ -421,7 +421,7 @@ Update task runner to detect needs_human and trigger escalation.
 ```python
 async def run_task_with_escalation(
     task: Task,
-    sandbox: SandboxManager,
+    sandbox: CodingAgentContainer,
     config: OrchestratorConfig,
     tracer: trace.Tracer,
     loop_detector: LoopDetector,

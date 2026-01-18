@@ -17,8 +17,8 @@ class OrchestratorConfig:
     variables using the from_env() factory method.
     """
 
-    # Sandbox settings
-    sandbox_container: str = "ktrdr-sandbox"
+    # Coding agent container settings
+    coding_agent_container: str = "ktrdr-coding-agent"
     workspace_path: str = "/workspace"
 
     # Claude Code settings

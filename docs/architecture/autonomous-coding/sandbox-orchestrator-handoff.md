@@ -121,13 +121,13 @@ The workspace is ephemeral - on reset, we blow it away and re-clone.
 **`sandbox-shell.sh`**
 ```bash
 # Drop into sandbox for manual work
-# docker exec -it ktrdr-sandbox /bin/bash
+# docker exec -it ktrdr-coding-agent /bin/bash
 ```
 
 **`sandbox-claude.sh`**
 ```bash
 # Run Claude Code in sandbox with a prompt
-# docker exec -it ktrdr-sandbox claude "$@"
+# docker exec -it ktrdr-coding-agent claude "$@"
 ```
 
 ### Docker Compose Addition
@@ -140,7 +140,7 @@ services:
     build:
       context: .
       dockerfile: docker/sandbox/Dockerfile
-    container_name: ktrdr-sandbox
+    container_name: ktrdr-coding-agent
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - sandbox-workspace:/workspace
