@@ -37,9 +37,7 @@ class TestListStrategiesCommand:
         app.add_typer(list_app)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.list_cmd.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -66,9 +64,7 @@ class TestListStrategiesCommand:
         app.add_typer(list_app)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.list_cmd.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -110,9 +106,7 @@ class TestListStrategiesCommand:
         app.add_typer(list_app)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.list_cmd.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -149,9 +143,7 @@ class TestListStrategiesCommand:
         app.add_typer(list_app)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.list_cmd.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -211,9 +203,7 @@ class TestListModelsCommand:
         app.add_typer(list_app)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.list_cmd.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -239,9 +229,7 @@ class TestListModelsCommand:
         app.add_typer(list_app)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.list_cmd.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -276,9 +264,7 @@ class TestListModelsCommand:
         app.add_typer(list_app)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.list_cmd.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -337,9 +323,7 @@ class TestListCheckpointsCommand:
         app.add_typer(list_app)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.list_cmd.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -365,9 +349,7 @@ class TestListCheckpointsCommand:
         app.add_typer(list_app)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.list_cmd.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -404,9 +386,7 @@ class TestListCheckpointsCommand:
         app.add_typer(list_app)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.list_cmd.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -447,9 +427,7 @@ class TestListCommandErrors:
         app.add_typer(list_app)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.list_cmd.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -473,9 +451,7 @@ class TestListCommandErrors:
         app.add_typer(list_app)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.list_cmd.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -499,9 +475,7 @@ class TestListCommandErrors:
         app.add_typer(list_app)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.list_cmd.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None

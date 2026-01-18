@@ -111,13 +111,13 @@ class TestBacktestCommandOptions:
 
         try:
             with patch(
-                "ktrdr.cli.commands.backtest.OperationRunner"
+                "ktrdr.cli.operation_runner.OperationRunner"
             ) as mock_runner_class:
                 mock_runner = MagicMock()
                 mock_runner_class.return_value = mock_runner
 
                 with patch(
-                    "ktrdr.cli.commands.backtest.BacktestingOperationAdapter"
+                    "ktrdr.cli.operation_adapters.BacktestingOperationAdapter"
                 ) as mock_adapter:
                     runner.invoke(
                         app,
@@ -155,7 +155,7 @@ class TestBacktestCommandRunner:
             runner = CliRunner()
 
             with patch(
-                "ktrdr.cli.commands.backtest.OperationRunner"
+                "ktrdr.cli.operation_runner.OperationRunner"
             ) as mock_runner_class:
                 mock_runner = MagicMock()
                 mock_runner_class.return_value = mock_runner
@@ -190,7 +190,7 @@ class TestBacktestCommandRunner:
             runner = CliRunner()
 
             with patch(
-                "ktrdr.cli.commands.backtest.OperationRunner"
+                "ktrdr.cli.operation_runner.OperationRunner"
             ) as mock_runner_class:
                 mock_runner = MagicMock()
                 mock_runner_class.return_value = mock_runner
@@ -226,7 +226,7 @@ class TestBacktestCommandRunner:
             runner = CliRunner()
 
             with patch(
-                "ktrdr.cli.commands.backtest.OperationRunner"
+                "ktrdr.cli.operation_runner.OperationRunner"
             ) as mock_runner_class:
                 mock_runner = MagicMock()
                 mock_runner_class.return_value = mock_runner
@@ -262,13 +262,13 @@ class TestBacktestCommandRunner:
             runner = CliRunner()
 
             with patch(
-                "ktrdr.cli.commands.backtest.OperationRunner"
+                "ktrdr.cli.operation_runner.OperationRunner"
             ) as mock_runner_class:
                 mock_runner = MagicMock()
                 mock_runner_class.return_value = mock_runner
 
                 with patch(
-                    "ktrdr.cli.commands.backtest.BacktestingOperationAdapter"
+                    "ktrdr.cli.operation_adapters.BacktestingOperationAdapter"
                 ) as mock_adapter_class:
                     runner.invoke(
                         app,
@@ -310,7 +310,7 @@ class TestBacktestCommandState:
             runner = CliRunner()
 
             with patch(
-                "ktrdr.cli.commands.backtest.OperationRunner"
+                "ktrdr.cli.operation_runner.OperationRunner"
             ) as mock_runner_class:
                 mock_runner = MagicMock()
                 mock_runner_class.return_value = mock_runner
@@ -347,7 +347,7 @@ class TestBacktestCommandState:
             runner = CliRunner()
 
             with patch(
-                "ktrdr.cli.commands.backtest.OperationRunner"
+                "ktrdr.cli.operation_runner.OperationRunner"
             ) as mock_runner_class:
                 mock_runner = MagicMock()
                 mock_runner_class.return_value = mock_runner
@@ -389,7 +389,7 @@ class TestBacktestCommandErrors:
             runner = CliRunner()
 
             with patch(
-                "ktrdr.cli.commands.backtest.OperationRunner"
+                "ktrdr.cli.operation_runner.OperationRunner"
             ) as mock_runner_class:
                 mock_runner = MagicMock()
                 mock_runner.start.side_effect = Exception("Connection failed")
@@ -422,7 +422,7 @@ class TestBacktestCommandErrors:
 
         try:
             with patch(
-                "ktrdr.cli.commands.backtest.OperationRunner"
+                "ktrdr.cli.operation_runner.OperationRunner"
             ) as mock_runner_class:
                 mock_runner = MagicMock()
                 mock_runner.start.side_effect = Exception("API unreachable")

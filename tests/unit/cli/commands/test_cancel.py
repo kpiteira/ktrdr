@@ -44,7 +44,7 @@ class TestCancelCommandArguments:
         app.command()(cancel)
 
         try:
-            with patch("ktrdr.cli.commands.cancel.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -75,7 +75,7 @@ class TestCancelOperation:
         app.command()(cancel)
 
         try:
-            with patch("ktrdr.cli.commands.cancel.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -105,7 +105,7 @@ class TestCancelOperation:
         app.command()(cancel)
 
         try:
-            with patch("ktrdr.cli.commands.cancel.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -143,7 +143,7 @@ class TestCancelOptions:
         app.command()(cancel)
 
         try:
-            with patch("ktrdr.cli.commands.cancel.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -176,7 +176,7 @@ class TestCancelOptions:
         app.command()(cancel)
 
         try:
-            with patch("ktrdr.cli.commands.cancel.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -204,7 +204,7 @@ class TestCancelOptions:
         app.command()(cancel)
 
         try:
-            with patch("ktrdr.cli.commands.cancel.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -232,7 +232,7 @@ class TestCancelOptions:
         app.command()(cancel)
 
         try:
-            with patch("ktrdr.cli.commands.cancel.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -264,7 +264,7 @@ class TestCancelJsonOutput:
         app.command()(cancel)
 
         try:
-            with patch("ktrdr.cli.commands.cancel.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -303,7 +303,7 @@ class TestCancelErrorHandling:
         app.command()(cancel)
 
         try:
-            with patch("ktrdr.cli.commands.cancel.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -337,7 +337,7 @@ class TestCancelErrorHandling:
         app.command()(cancel)
 
         try:
-            with patch("ktrdr.cli.commands.cancel.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -366,7 +366,7 @@ class TestCancelErrorHandling:
         app.command()(cancel)
 
         try:
-            with patch("ktrdr.cli.commands.cancel.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None

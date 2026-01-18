@@ -47,7 +47,7 @@ class TestResumeCommandArguments:
         app.command()(resume)
 
         try:
-            with patch("ktrdr.cli.commands.resume.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -82,7 +82,7 @@ class TestResumeOperation:
         app.command()(resume)
 
         try:
-            with patch("ktrdr.cli.commands.resume.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -116,7 +116,7 @@ class TestResumeOperation:
         app.command()(resume)
 
         try:
-            with patch("ktrdr.cli.commands.resume.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -156,7 +156,7 @@ class TestResumeFollowOption:
         app.command()(resume)
 
         try:
-            with patch("ktrdr.cli.commands.resume.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -211,7 +211,7 @@ class TestResumeFollowOption:
         app.command()(resume)
 
         try:
-            with patch("ktrdr.cli.commands.resume.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -263,7 +263,7 @@ class TestResumeJsonOutput:
         app.command()(resume)
 
         try:
-            with patch("ktrdr.cli.commands.resume.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -303,7 +303,7 @@ class TestResumeErrorHandling:
         app.command()(resume)
 
         try:
-            with patch("ktrdr.cli.commands.resume.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -331,7 +331,7 @@ class TestResumeErrorHandling:
         app.command()(resume)
 
         try:
-            with patch("ktrdr.cli.commands.resume.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -359,7 +359,7 @@ class TestResumeErrorHandling:
         app.command()(resume)
 
         try:
-            with patch("ktrdr.cli.commands.resume.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -387,7 +387,7 @@ class TestResumeErrorHandling:
         app.command()(resume)
 
         try:
-            with patch("ktrdr.cli.commands.resume.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None

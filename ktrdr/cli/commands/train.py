@@ -3,20 +3,16 @@
 Implements the `ktrdr train <strategy>` command that starts a training
 operation using the OperationRunner wrapper. Supports fire-and-forget
 (default) or follow mode with --follow flag.
+
+PERFORMANCE NOTE: Heavy imports (operation_runner, operation_adapters) are
+deferred inside the function body to keep CLI startup fast.
 """
 
 from typing import Optional
 
 import typer
-from rich.console import Console
 
-from ktrdr.cli.operation_adapters import TrainingOperationAdapter
-from ktrdr.cli.operation_runner import OperationRunner
-from ktrdr.cli.output import print_error
-from ktrdr.cli.state import CLIState
 from ktrdr.cli.telemetry import trace_cli_command
-
-console = Console()
 
 
 def _parse_csv_list(value: Optional[str]) -> Optional[list[str]]:
@@ -102,7 +98,16 @@ def train(
 
         ktrdr --json train momentum --start 2024-01-01 --end 2024-06-01
     """
+    # Lazy imports for fast CLI startup
+    from rich.console import Console
+
+    from ktrdr.cli.operation_adapters import TrainingOperationAdapter
+    from ktrdr.cli.operation_runner import OperationRunner
+    from ktrdr.cli.output import print_error
+    from ktrdr.cli.state import CLIState
+
     state: CLIState = ctx.obj
+    console = Console()
 
     # Parse optional symbol/timeframe overrides
     symbols_list = _parse_csv_list(symbols)
@@ -110,22 +115,22 @@ def train(
 
     # Handle dry run - show what would happen without executing
     if dry_run:
-        console.print("🔍 [yellow]DRY RUN - No model will be trained[/yellow]")
-        console.print(f"📋 Strategy: {strategy}")
-        console.print(f"📅 Period: {start_date} to {end_date}")
+        console.print("[yellow]DRY RUN - No model will be trained[/yellow]")
+        console.print(f"Strategy: {strategy}")
+        console.print(f"Period: {start_date} to {end_date}")
         if symbols_list:
-            console.print(f"📊 Symbols (override): {', '.join(symbols_list)}")
+            console.print(f"Symbols (override): {', '.join(symbols_list)}")
         else:
-            console.print("📊 Symbols: [dim](from strategy config)[/dim]")
+            console.print("Symbols: [dim](from strategy config)[/dim]")
         if timeframes_list:
-            console.print(f"⏰ Timeframes (override): {', '.join(timeframes_list)}")
+            console.print(f"Timeframes (override): {', '.join(timeframes_list)}")
         else:
-            console.print("⏰ Timeframes: [dim](from strategy config)[/dim]")
-        console.print(f"📊 Validation split: {validation_split}")
-        console.print(f"💾 Models directory: {models_dir}")
-        console.print(f"📂 Data mode: {data_mode}")
+            console.print("Timeframes: [dim](from strategy config)[/dim]")
+        console.print(f"Validation split: {validation_split}")
+        console.print(f"Models directory: {models_dir}")
+        console.print(f"Data mode: {data_mode}")
         if detailed_analytics:
-            console.print("📈 Detailed analytics: enabled")
+            console.print("Detailed analytics: enabled")
         return
 
     try:
@@ -133,8 +138,8 @@ def train(
 
         # Display training parameters
         if not state.json_mode:
-            console.print("🚀 [cyan]Starting model training...[/cyan]")
-            console.print("📋 Training parameters:")
+            console.print("[cyan]Starting model training...[/cyan]")
+            console.print("Training parameters:")
             console.print(f"   Strategy: {strategy}")
             console.print(f"   Period: {start_date} to {end_date}")
             if symbols_list:
@@ -147,9 +152,7 @@ def train(
                 console.print("   Timeframes: [dim](from strategy config)[/dim]")
             console.print(f"   Validation split: {validation_split}")
             if detailed_analytics:
-                console.print(
-                    "   Analytics: [green]✅ Detailed analytics enabled[/green]"
-                )
+                console.print("   Analytics: [green]Detailed analytics enabled[/green]")
             console.print()
 
         # Create training adapter with parameters

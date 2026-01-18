@@ -69,9 +69,7 @@ class TestValidateAPIMode:
         _register_validate_cmd(app)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.validate.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -100,9 +98,7 @@ class TestValidateAPIMode:
         _register_validate_cmd(app)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.validate.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -130,9 +126,7 @@ class TestValidateAPIMode:
         _register_validate_cmd(app)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.validate.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -170,9 +164,7 @@ class TestValidateAPIMode:
         _register_validate_cmd(app)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.validate.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -210,9 +202,7 @@ class TestValidateLocalMode:
             with patch("ktrdr.cli.commands.validate._validate_local") as mock_local:
                 mock_local.return_value = None  # No raise = success
 
-                with patch(
-                    "ktrdr.cli.commands.validate.AsyncCLIClient"
-                ) as mock_client_class:
+                with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                     mock_client = AsyncMock()
                     mock_client_class.return_value = mock_client
 
@@ -235,9 +225,7 @@ class TestValidateLocalMode:
             with patch("ktrdr.cli.commands.validate._validate_local") as mock_local:
                 mock_local.return_value = None  # Simulate success
 
-                with patch(
-                    "ktrdr.cli.commands.validate.AsyncCLIClient"
-                ) as mock_client_class:
+                with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                     mock_client = AsyncMock()
                     mock_client_class.return_value = mock_client
 
@@ -376,9 +364,7 @@ class TestValidateErrorHandling:
         _register_validate_cmd(app)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.validate.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -399,9 +385,7 @@ class TestValidateErrorHandling:
         _register_validate_cmd(app)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.validate.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None

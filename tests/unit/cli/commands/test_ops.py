@@ -21,7 +21,7 @@ class TestOpsCommandArguments:
         app.command()(ops)
 
         try:
-            with patch("ktrdr.cli.commands.ops.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -49,7 +49,7 @@ class TestOpsListing:
         app.command()(ops)
 
         try:
-            with patch("ktrdr.cli.commands.ops.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -77,7 +77,7 @@ class TestOpsListing:
         app.command()(ops)
 
         try:
-            with patch("ktrdr.cli.commands.ops.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -139,7 +139,7 @@ class TestOpsListing:
         app.command()(ops)
 
         try:
-            with patch("ktrdr.cli.commands.ops.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -165,7 +165,7 @@ class TestOpsListing:
         app.command()(ops)
 
         try:
-            with patch("ktrdr.cli.commands.ops.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -215,7 +215,7 @@ class TestOpsListing:
         app.command()(ops)
 
         try:
-            with patch("ktrdr.cli.commands.ops.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -261,7 +261,7 @@ class TestOpsJsonOutput:
         app.command()(ops)
 
         try:
-            with patch("ktrdr.cli.commands.ops.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -306,7 +306,7 @@ class TestOpsJsonOutput:
         app.command()(ops)
 
         try:
-            with patch("ktrdr.cli.commands.ops.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -332,7 +332,7 @@ class TestOpsJsonOutput:
         app.command()(ops)
 
         try:
-            with patch("ktrdr.cli.commands.ops.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -379,7 +379,7 @@ class TestOpsFiltering:
         app.command()(ops)
 
         try:
-            with patch("ktrdr.cli.commands.ops.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -406,7 +406,7 @@ class TestOpsFiltering:
         app.command()(ops)
 
         try:
-            with patch("ktrdr.cli.commands.ops.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -432,7 +432,7 @@ class TestOpsFiltering:
         app.command()(ops)
 
         try:
-            with patch("ktrdr.cli.commands.ops.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -458,7 +458,7 @@ class TestOpsFiltering:
         app.command()(ops)
 
         try:
-            with patch("ktrdr.cli.commands.ops.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -484,7 +484,7 @@ class TestOpsFiltering:
         app.command()(ops)
 
         try:
-            with patch("ktrdr.cli.commands.ops.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -534,7 +534,7 @@ class TestOpsFiltering:
         app.command()(ops)
 
         try:
-            with patch("ktrdr.cli.commands.ops.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -579,7 +579,7 @@ class TestOpsCheckpointErrors:
         app.command()(ops)
 
         try:
-            with patch("ktrdr.cli.commands.ops.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -625,7 +625,7 @@ class TestOpsErrors:
         app.command()(ops)
 
         try:
-            with patch("ktrdr.cli.commands.ops.AsyncCLIClient") as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None

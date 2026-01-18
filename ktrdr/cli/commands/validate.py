@@ -5,22 +5,19 @@ Implements the `ktrdr validate` command for validating strategies via API or loc
 Usage:
 - `ktrdr validate <name>` - Validate deployed strategy via API
 - `ktrdr validate ./path` - Validate local strategy file (paths starting with ./ or /)
+
+PERFORMANCE NOTE: Heavy imports are deferred inside the function body.
 """
 
-import asyncio
-import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import typer
-import yaml
-from rich.console import Console
 
-from ktrdr.cli.client import AsyncCLIClient
-from ktrdr.cli.output import print_error
-from ktrdr.cli.state import CLIState
+if TYPE_CHECKING:
+    from ktrdr.cli.state import CLIState
+
 from ktrdr.cli.telemetry import trace_cli_command
-
-console = Console()
 
 
 def _is_local_path(target: str) -> bool:
@@ -58,6 +55,14 @@ def validate_cmd(
         ktrdr validate ./my_strategy.yaml
         ktrdr validate /absolute/path/strategy.yaml
     """
+    # Lazy imports for fast CLI startup
+    import asyncio
+
+    import yaml
+
+    from ktrdr.cli.output import print_error
+    from ktrdr.cli.state import CLIState
+
     state: CLIState = ctx.obj
 
     try:
@@ -65,16 +70,21 @@ def validate_cmd(
             _validate_local(state, target)
         else:
             asyncio.run(_validate_api(state, target))
+    except yaml.YAMLError as e:
+        print_error(f"Invalid YAML: {e}", state)
+        raise typer.Exit(1) from None
     except Exception as e:
         print_error(str(e), state)
         raise typer.Exit(1) from None
 
 
-def _validate_local(state: CLIState, path: str) -> None:
+def _validate_local(state: "CLIState", path: str) -> None:
     """Validate a local strategy file.
 
     Detects v3 vs v2 format and uses appropriate validation.
     """
+    import yaml
+
     file_path = Path(path)
     if not file_path.exists():
         raise FileNotFoundError(f"File not found: {path}")
@@ -91,11 +101,18 @@ def _validate_local(state: CLIState, path: str) -> None:
         _validate_v2_local(state, file_path, raw_config)
 
 
-def _validate_v3_local(state: CLIState, file_path: Path, raw_config: dict) -> None:
+def _validate_v3_local(state: "CLIState", file_path: Path, raw_config: dict) -> None:
     """Validate a v3 strategy file locally."""
+    # Lazy imports for fast CLI startup
+    import json
+
+    from rich.console import Console
+
     from ktrdr.config.feature_resolver import FeatureResolver
     from ktrdr.config.strategy_loader import StrategyConfigurationLoader
     from ktrdr.config.strategy_validator import StrategyValidationError
+
+    console = Console()
 
     try:
         # Load and validate v3 strategy
@@ -141,9 +158,16 @@ def _validate_v3_local(state: CLIState, file_path: Path, raw_config: dict) -> No
         raise typer.Exit(1) from None
 
 
-def _validate_v2_local(state: CLIState, file_path: Path, raw_config: dict) -> None:
+def _validate_v2_local(state: "CLIState", file_path: Path, raw_config: dict) -> None:
     """Validate a v2 strategy file locally."""
+    # Lazy imports for fast CLI startup
+    import json
+
+    from rich.console import Console
+
     from ktrdr.config.strategy_validator import StrategyValidator
+
+    console = Console()
 
     validator = StrategyValidator()
     result = validator.validate_strategy(str(file_path))
@@ -181,8 +205,17 @@ def _validate_v2_local(state: CLIState, file_path: Path, raw_config: dict) -> No
             raise typer.Exit(1) from None
 
 
-async def _validate_api(state: CLIState, name: str) -> None:
+async def _validate_api(state: "CLIState", name: str) -> None:
     """Validate a deployed strategy via API."""
+    # Lazy imports for fast CLI startup
+    import json
+
+    from rich.console import Console
+
+    from ktrdr.cli.client import AsyncCLIClient
+
+    console = Console()
+
     async with AsyncCLIClient() as client:
         result = await client.post(f"/strategies/validate/{name}")
 

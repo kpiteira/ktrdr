@@ -92,9 +92,7 @@ class TestResearchCommandAPI:
         app.command()(research)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.research.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -124,9 +122,7 @@ class TestResearchCommandAPI:
         app.command()(research)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.research.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -155,9 +151,7 @@ class TestResearchCommandAPI:
         app.command()(research)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.research.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -186,9 +180,7 @@ class TestResearchCommandAPI:
         app.command()(research)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.research.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -221,9 +213,7 @@ class TestResearchCommandOutput:
         app.command()(research)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.research.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -251,9 +241,7 @@ class TestResearchCommandOutput:
         app.command()(research)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.research.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -265,7 +253,7 @@ class TestResearchCommandOutput:
 
                 # Without follow, should not enter monitoring
                 with patch(
-                    "ktrdr.cli.commands.research._monitor_agent_cycle"
+                    "ktrdr.cli.agent_commands._monitor_agent_cycle"
                 ) as mock_monitor:
                     result = runner.invoke(app, ["research", "test goal"])
 
@@ -290,9 +278,7 @@ class TestResearchCommandFollow:
         app.command()(research)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.research.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -303,7 +289,7 @@ class TestResearchCommandFollow:
                 mock_client_class.return_value = mock_client
 
                 with patch(
-                    "ktrdr.cli.commands.research._monitor_agent_cycle",
+                    "ktrdr.cli.agent_commands._monitor_agent_cycle",
                     new_callable=AsyncMock,
                 ) as mock_monitor:
                     runner.invoke(app, ["research", "test goal", "--follow"])
@@ -323,9 +309,7 @@ class TestResearchCommandFollow:
         app.command()(research)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.research.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -336,7 +320,7 @@ class TestResearchCommandFollow:
                 mock_client_class.return_value = mock_client
 
                 with patch(
-                    "ktrdr.cli.commands.research._monitor_agent_cycle",
+                    "ktrdr.cli.agent_commands._monitor_agent_cycle",
                     new_callable=AsyncMock,
                 ) as mock_monitor:
                     runner.invoke(app, ["research", "test goal", "-f"])
@@ -360,9 +344,7 @@ class TestResearchCommandErrors:
         app.command()(research)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.research.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None
@@ -394,9 +376,7 @@ class TestResearchCommandErrors:
         app.command()(research)
 
         try:
-            with patch(
-                "ktrdr.cli.commands.research.AsyncCLIClient"
-            ) as mock_client_class:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.__aenter__.return_value = mock_client
                 mock_client.__aexit__.return_value = None

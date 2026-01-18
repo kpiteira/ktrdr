@@ -5,20 +5,19 @@ Implements the `ktrdr migrate` command for migrating v2 strategies to v3 format.
 Usage:
 - `ktrdr migrate ./path.yaml` - Migrate a v2 strategy file to v3 format
 - `ktrdr migrate ./path.yaml -o ./output.yaml` - Specify output path
+
+PERFORMANCE NOTE: Heavy imports are deferred inside the function body.
 """
 
-import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import typer
-import yaml
-from rich.console import Console
 
-from ktrdr.cli.output import print_error
-from ktrdr.cli.state import CLIState
+if TYPE_CHECKING:
+    from ktrdr.cli.state import CLIState
+
 from ktrdr.cli.telemetry import trace_cli_command
-
-console = Console()
 
 
 def _is_v3_format(config: dict) -> bool:
@@ -52,6 +51,12 @@ def migrate_cmd(
         ktrdr migrate ./old_strategy.yaml
         ktrdr migrate ./old_strategy.yaml -o ./new_strategy.yaml
     """
+    # Lazy imports for fast CLI startup
+    import yaml
+
+    from ktrdr.cli.output import print_error
+    from ktrdr.cli.state import CLIState
+
     state: CLIState = ctx.obj
 
     try:
@@ -67,7 +72,7 @@ def migrate_cmd(
         raise typer.Exit(1) from None
 
 
-def _migrate_strategy(state: CLIState, path: str, output: str | None) -> None:
+def _migrate_strategy(state: "CLIState", path: str, output: str | None) -> None:
     """Migrate a v2 strategy file to v3 format.
 
     Args:
@@ -75,7 +80,15 @@ def _migrate_strategy(state: CLIState, path: str, output: str | None) -> None:
         path: Path to the v2 strategy file
         output: Optional output path (defaults to {name}_v3.yaml)
     """
+    # Lazy imports for fast CLI startup
+    import json
+
+    import yaml
+    from rich.console import Console
+
     from ktrdr.config.strategy_migration import migrate_v2_to_v3
+
+    console = Console()
 
     file_path = Path(path)
     if not file_path.exists():
