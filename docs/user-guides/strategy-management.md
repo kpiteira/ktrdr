@@ -6,50 +6,44 @@ The KTRDR CLI now includes integrated strategy management commands for validatin
 
 All strategy commands are part of the main `ktrdr` CLI:
 
-### 1. **List Strategies** 
+### 1. **List Strategies**
 ```bash
 # Basic listing
-ktrdr strategies list
+ktrdr list strategies
 
 # List with validation status
-ktrdr strategies list --validate
+ktrdr list strategies --validate
 
 # Detailed validation results
-ktrdr strategies list --validate --verbose
+ktrdr list strategies --validate --verbose
 
 # List from custom directory
-ktrdr strategies list -d my_strategies --validate
+ktrdr list strategies -d my_strategies --validate
 ```
 
 ### 2. **Validate Strategy**
 ```bash
 # Validate a specific strategy
-ktrdr strategies validate strategies/my_strategy.yaml
+ktrdr validate strategies/my_strategy.yaml
 
 # Quiet mode (minimal output)
-ktrdr strategies validate strategies/my_strategy.yaml --quiet
+ktrdr validate strategies/my_strategy.yaml --quiet
 ```
 
-### 3. **Upgrade Strategy**
+### 3. **Migrate Strategy (v2 to v3)**
 ```bash
-# Upgrade to new format (creates .upgraded.yaml file)
-ktrdr strategies upgrade strategies/old_strategy.yaml
+# Migrate to v3 format (creates backup)
+ktrdr migrate strategies/old_v2_strategy.yaml --backup
 
-# Upgrade in place (overwrites original - use with caution!)
-ktrdr strategies upgrade strategies/old_strategy.yaml --inplace
-
-# Specify custom output path
-ktrdr strategies upgrade strategies/old_strategy.yaml -o strategies/new_strategy.yaml
-
-# Quiet mode
-ktrdr strategies upgrade strategies/old_strategy.yaml --quiet
+# Preview migration without writing
+ktrdr migrate strategies/old_v2_strategy.yaml --dry-run
 ```
 
 ## 📊 Example Workflow
 
 ### Step 1: Check Current Strategies
 ```bash
-$ ktrdr strategies list --validate
+$ ktrdr list strategies --validate
 
 📂 Strategies in strategies:
 ============================================================
@@ -64,7 +58,7 @@ $ ktrdr strategies list --validate
 
 ### Step 2: Validate Specific Strategy
 ```bash
-$ ktrdr strategies validate strategies/mean_reversion_strategy.yaml
+$ ktrdr validate strategies/mean_reversion_strategy.yaml
 
 🔍 Validating strategy: strategies/mean_reversion_strategy.yaml
 ============================================================
@@ -81,39 +75,27 @@ $ ktrdr strategies validate strategies/mean_reversion_strategy.yaml
   1. Detected old model format with input_size/output_size
   2. Legacy fuzzy set format detected...
 
-💡 Run 'ktrdr strategies upgrade' to automatically fix issues
+💡 Run 'ktrdr migrate' to automatically fix issues
 ```
 
-### Step 3: Upgrade the Strategy
+### Step 3: Migrate the Strategy
 ```bash
-$ ktrdr strategies upgrade strategies/mean_reversion_strategy.yaml
+$ ktrdr migrate strategies/mean_reversion_strategy.yaml --backup
 
-🔧 Upgrading strategy: strategies/mean_reversion_strategy.yaml
-📁 Output path: strategies/mean_reversion_strategy.upgraded.yaml
+🔧 Migrating strategy: strategies/mean_reversion_strategy.yaml
 ============================================================
-📊 Current validation status:
-  🚨 5 errors
-  ⚠️  19 warnings
-  📋 5 missing sections
+✅ Strategy migration completed!
 
-✅ Strategy upgrade completed!
-💾 Upgraded configuration saved to: strategies/mean_reversion_strategy.upgraded.yaml
+🔍 Validating migrated strategy...
+✅ Migrated strategy is valid!
 
-🔍 Validating upgraded strategy...
-✅ Upgraded strategy is valid!
-
-============================================================
-🚀 Your strategy is now ready for neuro-fuzzy training!
-💡 Use: uv run ktrdr models train strategies/mean_reversion_strategy.upgraded.yaml SYMBOL TIMEFRAME
+🚀 Your strategy is now ready for training!
 ```
 
-### Step 4: Train with Upgraded Strategy
+### Step 4: Train with Migrated Strategy
 ```bash
-# Now you can use the upgraded strategy for training
-uv run ktrdr models train \
-  strategies/mean_reversion_strategy.upgraded.yaml \
-  AAPL \
-  1h \
+# Now you can use the migrated strategy for training
+ktrdr train strategies/mean_reversion_strategy.yaml \
   --start-date 2024-01-01 \
   --end-date 2024-06-01
 ```
@@ -157,19 +139,19 @@ The upgrade process adds these missing sections with sensible defaults:
 
 ## ✅ Best Practices
 
-1. **Always validate before training**: Run `strategy-validate` to ensure your strategy is properly configured
+1. **Always validate before training**: Run `ktrdr validate` to ensure your strategy is properly configured
 
-2. **Keep original files**: Use the default behavior (creates `.upgraded.yaml`) instead of `--inplace` to preserve originals
+2. **Keep original files**: Use the `--backup` flag with migration to preserve originals
 
-3. **Review upgraded files**: Check the upgraded YAML to ensure the defaults make sense for your strategy
+3. **Review migrated files**: Check the migrated YAML to ensure the defaults make sense for your strategy
 
-4. **Test incrementally**: After upgrading, run a small training test before full-scale training
+4. **Test incrementally**: After migrating, run a small training test before full-scale training
 
 ## 🚨 Common Issues
 
 - **"Strategy file not found"**: Ensure the path is correct and file exists
-- **"Missing required section"**: Use `strategy-upgrade` to add missing sections
-- **"Legacy fuzzy set format"**: Old format will be automatically converted during upgrade
+- **"Missing required section"**: Use `ktrdr migrate` to add missing sections
+- **"Legacy fuzzy set format"**: Old format will be automatically converted during migration
 
 ## 🎯 Ready Strategies
 

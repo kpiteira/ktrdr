@@ -198,7 +198,7 @@ make quality          # Lint + format + typecheck
 # CLI
 ktrdr --help
 ktrdr data show AAPL 1d --start-date 2024-01-01
-ktrdr operations list
+ktrdr ops
 
 # Check workers
 curl http://localhost:8000/api/v1/workers | jq

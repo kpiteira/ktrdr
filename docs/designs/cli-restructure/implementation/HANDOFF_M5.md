@@ -136,11 +136,54 @@ These test the OLD commands and may break when old files are deleted:
 
 ---
 
-### Next Task Notes (Task 5.2)
+---
 
-For Task 5.2 (Update Documentation):
-1. Start with Priority 1 files (user-facing docs)
-2. Use the command mapping table above
-3. Run verification: `rg "ktrdr (models|strategies|agent|operations|backtest run)" --type-add 'docs:*.md' -t docs` should return only arch/design docs after updates
-4. Update Priority 2 skills files
-5. Update Priority 4 code files (user-facing strings)
+## Task 5.2 Complete: Update Documentation
+
+### What Was Updated
+
+**Priority 1 (User-facing docs):** 7 files
+- README.md
+- CLAUDE.md
+- docs/user-guides/cli-reference.md
+- docs/user-guides/strategy-management.md
+- docs/user-guides/checkpoint-resume.md
+- strategies/README.md
+
+**Priority 2 (Skills/prompts):** 3 files
+- .claude/skills/deployment/SKILL.md
+- .claude/skills/e2e-testing/tests/cli/operations-workflow.md
+- .claude/skills/e2e-testing/tests/cli/client-migration.md
+
+**Priority 4 (Code with user-facing strings):** 5 files
+- ktrdr/decision/orchestrator.py
+- ktrdr/cli/operation_runner.py
+- ktrdr/cli/operation_adapters.py
+- ktrdr/cli/checkpoints_commands.py
+- ktrdr/config/strategy_validator.py
+
+### Verification
+
+```bash
+# Verified no old commands remain in priority files:
+rg "ktrdr (models|strategies|agent|operations|backtest run)" README.md CLAUDE.md \
+  docs/user-guides/*.md strategies/README.md .claude/skills/**/*.md
+# Result: No matches found
+```
+
+### Skipped Files (By Design)
+
+- **docs/user-guides/deployment.md** — Only 1 reference, low priority
+- **docs/developer/testing-guide.md** — Only 2 references, low priority
+- **docs/strategy-grammar.md** — Only 1 reference, low priority
+- **docs/migration-strategy.md** — Custom commands not in new CLI (may be obsolete)
+- **Architecture/design docs** — Historical documentation, left as-is
+
+### Next Task Notes (Task 5.3)
+
+For Task 5.3 (Remove Old Command Files):
+1. Files to delete per the audit in Task 5.1 (Priority 3 section)
+2. Update `ktrdr/cli/__init__.py` to remove old imports
+3. Consolidate command registration to `app.py` only (fix dual registration debt)
+4. Run `make test-unit` after deletions to catch import errors
+5. Tests in Priority 6 will likely fail - may need deletion or updates

@@ -37,10 +37,10 @@ List cancelled or failed operations that have checkpoints:
 
 ```bash
 # List all cancelled operations
-ktrdr operations list --status cancelled
+ktrdr ops --status cancelled
 
 # Show operations with checkpoint info
-ktrdr operations list --resumable
+ktrdr ops --resumable
 ```
 
 Example output:
@@ -78,13 +78,13 @@ State:
 
 Artifacts: /app/data/checkpoints/op_training_20241213_143022_abc123
 
-To resume: ktrdr operations resume op_training_20241213_143022_abc123
+To resume: ktrdr resume op_training_20241213_143022_abc123
 ```
 
 ### Resume an Operation
 
 ```bash
-ktrdr operations resume op_training_20241213_143022_abc123
+ktrdr resume op_training_20241213_143022_abc123
 ```
 
 The operation will:
@@ -143,14 +143,14 @@ curl -X POST "http://localhost:8000/api/v1/checkpoints/cleanup?max_age_days=30"
 
 ```bash
 # Start training
-ktrdr models train strategies/neuro_mean_reversion.yaml AAPL 1h \
+ktrdr train strategies/neuro_mean_reversion.yaml \
   --start-date 2024-01-01 --end-date 2024-06-01 --epochs 100
 
 # ... training reaches epoch 45, user presses Ctrl+C ...
 # Checkpoint automatically saved
 
 # Later, resume from checkpoint
-ktrdr operations resume op_training_20241213_143022_abc123
+ktrdr resume op_training_20241213_143022_abc123
 # Continues from epoch 45
 ```
 
@@ -161,11 +161,11 @@ ktrdr operations resume op_training_20241213_143022_abc123
 # Backend detects failure, operation marked FAILED
 
 # Check status
-ktrdr operations status op_training_20241213_143022_abc123
+ktrdr status op_training_20241213_143022_abc123
 # Shows: FAILED, Checkpoint: epoch 60
 
 # Resume on another worker
-ktrdr operations resume op_training_20241213_143022_abc123
+ktrdr resume op_training_20241213_143022_abc123
 # Continues from epoch 60
 ```
 
@@ -177,7 +177,7 @@ ktrdr operations resume op_training_20241213_143022_abc123
 # Operation continues without interruption
 
 # Check status
-ktrdr operations status op_training_20241213_143022_abc123
+ktrdr status op_training_20241213_143022_abc123
 # Shows: RUNNING (operation continued automatically)
 ```
 
@@ -195,7 +195,7 @@ The operation doesn't have a saved checkpoint. This can happen if:
 Only CANCELLED or FAILED operations can be resumed. Check the operation status:
 
 ```bash
-ktrdr operations status op_training_20241213_143022_abc123
+ktrdr status op_training_20241213_143022_abc123
 ```
 
 ### "Checkpoint version mismatch"

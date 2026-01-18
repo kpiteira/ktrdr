@@ -243,13 +243,11 @@ ktrdr fuzzy compute AAPL 1d --config config/fuzzy/default.yaml
 ktrdr fuzzy visualize AAPL 1d --indicator rsi
 
 # Model training
-ktrdr models train --strategy config/strategies/example.yaml
-ktrdr models list
-ktrdr models test model_v1.0.0 --symbol AAPL
+ktrdr train config/strategies/example.yaml --start-date 2024-01-01 --end-date 2024-06-01
 
-# Strategy backtesting
-ktrdr strategies validate config/strategies/example.yaml
-ktrdr strategies backtest config/strategies/example.yaml --start-date 2024-01-01
+# Strategy validation and backtesting
+ktrdr validate config/strategies/example.yaml
+ktrdr backtest config/strategies/example.yaml --start-date 2024-01-01 --end-date 2024-06-01
 
 # Interactive Brokers
 ktrdr ib test-connection
@@ -257,9 +255,9 @@ ktrdr ib check-status
 ktrdr ib cleanup-connections
 
 # Operations management
-ktrdr operations list
-ktrdr operations status <operation-id>
-ktrdr operations cancel <operation-id>
+ktrdr ops
+ktrdr status <operation-id>
+ktrdr cancel <operation-id>
 
 # Gap analysis
 ktrdr gap-analysis analyze AAPL 1d --start-date 2024-01-01
