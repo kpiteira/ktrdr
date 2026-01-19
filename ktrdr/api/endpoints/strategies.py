@@ -343,342 +343,53 @@ def _validate_strategy_config(
     config: dict[str, Any], strategy_name: str
 ) -> list[ValidationIssue]:
     """
-    Validate a strategy configuration and return list of issues.
+    Validate a v3 strategy configuration and return list of issues.
 
     Args:
-        config: Strategy configuration dictionary
+        config: Strategy configuration dictionary (v3 format)
         strategy_name: Name of the strategy being validated
 
     Returns:
         List of validation issues found
     """
+    from ktrdr.config.strategy_validator import StrategyValidator
+
     issues = []
+    validator = StrategyValidator()
 
-    # Get name mapping for strategy indicators
-    name_mapping = {
-        # Common aliases to official names (both snake_case and camelCase variants)
-        "bollinger_bands": "BollingerBands",
-        "bbands": "BollingerBands",
-        "keltner_channels": "KeltnerChannels",
-        "keltnerchannels": "KeltnerChannels",
-        "momentum": "Momentum",
-        "volume_sma": "SMA",
-        "atr": "ATR",
-        "rsi": "RSI",
-        "sma": "SMA",
-        "ema": "EMA",
-        "macd": "MACD",
-        "stoch": "Stochastic",
-        "stochastic": "Stochastic",
-        "adx": "ADX",
-        "zigzag": "ZigZag",
-        "williams_r": "WilliamsR",
-        "williamsr": "WilliamsR",  # camelCase variant
-        "obv": "OBV",
-        "cci": "CCI",
-        "roc": "ROC",
-        "vwap": "VWAP",
-        "parabolic_sar": "ParabolicSAR",
-        "parabolicsar": "ParabolicSAR",  # camelCase variant
-        "psar": "ParabolicSAR",
-        "ichimoku": "Ichimoku",
-        "rvi": "RVI",
-        "mfi": "MFI",
-        "aroon": "Aroon",
-        "donchian_channels": "DonchianChannels",
-        "donchianchannels": "DonchianChannels",  # camelCase variant
-        "donchian": "DonchianChannels",
-        "ad_line": "ADLine",
-        "accumulation_distribution": "AccumulationDistribution",
-        "cmf": "CMF",
-        "chaikin_money_flow": "ChaikinMoneyFlow",
-        "supertrend": "SuperTrend",
-        "fisher_transform": "FisherTransform",
-        "fishertransform": "FisherTransform",  # camelCase variant
-        "bollinger_band_width": "BollingerBandWidth",
-        "bollingerbandwidth": "BollingerBandWidth",  # camelCase variant
-        "bb_width": "BollingerBandWidth",
-        "volume_ratio": "VolumeRatio",
-        "volumeratio": "VolumeRatio",  # camelCase variant
-        "squeeze_intensity": "SqueezeIntensity",
-        "distance_from_ma": "DistanceFromMA",
-        "distancefromma": "DistanceFromMA",  # camelCase variant
-    }
+    # Use the v3-only validator
+    result = validator.validate_strategy_config(config)
 
-    # 1. Check basic structure
-    required_sections = ["indicators", "fuzzy_sets"]
-    for section in required_sections:
-        if section not in config:
-            issues.append(
-                ValidationIssue(
-                    severity="error",
-                    category="structure",
-                    message=f"Missing required section: '{section}'",
-                    details={"section": section},
-                )
+    # Convert validation errors to ValidationIssue format
+    for error in result.errors:
+        # Determine category from error message
+        category = "structure"
+        if "indicator" in error.lower():
+            category = "indicators"
+        elif "fuzzy" in error.lower():
+            category = "fuzzy_sets"
+        elif "nn_input" in error.lower():
+            category = "nn_inputs"
+
+        issues.append(
+            ValidationIssue(
+                severity="error",
+                category=category,
+                message=error,
+                details=None,
             )
+        )
 
-    # 2. Validate indicators
-    if "indicators" in config:
-        indicator_configs = config["indicators"]
-        if not isinstance(indicator_configs, list):
-            issues.append(
-                ValidationIssue(
-                    severity="error",
-                    category="indicators",
-                    message="'indicators' section must be a list",
-                    details={"type": str(type(indicator_configs))},
-                )
+    # Convert warnings
+    for warning in result.warnings:
+        issues.append(
+            ValidationIssue(
+                severity="warning",
+                category="validation",
+                message=warning,
+                details=None,
             )
-        else:
-            strategy_indicators = []
-            missing_indicators = []
-
-            for idx, indicator_config in enumerate(indicator_configs):
-                if not isinstance(indicator_config, dict):
-                    issues.append(
-                        ValidationIssue(
-                            severity="error",
-                            category="indicators",
-                            message=f"Indicator at index {idx} must be a dictionary",
-                            details={"index": idx, "type": str(type(indicator_config))},
-                        )
-                    )
-                    continue
-
-                if "name" not in indicator_config:
-                    issues.append(
-                        ValidationIssue(
-                            severity="error",
-                            category="indicators",
-                            message=f"Indicator at index {idx} missing 'name' field",
-                            details={"index": idx},
-                        )
-                    )
-                    continue
-
-                indicator_name = indicator_config["name"]
-                strategy_indicators.append(indicator_name)
-
-                # Check if indicator exists in registry
-                mapped_name = name_mapping.get(indicator_name.lower())
-
-                if mapped_name is None:
-                    # Try the original name as-is (for PascalCase names like "BollingerBands")
-                    if indicator_name in BUILT_IN_INDICATORS:
-                        mapped_name = indicator_name
-                    else:
-                        # Fallback: convert snake_case to PascalCase
-                        mapped_name = "".join(
-                            word.capitalize() for word in indicator_name.split("_")
-                        )
-
-                if mapped_name not in BUILT_IN_INDICATORS:
-                    missing_indicators.append(indicator_name)
-
-            # Report missing indicators
-            if missing_indicators:
-                available_indicators = sorted(set(BUILT_IN_INDICATORS.keys()))
-                issues.append(
-                    ValidationIssue(
-                        severity="error",
-                        category="indicators",
-                        message=f"Missing indicators: {', '.join(missing_indicators)} referenced by the strategy. Available indicators are: {', '.join(available_indicators)}",
-                        details={
-                            "missing_indicators": missing_indicators,
-                            "available_indicators": available_indicators,
-                            "strategy_indicators": strategy_indicators,
-                        },
-                    )
-                )
-
-    # 3. Validate fuzzy sets
-    if "fuzzy_sets" in config and "indicators" in config:
-        fuzzy_configs = config["fuzzy_sets"]
-        indicator_configs = config["indicators"]
-
-        if not isinstance(fuzzy_configs, dict):
-            issues.append(
-                ValidationIssue(
-                    severity="error",
-                    category="fuzzy_sets",
-                    message="'fuzzy_sets' section must be a dictionary",
-                    details={"type": str(type(fuzzy_configs))},
-                )
-            )
-        else:
-            # Get list of indicator names, feature_ids, and expected derived metrics
-            # feature_id is the source of truth for fuzzy set keys
-            indicator_names = []
-            indicator_feature_ids = []
-            if isinstance(indicator_configs, list):
-                for indicator_config in indicator_configs:
-                    if isinstance(indicator_config, dict):
-                        if "name" in indicator_config:
-                            indicator_names.append(indicator_config["name"])
-                        if "feature_id" in indicator_config:
-                            indicator_feature_ids.append(indicator_config["feature_id"])
-
-            # Expected derived metrics from complex indicators
-            # Multi-output indicators produce additional columns beyond the primary feature_id
-            expected_derived = set()
-            for name in indicator_names:
-                if name == "bollinger_bands":
-                    expected_derived.add("bb_width")
-                elif name == "volume_sma":
-                    expected_derived.add("volume_ratio")
-                elif name in ["bollinger_bands", "keltner_channels"]:
-                    # Both needed for squeeze_intensity
-                    if (
-                        "bollinger_bands" in indicator_names
-                        and "keltner_channels" in indicator_names
-                    ):
-                        expected_derived.add("squeeze_intensity")
-                # ADX produces DI_Plus and DI_Minus as secondary outputs
-                elif name == "adx":
-                    expected_derived.add("ADX")
-                    expected_derived.add("DI_Plus")
-                    expected_derived.add("DI_Minus")
-                # Aroon produces aroon_up and aroon_down
-                elif name == "aroon":
-                    expected_derived.add("aroon_up")
-                    expected_derived.add("aroon_down")
-
-            # Build set of all possible valid targets for fuzzy sets
-            # Includes: feature_ids (primary), indicator names, derived metrics, and price data columns
-            # feature_id is the source of truth - fuzzy set keys should match feature_ids directly
-            all_possible_targets = (
-                set(
-                    indicator_feature_ids
-                )  # Primary: feature_ids are the source of truth
-                | set(
-                    indicator_names
-                )  # Fallback: indicator names for backward compatibility
-                | expected_derived
-                | {
-                    "open",
-                    "high",
-                    "low",
-                    "close",
-                    "volume",
-                }
-            )
-
-            # Check if fuzzy sets reference valid indicators/metrics
-            # Note: Fuzzy set names may have suffixes like _14, _standard, _fast to distinguish
-            # between multiple instances of the same indicator with different parameters.
-            invalid_fuzzy_refs = []
-            for fuzzy_name in fuzzy_configs.keys():
-                # Check direct match first
-                if fuzzy_name in all_possible_targets:
-                    continue
-
-                # Extract base indicator name (e.g., "rsi_14" -> "rsi", "macd_standard" -> "macd")
-                base_name = fuzzy_name.split("_")[0]
-                if base_name in all_possible_targets:
-                    continue
-
-                # Check if fuzzy_name starts with any valid target prefix
-                # This handles multi-output indicators like ADX producing DI_Plus_14, DI_Minus_14
-                matched = False
-                for target in all_possible_targets:
-                    if fuzzy_name.startswith(f"{target}_"):
-                        matched = True
-                        break
-
-                if not matched:
-                    invalid_fuzzy_refs.append(fuzzy_name)
-
-            if invalid_fuzzy_refs:
-                issues.append(
-                    ValidationIssue(
-                        severity="error",
-                        category="fuzzy_sets",
-                        message=f"Fuzzy sets reference invalid indicators/metrics: {', '.join(invalid_fuzzy_refs)}. Valid targets are: {', '.join(sorted(all_possible_targets))}",
-                        details={
-                            "invalid_references": invalid_fuzzy_refs,
-                            "valid_targets": sorted(all_possible_targets),
-                            "indicator_feature_ids": indicator_feature_ids,
-                            "strategy_indicators": indicator_names,
-                            "derived_metrics": sorted(expected_derived),
-                        },
-                    )
-                )
-
-            # Validate fuzzy set structure
-            for fuzzy_name, fuzzy_config in fuzzy_configs.items():
-                if not isinstance(fuzzy_config, dict):
-                    issues.append(
-                        ValidationIssue(
-                            severity="error",
-                            category="fuzzy_sets",
-                            message=f"Fuzzy set '{fuzzy_name}' must be a dictionary",
-                            details={
-                                "fuzzy_set": fuzzy_name,
-                                "type": str(type(fuzzy_config)),
-                            },
-                        )
-                    )
-                    continue
-
-                # Check fuzzy set structure - should have membership functions
-                if not fuzzy_config:
-                    issues.append(
-                        ValidationIssue(
-                            severity="warning",
-                            category="fuzzy_sets",
-                            message=f"Fuzzy set '{fuzzy_name}' is empty",
-                            details={"fuzzy_set": fuzzy_name},
-                        )
-                    )
-                    continue
-
-                # Validate each membership function (skip input_transform - it's not a membership function)
-                for member_name, member_config in fuzzy_config.items():
-                    # Skip input_transform - it's a special configuration field, not a membership function
-                    if member_name == "input_transform":
-                        continue
-
-                    if not isinstance(member_config, dict):
-                        issues.append(
-                            ValidationIssue(
-                                severity="error",
-                                category="fuzzy_sets",
-                                message=f"Membership function '{member_name}' in fuzzy set '{fuzzy_name}' must be a dictionary",
-                                details={
-                                    "fuzzy_set": fuzzy_name,
-                                    "membership_function": member_name,
-                                },
-                            )
-                        )
-                        continue
-
-                    # Check required fields for membership functions
-                    if "type" not in member_config:
-                        issues.append(
-                            ValidationIssue(
-                                severity="error",
-                                category="fuzzy_sets",
-                                message=f"Membership function '{member_name}' in fuzzy set '{fuzzy_name}' missing 'type' field",
-                                details={
-                                    "fuzzy_set": fuzzy_name,
-                                    "membership_function": member_name,
-                                },
-                            )
-                        )
-
-                    if "parameters" not in member_config:
-                        issues.append(
-                            ValidationIssue(
-                                severity="error",
-                                category="fuzzy_sets",
-                                message=f"Membership function '{member_name}' in fuzzy set '{fuzzy_name}' missing 'parameters' field",
-                                details={
-                                    "fuzzy_set": fuzzy_name,
-                                    "membership_function": member_name,
-                                },
-                            )
-                        )
+        )
 
     return issues
 
