@@ -1,5 +1,9 @@
 # Configuration System Redesign: Architecture
 
+> **Status:** Architecture defined, validation paused.
+> **Dependency:** Requires M6/M7 (sandbox merge) before implementation.
+> See `VALIDATION_NOTES.md` for detailed session notes.
+
 ## Overview
 
 The new configuration system consolidates all KTRDR settings into Pydantic BaseSettings classes organized by concern. Configuration flows from Python defaults, overridden by environment variables. Secrets are injected via 1Password at deploy time. The system validates all settings at import time, failing fast with clear error messages.

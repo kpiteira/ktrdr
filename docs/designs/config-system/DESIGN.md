@@ -1,5 +1,9 @@
 # Configuration System Redesign: Design
 
+> **Status:** Design complete, validation paused.
+> **Dependency:** Requires M6/M7 (sandbox merge) before implementation.
+> See `VALIDATION_NOTES.md` for detailed session notes.
+
 ## Problem Statement
 
 KTRDR's configuration system has grown organically and now suffers from multiple overlapping patterns, unclear precedence, and scattered settings. There are 4+ different ways to define configuration (metadata.py with YAML, Pydantic BaseSettings, dataclasses with env lambdas, direct os.getenv calls), 14+ YAML files, 60+ environment variables with inconsistent naming, and no startup validation. This makes it difficult to understand where any given setting is configured, leads to subtle bugs when precedence is unclear, and creates maintenance burden.
@@ -183,27 +187,40 @@ Workers share core settings but don't need API-specific config.
 - Consistent pattern is easier to document and remember
 - Migration can be gradual (accept old names with deprecation warnings)
 
-### Decision 3: Required settings have no defaults
+### Decision 3: Secrets have insecure defaults with loud warnings
 
-**Choice:** Secrets and environment-specific settings have no Python defaults — they must be explicitly set.
+**Choice:** Secrets have insecure defaults that work for local dev, but emit prominent warnings at startup.
 
 **Defaults for local dev convenience:**
 ```python
 class DatabaseSettings(BaseSettings):
     host: str = "localhost"      # Default: local dev
     port: int = 5432             # Default: standard postgres
-    password: str                # NO DEFAULT: must be set
+    password: str = "localdev"   # Insecure default, triggers warning
 ```
 
+**Precedence for secrets (highest to lowest):**
+1. 1Password injection via `ktrdr sandbox up` (recommended)
+2. `.env.local` file (gitignored, manual setup)
+3. Python defaults with **BIG WARNINGS**
+
 **Alternatives considered:**
-- Default password to "localdev" (current approach)
-- Require all settings explicitly
+- No defaults at all (original proposal) — rejected: breaks "zero config local dev"
+- Silent defaults — rejected: too easy to deploy insecurely
 
 **Rationale:**
-- "localdev" as committed default is a security smell, even if harmless
-- Forces explicit configuration for anything that matters
-- Local dev can use `.env.local` (gitignored) with insecure values
-- Production deployment must provide secrets — can't accidentally deploy with defaults
+- Local dev must "just work" with minimal setup
+- Warnings make insecure state obvious without blocking development
+- 1Password integration (via sandbox system) provides secure path
+- Production deployments use 1Password injection, never see defaults
+
+**Warning mechanism (to be implemented):**
+- Validation module detects when insecure defaults are active
+- Emits prominent warning at startup (not a failure)
+- Consider `KTRDR_ENV=production` flag that converts warnings to failures
+
+> **Note:** This decision was revised during validation session (2025-01-18).
+> See `VALIDATION_NOTES.md` for full context.
 
 ### Decision 4: Project metadata stays in pyproject.toml
 
