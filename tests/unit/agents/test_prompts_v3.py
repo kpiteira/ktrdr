@@ -126,3 +126,69 @@ class TestPromptYAMLExample:
         assert parsed.name is not None
         assert parsed.nn_inputs is not None
         assert len(parsed.nn_inputs) > 0
+
+
+class TestCriticalV3Rules:
+    """Test that prompt contains critical v3 rules summary (issue #253).
+
+    These rules prevent Claude from wasting tokens on trial-and-error validation:
+    - indicators is a DICT, not a list
+    - fuzzy_sets MUST have indicator field
+    - nn_inputs section is REQUIRED
+    - Indicator type is case-sensitive
+    """
+
+    def test_prompt_has_critical_v3_rules_summary(self):
+        """Prompt must have an explicit Critical v3 rules summary (issue #253)."""
+        from ktrdr.agents.prompts import SYSTEM_PROMPT_TEMPLATE
+
+        # Issue #253 specifically asks for a "Critical v3 rules" section
+        # that lists the rules in a numbered format for quick reference
+        prompt_lower = SYSTEM_PROMPT_TEMPLATE.lower()
+
+        # Should have a section about critical v3 rules
+        assert (
+            "critical v3 rules" in prompt_lower or "critical rules" in prompt_lower
+        ), "Prompt must have a 'Critical v3 rules' summary section"
+
+    def test_emphasizes_indicators_dict_not_list(self):
+        """Prompt must explicitly state indicators is DICT, NOT list."""
+        from ktrdr.agents.prompts import SYSTEM_PROMPT_TEMPLATE
+
+        prompt_lower = SYSTEM_PROMPT_TEMPLATE.lower()
+        # Should explicitly say NOT a list
+        assert (
+            "not a list" in prompt_lower or "not list" in prompt_lower
+        ), "Prompt must explicitly say 'indicators' is NOT a list"
+
+    def test_emphasizes_fuzzy_sets_indicator_field_required(self):
+        """Prompt must state fuzzy_sets MUST have indicator field."""
+        from ktrdr.agents.prompts import SYSTEM_PROMPT_TEMPLATE
+
+        prompt_lower = SYSTEM_PROMPT_TEMPLATE.lower()
+        # Should mention that indicator field is required in fuzzy_sets
+        assert (
+            "fuzzy" in prompt_lower
+            and "indicator" in prompt_lower
+            and ("must" in prompt_lower or "required" in prompt_lower)
+        ), "Prompt must state fuzzy_sets MUST have indicator field"
+
+    def test_emphasizes_nn_inputs_required(self):
+        """Prompt must explicitly state nn_inputs is REQUIRED."""
+        from ktrdr.agents.prompts import SYSTEM_PROMPT_TEMPLATE
+
+        prompt_lower = SYSTEM_PROMPT_TEMPLATE.lower()
+        # Should say nn_inputs is required
+        assert (
+            "nn_inputs" in prompt_lower and "required" in prompt_lower
+        ), "Prompt must state nn_inputs is REQUIRED"
+
+    def test_emphasizes_indicator_type_case_sensitive(self):
+        """Prompt must warn about case sensitivity for indicator type."""
+        from ktrdr.agents.prompts import SYSTEM_PROMPT_TEMPLATE
+
+        prompt_lower = SYSTEM_PROMPT_TEMPLATE.lower()
+        # Should mention case sensitivity
+        assert (
+            "case" in prompt_lower and "sensitive" in prompt_lower
+        ), "Prompt must warn about case sensitivity for indicator type"
