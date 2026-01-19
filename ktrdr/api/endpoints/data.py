@@ -256,6 +256,7 @@ async def get_timeframes(
     - Fast response (local data only, no external API calls)
     - Returns actual OHLCV data arrays for charting
     - Optional date filtering with query parameters
+    - Optional limit parameter to return only the most recent N data points
     - Returns empty data if not cached locally (no errors)
 
     **Perfect for:** Frontend charts, data visualization, dashboards
@@ -275,6 +276,12 @@ async def get_cached_data(
     ),
     include_extended: Optional[bool] = Query(
         False, description="Include extended trading hours when filtering"
+    ),
+    limit: Optional[int] = Query(
+        None,
+        description="Limit to the most recent N data points",
+        ge=1,
+        le=100000,
     ),
     data_service: DataService = Depends(get_data_service),
 ) -> DataLoadResponse:
@@ -401,6 +408,21 @@ async def get_cached_data(
                 df, clean_symbol, timeframe, include_metadata=True
             )
             data = OHLCVData(**api_data)
+
+        # Apply limit if specified - return the most recent N data points
+        if limit and len(data.dates) > limit:
+            original_count = len(data.dates)
+            data.dates = data.dates[-limit:]
+            data.ohlcv = data.ohlcv[-limit:] if data.ohlcv else []
+            if data.points:
+                data.points = data.points[-limit:]
+            if data.metadata is not None:
+                data.metadata["points"] = len(data.dates)
+                data.metadata["limited"] = True
+                data.metadata["original_points"] = original_count
+            logger.info(
+                f"Applied limit={limit}: {original_count} -> {len(data.dates)} points"
+            )
 
         logger.info(
             f"Retrieved {len(data.dates)} cached data points for {clean_symbol}"
