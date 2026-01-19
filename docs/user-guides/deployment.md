@@ -820,10 +820,9 @@ curl http://localhost:8000/api/v1/operations/$OPERATION_ID | jq
 **Start CPU Training** (automatically uses CPU workers if no GPU):
 
 ```bash
-docker exec ktrdr-backend uv run ktrdr models train \
-  --strategy neuro_mean_reversion \
-  --symbol EURUSD \
-  --timeframe 1d
+docker exec ktrdr-backend uv run ktrdr train neuro_mean_reversion \
+  --start 2024-01-01 \
+  --end 2024-06-01
 
 # Backend automatically selects:
 # 1. GPU worker if available (10x-100x faster)
