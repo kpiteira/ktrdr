@@ -70,12 +70,14 @@ class TestResolveUrl:
         # Should auto-append /api/v1 since override doesn't have it
         assert result == "http://override:8000/api/v1"
 
+    @patch("ktrdr.cli.sandbox_detect.find_env_sandbox")
     @patch("ktrdr.cli.client.core.get_api_url_override")
     @patch("ktrdr.cli.client.core.get_api_base_url")
-    def test_config_default_fallback(self, mock_base, mock_override):
-        """Config default is used when no override."""
+    def test_config_default_fallback(self, mock_base, mock_override, mock_find_sandbox):
+        """Config default is used when no override and no sandbox."""
         mock_override.return_value = None
         mock_base.return_value = "http://default:8000/api/v1"
+        mock_find_sandbox.return_value = None  # No sandbox detected
 
         result = resolve_url(None)
         assert result == "http://default:8000/api/v1"
@@ -100,15 +102,68 @@ class TestResolveUrl:
         result = resolve_url(None)
         assert result == "http://override:8000/api/v2"
 
+    @patch("ktrdr.cli.sandbox_detect.find_env_sandbox")
     @patch("ktrdr.cli.client.core.get_api_url_override")
     @patch("ktrdr.cli.client.core.get_api_base_url")
-    def test_strips_trailing_slash(self, mock_base, mock_override):
+    def test_strips_trailing_slash(self, mock_base, mock_override, mock_find_sandbox):
         """Trailing slashes are stripped."""
         mock_override.return_value = None
         mock_base.return_value = "http://default:8000/api/v1/"
+        mock_find_sandbox.return_value = None  # No sandbox detected
 
         result = resolve_url(None)
         assert result == "http://default:8000/api/v1"
+
+    def test_sandbox_detection_fallback_when_override_is_none(self, tmp_path):
+        """Uses sandbox detection when CLI override returns None.
+
+        This tests the fix for issue #252: M2 commands (research, train, etc.)
+        don't set the legacy _cli_state, so get_api_url_override() returns None.
+        In this case, resolve_url() should fall back to sandbox detection before
+        using the config default.
+
+        Priority order:
+        1. explicit_url parameter
+        2. get_api_url_override() (--url flag / legacy state)
+        3. sandbox detection from .env.sandbox  <-- This test
+        4. get_api_base_url() config default
+        """
+        # Create a sandbox .env file with a custom port
+        env_file = tmp_path / ".env.sandbox"
+        env_file.write_text("KTRDR_API_PORT=8001\n")
+
+        # Mock get_api_url_override to return None (simulating M2 commands)
+        # Mock sandbox_detect.resolve_api_url to use our temp directory
+        with (
+            patch("ktrdr.cli.client.core.get_api_url_override") as mock_override,
+            patch("ktrdr.cli.sandbox_detect.find_env_sandbox") as mock_find_sandbox,
+        ):
+            mock_override.return_value = None
+            mock_find_sandbox.return_value = env_file
+
+            result = resolve_url(None)
+
+            # Should use sandbox-detected URL, not config default
+            assert result == "http://localhost:8001/api/v1"
+
+    @patch("ktrdr.cli.sandbox_detect.find_env_sandbox")
+    @patch("ktrdr.cli.client.core.get_api_url_override")
+    @patch("ktrdr.cli.client.core.get_api_base_url")
+    def test_sandbox_detection_skipped_when_no_sandbox_file(
+        self, mock_base, mock_override, mock_find_sandbox
+    ):
+        """Falls back to config default when no .env.sandbox exists.
+
+        Ensures sandbox detection doesn't break when not in a sandbox directory.
+        """
+        mock_override.return_value = None
+        mock_base.return_value = "http://localhost:8000/api/v1"
+        mock_find_sandbox.return_value = None  # No sandbox detected
+
+        result = resolve_url(None)
+
+        # Should fall back to config default
+        assert result == "http://localhost:8000/api/v1"
 
 
 class TestShouldRetry:
