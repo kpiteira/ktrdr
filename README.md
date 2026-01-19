@@ -1,506 +1,285 @@
-# KTRDR - Advanced Trading System
+# KTRDR
 
-KTRDR is an advanced automated trading system built around a neuro-fuzzy decision engine. It provides comprehensive tools for market data analysis, technical indicator calculation, fuzzy logic processing, neural network training, strategy backtesting, and Interactive Brokers integration.
+Advanced automated trading system with neuro-fuzzy decision engine
 
-## ✨ Key Features
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?logo=pytorch&logoColor=white)](https://pytorch.org/)
+[![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-### 🔄 Data Management
+## Table of Contents
 
-- **Multi-source data integration** with Interactive Brokers
-- **Gap analysis and filling** for data quality
-- **Multi-timeframe data synchronization**
-- **Local data caching and storage**
+- [Overview](#overview)
+- [Key Features](#key-features)
+- [Quick Start](#quick-start)
+- [Architecture](#architecture)
+- [CLI Commands](#cli-commands)
+- [API Reference](#api-reference)
+- [Development](#development)
+- [Testing](#testing)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [License](#license)
 
-### 📊 Technical Analysis
+## Overview
 
-- **70+ technical indicators** (RSI, MACD, Bollinger Bands, etc.)
-- **Multi-timeframe indicator calculations**
-- **Custom indicator development framework**
-- **Performance-optimized batch processing**
+KTRDR is a complete trading system that combines technical analysis, fuzzy logic, and neural networks to make trading decisions. It's designed for algorithmic traders who want a structured approach to strategy development, backtesting, and live execution through Interactive Brokers.
 
-### 🧠 Fuzzy Logic Engine
+**What KTRDR does:**
 
-- **Configurable membership functions** (triangular, trapezoidal, gaussian)
-- **Multi-timeframe fuzzy analysis**
-- **Custom fuzzy rule systems**
-- **Real-time fuzzy evaluation**
+- Loads and manages market data from multiple sources
+- Calculates 70+ technical indicators across multiple timeframes
+- Applies fuzzy logic to transform indicators into trading signals
+- Trains neural networks to optimize trading decisions
+- Backtests strategies on historical data
+- Executes trades through Interactive Brokers
 
-### 🤖 Neural Networks
+**What makes it different:**
 
-- **PyTorch-based models** for trading decisions
-- **Multi-symbol training capabilities**
-- **GPU memory management**
-- **Model versioning and storage**
+- Distributed architecture for horizontal scaling
+- GPU-accelerated training with CPU fallback
+- Complete toolchain: CLI, REST API, and web interface
 
-### 📈 Strategy Development
+## Key Features
 
-- **Strategy configuration and validation**
-- **Comprehensive backtesting engine**
-- **Performance metrics and analytics**
-- **Strategy comparison tools**
+### Data Management
 
-### ⚡ Distributed Execution
+- Multi-source integration with Interactive Brokers
+- Automatic gap detection and filling
+- Multi-timeframe synchronization
+- Local caching for fast access
 
-- **Horizontal scaling** with distributed workers
-- **Concurrent operations** across worker cluster
-- **GPU-first training** with CPU fallback
-- **Dynamic worker scaling** (`docker-compose up --scale`)
-- **Self-registering workers** (infrastructure-agnostic)
+### Technical Analysis
 
-### 🌐 API & Web Interface
+- 70+ indicators (RSI, MACD, Bollinger Bands, etc.)
+- Multi-timeframe calculations
+- Custom indicator framework
+- Optimized batch processing
 
-- **RESTful API** with FastAPI
-- **React frontend** for visualization
-- **Real-time data streaming**
-- **Interactive charts with TradingView**
+### Neuro-Fuzzy Engine
 
-### 🔌 Interactive Brokers Integration
+- Configurable membership functions
+- Custom fuzzy rule systems
+- PyTorch neural networks
+- GPU-accelerated training
 
-- **Connection management and health monitoring**
-- **Real-time market data**
-- **Historical data fetching**
-- **Trade execution capabilities**
+### Distributed Execution
 
-## 🚀 Quick Start
+- Horizontal scaling with workers
+- GPU-first with CPU fallback
+- Dynamic worker scaling
+- Self-registering architecture
+
+### Trading Interface
+
+- RESTful API (FastAPI)
+- React web frontend
+- Interactive TradingView charts
+- Interactive Brokers integration
+
+## Quick Start
 
 ### Prerequisites
 
-- Python 3.9+
+- Python 3.12 or later
 - Docker and Docker Compose
-- [UV](https://github.com/astral-sh/uv) package manager
+- [uv](https://github.com/astral-sh/uv) package manager
 
 ### Installation
 
 ```bash
-# Clone the repository
 git clone https://github.com/your-username/ktrdr.git
 cd ktrdr
-
-# Run the setup script
-chmod +x setup_dev.sh
 ./setup_dev.sh
 ```
 
-### Starting Workers
-
-**IMPORTANT**: KTRDR uses a distributed architecture where operations execute on workers. You must start workers alongside the backend.
-
-#### Quick Start: Docker Compose with Workers
+### Start the System
 
 ```bash
-# Start backend + workers (recommended for development)
-docker-compose -f docker/docker-compose.yml up -d \
-  --scale backtest-worker=3 \
-  --scale training-worker=2
+# Start backend with workers
+docker compose up -d --scale backtest-worker=3 --scale training-worker=2
 
 # Verify workers registered
 curl http://localhost:8000/api/v1/workers | jq
-
-# Expected: 3 backtest workers + 2 training workers showing as AVAILABLE
 ```
 
-**Worker Scaling**: Add more workers for more concurrent operations:
-- `--scale backtest-worker=10` → 10 concurrent backtests
-- `--scale training-worker=5` → 5 concurrent training operations (CPU)
-
-#### Optional: GPU Training (10x-100x Faster)
+For GPU-accelerated training (10x-100x faster):
 
 ```bash
-# Start GPU training host service (outside Docker, for GPU access)
 cd training-host-service && ./start.sh
-
-# GPU worker automatically registers with backend
-# Training operations will prefer GPU (if available) before CPU fallback
 ```
 
-#### For Production Deployments
-
-**Deployment Options**:
-- **Development**: [Docker Compose Guide](docs/user-guides/deployment.md) - Single-host, quick setup
-- **Production**: [Proxmox LXC Guide](docs/user-guides/deployment-proxmox.md) - Multi-host, 5-15% better performance
-- **Operations**: [CI/CD Runbook](docs/developer/cicd-operations-runbook.md) - Deployment automation, incident response
-
-**Key Benefits of Proxmox (Production)**:
-- Lower overhead (~5-15% performance improvement vs Docker)
-- Template-based rapid worker cloning
-- Full OS environment with systemd
-- Proxmox management tools (backups, snapshots, monitoring)
-
-### Launching KTRDR
-
-#### Option 1: Complete System (Recommended)
+### Basic Usage
 
 ```bash
-# Start both IB Host Service and Docker backend
-./start_ktrdr.sh
-```
+# Load market data
+ktrdr data load AAPL 1d --start-date 2024-01-01
 
-This will start:
-
-- IB Host Service on port 5001
-- API server on <http://localhost:8000>
-- Frontend on <http://localhost:3000>
-- **Note**: You still need to start workers separately (see above)
-
-#### Option 2: Docker Development Environment
-
-```bash
-# Start development containers
-./docker_dev.sh start
-
-# View logs
-./docker_dev.sh logs
-
-# Stop containers
-./docker_dev.sh stop
-
-# Note: Start workers separately for backtesting/training operations
-```
-
-#### Option 3: API Server Only
-
-```bash
-# Using UV (recommended)
-uv run python scripts/run_api_server.py
-
-# Or using Python directly
-python scripts/run_api_server.py --host 0.0.0.0 --port 8000
-
-# Note: Backend alone won't execute operations - requires workers
-```
-
-## 📚 API Documentation
-
-Once the server is running, visit:
-
-- **Swagger UI**: <http://localhost:8000/api/v1/docs>
-- **ReDoc**: <http://localhost:8000/api/v1/redoc>
-
-### Key API Endpoints
-
-#### Data Management
-
-- `GET /api/v1/data/info` - Get data directory information
-- `GET /api/v1/data/symbols` - List available symbols
-- `POST /api/v1/data/load` - Load market data
-- `GET /api/v1/data/range` - Get data range information
-
-#### Technical Indicators
-
-- `GET /api/v1/indicators` - List available indicators
-- `POST /api/v1/indicators/calculate` - Calculate indicators
-- `GET /api/v1/indicators/categories` - Get indicator categories
-
-#### Fuzzy Logic
-
-- `GET /api/v1/fuzzy/indicators` - List fuzzy indicators
-- `POST /api/v1/fuzzy/fuzzify` - Fuzzify data values
-- `GET /api/v1/fuzzy/sets` - Get fuzzy set definitions
-
-#### Trading Models
-
-- `GET /api/v1/models` - List trained models
-- `POST /api/v1/models/train` - Start model training
-- `POST /api/v1/models/predict` - Make predictions
-
-#### Strategy Management
-
-- `GET /api/v1/strategies` - List available strategies
-- `POST /api/v1/strategies/validate` - Validate strategy configuration
-- `POST /api/v1/backtesting/start` - Start backtest
-
-#### Interactive Brokers
-
-- `GET /api/v1/ib/status` - Check IB connection status
-- `GET /api/v1/ib/health` - Health check
-- `POST /api/v1/ib/cleanup` - Clean up connections
-
-#### System Operations
-
-- `GET /api/v1/operations` - List running operations
-- `GET /api/v1/system/status` - System health status
-
-## 🖥️ CLI Commands
-
-KTRDR provides a comprehensive CLI interface:
-
-```bash
-# Main command
-ktrdr --help
-
-# Data management
-ktrdr data show AAPL 1d --start-date 2024-01-01
-ktrdr data load AAPL 1h --end-date 2024-12-31
-ktrdr data range EURUSD 1d
-
-# Model training
-ktrdr train config/strategies/example.yaml --start-date 2024-01-01 --end-date 2024-06-01
-
-# Strategy validation and backtesting
+# Validate a strategy
 ktrdr validate config/strategies/example.yaml
-ktrdr backtest config/strategies/example.yaml --start-date 2024-01-01 --end-date 2024-06-01
+
+# Run a backtest
+ktrdr backtest config/strategies/example.yaml \
+  --start-date 2024-01-01 --end-date 2024-06-01
+```
+
+### Service URLs
+
+| Service | URL |
+|---------|-----|
+| API | http://localhost:8000 |
+| Swagger Docs | http://localhost:8000/api/v1/docs |
+| Frontend | http://localhost:3000 |
+| Grafana | http://localhost:3000 |
+| Jaeger | http://localhost:16686 |
+
+## Architecture
+
+KTRDR uses a distributed workers architecture where the backend orchestrates operations and workers execute them.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Backend (Orchestrator)               │
+│         Receives requests, selects workers,             │
+│              tracks progress                            │
+└─────────────────────┬───────────────────────────────────┘
+                      │
+          ┌───────────┼───────────┬───────────────┐
+          │           │           │               │
+          ▼           ▼           ▼               ▼
+    ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
+    │ Backtest │ │ Backtest │ │ Training │ │ Training │
+    │ Worker 1 │ │ Worker 2 │ │ Worker   │ │ Host GPU │
+    └──────────┘ └──────────┘ └──────────┘ └──────────┘
+```
+
+**Key principles:**
+
+- Backend never executes operations locally
+- Workers self-register on startup
+- GPU workers prioritized for training
+- All operations tracked via OperationsService
+
+For detailed architecture, see [docs/architecture-overviews/distributed-workers.md](docs/architecture-overviews/distributed-workers.md).
+
+## CLI Commands
+
+```bash
+# Data management
+ktrdr data show AAPL 1d --rows 20
+ktrdr data load AAPL 1h --start-date 2024-01-01
+
+# Strategy operations
+ktrdr validate config/strategies/example.yaml
+ktrdr train config/strategies/example.yaml --start-date 2024-01-01 --end-date 2024-06-01
+ktrdr backtest config/strategies/example.yaml --start-date 2024-07-01 --end-date 2024-12-31
+
+# Operations management
+ktrdr ops                    # List operations
+ktrdr status <operation-id>  # Check status
+ktrdr cancel <operation-id>  # Cancel operation
 
 # Interactive Brokers
 ktrdr ib test-connection
 ktrdr ib check-status
-ktrdr ib cleanup-connections
-
-# Operations management
-ktrdr ops
-ktrdr status <operation-id>
-ktrdr cancel <operation-id>
 ```
 
-## 🏗️ Project Architecture
+Full CLI reference: [docs/user-guides/cli-reference.md](docs/user-guides/cli-reference.md)
 
-```
-ktrdr/
-├── api/                    # FastAPI REST API
-│   ├── endpoints/          # API route handlers
-│   ├── models/            # Pydantic data models
-│   ├── services/          # Business logic services
-│   └── middleware/        # Custom middleware
-├── cli/                   # Command-line interface
-│   ├── data_commands.py   # Data management commands
-│   ├── model_commands.py  # ML model commands
-│   └── ib_commands.py     # IB integration commands
-├── data/                  # Data management layer
-│   ├── ib_data_adapter.py # IB data integration
-│   └── data_manager.py    # Core data operations
-├── indicators/            # Technical analysis
-│   ├── base_indicator.py  # Base indicator class
-│   ├── rsi_indicator.py   # RSI implementation
-│   └── indicator_engine.py # Batch processing
-├── fuzzy/                 # Fuzzy logic system
-│   ├── membership.py      # Membership functions
-│   ├── engine.py          # Fuzzy inference
-│   └── multi_timeframe_engine.py
-├── neural/                # Neural network models
-│   ├── models/            # PyTorch model definitions
-│   └── training/          # Training infrastructure
-├── backtesting/           # Strategy backtesting
-│   ├── engine.py          # Backtesting engine
-│   └── performance.py     # Performance analysis
-├── training/              # ML training pipeline
-│   ├── training_manager.py # Training orchestration
-│   └── model_storage.py   # Model persistence
-├── config/                # Configuration management
-├── errors/                # Custom exception handling
-└── logging/               # Logging infrastructure
+## API Reference
 
-frontend/                  # React web interface
-docker/                    # Docker configurations
-scripts/                   # Utility scripts
-tests/                     # Test suites
-```
+The REST API is available at `http://localhost:8000/api/v1/`.
 
-## 🔧 Development
+| Category | Endpoint | Description |
+|----------|----------|-------------|
+| Data | `POST /data/load` | Load market data |
+| Indicators | `POST /indicators/calculate` | Calculate indicators |
+| Training | `POST /training/start` | Start model training |
+| Backtesting | `POST /backtesting/start` | Start backtest |
+| Operations | `GET /operations` | List running operations |
+| Workers | `GET /workers` | List registered workers |
+
+Interactive documentation: http://localhost:8000/api/v1/docs
+
+## Development
 
 ### Prerequisites
 
-- **CRITICAL**: This project uses `uv` for dependency management
-- Never run `python` directly - always use `uv run python`
-- Docker for containerized development
-- Node.js for frontend development
+- Python 3.12+
+- Docker Desktop
+- Node.js 18+ (for frontend)
+- [uv](https://github.com/astral-sh/uv) package manager
 
-### Development Commands
+**Important:** Always use `uv run` for Python commands:
+
+```bash
+# Correct
+uv run pytest tests/
+
+# Wrong - uses system Python
+pytest tests/
+```
+
+### Setup
 
 ```bash
 # Install dependencies
 uv sync
 
-# Run tests
-uv run pytest
-
-# Code formatting
-uv run black ktrdr tests
-
-# Type checking
-uv run mypy ktrdr
-
 # Start development environment
-./docker_dev.sh start
+docker compose up -d
 
-# Run backend tests
-./docker_dev.sh test
-
-# View logs
-./docker_dev.sh logs-backend
-./docker_dev.sh logs-frontend
-
-# Switch to LOCAL training mode (CPU in Docker)
-./scripts/switch-training-mode.sh local
-
-# Switch to HOST SERVICE training mode (GPU if available)
-./scripts/switch-training-mode.sh host
+# Run quality checks
+make quality        # Lint + format + typecheck
+make test-unit      # Fast tests (<2min)
 ```
 
-### Environment Variables
+### Environment Configuration
 
-Copy `.env.example` to `.env` and configure:
+Copy `.env.example` to `.env` and configure as needed.
+
+Full setup guide: [docs/developer/setup.md](docs/developer/setup.md)
+
+## Testing
 
 ```bash
-# Interactive Brokers
-IB_HOST=127.0.0.1
-IB_PORT=7497
-IB_CLIENT_ID=1
-
-# API Settings
-KTRDR_API_HOST=0.0.0.0
-KTRDR_API_PORT=8000
-KTRDR_API_ENVIRONMENT=development
-
-# Database
-DATABASE_URL=postgresql://user:pass@localhost:5432/ktrdr
-
-# OpenAI (for research features)
-OPENAI_API_KEY=your_api_key_here
+make test-unit        # Unit tests (~1 min)
+make test-integration # Integration tests (<30s)
+make test-e2e         # End-to-end tests (<5min)
+make quality          # Lint + format + typecheck
 ```
 
-## 📊 Configuration
+**Pre-commit checklist:**
 
-### Strategy Configuration
+1. `make test-unit` passes
+2. `make quality` passes
+3. No debug code or secrets
+4. Commits are small and focused
 
-Strategies are defined in YAML files in `config/strategies/`:
+Testing guide: [docs/developer/testing-guide.md](docs/developer/testing-guide.md)
 
-```yaml
-strategy:
-  name: "Example Strategy"
-  description: "Basic RSI strategy"
-  
-symbols:
-  mode: "single"
-  symbol: "AAPL"
-  
-timeframes:
-  primary: "1d"
-  
-indicators:
-  rsi:
-    type: "rsi"
-    parameters:
-      period: 14
-      
-fuzzy:
-  variables:
-    rsi_level:
-      type: "input"
-      range: [0, 100]
-      
-neural:
-  model_type: "mlp"
-  hidden_layers: [64, 32, 16]
-```
+## Documentation
 
-### Indicator Configuration
+| Topic | Location |
+|-------|----------|
+| CLI Reference | [docs/user-guides/cli-reference.md](docs/user-guides/cli-reference.md) |
+| Deployment | [docs/user-guides/deployment.md](docs/user-guides/deployment.md) |
+| Architecture | [docs/architecture-overviews/distributed-workers.md](docs/architecture-overviews/distributed-workers.md) |
+| Development Guide | [docs/developer/setup.md](docs/developer/setup.md) |
+| Testing Guide | [docs/developer/testing-guide.md](docs/developer/testing-guide.md) |
+| Strategy Configuration | [docs/user-guides/strategy-management.md](docs/user-guides/strategy-management.md) |
 
-Configure custom indicators in `config/indicators/`:
-
-```yaml
-indicators:
-  custom_rsi:
-    type: "rsi"
-    parameters:
-      period: 21
-      overbought: 75
-      oversold: 25
-```
-
-## 🧪 Testing
-
-### Running Tests
-
-```bash
-# All tests
-uv run pytest
-
-# Specific test categories
-uv run pytest tests/unit/
-uv run pytest tests/integration/
-uv run pytest tests/e2e/
-
-# With coverage
-uv run pytest --cov=ktrdr --cov-report=html
-```
-
-### Test Categories
-
-- **Unit tests**: Individual component testing
-- **Integration tests**: Multi-component interaction
-- **E2E tests**: Full system workflow testing
-- **Real E2E tests**: Tests with live data (requires IB connection)
-
-## 🚨 Troubleshooting
-
-### Common Issues
-
-#### IB Connection Problems
-
-```bash
-# Check IB Gateway status
-ktrdr ib check-status
-
-# Test connection
-ktrdr ib test-connection
-
-# Clean up stale connections
-ktrdr ib cleanup-connections
-```
-
-#### Docker Issues
-
-```bash
-# Rebuild containers
-./docker_dev.sh rebuild
-
-# Clean environment
-./docker_dev.sh clean
-
-# View container logs
-./docker_dev.sh logs-backend
-```
-
-#### Data Issues
-
-```bash
-# Check data availability
-ktrdr data range AAPL 1d
-
-# Load data with automatic gap detection
-ktrdr data load AAPL 1d --start-date 2024-01-01
-```
-
-### Log Locations
-
-- **IB Host Service**: `ib-host-service/logs/ib-host-service.log`
-- **Backend**: `docker logs ktrdr-backend`
-- **Frontend**: `docker logs ktrdr-frontend`
-
-## 📝 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Make your changes following the coding guidelines in `CLAUDE.md`
-4. Run tests: `uv run pytest`
-5. Run linting: `uv run black ktrdr tests && uv run mypy ktrdr`
-6. Commit your changes: `git commit -m 'Add amazing feature'`
-7. Push to the branch: `git push origin feature/amazing-feature`
-8. Open a Pull Request
+3. Run tests: `make test-unit && make quality`
+4. Commit changes: `git commit -m 'Add amazing feature'`
+5. Push and open a Pull Request
 
-### Development Guidelines
+Development guidelines: [CLAUDE.md](CLAUDE.md)
 
-- Follow the patterns documented in `CLAUDE.md`
-- Use type hints for all functions
-- Write comprehensive docstrings
-- Add tests for new functionality
-- Keep commits focused and atomic
+## License
 
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🆘 Support
-
-- **Documentation**: Check the API docs at `/docs` when running the server
-- **Issues**: Report bugs via GitHub Issues
-- **Development**: See `CLAUDE.md` for detailed development guidelines
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
