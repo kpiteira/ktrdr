@@ -231,16 +231,7 @@ ktrdr --help
 # Data management
 ktrdr data show AAPL 1d --start-date 2024-01-01
 ktrdr data load AAPL 1h --end-date 2024-12-31
-ktrdr data get-range EURUSD 1d
-
-# Technical indicators
-ktrdr indicators list
-ktrdr indicators compute AAPL 1d rsi --period 14
-ktrdr indicators plot AAPL 1d --indicators rsi,macd
-
-# Fuzzy logic
-ktrdr fuzzy compute AAPL 1d --config config/fuzzy/default.yaml
-ktrdr fuzzy visualize AAPL 1d --indicator rsi
+ktrdr data range EURUSD 1d
 
 # Model training
 ktrdr train config/strategies/example.yaml --start-date 2024-01-01 --end-date 2024-06-01
@@ -258,10 +249,6 @@ ktrdr ib cleanup-connections
 ktrdr ops
 ktrdr status <operation-id>
 ktrdr cancel <operation-id>
-
-# Gap analysis
-ktrdr gap-analysis analyze AAPL 1d --start-date 2024-01-01
-ktrdr gap-analysis service-status
 ```
 
 ## 🏗️ Project Architecture
@@ -477,10 +464,10 @@ ktrdr ib cleanup-connections
 
 ```bash
 # Check data availability
-ktrdr data get-range AAPL 1d
+ktrdr data range AAPL 1d
 
-# Analyze data gaps
-ktrdr gap-analysis analyze AAPL 1d --start-date 2024-01-01
+# Load data with automatic gap detection
+ktrdr data load AAPL 1d --start-date 2024-01-01
 ```
 
 ### Log Locations
