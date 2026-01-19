@@ -70,12 +70,12 @@ uv run ktrdr indicators list 2>&1 | head -30
 echo "indicators list exit: $?"
 
 # Test strategies list
-uv run ktrdr strategies list strategies 2>&1 | head -30
-echo "strategies list exit: $?"
+uv run ktrdr list strategies 2>&1 | head -30
+echo "list strategies exit: $?"
 
 # Test operations list
-uv run ktrdr operations list 2>&1 | head -30
-echo "operations list exit: $?"
+uv run ktrdr ops 2>&1 | head -30
+echo "ops exit: $?"
 
 # Test ib status
 uv run ktrdr ib status 2>&1 | head -30
@@ -92,9 +92,9 @@ echo "ib status exit: $?"
 ```bash
 [ -f .env.sandbox ] && source .env.sandbox
 
-# Test agent status
-uv run ktrdr agent status 2>&1 | head -20
-echo "agent status exit: $?"
+# Test research status (replaces agent status)
+uv run ktrdr status 2>&1 | head -20
+echo "status exit: $?"
 
 # Test checkpoints show (will 404 but should not have import errors)
 uv run ktrdr checkpoints show test_op_123 2>&1 | head -20
@@ -102,7 +102,7 @@ echo "checkpoints show exit: $?"
 ```
 
 **Expected:**
-- agent status: Exits 0, shows "IDLE" or active cycle info
+- status: Exits 0, shows operations or "No operations"
 - checkpoints show: May exit non-zero (404 expected), but no import errors
 
 #### 1.4 Operation Commands (Dry Run)
@@ -111,13 +111,13 @@ echo "checkpoints show exit: $?"
 ```bash
 [ -f .env.sandbox ] && source .env.sandbox
 
-# Test models train help
-uv run ktrdr models train --help 2>&1 | head -20
-echo "models train help exit: $?"
+# Test train help
+uv run ktrdr train --help 2>&1 | head -20
+echo "train help exit: $?"
 
-# Test backtest run help
-uv run ktrdr backtest run --help 2>&1 | head -20
-echo "backtest run help exit: $?"
+# Test backtest help
+uv run ktrdr backtest --help 2>&1 | head -20
+echo "backtest help exit: $?"
 ```
 
 **Expected:**

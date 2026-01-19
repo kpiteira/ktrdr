@@ -9,34 +9,28 @@ The KTRDR CLI provides a single, unified interface for all trading operations in
 #### **Validate Strategy**
 ```bash
 # Validate a strategy configuration
-ktrdr strategies validate strategies/my_strategy.yaml
+ktrdr validate strategies/my_strategy.yaml
 
 # Quiet mode
-ktrdr strategies validate strategies/my_strategy.yaml --quiet
-```
-
-#### **Upgrade Strategy**
-```bash
-# Upgrade to neuro-fuzzy format (creates .upgraded.yaml)
-ktrdr strategies upgrade strategies/old_strategy.yaml
-
-# Upgrade in place (overwrites original)
-ktrdr strategies upgrade strategies/old_strategy.yaml --inplace
-
-# Specify custom output
-ktrdr strategies upgrade strategies/old_strategy.yaml -o strategies/new_strategy.yaml
+ktrdr validate strategies/my_strategy.yaml --quiet
 ```
 
 #### **List Strategies**
 ```bash
 # List all strategies
-ktrdr strategies list
+ktrdr list strategies
 
 # List with validation
-ktrdr strategies list --validate
+ktrdr list strategies --validate
 
 # Detailed validation results
-ktrdr strategies list --validate --verbose
+ktrdr list strategies --validate --verbose
+```
+
+#### **Migrate Strategy (v2 to v3)**
+```bash
+# Migrate a strategy to v3 format
+ktrdr migrate strategies/old_v2_strategy.yaml --backup
 ```
 
 ### 🏋️ Training Commands
@@ -44,12 +38,12 @@ ktrdr strategies list --validate --verbose
 #### **Train Strategy**
 ```bash
 # Basic training
-ktrdr models train strategies/neuro_mean_reversion.yaml AAPL 1h \
+ktrdr train strategies/neuro_mean_reversion.yaml \
   --start-date 2024-01-01 \
   --end-date 2024-06-01
 
 # Advanced training with options
-ktrdr models train strategies/momentum.yaml MSFT 4h \
+ktrdr train strategies/momentum.yaml \
   --start-date 2023-01-01 \
   --end-date 2024-01-01 \
   --epochs 100 \
@@ -58,7 +52,7 @@ ktrdr models train strategies/momentum.yaml MSFT 4h \
   --verbose
 
 # Dry run (validate without training)
-ktrdr models train strategies/test.yaml AAPL 1h \
+ktrdr train strategies/test.yaml \
   --start-date 2024-01-01 \
   --end-date 2024-06-01 \
   --dry-run
@@ -69,12 +63,12 @@ ktrdr models train strategies/test.yaml AAPL 1h \
 #### **Run Backtest**
 ```bash
 # Basic backtest
-ktrdr strategies backtest strategies/neuro_mean_reversion.yaml AAPL 1h \
+ktrdr backtest strategies/neuro_mean_reversion.yaml \
   --start-date 2024-07-01 \
   --end-date 2024-12-31
 
 # Advanced backtest with custom parameters
-ktrdr strategies backtest strategies/momentum.yaml MSFT 4h \
+ktrdr backtest strategies/momentum.yaml \
   --start-date 2023-01-01 \
   --end-date 2024-01-01 \
   --model models/momentum/MSFT_4h_v2 \
@@ -85,7 +79,7 @@ ktrdr strategies backtest strategies/momentum.yaml MSFT 4h \
   --output results/backtest_MSFT.json
 
 # Quiet mode (results only)
-ktrdr strategies backtest strategies/test.yaml AAPL 1h \
+ktrdr backtest strategies/test.yaml \
   --start-date 2024-01-01 \
   --end-date 2024-06-01 \
   --quiet \
@@ -160,16 +154,16 @@ ktrdr fuzzy compute MSFT --indicator MACD \
 ### 1. **Prepare Strategy**
 ```bash
 # Check available strategies
-ktrdr strategies list --validate
+ktrdr list strategies --validate
 
-# Upgrade old strategy if needed
-ktrdr strategies upgrade strategies/old_momentum.yaml
+# Validate the strategy
+ktrdr validate strategies/my_strategy.yaml
 ```
 
 ### 2. **Train Model**
 ```bash
 # Train on historical data
-ktrdr models train strategies/neuro_mean_reversion.yaml AAPL 1h \
+ktrdr train strategies/neuro_mean_reversion.yaml \
   --start-date 2023-01-01 \
   --end-date 2023-12-31 \
   --epochs 100 \
@@ -179,7 +173,7 @@ ktrdr models train strategies/neuro_mean_reversion.yaml AAPL 1h \
 ### 3. **Backtest Strategy**
 ```bash
 # Test on out-of-sample data
-ktrdr strategies backtest strategies/neuro_mean_reversion.yaml AAPL 1h \
+ktrdr backtest strategies/neuro_mean_reversion.yaml \
   --start-date 2024-01-01 \
   --end-date 2024-06-01 \
   --model models/neuro_mean_reversion/AAPL_1h_v1 \
@@ -202,29 +196,18 @@ ktrdr indicators plot AAPL --timeframe 1h \
 Chain commands together:
 ```bash
 # Validate, train, and backtest in sequence
-ktrdr strategies validate strategies/test.yaml && \
-ktrdr models train strategies/test.yaml AAPL 1h \
+ktrdr validate strategies/test.yaml && \
+ktrdr train strategies/test.yaml \
   --start-date 2023-01-01 --end-date 2023-12-31 && \
-ktrdr strategies backtest strategies/test.yaml AAPL 1h \
+ktrdr backtest strategies/test.yaml \
   --start-date 2024-01-01 --end-date 2024-06-01
-```
-
-### **Batch Processing**
-Process multiple symbols:
-```bash
-# Train on multiple symbols
-for symbol in AAPL MSFT GOOGL; do
-  ktrdr models train strategies/universal.yaml $symbol 1h \
-    --start-date 2023-01-01 \
-    --end-date 2023-12-31
-done
 ```
 
 ### **Configuration Override**
 Override strategy parameters:
 ```bash
 # Train with custom epochs
-ktrdr models train strategies/test.yaml AAPL 1h \
+ktrdr train strategies/test.yaml \
   --start-date 2024-01-01 \
   --end-date 2024-06-01 \
   --epochs 200  # Overrides strategy config
@@ -234,20 +217,20 @@ ktrdr models train strategies/test.yaml AAPL 1h \
 
 1. **Always validate strategies before training**:
    ```bash
-   ktrdr strategies validate strategies/my_strategy.yaml
+   ktrdr validate strategies/my_strategy.yaml
    ```
 
 2. **Use verbose mode for debugging**:
    ```bash
-   ktrdr models train strategies/test.yaml AAPL 1h \
+   ktrdr train strategies/test.yaml \
      --start-date 2024-01-01 --end-date 2024-06-01 --verbose
    ```
 
 3. **Save backtest results for analysis**:
    ```bash
-   ktrdr strategies backtest strategies/test.yaml AAPL 1h \
+   ktrdr backtest strategies/test.yaml \
      --start-date 2024-01-01 --end-date 2024-06-01 \
-     --output results/$(date +%Y%m%d)_AAPL.json
+     --output results/$(date +%Y%m%d)_backtest.json
    ```
 
 4. **Check data availability before training**:
@@ -260,36 +243,36 @@ ktrdr models train strategies/test.yaml AAPL 1h \
 #### **List Operations**
 ```bash
 # List all operations
-ktrdr operations list
+ktrdr ops
 
 # Filter by status
-ktrdr operations list --status running
-ktrdr operations list --status cancelled
-ktrdr operations list --status failed
+ktrdr ops --status running
+ktrdr ops --status cancelled
+ktrdr ops --status failed
 
 # Show only resumable operations (with checkpoints)
-ktrdr operations list --resumable
+ktrdr ops --resumable
 ```
 
 #### **Check Operation Status**
 
 ```bash
 # Get detailed status
-ktrdr operations status op_training_20241213_143022_abc123
+ktrdr status op_training_20241213_143022_abc123
 ```
 
 #### **Cancel Operation**
 
 ```bash
 # Cancel a running operation
-ktrdr operations cancel op_training_20241213_143022_abc123
+ktrdr cancel op_training_20241213_143022_abc123
 ```
 
 #### **Resume Operation**
 
 ```bash
 # Resume from checkpoint
-ktrdr operations resume op_training_20241213_143022_abc123
+ktrdr resume op_training_20241213_143022_abc123
 ```
 
 ### 📦 Checkpoint Commands
@@ -320,14 +303,17 @@ For more details, see the [Checkpoint & Resume Guide](checkpoint-resume.md).
 
 | Command | Purpose | Example |
 |---------|---------|---------|
-| `strategies validate` | Check strategy config | `ktrdr strategies validate strategies/test.yaml` |
-| `strategies upgrade` | Upgrade to neuro-fuzzy | `ktrdr strategies upgrade strategies/old.yaml` |
-| `strategies list` | List all strategies | `ktrdr strategies list --validate` |
-| `models train` | Train neural network | `ktrdr models train strategies/test.yaml AAPL 1h --start-date 2024-01-01 --end-date 2024-06-01` |
-| `strategies backtest` | Run trading simulation | `ktrdr strategies backtest strategies/test.yaml AAPL 1h --start-date 2024-07-01 --end-date 2024-12-31` |
+| `validate` | Check strategy config | `ktrdr validate strategies/test.yaml` |
+| `list strategies` | List all strategies | `ktrdr list strategies --validate` |
+| `migrate` | Migrate v2 to v3 | `ktrdr migrate strategies/old.yaml --backup` |
+| `train` | Train neural network | `ktrdr train strategies/test.yaml --start-date 2024-01-01 --end-date 2024-06-01` |
+| `backtest` | Run trading simulation | `ktrdr backtest strategies/test.yaml --start-date 2024-07-01 --end-date 2024-12-31` |
+| `ops` | List operations | `ktrdr ops --status running` |
+| `status` | Check operation status | `ktrdr status <operation-id>` |
+| `cancel` | Cancel operation | `ktrdr cancel <operation-id>` |
+| `resume` | Resume from checkpoint | `ktrdr resume <operation-id>` |
 | `data show` | Display price data | `ktrdr data show AAPL -t 1h -r 20` |
 | `indicators plot` | Create charts | `ktrdr indicators plot AAPL -t 1h --indicators sma:20,rsi:14:panel` |
-| `fuzzy compute` | Apply fuzzy logic | `ktrdr fuzzy compute AAPL --indicator RSI -t 1h` |
 
 ## 🚨 Getting Help
 
@@ -336,9 +322,9 @@ For more details, see the [Checkpoint & Resume Guide](checkpoint-resume.md).
 ktrdr --help
 
 # Command-specific help
-ktrdr models train --help
-ktrdr strategies backtest --help
-ktrdr strategies validate --help
+ktrdr train --help
+ktrdr backtest --help
+ktrdr validate --help
 ```
 
-The unified CLI makes KTRDR operations simple and consistent! 🚀
+The unified CLI makes KTRDR operations simple and consistent!

@@ -253,7 +253,7 @@ class TestResearchCommandOutput:
 
                 # Without follow, should not enter monitoring
                 with patch(
-                    "ktrdr.cli.agent_commands._monitor_agent_cycle"
+                    "ktrdr.cli.helpers.agent_monitor.monitor_agent_cycle"
                 ) as mock_monitor:
                     result = runner.invoke(app, ["research", "test goal"])
 
@@ -289,7 +289,7 @@ class TestResearchCommandFollow:
                 mock_client_class.return_value = mock_client
 
                 with patch(
-                    "ktrdr.cli.agent_commands._monitor_agent_cycle",
+                    "ktrdr.cli.helpers.agent_monitor.monitor_agent_cycle",
                     new_callable=AsyncMock,
                 ) as mock_monitor:
                     runner.invoke(app, ["research", "test goal", "--follow"])
@@ -320,7 +320,7 @@ class TestResearchCommandFollow:
                 mock_client_class.return_value = mock_client
 
                 with patch(
-                    "ktrdr.cli.agent_commands._monitor_agent_cycle",
+                    "ktrdr.cli.helpers.agent_monitor.monitor_agent_cycle",
                     new_callable=AsyncMock,
                 ) as mock_monitor:
                     runner.invoke(app, ["research", "test goal", "-f"])

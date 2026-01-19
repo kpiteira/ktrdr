@@ -508,5 +508,5 @@ class BacktestingOperationAdapter(OperationAdapter):
         operation_id = final_status.get("operation_id")
         if operation_id:
             console.print(
-                f"\n💡 View full results: [cyan]ktrdr operations status {operation_id}[/cyan]"
+                f"\n💡 View full results: [cyan]ktrdr status {operation_id}[/cyan]"
             )

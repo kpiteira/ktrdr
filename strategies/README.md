@@ -48,12 +48,12 @@ This differs from the deprecated V2 format which used list-based indicators.
 
 3. Validate your strategy:
    ```bash
-   ktrdr strategies validate ~/.ktrdr/shared/strategies/my_strategy.yaml
+   ktrdr validate ~/.ktrdr/shared/strategies/my_strategy.yaml
    ```
 
 4. Train:
    ```bash
-   ktrdr models train ~/.ktrdr/shared/strategies/my_strategy.yaml
+   ktrdr train ~/.ktrdr/shared/strategies/my_strategy.yaml --start-date 2024-01-01 --end-date 2024-06-01
    ```
 
 ## Key V3 Concepts
@@ -99,10 +99,10 @@ Always validate strategies before training:
 
 ```bash
 # Single file
-ktrdr strategies validate path/to/strategy.yaml
+ktrdr validate path/to/strategy.yaml
 
 # Show generated features
-ktrdr strategies features path/to/strategy.yaml
+ktrdr show features path/to/strategy.yaml
 ```
 
 ## Migration from V2
@@ -110,7 +110,7 @@ ktrdr strategies features path/to/strategy.yaml
 If you have V2 strategies, migrate them:
 
 ```bash
-ktrdr strategies migrate ~/.ktrdr/shared/strategies/ --backup
+ktrdr migrate ~/.ktrdr/shared/strategies/ --backup
 ```
 
 This converts list-based indicators to dict format and adds `nn_inputs`.

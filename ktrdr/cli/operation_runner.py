@@ -250,7 +250,7 @@ class OperationRunner:
                     operation_type=operation_type,
                     operation_id=operation_id,
                     stage="execution",
-                    suggestion="Check operation logs with: ktrdr operations status <operation_id>",
+                    suggestion="Check operation logs with: ktrdr status <operation_id>",
                 )
                 print_error(str(e), self.state, enhanced_error)
                 raise SystemExit(1) from None
@@ -288,7 +288,7 @@ class OperationRunner:
                 operation_type=operation_type,
                 operation_id=operation_id,
                 stage="completion",
-                suggestion=f"Check full operation details with: ktrdr operations status {operation_id}",
+                suggestion=f"Check full operation details with: ktrdr status {operation_id}",
             )
             print_error(
                 f"{operation_type.capitalize()} failed: {error_msg}",

@@ -48,7 +48,7 @@
 API_PORT=${KTRDR_API_PORT:-8000}
 
 # Start backtest in background
-uv run ktrdr backtest run neuro_mean_reversion EURUSD 1d \
+uv run ktrdr backtest neuro_mean_reversion \
   --start-date 2024-01-01 \
   --end-date 2024-06-01 \
   --capital 100000 &
@@ -72,7 +72,7 @@ echo "Background PID: $BG_PID"
 
 **Command:**
 ```bash
-uv run ktrdr operations list
+uv run ktrdr ops
 ```
 
 **Expected:**
@@ -85,7 +85,7 @@ uv run ktrdr operations list
 
 **Command:**
 ```bash
-uv run ktrdr operations status $OPERATION_ID
+uv run ktrdr status $OPERATION_ID
 ```
 
 **Expected:**
@@ -102,7 +102,7 @@ uv run ktrdr operations status $OPERATION_ID
 ```bash
 for i in {1..6}; do
   echo "--- Poll $i ---"
-  uv run ktrdr operations status $OPERATION_ID 2>&1 | grep -E "Status|Progress|Percentage"
+  uv run ktrdr status $OPERATION_ID 2>&1 | grep -E "Status|Progress|Percentage"
   sleep 5
 done
 ```
@@ -120,7 +120,7 @@ done
 API_PORT=${KTRDR_API_PORT:-8000}
 
 # Start longer backtest
-uv run ktrdr backtest run neuro_mean_reversion EURUSD 1d \
+uv run ktrdr backtest neuro_mean_reversion \
   --start-date 2023-01-01 \
   --end-date 2024-06-01 \
   --capital 100000 &
@@ -141,7 +141,7 @@ echo "Operation to cancel: $CANCEL_OP_ID"
 
 **Command:**
 ```bash
-uv run ktrdr operations cancel $CANCEL_OP_ID
+uv run ktrdr cancel $CANCEL_OP_ID
 ```
 
 **Expected:**
@@ -153,11 +153,11 @@ uv run ktrdr operations cancel $CANCEL_OP_ID
 **Command:**
 ```bash
 # Verify cancelled operation status
-uv run ktrdr operations status $CANCEL_OP_ID
+uv run ktrdr status $CANCEL_OP_ID
 
 # Wait for first operation and verify
 sleep 30
-uv run ktrdr operations status $OPERATION_ID
+uv run ktrdr status $OPERATION_ID
 ```
 
 **Expected:**
@@ -169,11 +169,11 @@ uv run ktrdr operations status $OPERATION_ID
 
 ## Success Criteria
 
-- [ ] `ktrdr backtest run` starts operation successfully
-- [ ] `ktrdr operations list` displays operations in table format
-- [ ] `ktrdr operations status <op-id>` displays operation details
+- [ ] `ktrdr backtest` starts operation successfully
+- [ ] `ktrdr ops` displays operations in table format
+- [ ] `ktrdr status <op-id>` displays operation details
 - [ ] Progress tracking shows changes over time
-- [ ] `ktrdr operations cancel <op-id>` cancels running operation
+- [ ] `ktrdr cancel <op-id>` cancels running operation
 - [ ] Cancelled operation status changes to failed/cancelled
 - [ ] Original operation completes with status "completed"
 - [ ] Output formatting is correct (Rich tables render)

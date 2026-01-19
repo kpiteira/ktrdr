@@ -79,14 +79,12 @@ ktrdr data load EURUSD 1h --start-date 2024-01-01 --end-date 2024-12-31
 ktrdr data get-range AAPL 1d
 
 # Training operations
-ktrdr models train --strategy config/strategies/example.yaml
-ktrdr models list
-ktrdr models test model_v1.0.0 --symbol AAPL
+ktrdr train config/strategies/example.yaml --start-date 2024-01-01 --end-date 2024-06-01
 
 # Operations management
-ktrdr operations list
-ktrdr operations status <operation-id>
-ktrdr operations cancel <operation-id>
+ktrdr ops
+ktrdr status <operation-id>
+ktrdr cancel <operation-id>
 
 # IB Gateway integration
 ktrdr ib test-connection

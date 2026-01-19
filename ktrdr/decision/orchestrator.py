@@ -830,7 +830,7 @@ class DecisionOrchestrator:
 
             logger.warning(
                 f"No models found for strategy {self.strategy_name}. "
-                f"Train a model first with 'ktrdr models train'."
+                f"Train a model first with 'ktrdr train'."
             )
             return None
 

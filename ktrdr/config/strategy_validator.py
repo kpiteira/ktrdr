@@ -435,7 +435,7 @@ class StrategyValidator:
 
         # V1-specific suggestion
         result.suggestions.append(
-            "Consider migrating to v2 format with 'ktrdr strategies migrate' for multi-scope support"
+            "Consider migrating to v2 format with 'ktrdr migrate' for multi-scope support"
         )
 
         return result

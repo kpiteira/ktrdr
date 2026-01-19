@@ -205,9 +205,7 @@ def show_checkpoint(
                 console.print(f"\n[bold]Artifacts:[/bold] {artifacts_path}")
 
             # Resume command hint
-            console.print(
-                f"\n[dim]To resume:[/dim] ktrdr operations resume {operation_id}"
-            )
+            console.print(f"\n[dim]To resume:[/dim] ktrdr resume {operation_id}")
 
             if verbose:
                 console.print("\nCheckpoint details retrieved successfully")
