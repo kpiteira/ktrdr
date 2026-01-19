@@ -28,9 +28,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from ktrdr.api.models.backtesting import BacktestStartRequest, BacktestStartResponse
 from ktrdr.api.models.operations import OperationType
 from ktrdr.api.services.operations_service import get_operations_service
+from ktrdr.api.services.training import extract_symbols_timeframes_from_strategy
 from ktrdr.api.services.worker_registry import WorkerRegistry
 from ktrdr.backtesting.backtesting_service import BacktestingService
 from ktrdr.backtesting.worker_registration import WorkerRegistration
+from ktrdr.errors import ConfigurationError, ValidationError
 
 if TYPE_CHECKING:
     from ktrdr.api.services.operations_service import OperationsService
@@ -238,6 +240,34 @@ async def start_backtest(request: BacktestStartRequest) -> BacktestStartResponse
         # Build strategy config path
         strategy_config_path = f"strategies/{request.strategy_name}.yaml"
 
+        # Resolve symbol/timeframe - use request values or extract from strategy config
+        resolved_symbol = request.symbol
+        resolved_timeframe = request.timeframe
+
+        if resolved_symbol is None or resolved_timeframe is None:
+            logger.info(
+                f"Extracting symbol/timeframe from strategy config: {request.strategy_name}"
+            )
+            config_symbols, config_timeframes = (
+                extract_symbols_timeframes_from_strategy(request.strategy_name)
+            )
+
+            if resolved_symbol is None:
+                resolved_symbol = config_symbols[0] if config_symbols else None
+                logger.info(f"Using symbol from strategy config: {resolved_symbol}")
+
+            if resolved_timeframe is None:
+                resolved_timeframe = config_timeframes[0] if config_timeframes else None
+                logger.info(
+                    f"Using timeframe from strategy config: {resolved_timeframe}"
+                )
+
+        # Validate we have both symbol and timeframe (either from request or strategy)
+        if not resolved_symbol or not resolved_timeframe:
+            raise ValidationError(
+                "Symbol and timeframe must be provided or defined in strategy config"
+            )
+
         # Get worker ID for logging
         import socket
 
@@ -245,12 +275,12 @@ async def start_backtest(request: BacktestStartRequest) -> BacktestStartResponse
 
         # Call BacktestingService (will run in LOCAL mode)
         logger.info(
-            f"🔵 WORKER {worker_id}: Starting backtest {request.symbol} {request.timeframe} ({request.start_date} to {request.end_date})"
+            f"🔵 WORKER {worker_id}: Starting backtest {resolved_symbol} {resolved_timeframe} ({request.start_date} to {request.end_date})"
         )
 
         result = await service.run_backtest(
-            symbol=request.symbol,
-            timeframe=request.timeframe,
+            symbol=resolved_symbol,
+            timeframe=resolved_timeframe,
             strategy_config_path=strategy_config_path,
             model_path=None,  # Auto-discovery
             start_date=start_date,
@@ -276,6 +306,9 @@ async def start_backtest(request: BacktestStartRequest) -> BacktestStartResponse
 
     except ValueError as e:
         logger.error(f"Validation error: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except (ValidationError, ConfigurationError) as e:
+        logger.error(f"Configuration/validation error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Internal error starting backtest: {str(e)}", exc_info=True)

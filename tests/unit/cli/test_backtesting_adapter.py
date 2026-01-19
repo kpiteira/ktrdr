@@ -282,3 +282,99 @@ class TestBacktestingOperationAdapter:
         assert adapter1.symbol != adapter2.symbol
         assert adapter1.timeframe != adapter2.timeframe
         assert adapter1.initial_capital != adapter2.initial_capital
+
+
+class TestBacktestingOperationAdapterOptionalSymbolTimeframe:
+    """Test optional symbol/timeframe behavior (like TrainingOperationAdapter)."""
+
+    def test_initialization_with_symbol_timeframe_none(self):
+        """Test initialization with symbol and timeframe as None."""
+        adapter = BacktestingOperationAdapter(
+            strategy_name="test_strategy",
+            symbol=None,
+            timeframe=None,
+            start_date="2024-01-01",
+            end_date="2024-06-30",
+            initial_capital=50000.0,
+        )
+
+        assert adapter.symbol is None
+        assert adapter.timeframe is None
+        assert adapter.strategy_name == "test_strategy"
+
+    def test_get_start_payload_omits_symbol_when_none(self):
+        """Verify symbol is not in payload when None (backend reads from strategy)."""
+        adapter = BacktestingOperationAdapter(
+            strategy_name="momentum",
+            symbol=None,
+            timeframe="1h",
+            start_date="2023-01-01",
+            end_date="2023-12-31",
+            initial_capital=75000.0,
+        )
+
+        payload = adapter.get_start_payload()
+
+        # symbol should NOT be in payload when None
+        assert "symbol" not in payload
+        # timeframe should still be present
+        assert payload["timeframe"] == "1h"
+        assert payload["strategy_name"] == "momentum"
+
+    def test_get_start_payload_omits_timeframe_when_none(self):
+        """Verify timeframe is not in payload when None (backend reads from strategy)."""
+        adapter = BacktestingOperationAdapter(
+            strategy_name="momentum",
+            symbol="AAPL",
+            timeframe=None,
+            start_date="2023-01-01",
+            end_date="2023-12-31",
+            initial_capital=75000.0,
+        )
+
+        payload = adapter.get_start_payload()
+
+        # timeframe should NOT be in payload when None
+        assert "timeframe" not in payload
+        # symbol should still be present
+        assert payload["symbol"] == "AAPL"
+        assert payload["strategy_name"] == "momentum"
+
+    def test_get_start_payload_omits_both_when_none(self):
+        """Verify both symbol and timeframe omitted when None."""
+        adapter = BacktestingOperationAdapter(
+            strategy_name="momentum",
+            symbol=None,
+            timeframe=None,
+            start_date="2023-01-01",
+            end_date="2023-12-31",
+            initial_capital=75000.0,
+        )
+
+        payload = adapter.get_start_payload()
+
+        # Neither should be in payload
+        assert "symbol" not in payload
+        assert "timeframe" not in payload
+        # Other fields should be present
+        assert payload["strategy_name"] == "momentum"
+        assert payload["start_date"] == "2023-01-01"
+        assert payload["end_date"] == "2023-12-31"
+        assert payload["initial_capital"] == 75000.0
+
+    def test_get_start_payload_includes_both_when_provided(self):
+        """Verify symbol and timeframe included when explicitly provided."""
+        adapter = BacktestingOperationAdapter(
+            strategy_name="momentum",
+            symbol="MSFT",
+            timeframe="4h",
+            start_date="2023-01-01",
+            end_date="2023-12-31",
+            initial_capital=75000.0,
+        )
+
+        payload = adapter.get_start_payload()
+
+        # Both should be in payload when provided
+        assert payload["symbol"] == "MSFT"
+        assert payload["timeframe"] == "4h"

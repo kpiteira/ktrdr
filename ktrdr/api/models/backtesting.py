@@ -19,11 +19,16 @@ class BacktestStartRequest(BaseModel):
     - Returns operation_id for tracking via /operations/* endpoints
     - Uses strategy_name (auto-discovers paths internally)
     - Supports commission and slippage parameters
+    - Symbol/timeframe are optional - if not provided, read from strategy config
     """
 
     strategy_name: str
-    symbol: str
-    timeframe: str
+    symbol: Optional[str] = (
+        None  # Optional - backend reads from strategy config if None
+    )
+    timeframe: Optional[str] = (
+        None  # Optional - backend reads from strategy config if None
+    )
     start_date: str  # ISO format: "YYYY-MM-DD"
     end_date: str  # ISO format: "YYYY-MM-DD"
     initial_capital: float = 100000.0
@@ -31,13 +36,21 @@ class BacktestStartRequest(BaseModel):
     slippage: float = 0.001
     model_path: Optional[str] = None  # Explicit model path (for v3 models)
 
-    @field_validator("strategy_name", "symbol", "timeframe")
+    @field_validator("strategy_name")
     @classmethod
-    def validate_non_empty_strings(cls, v: str) -> str:
-        """Validate that required string fields are not empty."""
+    def validate_strategy_name(cls, v: str) -> str:
+        """Validate that strategy_name is not empty."""
         if not v or not v.strip():
             raise ValueError("Field cannot be empty")
         return v.strip()
+
+    @field_validator("symbol", "timeframe")
+    @classmethod
+    def validate_optional_strings(cls, v: Optional[str]) -> Optional[str]:
+        """Validate that optional string fields are not empty if provided."""
+        if v is not None and (not v or not v.strip()):
+            raise ValueError("Field cannot be empty if provided")
+        return v.strip() if v else None
 
     @field_validator("start_date", "end_date")
     @classmethod
