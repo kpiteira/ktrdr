@@ -6,12 +6,10 @@ when those services are actually running and available.
 """
 
 import asyncio
-from typing import Optional
+import os
 
 import pytest
 from ib_insync import IB
-
-from ktrdr.config.config_manager import ConfigManager
 
 
 @pytest.fixture(scope="session")
@@ -23,29 +21,23 @@ def event_loop():
 
 
 @pytest.fixture(scope="session")
-def config_manager():
-    """Load configuration for host service tests."""
-    return ConfigManager.get_instance()
-
-
-@pytest.fixture(scope="session")
-async def real_ib_connection(config_manager):
+async def real_ib_connection():
     """
     Connect to real IB Gateway/TWS.
 
     This fixture requires:
     - IB Gateway or TWS running
     - Paper trading account recommended
-    - Proper configuration in config files
+    - Environment variables or defaults for connection
 
     Skips test if IB connection is not available.
     """
     ib = IB()
     try:
-        # Try to connect to IB Gateway (default port 4002) or TWS (port 7497)
-        host = config_manager.get("ib.host", "127.0.0.1")
-        port = config_manager.get("ib.port", 4002)
-        client_id = config_manager.get("ib.client_id", 1)
+        # Use environment variables or defaults
+        host = os.environ.get("IB_HOST", "127.0.0.1")
+        port = int(os.environ.get("IB_PORT", "4002"))
+        client_id = int(os.environ.get("IB_CLIENT_ID", "1"))
 
         await ib.connectAsync(host=host, port=port, clientId=client_id, timeout=5.0)
 
@@ -62,18 +54,17 @@ async def real_ib_connection(config_manager):
 
 
 @pytest.fixture(scope="session")
-def real_training_service_url(config_manager):
+def real_training_service_url():
     """
     Get real training service URL.
 
     Returns URL for real training service if configured and available.
     Skips test if service is not available.
     """
-    url = config_manager.get("training.service_url", None)
+    url = os.environ.get("TRAINING_SERVICE_URL")
     if not url:
-        pytest.skip("Training service URL not configured")
+        pytest.skip("Training service URL not configured (set TRAINING_SERVICE_URL)")
 
-    # Could add a health check here if the service has a health endpoint
     return url
 
 
