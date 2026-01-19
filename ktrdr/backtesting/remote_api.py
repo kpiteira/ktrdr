@@ -32,7 +32,7 @@ from ktrdr.api.services.training import extract_symbols_timeframes_from_strategy
 from ktrdr.api.services.worker_registry import WorkerRegistry
 from ktrdr.backtesting.backtesting_service import BacktestingService
 from ktrdr.backtesting.worker_registration import WorkerRegistration
-from ktrdr.errors import ValidationError
+from ktrdr.errors import ConfigurationError, ValidationError
 
 if TYPE_CHECKING:
     from ktrdr.api.services.operations_service import OperationsService
@@ -306,6 +306,9 @@ async def start_backtest(request: BacktestStartRequest) -> BacktestStartResponse
 
     except ValueError as e:
         logger.error(f"Validation error: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except (ValidationError, ConfigurationError) as e:
+        logger.error(f"Configuration/validation error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Internal error starting backtest: {str(e)}", exc_info=True)

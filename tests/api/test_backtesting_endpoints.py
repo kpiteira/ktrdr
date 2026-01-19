@@ -389,6 +389,38 @@ class TestBacktestingOptionalSymbolTimeframe:
         assert call_kwargs["symbol"] == "AAPL"  # From config
         assert call_kwargs["timeframe"] == "4h"  # From request
 
+    @pytest.mark.api
+    def test_start_backtest_configuration_error_when_strategy_has_no_symbols(
+        self, client_with_mocked_service, mock_backtesting_service
+    ):
+        """Test 400 response when strategy config is missing symbols/timeframes."""
+        from unittest.mock import patch
+
+        from ktrdr.errors import ConfigurationError
+
+        payload = {
+            "strategy_name": "invalid_strategy",
+            # symbol and timeframe intentionally omitted
+            "start_date": "2024-01-01",
+            "end_date": "2024-06-01",
+        }
+
+        # Mock strategy config extraction to raise ConfigurationError
+        with patch(
+            "ktrdr.api.endpoints.backtesting.extract_symbols_timeframes_from_strategy"
+        ) as mock_extract:
+            mock_extract.side_effect = ConfigurationError(
+                message="Strategy 'invalid_strategy' has no symbols configured",
+                error_code="STRATEGY-NoSymbols",
+            )
+
+            response = client_with_mocked_service.post(
+                "/api/v1/backtests/start", json=payload
+            )
+
+        assert response.status_code == 400
+        assert "no symbols configured" in str(response.json()["detail"]).lower()
+
 
 class TestBacktestStartRequestModel:
     """Test BacktestStartRequest Pydantic model."""
