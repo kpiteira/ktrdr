@@ -578,6 +578,8 @@ def up(
     cmd = ["docker", "compose", "-f", str(compose_file), "up", "-d"]
     if build:
         cmd.append("--build")
+    # Force recreate to pick up new environment variables (especially secrets)
+    cmd.append("--force-recreate")
 
     # Set environment for compose
     # Order matters: os.environ < .env.sandbox < 1Password secrets
