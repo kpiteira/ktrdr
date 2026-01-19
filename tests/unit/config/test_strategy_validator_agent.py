@@ -506,34 +506,34 @@ class TestDuplicateStrategyNameValidation:
 
 
 class TestValidateStrategyConfig:
-    """Test validate_strategy_config for agent-generated configs (dict input)."""
+    """Test validate_strategy_config for agent-generated configs (v3 dict input)."""
 
     def test_validate_strategy_config_valid_dict(self):
-        """Valid strategy config dict should pass validation."""
+        """Valid v3 strategy config dict should pass validation."""
         validator = StrategyValidator()
 
+        # V3 format: indicators as dict, fuzzy_sets with indicator reference, nn_inputs required
         config = {
             "name": "agent_generated_strategy_1",
-            "version": "1.0",
-            "scope": "universal",
+            "version": "3.0",
             "training_data": {
                 "symbols": {"mode": "single", "symbol": "EURUSD"},
                 "timeframes": {"mode": "single", "timeframe": "1h"},
             },
-            "deployment": {
-                "target_symbols": {"mode": "universal"},
-                "target_timeframes": {"mode": "single", "timeframe": "1h"},
+            "indicators": {
+                "rsi_14": {"type": "rsi", "period": 14},
             },
-            "indicators": [
-                {"name": "rsi", "feature_id": "rsi_14", "period": 14},
-            ],
             "fuzzy_sets": {
-                "rsi_14": {
+                "rsi_momentum": {
+                    "indicator": "rsi_14",
                     "oversold": {"type": "triangular", "parameters": [0, 20, 35]},
                     "neutral": {"type": "triangular", "parameters": [30, 50, 70]},
                     "overbought": {"type": "triangular", "parameters": [65, 80, 100]},
                 }
             },
+            "nn_inputs": [
+                {"fuzzy_set": "rsi_momentum", "timeframes": ["1h"]},
+            ],
             "model": {
                 "type": "mlp",
                 "architecture": {
@@ -542,31 +542,17 @@ class TestValidateStrategyConfig:
                     "output_activation": "softmax",
                     "dropout": 0.2,
                 },
-                "training": {
-                    "learning_rate": 0.001,
-                    "batch_size": 32,
-                    "epochs": 50,
-                    "optimizer": "adam",
-                },
-                "features": {
-                    "include_price_context": False,
-                    "lookback_periods": 2,
-                    "scale_features": True,
-                },
             },
             "decisions": {
                 "output_format": "classification",
                 "confidence_threshold": 0.6,
-                "position_awareness": True,
             },
             "training": {
                 "method": "supervised",
                 "labels": {
                     "source": "zigzag",
                     "zigzag_threshold": 0.03,
-                    "label_lookahead": 20,
                 },
-                "data_split": {"train": 0.7, "validation": 0.15, "test": 0.15},
             },
         }
 
@@ -574,70 +560,37 @@ class TestValidateStrategyConfig:
 
         assert result.is_valid, f"Errors: {result.errors}"
 
-    def test_validate_strategy_config_invalid_indicator(self):
-        """Invalid indicator type in config dict should fail validation."""
+    def test_validate_strategy_config_missing_nn_inputs(self):
+        """V3 config missing nn_inputs should fail validation."""
         validator = StrategyValidator()
 
+        # Missing nn_inputs - should fail
         config = {
-            "name": "agent_bad_indicator",
-            "version": "1.0",
-            "scope": "universal",
+            "name": "agent_missing_nn_inputs",
+            "version": "3.0",
             "training_data": {
                 "symbols": {"mode": "single", "symbol": "EURUSD"},
                 "timeframes": {"mode": "single", "timeframe": "1h"},
             },
-            "deployment": {
-                "target_symbols": {"mode": "universal"},
-                "target_timeframes": {"mode": "single", "timeframe": "1h"},
+            "indicators": {
+                "rsi_14": {"type": "rsi", "period": 14},
             },
-            "indicators": [
-                {"name": "nonexistent_indicator", "feature_id": "bad_1", "period": 14},
-            ],
             "fuzzy_sets": {
-                "bad_1": {
-                    "low": {"type": "triangular", "parameters": [0, 20, 40]},
+                "rsi_momentum": {
+                    "indicator": "rsi_14",
+                    "oversold": {"type": "triangular", "parameters": [0, 20, 35]},
                 }
             },
-            "model": {
-                "type": "mlp",
-                "architecture": {
-                    "hidden_layers": [20, 10],
-                    "activation": "relu",
-                    "output_activation": "softmax",
-                    "dropout": 0.2,
-                },
-                "training": {
-                    "learning_rate": 0.001,
-                    "batch_size": 32,
-                    "epochs": 100,
-                    "optimizer": "adam",
-                },
-                "features": {
-                    "include_price_context": False,
-                    "lookback_periods": 2,
-                    "scale_features": True,
-                },
-            },
-            "decisions": {
-                "output_format": "classification",
-                "confidence_threshold": 0.6,
-                "position_awareness": True,
-            },
-            "training": {
-                "method": "supervised",
-                "labels": {
-                    "source": "zigzag",
-                    "zigzag_threshold": 0.03,
-                    "label_lookahead": 20,
-                },
-                "data_split": {"train": 0.7, "validation": 0.15, "test": 0.15},
-            },
+            # Missing nn_inputs!
+            "model": {"type": "mlp", "architecture": {"hidden_layers": [32, 16]}},
+            "decisions": {"output_format": "classification"},
+            "training": {"method": "supervised", "labels": {"source": "zigzag"}},
         }
 
         result = validator.validate_strategy_config(config)
 
         assert not result.is_valid
-        assert any("nonexistent_indicator" in err.lower() for err in result.errors)
+        assert any("nn_inputs" in err.lower() for err in result.errors)
 
 
 class TestAgentFriendlyErrorMessages:
