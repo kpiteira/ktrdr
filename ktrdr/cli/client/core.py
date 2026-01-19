@@ -73,11 +73,11 @@ def resolve_url(explicit_url: Optional[str] = None) -> str:
     # Priority 3: Check sandbox detection (fixes issue #252)
     # M2 commands use app.py callback which doesn't set legacy _cli_state,
     # so we need to check sandbox detection directly as a fallback.
-    from ktrdr.cli.sandbox_detect import resolve_api_url as sandbox_resolve
+    from ktrdr.cli import sandbox_detect
 
-    sandbox_url = sandbox_resolve()
-    if sandbox_url != "http://localhost:8000":
-        # Sandbox detected - use it with /api/v1 path
+    if sandbox_detect.find_env_sandbox() is not None:
+        # Sandbox detected - use resolved URL with /api/v1 path
+        sandbox_url = sandbox_detect.resolve_api_url()
         return f"{sandbox_url}/api/v1"
 
     return get_api_base_url().rstrip("/")

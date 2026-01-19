@@ -146,24 +146,24 @@ class TestResolveUrl:
             # Should use sandbox-detected URL, not config default
             assert result == "http://localhost:8001/api/v1"
 
+    @patch("ktrdr.cli.sandbox_detect.find_env_sandbox")
     @patch("ktrdr.cli.client.core.get_api_url_override")
+    @patch("ktrdr.cli.client.core.get_api_base_url")
     def test_sandbox_detection_skipped_when_no_sandbox_file(
-        self, mock_override, tmp_path
+        self, mock_base, mock_override, mock_find_sandbox
     ):
         """Falls back to config default when no .env.sandbox exists.
 
         Ensures sandbox detection doesn't break when not in a sandbox directory.
         """
         mock_override.return_value = None
+        mock_base.return_value = "http://localhost:8000/api/v1"
+        mock_find_sandbox.return_value = None  # No sandbox detected
 
-        # Mock sandbox detection to return None (no .env.sandbox file)
-        with patch("ktrdr.cli.sandbox_detect.find_env_sandbox") as mock_find_sandbox:
-            mock_find_sandbox.return_value = None
+        result = resolve_url(None)
 
-            result = resolve_url(None)
-
-            # Should fall back to config default
-            assert "localhost:8000" in result
+        # Should fall back to config default
+        assert result == "http://localhost:8000/api/v1"
 
 
 class TestShouldRetry:
