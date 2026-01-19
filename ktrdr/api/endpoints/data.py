@@ -416,7 +416,7 @@ async def get_cached_data(
             data.ohlcv = data.ohlcv[-limit:] if data.ohlcv else []
             if data.points:
                 data.points = data.points[-limit:]
-            if data.metadata:
+            if data.metadata is not None:
                 data.metadata["points"] = len(data.dates)
                 data.metadata["limited"] = True
                 data.metadata["original_points"] = original_count

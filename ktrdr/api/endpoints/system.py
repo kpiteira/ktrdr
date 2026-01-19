@@ -6,6 +6,7 @@ Provides endpoints to monitor:
 - Overall system health
 """
 
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -61,11 +62,7 @@ async def get_ib_status(
             },
             "status": "available" if connection.connected else "disconnected",
             "ib_available": status.ib_available,
-            "timestamp": (
-                connection.connection_time.isoformat()
-                if connection.connection_time
-                else ""
-            ),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
     except Exception as e:
