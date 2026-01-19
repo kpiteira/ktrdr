@@ -1,12 +1,14 @@
 # KTRDR
 
-Advanced automated trading system with neuro-fuzzy decision engine
+Trading strategy research system using neuro-fuzzy neural networks
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+> **Note:** This is a personal learning project, not production trading software. I built it as a vehicle for exploring AI-assisted coding, neural networks, fuzzy systems, distributed architectures, and homelab cluster deployments. It's deliberately over-engineered for a solo project — that's the point.
 
 ## Table of Contents
 
@@ -24,22 +26,21 @@ Advanced automated trading system with neuro-fuzzy decision engine
 
 ## Overview
 
-KTRDR is a complete trading system that combines technical analysis, fuzzy logic, and neural networks to make trading decisions. It's designed for algorithmic traders who want a structured approach to strategy development, backtesting, and live execution through Interactive Brokers.
+KTRDR is a **trading strategy research system** that uses neuro-fuzzy neural networks to develop and validate trading strategies. Unlike black-box ML approaches, neuro-fuzzy models combine neural network learning with fuzzy logic rules, producing **interpretable** trading decisions you can understand and refine.
 
-**What KTRDR does:**
+**The research loop:**
 
-- Loads and manages market data from multiple sources
-- Calculates 70+ technical indicators across multiple timeframes
-- Applies fuzzy logic to transform indicators into trading signals
-- Trains neural networks to optimize trading decisions
-- Backtests strategies on historical data
-- Executes trades through Interactive Brokers
+1. **Design** — Define strategies using technical indicators and fuzzy logic rules
+2. **Train** — Train neuro-fuzzy models on historical data (GPU-accelerated)
+3. **Backtest** — Validate strategies against out-of-sample data
+4. **Assess** — Evaluate results, identify what works and why
+5. **Learn** — Accumulate knowledge across experiments
 
 **What makes it different:**
 
-- Distributed architecture for horizontal scaling
-- GPU-accelerated training with CPU fallback
-- Complete toolchain: CLI, REST API, and web interface
+- **Interpretable models** — Fuzzy rules you can read, not black-box predictions
+- **Distributed workers** — Horizontal scaling for parallel experiments
+- **Full observability** — Trace every operation through Jaeger
 
 ## Key Features
 
@@ -71,12 +72,11 @@ KTRDR is a complete trading system that combines technical analysis, fuzzy logic
 - Dynamic worker scaling
 - Self-registering architecture
 
-### Trading Interface
+### Research Interfaces
 
-- RESTful API (FastAPI)
-- React web frontend
-- Interactive TradingView charts
-- Interactive Brokers integration
+- **CLI** for running experiments (`ktrdr train`, `ktrdr backtest`)
+- **REST API** (FastAPI) for automation and integration
+- **Interactive Brokers** connection for market data
 
 ## Quick Start
 
@@ -136,30 +136,44 @@ ktrdr backtest config/strategies/example.yaml \
 
 ## Architecture
 
-KTRDR uses a distributed workers architecture where the backend orchestrates operations and workers execute them.
+KTRDR uses a distributed architecture where the backend orchestrates and workers execute:
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    Backend (Orchestrator)               │
-│         Receives requests, selects workers,             │
-│              tracks progress                            │
-└─────────────────────┬───────────────────────────────────┘
-                      │
-          ┌───────────┼───────────┬───────────────┐
-          │           │           │               │
-          ▼           ▼           ▼               ▼
-    ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
-    │ Backtest │ │ Backtest │ │ Training │ │ Training │
-    │ Worker 1 │ │ Worker 2 │ │ Worker   │ │ Host GPU │
-    └──────────┘ └──────────┘ └──────────┘ └──────────┘
+                    ┌─────────────────────────┐
+                    │    Strategy Config      │
+                    │  (indicators + fuzzy    │
+                    │       rules)            │
+                    └───────────┬─────────────┘
+                                │
+                                ▼
+┌───────────────────────────────────────────────────────────────────┐
+│                      Backend (Orchestrator)                       │
+│              Routes operations to available workers               │
+└─────────────────────────────┬─────────────────────────────────────┘
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        │                     │                     │
+        ▼                     ▼                     ▼
+  ┌───────────┐         ┌───────────┐         ┌───────────┐
+  │ Training  │         │ Training  │         │ Backtest  │
+  │ Worker    │         │ Worker    │         │ Workers   │
+  │ (GPU)     │         │ (CPU)     │         │           │
+  └─────┬─────┘         └─────┬─────┘         └─────┬─────┘
+        │                     │                     │
+        └──────────┬──────────┘                     │
+                   ▼                                ▼
+          ┌───────────────┐                ┌───────────────┐
+          │ Trained Model │ ──────────────▶│   Backtest    │
+          │ (Neuro-Fuzzy) │                │   Results     │
+          └───────────────┘                └───────────────┘
 ```
 
 **Key principles:**
 
-- Backend never executes operations locally
+- Backend orchestrates, workers execute
+- GPU workers prioritized for training (10-100x faster)
 - Workers self-register on startup
-- GPU workers prioritized for training
-- All operations tracked via OperationsService
+- All operations tracked with distributed tracing
 
 For detailed architecture, see [docs/architecture-overviews/distributed-workers.md](docs/architecture-overviews/distributed-workers.md).
 
