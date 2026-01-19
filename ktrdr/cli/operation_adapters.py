@@ -373,11 +373,11 @@ class BacktestingOperationAdapter(OperationAdapter):
     def __init__(
         self,
         strategy_name: str,
-        symbol: str,
-        timeframe: str,
-        start_date: str,
-        end_date: str,
-        initial_capital: float,
+        symbol: Optional[str] = None,
+        timeframe: Optional[str] = None,
+        start_date: str = "",
+        end_date: str = "",
+        initial_capital: float = 100000.0,
         commission: float = 0.001,
         slippage: float = 0.001,
         model_path: Optional[str] = None,
@@ -387,8 +387,8 @@ class BacktestingOperationAdapter(OperationAdapter):
 
         Args:
             strategy_name: Name of the strategy to backtest
-            symbol: Trading symbol (e.g., AAPL, EURUSD)
-            timeframe: Data timeframe (e.g., 1h, 1d)
+            symbol: Trading symbol (optional - backend reads from strategy config if None)
+            timeframe: Data timeframe (optional - backend reads from strategy config if None)
             start_date: Backtest start date (YYYY-MM-DD)
             end_date: Backtest end date (YYYY-MM-DD)
             initial_capital: Initial capital for backtest
@@ -411,17 +411,24 @@ class BacktestingOperationAdapter(OperationAdapter):
         return "/backtests/start"
 
     def get_start_payload(self) -> dict[str, Any]:
-        """Construct backtesting request payload."""
+        """Construct backtesting request payload.
+
+        Omits symbol/timeframe if None - backend will read from strategy config.
+        """
         payload: dict[str, Any] = {
             "strategy_name": self.strategy_name,
-            "symbol": self.symbol,
-            "timeframe": self.timeframe,
             "start_date": self.start_date,
             "end_date": self.end_date,
             "initial_capital": self.initial_capital,
             "commission": self.commission,
             "slippage": self.slippage,
         }
+
+        # Only include symbol/timeframe if provided (allows backend to use strategy defaults)
+        if self.symbol is not None:
+            payload["symbol"] = self.symbol
+        if self.timeframe is not None:
+            payload["timeframe"] = self.timeframe
 
         # Add optional model path if provided
         if self.model_path:

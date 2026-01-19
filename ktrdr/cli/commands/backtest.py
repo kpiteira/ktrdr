@@ -101,13 +101,10 @@ def backtest(
         runner = OperationRunner(state)
 
         # Create backtesting adapter
-        # Symbol/timeframe are placeholders - backend should read from strategy config
-        # TODO: Update BacktestingOperationAdapter to make symbol/timeframe optional
-        #       like TrainingOperationAdapter, then remove hardcoded values
+        # Symbol/timeframe omitted - backend reads from strategy config
         adapter = BacktestingOperationAdapter(
             strategy_name=strategy,
-            symbol="AAPL",  # TODO: Get from strategy config via API
-            timeframe="1h",  # TODO: Get from strategy config via API
+            # symbol and timeframe not provided - backend reads from strategy config
             start_date=start_date,
             end_date=end_date,
             initial_capital=capital,

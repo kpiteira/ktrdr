@@ -91,7 +91,7 @@ class TestBacktestingEndpoints:
         assert call_kwargs["symbol"] == "AAPL"
         assert call_kwargs["timeframe"] == "1h"
         assert call_kwargs["strategy_config_path"] == "strategies/test_strategy.yaml"
-        assert call_kwargs["model_path"] == "AAPL_1h_latest"
+        assert call_kwargs["model_path"] is None  # Not provided in request
         assert isinstance(call_kwargs["start_date"], datetime)
         assert isinstance(call_kwargs["end_date"], datetime)
         assert call_kwargs["initial_capital"] == 100000.0
@@ -251,3 +251,202 @@ class TestBacktestingEndpoints:
         call_kwargs = mock_backtesting_service.run_backtest.call_args[1]
         assert call_kwargs["commission"] == 0.002
         assert call_kwargs["slippage"] == 0.0015
+
+
+class TestBacktestingOptionalSymbolTimeframe:
+    """Test optional symbol/timeframe behavior (extracted from strategy config)."""
+
+    @pytest.mark.api
+    def test_start_backtest_without_symbol_timeframe(
+        self, client_with_mocked_service, mock_backtesting_service
+    ):
+        """Test starting backtest without symbol/timeframe (uses strategy config)."""
+        from unittest.mock import patch
+
+        mock_backtesting_service.run_backtest.return_value = {
+            "success": True,
+            "operation_id": "op_backtest_20250118_xyz",
+            "status": "started",
+            "message": "Backtest started for AAPL 1h",
+            "symbol": "AAPL",
+            "timeframe": "1h",
+            "mode": "distributed",
+        }
+
+        payload = {
+            "strategy_name": "test_strategy",
+            # symbol and timeframe intentionally omitted
+            "start_date": "2024-01-01",
+            "end_date": "2024-06-01",
+            "initial_capital": 100000.0,
+        }
+
+        # Mock strategy config extraction
+        with patch(
+            "ktrdr.api.endpoints.backtesting.extract_symbols_timeframes_from_strategy"
+        ) as mock_extract:
+            mock_extract.return_value = (["AAPL"], ["1h"])
+
+            response = client_with_mocked_service.post(
+                "/api/v1/backtests/start", json=payload
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["operation_id"] == "op_backtest_20250118_xyz"
+
+        # Verify service was called with resolved symbol/timeframe
+        call_kwargs = mock_backtesting_service.run_backtest.call_args[1]
+        assert call_kwargs["symbol"] == "AAPL"
+        assert call_kwargs["timeframe"] == "1h"
+
+    @pytest.mark.api
+    def test_start_backtest_with_symbol_only(
+        self, client_with_mocked_service, mock_backtesting_service
+    ):
+        """Test starting backtest with only symbol (timeframe from strategy)."""
+        from unittest.mock import patch
+
+        mock_backtesting_service.run_backtest.return_value = {
+            "success": True,
+            "operation_id": "op_backtest_symbol_only",
+            "status": "started",
+            "message": "Backtest started for MSFT 1h",
+            "symbol": "MSFT",
+            "timeframe": "1h",
+            "mode": "distributed",
+        }
+
+        payload = {
+            "strategy_name": "momentum_strategy",
+            "symbol": "MSFT",
+            # timeframe intentionally omitted
+            "start_date": "2024-01-01",
+            "end_date": "2024-06-01",
+        }
+
+        # Mock strategy config extraction (only timeframe will be used)
+        with patch(
+            "ktrdr.api.endpoints.backtesting.extract_symbols_timeframes_from_strategy"
+        ) as mock_extract:
+            mock_extract.return_value = (["AAPL"], ["1h"])
+
+            response = client_with_mocked_service.post(
+                "/api/v1/backtests/start", json=payload
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+
+        # Verify service was called with request symbol and config timeframe
+        call_kwargs = mock_backtesting_service.run_backtest.call_args[1]
+        assert call_kwargs["symbol"] == "MSFT"  # From request
+        assert call_kwargs["timeframe"] == "1h"  # From config
+
+    @pytest.mark.api
+    def test_start_backtest_with_timeframe_only(
+        self, client_with_mocked_service, mock_backtesting_service
+    ):
+        """Test starting backtest with only timeframe (symbol from strategy)."""
+        from unittest.mock import patch
+
+        mock_backtesting_service.run_backtest.return_value = {
+            "success": True,
+            "operation_id": "op_backtest_tf_only",
+            "status": "started",
+            "message": "Backtest started for AAPL 4h",
+            "symbol": "AAPL",
+            "timeframe": "4h",
+            "mode": "distributed",
+        }
+
+        payload = {
+            "strategy_name": "momentum_strategy",
+            # symbol intentionally omitted
+            "timeframe": "4h",
+            "start_date": "2024-01-01",
+            "end_date": "2024-06-01",
+        }
+
+        # Mock strategy config extraction (only symbol will be used)
+        with patch(
+            "ktrdr.api.endpoints.backtesting.extract_symbols_timeframes_from_strategy"
+        ) as mock_extract:
+            mock_extract.return_value = (["AAPL"], ["1h"])
+
+            response = client_with_mocked_service.post(
+                "/api/v1/backtests/start", json=payload
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+
+        # Verify service was called with config symbol and request timeframe
+        call_kwargs = mock_backtesting_service.run_backtest.call_args[1]
+        assert call_kwargs["symbol"] == "AAPL"  # From config
+        assert call_kwargs["timeframe"] == "4h"  # From request
+
+
+class TestBacktestStartRequestModel:
+    """Test BacktestStartRequest Pydantic model."""
+
+    def test_model_accepts_optional_symbol(self):
+        """BacktestStartRequest accepts None for symbol."""
+        from ktrdr.api.models.backtesting import BacktestStartRequest
+
+        request = BacktestStartRequest(
+            strategy_name="test_strategy",
+            symbol=None,
+            timeframe="1h",
+            start_date="2024-01-01",
+            end_date="2024-06-01",
+        )
+
+        assert request.symbol is None
+        assert request.timeframe == "1h"
+
+    def test_model_accepts_optional_timeframe(self):
+        """BacktestStartRequest accepts None for timeframe."""
+        from ktrdr.api.models.backtesting import BacktestStartRequest
+
+        request = BacktestStartRequest(
+            strategy_name="test_strategy",
+            symbol="AAPL",
+            timeframe=None,
+            start_date="2024-01-01",
+            end_date="2024-06-01",
+        )
+
+        assert request.symbol == "AAPL"
+        assert request.timeframe is None
+
+    def test_model_accepts_both_optional(self):
+        """BacktestStartRequest accepts None for both symbol and timeframe."""
+        from ktrdr.api.models.backtesting import BacktestStartRequest
+
+        request = BacktestStartRequest(
+            strategy_name="test_strategy",
+            symbol=None,
+            timeframe=None,
+            start_date="2024-01-01",
+            end_date="2024-06-01",
+        )
+
+        assert request.symbol is None
+        assert request.timeframe is None
+
+    def test_model_accepts_omitted_symbol_timeframe(self):
+        """BacktestStartRequest works when symbol/timeframe are omitted entirely."""
+        from ktrdr.api.models.backtesting import BacktestStartRequest
+
+        request = BacktestStartRequest(
+            strategy_name="test_strategy",
+            start_date="2024-01-01",
+            end_date="2024-06-01",
+        )
+
+        assert request.symbol is None
+        assert request.timeframe is None
