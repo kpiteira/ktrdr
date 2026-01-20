@@ -13,7 +13,6 @@ Key differences from sandbox:
 Commands are thin wrappers over instance_core.py - no duplicated Docker logic.
 """
 
-import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -28,6 +27,7 @@ from ktrdr.cli.instance_core import (
     start_instance,
     stop_instance,
 )
+from ktrdr.cli.sandbox import is_ktrdr_repo
 from ktrdr.cli.sandbox_ports import get_ports
 from ktrdr.cli.sandbox_registry import (
     InstanceInfo,
@@ -66,29 +66,6 @@ def _is_clone_not_worktree(path: Path) -> bool:
     """
     git_path = path / ".git"
     return git_path.is_dir()
-
-
-def is_ktrdr_repo(path: Path) -> bool:
-    """Check if path is a KTRDR repository by checking git remote.
-
-    Args:
-        path: The path to check.
-
-    Returns:
-        True if the git remote contains 'ktrdr', False otherwise.
-    """
-    try:
-        result = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
-            capture_output=True,
-            text=True,
-            cwd=path,
-        )
-        if result.returncode != 0:
-            return False
-        return "ktrdr" in result.stdout.lower()
-    except Exception:
-        return False
 
 
 def _require_local_prod_context() -> dict[str, str]:

@@ -183,8 +183,43 @@ The registry already had full local-prod support implemented. Task 6.1 was prima
 
 ### Next Task Notes
 
-Task 6.2 implements CLI commands. Key points:
-- Delete `create` command (use `init` instead)
-- Use `_is_clone_not_worktree()` helper for validation
-- **destroy MUST use registry lookup** (see critical bug warning above)
-- Reuse `instance_core.py` functions - don't duplicate Docker logic
+Task 6.3 implements the bootstrap setup script. Key points:
+- Script solves chicken-and-egg problem (need CLI to setup, need clone to have CLI)
+- Should check prerequisites, clone, run uv sync, run init, offer shared data setup
+
+---
+
+## Task 6.2 Complete: Implement Local-Prod CLI Commands
+
+### Implementation
+
+Created `ktrdr/cli/local_prod.py` with commands:
+- `init` - Validates clone (not worktree), enforces singleton, creates .env.sandbox with slot 0
+- `up` - Thin wrapper over `start_instance(profile="local-prod", secrets_item="ktrdr-local-prod")`
+- `down` - Thin wrapper over `stop_instance(profile="local-prod")`
+- `destroy` - Uses registry lookup (`get_local_prod()`) to find path, NOT cwd
+- `status` - Shows service URLs
+- `logs` - Shows container logs
+
+### Key Gotchas
+
+1. **No `create` command** - Local-prod uses `init`, not `create`. User must manually clone first.
+
+2. **destroy uses registry lookup** - The critical bug fix is implemented:
+   ```python
+   info = get_local_prod()
+   local_prod_path = Path(info.path)  # Use registered path, NOT cwd
+   ```
+
+3. **Different 1Password item** - Added `secrets_item` parameter to `instance_core.start_instance()`:
+   - Sandbox uses: `ktrdr-sandbox-dev`
+   - Local-prod uses: `ktrdr-local-prod`
+
+4. **Clone validation** - `_is_clone_not_worktree()` checks if `.git` is a directory (clone) vs file (worktree)
+
+### Tests Added
+
+14 tests in `tests/unit/cli/test_local_prod.py`:
+- Init validation (worktree rejection, singleton, clone success)
+- Destroy registry lookup (critical bug prevention)
+- Profile passing to instance_core functions
