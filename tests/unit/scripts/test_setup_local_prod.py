@@ -152,11 +152,14 @@ class TestSetupLocalProdScript:
             text=True,
         )
 
-        # Should fail with appropriate error
-        assert (
-            result.returncode != 0
-            or "already exists" in (result.stdout + result.stderr).lower()
-        ), f"Expected failure or warning for existing directory, got:\n{result.stdout}\n{result.stderr}"
+        # Should fail with appropriate error: non-zero exit AND clear message
+        output = (result.stdout + result.stderr).lower()
+        assert result.returncode != 0, (
+            f"Expected non-zero exit code for existing directory, got: {result.returncode}"
+        )
+        assert "already exists" in output, (
+            f"Expected 'already exists' error message, got:\n{result.stdout}\n{result.stderr}"
+        )
 
 
 class TestSetupLocalProdPrerequisites:
