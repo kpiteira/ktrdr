@@ -53,8 +53,11 @@ SANDBOX_SECRETS_MAPPING = {
 }
 
 
-def fetch_sandbox_secrets() -> dict[str, str]:
-    """Fetch sandbox secrets from 1Password.
+def fetch_secrets(item_name: Optional[str] = None) -> dict[str, str]:
+    """Fetch secrets from 1Password.
+
+    Args:
+        item_name: 1Password item name. Defaults to SANDBOX_SECRETS_ITEM.
 
     Returns:
         Dict mapping environment variable names to secret values.
@@ -63,8 +66,10 @@ def fetch_sandbox_secrets() -> dict[str, str]:
     if not check_1password_authenticated():
         return {}
 
+    item = item_name or SANDBOX_SECRETS_ITEM
+
     try:
-        secrets = fetch_secrets_from_1password(SANDBOX_SECRETS_ITEM)
+        secrets = fetch_secrets_from_1password(item)
     except OnePasswordError:
         return {}
 
@@ -75,6 +80,16 @@ def fetch_sandbox_secrets() -> dict[str, str]:
             env_secrets[env_var] = secrets[field_label]
 
     return env_secrets
+
+
+def fetch_sandbox_secrets() -> dict[str, str]:
+    """Fetch sandbox secrets from 1Password (legacy wrapper).
+
+    Returns:
+        Dict mapping environment variable names to secret values.
+        Empty dict if 1Password is unavailable or not authenticated.
+    """
+    return fetch_secrets(SANDBOX_SECRETS_ITEM)
 
 
 def load_env_file(path: Optional[Path] = None) -> dict[str, str]:
@@ -231,6 +246,7 @@ def start_instance(
     timeout: int = 120,
     no_secrets: bool = False,
     profile: Optional[str] = None,
+    secrets_item: Optional[str] = None,
 ) -> int:
     """Start the instance Docker Compose stack.
 
@@ -241,6 +257,7 @@ def start_instance(
         timeout: Gate timeout in seconds.
         no_secrets: Skip 1Password secrets.
         profile: Docker Compose profile to use (e.g., "local-prod" for extra workers).
+        secrets_item: 1Password item name for secrets. Defaults to sandbox item.
 
     Returns:
         Exit code (0 for success, 1 for general error, 2 for gate failure, 3 for port conflict).
@@ -273,12 +290,13 @@ def start_instance(
         return 3
 
     # Fetch secrets from 1Password
+    item_name = secrets_item or SANDBOX_SECRETS_ITEM
     secrets_env: dict[str, str] = {}
     if no_secrets:
         console.print("[dim]Skipping 1Password secrets (--no-secrets)[/dim]")
     else:
         console.print("Fetching secrets from 1Password...")
-        secrets_env = fetch_sandbox_secrets()
+        secrets_env = fetch_secrets(item_name)
         if secrets_env:
             secret_names = ", ".join(sorted(secrets_env.keys()))
             console.print(f"  [green]✓[/green] Loaded: {secret_names}")
@@ -289,7 +307,7 @@ def start_instance(
             error_console.print("  Possible causes:")
             error_console.print("    - 1Password CLI (op) not installed")
             error_console.print("    - Not signed in (run: op signin)")
-            error_console.print(f"    - Item '{SANDBOX_SECRETS_ITEM}' not found")
+            error_console.print(f"    - Item '{item_name}' not found")
             error_console.print("  [dim]Using default/empty values for secrets[/dim]")
 
     # Build compose command
