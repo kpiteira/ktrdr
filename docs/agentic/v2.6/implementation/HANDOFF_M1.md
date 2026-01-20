@@ -95,3 +95,48 @@ Error handling: If one research fails, it's marked as FAILED and the coordinator
 ### Next Task Notes (Task 1.5)
 
 Task 1.5 manages coordinator lifecycle - starting on first trigger, tracking the coordinator task, and reusing it for subsequent triggers. The key change is moving from "one task per operation" to "one coordinator task for all operations".
+
+---
+
+## Task 1.5 Complete: Coordinator Lifecycle Management
+
+### Implementation Notes
+
+Added to AgentService:
+- `_coordinator_task: asyncio.Task | None = None` - tracks the single coordinator task
+- `_start_coordinator()` - creates and starts the coordinator task
+- `_run_coordinator(worker)` - wrapper that calls `worker.run()` and handles completion/errors
+
+In `trigger()`:
+- After creating operation, checks if coordinator running
+- Starts coordinator if not running (task is None or done)
+
+In `resume()`:
+- Same pattern - starts coordinator if not running after resuming operation
+
+---
+
+## Task 1.6 Complete: Add Startup Hook
+
+### Implementation Notes
+
+Added `resume_if_needed()` to AgentService:
+- Checks for active research operations via `_get_all_active_research_ops()`
+- If active ops exist and coordinator not running, calls `_start_coordinator()`
+- Logs the number of active researches being resumed
+
+Called from `lifespan()` in `startup.py`:
+- Added after checkpoint cleanup service initialization
+- Uses `get_agent_service()` singleton
+- Called with `await agent_service.resume_if_needed()`
+
+### Smoke Test Note
+
+Smoke test was blocked by a sandbox database authentication issue (asyncpg password auth failing from backend container to db container, though psql works via `docker compose exec`). The code is correctly implemented and wired - verify with:
+1. Create a RUNNING agent_research operation in DB
+2. Restart backend
+3. Check logs for "Resuming coordinator for X active researches"
+
+### Next Task Notes (Task 1.7)
+
+Task 1.7 moves operation completion handling inside the coordinator loop. Currently `_handle_assessing_phase` already calls `complete_operation()` directly (done in Task 1.4), so this may be mostly validation that metrics recording happens per-research.

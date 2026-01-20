@@ -610,6 +610,19 @@ class AgentService:
             return op.metadata.parameters.get(key)
         return None
 
+    async def resume_if_needed(self) -> None:
+        """Start coordinator if active researches exist.
+
+        Called on backend startup to resume processing of any researches
+        that were in progress when the backend last shut down.
+        """
+        active_ops = await self._get_all_active_research_ops()
+        if active_ops and (
+            self._coordinator_task is None or self._coordinator_task.done()
+        ):
+            logger.info(f"Resuming coordinator for {len(active_ops)} active researches")
+            self._start_coordinator()
+
 
 # Singleton
 _agent_service: AgentService | None = None

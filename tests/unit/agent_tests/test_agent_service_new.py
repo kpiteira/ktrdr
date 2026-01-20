@@ -938,3 +938,128 @@ class TestAgentServiceBudget:
             assert (
                 0.01 < cost < 0.05
             ), f"Haiku design cost should be ~$0.02, got ${cost}"
+
+
+class TestAgentServiceResumeIfNeeded:
+    """Test resume_if_needed() method - M1 Task 1.6.
+
+    Tests that:
+    - Coordinator starts on backend startup if active researches exist
+    - No coordinator started when no active researches
+    - No duplicate coordinators created if already running
+    """
+
+    @pytest.fixture(autouse=True)
+    def use_stub_workers(self, monkeypatch):
+        """Use stub workers to avoid real API calls in unit tests."""
+        monkeypatch.setenv("USE_STUB_WORKERS", "true")
+        monkeypatch.setenv("STUB_WORKER_FAST", "true")
+
+    @pytest.mark.asyncio
+    async def test_resume_starts_coordinator_when_active_ops_exist(
+        self, mock_operations_service
+    ):
+        """resume_if_needed() starts coordinator when active ops exist."""
+        from ktrdr.api.services.agent_service import AgentService
+
+        # Create an active research operation
+        op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "training"}),
+        )
+        mock_operations_service._operations[op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        # Initially no coordinator
+        assert service._coordinator_task is None
+
+        # Call resume_if_needed
+        await service.resume_if_needed()
+
+        # Coordinator should be started
+        assert service._coordinator_task is not None
+        assert not service._coordinator_task.done()
+
+    @pytest.mark.asyncio
+    async def test_resume_does_nothing_when_no_active_ops(
+        self, mock_operations_service
+    ):
+        """resume_if_needed() does nothing when no active ops exist."""
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        # No active operations
+        assert len(mock_operations_service._operations) == 0
+
+        # Call resume_if_needed
+        await service.resume_if_needed()
+
+        # Coordinator should NOT be started
+        assert service._coordinator_task is None
+
+    @pytest.mark.asyncio
+    async def test_resume_does_nothing_when_coordinator_already_running(
+        self, mock_operations_service
+    ):
+        """resume_if_needed() does nothing if coordinator already running."""
+        from unittest.mock import MagicMock
+
+        from ktrdr.api.services.agent_service import AgentService
+
+        # Create an active research operation
+        op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "training"}),
+        )
+        mock_operations_service._operations[op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        # Simulate already-running coordinator
+        mock_task = MagicMock()
+        mock_task.done.return_value = False
+        service._coordinator_task = mock_task
+
+        # Call resume_if_needed
+        await service.resume_if_needed()
+
+        # Should not have replaced the existing task
+        assert service._coordinator_task is mock_task
+
+    @pytest.mark.asyncio
+    async def test_resume_starts_coordinator_when_previous_task_done(
+        self, mock_operations_service
+    ):
+        """resume_if_needed() starts coordinator if previous task completed."""
+        from unittest.mock import MagicMock
+
+        from ktrdr.api.services.agent_service import AgentService
+
+        # Create an active research operation
+        op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "training"}),
+        )
+        mock_operations_service._operations[op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        # Simulate completed coordinator task
+        mock_task = MagicMock()
+        mock_task.done.return_value = True
+        service._coordinator_task = mock_task
+
+        # Call resume_if_needed
+        await service.resume_if_needed()
+
+        # Should have started a new coordinator
+        assert service._coordinator_task is not mock_task
+        assert service._coordinator_task is not None
