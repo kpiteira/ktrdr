@@ -537,6 +537,35 @@ class AgentService:
             result.extend(ops)
         return result
 
+    def _get_concurrency_limit(self) -> int:
+        """Calculate max concurrent researches from worker pool.
+
+        Checks for manual override via AGENT_MAX_CONCURRENT_RESEARCHES env var first.
+        Otherwise calculates: training_workers + backtest_workers + buffer.
+
+        Returns:
+            Maximum number of concurrent researches allowed (minimum 1).
+        """
+        from ktrdr.api.endpoints.workers import get_worker_registry
+        from ktrdr.api.models.workers import WorkerType
+
+        # Check manual override
+        override = os.getenv("AGENT_MAX_CONCURRENT_RESEARCHES", "0")
+        if override != "0":
+            try:
+                return int(override)
+            except ValueError:
+                pass  # Fall through to calculation
+
+        # Calculate from workers
+        registry = get_worker_registry()
+        training = len(registry.list_workers(worker_type=WorkerType.TRAINING))
+        backtest = len(registry.list_workers(worker_type=WorkerType.BACKTESTING))
+        buffer = int(os.getenv("AGENT_CONCURRENCY_BUFFER", "1"))
+
+        # Minimum of 1 to allow at least one research
+        return max(1, training + backtest + buffer)
+
     async def _get_last_research_op(self):
         """Get most recent completed/failed AGENT_RESEARCH operation.
 

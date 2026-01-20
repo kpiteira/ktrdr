@@ -1,6 +1,7 @@
 """Tests for multi-research coordinator functionality.
 
 Task 1.1: Tests for _get_all_active_research_ops() method.
+Task 1.2: Tests for _get_concurrency_limit() method.
 """
 
 from datetime import datetime, timezone
@@ -367,3 +368,216 @@ class TestGetActiveResearchOpBackwardCompatibility:
         result = await service._get_active_research_op()
 
         assert result is None
+
+
+class TestGetConcurrencyLimit:
+    """Tests for _get_concurrency_limit() method - Task 1.2."""
+
+    @pytest.fixture
+    def mock_worker_registry(self):
+        """Create a mock worker registry."""
+        from unittest.mock import MagicMock
+
+        from ktrdr.api.models.workers import WorkerEndpoint, WorkerStatus, WorkerType
+
+        registry = MagicMock()
+        workers: dict[WorkerType, list[WorkerEndpoint]] = {
+            WorkerType.TRAINING: [],
+            WorkerType.BACKTESTING: [],
+        }
+
+        def list_workers(worker_type=None, status=None):
+            if worker_type is None:
+                all_workers = []
+                for w_list in workers.values():
+                    all_workers.extend(w_list)
+                return all_workers
+            return workers.get(worker_type, [])
+
+        def add_worker(worker_type: WorkerType, worker_id: str):
+            """Helper to add a worker for testing."""
+            worker = WorkerEndpoint(
+                worker_id=worker_id,
+                worker_type=worker_type,
+                endpoint_url=f"http://localhost:500{len(workers[worker_type])}",
+                status=WorkerStatus.AVAILABLE,
+            )
+            workers[worker_type].append(worker)
+            return worker
+
+        registry.list_workers = list_workers
+        registry._workers = workers
+        registry._add_worker = add_worker
+
+        return registry
+
+    def test_returns_override_value_when_env_var_set(
+        self, mock_operations_service, mock_worker_registry, monkeypatch
+    ):
+        """Returns override value when AGENT_MAX_CONCURRENT_RESEARCHES is set."""
+        from unittest.mock import patch
+
+        from ktrdr.api.services.agent_service import AgentService
+
+        monkeypatch.setenv("AGENT_MAX_CONCURRENT_RESEARCHES", "10")
+
+        with patch(
+            "ktrdr.api.endpoints.workers.get_worker_registry",
+            return_value=mock_worker_registry,
+        ):
+            service = AgentService(operations_service=mock_operations_service)
+            result = service._get_concurrency_limit()
+
+        assert result == 10
+
+    def test_calculates_from_workers_when_no_override(
+        self, mock_operations_service, mock_worker_registry, monkeypatch
+    ):
+        """Calculates limit from workers when no override is set."""
+        from unittest.mock import patch
+
+        from ktrdr.api.models.workers import WorkerType
+        from ktrdr.api.services.agent_service import AgentService
+
+        # Remove override env var if set
+        monkeypatch.delenv("AGENT_MAX_CONCURRENT_RESEARCHES", raising=False)
+
+        # Add 2 training workers and 3 backtest workers
+        mock_worker_registry._add_worker(WorkerType.TRAINING, "training-1")
+        mock_worker_registry._add_worker(WorkerType.TRAINING, "training-2")
+        mock_worker_registry._add_worker(WorkerType.BACKTESTING, "backtest-1")
+        mock_worker_registry._add_worker(WorkerType.BACKTESTING, "backtest-2")
+        mock_worker_registry._add_worker(WorkerType.BACKTESTING, "backtest-3")
+
+        with patch(
+            "ktrdr.api.endpoints.workers.get_worker_registry",
+            return_value=mock_worker_registry,
+        ):
+            service = AgentService(operations_service=mock_operations_service)
+            result = service._get_concurrency_limit()
+
+        # 2 training + 3 backtest + 1 buffer = 6
+        assert result == 6
+
+    def test_applies_buffer_correctly(
+        self, mock_operations_service, mock_worker_registry, monkeypatch
+    ):
+        """Applies buffer from AGENT_CONCURRENCY_BUFFER env var."""
+        from unittest.mock import patch
+
+        from ktrdr.api.models.workers import WorkerType
+        from ktrdr.api.services.agent_service import AgentService
+
+        monkeypatch.delenv("AGENT_MAX_CONCURRENT_RESEARCHES", raising=False)
+        monkeypatch.setenv("AGENT_CONCURRENCY_BUFFER", "3")
+
+        # Add 2 workers total
+        mock_worker_registry._add_worker(WorkerType.TRAINING, "training-1")
+        mock_worker_registry._add_worker(WorkerType.BACKTESTING, "backtest-1")
+
+        with patch(
+            "ktrdr.api.endpoints.workers.get_worker_registry",
+            return_value=mock_worker_registry,
+        ):
+            service = AgentService(operations_service=mock_operations_service)
+            result = service._get_concurrency_limit()
+
+        # 1 training + 1 backtest + 3 buffer = 5
+        assert result == 5
+
+    def test_returns_minimum_1_when_no_workers_registered(
+        self, mock_operations_service, mock_worker_registry, monkeypatch
+    ):
+        """Returns minimum of 1 when no workers are registered."""
+        from unittest.mock import patch
+
+        from ktrdr.api.services.agent_service import AgentService
+
+        monkeypatch.delenv("AGENT_MAX_CONCURRENT_RESEARCHES", raising=False)
+        monkeypatch.delenv("AGENT_CONCURRENCY_BUFFER", raising=False)
+
+        # No workers added - registry is empty
+
+        with patch(
+            "ktrdr.api.endpoints.workers.get_worker_registry",
+            return_value=mock_worker_registry,
+        ):
+            service = AgentService(operations_service=mock_operations_service)
+            result = service._get_concurrency_limit()
+
+        # 0 workers + 1 buffer = 1, and min is 1
+        assert result == 1
+
+    def test_override_zero_is_not_treated_as_override(
+        self, mock_operations_service, mock_worker_registry, monkeypatch
+    ):
+        """Setting override to '0' should calculate from workers, not use 0."""
+        from unittest.mock import patch
+
+        from ktrdr.api.models.workers import WorkerType
+        from ktrdr.api.services.agent_service import AgentService
+
+        monkeypatch.setenv("AGENT_MAX_CONCURRENT_RESEARCHES", "0")
+
+        # Add workers
+        mock_worker_registry._add_worker(WorkerType.TRAINING, "training-1")
+        mock_worker_registry._add_worker(WorkerType.BACKTESTING, "backtest-1")
+
+        with patch(
+            "ktrdr.api.endpoints.workers.get_worker_registry",
+            return_value=mock_worker_registry,
+        ):
+            service = AgentService(operations_service=mock_operations_service)
+            result = service._get_concurrency_limit()
+
+        # Should calculate: 1 + 1 + 1 (default buffer) = 3
+        assert result == 3
+
+    def test_invalid_override_falls_back_to_calculation(
+        self, mock_operations_service, mock_worker_registry, monkeypatch
+    ):
+        """Invalid override value (non-integer) falls back to calculation."""
+        from unittest.mock import patch
+
+        from ktrdr.api.models.workers import WorkerType
+        from ktrdr.api.services.agent_service import AgentService
+
+        monkeypatch.setenv("AGENT_MAX_CONCURRENT_RESEARCHES", "invalid")
+
+        # Add workers
+        mock_worker_registry._add_worker(WorkerType.TRAINING, "training-1")
+
+        with patch(
+            "ktrdr.api.endpoints.workers.get_worker_registry",
+            return_value=mock_worker_registry,
+        ):
+            service = AgentService(operations_service=mock_operations_service)
+            result = service._get_concurrency_limit()
+
+        # Should calculate: 1 training + 0 backtest + 1 buffer = 2
+        assert result == 2
+
+    def test_default_buffer_is_1(
+        self, mock_operations_service, mock_worker_registry, monkeypatch
+    ):
+        """Default buffer is 1 when AGENT_CONCURRENCY_BUFFER not set."""
+        from unittest.mock import patch
+
+        from ktrdr.api.models.workers import WorkerType
+        from ktrdr.api.services.agent_service import AgentService
+
+        monkeypatch.delenv("AGENT_MAX_CONCURRENT_RESEARCHES", raising=False)
+        monkeypatch.delenv("AGENT_CONCURRENCY_BUFFER", raising=False)
+
+        # Add 1 training worker
+        mock_worker_registry._add_worker(WorkerType.TRAINING, "training-1")
+
+        with patch(
+            "ktrdr.api.endpoints.workers.get_worker_registry",
+            return_value=mock_worker_registry,
+        ):
+            service = AgentService(operations_service=mock_operations_service)
+            result = service._get_concurrency_limit()
+
+        # 1 training + 0 backtest + 1 default buffer = 2
+        assert result == 2
