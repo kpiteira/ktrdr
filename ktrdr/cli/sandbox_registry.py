@@ -151,13 +151,23 @@ def allocate_next_slot() -> int:
         The allocated slot number.
 
     Raises:
-        RuntimeError: If all 10 slots are in use.
+        RuntimeError: If all 10 slots are in use. Error includes list of all instances.
     """
     allocated = get_allocated_slots()
     for slot in range(1, 11):
         if slot not in allocated:
             return slot
-    raise RuntimeError("All 10 sandbox slots are in use")
+
+    # Provide helpful error with current allocations
+    registry = load_registry()
+    instances = sorted(registry.instances.items(), key=lambda x: x[1].slot)
+
+    msg = "All 10 sandbox slots are in use:\n"
+    for instance_id, info in instances:
+        msg += f"  Slot {info.slot}: {instance_id}\n"
+    msg += "\nDestroy unused instances with: ktrdr sandbox destroy"
+
+    raise RuntimeError(msg)
 
 
 def clean_stale_entries() -> list[str]:
