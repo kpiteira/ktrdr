@@ -318,3 +318,50 @@ Created `docs/designs/Sandbox/LOCAL_PROD_SETUP.md` with comprehensive setup docu
 ### Next Task Notes
 
 Task 6.6 is E2E Validation - execute the full E2E test scenario from M6_local_prod.md
+
+---
+
+## Task 6.6 Complete: E2E Validation
+
+### Test Results: ALL PASSED
+
+| Success Criterion | Result |
+|-------------------|--------|
+| `init` works on fresh clone with slot 0 | ✅ PASSED |
+| `init` fails if local-prod already exists | ✅ PASSED |
+| `init` fails on worktree (must be clone) | ✅ PASSED |
+| `up` starts all services on standard ports | ✅ PASSED |
+| `status` shows all services and URLs | ✅ PASSED |
+| `down` stops containers | ✅ PASSED |
+| `destroy` unregisters, keeps clone | ✅ PASSED |
+| `destroy` works from ANY directory | ✅ PASSED |
+| MCP server running | ✅ PASSED |
+| 4 workers registered | ✅ PASSED |
+
+### Key Validations
+
+1. **Registry-based destroy** - Correctly uses registered path even when called from different directory
+2. **Clone vs worktree detection** - Robust detection with clear error message
+3. **Singleton enforcement** - Prevents multiple local-prod instances
+4. **Port allocation** - All services on standard ports (slot 0)
+5. **MCP integration** - Container starts automatically with local-prod
+
+### Test Execution
+
+- Total time: ~5 minutes
+- Method: Copied current codebase to /tmp/test-ktrdr-prod (since changes not pushed to GitHub)
+- All services verified: backend, grafana, jaeger, workers, mcp-local
+
+---
+
+## M6 Milestone Complete
+
+All 6 tasks completed:
+- [x] Task 6.1: Registry functions verified
+- [x] Task 6.2: CLI commands implemented
+- [x] Task 6.3: Bootstrap script created
+- [x] Task 6.4: Compose file updated (mcp-local added)
+- [x] Task 6.5: Documentation created
+- [x] Task 6.6: E2E validation passed
+
+**Local-prod is ready to replace ktrdr2 as the primary execution environment.**
