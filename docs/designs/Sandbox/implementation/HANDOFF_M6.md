@@ -292,3 +292,29 @@ Task 6.5 creates documentation:
 - `docs/designs/Sandbox/LOCAL_PROD_SETUP.md` - Complete setup guide
 - Document 1Password item requirements
 - Document host service connections
+
+---
+
+## Task 6.5 Complete: Create 1Password Item Documentation
+
+### Implementation
+
+Created `docs/designs/Sandbox/LOCAL_PROD_SETUP.md` with comprehensive setup documentation.
+
+**Sections included:**
+1. Prerequisites - with prerequisite check command
+2. 1Password Setup - item name (`ktrdr-local-prod`), required fields, CLI command
+3. Clone and Initialize - automated (bootstrap script) and manual options
+4. Daily Usage - commands and service URLs
+5. Host Services - IB Gateway and GPU Training with architecture diagram
+6. MCP Server Usage - Claude Desktop and Claude Code configuration
+7. Troubleshooting - common issues and solutions
+
+**Key documentation points:**
+- 1Password item: `ktrdr-local-prod` with fields: `db_password`, `jwt_secret`, `anthropic_api_key`, `grafana_password`
+- MCP container name for Claude config: `ktrdr-prod-mcp-local-1`
+- Host services connect via `host.docker.internal:5001` (IB) and `host.docker.internal:5002` (Training)
+
+### Next Task Notes
+
+Task 6.6 is E2E Validation - execute the full E2E test scenario from M6_local_prod.md
