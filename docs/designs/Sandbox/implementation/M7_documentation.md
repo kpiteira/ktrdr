@@ -5,11 +5,11 @@ architecture: ../ARCHITECTURE.md
 
 # Milestone 7: Documentation & Polish
 
-**Goal:** Complete documentation and handle edge cases for production-ready sandbox system.
+**Goal:** Complete documentation and handle edge cases for production-ready sandbox and local-prod system.
 
 **Branch:** `feature/sandbox-m7-docs`
 
-**Builds on:** M6 (Merge)
+**Builds on:** M6 (Local-Prod)
 
 ---
 
@@ -18,7 +18,7 @@ architecture: ../ARCHITECTURE.md
 **Purpose:** Verify documentation is complete and edge cases are handled.
 
 **Prerequisites:**
-- M6 complete (merge done)
+- M6 complete (local-prod working)
 - Clean test environment
 
 ```bash
@@ -199,12 +199,41 @@ Add sandbox documentation section to the main README.
 
 **Implementation Notes:**
 
-Add section after existing development setup:
+Add sections after existing development setup:
 
 ```markdown
-## Parallel Development (Sandboxes)
+## Local-Prod Environment
 
-Run multiple KTRDR stacks in parallel for feature development:
+The main execution environment for real work (IB Gateway, GPU training, MCP server):
+
+### Quick Start
+
+```bash
+# Use the bootstrap script
+./scripts/setup-local-prod.sh
+
+# Or manually:
+git clone https://github.com/kpiteira/ktrdr.git ~/Documents/dev/ktrdr-prod
+cd ~/Documents/dev/ktrdr-prod
+uv sync
+ktrdr local-prod init
+ktrdr local-prod up
+```
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `ktrdr local-prod init` | Initialize current clone as local-prod |
+| `ktrdr local-prod up` | Start the stack |
+| `ktrdr local-prod down` | Stop the stack |
+| `ktrdr local-prod destroy` | Unregister (keeps clone) |
+| `ktrdr local-prod status` | Detailed status with URLs |
+| `ktrdr local-prod logs` | View logs |
+
+## Sandboxes (Parallel Development)
+
+Run multiple KTRDR stacks in parallel for feature development and testing:
 
 ### Quick Start
 
@@ -231,7 +260,7 @@ open http://localhost:8001/api/v1/docs
 
 ### Shared Data
 
-Sandboxes share data via `~/.ktrdr/shared/`:
+Both local-prod and sandboxes share data via `~/.ktrdr/shared/`:
 
 ```bash
 # Initialize shared data from existing environment
@@ -243,7 +272,7 @@ ktrdr sandbox init-shared --minimal
 
 ### CLI Auto-Detection
 
-When in a sandbox directory, CLI commands automatically target that instance:
+When in a sandbox or local-prod directory, CLI commands automatically target that instance:
 
 ```bash
 cd ../ktrdr--my-feature
@@ -281,14 +310,16 @@ grep -A 20 "Parallel Development" README.md
 **Task Categories:** Configuration
 
 **Description:**
-Final cleanup tasks to make sandbox production-ready.
+Final cleanup tasks to make sandbox and local-prod production-ready.
 
 **Implementation Notes:**
 
-1. **Delete `docker-compose.sandbox.yml`** (now merged)
+1. **Keep `docker-compose.sandbox.yml`** - Used by both sandboxes and local-prod
 
-2. **Delete backup files** (if merge verified)
-   - `docker-compose.yml.pre-sandbox-backup`
+2. **Verify local-prod and sandbox can coexist:**
+   - Local-prod on slot 0 (ports 8000, 5432, etc.)
+   - Sandbox on slot 1+ (ports 8001+, 5433+, etc.)
+   - Both can run simultaneously without conflicts
 
 3. **Review and improve help text** for all commands:
 
@@ -334,16 +365,22 @@ def create(
 ktrdr sandbox create --help
 # Should show examples and clear descriptions
 
-ls docker-compose.sandbox.yml
-# Should not exist (deleted)
+ktrdr local-prod --help
+# Should show all local-prod commands
+
+# Test coexistence
+ktrdr local-prod up
+ktrdr sandbox create test-coexist
+cd ../ktrdr--test-coexist && ktrdr sandbox up
+# Both should be running on different ports
 ```
 
 **Acceptance Criteria:**
-- [ ] Sandbox compose file deleted
-- [ ] Backup files deleted
+- [ ] Local-prod and sandbox can run simultaneously
 - [ ] All commands have examples in help
 - [ ] Error messages suggest fixes
-- [ ] No TODOs or FIXMEs in sandbox code
+- [ ] No TODOs or FIXMEs in sandbox/local-prod code
+- [ ] Bootstrap script documented in README
 
 ---
 
@@ -351,8 +388,8 @@ ls docker-compose.sandbox.yml
 
 - [ ] All 3 tasks complete and committed
 - [ ] Edge cases handled gracefully
-- [ ] README updated with sandbox docs
-- [ ] Temporary files cleaned up
+- [ ] README updated with sandbox and local-prod docs
+- [ ] Local-prod and sandbox can coexist
 - [ ] Help text polished
 - [ ] No FIXMEs or TODOs remaining
 - [ ] Full E2E flow tested one more time

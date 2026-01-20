@@ -26,6 +26,8 @@ def destroy(...):
 5. **It destroyed the sandbox directory (`ktrdr--stream-b`) instead of the local-prod (`ktrdr-prod`)**
 6. All uncommitted M6 work was lost because the branch was never pushed
 
+**NOTE:** The spec has changed since this bug. Local-prod now uses `init` (not `create`) and must be a clone (not worktree). However, the destroy bug lesson still applies: **always use registry lookup for destroy**.
+
 ### The Correct Implementation
 
 `local-prod destroy` is DIFFERENT from `sandbox destroy`:
@@ -71,19 +73,35 @@ def destroy(...):
 
 ### Checklist When Implementing Task 6.2
 
-- [ ] `local-prod create` - Creates at `../ktrdr-prod`, registers in `local_prod` field
+**NOTE:** Local-prod uses `init`, NOT `create`. User must manually clone first.
+
+- [ ] **`local-prod create` - DELETE THIS COMMAND** (it creates worktrees, but local-prod must be a clone)
+- [ ] `local-prod init` - Validates clone (not worktree), creates `.env.sandbox`, registers in `local_prod` field
 - [ ] `local-prod up` - Requires being in local-prod directory (uses `_require_local_prod_context`)
 - [ ] `local-prod down` - Requires being in local-prod directory (uses `_require_local_prod_context`)
 - [ ] `local-prod status` - Requires being in local-prod directory (uses `_require_local_prod_context`)
 - [ ] `local-prod logs` - Requires being in local-prod directory (uses `_require_local_prod_context`)
 - [ ] **`local-prod destroy` - MUST use `get_local_prod()` registry lookup, NOT current directory!**
 
+### Clone vs Worktree Validation
+
+`local-prod init` must verify the current directory is a **clone**, not a worktree:
+
+```python
+def _is_clone_not_worktree(path: Path) -> bool:
+    """Worktrees have .git as a FILE. Clones have .git as a DIRECTORY."""
+    git_path = path / ".git"
+    return git_path.is_dir()  # True = clone, False = worktree
+```
+
 ### E2E Test Scenarios That Must Pass
 
 The E2E test should verify:
-1. Create local-prod from sandbox directory → local-prod created at `../ktrdr-prod`
-2. Destroy local-prod from sandbox directory → **local-prod destroyed, sandbox untouched**
-3. Destroy local-prod from local-prod directory → local-prod destroyed correctly
+1. Init in a clone → local-prod initialized
+2. Init in a worktree → **rejected with clear error**
+3. Init when local-prod already exists → **rejected (singleton)**
+4. Destroy from any directory → **local-prod destroyed, other directories untouched**
+5. Destroy from local-prod directory → local-prod destroyed correctly
 
 ---
 
@@ -120,3 +138,26 @@ def stop_instance(path: Path, remove_volumes: bool = False, profile: Optional[st
     cmd.append("down")
     # ...
 ```
+
+### Bootstrap Script (Task 6.3)
+
+A new `scripts/setup-local-prod.sh` script guides users through first-time setup:
+1. Checks prerequisites (git, docker, uv, op)
+2. Explains 1Password requirements (`ktrdr-local-prod` item)
+3. Clones repo to user-specified path
+4. Runs `uv sync` and `ktrdr local-prod init`
+5. Offers shared data initialization
+
+This solves the chicken-and-egg problem: you need the CLI to setup, but you need a clone to have the CLI.
+
+### Code Reuse Warning
+
+**Local-prod commands are THIN WRAPPERS over `instance_core.py`.**
+
+Do NOT re-implement Docker/Compose logic. Call existing functions:
+- `instance_core.start_instance(profile="local-prod")`
+- `instance_core.stop_instance(profile="local-prod")`
+- `instance_core.generate_env_file(slot=0)`
+- etc.
+
+See M6_local_prod.md Task 6.2 for the full reuse table.
