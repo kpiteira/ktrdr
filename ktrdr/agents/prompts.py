@@ -324,10 +324,9 @@ training:
 ## Critical v3 Rules (MUST FOLLOW)
 
 1. `indicators` is a **DICT keyed by ID**, NOT a list
-2. Each indicator ID **MUST** have a matching `fuzzy_sets` entry
-3. Each fuzzy_set **MUST** have `indicator: <id>` field linking back
-4. `nn_inputs` section is **REQUIRED** - without it validation fails
-5. Use `parameters` (NOT `params`) for fuzzy set membership definitions
+2. Each `fuzzy_sets` entry **MUST** have an `indicator` field that references a valid indicator ID
+3. `nn_inputs` section is **REQUIRED** - without it validation fails
+4. Use `parameters` (NOT `params`) for fuzzy set membership definitions
 
 ## V3 Format Key Concepts
 
