@@ -23,6 +23,7 @@ from opentelemetry import trace
 
 from ktrdr import get_logger
 from ktrdr.agents.budget import get_budget_tracker
+from ktrdr.agents.checkpoint_builder import build_agent_checkpoint_state
 from ktrdr.agents.gates import check_backtest_gate, check_training_gate
 from ktrdr.agents.metrics import (
     record_budget_spend,
@@ -147,6 +148,7 @@ class AgentResearchWorker:
         assessment_worker: ChildWorker,
         training_service: Any = None,  # TrainingService - lazy loaded if None
         backtest_service: Any = None,  # BacktestingService - lazy loaded if None
+        checkpoint_service: Any = None,  # CheckpointService - for save/delete on failure/success
     ):
         """Initialize the orchestrator.
 
@@ -156,12 +158,14 @@ class AgentResearchWorker:
             assessment_worker: Worker for result assessment phase.
             training_service: Optional TrainingService (lazy loaded if None).
             backtest_service: Optional BacktestingService (lazy loaded if None).
+            checkpoint_service: Optional CheckpointService for checkpoint operations.
         """
         self.ops = operations_service
         self.design_worker = design_worker
         self.assessment_worker = assessment_worker
         self._training_service = training_service
         self._backtest_service = backtest_service
+        self._checkpoint_service = checkpoint_service
 
         # Read poll interval from environment
         self.POLL_INTERVAL = _get_poll_interval()
@@ -245,6 +249,8 @@ class AgentResearchWorker:
                         except (WorkerError, GateFailedError) as e:
                             # Log error but continue with other researches
                             logger.error(f"Research {op.operation_id} failed: {e}")
+                            # Save checkpoint before marking failed (for resume capability)
+                            await self._save_checkpoint(op.operation_id, "failure")
                             # Mark the operation as failed
                             await self.ops.fail_operation(op.operation_id, str(e))
                             record_cycle_outcome("failed")
@@ -255,6 +261,9 @@ class AgentResearchWorker:
             except asyncio.CancelledError:
                 logger.info("Coordinator cancelled")
                 span.set_attribute("outcome", "cancelled")
+                # Save checkpoints for all active operations before cancellation
+                for op in active_ops:
+                    await self._save_checkpoint(op.operation_id, "cancellation")
                 # Propagate cancellation to active child
                 await self._cancel_current_child()
                 raise
@@ -809,6 +818,9 @@ class AgentResearchWorker:
             }
             await self.ops.complete_operation(operation_id, completion_result)
 
+            # Delete checkpoint on successful completion (no longer needed for resume)
+            await self._delete_checkpoint(operation_id)
+
             # Record cycle metrics
             record_cycle_duration(0)  # Duration tracked per-research in future
             record_cycle_outcome("completed")
@@ -960,3 +972,64 @@ class AgentResearchWorker:
         while elapsed < seconds:
             await asyncio.sleep(interval)
             elapsed += interval
+
+    async def _save_checkpoint(
+        self,
+        operation_id: str,
+        checkpoint_type: str,
+    ) -> None:
+        """Save checkpoint for an operation.
+
+        Builds checkpoint state from the operation metadata and saves it.
+
+        Args:
+            operation_id: The operation ID to checkpoint.
+            checkpoint_type: Type of checkpoint (failure, cancellation, etc.).
+        """
+        if self._checkpoint_service is None:
+            logger.debug(
+                f"Checkpoint service not available, skipping checkpoint save: {operation_id}"
+            )
+            return
+
+        try:
+            op = await self.ops.get_operation(operation_id)
+            if op is None:
+                logger.warning(
+                    f"Cannot save checkpoint - operation not found: {operation_id}"
+                )
+                return
+
+            checkpoint_state = build_agent_checkpoint_state(op)
+
+            await self._checkpoint_service.save_checkpoint(
+                operation_id=operation_id,
+                checkpoint_type=checkpoint_type,
+                state=checkpoint_state.to_dict(),
+                artifacts=None,
+            )
+
+            logger.info(
+                f"Agent checkpoint saved: {operation_id} "
+                f"(type={checkpoint_type}, phase={checkpoint_state.phase})"
+            )
+
+        except Exception as e:
+            logger.warning(f"Failed to save agent checkpoint: {e}")
+
+    async def _delete_checkpoint(self, operation_id: str) -> None:
+        """Delete checkpoint for an operation.
+
+        Called when an operation completes successfully.
+
+        Args:
+            operation_id: The operation ID whose checkpoint should be deleted.
+        """
+        if self._checkpoint_service is None:
+            return
+
+        try:
+            await self._checkpoint_service.delete_checkpoint(operation_id)
+            logger.debug(f"Checkpoint deleted for completed operation: {operation_id}")
+        except Exception as e:
+            logger.warning(f"Failed to delete checkpoint: {e}")

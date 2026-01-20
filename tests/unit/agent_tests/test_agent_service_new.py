@@ -68,7 +68,7 @@ def mock_operations_service():
             operations[operation_id].status = OperationStatus.CANCELLED
             operations[operation_id].error_message = reason
 
-    async def async_start_operation(operation_id, task):
+    async def async_start_operation(operation_id, task=None):
         if operation_id in operations:
             operations[operation_id].status = OperationStatus.RUNNING
             operations[operation_id].started_at = datetime.now(timezone.utc)
@@ -786,13 +786,8 @@ class TestAgentServiceBudget:
         ):
             service = AgentService(operations_service=mock_operations_service)
 
-            # Manually call _run_worker to test spend recording
-            op = await mock_operations_service.create_operation(
-                operation_type=OperationType.AGENT_RESEARCH,
-                metadata=OperationMetadata(parameters={"phase": "idle"}),
-            )
-
-            await service._run_worker(op.operation_id, mock_worker)
+            # Manually call _run_coordinator to test spend recording
+            await service._run_coordinator(mock_worker)
 
         # Service should NOT record spend - worker records per-phase
         mock_budget_tracker.record_spend.assert_not_called()
@@ -817,13 +812,8 @@ class TestAgentServiceBudget:
         ):
             service = AgentService(operations_service=mock_operations_service)
 
-            op = await mock_operations_service.create_operation(
-                operation_type=OperationType.AGENT_RESEARCH,
-                metadata=OperationMetadata(parameters={"phase": "idle"}),
-            )
-
             with pytest.raises(Exception, match="Worker failed"):
-                await service._run_worker(op.operation_id, mock_worker)
+                await service._run_coordinator(mock_worker)
 
         # Spend should NOT have been recorded
         mock_budget_tracker.record_spend.assert_not_called()
@@ -848,13 +838,8 @@ class TestAgentServiceBudget:
         ):
             service = AgentService(operations_service=mock_operations_service)
 
-            op = await mock_operations_service.create_operation(
-                operation_type=OperationType.AGENT_RESEARCH,
-                metadata=OperationMetadata(parameters={"phase": "idle"}),
-            )
-
             with pytest.raises(asyncio.CancelledError):
-                await service._run_worker(op.operation_id, mock_worker)
+                await service._run_coordinator(mock_worker)
 
         # Spend should NOT have been recorded
         mock_budget_tracker.record_spend.assert_not_called()

@@ -1,14 +1,14 @@
-"""Tests for Agent Checkpoint Integration (M7 Task 7.4).
+"""Tests for Agent Checkpoint Integration (M7 Task 7.4, updated for v2.6 multi-research).
 
 Tests checkpoint saving at:
-- Phase transitions (in AgentResearchWorker)
-- Cancellation (in AgentService._run_worker)
-- Failure (in AgentService._run_worker)
+- Failure in coordinator loop (in AgentResearchWorker)
+- Cancellation (in AgentResearchWorker)
+- Successful completion (checkpoint deleted in AgentResearchWorker)
 """
 
 import asyncio
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -69,7 +69,7 @@ def mock_operations_service():
             operations[operation_id].status = OperationStatus.CANCELLED
             operations[operation_id].error_message = reason
 
-    async def async_start_operation(operation_id, task):
+    async def async_start_operation(operation_id, task=None):
         if operation_id in operations:
             operations[operation_id].status = OperationStatus.RUNNING
             operations[operation_id].started_at = datetime.now(timezone.utc)
@@ -134,38 +134,27 @@ def mock_checkpoint_service():
     return service
 
 
-@pytest.fixture(autouse=True)
-def mock_budget():
-    """Mock budget tracker to allow triggers in tests."""
-    mock_tracker = MagicMock()
-    mock_tracker.can_spend.return_value = (True, None)
-    mock_tracker.record_spend = MagicMock()
-
-    with patch(
-        "ktrdr.api.services.agent_service.get_budget_tracker",
-        return_value=mock_tracker,
-    ):
-        yield mock_tracker
-
-
-class TestAgentCheckpointOnFailure:
-    """Test checkpoint saved on failure in AgentService._run_worker."""
+class TestResearchWorkerCheckpointOnFailure:
+    """Test checkpoint saved on failure in AgentResearchWorker coordinator loop."""
 
     @pytest.mark.asyncio
-    async def test_checkpoint_saved_when_worker_fails(
+    async def test_checkpoint_saved_when_research_fails(
         self, mock_operations_service, mock_checkpoint_service
     ):
-        """Checkpoint is saved when worker raises an exception."""
-        from ktrdr.agents.workers.research_worker import AgentResearchWorker
-        from ktrdr.api.services.agent_service import AgentService
+        """Checkpoint is saved when a research operation fails in the coordinator loop."""
+        from ktrdr.agents.workers.research_worker import (
+            AgentResearchWorker,
+            WorkerError,
+        )
 
-        # Create a mock worker that fails
-        mock_worker = AsyncMock(spec=AgentResearchWorker)
-        mock_worker.run.side_effect = Exception("Worker failed")
+        # Create worker with mock checkpoint service
+        mock_design_worker = AsyncMock()
+        mock_assessment_worker = AsyncMock()
 
-        # Inject checkpoint service via constructor
-        service = AgentService(
+        worker = AgentResearchWorker(
             operations_service=mock_operations_service,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
             checkpoint_service=mock_checkpoint_service,
         )
 
@@ -180,9 +169,16 @@ class TestAgentCheckpointOnFailure:
                 }
             ),
         )
+        # Mark as running so it's picked up by the coordinator
+        mock_operations_service._operations[op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
 
-        with pytest.raises(Exception, match="Worker failed"):
-            await service._run_worker(op.operation_id, mock_worker)
+        # Mock _advance_research to raise an error
+        worker._advance_research = AsyncMock(side_effect=WorkerError("Training failed"))
+
+        # Run coordinator - it should save checkpoint on failure
+        await worker.run()
 
         # Checkpoint should have been saved with type "failure"
         mock_checkpoint_service.save_checkpoint.assert_called_once()
@@ -195,14 +191,18 @@ class TestAgentCheckpointOnFailure:
         self, mock_operations_service, mock_checkpoint_service
     ):
         """Checkpoint state includes current phase and strategy info on failure."""
-        from ktrdr.agents.workers.research_worker import AgentResearchWorker
-        from ktrdr.api.services.agent_service import AgentService
+        from ktrdr.agents.workers.research_worker import (
+            AgentResearchWorker,
+            WorkerError,
+        )
 
-        mock_worker = AsyncMock(spec=AgentResearchWorker)
-        mock_worker.run.side_effect = Exception("Worker failed")
+        mock_design_worker = AsyncMock()
+        mock_assessment_worker = AsyncMock()
 
-        service = AgentService(
+        worker = AgentResearchWorker(
             operations_service=mock_operations_service,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
             checkpoint_service=mock_checkpoint_service,
         )
 
@@ -218,9 +218,13 @@ class TestAgentCheckpointOnFailure:
                 }
             ),
         )
+        mock_operations_service._operations[op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
 
-        with pytest.raises(Exception, match="Worker failed"):
-            await service._run_worker(op.operation_id, mock_worker)
+        worker._advance_research = AsyncMock(side_effect=WorkerError("Backtest failed"))
+
+        await worker.run()
 
         # Verify checkpoint state includes phase info
         call_args = mock_checkpoint_service.save_checkpoint.call_args
@@ -230,22 +234,23 @@ class TestAgentCheckpointOnFailure:
         assert state["backtest_operation_id"] == "op_backtest_789"
 
 
-class TestAgentCheckpointOnCancellation:
-    """Test checkpoint saved on cancellation in AgentService._run_worker."""
+class TestResearchWorkerCheckpointOnCancellation:
+    """Test checkpoint saved on cancellation in AgentResearchWorker."""
 
     @pytest.mark.asyncio
-    async def test_checkpoint_saved_when_worker_cancelled(
+    async def test_checkpoint_saved_when_coordinator_cancelled(
         self, mock_operations_service, mock_checkpoint_service
     ):
-        """Checkpoint is saved when worker is cancelled."""
+        """Checkpoint is saved for active operations when coordinator is cancelled."""
         from ktrdr.agents.workers.research_worker import AgentResearchWorker
-        from ktrdr.api.services.agent_service import AgentService
 
-        mock_worker = AsyncMock(spec=AgentResearchWorker)
-        mock_worker.run.side_effect = asyncio.CancelledError()
+        mock_design_worker = AsyncMock()
+        mock_assessment_worker = AsyncMock()
 
-        service = AgentService(
+        worker = AgentResearchWorker(
             operations_service=mock_operations_service,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
             checkpoint_service=mock_checkpoint_service,
         )
 
@@ -258,9 +263,15 @@ class TestAgentCheckpointOnCancellation:
                 }
             ),
         )
+        mock_operations_service._operations[op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+
+        # Mock _advance_research to raise CancelledError (simulating cancellation)
+        worker._advance_research = AsyncMock(side_effect=asyncio.CancelledError())
 
         with pytest.raises(asyncio.CancelledError):
-            await service._run_worker(op.operation_id, mock_worker)
+            await worker.run()
 
         # Checkpoint should have been saved with type "cancellation"
         mock_checkpoint_service.save_checkpoint.assert_called_once()
@@ -269,42 +280,55 @@ class TestAgentCheckpointOnCancellation:
         assert call_args[1]["checkpoint_type"] == "cancellation"
 
     @pytest.mark.asyncio
-    async def test_checkpoint_includes_phase_state_on_cancellation(
+    async def test_checkpoint_saved_for_all_active_ops_on_cancellation(
         self, mock_operations_service, mock_checkpoint_service
     ):
-        """Checkpoint state includes current phase on cancellation."""
+        """Checkpoints saved for all active operations when coordinator cancelled."""
         from ktrdr.agents.workers.research_worker import AgentResearchWorker
-        from ktrdr.api.services.agent_service import AgentService
 
-        mock_worker = AsyncMock(spec=AgentResearchWorker)
-        mock_worker.run.side_effect = asyncio.CancelledError()
+        mock_design_worker = AsyncMock()
+        mock_assessment_worker = AsyncMock()
 
-        service = AgentService(
+        worker = AgentResearchWorker(
             operations_service=mock_operations_service,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
             checkpoint_service=mock_checkpoint_service,
         )
 
-        op = await mock_operations_service.create_operation(
+        # Create two active operations
+        op1 = await mock_operations_service.create_operation(
             operation_type=OperationType.AGENT_RESEARCH,
-            metadata=OperationMetadata(
-                parameters={
-                    "phase": "training",
-                    "strategy_name": "rsi_crossover",
-                    "training_op_id": "op_training_001",
-                }
-            ),
+            metadata=OperationMetadata(parameters={"phase": "training"}),
+        )
+        op2 = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "backtesting"}),
+        )
+        mock_operations_service._operations[op1.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+        mock_operations_service._operations[op2.operation_id].status = (
+            OperationStatus.RUNNING
         )
 
+        # Mock _advance_research to raise CancelledError
+        worker._advance_research = AsyncMock(side_effect=asyncio.CancelledError())
+
         with pytest.raises(asyncio.CancelledError):
-            await service._run_worker(op.operation_id, mock_worker)
+            await worker.run()
 
-        call_args = mock_checkpoint_service.save_checkpoint.call_args
-        state = call_args[1]["state"]
-        assert state["phase"] == "training"
-        assert state["training_operation_id"] == "op_training_001"
+        # Both operations should have checkpoints saved
+        assert mock_checkpoint_service.save_checkpoint.call_count == 2
+        saved_op_ids = [
+            call[1]["operation_id"]
+            for call in mock_checkpoint_service.save_checkpoint.call_args_list
+        ]
+        assert op1.operation_id in saved_op_ids
+        assert op2.operation_id in saved_op_ids
 
 
-class TestAgentCheckpointStateShape:
+class TestResearchWorkerCheckpointStateShape:
     """Test that checkpoint state matches AgentCheckpointState schema."""
 
     @pytest.mark.asyncio
@@ -312,14 +336,18 @@ class TestAgentCheckpointStateShape:
         self, mock_operations_service, mock_checkpoint_service
     ):
         """Checkpoint state has all required AgentCheckpointState fields."""
-        from ktrdr.agents.workers.research_worker import AgentResearchWorker
-        from ktrdr.api.services.agent_service import AgentService
+        from ktrdr.agents.workers.research_worker import (
+            AgentResearchWorker,
+            WorkerError,
+        )
 
-        mock_worker = AsyncMock(spec=AgentResearchWorker)
-        mock_worker.run.side_effect = Exception("Test failure")
+        mock_design_worker = AsyncMock()
+        mock_assessment_worker = AsyncMock()
 
-        service = AgentService(
+        worker = AgentResearchWorker(
             operations_service=mock_operations_service,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
             checkpoint_service=mock_checkpoint_service,
         )
 
@@ -333,9 +361,13 @@ class TestAgentCheckpointStateShape:
                 }
             ),
         )
+        mock_operations_service._operations[op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
 
-        with pytest.raises(Exception, match="Test failure"):
-            await service._run_worker(op.operation_id, mock_worker)
+        worker._advance_research = AsyncMock(side_effect=WorkerError("Test failure"))
+
+        await worker.run()
 
         call_args = mock_checkpoint_service.save_checkpoint.call_args
         state = call_args[1]["state"]
@@ -350,15 +382,19 @@ class TestAgentCheckpointStateShape:
         self, mock_operations_service, mock_checkpoint_service
     ):
         """Checkpoint state can be deserialized to AgentCheckpointState."""
-        from ktrdr.agents.workers.research_worker import AgentResearchWorker
-        from ktrdr.api.services.agent_service import AgentService
+        from ktrdr.agents.workers.research_worker import (
+            AgentResearchWorker,
+            WorkerError,
+        )
         from ktrdr.checkpoint.schemas import AgentCheckpointState
 
-        mock_worker = AsyncMock(spec=AgentResearchWorker)
-        mock_worker.run.side_effect = Exception("Test failure")
+        mock_design_worker = AsyncMock()
+        mock_assessment_worker = AsyncMock()
 
-        service = AgentService(
+        worker = AgentResearchWorker(
             operations_service=mock_operations_service,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
             checkpoint_service=mock_checkpoint_service,
         )
 
@@ -372,9 +408,13 @@ class TestAgentCheckpointStateShape:
                 }
             ),
         )
+        mock_operations_service._operations[op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
 
-        with pytest.raises(Exception, match="Test failure"):
-            await service._run_worker(op.operation_id, mock_worker)
+        worker._advance_research = AsyncMock(side_effect=WorkerError("Test failure"))
+
+        await worker.run()
 
         call_args = mock_checkpoint_service.save_checkpoint.call_args
         state = call_args[1]["state"]
@@ -385,37 +425,8 @@ class TestAgentCheckpointStateShape:
         assert checkpoint_state.operation_type == "agent"
 
 
-class TestAgentCheckpointNotSavedOnSuccess:
-    """Test that checkpoint is NOT saved when operation completes successfully."""
-
-    @pytest.mark.asyncio
-    async def test_no_checkpoint_on_successful_completion(
-        self, mock_operations_service, mock_checkpoint_service
-    ):
-        """No checkpoint is saved when worker completes successfully."""
-        from ktrdr.agents.workers.research_worker import AgentResearchWorker
-        from ktrdr.api.services.agent_service import AgentService
-
-        mock_worker = AsyncMock(spec=AgentResearchWorker)
-        mock_worker.run.return_value = {
-            "success": True,
-            "strategy_name": "completed_strategy",
-        }
-
-        service = AgentService(
-            operations_service=mock_operations_service,
-            checkpoint_service=mock_checkpoint_service,
-        )
-
-        op = await mock_operations_service.create_operation(
-            operation_type=OperationType.AGENT_RESEARCH,
-            metadata=OperationMetadata(parameters={"phase": "idle"}),
-        )
-
-        await service._run_worker(op.operation_id, mock_worker)
-
-        # save_checkpoint should NOT have been called
-        mock_checkpoint_service.save_checkpoint.assert_not_called()
+class TestResearchWorkerCheckpointOnSuccess:
+    """Test that checkpoint is deleted when operation completes successfully."""
 
     @pytest.mark.asyncio
     async def test_checkpoint_deleted_on_successful_completion(
@@ -423,13 +434,14 @@ class TestAgentCheckpointNotSavedOnSuccess:
     ):
         """Existing checkpoint is deleted when operation completes successfully."""
         from ktrdr.agents.workers.research_worker import AgentResearchWorker
-        from ktrdr.api.services.agent_service import AgentService
 
-        mock_worker = AsyncMock(spec=AgentResearchWorker)
-        mock_worker.run.return_value = {"success": True}
+        mock_design_worker = AsyncMock()
+        mock_assessment_worker = AsyncMock()
 
-        service = AgentService(
+        worker = AgentResearchWorker(
             operations_service=mock_operations_service,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
             checkpoint_service=mock_checkpoint_service,
         )
 
@@ -437,64 +449,129 @@ class TestAgentCheckpointNotSavedOnSuccess:
             operation_type=OperationType.AGENT_RESEARCH,
             metadata=OperationMetadata(parameters={"phase": "idle"}),
         )
+        mock_operations_service._operations[op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
 
-        await service._run_worker(op.operation_id, mock_worker)
+        # Call _delete_checkpoint directly to test
+        await worker._delete_checkpoint(op.operation_id)
 
-        # delete_checkpoint should have been called to clean up
+        # delete_checkpoint should have been called
         mock_checkpoint_service.delete_checkpoint.assert_called_once_with(
             op.operation_id
         )
 
-
-class TestAgentCheckpointAtPhaseTransitions:
-    """Test checkpoint saved at phase transitions in AgentResearchWorker."""
-
-    @pytest.fixture
-    def mock_worker_dependencies(
+    @pytest.mark.asyncio
+    async def test_no_checkpoint_saved_on_success(
         self, mock_operations_service, mock_checkpoint_service
     ):
-        """Set up mock dependencies for AgentResearchWorker."""
+        """No checkpoint is saved when research completes successfully (only deleted)."""
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
         mock_design_worker = AsyncMock()
-        mock_design_worker.run.return_value = {
-            "success": True,
-            "strategy_name": "test_strategy",
-            "strategy_path": "/strategies/test.yaml",
-        }
-
         mock_assessment_worker = AsyncMock()
-        mock_training_service = AsyncMock()
-        mock_backtest_service = AsyncMock()
 
-        return {
-            "ops": mock_operations_service,
-            "checkpoint_service": mock_checkpoint_service,
-            "design_worker": mock_design_worker,
-            "assessment_worker": mock_assessment_worker,
-            "training_service": mock_training_service,
-            "backtest_service": mock_backtest_service,
-        }
+        worker = AgentResearchWorker(
+            operations_service=mock_operations_service,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
+            checkpoint_service=mock_checkpoint_service,
+        )
+
+        # Create operation that will complete on first advance
+        op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "idle"}),
+        )
+        mock_operations_service._operations[op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+
+        # Mock _advance_research to complete the operation (set status to COMPLETED)
+        async def complete_op(operation):
+            mock_operations_service._operations[operation.operation_id].status = (
+                OperationStatus.COMPLETED
+            )
+
+        worker._advance_research = AsyncMock(side_effect=complete_op)
+
+        await worker.run()
+
+        # save_checkpoint should NOT have been called (no failure/cancellation)
+        mock_checkpoint_service.save_checkpoint.assert_not_called()
+
+
+class TestResearchWorkerCheckpointHelpers:
+    """Test the checkpoint helper methods directly."""
 
     @pytest.mark.asyncio
-    async def test_checkpoint_saved_after_design_phase_completes(
-        self, mock_worker_dependencies
+    async def test_save_checkpoint_handles_missing_service(
+        self, mock_operations_service
     ):
-        """Checkpoint is saved after design phase transitions to training."""
-        # This test verifies that when design phase completes,
-        # a checkpoint is saved before starting training.
-        # The implementation should add checkpoint save in _handle_designing_phase
-        # or _start_training in AgentResearchWorker.
-        pytest.skip("Test to be implemented after verifying worker structure")
+        """_save_checkpoint handles missing checkpoint service gracefully."""
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
+        mock_design_worker = AsyncMock()
+        mock_assessment_worker = AsyncMock()
+
+        # Create worker WITHOUT checkpoint service
+        worker = AgentResearchWorker(
+            operations_service=mock_operations_service,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
+            checkpoint_service=None,  # No checkpoint service
+        )
+
+        op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "training"}),
+        )
+
+        # Should not raise - just skip checkpoint save
+        await worker._save_checkpoint(op.operation_id, "failure")
+        # No assertion needed - we're just verifying it doesn't raise
 
     @pytest.mark.asyncio
-    async def test_checkpoint_saved_after_training_phase_completes(
-        self, mock_worker_dependencies
+    async def test_delete_checkpoint_handles_missing_service(
+        self, mock_operations_service
     ):
-        """Checkpoint is saved after training phase transitions to backtesting."""
-        pytest.skip("Test to be implemented after verifying worker structure")
+        """_delete_checkpoint handles missing checkpoint service gracefully."""
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
+        mock_design_worker = AsyncMock()
+        mock_assessment_worker = AsyncMock()
+
+        # Create worker WITHOUT checkpoint service
+        worker = AgentResearchWorker(
+            operations_service=mock_operations_service,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
+            checkpoint_service=None,
+        )
+
+        # Should not raise - just skip checkpoint delete
+        await worker._delete_checkpoint("op_123")
+        # No assertion needed - we're just verifying it doesn't raise
 
     @pytest.mark.asyncio
-    async def test_checkpoint_saved_after_backtest_phase_completes(
-        self, mock_worker_dependencies
+    async def test_save_checkpoint_handles_missing_operation(
+        self, mock_operations_service, mock_checkpoint_service
     ):
-        """Checkpoint is saved after backtest phase transitions to assessment."""
-        pytest.skip("Test to be implemented after verifying worker structure")
+        """_save_checkpoint handles non-existent operation gracefully."""
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
+        mock_design_worker = AsyncMock()
+        mock_assessment_worker = AsyncMock()
+
+        worker = AgentResearchWorker(
+            operations_service=mock_operations_service,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
+            checkpoint_service=mock_checkpoint_service,
+        )
+
+        # Try to save checkpoint for non-existent operation
+        await worker._save_checkpoint("non_existent_op", "failure")
+
+        # save_checkpoint should NOT have been called (operation not found)
+        mock_checkpoint_service.save_checkpoint.assert_not_called()

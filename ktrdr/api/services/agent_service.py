@@ -70,6 +70,7 @@ class AgentService:
         self.ops = operations_service or get_operations_service()
         self._checkpoint_service = checkpoint_service
         self._worker: AgentResearchWorker | None = None
+        self._coordinator_task: asyncio.Task | None = None
 
     def _get_worker(self) -> AgentResearchWorker:
         """Get or create the research worker.
@@ -83,6 +84,7 @@ class AgentService:
             Training and Backtest are services (lazy-loaded inside orchestrator).
         """
         if self._worker is None:
+            checkpoint_svc = self._get_checkpoint_service()
             if _use_stub_workers():
                 logger.info("Using stub workers (USE_STUB_WORKERS=true)")
                 self._worker = AgentResearchWorker(
@@ -92,6 +94,7 @@ class AgentService:
                     # Services will be stubbed via mock injection in tests
                     training_service=None,
                     backtest_service=None,
+                    checkpoint_service=checkpoint_svc,
                 )
             else:
                 self._worker = AgentResearchWorker(
@@ -101,6 +104,7 @@ class AgentService:
                     # Services lazy-loaded inside orchestrator
                     training_service=None,
                     backtest_service=None,
+                    checkpoint_service=checkpoint_svc,
                 )
         return self._worker
 
@@ -229,10 +233,12 @@ class AgentService:
             is_backend_local=True,  # M7 Task 7.1: Mark as backend-local for checkpoint handling
         )
 
-        # Start worker in background
-        worker = self._get_worker()
-        task = asyncio.create_task(self._run_worker(op.operation_id, worker))
-        await self.ops.start_operation(op.operation_id, task)
+        # Start operation (transition to RUNNING)
+        await self.ops.start_operation(op.operation_id)
+
+        # Start coordinator if not running
+        if self._coordinator_task is None or self._coordinator_task.done():
+            self._start_coordinator()
 
         logger.info(
             f"Research cycle triggered: {op.operation_id}, model: {resolved_model}"
@@ -245,38 +251,33 @@ class AgentService:
             "message": "Research cycle started",
         }
 
-    async def _run_worker(self, operation_id: str, worker: AgentResearchWorker) -> None:
-        """Run coordinator and handle completion/failure.
+    def _start_coordinator(self) -> None:
+        """Start the coordinator loop task if not already running.
 
-        The coordinator loop discovers and processes all active researches.
-        Individual operation completion is handled inside the coordinator.
+        Creates a single coordinator task that discovers and processes all
+        active research operations. Only one coordinator runs at a time.
+        """
+        worker = self._get_worker()
+        self._coordinator_task = asyncio.create_task(self._run_coordinator(worker))
+        logger.info("Coordinator task started")
 
-        M7: Saves checkpoint on failure/cancellation for resume capability.
+    async def _run_coordinator(self, worker: AgentResearchWorker) -> None:
+        """Run the coordinator loop.
+
+        The coordinator discovers and processes all active researches.
+        Individual operation completion/failure is handled inside the loop.
 
         Args:
-            operation_id: The operation ID that triggered the coordinator (for checkpoint).
             worker: The worker instance to run.
         """
         try:
-            # Coordinator loop - discovers and processes all active researches
-            # Individual completions handled inside the loop
             await worker.run()
-
-            # Coordinator exited normally (no active researches)
-            # M7: Delete checkpoint for the triggering operation if it completed
-            if self._checkpoint_service is not None:
-                await self._checkpoint_service.delete_checkpoint(operation_id)
-
+            logger.info("Coordinator completed (no active researches)")
         except asyncio.CancelledError:
-            # M7: Save checkpoint before marking cancelled
-            await self._save_checkpoint(operation_id, "cancellation")
-            await self.ops.cancel_operation(operation_id, "Cancelled by user")
+            logger.info("Coordinator cancelled")
             raise
-
         except Exception as e:
-            # M7: Save checkpoint before marking failed
-            await self._save_checkpoint(operation_id, "failure")
-            await self.ops.fail_operation(operation_id, str(e))
+            logger.error(f"Coordinator error: {e}")
             raise
 
     @trace_service_method("agent.get_status")
@@ -462,10 +463,12 @@ class AgentService:
         # Update operation metadata
         op.metadata.parameters = updated_params
 
-        # 7. Start worker in background
-        worker = self._get_worker()
-        task = asyncio.create_task(self._run_worker(operation_id, worker))
-        await self.ops.start_operation(operation_id, task)
+        # 7. Start operation (transition to RUNNING)
+        await self.ops.start_operation(operation_id)
+
+        # Start coordinator if not running
+        if self._coordinator_task is None or self._coordinator_task.done():
+            self._start_coordinator()
 
         logger.info(
             f"Research cycle resumed: {operation_id}, phase: {resumed_from_phase}"
