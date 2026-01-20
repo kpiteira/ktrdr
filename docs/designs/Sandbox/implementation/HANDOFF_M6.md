@@ -161,3 +161,30 @@ Do NOT re-implement Docker/Compose logic. Call existing functions:
 - etc.
 
 See M6_local_prod.md Task 6.2 for the full reuse table.
+
+---
+
+## Task 6.1 Complete: Update Registry for Local-Prod
+
+### Implementation Status
+
+The registry already had full local-prod support implemented. Task 6.1 was primarily verification through tests.
+
+### Tests Added
+
+7 new tests in `TestLocalProdRegistry` class:
+- `test_local_prod_not_exists_initially` - Empty registry state
+- `test_set_and_get_local_prod` - Basic CRUD round-trip
+- `test_clear_local_prod` - Remove singleton
+- `test_local_prod_is_worktree_false_for_clones` - Verify clone flag
+- `test_local_prod_singleton_overwrite` - Singleton behavior
+- `test_local_prod_persists_across_load` - Persistence validation
+- `test_local_prod_independent_of_sandboxes` - Isolation from sandbox instances
+
+### Next Task Notes
+
+Task 6.2 implements CLI commands. Key points:
+- Delete `create` command (use `init` instead)
+- Use `_is_clone_not_worktree()` helper for validation
+- **destroy MUST use registry lookup** (see critical bug warning above)
+- Reuse `instance_core.py` functions - don't duplicate Docker logic
