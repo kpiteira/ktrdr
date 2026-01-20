@@ -320,14 +320,28 @@ def derive_unique_instance_id(base_id: str) -> str:
 @sandbox_app.command()
 def create(
     name: str = typer.Argument(
-        ..., help="Instance name (will be prefixed with ktrdr--)"
+        ..., help="Instance name (e.g., 'my-feature' creates ktrdr--my-feature)"
     ),
-    branch: str = typer.Option(None, "--branch", "-b", help="Git branch to checkout"),
+    branch: str = typer.Option(
+        None, "--branch", "-b", help="Git branch to checkout (default: current branch)"
+    ),
     slot: int = typer.Option(
-        None, "--slot", "-s", help="Force specific port slot (1-10)"
+        None,
+        "--slot",
+        "-s",
+        help="Force specific port slot 1-10 (default: auto-allocate)",
     ),
 ) -> None:
-    """Create a new sandbox instance using git worktree."""
+    """Create a new sandbox instance using git worktree.
+
+    Creates a new directory ../ktrdr--<name> with its own git working
+    directory and allocates a unique port slot for running in parallel.
+
+    Examples:
+        ktrdr sandbox create my-feature
+        ktrdr sandbox create bugfix --branch fix/issue-123
+        ktrdr sandbox create test --slot 5
+    """
     # Derive paths
     current_repo = Path.cwd()
     instance_name = f"ktrdr--{slugify(name)}"
