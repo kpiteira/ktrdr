@@ -581,3 +581,322 @@ class TestGetConcurrencyLimit:
 
         # 1 training + 0 backtest + 1 default buffer = 2
         assert result == 2
+
+
+class TestTriggerCapacityCheck:
+    """Tests for trigger() capacity check - Task 1.3."""
+
+    @pytest.fixture
+    def mock_worker_registry(self):
+        """Create a mock worker registry for capacity tests."""
+        from unittest.mock import MagicMock
+
+        from ktrdr.api.models.workers import WorkerEndpoint, WorkerStatus, WorkerType
+
+        registry = MagicMock()
+        workers: dict[WorkerType, list[WorkerEndpoint]] = {
+            WorkerType.TRAINING: [],
+            WorkerType.BACKTESTING: [],
+        }
+
+        def list_workers(worker_type=None, status=None):
+            if worker_type is None:
+                all_workers = []
+                for w_list in workers.values():
+                    all_workers.extend(w_list)
+                return all_workers
+            return workers.get(worker_type, [])
+
+        def add_worker(worker_type: WorkerType, worker_id: str):
+            """Helper to add a worker for testing."""
+            worker = WorkerEndpoint(
+                worker_id=worker_id,
+                worker_type=worker_type,
+                endpoint_url=f"http://localhost:500{len(workers[worker_type])}",
+                status=WorkerStatus.AVAILABLE,
+            )
+            workers[worker_type].append(worker)
+            return worker
+
+        registry.list_workers = list_workers
+        registry._workers = workers
+        registry._add_worker = add_worker
+
+        return registry
+
+    @pytest.fixture(autouse=True)
+    def use_stub_workers(self, monkeypatch):
+        """Use stub workers to avoid real API calls in unit tests."""
+        monkeypatch.setenv("USE_STUB_WORKERS", "true")
+        monkeypatch.setenv("STUB_WORKER_FAST", "true")
+
+    @pytest.fixture(autouse=True)
+    def mock_budget(self):
+        """Mock budget tracker to allow triggers in tests."""
+        from unittest.mock import MagicMock, patch
+
+        mock_tracker = MagicMock()
+        mock_tracker.can_spend.return_value = (True, None)
+
+        with patch(
+            "ktrdr.api.services.agent_service.get_budget_tracker",
+            return_value=mock_tracker,
+        ):
+            yield mock_tracker
+
+    @pytest.mark.asyncio
+    async def test_first_trigger_succeeds(
+        self, mock_operations_service, mock_worker_registry, monkeypatch
+    ):
+        """First trigger succeeds when no active researches (count 0)."""
+        from unittest.mock import patch
+
+        from ktrdr.api.services.agent_service import AgentService
+
+        # Set limit to 5
+        monkeypatch.setenv("AGENT_MAX_CONCURRENT_RESEARCHES", "5")
+
+        with patch(
+            "ktrdr.api.endpoints.workers.get_worker_registry",
+            return_value=mock_worker_registry,
+        ):
+            service = AgentService(operations_service=mock_operations_service)
+            result = await service.trigger()
+
+        assert result["triggered"] is True
+        assert "operation_id" in result
+
+    @pytest.mark.asyncio
+    async def test_second_trigger_succeeds_under_capacity(
+        self, mock_operations_service, mock_worker_registry, monkeypatch
+    ):
+        """Second trigger succeeds when under capacity (count 1, limit 5)."""
+        from unittest.mock import patch
+
+        from ktrdr.api.services.agent_service import AgentService
+
+        # Set limit to 5
+        monkeypatch.setenv("AGENT_MAX_CONCURRENT_RESEARCHES", "5")
+
+        # Create one running research
+        mock_operations_service._create_op(
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RUNNING,
+        )
+
+        with patch(
+            "ktrdr.api.endpoints.workers.get_worker_registry",
+            return_value=mock_worker_registry,
+        ):
+            service = AgentService(operations_service=mock_operations_service)
+            result = await service.trigger()
+
+        # Should succeed - we're at 1/5 capacity
+        assert result["triggered"] is True
+        assert "operation_id" in result
+
+    @pytest.mark.asyncio
+    async def test_trigger_at_capacity_fails_with_at_capacity_reason(
+        self, mock_operations_service, mock_worker_registry, monkeypatch
+    ):
+        """Trigger at capacity fails with 'at_capacity' reason."""
+        from unittest.mock import patch
+
+        from ktrdr.api.services.agent_service import AgentService
+
+        # Set limit to 2
+        monkeypatch.setenv("AGENT_MAX_CONCURRENT_RESEARCHES", "2")
+
+        # Create 2 running researches (at capacity)
+        mock_operations_service._create_op(
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RUNNING,
+        )
+        mock_operations_service._create_op(
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RUNNING,
+        )
+
+        with patch(
+            "ktrdr.api.endpoints.workers.get_worker_registry",
+            return_value=mock_worker_registry,
+        ):
+            service = AgentService(operations_service=mock_operations_service)
+            result = await service.trigger()
+
+        assert result["triggered"] is False
+        assert result["reason"] == "at_capacity"
+
+    @pytest.mark.asyncio
+    async def test_at_capacity_response_includes_active_count(
+        self, mock_operations_service, mock_worker_registry, monkeypatch
+    ):
+        """At-capacity response includes active_count field."""
+        from unittest.mock import patch
+
+        from ktrdr.api.services.agent_service import AgentService
+
+        # Set limit to 2
+        monkeypatch.setenv("AGENT_MAX_CONCURRENT_RESEARCHES", "2")
+
+        # Create 2 running researches
+        mock_operations_service._create_op(
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RUNNING,
+        )
+        mock_operations_service._create_op(
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RUNNING,
+        )
+
+        with patch(
+            "ktrdr.api.endpoints.workers.get_worker_registry",
+            return_value=mock_worker_registry,
+        ):
+            service = AgentService(operations_service=mock_operations_service)
+            result = await service.trigger()
+
+        assert "active_count" in result
+        assert result["active_count"] == 2
+
+    @pytest.mark.asyncio
+    async def test_at_capacity_response_includes_limit(
+        self, mock_operations_service, mock_worker_registry, monkeypatch
+    ):
+        """At-capacity response includes limit field."""
+        from unittest.mock import patch
+
+        from ktrdr.api.services.agent_service import AgentService
+
+        # Set limit to 3
+        monkeypatch.setenv("AGENT_MAX_CONCURRENT_RESEARCHES", "3")
+
+        # Create 3 running researches
+        mock_operations_service._create_op(
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RUNNING,
+        )
+        mock_operations_service._create_op(
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RUNNING,
+        )
+        mock_operations_service._create_op(
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RUNNING,
+        )
+
+        with patch(
+            "ktrdr.api.endpoints.workers.get_worker_registry",
+            return_value=mock_worker_registry,
+        ):
+            service = AgentService(operations_service=mock_operations_service)
+            result = await service.trigger()
+
+        assert "limit" in result
+        assert result["limit"] == 3
+
+    @pytest.mark.asyncio
+    async def test_at_capacity_response_includes_message(
+        self, mock_operations_service, mock_worker_registry, monkeypatch
+    ):
+        """At-capacity response includes descriptive message."""
+        from unittest.mock import patch
+
+        from ktrdr.api.services.agent_service import AgentService
+
+        # Set limit to 2
+        monkeypatch.setenv("AGENT_MAX_CONCURRENT_RESEARCHES", "2")
+
+        # Create 2 running researches
+        mock_operations_service._create_op(
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RUNNING,
+        )
+        mock_operations_service._create_op(
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RUNNING,
+        )
+
+        with patch(
+            "ktrdr.api.endpoints.workers.get_worker_registry",
+            return_value=mock_worker_registry,
+        ):
+            service = AgentService(operations_service=mock_operations_service)
+            result = await service.trigger()
+
+        assert "message" in result
+        # Message should mention capacity
+        assert "capacity" in result["message"].lower() or "2/2" in result["message"]
+
+    @pytest.mark.asyncio
+    async def test_budget_check_still_happens_first(
+        self, mock_operations_service, mock_worker_registry, monkeypatch
+    ):
+        """Budget check still happens before capacity check."""
+        from unittest.mock import MagicMock, patch
+
+        from ktrdr.api.services.agent_service import AgentService
+
+        # Set limit to 2
+        monkeypatch.setenv("AGENT_MAX_CONCURRENT_RESEARCHES", "2")
+
+        # Create 2 running researches (at capacity)
+        mock_operations_service._create_op(
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RUNNING,
+        )
+        mock_operations_service._create_op(
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RUNNING,
+        )
+
+        # Mock budget as exhausted
+        mock_tracker = MagicMock()
+        mock_tracker.can_spend.return_value = (False, "budget_exhausted")
+
+        with patch(
+            "ktrdr.api.endpoints.workers.get_worker_registry",
+            return_value=mock_worker_registry,
+        ):
+            with patch(
+                "ktrdr.api.services.agent_service.get_budget_tracker",
+                return_value=mock_tracker,
+            ):
+                service = AgentService(operations_service=mock_operations_service)
+                result = await service.trigger()
+
+        # Should return budget_exhausted, not at_capacity
+        assert result["triggered"] is False
+        assert result["reason"] == "budget_exhausted"
+
+    @pytest.mark.asyncio
+    async def test_trigger_succeeds_when_one_below_capacity(
+        self, mock_operations_service, mock_worker_registry, monkeypatch
+    ):
+        """Trigger succeeds when exactly one below capacity."""
+        from unittest.mock import patch
+
+        from ktrdr.api.services.agent_service import AgentService
+
+        # Set limit to 3
+        monkeypatch.setenv("AGENT_MAX_CONCURRENT_RESEARCHES", "3")
+
+        # Create 2 running researches (one below capacity)
+        mock_operations_service._create_op(
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RUNNING,
+        )
+        mock_operations_service._create_op(
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RUNNING,
+        )
+
+        with patch(
+            "ktrdr.api.endpoints.workers.get_worker_registry",
+            return_value=mock_worker_registry,
+        ):
+            service = AgentService(operations_service=mock_operations_service)
+            result = await service.trigger()
+
+        # Should succeed - we're at 2/3 capacity
+        assert result["triggered"] is True

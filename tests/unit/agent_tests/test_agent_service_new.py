@@ -172,26 +172,42 @@ class TestAgentServiceTrigger:
         assert op.operation_type == OperationType.AGENT_RESEARCH
 
     @pytest.mark.asyncio
-    async def test_trigger_rejects_when_cycle_active(self, mock_operations_service):
-        """Trigger returns triggered=False if cycle already active."""
+    async def test_trigger_rejects_when_at_capacity(
+        self, mock_operations_service, monkeypatch
+    ):
+        """Trigger returns triggered=False with at_capacity when at limit."""
+        from unittest.mock import MagicMock, patch
+
         from ktrdr.api.services.agent_service import AgentService
 
-        service = AgentService(operations_service=mock_operations_service)
+        # Set capacity limit to 1 for this test
+        monkeypatch.setenv("AGENT_MAX_CONCURRENT_RESEARCHES", "1")
 
-        # First trigger should succeed
-        result1 = await service.trigger()
-        assert result1["triggered"] is True
+        # Create mock worker registry (needed for capacity check)
+        mock_registry = MagicMock()
+        mock_registry.list_workers.return_value = []
 
-        # Mark the operation as running (simulating started worker)
-        op_id = result1["operation_id"]
-        mock_operations_service._operations[op_id].status = OperationStatus.RUNNING
+        with patch(
+            "ktrdr.api.endpoints.workers.get_worker_registry",
+            return_value=mock_registry,
+        ):
+            service = AgentService(operations_service=mock_operations_service)
 
-        # Second trigger should fail
-        result2 = await service.trigger()
+            # First trigger should succeed
+            result1 = await service.trigger()
+            assert result1["triggered"] is True
 
-        assert result2["triggered"] is False
-        assert result2["reason"] == "active_cycle_exists"
-        assert result2["operation_id"] == op_id
+            # Mark the operation as running (simulating started worker)
+            op_id = result1["operation_id"]
+            mock_operations_service._operations[op_id].status = OperationStatus.RUNNING
+
+            # Second trigger should fail (at capacity with limit=1)
+            result2 = await service.trigger()
+
+            assert result2["triggered"] is False
+            assert result2["reason"] == "at_capacity"
+            assert result2["active_count"] == 1
+            assert result2["limit"] == 1
 
     @pytest.mark.asyncio
     async def test_trigger_starts_worker_in_background(self, mock_operations_service):

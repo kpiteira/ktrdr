@@ -36,3 +36,29 @@ Key difference from code sketch in plan:
 ### Next Task Notes (Task 1.3)
 
 Task 1.3 modifies `trigger()` to use the new methods for capacity checking. Replace the single-research rejection block with a capacity check using `_get_all_active_research_ops()` and `_get_concurrency_limit()`.
+
+---
+
+## Task 1.3 Complete: Modify `trigger()` for Capacity Check
+
+### Gotchas
+
+- **Updated existing test**: The test `test_trigger_rejects_when_cycle_active` in `test_agent_service_new.py` was testing for `active_cycle_exists` reason. Updated to `test_trigger_rejects_when_at_capacity` which tests the new `at_capacity` response with explicit limit=1.
+
+- **Response shape changed**: Old response had `operation_id` pointing to the active cycle. New response has `active_count` and `limit` instead. Any code checking for `active_cycle_exists` reason needs to be updated to check for `at_capacity`.
+
+### Implementation Notes
+
+The change is minimal - just replacing the single-research rejection block with:
+```python
+active_ops = await self._get_all_active_research_ops()
+limit = self._get_concurrency_limit()
+if len(active_ops) >= limit:
+    return {"triggered": False, "reason": "at_capacity", ...}
+```
+
+Budget check order preserved (happens before capacity check).
+
+### Next Task Notes (Task 1.4)
+
+Task 1.4 refactors `run()` in `research_worker.py` to iterate over all active researches. This is the core architectural change - the coordinator will query all active ops and advance each one, rather than running a single operation to completion.

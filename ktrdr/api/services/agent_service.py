@@ -204,14 +204,16 @@ class AgentService:
                 "message": f"Daily budget exhausted: {reason}",
             }
 
-        # Check for active cycle
-        active = await self._get_active_research_op()
-        if active:
+        # Check capacity (multiple researches allowed up to limit)
+        active_ops = await self._get_all_active_research_ops()
+        limit = self._get_concurrency_limit()
+        if len(active_ops) >= limit:
             return {
                 "triggered": False,
-                "reason": "active_cycle_exists",
-                "operation_id": active.operation_id,
-                "message": f"Active cycle exists: {active.operation_id}",
+                "reason": "at_capacity",
+                "active_count": len(active_ops),
+                "limit": limit,
+                "message": f"At capacity ({len(active_ops)}/{limit} researches active)",
             }
 
         # Create operation with model, brief, and bypass_gates in metadata
