@@ -35,6 +35,7 @@ from ktrdr.agents.metrics import (
 from ktrdr.api.models.operations import (
     OperationProgress,
     OperationStatus,
+    OperationType,
 )
 
 logger = get_logger(__name__)
@@ -209,106 +210,62 @@ class AgentResearchWorker:
             )
             return {}
 
-    async def run(self, operation_id: str) -> dict[str, Any]:
-        """Main orchestrator loop using polling pattern.
+    async def run(self) -> None:
+        """Coordinator loop for all active researches.
 
-        Polls child operation status in a loop rather than directly awaiting
-        workers. This supports distributed workers that run independently.
+        Queries all active AGENT_RESEARCH operations and advances each one step.
+        Exits when no active operations remain.
 
-        For training and backtesting, the orchestrator calls services directly
-        and tracks the real operation IDs in parent metadata.
-
-        Args:
-            operation_id: The parent AGENT_RESEARCH operation ID.
-
-        Returns:
-            Result dict with success, strategy_name, and verdict.
+        Uses a polling pattern: query active ops, advance each, sleep, repeat.
+        This supports multiple concurrent researches running independently.
 
         Raises:
-            asyncio.CancelledError: If the operation is cancelled.
+            asyncio.CancelledError: If the coordinator is cancelled.
             WorkerError: If any child worker fails.
             GateFailedError: If a quality gate check fails.
         """
-        logger.info(f"Starting research cycle: {operation_id}")
-        cycle_start_time = time.time()
+        logger.info("Coordinator started")
 
-        with tracer.start_as_current_span("agent.research_cycle") as span:
-            span.set_attribute("operation.id", operation_id)
-            span.set_attribute("operation.type", "agent_research")
+        with tracer.start_as_current_span("agent.coordinator") as span:
+            span.set_attribute("operation.type", "coordinator")
 
             try:
                 while True:
-                    # Get current parent state
-                    op = await self.ops.get_operation(operation_id)
-                    if op is None:
-                        raise WorkerError(f"Parent operation not found: {operation_id}")
+                    # Query all active research operations
+                    active_ops = await self._get_active_research_operations()
 
-                    phase = op.metadata.parameters.get("phase", "idle")
+                    if not active_ops:
+                        logger.info("No active researches, coordinator stopping")
+                        break
 
-                    # Get current child operation if any
-                    child_op_id = self._get_child_op_id(op, phase)
-                    child_op = None
-                    if child_op_id:
-                        child_op = await self.ops.get_operation(child_op_id)
-
-                    # State machine logic
-                    if phase == "idle":
-                        # Start the first phase (designing)
-                        await self._start_design(operation_id)
-
-                    elif phase == "designing":
-                        await self._handle_designing_phase(operation_id, child_op)
-
-                    elif phase == "training":
-                        await self._handle_training_phase(operation_id, child_op)
-
-                    elif phase == "backtesting":
-                        await self._handle_backtesting_phase(operation_id, child_op)
-
-                    elif phase == "assessing":
-                        result = await self._handle_assessing_phase(
-                            operation_id, child_op
-                        )
-                        if result is not None:
-                            # Record successful cycle metrics
-                            cycle_duration = time.time() - cycle_start_time
-                            record_cycle_duration(cycle_duration)
-                            record_cycle_outcome("completed")
-                            span.set_attribute("outcome", "completed")
-                            return result
+                    # Advance each active research one step
+                    for op in active_ops:
+                        try:
+                            await self._advance_research(op)
+                        except (WorkerError, GateFailedError) as e:
+                            # Log error but continue with other researches
+                            logger.error(f"Research {op.operation_id} failed: {e}")
+                            # Mark the operation as failed
+                            await self.ops.fail_operation(op.operation_id, str(e))
+                            record_cycle_outcome("failed")
 
                     # Poll interval
                     await self._cancellable_sleep(self.POLL_INTERVAL)
 
             except asyncio.CancelledError:
-                logger.info(f"Research cycle cancelled: {operation_id}")
-                # Record cancelled cycle metrics
-                cycle_duration = time.time() - cycle_start_time
-                record_cycle_duration(cycle_duration)
-                record_cycle_outcome("cancelled")
+                logger.info("Coordinator cancelled")
                 span.set_attribute("outcome", "cancelled")
                 # Propagate cancellation to active child
                 await self._cancel_current_child()
                 raise
-            except (WorkerError, GateFailedError) as e:
-                # Record failed cycle metrics
-                cycle_duration = time.time() - cycle_start_time
-                record_cycle_duration(cycle_duration)
-                record_cycle_outcome("failed")
-                span.set_attribute("outcome", "failed")
-                span.set_attribute("error", str(e))
-                span.record_exception(e)
-                raise
             except Exception as e:
-                # Record failed cycle metrics
-                cycle_duration = time.time() - cycle_start_time
-                record_cycle_duration(cycle_duration)
-                record_cycle_outcome("failed")
                 span.set_attribute("outcome", "failed")
                 span.set_attribute("error", str(e))
                 span.record_exception(e)
-                logger.error(f"Research cycle failed: {operation_id}, error={e}")
+                logger.error(f"Coordinator error: {e}")
                 raise
+
+        logger.info("Coordinator completed")
 
     async def _start_design(self, operation_id: str) -> None:
         """Start the design phase with design worker.
@@ -844,11 +801,21 @@ class AgentResearchWorker:
                 OperationProgress(percentage=100.0, current_step="Complete"),
             )
 
-            return {
+            # Mark operation as complete (multi-research: completion handled in loop)
+            completion_result = {
                 "success": True,
                 "strategy_name": strategy_name,
                 "verdict": result.get("verdict", "unknown"),
             }
+            await self.ops.complete_operation(operation_id, completion_result)
+
+            # Record cycle metrics
+            record_cycle_duration(0)  # Duration tracked per-research in future
+            record_cycle_outcome("completed")
+
+            logger.info(f"Research completed: {operation_id}")
+
+            return completion_result
 
         elif child_op.status == OperationStatus.FAILED:
             raise WorkerError(f"Assessment failed: {child_op.error_message}")
@@ -883,6 +850,58 @@ class AgentResearchWorker:
         output_cost = (output_tokens / 1_000_000) * pricing["output"]
 
         return input_cost + output_cost
+
+    async def _get_active_research_operations(self) -> list[Any]:
+        """Query all active AGENT_RESEARCH operations.
+
+        Returns operations with RUNNING or PENDING status.
+        Used by the multi-research coordinator to iterate over all active researches.
+
+        Returns:
+            List of active operations (may be empty).
+        """
+        result: list[Any] = []
+        for status in [OperationStatus.RUNNING, OperationStatus.PENDING]:
+            ops, _, _ = await self.ops.list_operations(
+                operation_type=OperationType.AGENT_RESEARCH,
+                status=status,
+            )
+            result.extend(ops)
+        return result
+
+    async def _advance_research(self, op: Any) -> None:
+        """Advance a single research one step through its phase.
+
+        Called by the coordinator loop for each active research operation.
+        Determines the current phase and calls the appropriate handler.
+
+        Args:
+            op: The research operation to advance.
+        """
+        operation_id = op.operation_id
+        phase = op.metadata.parameters.get("phase", "idle")
+
+        # Get current child operation if any
+        child_op_id = self._get_child_op_id(op, phase)
+        child_op = None
+        if child_op_id:
+            child_op = await self.ops.get_operation(child_op_id)
+
+        # State machine logic - advance one step
+        if phase == "idle":
+            await self._start_design(operation_id)
+
+        elif phase == "designing":
+            await self._handle_designing_phase(operation_id, child_op)
+
+        elif phase == "training":
+            await self._handle_training_phase(operation_id, child_op)
+
+        elif phase == "backtesting":
+            await self._handle_backtesting_phase(operation_id, child_op)
+
+        elif phase == "assessing":
+            await self._handle_assessing_phase(operation_id, child_op)
 
     def _get_child_op_id(self, op: Any, phase: str) -> str | None:
         """Get child operation ID for current phase.

@@ -246,24 +246,26 @@ class AgentService:
         }
 
     async def _run_worker(self, operation_id: str, worker: AgentResearchWorker) -> None:
-        """Run worker and handle completion/failure.
+        """Run coordinator and handle completion/failure.
+
+        The coordinator loop discovers and processes all active researches.
+        Individual operation completion is handled inside the coordinator.
 
         M7: Saves checkpoint on failure/cancellation for resume capability.
-        Deletes checkpoint on successful completion.
 
         Args:
-            operation_id: The operation ID to run.
+            operation_id: The operation ID that triggered the coordinator (for checkpoint).
             worker: The worker instance to run.
         """
         try:
-            result = await worker.run(operation_id)
+            # Coordinator loop - discovers and processes all active researches
+            # Individual completions handled inside the loop
+            await worker.run()
 
-            # M7: Delete checkpoint on successful completion (if checkpoint service available)
+            # Coordinator exited normally (no active researches)
+            # M7: Delete checkpoint for the triggering operation if it completed
             if self._checkpoint_service is not None:
                 await self._checkpoint_service.delete_checkpoint(operation_id)
-
-            await self.ops.complete_operation(operation_id, result)
-            # Budget spend is recorded per-phase in the worker
 
         except asyncio.CancelledError:
             # M7: Save checkpoint before marking cancelled

@@ -1,14 +1,15 @@
 """Tests for AgentResearchWorker OpenTelemetry instrumentation.
 
 Tests cover:
-- Parent span for full research cycle
-- Child spans for each phase
-- operation.id attribute on all spans
+- Coordinator span creation
+- Child spans for each phase (via direct handler calls)
 - Phase-specific attributes (strategy_name, gate results, etc.)
 - Error and exception recording
 
 NOTE: These tests must be run in isolation to avoid tracer provider conflicts
 with other tests. Run with: pytest tests/unit/agent_tests/test_research_worker_telemetry.py
+
+Updated for v2.6 M1 multi-research coordinator model.
 """
 
 import asyncio
@@ -22,7 +23,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 
 # Import the module to patch its tracer
 import ktrdr.agents.workers.research_worker as worker_module
-from ktrdr.api.models.operations import OperationStatus
+from ktrdr.api.models.operations import OperationStatus, OperationType
 
 
 @pytest.fixture
@@ -54,22 +55,38 @@ def tracer_provider():
 
 @pytest.fixture
 def mock_operations_service():
-    """Create a mock operations service."""
+    """Create a mock operations service for coordinator model.
+
+    Supports both get_operation and list_operations for the multi-research
+    coordinator loop.
+    """
     service = AsyncMock()
 
-    # Default operation with idle phase
-    mock_op = Mock()
-    mock_op.operation_id = "op_agent_research_test"
-    mock_op.metadata = Mock()
-    mock_op.metadata.parameters = {"phase": "idle"}
-    mock_op.status = OperationStatus.PENDING
+    # Storage for operations (tests can modify this)
+    operations: dict[str, Mock] = {}
 
-    service.get_operation.return_value = mock_op
-    service.create_operation.return_value = mock_op
+    async def get_operation(op_id):
+        return operations.get(op_id)
+
+    async def list_operations(operation_type=None, status=None, **kwargs):
+        filtered = list(operations.values())
+        if operation_type:
+            filtered = [op for op in filtered if op.operation_type == operation_type]
+        if status:
+            filtered = [op for op in filtered if op.status == status]
+        return filtered, len(filtered), len(filtered)
+
+    service.get_operation.side_effect = get_operation
+    service.list_operations.side_effect = list_operations
+    service.create_operation.return_value = None
     service.start_operation.return_value = None
     service.complete_operation.return_value = None
     service.fail_operation.return_value = None
     service.cancel_operation.return_value = None
+    service.update_progress.return_value = None
+
+    # Expose operations dict for test manipulation
+    service._operations = operations
 
     return service
 
@@ -113,57 +130,24 @@ class TestResearchWorkerTelemetrySetup:
         assert worker_module.tracer is not None
 
 
-class TestParentSpan:
-    """Tests for parent span creation."""
+class TestCoordinatorSpan:
+    """Tests for coordinator parent span creation."""
 
     @pytest.mark.asyncio
-    async def test_run_creates_parent_span(
+    async def test_run_creates_coordinator_span(
         self,
         tracer_provider,
         mock_operations_service,
         mock_design_worker,
         mock_assessment_worker,
     ):
-        """Test that run() creates an agent.research_cycle parent span."""
+        """Test that run() creates an agent.coordinator parent span."""
         from ktrdr.agents.workers.research_worker import AgentResearchWorker
 
         provider, exporter = tracer_provider
 
-        # Set up a complete cycle that finishes immediately
-        call_count = [0]
-
-        async def mock_get_operation(op_id):
-            call_count[0] += 1
-            mock_op = Mock()
-            mock_op.operation_id = op_id
-            mock_op.metadata = Mock()
-
-            # Simulate phase progression
-            if call_count[0] <= 1:
-                mock_op.metadata.parameters = {"phase": "idle"}
-            elif call_count[0] <= 3:
-                # Designing phase
-                mock_op.metadata.parameters = {
-                    "phase": "designing",
-                    "design_op_id": "op_design_test",
-                }
-                # Return completed child
-                if op_id == "op_design_test":
-                    mock_op.status = OperationStatus.COMPLETED
-                    mock_op.result_summary = {
-                        "strategy_name": "test_strategy",
-                        "strategy_path": "/tmp/test.yaml",
-                    }
-            else:
-                # Fast-forward to complete
-                mock_op.metadata.parameters = {"phase": "assessing"}
-                # Raise to exit the loop
-                raise asyncio.CancelledError("Test complete")
-
-            mock_op.status = OperationStatus.RUNNING
-            return mock_op
-
-        mock_operations_service.get_operation.side_effect = mock_get_operation
+        # Empty operations - coordinator should start and exit immediately
+        mock_operations_service._operations.clear()
 
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
@@ -172,45 +156,33 @@ class TestParentSpan:
         )
         worker.POLL_INTERVAL = 0  # No delay for tests
 
-        # Run until cancelled
-        with pytest.raises(asyncio.CancelledError):
-            await worker.run("op_test")
+        # Run - should exit immediately with no operations
+        await worker.run()
 
         # Get exported spans
         spans = exporter.get_finished_spans()
 
-        # Find the parent span
-        parent_spans = [s for s in spans if s.name == "agent.research_cycle"]
-        assert len(parent_spans) >= 1, "Should create agent.research_cycle parent span"
+        # Find the coordinator span
+        coordinator_spans = [s for s in spans if s.name == "agent.coordinator"]
+        assert (
+            len(coordinator_spans) >= 1
+        ), "Should create agent.coordinator parent span"
 
     @pytest.mark.asyncio
-    async def test_parent_span_has_operation_id_attribute(
+    async def test_coordinator_span_has_operation_type_attribute(
         self,
         tracer_provider,
         mock_operations_service,
         mock_design_worker,
         mock_assessment_worker,
     ):
-        """Test that parent span has operation.id attribute."""
+        """Test that coordinator span has operation.type attribute."""
         from ktrdr.agents.workers.research_worker import AgentResearchWorker
 
         provider, exporter = tracer_provider
 
-        # Simple mock that raises after first iteration
-        call_count = [0]
-
-        async def mock_get_operation(op_id):
-            call_count[0] += 1
-            if call_count[0] > 1:
-                raise asyncio.CancelledError("Test complete")
-            mock_op = Mock()
-            mock_op.operation_id = op_id
-            mock_op.metadata = Mock()
-            mock_op.metadata.parameters = {"phase": "idle"}
-            mock_op.status = OperationStatus.PENDING
-            return mock_op
-
-        mock_operations_service.get_operation.side_effect = mock_get_operation
+        # Empty operations - coordinator exits immediately
+        mock_operations_service._operations.clear()
 
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
@@ -219,20 +191,22 @@ class TestParentSpan:
         )
         worker.POLL_INTERVAL = 0
 
-        with pytest.raises(asyncio.CancelledError):
-            await worker.run("op_research_12345")
+        await worker.run()
 
         spans = exporter.get_finished_spans()
-        parent_spans = [s for s in spans if s.name == "agent.research_cycle"]
+        coordinator_spans = [s for s in spans if s.name == "agent.coordinator"]
 
-        assert len(parent_spans) >= 1
-        span = parent_spans[0]
-        assert span.attributes.get("operation.id") == "op_research_12345"
-        assert span.attributes.get("operation.type") == "agent_research"
+        assert len(coordinator_spans) >= 1
+        span = coordinator_spans[0]
+        assert span.attributes.get("operation.type") == "coordinator"
 
 
 class TestPhaseSpans:
-    """Tests for phase-specific child spans."""
+    """Tests for phase-specific child spans.
+
+    These test that phase handlers create telemetry spans by directly calling
+    the handlers rather than going through the full coordinator loop.
+    """
 
     @pytest.mark.asyncio
     async def test_designing_phase_creates_span(
@@ -247,87 +221,44 @@ class TestPhaseSpans:
 
         provider, exporter = tracer_provider
 
-        # _start_design makes 1 call to get_operation, then run() polls
-        # Workers now own their child operations (set design_op_id via parent metadata)
-        # Total call sequence:
-        # 1. run(): get parent (idle) -> calls _start_design
-        # 2. _start_design: get parent to set phase (design_op_id set by worker)
-        # 3. run(): get parent (designing)
-        # 4. run(): get child (completed)
-        # 5. _handle_designing_phase: get parent for metrics
-        # Then cancel
+        # Set up parent operation in designing phase with completed child
+        parent_op = Mock()
+        parent_op.operation_id = "op_test"
+        parent_op.operation_type = OperationType.AGENT_RESEARCH
+        parent_op.metadata = Mock()
+        parent_op.metadata.parameters = {
+            "phase": "designing",
+            "design_op_id": "op_design_test",
+            "phase_start_time": 1000.0,
+        }
+        parent_op.status = OperationStatus.RUNNING
 
-        call_count = [0]
+        # Child operation (design) completed
+        child_op = Mock()
+        child_op.operation_id = "op_design_test"
+        child_op.status = OperationStatus.COMPLETED
+        child_op.result_summary = {
+            "strategy_name": "test_strategy",
+            "strategy_path": "/tmp/test.yaml",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+        }
 
-        async def mock_get_operation(op_id):
-            call_count[0] += 1
-            mock_op = Mock()
-            mock_op.operation_id = op_id
-            mock_op.metadata = Mock()
-
-            if call_count[0] == 1:
-                # run(): First loop - idle phase, triggers _start_design
-                mock_op.metadata.parameters = {"phase": "idle"}
-                mock_op.status = OperationStatus.PENDING
-            elif call_count[0] == 2:
-                # _start_design: get parent to set phase
-                # design_op_id is set by design_worker (mocked, so we simulate it)
-                mock_op.metadata.parameters = {
-                    "phase": "designing",
-                    "design_op_id": "op_design_test",
-                    "phase_start_time": 1000.0,
-                }
-                mock_op.status = OperationStatus.RUNNING
-            elif call_count[0] == 3:
-                # run(): Second loop - get parent (designing phase)
-                mock_op.metadata.parameters = {
-                    "phase": "designing",
-                    "design_op_id": "op_design_test",
-                    "phase_start_time": 1000.0,
-                }
-                mock_op.status = OperationStatus.RUNNING
-            elif call_count[0] == 4:
-                # run(): get child op (completed)
-                if op_id == "op_design_test":
-                    mock_op.status = OperationStatus.COMPLETED
-                    mock_op.result_summary = {
-                        "strategy_name": "test_strategy",
-                        "strategy_path": "/tmp/test.yaml",
-                        "input_tokens": 1000,
-                        "output_tokens": 500,
-                    }
-                else:
-                    mock_op.metadata.parameters = {
-                        "phase": "designing",
-                        "design_op_id": "op_design_test",
-                        "phase_start_time": 1000.0,
-                    }
-                    mock_op.status = OperationStatus.RUNNING
-            elif call_count[0] == 5:
-                # _handle_designing_phase: get parent for metrics update
-                mock_op.metadata.parameters = {
-                    "phase": "designing",
-                    "design_op_id": "op_design_test",
-                    "phase_start_time": 1000.0,
-                }
-                mock_op.status = OperationStatus.RUNNING
-            else:
-                # After design span is created, cancel
-                raise asyncio.CancelledError("Test complete")
-
-            return mock_op
-
-        mock_operations_service.get_operation.side_effect = mock_get_operation
+        mock_operations_service._operations["op_test"] = parent_op
+        mock_operations_service._operations["op_design_test"] = child_op
 
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=mock_design_worker,
             assessment_worker=mock_assessment_worker,
         )
-        worker.POLL_INTERVAL = 0
 
-        with pytest.raises(asyncio.CancelledError):
-            await worker.run("op_test")
+        # Directly call the handler (this is what _advance_research calls)
+        # We need to catch the follow-on call to _start_training which will fail
+        try:
+            await worker._handle_designing_phase("op_test", child_op)
+        except Exception:
+            pass  # Expected - _start_training will fail without full setup
 
         spans = exporter.get_finished_spans()
         design_spans = [s for s in spans if s.name == "agent.phase.design"]
@@ -349,63 +280,41 @@ class TestPhaseSpans:
 
         provider, exporter = tracer_provider
 
-        call_count = [0]
+        # Set up parent operation in training phase with completed child
+        parent_op = Mock()
+        parent_op.operation_id = "op_test"
+        parent_op.operation_type = OperationType.AGENT_RESEARCH
+        parent_op.metadata = Mock()
+        parent_op.metadata.parameters = {
+            "phase": "training",
+            "training_op_id": "op_training_test",
+            "phase_start_time": 1000.0,
+        }
+        parent_op.status = OperationStatus.RUNNING
 
-        async def mock_get_operation(op_id):
-            call_count[0] += 1
-            mock_op = Mock()
-            mock_op.operation_id = op_id
-            mock_op.metadata = Mock()
+        # Child operation (training) completed
+        child_op = Mock()
+        child_op.operation_id = "op_training_test"
+        child_op.status = OperationStatus.COMPLETED
+        child_op.result_summary = {
+            "accuracy": 0.65,
+            "final_loss": 0.3,
+        }
 
-            if call_count[0] == 1:
-                # First call - get parent (training phase)
-                mock_op.metadata.parameters = {
-                    "phase": "training",
-                    "training_op_id": "op_training_test",
-                    "phase_start_time": 1000.0,
-                }
-                mock_op.status = OperationStatus.RUNNING
-            elif call_count[0] == 2:
-                # Second call - get child (completed)
-                if op_id == "op_training_test":
-                    mock_op.status = OperationStatus.COMPLETED
-                    mock_op.result_summary = {
-                        "accuracy": 0.65,
-                        "final_loss": 0.3,
-                        "initial_loss": 0.8,
-                    }
-                else:
-                    mock_op.metadata.parameters = {
-                        "phase": "training",
-                        "training_op_id": "op_training_test",
-                        "phase_start_time": 1000.0,
-                    }
-                    mock_op.status = OperationStatus.RUNNING
-            elif call_count[0] == 3:
-                # Third call - get parent for updating
-                mock_op.metadata.parameters = {
-                    "phase": "training",
-                    "training_op_id": "op_training_test",
-                    "phase_start_time": 1000.0,
-                }
-                mock_op.status = OperationStatus.RUNNING
-            else:
-                # After training span is created, cancel
-                raise asyncio.CancelledError("Test complete")
-
-            return mock_op
-
-        mock_operations_service.get_operation.side_effect = mock_get_operation
+        mock_operations_service._operations["op_test"] = parent_op
+        mock_operations_service._operations["op_training_test"] = child_op
 
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=mock_design_worker,
             assessment_worker=mock_assessment_worker,
         )
-        worker.POLL_INTERVAL = 0
 
-        with pytest.raises(asyncio.CancelledError):
-            await worker.run("op_test")
+        # Directly call the handler
+        try:
+            await worker._handle_training_phase("op_test", child_op)
+        except Exception:
+            pass  # Expected - _start_backtest will fail without full setup
 
         spans = exporter.get_finished_spans()
         training_spans = [s for s in spans if s.name == "agent.phase.training"]
@@ -427,48 +336,44 @@ class TestPhaseSpans:
 
         provider, exporter = tracer_provider
 
-        call_count = [0]
+        # Set up parent operation in backtesting phase with completed child
+        parent_op = Mock()
+        parent_op.operation_id = "op_test"
+        parent_op.operation_type = OperationType.AGENT_RESEARCH
+        parent_op.metadata = Mock()
+        parent_op.metadata.parameters = {
+            "phase": "backtesting",
+            "backtest_op_id": "op_backtest_test",
+            "phase_start_time": 1000.0,
+        }
+        parent_op.status = OperationStatus.RUNNING
 
-        async def mock_get_operation(op_id):
-            call_count[0] += 1
-            mock_op = Mock()
-            mock_op.operation_id = op_id
-            mock_op.metadata = Mock()
+        # Child operation (backtest) completed
+        child_op = Mock()
+        child_op.operation_id = "op_backtest_test"
+        child_op.status = OperationStatus.COMPLETED
+        child_op.result_summary = {
+            "metrics": {
+                "win_rate": 0.55,
+                "max_drawdown_pct": 0.2,
+                "sharpe_ratio": 1.0,
+            }
+        }
 
-            if call_count[0] <= 3:
-                # Allow 3 calls: poll, child check, and bypass_gates check
-                mock_op.metadata.parameters = {
-                    "phase": "backtesting",
-                    "backtest_op_id": "op_backtest_test",
-                    "phase_start_time": 1000.0,
-                }
-                if op_id == "op_backtest_test":
-                    mock_op.status = OperationStatus.COMPLETED
-                    mock_op.result_summary = {
-                        "metrics": {
-                            "win_rate": 0.55,
-                            "max_drawdown_pct": 0.2,
-                            "sharpe_ratio": 1.0,
-                        }
-                    }
-                else:
-                    mock_op.status = OperationStatus.RUNNING
-            else:
-                raise asyncio.CancelledError("Test complete")
-
-            return mock_op
-
-        mock_operations_service.get_operation.side_effect = mock_get_operation
+        mock_operations_service._operations["op_test"] = parent_op
+        mock_operations_service._operations["op_backtest_test"] = child_op
 
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=mock_design_worker,
             assessment_worker=mock_assessment_worker,
         )
-        worker.POLL_INTERVAL = 0
 
-        with pytest.raises(asyncio.CancelledError):
-            await worker.run("op_test")
+        # Directly call the handler
+        try:
+            await worker._handle_backtesting_phase("op_test", child_op)
+        except Exception:
+            pass  # Expected - _start_assessment will fail without full setup
 
         spans = exporter.get_finished_spans()
         backtest_spans = [s for s in spans if s.name == "agent.phase.backtest"]
@@ -490,63 +395,43 @@ class TestPhaseSpans:
 
         provider, exporter = tracer_provider
 
-        call_count = [0]
+        # Set up parent operation in assessing phase with completed child
+        parent_op = Mock()
+        parent_op.operation_id = "op_test"
+        parent_op.operation_type = OperationType.AGENT_RESEARCH
+        parent_op.metadata = Mock()
+        parent_op.metadata.parameters = {
+            "phase": "assessing",
+            "assessment_op_id": "op_assess_test",
+            "strategy_name": "test_strategy",
+            "phase_start_time": 1000.0,
+        }
+        parent_op.status = OperationStatus.RUNNING
 
-        async def mock_get_operation(op_id):
-            call_count[0] += 1
-            mock_op = Mock()
-            mock_op.operation_id = op_id
-            mock_op.metadata = Mock()
+        # Child operation (assessment) completed
+        child_op = Mock()
+        child_op.operation_id = "op_assess_test"
+        child_op.status = OperationStatus.COMPLETED
+        child_op.result_summary = {
+            "verdict": "promising",
+            "input_tokens": 1500,
+            "output_tokens": 800,
+        }
 
-            if call_count[0] == 1:
-                # First call - get parent (assessing phase)
-                mock_op.metadata.parameters = {
-                    "phase": "assessing",
-                    "assessment_op_id": "op_assess_test",
-                    "strategy_name": "test_strategy",
-                    "phase_start_time": 1000.0,
-                }
-                mock_op.status = OperationStatus.RUNNING
-            elif call_count[0] == 2:
-                # Second call - get child (completed)
-                if op_id == "op_assess_test":
-                    mock_op.status = OperationStatus.COMPLETED
-                    mock_op.result_summary = {
-                        "verdict": "promising",
-                        "input_tokens": 1500,
-                        "output_tokens": 800,
-                    }
-                else:
-                    mock_op.metadata.parameters = {
-                        "phase": "assessing",
-                        "assessment_op_id": "op_assess_test",
-                        "strategy_name": "test_strategy",
-                        "phase_start_time": 1000.0,
-                    }
-                    mock_op.status = OperationStatus.RUNNING
-            else:
-                # Third call - get parent for final result
-                mock_op.metadata.parameters = {
-                    "phase": "assessing",
-                    "assessment_op_id": "op_assess_test",
-                    "strategy_name": "test_strategy",
-                    "phase_start_time": 1000.0,
-                }
-                mock_op.status = OperationStatus.RUNNING
-
-            return mock_op
-
-        mock_operations_service.get_operation.side_effect = mock_get_operation
+        mock_operations_service._operations["op_test"] = parent_op
+        mock_operations_service._operations["op_assess_test"] = child_op
 
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=mock_design_worker,
             assessment_worker=mock_assessment_worker,
         )
-        worker.POLL_INTERVAL = 0
 
-        # Assessment completes and returns result
-        result = await worker.run("op_test")
+        # Directly call the handler - this one completes the operation
+        result = await worker._handle_assessing_phase("op_test", child_op)
+
+        # Should return result
+        assert result is not None
         assert result["success"] is True
 
         spans = exporter.get_finished_spans()
@@ -561,248 +446,123 @@ class TestSpanAttributes:
     """Tests for span attributes."""
 
     @pytest.mark.asyncio
-    async def test_gate_pass_recorded_in_span(
+    async def test_gate_pass_recorded_in_training_span(
         self,
         tracer_provider,
         mock_operations_service,
         mock_design_worker,
         mock_assessment_worker,
     ):
-        """Test that gate pass result is recorded in training span."""
+        """Test that gate pass is recorded in training span."""
         from ktrdr.agents.workers.research_worker import AgentResearchWorker
 
         provider, exporter = tracer_provider
 
-        call_count = [0]
+        # Set up parent operation in training phase
+        parent_op = Mock()
+        parent_op.operation_id = "op_test"
+        parent_op.operation_type = OperationType.AGENT_RESEARCH
+        parent_op.metadata = Mock()
+        parent_op.metadata.parameters = {
+            "phase": "training",
+            "training_op_id": "op_training_test",
+            "phase_start_time": 1000.0,
+            "bypass_gates": False,  # Don't bypass gates
+        }
+        parent_op.status = OperationStatus.RUNNING
 
-        async def mock_get_operation(op_id):
-            call_count[0] += 1
-            mock_op = Mock()
-            mock_op.operation_id = op_id
-            mock_op.metadata = Mock()
+        # Child operation completed with good metrics (gate should pass)
+        child_op = Mock()
+        child_op.operation_id = "op_training_test"
+        child_op.status = OperationStatus.COMPLETED
+        child_op.result_summary = {
+            "accuracy": 0.7,  # Above threshold
+            "final_loss": 0.3,
+        }
 
-            if call_count[0] == 1:
-                # First call - get parent (training phase)
-                mock_op.metadata.parameters = {
-                    "phase": "training",
-                    "training_op_id": "op_training_test",
-                    "phase_start_time": 1000.0,
-                }
-                mock_op.status = OperationStatus.RUNNING
-            elif call_count[0] == 2:
-                # Second call - get child (completed)
-                if op_id == "op_training_test":
-                    mock_op.status = OperationStatus.COMPLETED
-                    mock_op.result_summary = {
-                        "accuracy": 0.65,
-                        "final_loss": 0.3,
-                        "initial_loss": 0.8,
-                    }
-                else:
-                    mock_op.metadata.parameters = {
-                        "phase": "training",
-                        "training_op_id": "op_training_test",
-                        "phase_start_time": 1000.0,
-                    }
-                    mock_op.status = OperationStatus.RUNNING
-            elif call_count[0] == 3:
-                # Third call - get parent for updating
-                mock_op.metadata.parameters = {
-                    "phase": "training",
-                    "training_op_id": "op_training_test",
-                    "phase_start_time": 1000.0,
-                }
-                mock_op.status = OperationStatus.RUNNING
-            else:
-                # After training span is created, cancel
-                raise asyncio.CancelledError("Test complete")
-
-            return mock_op
-
-        mock_operations_service.get_operation.side_effect = mock_get_operation
+        mock_operations_service._operations["op_test"] = parent_op
+        mock_operations_service._operations["op_training_test"] = child_op
 
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=mock_design_worker,
             assessment_worker=mock_assessment_worker,
         )
-        worker.POLL_INTERVAL = 0
 
-        with pytest.raises(asyncio.CancelledError):
-            await worker.run("op_test")
+        try:
+            await worker._handle_training_phase("op_test", child_op)
+        except Exception:
+            pass
 
         spans = exporter.get_finished_spans()
         training_spans = [s for s in spans if s.name == "agent.phase.training"]
 
         assert len(training_spans) >= 1
         span = training_spans[0]
-        assert span.attributes.get("gate.passed") is True
         assert span.attributes.get("gate.name") == "training"
+        assert span.attributes.get("gate.passed") is True
 
     @pytest.mark.asyncio
-    async def test_gate_fail_recorded_in_span(
+    async def test_gate_fail_recorded_in_training_span(
         self,
         tracer_provider,
         mock_operations_service,
         mock_design_worker,
         mock_assessment_worker,
     ):
-        """Test that gate failure is recorded in span.
-
-        Note: M2 changed behavior - gate failures now route to assessment
-        instead of raising GateError. This test verifies the span still
-        records gate.passed=False before transitioning to assessment.
-        """
+        """Test that gate fail is recorded in training span."""
         from ktrdr.agents.workers.research_worker import AgentResearchWorker
 
         provider, exporter = tracer_provider
 
-        call_count = [0]
-        assessment_called = [False]
+        # Set up parent operation in training phase
+        parent_op = Mock()
+        parent_op.operation_id = "op_test"
+        parent_op.operation_type = OperationType.AGENT_RESEARCH
+        parent_op.metadata = Mock()
+        parent_op.metadata.parameters = {
+            "phase": "training",
+            "training_op_id": "op_training_test",
+            "phase_start_time": 1000.0,
+            "bypass_gates": False,
+        }
+        parent_op.status = OperationStatus.RUNNING
 
-        async def mock_get_operation(op_id):
-            call_count[0] += 1
-            mock_op = Mock()
-            mock_op.operation_id = op_id
-            mock_op.metadata = Mock()
+        # Child operation completed with poor metrics (gate should fail)
+        # Default min_accuracy is 0.10, so use < 10% to fail
+        child_op = Mock()
+        child_op.operation_id = "op_training_test"
+        child_op.status = OperationStatus.COMPLETED
+        child_op.result_summary = {
+            "accuracy": 0.05,  # Below 10% threshold
+            "final_loss": 0.9,  # Above 0.8 threshold
+        }
 
-            if call_count[0] == 1:
-                # First call - get parent (training phase)
-                mock_op.metadata.parameters = {
-                    "phase": "training",
-                    "training_op_id": "op_training_test",
-                    "phase_start_time": 1000.0,
-                }
-                mock_op.status = OperationStatus.RUNNING
-            elif call_count[0] == 2:
-                # Second call - get child (completed with bad accuracy)
-                if op_id == "op_training_test":
-                    mock_op.status = OperationStatus.COMPLETED
-                    # Accuracy below Baby mode threshold (0.10)
-                    mock_op.result_summary = {
-                        "accuracy": 0.05,
-                        "final_loss": 0.3,
-                        "initial_loss": 0.8,
-                    }
-                else:
-                    mock_op.metadata.parameters = {
-                        "phase": "training",
-                        "training_op_id": "op_training_test",
-                        "phase_start_time": 1000.0,
-                    }
-                    mock_op.status = OperationStatus.RUNNING
-            else:
-                # After gate check - return completed to end the cycle
-                mock_op.metadata.parameters = {
-                    "phase": "assessing",
-                    "assessment_op_id": "op_assessment_test",
-                }
-                # End the cycle once assessment was called
-                if assessment_called[0]:
-                    mock_op.status = OperationStatus.COMPLETED
-                    mock_op.result_summary = {"verdict": "poor"}
-                else:
-                    mock_op.status = OperationStatus.RUNNING
-
-            return mock_op
-
-        mock_operations_service.get_operation.side_effect = mock_get_operation
-
-        # Track when assessment is called and complete the cycle
-        async def mock_assessment_run(*args, **kwargs):
-            assessment_called[0] = True
-            return {
-                "success": True,
-                "verdict": "poor",
-                "input_tokens": 100,
-                "output_tokens": 50,
-            }
-
-        mock_assessment_worker.run.side_effect = mock_assessment_run
+        mock_operations_service._operations["op_test"] = parent_op
+        mock_operations_service._operations["op_training_test"] = child_op
 
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
             design_worker=mock_design_worker,
             assessment_worker=mock_assessment_worker,
         )
-        worker.POLL_INTERVAL = 0
 
-        # M2: Gate failure routes to assessment, then completes
-        result = await worker.run("op_test")
-
-        # Verify cycle completed through assessment
-        assert result is not None
+        try:
+            await worker._handle_training_phase("op_test", child_op)
+        except Exception:
+            pass
 
         spans = exporter.get_finished_spans()
         training_spans = [s for s in spans if s.name == "agent.phase.training"]
 
         assert len(training_spans) >= 1
         span = training_spans[0]
-        assert span.attributes.get("gate.passed") is False
         assert span.attributes.get("gate.name") == "training"
+        assert span.attributes.get("gate.passed") is False
 
 
 class TestOutcomeRecording:
-    """Tests for outcome recording in spans."""
-
-    @pytest.mark.asyncio
-    async def test_completed_outcome_recorded(
-        self,
-        tracer_provider,
-        mock_operations_service,
-        mock_design_worker,
-        mock_assessment_worker,
-    ):
-        """Test that completed outcome is recorded in parent span."""
-        from ktrdr.agents.workers.research_worker import AgentResearchWorker
-
-        provider, exporter = tracer_provider
-
-        call_count = [0]
-
-        async def mock_get_operation(op_id):
-            call_count[0] += 1
-            mock_op = Mock()
-            mock_op.operation_id = op_id
-            mock_op.metadata = Mock()
-
-            # Simulate assessment phase completion
-            mock_op.metadata.parameters = {
-                "phase": "assessing",
-                "assessment_op_id": "op_assess_test",
-                "strategy_name": "test_strategy",
-                "phase_start_time": 1000.0,
-            }
-            if op_id == "op_assess_test":
-                mock_op.status = OperationStatus.COMPLETED
-                mock_op.result_summary = {
-                    "verdict": "promising",
-                    "input_tokens": 1500,
-                    "output_tokens": 800,
-                }
-            else:
-                mock_op.status = OperationStatus.RUNNING
-
-            return mock_op
-
-        mock_operations_service.get_operation.side_effect = mock_get_operation
-
-        worker = AgentResearchWorker(
-            operations_service=mock_operations_service,
-            design_worker=mock_design_worker,
-            assessment_worker=mock_assessment_worker,
-        )
-        worker.POLL_INTERVAL = 0
-
-        result = await worker.run("op_test")
-        assert result["success"] is True
-
-        spans = exporter.get_finished_spans()
-        parent_spans = [s for s in spans if s.name == "agent.research_cycle"]
-
-        assert len(parent_spans) >= 1
-        span = parent_spans[0]
-        assert span.attributes.get("outcome") == "completed"
+    """Tests for outcome recording in coordinator span."""
 
     @pytest.mark.asyncio
     async def test_cancelled_outcome_recorded(
@@ -812,15 +572,20 @@ class TestOutcomeRecording:
         mock_design_worker,
         mock_assessment_worker,
     ):
-        """Test that cancelled outcome is recorded in parent span."""
+        """Test that cancelled outcome is recorded in coordinator span."""
         from ktrdr.agents.workers.research_worker import AgentResearchWorker
 
         provider, exporter = tracer_provider
 
-        async def mock_get_operation(op_id):
-            raise asyncio.CancelledError("Cancelled by user")
+        # Set up an operation that will cause cancellation
+        parent_op = Mock()
+        parent_op.operation_id = "op_test"
+        parent_op.operation_type = OperationType.AGENT_RESEARCH
+        parent_op.metadata = Mock()
+        parent_op.metadata.parameters = {"phase": "idle"}
+        parent_op.status = OperationStatus.RUNNING
 
-        mock_operations_service.get_operation.side_effect = mock_get_operation
+        mock_operations_service._operations["op_test"] = parent_op
 
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
@@ -828,108 +593,49 @@ class TestOutcomeRecording:
             assessment_worker=mock_assessment_worker,
         )
         worker.POLL_INTERVAL = 0
+
+        # Make _start_design raise CancelledError to simulate cancellation
+        async def raise_cancelled(*args, **kwargs):
+            raise asyncio.CancelledError("Test cancellation")
+
+        worker._start_design = raise_cancelled
 
         with pytest.raises(asyncio.CancelledError):
-            await worker.run("op_test")
+            await worker.run()
 
         spans = exporter.get_finished_spans()
-        parent_spans = [s for s in spans if s.name == "agent.research_cycle"]
+        coordinator_spans = [s for s in spans if s.name == "agent.coordinator"]
 
-        assert len(parent_spans) >= 1
-        span = parent_spans[0]
+        assert len(coordinator_spans) >= 1
+        span = coordinator_spans[0]
         assert span.attributes.get("outcome") == "cancelled"
-
-    @pytest.mark.asyncio
-    async def test_failed_outcome_recorded(
-        self,
-        tracer_provider,
-        mock_operations_service,
-        mock_design_worker,
-        mock_assessment_worker,
-    ):
-        """Test that failed outcome is recorded in parent span."""
-        from ktrdr.agents.workers.research_worker import (
-            AgentResearchWorker,
-            WorkerError,
-        )
-
-        provider, exporter = tracer_provider
-
-        call_count = [0]
-
-        async def mock_get_operation(op_id):
-            call_count[0] += 1
-            mock_op = Mock()
-            mock_op.operation_id = op_id
-            mock_op.metadata = Mock()
-
-            mock_op.metadata.parameters = {
-                "phase": "designing",
-                "design_op_id": "op_design_test",
-            }
-            if op_id == "op_design_test":
-                mock_op.status = OperationStatus.FAILED
-                mock_op.error_message = "Design worker crashed"
-            else:
-                mock_op.status = OperationStatus.RUNNING
-
-            return mock_op
-
-        mock_operations_service.get_operation.side_effect = mock_get_operation
-
-        worker = AgentResearchWorker(
-            operations_service=mock_operations_service,
-            design_worker=mock_design_worker,
-            assessment_worker=mock_assessment_worker,
-        )
-        worker.POLL_INTERVAL = 0
-
-        with pytest.raises(WorkerError):
-            await worker.run("op_test")
-
-        spans = exporter.get_finished_spans()
-        parent_spans = [s for s in spans if s.name == "agent.research_cycle"]
-
-        assert len(parent_spans) >= 1
-        span = parent_spans[0]
-        assert span.attributes.get("outcome") == "failed"
 
 
 class TestErrorRecording:
     """Tests for error recording in spans."""
 
     @pytest.mark.asyncio
-    async def test_exception_recorded_in_span(
+    async def test_exception_recorded_in_coordinator_span(
         self,
         tracer_provider,
         mock_operations_service,
         mock_design_worker,
         mock_assessment_worker,
     ):
-        """Test that exceptions are recorded in spans."""
-        from ktrdr.agents.workers.research_worker import (
-            AgentResearchWorker,
-            WorkerError,
-        )
+        """Test that exceptions are recorded in coordinator span."""
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
 
         provider, exporter = tracer_provider
 
-        async def mock_get_operation(op_id):
-            mock_op = Mock()
-            mock_op.operation_id = op_id
-            mock_op.metadata = Mock()
-            mock_op.metadata.parameters = {
-                "phase": "designing",
-                "design_op_id": "op_design_test",
-            }
-            if op_id == "op_design_test":
-                mock_op.status = OperationStatus.FAILED
-                mock_op.error_message = "API rate limit exceeded"
-            else:
-                mock_op.status = OperationStatus.RUNNING
-            return mock_op
+        # Set up an operation
+        parent_op = Mock()
+        parent_op.operation_id = "op_test"
+        parent_op.operation_type = OperationType.AGENT_RESEARCH
+        parent_op.metadata = Mock()
+        parent_op.metadata.parameters = {"phase": "idle"}
+        parent_op.status = OperationStatus.RUNNING
 
-        mock_operations_service.get_operation.side_effect = mock_get_operation
+        mock_operations_service._operations["op_test"] = parent_op
 
         worker = AgentResearchWorker(
             operations_service=mock_operations_service,
@@ -938,14 +644,19 @@ class TestErrorRecording:
         )
         worker.POLL_INTERVAL = 0
 
-        with pytest.raises(WorkerError):
-            await worker.run("op_test")
+        # Make _start_design raise an error
+        async def raise_error(*args, **kwargs):
+            raise RuntimeError("Test error")
+
+        worker._start_design = raise_error
+
+        with pytest.raises(RuntimeError):
+            await worker.run()
 
         spans = exporter.get_finished_spans()
-        parent_spans = [s for s in spans if s.name == "agent.research_cycle"]
+        coordinator_spans = [s for s in spans if s.name == "agent.coordinator"]
 
-        assert len(parent_spans) >= 1
-        span = parent_spans[0]
-
-        # Check that error was recorded
-        assert span.attributes.get("error") is not None or "error" in str(span.events)
+        assert len(coordinator_spans) >= 1
+        span = coordinator_spans[0]
+        assert span.attributes.get("outcome") == "failed"
+        assert "Test error" in str(span.attributes.get("error", ""))

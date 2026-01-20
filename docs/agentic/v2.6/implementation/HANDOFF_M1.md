@@ -62,3 +62,36 @@ Budget check order preserved (happens before capacity check).
 ### Next Task Notes (Task 1.4)
 
 Task 1.4 refactors `run()` in `research_worker.py` to iterate over all active researches. This is the core architectural change - the coordinator will query all active ops and advance each one, rather than running a single operation to completion.
+
+---
+
+## Task 1.4 Complete: Refactor `run()` to Multi-Research Loop
+
+### Gotchas
+
+- **Telemetry tests refactored**: The tests in `test_research_worker_telemetry.py` were testing the old `run(operation_id)` signature. They've been completely rewritten to:
+  - Test coordinator span creation (`agent.coordinator` instead of per-operation `agent.research_cycle`)
+  - Test phase spans by calling handlers directly (simpler, more unit-test-like)
+  - Test gate attributes and outcome recording via the coordinator model
+
+- **Completion handling moved inside**: The `_handle_assessing_phase` method now calls `ops.complete_operation()` directly when a research completes. This was necessary because the coordinator loop no longer returns a result to complete the operation externally.
+
+- **AgentService._run_worker updated**: The method now calls `worker.run()` without arguments since the coordinator discovers operations itself.
+
+### Implementation Notes
+
+Key new methods in `research_worker.py`:
+- `_get_active_research_operations()` - Queries RUNNING and PENDING AGENT_RESEARCH operations
+- `_advance_research(op)` - Advances a single research one step through its phase state machine
+
+The `run()` method now:
+1. Queries all active operations
+2. Iterates and advances each one step
+3. Sleeps for POLL_INTERVAL
+4. Exits when no active operations remain
+
+Error handling: If one research fails, it's marked as FAILED and the coordinator continues with other researches.
+
+### Next Task Notes (Task 1.5)
+
+Task 1.5 manages coordinator lifecycle - starting on first trigger, tracking the coordinator task, and reusing it for subsequent triggers. The key change is moving from "one task per operation" to "one coordinator task for all operations".

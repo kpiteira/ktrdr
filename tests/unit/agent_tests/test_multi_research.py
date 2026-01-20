@@ -900,3 +900,362 @@ class TestTriggerCapacityCheck:
 
         # Should succeed - we're at 2/3 capacity
         assert result["triggered"] is True
+
+
+class TestMultiResearchCoordinatorLoop:
+    """Tests for multi-research coordinator loop - Task 1.4."""
+
+    @pytest.fixture
+    def mock_ops_service_for_worker(self):
+        """Create a mock operations service for research worker testing."""
+        service = AsyncMock()
+        operations: dict[str, OperationInfo] = {}
+
+        async def async_get_operation(operation_id):
+            return operations.get(operation_id)
+
+        async def async_list_operations(
+            operation_type=None, status=None, limit=100, offset=0, active_only=False
+        ):
+            """List operations with filtering."""
+            filtered = list(operations.values())
+
+            if operation_type:
+                filtered = [
+                    op for op in filtered if op.operation_type == operation_type
+                ]
+
+            if status:
+                filtered = [op for op in filtered if op.status == status]
+
+            return filtered, len(filtered), len(filtered)
+
+        async def async_update_progress(operation_id, progress):
+            pass
+
+        service.get_operation = async_get_operation
+        service.list_operations = async_list_operations
+        service.update_progress = async_update_progress
+        service._operations = operations
+
+        return service
+
+    @pytest.fixture
+    def mock_design_worker(self):
+        """Create a mock design worker."""
+        worker = AsyncMock()
+        worker.run.return_value = {
+            "success": True,
+            "strategy_name": "test_strategy",
+            "strategy_path": "/tmp/test_strategy.yaml",
+        }
+        return worker
+
+    @pytest.fixture
+    def mock_assessment_worker(self):
+        """Create a mock assessment worker."""
+        worker = AsyncMock()
+        worker.run.return_value = {
+            "success": True,
+            "verdict": "promising",
+        }
+        return worker
+
+    @pytest.mark.asyncio
+    async def test_get_active_research_operations_returns_correct_operations(
+        self, mock_ops_service_for_worker
+    ):
+        """_get_active_research_operations() returns all active AGENT_RESEARCH operations."""
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
+        worker = AgentResearchWorker(
+            operations_service=mock_ops_service_for_worker,
+            design_worker=AsyncMock(),
+            assessment_worker=AsyncMock(),
+        )
+
+        # Add some operations
+        op1 = OperationInfo(
+            operation_id="op_1",
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RUNNING,
+            created_at=datetime.now(timezone.utc),
+            metadata=OperationMetadata(parameters={"phase": "training"}),
+        )
+        op2 = OperationInfo(
+            operation_id="op_2",
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.PENDING,
+            created_at=datetime.now(timezone.utc),
+            metadata=OperationMetadata(parameters={"phase": "idle"}),
+        )
+        mock_ops_service_for_worker._operations["op_1"] = op1
+        mock_ops_service_for_worker._operations["op_2"] = op2
+
+        result = await worker._get_active_research_operations()
+
+        assert len(result) == 2
+        assert {op.operation_id for op in result} == {"op_1", "op_2"}
+
+    @pytest.mark.asyncio
+    async def test_get_active_research_operations_excludes_completed(
+        self, mock_ops_service_for_worker
+    ):
+        """_get_active_research_operations() excludes COMPLETED operations."""
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
+        worker = AgentResearchWorker(
+            operations_service=mock_ops_service_for_worker,
+            design_worker=AsyncMock(),
+            assessment_worker=AsyncMock(),
+        )
+
+        # Add completed and running operations
+        op_completed = OperationInfo(
+            operation_id="op_completed",
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.COMPLETED,
+            created_at=datetime.now(timezone.utc),
+            metadata=OperationMetadata(parameters={"phase": "done"}),
+        )
+        op_running = OperationInfo(
+            operation_id="op_running",
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RUNNING,
+            created_at=datetime.now(timezone.utc),
+            metadata=OperationMetadata(parameters={"phase": "training"}),
+        )
+        mock_ops_service_for_worker._operations["op_completed"] = op_completed
+        mock_ops_service_for_worker._operations["op_running"] = op_running
+
+        result = await worker._get_active_research_operations()
+
+        assert len(result) == 1
+        assert result[0].operation_id == "op_running"
+
+    @pytest.mark.asyncio
+    async def test_advance_research_calls_correct_phase_handler_idle(
+        self, mock_ops_service_for_worker, mock_design_worker, mock_assessment_worker
+    ):
+        """_advance_research() calls _start_design for idle phase."""
+        from unittest.mock import patch
+
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
+        worker = AgentResearchWorker(
+            operations_service=mock_ops_service_for_worker,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
+        )
+
+        op = OperationInfo(
+            operation_id="op_test",
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RUNNING,
+            created_at=datetime.now(timezone.utc),
+            metadata=OperationMetadata(parameters={"phase": "idle"}),
+        )
+        mock_ops_service_for_worker._operations["op_test"] = op
+
+        with patch.object(worker, "_start_design") as mock_start_design:
+            await worker._advance_research(op)
+            mock_start_design.assert_called_once_with("op_test")
+
+    @pytest.mark.asyncio
+    async def test_advance_research_calls_correct_phase_handler_designing(
+        self, mock_ops_service_for_worker, mock_design_worker, mock_assessment_worker
+    ):
+        """_advance_research() calls _handle_designing_phase for designing phase."""
+        from unittest.mock import patch
+
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
+        worker = AgentResearchWorker(
+            operations_service=mock_ops_service_for_worker,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
+        )
+
+        op = OperationInfo(
+            operation_id="op_test",
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RUNNING,
+            created_at=datetime.now(timezone.utc),
+            metadata=OperationMetadata(
+                parameters={"phase": "designing", "design_op_id": "op_design_1"}
+            ),
+        )
+        mock_ops_service_for_worker._operations["op_test"] = op
+
+        # Add mock child operation
+        child_op = OperationInfo(
+            operation_id="op_design_1",
+            operation_type=OperationType.AGENT_DESIGN,
+            status=OperationStatus.RUNNING,
+            created_at=datetime.now(timezone.utc),
+            metadata=OperationMetadata(),
+        )
+        mock_ops_service_for_worker._operations["op_design_1"] = child_op
+
+        with patch.object(worker, "_handle_designing_phase") as mock_handler:
+            await worker._advance_research(op)
+            mock_handler.assert_called_once()
+            # First arg is operation_id, second is child_op
+            call_args = mock_handler.call_args
+            assert call_args[0][0] == "op_test"
+
+    @pytest.mark.asyncio
+    async def test_run_exits_when_no_active_operations(
+        self, mock_ops_service_for_worker, mock_design_worker, mock_assessment_worker
+    ):
+        """run() exits loop when no active operations."""
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
+        worker = AgentResearchWorker(
+            operations_service=mock_ops_service_for_worker,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
+        )
+        worker.POLL_INTERVAL = 0.01  # Fast polling for test
+
+        # No operations - should exit immediately
+        await worker.run()  # Should not hang
+
+    @pytest.mark.asyncio
+    async def test_run_processes_multiple_operations_in_one_cycle(
+        self, mock_ops_service_for_worker, mock_design_worker, mock_assessment_worker
+    ):
+        """run() advances all active operations in one loop iteration."""
+        from unittest.mock import patch
+
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
+        worker = AgentResearchWorker(
+            operations_service=mock_ops_service_for_worker,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
+        )
+        worker.POLL_INTERVAL = 0.01
+
+        # Create two operations that will complete on first advance
+        op1 = OperationInfo(
+            operation_id="op_1",
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RUNNING,
+            created_at=datetime.now(timezone.utc),
+            metadata=OperationMetadata(parameters={"phase": "idle"}),
+        )
+        op2 = OperationInfo(
+            operation_id="op_2",
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RUNNING,
+            created_at=datetime.now(timezone.utc),
+            metadata=OperationMetadata(parameters={"phase": "idle"}),
+        )
+
+        # Track which operations were advanced
+        advanced_ops = []
+
+        call_count = [0]
+
+        async def mock_advance_research(op):
+            advanced_ops.append(op.operation_id)
+            # After first round, mark operations as completed so loop exits
+            call_count[0] += 1
+            if call_count[0] >= 2:
+                # Remove from operations to simulate completion
+                mock_ops_service_for_worker._operations.clear()
+
+        mock_ops_service_for_worker._operations["op_1"] = op1
+        mock_ops_service_for_worker._operations["op_2"] = op2
+
+        with patch.object(
+            worker, "_advance_research", side_effect=mock_advance_research
+        ):
+            await worker.run()
+
+        # Both operations should have been advanced
+        assert "op_1" in advanced_ops
+        assert "op_2" in advanced_ops
+
+    @pytest.mark.asyncio
+    async def test_run_continues_after_one_research_completes(
+        self, mock_ops_service_for_worker, mock_design_worker, mock_assessment_worker
+    ):
+        """run() continues processing after one research completes."""
+        from unittest.mock import patch
+
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
+        worker = AgentResearchWorker(
+            operations_service=mock_ops_service_for_worker,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
+        )
+        worker.POLL_INTERVAL = 0.01
+
+        op1 = OperationInfo(
+            operation_id="op_1",
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RUNNING,
+            created_at=datetime.now(timezone.utc),
+            metadata=OperationMetadata(parameters={"phase": "idle"}),
+        )
+        op2 = OperationInfo(
+            operation_id="op_2",
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RUNNING,
+            created_at=datetime.now(timezone.utc),
+            metadata=OperationMetadata(parameters={"phase": "idle"}),
+        )
+
+        mock_ops_service_for_worker._operations["op_1"] = op1
+        mock_ops_service_for_worker._operations["op_2"] = op2
+
+        advance_calls = []
+        loop_iterations = [0]
+
+        async def mock_advance_research(op):
+            advance_calls.append(op.operation_id)
+            loop_iterations[0] += 1
+
+            # On first iteration: op_1 completes (remove it)
+            if op.operation_id == "op_1" and loop_iterations[0] <= 2:
+                del mock_ops_service_for_worker._operations["op_1"]
+
+            # On second iteration: op_2 completes (remove it)
+            if op.operation_id == "op_2" and loop_iterations[0] > 2:
+                del mock_ops_service_for_worker._operations["op_2"]
+
+        with patch.object(
+            worker, "_advance_research", side_effect=mock_advance_research
+        ):
+            await worker.run()
+
+        # op_1 should have been called once, op_2 should have been called twice
+        assert advance_calls.count("op_1") >= 1
+        assert advance_calls.count("op_2") >= 1
+
+    @pytest.mark.asyncio
+    async def test_run_no_operation_id_parameter(
+        self, mock_ops_service_for_worker, mock_design_worker, mock_assessment_worker
+    ):
+        """run() takes no operation_id parameter (discovers ops itself)."""
+        import inspect
+
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
+        worker = AgentResearchWorker(
+            operations_service=mock_ops_service_for_worker,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
+        )
+
+        # Check that run() signature has no required parameters
+        sig = inspect.signature(worker.run)
+        required_params = [
+            p
+            for p in sig.parameters.values()
+            if p.default == inspect.Parameter.empty and p.name != "self"
+        ]
+        assert len(required_params) == 0, "run() should not require any parameters"
