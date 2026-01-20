@@ -24,7 +24,7 @@ from concurrent.futures import Future
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
-from ib_insync import IB
+from ib_async import IB
 from opentelemetry import trace
 
 from ktrdr.logging import get_logger

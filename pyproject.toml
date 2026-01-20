@@ -21,6 +21,7 @@ dependencies = [
     "torch>=2.7.1",
     "pydantic>=2.0.0",
     "typer>=0.9.0",
+    "ib_async>=1.0.0",  # For IB host service (spike: migrating from ib_insync)
     "pyyaml>=6.0",
     "scikit-learn>=1.6.1",
     "tabulate>=0.9.0",

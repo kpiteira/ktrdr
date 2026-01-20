@@ -9,7 +9,7 @@ import asyncio
 import os
 
 import pytest
-from ib_insync import IB
+from ib_async import IB
 
 
 @pytest.fixture(scope="session")

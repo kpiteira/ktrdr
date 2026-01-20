@@ -17,7 +17,7 @@ import time
 from datetime import datetime
 
 import pandas as pd
-from ib_insync import Contract, Forex, Stock
+from ib_async import Contract, Forex, Stock
 from opentelemetry import trace
 
 from ib.pool_manager import get_shared_ib_pool
