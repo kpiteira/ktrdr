@@ -15,6 +15,7 @@ Trading strategy research system using neuro-fuzzy neural networks
 - [Overview](#overview)
 - [Key Features](#key-features)
 - [Quick Start](#quick-start)
+- [Development Environments](#development-environments)
 - [Architecture](#architecture)
 - [CLI Commands](#cli-commands)
 - [API Reference](#api-reference)
@@ -133,6 +134,56 @@ ktrdr backtest config/strategies/example.yaml \
 | Frontend | http://localhost:3000 |
 | Grafana | http://localhost:3000 |
 | Jaeger | http://localhost:16686 |
+
+## Development Environments
+
+KTRDR provides two types of managed environments:
+
+### Local-Prod (Primary Environment)
+
+Local-prod is your main execution environment for real work — connecting to IB Gateway, running GPU training, and using the MCP server with Claude.
+
+```bash
+# First-time setup (interactive)
+curl -fsSL https://raw.githubusercontent.com/kpiteira/ktrdr/main/scripts/setup-local-prod.sh | bash
+
+# Or manual setup
+git clone https://github.com/kpiteira/ktrdr.git ~/Documents/dev/ktrdr-prod
+cd ~/Documents/dev/ktrdr-prod
+uv sync
+uv run ktrdr local-prod init
+uv run ktrdr local-prod up
+```
+
+**Key features:**
+- Standard ports (8000, 3000, etc.) for host service integration
+- 1Password secrets management (`ktrdr-local-prod` item)
+- MCP server for Claude Code/Desktop integration
+- Singleton — only one local-prod instance allowed
+
+Full setup guide: [docs/designs/Sandbox/LOCAL_PROD_SETUP.md](docs/designs/Sandbox/LOCAL_PROD_SETUP.md)
+
+### Sandboxes (Parallel Development)
+
+Sandboxes are isolated environments for parallel feature development and testing. Each sandbox runs on different ports to avoid conflicts.
+
+```bash
+# Create a sandbox for feature work
+uv run ktrdr sandbox create my-feature
+cd ../ktrdr--my-feature
+uv run ktrdr sandbox up
+
+# List all sandboxes
+uv run ktrdr sandbox list
+```
+
+**Key features:**
+- Up to 10 parallel sandboxes (slots 1-10)
+- Isolated Docker containers on offset ports
+- Git worktrees for efficient disk usage
+- Shared data directory (`~/.ktrdr/shared/`)
+
+Sandbox guide: [docs/designs/Sandbox/USAGE_GUIDE.md](docs/designs/Sandbox/USAGE_GUIDE.md)
 
 ## Architecture
 
