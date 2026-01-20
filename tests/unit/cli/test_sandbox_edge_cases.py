@@ -30,7 +30,11 @@ def mock_registry_path(temp_registry_dir):
 
 
 class TestOrphanedContainerDetection:
-    """Tests for detecting orphaned Docker containers."""
+    """Tests for detecting orphaned Docker containers.
+
+    Uses Docker's com.docker.compose.project label to get project names directly,
+    avoiding container name parsing issues with multi-dash service names.
+    """
 
     def test_detect_orphaned_containers_finds_unregistered(self, mock_registry_path):
         """Detects containers matching ktrdr-- pattern not in registry."""
@@ -48,8 +52,9 @@ class TestOrphanedContainerDetection:
             )
         )
 
-        # Mock docker ps to return both registered and orphaned containers
-        mock_docker_output = "ktrdr--registered-backend-1\nktrdr--orphaned-backend-1\n"
+        # Mock docker ps to return project labels (not container names)
+        # This simulates: docker ps --format '{{.Label "com.docker.compose.project"}}'
+        mock_docker_output = "ktrdr--registered\nktrdr--orphaned\n"
 
         with patch("subprocess.run") as mock_run:
             mock_result = MagicMock()
@@ -81,8 +86,9 @@ class TestOrphanedContainerDetection:
             )
         )
 
-        # Mock docker ps to return only registered container
-        mock_docker_output = "ktrdr--test-backend-1\nktrdr--test-db-1\n"
+        # Mock docker ps with project label - same project appears multiple times
+        # (once per container, but all with same project name)
+        mock_docker_output = "ktrdr--test\nktrdr--test\n"
 
         with patch("subprocess.run") as mock_run:
             mock_result = MagicMock()
@@ -127,11 +133,11 @@ class TestOrphanedContainerDetection:
         """Ignores containers not matching ktrdr-- pattern."""
         from ktrdr.cli.sandbox import detect_orphaned_containers
 
-        # Various non-matching containers
+        # Various non-matching project names
         mock_docker_output = (
-            "postgres-1\n"
+            "postgres\n"
             "redis-main\n"
-            "my-app-backend-1\n"
+            "my-app\n"
             "ktrdr-not-sandbox\n"  # Missing double dash
         )
 
@@ -144,6 +150,44 @@ class TestOrphanedContainerDetection:
             orphaned = detect_orphaned_containers()
 
         assert orphaned == []
+
+    def test_detect_orphaned_containers_handles_multi_dash_service_names(
+        self, mock_registry_path
+    ):
+        """Handles projects with multi-dash names correctly.
+
+        This test verifies that using Docker labels instead of parsing container
+        names works correctly - the old rsplit approach would fail for services
+        like 'backtest-worker-1' that have dashes in the name.
+        """
+        from ktrdr.cli.sandbox import detect_orphaned_containers
+        from ktrdr.cli.sandbox_registry import InstanceInfo, add_instance
+
+        # Register an instance with dashes in the name
+        add_instance(
+            InstanceInfo(
+                instance_id="ktrdr--my-feature-branch",
+                slot=1,
+                path="/tmp/ktrdr--my-feature-branch",
+                created_at="2024-01-15T10:30:00Z",
+                is_worktree=True,
+            )
+        )
+
+        # Docker labels give us the exact project name regardless of service names
+        mock_docker_output = "ktrdr--my-feature-branch\nktrdr--another-orphan\n"
+
+        with patch("subprocess.run") as mock_run:
+            mock_result = MagicMock()
+            mock_result.stdout = mock_docker_output
+            mock_result.returncode = 0
+            mock_run.return_value = mock_result
+
+            orphaned = detect_orphaned_containers()
+
+        # Should correctly identify orphaned project
+        assert "ktrdr--another-orphan" in orphaned
+        assert "ktrdr--my-feature-branch" not in orphaned
 
 
 class TestDuplicateInstanceIdHandling:
@@ -186,12 +230,13 @@ class TestDuplicateInstanceIdHandling:
         from ktrdr.cli.sandbox import derive_unique_instance_id
         from ktrdr.cli.sandbox_registry import InstanceInfo, add_instance
 
-        # Register base and -2
-        for suffix in ["", "-2", "-3"]:
+        # Register base and -2, -3 with different slots (realistic test data)
+        suffixes_and_slots = [("", 1), ("-2", 2), ("-3", 3)]
+        for suffix, slot in suffixes_and_slots:
             add_instance(
                 InstanceInfo(
                     instance_id=f"ktrdr--feature{suffix}",
-                    slot=1,
+                    slot=slot,
                     path=f"/tmp/ktrdr--feature{suffix}",
                     created_at="2024-01-15T10:30:00Z",
                     is_worktree=True,

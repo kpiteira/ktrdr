@@ -259,32 +259,35 @@ def detect_orphaned_containers() -> list[str]:
     not registered in the sandbox registry. These may be left over
     from manually deleted instances.
 
+    Uses Docker's COMPOSE_PROJECT_NAME label which is set by Docker Compose
+    and contains the exact project name (instance ID).
+
     Returns:
         List of orphaned instance IDs (deduplicated).
     """
     try:
+        # Use Docker label to get the exact project name
+        # Docker Compose sets com.docker.compose.project to COMPOSE_PROJECT_NAME
         result = subprocess.run(
-            ["docker", "ps", "--format", "{{.Names}}"],
+            [
+                "docker",
+                "ps",
+                "--format",
+                '{{.Label "com.docker.compose.project"}}',
+            ],
             capture_output=True,
             text=True,
         )
-        running = result.stdout.strip().split("\n") if result.stdout.strip() else []
+        projects = result.stdout.strip().split("\n") if result.stdout.strip() else []
 
-        # Find containers matching ktrdr-- pattern not in registry
+        # Find projects matching ktrdr-- pattern not in registry
         registry = load_registry()
         registered_ids = set(registry.instances.keys())
 
         orphaned = []
-        for container in running:
-            # Extract instance ID from container name (format: instance_id-service-1)
-            if container.startswith("ktrdr--"):
-                # Container names are like: ktrdr--my-feature-backend-1
-                # We need to extract: ktrdr--my-feature
-                parts = container.rsplit("-", 2)
-                if len(parts) >= 2:
-                    instance_id = parts[0]
-                    if instance_id not in registered_ids:
-                        orphaned.append(instance_id)
+        for project in projects:
+            if project.startswith("ktrdr--") and project not in registered_ids:
+                orphaned.append(project)
 
         return list(set(orphaned))
     except Exception:
