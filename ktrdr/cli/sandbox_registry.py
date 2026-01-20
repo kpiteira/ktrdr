@@ -33,11 +33,18 @@ class InstanceInfo:
 class Registry:
     """Sandbox instance registry.
 
-    Contains version info and a mapping of instance IDs to their metadata.
+    Contains version info, optional local_prod singleton, and a mapping of
+    sandbox instance IDs to their metadata.
+
+    The local_prod field is separate from instances because:
+    - It's a singleton (only one allowed)
+    - It uses slot 0 (reserved for standard ports)
+    - It has different lifecycle (no slot allocation needed)
     """
 
     version: int = 1
-    instances: dict[str, InstanceInfo] = field(default_factory=dict)
+    local_prod: Optional[InstanceInfo] = None  # Singleton local-prod instance
+    instances: dict[str, InstanceInfo] = field(default_factory=dict)  # Sandboxes only
 
 
 def _ensure_registry_dir() -> None:
@@ -59,7 +66,16 @@ def load_registry() -> Registry:
         with open(REGISTRY_FILE) as f:
             data = json.load(f)
         instances = {k: InstanceInfo(**v) for k, v in data.get("instances", {}).items()}
-        return Registry(version=data.get("version", 1), instances=instances)
+
+        # Load local_prod if present
+        local_prod_data = data.get("local_prod")
+        local_prod = InstanceInfo(**local_prod_data) if local_prod_data else None
+
+        return Registry(
+            version=data.get("version", 1),
+            local_prod=local_prod,
+            instances=instances,
+        )
     except (json.JSONDecodeError, TypeError, KeyError):
         # Corrupted file, start fresh
         return Registry()
@@ -74,6 +90,7 @@ def save_registry(registry: Registry) -> None:
     _ensure_registry_dir()
     data = {
         "version": registry.version,
+        "local_prod": asdict(registry.local_prod) if registry.local_prod else None,
         "instances": {k: asdict(v) for k, v in registry.instances.items()},
     }
     with open(REGISTRY_FILE, "w") as f:
@@ -163,3 +180,46 @@ def clean_stale_entries() -> list[str]:
     if stale:
         save_registry(registry)
     return stale
+
+
+# =============================================================================
+# Local-prod singleton management
+# =============================================================================
+
+
+def local_prod_exists() -> bool:
+    """Check if a local-prod instance is registered.
+
+    Returns:
+        True if local-prod exists in registry, False otherwise.
+    """
+    registry = load_registry()
+    return registry.local_prod is not None
+
+
+def get_local_prod() -> Optional[InstanceInfo]:
+    """Get the local-prod instance info.
+
+    Returns:
+        InstanceInfo for local-prod if it exists, None otherwise.
+    """
+    registry = load_registry()
+    return registry.local_prod
+
+
+def set_local_prod(info: InstanceInfo) -> None:
+    """Set the local-prod instance.
+
+    Args:
+        info: The InstanceInfo for the local-prod instance.
+    """
+    registry = load_registry()
+    registry.local_prod = info
+    save_registry(registry)
+
+
+def clear_local_prod() -> None:
+    """Clear the local-prod instance from the registry."""
+    registry = load_registry()
+    registry.local_prod = None
+    save_registry(registry)
