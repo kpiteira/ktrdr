@@ -440,3 +440,194 @@ class TestRegistryPersistence:
         assert "persist-test" in registry.instances
         assert registry.instances["persist-test"].slot == 3
         assert registry.instances["persist-test"].parent_repo == "/tmp/ktrdr"
+
+
+class TestLocalProdRegistry:
+    """Tests for local-prod singleton CRUD operations."""
+
+    def test_local_prod_not_exists_initially(self, mock_registry_path):
+        """Empty registry has no local-prod."""
+        from ktrdr.cli.sandbox_registry import local_prod_exists
+
+        assert not local_prod_exists()
+
+    def test_set_and_get_local_prod(self, mock_registry_path):
+        """Set local-prod, retrieve it."""
+        from ktrdr.cli.sandbox_registry import (
+            InstanceInfo,
+            get_local_prod,
+            local_prod_exists,
+            set_local_prod,
+        )
+
+        info = InstanceInfo(
+            instance_id="ktrdr-prod",
+            slot=0,
+            path="/tmp/test-ktrdr-prod",
+            created_at="2024-01-01T00:00:00Z",
+            is_worktree=False,  # Clone, not worktree
+            parent_repo=None,
+        )
+        set_local_prod(info)
+
+        assert local_prod_exists()
+        retrieved = get_local_prod()
+        assert retrieved is not None
+        assert retrieved.instance_id == "ktrdr-prod"
+        assert retrieved.slot == 0
+        assert not retrieved.is_worktree
+
+    def test_clear_local_prod(self, mock_registry_path):
+        """Clear local-prod removes it from registry."""
+        from ktrdr.cli.sandbox_registry import (
+            InstanceInfo,
+            clear_local_prod,
+            get_local_prod,
+            local_prod_exists,
+            set_local_prod,
+        )
+
+        # Set local-prod first
+        info = InstanceInfo(
+            instance_id="ktrdr-prod",
+            slot=0,
+            path="/tmp/test-ktrdr-prod",
+            created_at="2024-01-01T00:00:00Z",
+            is_worktree=False,
+            parent_repo=None,
+        )
+        set_local_prod(info)
+        assert local_prod_exists()
+
+        # Clear it
+        clear_local_prod()
+
+        assert not local_prod_exists()
+        assert get_local_prod() is None
+
+    def test_local_prod_is_worktree_false_for_clones(self, mock_registry_path):
+        """Verify is_worktree=False is preserved for clone-based local-prod."""
+        from ktrdr.cli.sandbox_registry import (
+            InstanceInfo,
+            get_local_prod,
+            set_local_prod,
+        )
+
+        info = InstanceInfo(
+            instance_id="ktrdr-prod",
+            slot=0,
+            path="/home/user/ktrdr-prod",
+            created_at="2024-01-15T10:30:00Z",
+            is_worktree=False,  # Must be False for clones
+            parent_repo=None,  # Clones have no parent
+        )
+        set_local_prod(info)
+
+        retrieved = get_local_prod()
+        assert retrieved is not None
+        assert retrieved.is_worktree is False
+        assert retrieved.parent_repo is None
+
+    def test_local_prod_singleton_overwrite(self, mock_registry_path):
+        """Setting local-prod twice overwrites the previous one."""
+        from ktrdr.cli.sandbox_registry import (
+            InstanceInfo,
+            get_local_prod,
+            set_local_prod,
+        )
+
+        info1 = InstanceInfo(
+            instance_id="ktrdr-prod-1",
+            slot=0,
+            path="/path/one",
+            created_at="2024-01-01T00:00:00Z",
+            is_worktree=False,
+        )
+        info2 = InstanceInfo(
+            instance_id="ktrdr-prod-2",
+            slot=0,
+            path="/path/two",
+            created_at="2024-01-02T00:00:00Z",
+            is_worktree=False,
+        )
+
+        set_local_prod(info1)
+        set_local_prod(info2)
+
+        retrieved = get_local_prod()
+        assert retrieved.instance_id == "ktrdr-prod-2"
+        assert retrieved.path == "/path/two"
+
+    def test_local_prod_persists_across_load(self, mock_registry_path):
+        """Local-prod survives save/reload cycle."""
+        from ktrdr.cli.sandbox_registry import (
+            InstanceInfo,
+            load_registry,
+            set_local_prod,
+        )
+
+        info = InstanceInfo(
+            instance_id="ktrdr-prod",
+            slot=0,
+            path="/tmp/ktrdr-prod",
+            created_at="2024-01-01T00:00:00Z",
+            is_worktree=False,
+            parent_repo=None,
+        )
+        set_local_prod(info)
+
+        # Reload (simulates new process)
+        registry = load_registry()
+
+        assert registry.local_prod is not None
+        assert registry.local_prod.instance_id == "ktrdr-prod"
+        assert registry.local_prod.slot == 0
+        assert registry.local_prod.is_worktree is False
+
+    def test_local_prod_independent_of_sandboxes(self, mock_registry_path):
+        """Local-prod doesn't affect sandbox instances and vice versa."""
+        from ktrdr.cli.sandbox_registry import (
+            InstanceInfo,
+            add_instance,
+            clear_local_prod,
+            get_instance,
+            get_local_prod,
+            local_prod_exists,
+            remove_instance,
+            set_local_prod,
+        )
+
+        # Set up both local-prod and a sandbox
+        local_prod_info = InstanceInfo(
+            instance_id="ktrdr-prod",
+            slot=0,
+            path="/tmp/ktrdr-prod",
+            created_at="2024-01-01T00:00:00Z",
+            is_worktree=False,
+        )
+        sandbox_info = InstanceInfo(
+            instance_id="ktrdr--feature-x",
+            slot=1,
+            path="/tmp/ktrdr--feature-x",
+            created_at="2024-01-01T00:00:00Z",
+            is_worktree=True,
+            parent_repo="/tmp/ktrdr",
+        )
+
+        set_local_prod(local_prod_info)
+        add_instance(sandbox_info)
+
+        # Both should exist independently
+        assert local_prod_exists()
+        assert get_instance("ktrdr--feature-x") is not None
+
+        # Removing sandbox doesn't affect local-prod
+        remove_instance("ktrdr--feature-x")
+        assert local_prod_exists()
+        assert get_local_prod().instance_id == "ktrdr-prod"
+
+        # Clearing local-prod doesn't affect sandboxes
+        add_instance(sandbox_info)  # Re-add
+        clear_local_prod()
+        assert not local_prod_exists()
+        assert get_instance("ktrdr--feature-x") is not None

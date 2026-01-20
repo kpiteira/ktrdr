@@ -17,10 +17,10 @@
 | M3 | [Startability Gate](M3_startability-gate.md) | 5 | Health checks shown, status displays URLs | ⏳ |
 | M4 | [Auto-Detection](M4_auto-detection.md) | 4 | CLI auto-targets correct backend | ⏳ |
 | M5 | [Shared Data](M5_shared-data.md) | 3 | `init-shared` populates shared directory | ⏳ |
-| M6 | [Merge](M6_merge.md) | 4 | Default ports work after merge | ⏳ |
+| M6 | [Local-Prod](M6_local_prod.md) | 6 | Local-prod `init → up → status` works | ⏳ |
 | M7 | [Documentation](M7_documentation.md) | 3 | Setup docs complete, edge cases handled | ⏳ |
 
-**Total Tasks:** 30
+**Total Tasks:** 32
 
 **Parallelization:** M5 can run in parallel with M3/M4 after M2 completes.
 
@@ -39,7 +39,7 @@ M1 (Compose Setup)
       │
       └─► M5 (Shared Data)
            │
-           └─► M6 (Merge)
+           └─► M6 (Local-Prod)
                 │
                 └─► M7 (Documentation)
 ```
@@ -59,7 +59,8 @@ M5 (Shared Data) can run in parallel with M3/M4 after M2 is complete.
 | Instance Registry | M2: Task 2.2 | ⏳ |
 | Startability Gate | M3: Tasks 3.1-3.2 | ⏳ |
 | Directory Detection | M4: Tasks 4.1-4.2 | ⏳ |
-| Two-File Strategy | M1: Task 1.1, M6: Tasks 6.1-6.3 | ⏳ |
+| Local-Prod Singleton | M6: Tasks 6.1-6.2 | ⏳ |
+| Slot 0 Reserved | M6: Task 6.1 | ⏳ |
 
 ---
 
@@ -69,20 +70,21 @@ M5 (Shared Data) can run in parallel with M3/M4 after M2 is complete.
 
 | File | Milestone | Purpose |
 |------|-----------|---------|
-| `docker-compose.sandbox.yml` | M1 | Parameterized compose for sandboxes |
+| `docker-compose.sandbox.yml` | M1 | Parameterized compose for sandboxes and local-prod |
 | `ktrdr/cli/sandbox.py` | M2 | Sandbox subcommand group |
 | `ktrdr/cli/sandbox_ports.py` | M2 | Port allocation logic |
 | `ktrdr/cli/sandbox_registry.py` | M2 | Instance registry management |
 | `ktrdr/cli/sandbox_gate.py` | M3 | Startability Gate checks |
-| `scripts/verify-sandbox-merge.sh` | M6 | Pre-merge verification |
-| `scripts/sandbox-rollback.sh` | M6 | Emergency rollback |
+| `ktrdr/cli/local_prod.py` | M6 | Local-prod subcommand group |
+| `ktrdr/cli/instance_core.py` | M6 | Shared instance lifecycle logic |
+| `scripts/setup-local-prod.sh` | M6 | Bootstrap script for local-prod setup |
 
 ### Modified Files
 
 | File | Milestone | Changes |
 |------|-----------|---------|
-| `ktrdr/cli/main.py` | M2, M4 | Register sandbox subcommand, add `--port` flag |
-| `docker-compose.yml` | M6 | Merge parameterized ports (after verification) |
+| `ktrdr/cli/main.py` | M2, M4, M6 | Register sandbox/local-prod subcommands, add `--port` flag |
+| `docker-compose.sandbox.yml` | M6 | Comment out extra workers, ensure mcp-local included |
 
 ---
 
@@ -93,7 +95,8 @@ M5 (Shared Data) can run in parallel with M3/M4 after M2 is complete.
 | M1 | Compose changes break existing workflow | Two-file strategy, main compose untouched |
 | M2 | Git worktree edge cases | Test with both worktrees and clones |
 | M3 | Health checks flaky | Configurable timeouts, retry logic |
-| M6 | Merge breaks ktrdr2 | Verification script, rollback script, git tag |
+| M6 | Destroy bug (wrong directory) | Registry lookup, not cwd; thorough testing |
+| M6 | Code duplication with sandbox | Thin wrappers over instance_core.py |
 
 ---
 

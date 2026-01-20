@@ -641,26 +641,23 @@ ktrdr -p 8002 operations list
 
 ## Migration / Rollout
 
-### CRITICAL: Backward Compatibility
+### CRITICAL: Slot 0 Reserved for Local-Prod
 
-**The existing `../ktrdr2` environment MUST continue to work throughout this transition.**
+**Slot 0 (standard ports: 8000, 5432, 3000, etc.) is reserved for local-prod.**
 
-The new sandbox infrastructure is additive, not replacement. We build new capabilities while preserving the working system:
+The sandbox infrastructure supports two environment types:
 
-- Existing `docker compose up` in `../ktrdr2` continues to work (uses default ports)
-- During development, we use a SEPARATE `docker-compose.sandbox.yml` file
-- Only after validation do we merge changes into the main compose file
-- Slot 0 (default ports) is reserved for the main dev environment
-- New sandbox instances use slots 1-10 with offset ports
+- **Sandboxes (slots 1-10)**: Development/testing environments using worktrees with offset ports
+- **Local-prod (slot 0)**: Production-like environment using a clone with standard ports
 
-**Two-File Development Strategy:**
+**Two-File Strategy:**
 
 ```text
-docker-compose.yml          # Untouched during development
-docker-compose.sandbox.yml  # New file for sandbox instances
+docker-compose.yml          # Symlink to deploy/environments/local/ (for ktrdr2 compatibility)
+docker-compose.sandbox.yml  # Used by both sandboxes AND local-prod
 ```
 
-Merge only happens in the final milestone, with verified backward compatibility and rollback capability.
+The `docker-compose.sandbox.yml` file has parameterized ports with defaults matching standard values, so local-prod (slot 0) uses 8000, 5432, etc. while sandboxes use offset ports.
 
 ### Milestone 1: Compose File + Shared Data Setup
 
@@ -698,64 +695,51 @@ Merge only happens in the final milestone, with verified backward compatibility 
 2. Add `--from` and `--minimal` options
 3. Document new dev machine setup workflow
 
-### Milestone 6: Backward-Compatible Merge
+### Milestone 6: Local-Prod Environment
 
-**This milestone merges sandbox changes into the main compose file with guaranteed rollback.**
+**This milestone creates the local-prod environment - a production-like execution environment using the sandbox infrastructure.**
 
-**Pre-merge setup:**
+Local-prod replaces the ad-hoc `../ktrdr2` setup with a properly managed environment.
 
-```bash
-# Create rollback point
-git tag sandbox-merge-rollback-point
-cp docker-compose.yml docker-compose.yml.pre-sandbox-backup
-```
+**Key characteristics:**
+- Slot 0 (standard ports: 8000, 5432, 3000, etc.)
+- Singleton (only one local-prod allowed)
+- Must be a git clone (not worktree) - for independence
+- Supports host services (IB Gateway, GPU training)
+- Includes MCP server
 
-**Verification checklist (automated script):**
-
-```bash
-# scripts/verify-sandbox-merge.sh
-# MUST pass before merge is considered complete
-
-# Test 1: Default ports work (no env vars)
-cd ../ktrdr2
-docker compose down -v
-unset KTRDR_API_PORT KTRDR_DB_PORT  # etc
-docker compose up -d
-curl http://localhost:8000/api/v1/health || exit 1
-curl http://localhost:3000/api/health || exit 1
-
-# Test 2: Sandbox still works
-cd ../ktrdr--test-sandbox
-ktrdr sandbox up
-curl http://localhost:8001/api/v1/health || exit 1
-
-echo "✓ All checks passed. Merge is safe."
-```
-
-**Rollback script:**
+**Setup flow (bootstrap script):**
 
 ```bash
-# scripts/sandbox-rollback.sh
-# Emergency rollback if merge breaks main dev workflow
+# Run the setup script
+./scripts/setup-local-prod.sh
 
-echo "Rolling back sandbox merge..."
-git checkout sandbox-merge-rollback-point -- docker-compose.yml
-# OR: cp docker-compose.yml.pre-sandbox-backup docker-compose.yml
-echo "Rollback complete. Run 'docker compose up' to verify."
+# Or manually:
+git clone https://github.com/kpiteira/ktrdr.git ~/Documents/dev/ktrdr-prod
+cd ~/Documents/dev/ktrdr-prod
+uv sync
+uv run ktrdr local-prod init
+uv run ktrdr local-prod up
 ```
 
-**Merge is NOT complete until:**
+**Commands:**
+- `ktrdr local-prod init` - Initialize current clone as local-prod
+- `ktrdr local-prod up` - Start the stack
+- `ktrdr local-prod down` - Stop the stack
+- `ktrdr local-prod destroy` - Unregister (keeps clone)
+- `ktrdr local-prod status` - Show status
+- `ktrdr local-prod logs` - View logs
 
-1. Verification script passes
-2. Karl manually confirms `docker compose up` works in ktrdr2
-3. Rollback script is tested (run it, then undo)
+**CRITICAL: The destroy bug**
+
+`local-prod destroy` MUST use registry lookup, NOT current directory. See HANDOFF_M6.md for details on the bug that caused complete loss of work.
 
 ### Milestone 7: Documentation & Polish
 
-1. Update README with sandbox workflow
-2. Document new dev machine setup
-3. Delete `docker-compose.sandbox.yml` (now merged)
-4. Handle edge cases (stale registry, orphaned containers)
+1. Update README with sandbox and local-prod workflows
+2. Document new dev machine setup (using bootstrap script)
+3. Handle edge cases (stale registry, orphaned containers)
+4. Polish help text and error messages
 
 ## Verification Strategy
 

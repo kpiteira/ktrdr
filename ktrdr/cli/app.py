@@ -109,6 +109,7 @@ def _register_subgroups() -> None:
     from ktrdr.cli.data_commands import data_app
     from ktrdr.cli.deploy_commands import deploy_app
     from ktrdr.cli.ib_commands import ib_app
+    from ktrdr.cli.local_prod import local_prod_app
     from ktrdr.cli.sandbox import sandbox_app
 
     app.add_typer(
@@ -118,6 +119,11 @@ def _register_subgroups() -> None:
     app.add_typer(ib_app, name="ib", help="Interactive Brokers integration commands")
     app.add_typer(
         deploy_app, name="deploy", help="Deploy KTRDR services to pre-production"
+    )
+    app.add_typer(
+        local_prod_app,
+        name="local-prod",
+        help="Manage local-prod production-like environment",
     )
     app.add_typer(
         sandbox_app,

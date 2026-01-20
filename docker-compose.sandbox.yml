@@ -424,6 +424,270 @@ services:
         condition: service_started
     command: /app/.venv/bin/uvicorn ktrdr.training.training_worker:app --host 0.0.0.0 --port 5006 --reload
 
+  # MCP Server (Local) - For Claude Code/Desktop targeting local backend
+  # NOTE: MCP code is mounted at /mcp (not /app/mcp) to avoid shadowing the pip 'mcp' package
+  # This service starts with regular 'up' (no profile needed) for local-prod usage.
+  mcp-local:
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile.dev
+      cache_from:
+        - ktrdr-backend:dev
+    image: ktrdr-backend:dev
+    restart: unless-stopped
+    volumes:
+      - ./mcp:/mcp:ro              # Mount outside /app to avoid shadowing pip mcp package
+      - ./ktrdr:/app/ktrdr:ro
+      - ./research_agents:/app/research_agents:ro  # Agent research package
+      - ./config:/app/config:ro    # Config files for KTRDR
+      - ./logs:/app/logs
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+      - PYTHONPATH=/app:/mcp       # Include both /app (for ktrdr) and /mcp (for src)
+      - KTRDR_API_URL=http://backend:8000/api/v1
+      - OTLP_ENDPOINT=http://jaeger:4317
+    working_dir: /mcp
+    stdin_open: true               # Required for stdio MCP transport
+    networks:
+      - ktrdr-network
+    depends_on:
+      backend:
+        condition: service_healthy
+    # No command - container stays running, Claude exec's into it
+    command: ["sleep", "infinity"]
+
+  # =============================================================================
+  # EXTRA WORKERS (local-prod profile only) - CURRENTLY DISABLED
+  # =============================================================================
+  # Uncomment these workers if you need more than 4 workers for local-prod.
+  # These workers only start when using --profile local-prod.
+  #
+  # To enable: uncomment the worker definitions below and run:
+  #   docker compose --profile local-prod up -d
+  #
+  # Port assignments (from sandbox_ports.py slot 0):
+  #   backtest-worker-3:  5007 (KTRDR_WORKER_PORT_5)
+  #   backtest-worker-4:  5008 (KTRDR_WORKER_PORT_6)
+  #   training-worker-3:  5009 (KTRDR_WORKER_PORT_7)
+  #   training-worker-4:  5010 (KTRDR_WORKER_PORT_8)
+
+  # # Backtest Worker 3 (local-prod only)
+  # backtest-worker-3:
+  #   profiles: [local-prod]
+  #   build:
+  #     context: .
+  #     dockerfile: docker/backend/Dockerfile.dev
+  #     cache_from:
+  #       - ktrdr-backend:dev
+  #   image: ktrdr-backend:dev
+  #   restart: unless-stopped
+  #   stop_grace_period: 30s
+  #   ports:
+  #     - "${KTRDR_WORKER_PORT_5:-5007}:5007"
+  #   volumes:
+  #     - ./ktrdr:/app/ktrdr
+  #     - ./logs:/app/logs
+  #     - ./config:/app/config:ro
+  #     - ${KTRDR_DATA_DIR:-./data}:/app/data
+  #     - ${KTRDR_MODELS_DIR:-./models}:/app/models:ro
+  #     - ${KTRDR_STRATEGIES_DIR:-./strategies}:/app/strategies:ro
+  #     - pip-cache:/root/.cache/pip
+  #     - uv-cache:/root/.cache/uv
+  #   environment:
+  #     - ENVIRONMENT=development
+  #     - LOG_LEVEL=INFO
+  #     - PYTHONPATH=/app
+  #     - KTRDR_API_URL=http://backend:8000
+  #     - WORKER_TYPE=backtesting
+  #     - WORKER_PORT=5007
+  #     - WORKER_PUBLIC_BASE_URL=http://backtest-worker-3:5007
+  #     - OTLP_ENDPOINT=http://jaeger:4317
+  #     - CHECKPOINT_DIR=/app/data/checkpoints
+  #     - DB_HOST=db
+  #     - DB_PORT=5432
+  #     - DB_NAME=${DB_NAME:-ktrdr}
+  #     - DB_USER=${DB_USER:-ktrdr}
+  #     - DB_PASSWORD=${DB_PASSWORD:-localdev}
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:5007/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 30s
+  #   networks:
+  #     - ktrdr-network
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #     backend:
+  #       condition: service_started
+  #   command: /app/.venv/bin/uvicorn ktrdr.backtesting.backtest_worker:app --host 0.0.0.0 --port 5007 --reload
+
+  # # Backtest Worker 4 (local-prod only)
+  # backtest-worker-4:
+  #   profiles: [local-prod]
+  #   build:
+  #     context: .
+  #     dockerfile: docker/backend/Dockerfile.dev
+  #     cache_from:
+  #       - ktrdr-backend:dev
+  #   image: ktrdr-backend:dev
+  #   restart: unless-stopped
+  #   stop_grace_period: 30s
+  #   ports:
+  #     - "${KTRDR_WORKER_PORT_6:-5008}:5008"
+  #   volumes:
+  #     - ./ktrdr:/app/ktrdr
+  #     - ./logs:/app/logs
+  #     - ./config:/app/config:ro
+  #     - ${KTRDR_DATA_DIR:-./data}:/app/data
+  #     - ${KTRDR_MODELS_DIR:-./models}:/app/models:ro
+  #     - ${KTRDR_STRATEGIES_DIR:-./strategies}:/app/strategies:ro
+  #     - pip-cache:/root/.cache/pip
+  #     - uv-cache:/root/.cache/uv
+  #   environment:
+  #     - ENVIRONMENT=development
+  #     - LOG_LEVEL=INFO
+  #     - PYTHONPATH=/app
+  #     - KTRDR_API_URL=http://backend:8000
+  #     - WORKER_TYPE=backtesting
+  #     - WORKER_PORT=5008
+  #     - WORKER_PUBLIC_BASE_URL=http://backtest-worker-4:5008
+  #     - OTLP_ENDPOINT=http://jaeger:4317
+  #     - CHECKPOINT_DIR=/app/data/checkpoints
+  #     - DB_HOST=db
+  #     - DB_PORT=5432
+  #     - DB_NAME=${DB_NAME:-ktrdr}
+  #     - DB_USER=${DB_USER:-ktrdr}
+  #     - DB_PASSWORD=${DB_PASSWORD:-localdev}
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:5008/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 30s
+  #   networks:
+  #     - ktrdr-network
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #     backend:
+  #       condition: service_started
+  #   command: /app/.venv/bin/uvicorn ktrdr.backtesting.backtest_worker:app --host 0.0.0.0 --port 5008 --reload
+
+  # # Training Worker 3 (local-prod only)
+  # training-worker-3:
+  #   profiles: [local-prod]
+  #   build:
+  #     context: .
+  #     dockerfile: docker/backend/Dockerfile.dev
+  #     cache_from:
+  #       - ktrdr-backend:dev
+  #   image: ktrdr-backend:dev
+  #   restart: unless-stopped
+  #   stop_grace_period: 30s
+  #   ports:
+  #     - "${KTRDR_WORKER_PORT_7:-5009}:5009"
+  #   volumes:
+  #     - ./ktrdr:/app/ktrdr
+  #     - ./logs:/app/logs
+  #     - ./config:/app/config:ro
+  #     - ${KTRDR_DATA_DIR:-./data}:/app/data
+  #     - ${KTRDR_MODELS_DIR:-./models}:/app/models
+  #     - ${KTRDR_STRATEGIES_DIR:-./strategies}:/app/strategies:ro
+  #     - pip-cache:/root/.cache/pip
+  #     - uv-cache:/root/.cache/uv
+  #   environment:
+  #     - ENVIRONMENT=development
+  #     - LOG_LEVEL=INFO
+  #     - PYTHONPATH=/app
+  #     - KTRDR_API_URL=http://backend:8000
+  #     - WORKER_TYPE=training
+  #     - WORKER_PORT=5009
+  #     - WORKER_PUBLIC_BASE_URL=http://training-worker-3:5009
+  #     - OTLP_ENDPOINT=http://jaeger:4317
+  #     - CHECKPOINT_DIR=/app/data/checkpoints
+  #     - DB_HOST=db
+  #     - DB_PORT=5432
+  #     - DB_NAME=${DB_NAME:-ktrdr}
+  #     - DB_USER=${DB_USER:-ktrdr}
+  #     - DB_PASSWORD=${DB_PASSWORD:-localdev}
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:5009/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 30s
+  #   networks:
+  #     - ktrdr-network
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #     backend:
+  #       condition: service_started
+  #   command: /app/.venv/bin/uvicorn ktrdr.training.training_worker:app --host 0.0.0.0 --port 5009 --reload
+
+  # # Training Worker 4 (local-prod only)
+  # training-worker-4:
+  #   profiles: [local-prod]
+  #   build:
+  #     context: .
+  #     dockerfile: docker/backend/Dockerfile.dev
+  #     cache_from:
+  #       - ktrdr-backend:dev
+  #   image: ktrdr-backend:dev
+  #   restart: unless-stopped
+  #   stop_grace_period: 30s
+  #   ports:
+  #     - "${KTRDR_WORKER_PORT_8:-5010}:5010"
+  #   volumes:
+  #     - ./ktrdr:/app/ktrdr
+  #     - ./logs:/app/logs
+  #     - ./config:/app/config:ro
+  #     - ${KTRDR_DATA_DIR:-./data}:/app/data
+  #     - ${KTRDR_MODELS_DIR:-./models}:/app/models
+  #     - ${KTRDR_STRATEGIES_DIR:-./strategies}:/app/strategies:ro
+  #     - pip-cache:/root/.cache/pip
+  #     - uv-cache:/root/.cache/uv
+  #   environment:
+  #     - ENVIRONMENT=development
+  #     - LOG_LEVEL=INFO
+  #     - PYTHONPATH=/app
+  #     - KTRDR_API_URL=http://backend:8000
+  #     - WORKER_TYPE=training
+  #     - WORKER_PORT=5010
+  #     - WORKER_PUBLIC_BASE_URL=http://training-worker-4:5010
+  #     - OTLP_ENDPOINT=http://jaeger:4317
+  #     - CHECKPOINT_DIR=/app/data/checkpoints
+  #     - DB_HOST=db
+  #     - DB_PORT=5432
+  #     - DB_NAME=${DB_NAME:-ktrdr}
+  #     - DB_USER=${DB_USER:-ktrdr}
+  #     - DB_PASSWORD=${DB_PASSWORD:-localdev}
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:5010/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 30s
+  #   networks:
+  #     - ktrdr-network
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #     backend:
+  #       condition: service_started
+  #   command: /app/.venv/bin/uvicorn ktrdr.training.training_worker:app --host 0.0.0.0 --port 5010 --reload
+
 networks:
   ktrdr-network:
     driver: bridge

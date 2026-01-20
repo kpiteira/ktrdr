@@ -21,6 +21,7 @@ class TestPortAllocation:
         ports = get_ports(0)
 
         # Standard ports from current docker-compose.yml
+        # Slot 0 (local-prod) gets 8 worker ports for extra workers
         assert ports.slot == 0
         assert ports.backend == 8000
         assert ports.db == 5432
@@ -29,7 +30,7 @@ class TestPortAllocation:
         assert ports.jaeger_otlp_grpc == 4317
         assert ports.jaeger_otlp_http == 4318
         assert ports.prometheus == 9090
-        assert ports.worker_ports == [5003, 5004, 5005, 5006]
+        assert ports.worker_ports == [5003, 5004, 5005, 5006, 5007, 5008, 5009, 5010]
 
     def test_slot_1_returns_offset_ports(self):
         """Verify slot 1 has correct +1 offsets."""
@@ -46,18 +47,19 @@ class TestPortAllocation:
         assert ports.jaeger_otlp_grpc == 4327
         assert ports.jaeger_otlp_http == 4328
         assert ports.prometheus == 9091
-        # Worker ports for slot 1: 5010-5013
-        assert ports.worker_ports == [5010, 5011, 5012, 5013]
+        # Worker ports for slot 1: 5011-5014 (shifted to avoid slot 0's 5003-5010)
+        assert ports.worker_ports == [5011, 5012, 5013, 5014]
 
     def test_slot_2_worker_ports(self):
-        """Verify worker port ranges for slot 2 (5020-5023)."""
+        """Verify worker port ranges for slot 2 (5021-5024)."""
         from ktrdr.cli.sandbox_ports import get_ports
 
         ports = get_ports(2)
 
         assert ports.slot == 2
         assert ports.backend == 8002
-        assert ports.worker_ports == [5020, 5021, 5022, 5023]
+        # Slot 2: 5011 + (2-1)*10 = 5021
+        assert ports.worker_ports == [5021, 5022, 5023, 5024]
 
     def test_slot_10_returns_max_offset_ports(self):
         """Verify slot 10 (maximum) has correct offsets."""
@@ -74,8 +76,8 @@ class TestPortAllocation:
         assert ports.jaeger_otlp_grpc == 4417
         assert ports.jaeger_otlp_http == 4418
         assert ports.prometheus == 9100
-        # Worker ports for slot 10: 5010 + (10-1)*10 = 5100
-        assert ports.worker_ports == [5100, 5101, 5102, 5103]
+        # Worker ports for slot 10: 5011 + (10-1)*10 = 5101
+        assert ports.worker_ports == [5101, 5102, 5103, 5104]
 
     def test_invalid_slot_negative_raises(self):
         """Slot -1 should raise ValueError."""
@@ -111,10 +113,11 @@ class TestToEnvDict:
         assert env["KTRDR_JAEGER_OTLP_GRPC_PORT"] == "4327"
         assert env["KTRDR_JAEGER_OTLP_HTTP_PORT"] == "4328"
         assert env["KTRDR_PROMETHEUS_PORT"] == "9091"
-        assert env["KTRDR_WORKER_PORT_1"] == "5010"
-        assert env["KTRDR_WORKER_PORT_2"] == "5011"
-        assert env["KTRDR_WORKER_PORT_3"] == "5012"
-        assert env["KTRDR_WORKER_PORT_4"] == "5013"
+        # Slot 1 worker ports: 5011-5014 (shifted to avoid slot 0's 5003-5010)
+        assert env["KTRDR_WORKER_PORT_1"] == "5011"
+        assert env["KTRDR_WORKER_PORT_2"] == "5012"
+        assert env["KTRDR_WORKER_PORT_3"] == "5013"
+        assert env["KTRDR_WORKER_PORT_4"] == "5014"
 
     def test_to_env_dict_all_values_are_strings(self):
         """All values in env dict should be strings."""
@@ -169,10 +172,11 @@ class TestAllPorts:
         assert 4327 in all_ports  # jaeger_otlp_grpc
         assert 4328 in all_ports  # jaeger_otlp_http
         assert 9091 in all_ports  # prometheus
-        assert 5010 in all_ports  # worker 1
-        assert 5011 in all_ports  # worker 2
-        assert 5012 in all_ports  # worker 3
-        assert 5013 in all_ports  # worker 4
+        # Slot 1 worker ports: 5011-5014
+        assert 5011 in all_ports  # worker 1
+        assert 5012 in all_ports  # worker 2
+        assert 5013 in all_ports  # worker 3
+        assert 5014 in all_ports  # worker 4
 
 
 class TestPortAvailability:
