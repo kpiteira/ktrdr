@@ -252,17 +252,99 @@ def is_ktrdr_repo(path: Path) -> bool:
         return False
 
 
+def detect_orphaned_containers() -> list[str]:
+    """Find sandbox containers not in registry.
+
+    Detects Docker containers matching the ktrdr-- pattern that are
+    not registered in the sandbox registry. These may be left over
+    from manually deleted instances.
+
+    Uses Docker's COMPOSE_PROJECT_NAME label which is set by Docker Compose
+    and contains the exact project name (instance ID).
+
+    Returns:
+        List of orphaned instance IDs (deduplicated).
+    """
+    try:
+        # Use Docker label to get the exact project name
+        # Docker Compose sets com.docker.compose.project to COMPOSE_PROJECT_NAME
+        result = subprocess.run(
+            [
+                "docker",
+                "ps",
+                "--format",
+                '{{.Label "com.docker.compose.project"}}',
+            ],
+            capture_output=True,
+            text=True,
+        )
+        projects = result.stdout.strip().split("\n") if result.stdout.strip() else []
+
+        # Find projects matching ktrdr-- pattern not in registry
+        registry = load_registry()
+        registered_ids = set(registry.instances.keys())
+
+        orphaned = []
+        for project in projects:
+            if project.startswith("ktrdr--") and project not in registered_ids:
+                orphaned.append(project)
+
+        return list(set(orphaned))
+    except Exception:
+        return []
+
+
+def derive_unique_instance_id(base_id: str) -> str:
+    """Ensure instance ID is unique, appending number if needed.
+
+    If an instance with the base_id already exists, appends -2, -3, etc.
+    until finding an unused ID.
+
+    Args:
+        base_id: The desired instance ID.
+
+    Returns:
+        The base_id if unused, or base_id-N where N is the first available number.
+
+    Raises:
+        RuntimeError: If unable to generate unique ID after 99 attempts.
+    """
+    if not get_instance(base_id):
+        return base_id
+
+    for i in range(2, 100):
+        candidate = f"{base_id}-{i}"
+        if not get_instance(candidate):
+            return candidate
+
+    raise RuntimeError(f"Could not generate unique ID for {base_id}")
+
+
 @sandbox_app.command()
 def create(
     name: str = typer.Argument(
-        ..., help="Instance name (will be prefixed with ktrdr--)"
+        ..., help="Instance name (e.g., 'my-feature' creates ktrdr--my-feature)"
     ),
-    branch: str = typer.Option(None, "--branch", "-b", help="Git branch to checkout"),
+    branch: str = typer.Option(
+        None, "--branch", "-b", help="Git branch to checkout (default: current branch)"
+    ),
     slot: int = typer.Option(
-        None, "--slot", "-s", help="Force specific port slot (1-10)"
+        None,
+        "--slot",
+        "-s",
+        help="Force specific port slot 1-10 (default: auto-allocate)",
     ),
 ) -> None:
-    """Create a new sandbox instance using git worktree."""
+    """Create a new sandbox instance using git worktree.
+
+    Creates a new directory ../ktrdr--<name> with its own git working
+    directory and allocates a unique port slot for running in parallel.
+
+    Examples:
+        ktrdr sandbox create my-feature
+        ktrdr sandbox create bugfix --branch fix/issue-123
+        ktrdr sandbox create test --slot 5
+    """
     # Derive paths
     current_repo = Path.cwd()
     instance_name = f"ktrdr--{slugify(name)}"
@@ -894,6 +976,17 @@ def list_instances() -> None:
     stale = clean_stale_entries()
     if stale:
         console.print(f"[dim]Cleaned {len(stale)} stale entries[/dim]")
+
+    # Check for orphaned containers
+    orphaned = detect_orphaned_containers()
+    if orphaned:
+        console.print(
+            f"[yellow]Warning:[/yellow] Found orphaned containers: {orphaned}"
+        )
+        console.print("  These may be from deleted sandbox instances.")
+        console.print(
+            "  Clean up with: docker compose down (in each orphaned directory)"
+        )
 
     registry = load_registry()
 

@@ -161,6 +161,17 @@ uv run ktrdr local-prod up
 - MCP server for Claude Code/Desktop integration
 - Singleton — only one local-prod instance allowed
 
+**Commands:**
+
+| Command | Description |
+|---------|-------------|
+| `ktrdr local-prod init` | Initialize current clone as local-prod |
+| `ktrdr local-prod up` | Start the stack |
+| `ktrdr local-prod down` | Stop the stack |
+| `ktrdr local-prod destroy` | Unregister (keeps clone) |
+| `ktrdr local-prod status` | Detailed status with URLs |
+| `ktrdr local-prod logs` | View logs |
+
 Full setup guide: [docs/designs/Sandbox/LOCAL_PROD_SETUP.md](docs/designs/Sandbox/LOCAL_PROD_SETUP.md)
 
 ### Sandboxes (Parallel Development)
@@ -182,6 +193,29 @@ uv run ktrdr sandbox list
 - Isolated Docker containers on offset ports
 - Git worktrees for efficient disk usage
 - Shared data directory (`~/.ktrdr/shared/`)
+
+**Commands:**
+
+| Command | Description |
+|---------|-------------|
+| `ktrdr sandbox create <name>` | Create new sandbox instance |
+| `ktrdr sandbox up` | Start the sandbox stack |
+| `ktrdr sandbox down` | Stop the stack |
+| `ktrdr sandbox destroy` | Remove everything |
+| `ktrdr sandbox list` | Show all instances |
+| `ktrdr sandbox status` | Detailed status with URLs |
+
+**CLI Auto-Detection:**
+
+When in a sandbox or local-prod directory, CLI commands automatically target that instance:
+
+```bash
+cd ../ktrdr--my-feature
+ktrdr operations list  # Hits port 8001
+
+# Override with --port
+ktrdr --port 8002 operations list
+```
 
 Sandbox guide: [docs/designs/Sandbox/USAGE_GUIDE.md](docs/designs/Sandbox/USAGE_GUIDE.md)
 
