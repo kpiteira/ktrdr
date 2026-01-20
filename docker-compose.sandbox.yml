@@ -424,6 +424,39 @@ services:
         condition: service_started
     command: /app/.venv/bin/uvicorn ktrdr.training.training_worker:app --host 0.0.0.0 --port 5006 --reload
 
+  # MCP Server (Local) - For Claude Code/Desktop targeting local backend
+  # NOTE: MCP code is mounted at /mcp (not /app/mcp) to avoid shadowing the pip 'mcp' package
+  # This service starts with regular 'up' (no profile needed) for local-prod usage.
+  mcp-local:
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile.dev
+      cache_from:
+        - ktrdr-backend:dev
+    image: ktrdr-backend:dev
+    restart: unless-stopped
+    volumes:
+      - ./mcp:/mcp:ro              # Mount outside /app to avoid shadowing pip mcp package
+      - ./ktrdr:/app/ktrdr:ro
+      - ./research_agents:/app/research_agents:ro  # Agent research package
+      - ./config:/app/config:ro    # Config files for KTRDR
+      - ./logs:/app/logs
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+      - PYTHONPATH=/app:/mcp       # Include both /app (for ktrdr) and /mcp (for src)
+      - KTRDR_API_URL=http://backend:8000/api/v1
+      - OTLP_ENDPOINT=http://jaeger:4317
+    working_dir: /mcp
+    stdin_open: true               # Required for stdio MCP transport
+    networks:
+      - ktrdr-network
+    depends_on:
+      backend:
+        condition: service_healthy
+    # No command - container stays running, Claude exec's into it
+    command: ["sleep", "infinity"]
+
   # =============================================================================
   # EXTRA WORKERS (local-prod profile only) - CURRENTLY DISABLED
   # =============================================================================

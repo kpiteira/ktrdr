@@ -265,3 +265,30 @@ Created `scripts/setup-local-prod.sh` - an interactive setup script that solves 
 Task 6.4 updates the Docker Compose file:
 - Comment out extra workers (5-8) but keep profile structure
 - Ensure `mcp-local` service is included
+
+---
+
+## Task 6.4 Complete: Update Compose for Local-Prod
+
+### Implementation
+
+The extra workers (5-8) were already commented out with proper profile structure preserved. Added `mcp-local` service.
+
+**Changes to `docker-compose.sandbox.yml`:**
+- Added `mcp-local` service (copied from `deploy/environments/local/docker-compose.yml`)
+- Adapted paths for sandbox context (e.g., `./mcp:/mcp:ro` instead of `../../../mcp:/mcp:ro`)
+- `mcp-local` has no profile restriction - starts with regular `up`
+
+**Key configuration for mcp-local:**
+- Mounts `./mcp` at `/mcp` (not `/app/mcp`) to avoid shadowing pip mcp package
+- Sets `PYTHONPATH=/app:/mcp` for both ktrdr and mcp imports
+- `working_dir: /mcp` for correct execution context
+- `stdin_open: true` for stdio MCP transport
+- `command: ["sleep", "infinity"]` - Claude exec's into the container
+
+### Next Task Notes
+
+Task 6.5 creates documentation:
+- `docs/designs/Sandbox/LOCAL_PROD_SETUP.md` - Complete setup guide
+- Document 1Password item requirements
+- Document host service connections
