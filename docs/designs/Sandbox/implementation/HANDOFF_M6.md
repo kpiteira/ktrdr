@@ -223,3 +223,45 @@ Created `ktrdr/cli/local_prod.py` with commands:
 - Init validation (worktree rejection, singleton, clone success)
 - Destroy registry lookup (critical bug prevention)
 - Profile passing to instance_core functions
+
+---
+
+## Task 6.3 Complete: Create Bootstrap Setup Script
+
+### Implementation
+
+Created `scripts/setup-local-prod.sh` - an interactive setup script that solves the chicken-and-egg problem.
+
+**Script features:**
+- `--help` - Shows usage information
+- `--check-only` - Only validates prerequisites, doesn't install
+- `--non-interactive --path=PATH` - For CI/scripted mode
+- Interactive mode with prompts for path and shared data setup
+
+**What the script does:**
+1. Checks prerequisites (git, docker, uv, op) with color-coded status
+2. Explains 1Password requirements (item: `ktrdr-local-prod`)
+3. Clones repository to user-specified path
+4. Runs `uv sync` for dependencies
+5. Runs `ktrdr local-prod init`
+6. Offers shared data initialization (copy from existing or minimal)
+7. Offers to start local-prod
+8. Shows next steps summary
+
+### Tests Added
+
+12 tests in `tests/unit/scripts/test_setup_local_prod.py`:
+- Script exists and is executable
+- `--check-only` validates prerequisites
+- Reports status for git, docker, uv, 1Password
+- Explains 1Password item requirements
+- `--help` shows usage
+- Fails if destination already exists
+- Shows banner/title
+- Uses color codes for status
+
+### Next Task Notes
+
+Task 6.4 updates the Docker Compose file:
+- Comment out extra workers (5-8) but keep profile structure
+- Ensure `mcp-local` service is included
