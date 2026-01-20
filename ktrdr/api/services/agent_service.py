@@ -24,6 +24,7 @@ from ktrdr.agents.workers.stubs import (
     StubDesignWorker,
 )
 from ktrdr.api.models.operations import (
+    OperationInfo,
     OperationMetadata,
     OperationStatus,
     OperationType,
@@ -513,6 +514,28 @@ class AgentService:
             limit=1,
         )
         return ops[0] if ops else None
+
+    async def _get_all_active_research_ops(self) -> list[OperationInfo]:
+        """Get all active AGENT_RESEARCH operations.
+
+        Returns all operations with RUNNING, RESUMING, or PENDING status.
+        Used by the multi-research coordinator to iterate over all active researches.
+
+        Returns:
+            List of active operations (may be empty).
+        """
+        result: list[OperationInfo] = []
+        for status in [
+            OperationStatus.RUNNING,
+            OperationStatus.RESUMING,
+            OperationStatus.PENDING,
+        ]:
+            ops, _, _ = await self.ops.list_operations(
+                operation_type=OperationType.AGENT_RESEARCH,
+                status=status,
+            )
+            result.extend(ops)
+        return result
 
     async def _get_last_research_op(self):
         """Get most recent completed/failed AGENT_RESEARCH operation.
