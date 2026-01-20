@@ -221,11 +221,7 @@ Your task is to analyze the results and provide a comprehensive assessment:
 
 ## Strategy YAML Template (v3 Format)
 
-Use this v3 format when creating strategies. The v3 format has three key sections:
-
-1. **indicators**: Dict of indicator calculations (keyed by indicator_id)
-2. **fuzzy_sets**: Dict of fuzzy interpretations (each references an indicator)
-3. **nn_inputs**: List specifying which fuzzy_set + timeframe combinations feed the neural network
+**COPY THIS PATTERN EXACTLY.** Use this v3 format when creating strategies:
 
 ```yaml
 name: "strategy_name_timestamp"
@@ -252,9 +248,10 @@ deployment:
     mode: "single"
     supported: ["1h"]
 
+# INDICATORS: Dict keyed by ID (NOT a list!)
 indicators:
-  rsi_14:
-    type: rsi
+  rsi_14:                      # This ID is referenced in fuzzy_sets
+    type: rsi                  # Use lowercase for type
     period: 14
     source: close
   macd_12_26_9:
@@ -263,12 +260,13 @@ indicators:
     slow_period: 26
     signal_period: 9
 
+# FUZZY_SETS: Each MUST have 'indicator' field linking to an indicator ID
 fuzzy_sets:
   rsi_momentum:
-    indicator: rsi_14
+    indicator: rsi_14          # REQUIRED: links to indicator ID above
     oversold:
       type: "triangular"
-      parameters: [0, 20, 35]
+      parameters: [0, 20, 35]  # Use 'parameters' NOT 'params'
     neutral:
       type: "triangular"
       parameters: [30, 50, 70]
@@ -276,7 +274,7 @@ fuzzy_sets:
       type: "triangular"
       parameters: [65, 80, 100]
   macd_trend:
-    indicator: macd_12_26_9.histogram
+    indicator: macd_12_26_9.histogram  # Dot notation for sub-outputs
     bearish:
       type: "triangular"
       parameters: [-50, -10, 0]
@@ -284,8 +282,9 @@ fuzzy_sets:
       type: "triangular"
       parameters: [0, 10, 50]
 
+# NN_INPUTS: REQUIRED section - specifies what feeds the neural network
 nn_inputs:
-  - fuzzy_set: rsi_momentum
+  - fuzzy_set: rsi_momentum    # References fuzzy_set key
     timeframes: all
   - fuzzy_set: macd_trend
     timeframes: ["1h"]
@@ -321,6 +320,13 @@ training:
     validation: 0.15
     test: 0.15
 ```
+
+## Critical v3 Rules (MUST FOLLOW)
+
+1. `indicators` is a **DICT keyed by ID**, NOT a list
+2. Each `fuzzy_sets` entry **MUST** have an `indicator` field that references a valid indicator ID
+3. `nn_inputs` section is **REQUIRED** - without it validation fails
+4. Use `parameters` (NOT `params`) for fuzzy set membership definitions
 
 ## V3 Format Key Concepts
 

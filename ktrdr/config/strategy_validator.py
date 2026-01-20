@@ -20,7 +20,11 @@ import yaml
 from pydantic import ValidationError as PydanticValidationError
 
 from ktrdr import get_logger
-from ktrdr.config.models import LegacyStrategyConfiguration, StrategyConfigurationV2
+from ktrdr.config.models import (
+    LegacyStrategyConfiguration,
+    StrategyConfigurationV2,
+    StrategyConfigurationV3,
+)
 from ktrdr.config.strategy_loader import strategy_loader
 
 logger = get_logger(__name__)
@@ -942,13 +946,13 @@ Missing feature_ids: {', '.join(missing_list)}
         strategies_dir: Union[str, Path] = Path("strategies"),
     ) -> ValidationResult:
         """
-        Validate a strategy configuration dictionary (for agent-generated configs).
+        Validate a v3 strategy configuration dictionary.
 
         This is the main entry point for validating configs that are generated
-        programmatically (e.g., by the agent) rather than loaded from files.
+        programmatically (e.g., by the agent). Only v3 format is supported.
 
         Args:
-            config: Strategy configuration as a dictionary
+            config: Strategy configuration as a dictionary (must be v3 format)
             check_name_unique: If True, also check if strategy name is unique
             strategies_dir: Directory to check for existing strategies
 
@@ -967,19 +971,17 @@ Missing feature_ids: {', '.join(missing_list)}
                 result.errors.extend(name_result.errors)
                 result.suggestions.extend(name_result.suggestions)
 
-        # Try to validate using Pydantic models
+        # Validate as v3 (only format supported)
         try:
-            # Detect format and create appropriate config object
-            is_v2 = self._detect_v2_format(config)
+            # Parse as v3 config
+            v3_config = StrategyConfigurationV3(**config)
 
-            if is_v2:
-                v2_config = StrategyConfigurationV2(**config)
-                return self._validate_v2_strategy_full(v2_config, result)
-            else:
-                # Add legacy defaults before validation
-                config = strategy_loader._add_legacy_defaults(config)
-                v1_config = LegacyStrategyConfiguration(**config)
-                return self._validate_v1_strategy(v1_config, result)
+            # Run v3-specific validation
+            warnings = validate_v3_strategy(v3_config)
+            for w in warnings:
+                result.warnings.append(f"{w.message} at {w.location}")
+
+            return result
 
         except PydanticValidationError as e:
             result.is_valid = False
@@ -987,33 +989,14 @@ Missing feature_ids: {', '.join(missing_list)}
             result.errors.extend(error_messages)
             result.missing_sections.extend(missing_sections)
             return result
+        except StrategyValidationError as e:
+            result.is_valid = False
+            result.errors.append(str(e))
+            return result
         except Exception as e:
             result.is_valid = False
             result.errors.append(f"Validation failed: {e}")
             return result
-
-    def _detect_v2_format(self, config: dict[str, Any]) -> bool:
-        """
-        Detect if configuration uses v2 format.
-
-        V2 format indicators:
-        - Has 'scope' field
-        - Has 'training_data' section
-        - Has 'deployment' section
-        """
-        v2_indicators = ["scope", "training_data", "deployment"]
-        return any(field in config for field in v2_indicators)
-
-    def _validate_v2_strategy_full(
-        self, config: StrategyConfigurationV2, result: ValidationResult
-    ) -> ValidationResult:
-        """
-        Full validation for v2 strategy including agent-specific checks.
-
-        This delegates to _validate_v2_strategy which now includes all
-        agent-specific validations (indicator types, fuzzy params).
-        """
-        return self._validate_v2_strategy(config, result)
 
 
 # =============================
