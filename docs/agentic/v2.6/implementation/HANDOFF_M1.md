@@ -130,12 +130,19 @@ Called from `lifespan()` in `startup.py`:
 - Uses `get_agent_service()` singleton
 - Called with `await agent_service.resume_if_needed()`
 
-### Smoke Test Note
+### Gotchas
 
-Smoke test was blocked by a sandbox database authentication issue (asyncpg password auth failing from backend container to db container, though psql works via `docker compose exec`). The code is correctly implemented and wired - verify with:
-1. Create a RUNNING agent_research operation in DB
-2. Restart backend
-3. Check logs for "Resuming coordinator for X active researches"
+- **Cache vs Database**: The OperationsService uses an in-memory cache, and `list_operations()` only queries the cache. On startup, the cache is empty. Modified `_get_all_active_research_ops()` to also query the database repository directly when the cache is empty.
+
+- **Database password reset**: If asyncpg authentication fails, reset the password via: `docker compose exec db psql -U ktrdr -d ktrdr -c "ALTER USER ktrdr WITH PASSWORD 'localdev';"`
+
+### Smoke Test Result
+
+✅ **PASSED** - Backend restart with pending operations shows:
+```
+Resuming coordinator for 2 active researches
+Coordinator task started
+```
 
 ### Next Task Notes (Task 1.7)
 

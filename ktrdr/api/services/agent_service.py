@@ -528,20 +528,37 @@ class AgentService:
         Returns all operations with RUNNING, RESUMING, or PENDING status.
         Used by the multi-research coordinator to iterate over all active researches.
 
+        Note: On startup, the in-memory cache may be empty, so we also query
+        the database repository directly to find operations that need resuming.
+
         Returns:
             List of active operations (may be empty).
         """
         result: list[OperationInfo] = []
-        for status in [
+        active_statuses = [
             OperationStatus.RUNNING,
             OperationStatus.RESUMING,
             OperationStatus.PENDING,
-        ]:
+        ]
+
+        # First check in-memory cache via list_operations
+        for status in active_statuses:
             ops, _, _ = await self.ops.list_operations(
                 operation_type=OperationType.AGENT_RESEARCH,
                 status=status,
             )
             result.extend(ops)
+
+        # If cache is empty and repository is available, query database directly
+        # This handles the startup case where cache hasn't been populated yet
+        if not result and hasattr(self.ops, "_repository") and self.ops._repository:
+            for status in active_statuses:
+                db_ops = await self.ops._repository.list(status=status.value)
+                # Filter to only AGENT_RESEARCH operations
+                for op in db_ops:
+                    if op.operation_type == OperationType.AGENT_RESEARCH:
+                        result.append(op)
+
         return result
 
     def _get_concurrency_limit(self) -> int:
