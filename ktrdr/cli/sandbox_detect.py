@@ -1,4 +1,4 @@
-"""Sandbox auto-detection for CLI commands.
+"""Sandbox auto-detection and URL utilities for CLI commands.
 
 This module provides URL resolution logic that determines which KTRDR backend
 to target based on flags and current directory's .env.sandbox file.
@@ -16,6 +16,95 @@ Priority order (highest to lowest):
 
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
+
+# Default API port for KTRDR backend
+DEFAULT_API_PORT = 8000
+
+# Module-level URL override set by --url flag in CLI callback.
+# This allows the URL to flow from the CLI entry point to HTTP clients
+# without requiring every command to explicitly pass it.
+_url_override: Optional[str] = None
+
+
+def set_url_override(url: Optional[str]) -> None:
+    """Set the global URL override (called by CLI callback when --url is used).
+
+    Args:
+        url: The normalized API URL, or None to clear the override.
+    """
+    global _url_override
+    _url_override = url
+
+
+def get_url_override() -> Optional[str]:
+    """Get the global URL override if set via --url flag.
+
+    Returns:
+        The URL override if set, None otherwise.
+    """
+    return _url_override
+
+
+def get_effective_api_url() -> str:
+    """Get the effective API URL for display in error messages.
+
+    Follows the same priority as URL resolution:
+    1. URL override (if set via --url flag)
+    2. Sandbox detection (if .env.sandbox exists)
+    3. Config default
+
+    This is useful for error messages to show users what URL is being targeted.
+
+    Returns:
+        The effective API URL being used.
+    """
+    # Priority 1: URL override from --url flag
+    if _url_override:
+        return _url_override
+
+    # Priority 2: Sandbox detection
+    if find_env_sandbox() is not None:
+        sandbox_url = resolve_api_url()
+        return f"{sandbox_url}/api/v1"
+
+    # Priority 3: Config default
+    from ktrdr.config.host_services import get_api_base_url
+
+    return get_api_base_url()
+
+
+def normalize_api_url(url: str) -> str:
+    """Normalize an API URL by adding protocol, port, and /api/v1 if missing.
+
+    Args:
+        url: Raw URL (e.g., "backend.example.com" or "http://backend.example.com:8000")
+
+    Returns:
+        Normalized URL with protocol, port, and API path
+        (e.g., "http://backend.example.com:8000/api/v1")
+    """
+    if not url:
+        return url
+
+    # Add http:// if no protocol specified
+    if not url.startswith(("http://", "https://")):
+        url = f"http://{url}"
+
+    # Parse and add default port if missing
+    parsed = urlparse(url)
+    if parsed.port is None:
+        # Reconstruct with default port
+        netloc = f"{parsed.hostname}:{DEFAULT_API_PORT}"
+        url = f"{parsed.scheme}://{netloc}{parsed.path}"
+
+    url = url.rstrip("/")
+
+    # Auto-append /api/v1 if no API path present
+    if "/api/" not in url:
+        url = f"{url}/api/v1"
+
+    return url
 
 
 def parse_dotenv_file(path: Path) -> dict[str, str]:
