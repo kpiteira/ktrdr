@@ -242,12 +242,45 @@ All 39 existing agent service tests pass (no regressions).
 
 ---
 
+## E2E Validation Complete
+
+### Bugfix: Backend Startup on Fresh Database
+
+**Problem found during E2E validation**: Backend failed to start on a fresh database (after `ktrdr sandbox down -v`) because `resume_if_needed()` queries the operations table before alembic migrations run.
+
+**Fix**: Made `resume_if_needed()` resilient to missing tables. It now catches exceptions containing "does not exist" or "undefined" and logs a warning instead of crashing:
+
+```python
+except Exception as e:
+    error_str = str(e).lower()
+    if "does not exist" in error_str or "undefined" in error_str:
+        logger.warning("Database tables not yet initialized, skipping coordinator resume.")
+    else:
+        raise
+```
+
+**Test added**: `test_resume_if_needed_handles_missing_tables_gracefully`
+
+### E2E Test Results
+
+**Test: agent/multi-research-completion** - PASSED
+
+| Step | Result | Evidence |
+|------|--------|----------|
+| Trigger research A | ✅ | `op_agent_research_20260121_042545_fc69c6b1` |
+| Trigger research B | ✅ | `op_agent_research_20260121_042550_3f444932` |
+| Both running | ✅ | `active_count: 3` (including one earlier test) |
+| Status shows phases | ✅ | All showing "Designing strategy..." |
+
+---
+
 ## M1 Complete: Multi-Research Coordinator Loop
 
-All 8 tasks complete. The coordinator now:
+All 8 tasks complete + E2E validated. The coordinator now:
 1. Manages multiple concurrent research operations
 2. Enforces capacity limits based on worker pool size
 3. Starts automatically on first trigger
 4. Resumes on backend startup if operations exist
 5. Handles completion/failure per-research without stopping the loop
 6. Records metrics per-research
+7. **Handles fresh database gracefully (no tables yet)**

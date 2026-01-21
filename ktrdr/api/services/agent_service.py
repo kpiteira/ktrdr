@@ -632,13 +632,31 @@ class AgentService:
 
         Called on backend startup to resume processing of any researches
         that were in progress when the backend last shut down.
+
+        Handles gracefully if database tables don't exist yet (fresh install
+        before alembic migrations run).
         """
-        active_ops = await self._get_all_active_research_ops()
-        if active_ops and (
-            self._coordinator_task is None or self._coordinator_task.done()
-        ):
-            logger.info(f"Resuming coordinator for {len(active_ops)} active researches")
-            self._start_coordinator()
+        try:
+            active_ops = await self._get_all_active_research_ops()
+            if active_ops and (
+                self._coordinator_task is None or self._coordinator_task.done()
+            ):
+                logger.info(
+                    f"Resuming coordinator for {len(active_ops)} active researches"
+                )
+                self._start_coordinator()
+        except Exception as e:
+            # Handle case where database tables don't exist yet (fresh install).
+            # This can happen on first startup before alembic migrations run.
+            error_str = str(e).lower()
+            if "does not exist" in error_str or "undefined" in error_str:
+                logger.warning(
+                    "Database tables not yet initialized, skipping coordinator resume. "
+                    "This is expected on first startup before migrations."
+                )
+            else:
+                # Re-raise unexpected errors
+                raise
 
 
 # Singleton

@@ -842,6 +842,32 @@ class TestCoordinatorLifecycle:
         # Should have started a new coordinator
         assert service._coordinator_task is not mock_task
 
+    @pytest.mark.asyncio
+    async def test_resume_if_needed_handles_missing_tables_gracefully(self):
+        """Startup hook handles missing database tables gracefully.
+
+        On fresh install before alembic migrations, the operations table
+        doesn't exist. resume_if_needed should log a warning and continue
+        instead of crashing the backend startup.
+        """
+        from unittest.mock import AsyncMock, MagicMock
+
+        from ktrdr.api.services.agent_service import AgentService
+
+        # Create a mock operations service that raises "table does not exist"
+        mock_ops = MagicMock()
+        mock_ops.list_operations = AsyncMock(
+            side_effect=Exception('relation "operations" does not exist')
+        )
+
+        service = AgentService(operations_service=mock_ops)
+
+        # Should NOT raise - should handle gracefully
+        await service.resume_if_needed()
+
+        # Coordinator should NOT be started (we couldn't check for ops)
+        assert service._coordinator_task is None
+
 
 # ============================================================================
 # TestOperationCompletion
