@@ -344,7 +344,7 @@ class OperationRunner:
         if self.state.json_mode:
             self._display_results_json(operation_type, results)
         else:
-            self._display_results_human(operation_type, results, result_summary)
+            self._display_results_human(operation_type, results)
 
     def _extract_results(
         self, result_summary: dict[str, Any], operation_type: str
@@ -360,11 +360,11 @@ class OperationRunner:
         """
         if operation_type == "training":
             training_metrics = result_summary.get("training_metrics", {})
-            results = {}
-            if training_metrics:
-                results["epochs_trained"] = training_metrics.get("epochs_trained")
-                results["final_loss"] = training_metrics.get("final_loss")
-                results["final_val_loss"] = training_metrics.get("final_val_loss")
+            results = {
+                "epochs_trained": training_metrics.get("epochs_trained"),
+                "final_loss": training_metrics.get("final_loss"),
+                "final_val_loss": training_metrics.get("final_val_loss"),
+            }
             if result_summary.get("model_path"):
                 results["model_path"] = result_summary.get("model_path")
             # Remove None values
@@ -401,7 +401,7 @@ class OperationRunner:
         """
         output = {
             "operation_type": operation_type,
-            "results": results if results else None,
+            "results": results,
         }
         print(json.dumps(output, indent=2, default=str))
 
@@ -409,14 +409,12 @@ class OperationRunner:
         self,
         operation_type: str,
         results: dict[str, Any],
-        result_summary: dict[str, Any],
     ) -> None:
         """Display results in human-readable format.
 
         Args:
             operation_type: Type of operation.
             results: Extracted results dictionary.
-            result_summary: Original result summary for additional context.
         """
         if not results:
             self.console.print(
@@ -426,20 +424,17 @@ class OperationRunner:
 
         # Use operation-specific display methods for better formatting
         if operation_type == "training":
-            self._display_training_results_human(results, result_summary)
+            self._display_training_results_human(results)
         elif operation_type in ("backtest", "backtesting"):
             self._display_backtest_results_human(results)
         else:
             self._display_generic_results_human(operation_type, results)
 
-    def _display_training_results_human(
-        self, results: dict[str, Any], result_summary: dict[str, Any]
-    ) -> None:
+    def _display_training_results_human(self, results: dict[str, Any]) -> None:
         """Display training-specific results in human-readable format.
 
         Args:
             results: Extracted training results.
-            result_summary: Original result summary for model_path.
         """
         self.console.print("📊 [bold green]Training Results:[/bold green]")
 
@@ -501,7 +496,11 @@ class OperationRunner:
         for key, value in results.items():
             display_key = key.replace("_", " ").title()
             if isinstance(value, float):
-                display_value = f"{value:.4f}"
+                key_lower = key.lower()
+                if "pct" in key_lower or "rate" in key_lower:
+                    display_value = f"{value:.2%}"
+                else:
+                    display_value = f"{value:.4g}"
             elif isinstance(value, dict):
                 display_value = json.dumps(value, default=str)
             else:

@@ -358,9 +358,9 @@ class TestOperationRunnerResultDisplay:
         runner._display_results(backtest_data, "backtest")
         backtest_output = capsys.readouterr().out
 
-        # Both should use "Results:" header pattern
-        assert "Results:" in training_output or "Results" in training_output
-        assert "Results:" in backtest_output or "Results" in backtest_output
+        # Both should use consistent "Results:" header pattern
+        assert "Training Results:" in training_output
+        assert "Backtest Results:" in backtest_output
 
     def test_display_results_empty_summary_json_mode(
         self, capsys: pytest.CaptureFixture
@@ -394,7 +394,7 @@ class TestOperationRunnerResultDisplay:
         runner._display_results(op_data, "training")
 
         captured = capsys.readouterr()
-        # Should output valid JSON indicating no results
+        # Should output valid JSON with empty results dict
         output = json.loads(captured.out)
         assert output["operation_type"] == "training"
-        assert output["results"] is None or output["results"] == {}
+        assert output["results"] == {}
