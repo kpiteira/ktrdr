@@ -57,6 +57,7 @@ class AgentStatusResponse(BaseModel):
     status: str  # "active" or "idle"
     operation_id: Optional[str] = None
     phase: Optional[str] = None
+    child_operation_id: Optional[str] = None
     progress: Optional[dict[str, Any]] = None
     strategy_name: Optional[str] = None
     started_at: Optional[str] = None
