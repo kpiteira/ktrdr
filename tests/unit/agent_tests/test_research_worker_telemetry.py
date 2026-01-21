@@ -396,6 +396,8 @@ class TestPhaseSpans:
         provider, exporter = tracer_provider
 
         # Set up parent operation in assessing phase with completed child
+        from datetime import datetime, timezone
+
         parent_op = Mock()
         parent_op.operation_id = "op_test"
         parent_op.operation_type = OperationType.AGENT_RESEARCH
@@ -407,6 +409,7 @@ class TestPhaseSpans:
             "phase_start_time": 1000.0,
         }
         parent_op.status = OperationStatus.RUNNING
+        parent_op.created_at = datetime.now(timezone.utc)
 
         # Child operation (assessment) completed
         child_op = Mock()

@@ -1259,3 +1259,288 @@ class TestMultiResearchCoordinatorLoop:
             if p.default == inspect.Parameter.empty and p.name != "self"
         ]
         assert len(required_params) == 0, "run() should not require any parameters"
+
+
+class TestOperationCompletionHandling:
+    """Tests for Task 1.7: Operation completion inside the loop."""
+
+    @pytest.fixture
+    def mock_ops_service_for_completion(self):
+        """Create mock operations service with complete_operation tracking."""
+        service = AsyncMock()
+        operations: dict[str, OperationInfo] = {}
+
+        async def list_operations(operation_type=None, status=None, **kwargs):
+            filtered = list(operations.values())
+            if operation_type:
+                filtered = [
+                    op for op in filtered if op.operation_type == operation_type
+                ]
+            if status:
+                filtered = [op for op in filtered if op.status == status]
+            return filtered, len(filtered), len(filtered)
+
+        async def get_operation(op_id):
+            return operations.get(op_id)
+
+        service.list_operations.side_effect = list_operations
+        service.get_operation.side_effect = get_operation
+        service.complete_operation = AsyncMock()
+        service.fail_operation = AsyncMock()
+        service.update_progress = AsyncMock()
+        service._operations = operations
+
+        return service
+
+    @pytest.fixture
+    def mock_design_worker(self):
+        """Create a mock design worker."""
+        worker = AsyncMock()
+        worker.run.return_value = {
+            "success": True,
+            "strategy_name": "test_strategy",
+            "strategy_path": "/tmp/test_strategy.yaml",
+        }
+        return worker
+
+    @pytest.fixture
+    def mock_assessment_worker(self):
+        """Create a mock assessment worker."""
+        worker = AsyncMock()
+        worker.run.return_value = {
+            "success": True,
+            "verdict": "promising",
+        }
+        return worker
+
+    @pytest.mark.asyncio
+    async def test_cycle_duration_recorded_from_created_at(
+        self,
+        mock_ops_service_for_completion,
+        mock_design_worker,
+        mock_assessment_worker,
+    ):
+        """Cycle duration is calculated from operation created_at timestamp."""
+        from datetime import timedelta
+        from unittest.mock import patch
+
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
+        worker = AgentResearchWorker(
+            operations_service=mock_ops_service_for_completion,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
+        )
+
+        # Create operation with created_at 60 seconds ago
+        created_time = datetime.now(timezone.utc) - timedelta(seconds=60)
+        parent_op = OperationInfo(
+            operation_id="op_test",
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RUNNING,
+            created_at=created_time,
+            metadata=OperationMetadata(
+                parameters={
+                    "phase": "assessing",
+                    "assessment_op_id": "op_assess",
+                    "strategy_name": "test_strategy",
+                    "phase_start_time": 1000.0,
+                }
+            ),
+        )
+
+        # Child operation (assessment) completed
+        child_op = OperationInfo(
+            operation_id="op_assess",
+            operation_type=OperationType.AGENT_ASSESSMENT,
+            status=OperationStatus.COMPLETED,
+            created_at=datetime.now(timezone.utc),
+            metadata=OperationMetadata(),
+            result_summary={
+                "verdict": "promising",
+                "input_tokens": 100,
+                "output_tokens": 50,
+            },
+        )
+
+        mock_ops_service_for_completion._operations["op_test"] = parent_op
+        mock_ops_service_for_completion._operations["op_assess"] = child_op
+
+        # Track duration recorded
+        recorded_durations = []
+
+        def mock_record_duration(duration):
+            recorded_durations.append(duration)
+
+        with patch(
+            "ktrdr.agents.workers.research_worker.record_cycle_duration",
+            side_effect=mock_record_duration,
+        ):
+            await worker._handle_assessing_phase("op_test", child_op)
+
+        # Duration should be recorded and roughly 60 seconds (not 0)
+        assert len(recorded_durations) == 1
+        assert recorded_durations[0] >= 59.0  # Allow small timing variance
+        assert recorded_durations[0] < 120.0  # But not too large
+
+    @pytest.mark.asyncio
+    async def test_complete_operation_called_inside_handler(
+        self,
+        mock_ops_service_for_completion,
+        mock_design_worker,
+        mock_assessment_worker,
+    ):
+        """complete_operation is called inside _handle_assessing_phase, not run()."""
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
+        worker = AgentResearchWorker(
+            operations_service=mock_ops_service_for_completion,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
+        )
+
+        parent_op = OperationInfo(
+            operation_id="op_test",
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RUNNING,
+            created_at=datetime.now(timezone.utc),
+            metadata=OperationMetadata(
+                parameters={
+                    "phase": "assessing",
+                    "assessment_op_id": "op_assess",
+                    "strategy_name": "test_strategy",
+                    "phase_start_time": 1000.0,
+                }
+            ),
+        )
+
+        child_op = OperationInfo(
+            operation_id="op_assess",
+            operation_type=OperationType.AGENT_ASSESSMENT,
+            status=OperationStatus.COMPLETED,
+            created_at=datetime.now(timezone.utc),
+            metadata=OperationMetadata(),
+            result_summary={"verdict": "promising"},
+        )
+
+        mock_ops_service_for_completion._operations["op_test"] = parent_op
+        mock_ops_service_for_completion._operations["op_assess"] = child_op
+
+        # Call the handler directly
+        await worker._handle_assessing_phase("op_test", child_op)
+
+        # complete_operation should have been called with the operation_id
+        mock_ops_service_for_completion.complete_operation.assert_called_once()
+        call_args = mock_ops_service_for_completion.complete_operation.call_args
+        assert call_args[0][0] == "op_test"
+
+    @pytest.mark.asyncio
+    async def test_cycle_outcome_recorded_per_research(
+        self,
+        mock_ops_service_for_completion,
+        mock_design_worker,
+        mock_assessment_worker,
+    ):
+        """Cycle outcome is recorded when each research completes, not at coordinator exit."""
+        from unittest.mock import patch
+
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
+        worker = AgentResearchWorker(
+            operations_service=mock_ops_service_for_completion,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
+        )
+
+        parent_op = OperationInfo(
+            operation_id="op_test",
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RUNNING,
+            created_at=datetime.now(timezone.utc),
+            metadata=OperationMetadata(
+                parameters={
+                    "phase": "assessing",
+                    "assessment_op_id": "op_assess",
+                    "strategy_name": "test_strategy",
+                    "phase_start_time": 1000.0,
+                }
+            ),
+        )
+
+        child_op = OperationInfo(
+            operation_id="op_assess",
+            operation_type=OperationType.AGENT_ASSESSMENT,
+            status=OperationStatus.COMPLETED,
+            created_at=datetime.now(timezone.utc),
+            metadata=OperationMetadata(),
+            result_summary={"verdict": "promising"},
+        )
+
+        mock_ops_service_for_completion._operations["op_test"] = parent_op
+        mock_ops_service_for_completion._operations["op_assess"] = child_op
+
+        recorded_outcomes = []
+
+        def mock_record_outcome(outcome):
+            recorded_outcomes.append(outcome)
+
+        with patch(
+            "ktrdr.agents.workers.research_worker.record_cycle_outcome",
+            side_effect=mock_record_outcome,
+        ):
+            await worker._handle_assessing_phase("op_test", child_op)
+
+        # Outcome should be recorded as "completed"
+        assert len(recorded_outcomes) == 1
+        assert recorded_outcomes[0] == "completed"
+
+    @pytest.mark.asyncio
+    async def test_handler_returns_result_for_coordinator_visibility(
+        self,
+        mock_ops_service_for_completion,
+        mock_design_worker,
+        mock_assessment_worker,
+    ):
+        """_handle_assessing_phase returns result dict for logging/visibility."""
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
+        worker = AgentResearchWorker(
+            operations_service=mock_ops_service_for_completion,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
+        )
+
+        parent_op = OperationInfo(
+            operation_id="op_test",
+            operation_type=OperationType.AGENT_RESEARCH,
+            status=OperationStatus.RUNNING,
+            created_at=datetime.now(timezone.utc),
+            metadata=OperationMetadata(
+                parameters={
+                    "phase": "assessing",
+                    "assessment_op_id": "op_assess",
+                    "strategy_name": "my_strategy",
+                    "phase_start_time": 1000.0,
+                }
+            ),
+        )
+
+        child_op = OperationInfo(
+            operation_id="op_assess",
+            operation_type=OperationType.AGENT_ASSESSMENT,
+            status=OperationStatus.COMPLETED,
+            created_at=datetime.now(timezone.utc),
+            metadata=OperationMetadata(),
+            result_summary={"verdict": "promising"},
+        )
+
+        mock_ops_service_for_completion._operations["op_test"] = parent_op
+        mock_ops_service_for_completion._operations["op_assess"] = child_op
+
+        result = await worker._handle_assessing_phase("op_test", child_op)
+
+        # Should return completion result
+        assert result is not None
+        assert result["success"] is True
+        assert result["strategy_name"] == "my_strategy"
+        assert result["verdict"] == "promising"

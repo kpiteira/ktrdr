@@ -147,3 +147,32 @@ Coordinator task started
 ### Next Task Notes (Task 1.7)
 
 Task 1.7 moves operation completion handling inside the coordinator loop. Currently `_handle_assessing_phase` already calls `complete_operation()` directly (done in Task 1.4), so this may be mostly validation that metrics recording happens per-research.
+
+---
+
+## Task 1.7 Complete: Update Operation Completion Handling
+
+### Implementation Notes
+
+The main change was fixing `record_cycle_duration(0)` which was a placeholder from Task 1.4. Now calculates actual duration:
+
+```python
+cycle_duration = time.time() - parent_op.created_at.timestamp()
+record_cycle_duration(cycle_duration)
+```
+
+Most functionality was already implemented in Task 1.4:
+- `complete_operation()` called inside `_handle_assessing_phase()`
+- `record_cycle_outcome("completed")` recorded per-research
+- Checkpoint deletion on successful completion
+
+### Gotchas
+
+- **Mock created_at**: Tests using `Mock()` for operations now need `parent_op.created_at = datetime.now(timezone.utc)` since the code calls `.timestamp()` on it. Updated `test_assessing_phase_creates_span` in telemetry tests.
+
+### Next Task Notes (Task 1.8)
+
+Task 1.8 is unit and integration tests. Most tests already exist from previous tasks. The task involves:
+- Consolidating tests in `test_research_worker_multi.py`
+- Writing integration test for two researches completing concurrently
+- Verifying no regressions in existing tests

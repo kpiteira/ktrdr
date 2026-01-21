@@ -821,8 +821,9 @@ class AgentResearchWorker:
             # Delete checkpoint on successful completion (no longer needed for resume)
             await self._delete_checkpoint(operation_id)
 
-            # Record cycle metrics
-            record_cycle_duration(0)  # Duration tracked per-research in future
+            # Record cycle metrics (duration from created_at to now)
+            cycle_duration = time.time() - parent_op.created_at.timestamp()
+            record_cycle_duration(cycle_duration)
             record_cycle_outcome("completed")
 
             logger.info(f"Research completed: {operation_id}")
