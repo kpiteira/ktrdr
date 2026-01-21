@@ -146,11 +146,11 @@ class IbConnection:
         Run synchronous connection loop in dedicated thread.
 
         This method runs a purely synchronous loop without asyncio,
-        allowing ib_insync to create its own event loop for connections.
+        allowing ib_async to create its own event loop for connections.
         """
         logger.debug(f"_run_sync_loop starting for connection {self.client_id}")
 
-        # No event loop! Let ib_insync handle its own event loop
+        # No event loop! Let ib_async handle its own event loop
         self.loop = None
 
         try:
@@ -209,7 +209,7 @@ class IbConnection:
             span.set_attribute("connection.client_id", self.client_id)
 
             try:
-                # Create fresh event loop for this thread - ib_insync needs one
+                # Create fresh event loop for this thread - ib_async needs one
                 import asyncio
 
                 try:
@@ -222,7 +222,7 @@ class IbConnection:
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
 
-                # Use synchronous connect - ib_insync will use the event loop we just created
+                # Use synchronous connect - ib_async will use the event loop we just created
                 self.ib.connect(
                     host=self.host,
                     port=self.port,
@@ -342,7 +342,7 @@ class IbConnection:
         )
 
         try:
-            # Ensure event loop is available for ib_insync calls
+            # Ensure event loop is available for ib_async calls
             import asyncio
 
             try:
