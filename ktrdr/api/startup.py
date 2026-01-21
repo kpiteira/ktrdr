@@ -244,6 +244,12 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Checkpoint cleanup skipped: DB_HOST not configured")
 
+    # Resume agent coordinator if needed (M1: Multi-Research Coordinator)
+    from ktrdr.api.services.agent_service import get_agent_service
+
+    agent_service = get_agent_service()
+    await agent_service.resume_if_needed()
+
     logger.info("API startup completed")
 
     yield

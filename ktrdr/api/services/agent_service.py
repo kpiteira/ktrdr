@@ -24,6 +24,7 @@ from ktrdr.agents.workers.stubs import (
     StubDesignWorker,
 )
 from ktrdr.api.models.operations import (
+    OperationInfo,
     OperationMetadata,
     OperationStatus,
     OperationType,
@@ -69,6 +70,7 @@ class AgentService:
         self.ops = operations_service or get_operations_service()
         self._checkpoint_service = checkpoint_service
         self._worker: AgentResearchWorker | None = None
+        self._coordinator_task: asyncio.Task | None = None
 
     def _get_worker(self) -> AgentResearchWorker:
         """Get or create the research worker.
@@ -82,6 +84,7 @@ class AgentService:
             Training and Backtest are services (lazy-loaded inside orchestrator).
         """
         if self._worker is None:
+            checkpoint_svc = self._get_checkpoint_service()
             if _use_stub_workers():
                 logger.info("Using stub workers (USE_STUB_WORKERS=true)")
                 self._worker = AgentResearchWorker(
@@ -91,6 +94,7 @@ class AgentService:
                     # Services will be stubbed via mock injection in tests
                     training_service=None,
                     backtest_service=None,
+                    checkpoint_service=checkpoint_svc,
                 )
             else:
                 self._worker = AgentResearchWorker(
@@ -100,6 +104,7 @@ class AgentService:
                     # Services lazy-loaded inside orchestrator
                     training_service=None,
                     backtest_service=None,
+                    checkpoint_service=checkpoint_svc,
                 )
         return self._worker
 
@@ -203,14 +208,16 @@ class AgentService:
                 "message": f"Daily budget exhausted: {reason}",
             }
 
-        # Check for active cycle
-        active = await self._get_active_research_op()
-        if active:
+        # Check capacity (multiple researches allowed up to limit)
+        active_ops = await self._get_all_active_research_ops()
+        limit = self._get_concurrency_limit()
+        if len(active_ops) >= limit:
             return {
                 "triggered": False,
-                "reason": "active_cycle_exists",
-                "operation_id": active.operation_id,
-                "message": f"Active cycle exists: {active.operation_id}",
+                "reason": "at_capacity",
+                "active_count": len(active_ops),
+                "limit": limit,
+                "message": f"At capacity ({len(active_ops)}/{limit} researches active)",
             }
 
         # Create operation with model, brief, and bypass_gates in metadata
@@ -226,10 +233,12 @@ class AgentService:
             is_backend_local=True,  # M7 Task 7.1: Mark as backend-local for checkpoint handling
         )
 
-        # Start worker in background
-        worker = self._get_worker()
-        task = asyncio.create_task(self._run_worker(op.operation_id, worker))
-        await self.ops.start_operation(op.operation_id, task)
+        # Start operation (transition to RUNNING)
+        await self.ops.start_operation(op.operation_id)
+
+        # Start coordinator if not running
+        if self._coordinator_task is None or self._coordinator_task.done():
+            self._start_coordinator()
 
         logger.info(
             f"Research cycle triggered: {op.operation_id}, model: {resolved_model}"
@@ -242,36 +251,33 @@ class AgentService:
             "message": "Research cycle started",
         }
 
-    async def _run_worker(self, operation_id: str, worker: AgentResearchWorker) -> None:
-        """Run worker and handle completion/failure.
+    def _start_coordinator(self) -> None:
+        """Start the coordinator loop task if not already running.
 
-        M7: Saves checkpoint on failure/cancellation for resume capability.
-        Deletes checkpoint on successful completion.
+        Creates a single coordinator task that discovers and processes all
+        active research operations. Only one coordinator runs at a time.
+        """
+        worker = self._get_worker()
+        self._coordinator_task = asyncio.create_task(self._run_coordinator(worker))
+        logger.info("Coordinator task started")
+
+    async def _run_coordinator(self, worker: AgentResearchWorker) -> None:
+        """Run the coordinator loop.
+
+        The coordinator discovers and processes all active researches.
+        Individual operation completion/failure is handled inside the loop.
 
         Args:
-            operation_id: The operation ID to run.
             worker: The worker instance to run.
         """
         try:
-            result = await worker.run(operation_id)
-
-            # M7: Delete checkpoint on successful completion (if checkpoint service available)
-            if self._checkpoint_service is not None:
-                await self._checkpoint_service.delete_checkpoint(operation_id)
-
-            await self.ops.complete_operation(operation_id, result)
-            # Budget spend is recorded per-phase in the worker
-
+            await worker.run()
+            logger.info("Coordinator completed (no active researches)")
         except asyncio.CancelledError:
-            # M7: Save checkpoint before marking cancelled
-            await self._save_checkpoint(operation_id, "cancellation")
-            await self.ops.cancel_operation(operation_id, "Cancelled by user")
+            logger.info("Coordinator cancelled")
             raise
-
         except Exception as e:
-            # M7: Save checkpoint before marking failed
-            await self._save_checkpoint(operation_id, "failure")
-            await self.ops.fail_operation(operation_id, str(e))
+            logger.error(f"Coordinator error: {e}")
             raise
 
     @trace_service_method("agent.get_status")
@@ -457,10 +463,12 @@ class AgentService:
         # Update operation metadata
         op.metadata.parameters = updated_params
 
-        # 7. Start worker in background
-        worker = self._get_worker()
-        task = asyncio.create_task(self._run_worker(operation_id, worker))
-        await self.ops.start_operation(operation_id, task)
+        # 7. Start operation (transition to RUNNING)
+        await self.ops.start_operation(operation_id)
+
+        # Start coordinator if not running
+        if self._coordinator_task is None or self._coordinator_task.done():
+            self._start_coordinator()
 
         logger.info(
             f"Research cycle resumed: {operation_id}, phase: {resumed_from_phase}"
@@ -514,6 +522,74 @@ class AgentService:
         )
         return ops[0] if ops else None
 
+    async def _get_all_active_research_ops(self) -> list[OperationInfo]:
+        """Get all active AGENT_RESEARCH operations.
+
+        Returns all operations with RUNNING, RESUMING, or PENDING status.
+        Used by the multi-research coordinator to iterate over all active researches.
+
+        Note: On startup, the in-memory cache may be empty, so we also query
+        the database repository directly to find operations that need resuming.
+
+        Returns:
+            List of active operations (may be empty).
+        """
+        result: list[OperationInfo] = []
+        active_statuses = [
+            OperationStatus.RUNNING,
+            OperationStatus.RESUMING,
+            OperationStatus.PENDING,
+        ]
+
+        # First check in-memory cache via list_operations
+        for status in active_statuses:
+            ops, _, _ = await self.ops.list_operations(
+                operation_type=OperationType.AGENT_RESEARCH,
+                status=status,
+            )
+            result.extend(ops)
+
+        # If cache is empty and repository is available, query database directly
+        # This handles the startup case where cache hasn't been populated yet
+        if not result and hasattr(self.ops, "_repository") and self.ops._repository:
+            for status in active_statuses:
+                db_ops = await self.ops._repository.list(status=status.value)
+                # Filter to only AGENT_RESEARCH operations
+                for op in db_ops:
+                    if op.operation_type == OperationType.AGENT_RESEARCH:
+                        result.append(op)
+
+        return result
+
+    def _get_concurrency_limit(self) -> int:
+        """Calculate max concurrent researches from worker pool.
+
+        Checks for manual override via AGENT_MAX_CONCURRENT_RESEARCHES env var first.
+        Otherwise calculates: training_workers + backtest_workers + buffer.
+
+        Returns:
+            Maximum number of concurrent researches allowed (minimum 1).
+        """
+        from ktrdr.api.endpoints.workers import get_worker_registry
+        from ktrdr.api.models.workers import WorkerType
+
+        # Check manual override
+        override = os.getenv("AGENT_MAX_CONCURRENT_RESEARCHES", "0")
+        if override != "0":
+            try:
+                return int(override)
+            except ValueError:
+                pass  # Fall through to calculation
+
+        # Calculate from workers
+        registry = get_worker_registry()
+        training = len(registry.list_workers(worker_type=WorkerType.TRAINING))
+        backtest = len(registry.list_workers(worker_type=WorkerType.BACKTESTING))
+        buffer = int(os.getenv("AGENT_CONCURRENCY_BUFFER", "1"))
+
+        # Minimum of 1 to allow at least one research
+        return max(1, training + backtest + buffer)
+
     async def _get_last_research_op(self):
         """Get most recent completed/failed AGENT_RESEARCH operation.
 
@@ -550,6 +626,44 @@ class AgentService:
         if key:
             return op.metadata.parameters.get(key)
         return None
+
+    async def resume_if_needed(self) -> None:
+        """Start coordinator if active researches exist.
+
+        Called on backend startup to resume processing of any researches
+        that were in progress when the backend last shut down.
+
+        Handles gracefully if database tables don't exist yet (fresh install
+        before alembic migrations run).
+        """
+        try:
+            active_ops = await self._get_all_active_research_ops()
+            if active_ops and (
+                self._coordinator_task is None or self._coordinator_task.done()
+            ):
+                logger.info(
+                    f"Resuming coordinator for {len(active_ops)} active researches"
+                )
+                self._start_coordinator()
+        except Exception as e:
+            # Handle cases where database isn't ready:
+            # - Tables don't exist yet (fresh install before migrations)
+            # - Database not reachable (CI environment, no DB configured)
+            error_str = str(e).lower()
+            is_db_not_ready = (
+                "does not exist" in error_str
+                or "undefined" in error_str
+                or "connect call failed" in error_str
+                or "connection refused" in error_str
+            )
+            if is_db_not_ready:
+                logger.warning(
+                    "Database not ready for coordinator resume, skipping. "
+                    "This is expected on first startup or in test environments."
+                )
+            else:
+                # Re-raise unexpected errors
+                raise
 
 
 # Singleton

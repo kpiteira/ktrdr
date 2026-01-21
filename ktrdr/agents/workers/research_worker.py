@@ -23,6 +23,7 @@ from opentelemetry import trace
 
 from ktrdr import get_logger
 from ktrdr.agents.budget import get_budget_tracker
+from ktrdr.agents.checkpoint_builder import build_agent_checkpoint_state
 from ktrdr.agents.gates import check_backtest_gate, check_training_gate
 from ktrdr.agents.metrics import (
     record_budget_spend,
@@ -35,6 +36,7 @@ from ktrdr.agents.metrics import (
 from ktrdr.api.models.operations import (
     OperationProgress,
     OperationStatus,
+    OperationType,
 )
 
 logger = get_logger(__name__)
@@ -146,6 +148,7 @@ class AgentResearchWorker:
         assessment_worker: ChildWorker,
         training_service: Any = None,  # TrainingService - lazy loaded if None
         backtest_service: Any = None,  # BacktestingService - lazy loaded if None
+        checkpoint_service: Any = None,  # CheckpointService - for save/delete on failure/success
     ):
         """Initialize the orchestrator.
 
@@ -155,12 +158,14 @@ class AgentResearchWorker:
             assessment_worker: Worker for result assessment phase.
             training_service: Optional TrainingService (lazy loaded if None).
             backtest_service: Optional BacktestingService (lazy loaded if None).
+            checkpoint_service: Optional CheckpointService for checkpoint operations.
         """
         self.ops = operations_service
         self.design_worker = design_worker
         self.assessment_worker = assessment_worker
         self._training_service = training_service
         self._backtest_service = backtest_service
+        self._checkpoint_service = checkpoint_service
 
         # Read poll interval from environment
         self.POLL_INTERVAL = _get_poll_interval()
@@ -209,106 +214,70 @@ class AgentResearchWorker:
             )
             return {}
 
-    async def run(self, operation_id: str) -> dict[str, Any]:
-        """Main orchestrator loop using polling pattern.
+    async def run(self) -> None:
+        """Coordinator loop for all active researches.
 
-        Polls child operation status in a loop rather than directly awaiting
-        workers. This supports distributed workers that run independently.
+        Queries all active AGENT_RESEARCH operations and advances each one step.
+        Exits when no active operations remain.
 
-        For training and backtesting, the orchestrator calls services directly
-        and tracks the real operation IDs in parent metadata.
-
-        Args:
-            operation_id: The parent AGENT_RESEARCH operation ID.
-
-        Returns:
-            Result dict with success, strategy_name, and verdict.
+        Uses a polling pattern: query active ops, advance each, sleep, repeat.
+        This supports multiple concurrent researches running independently.
 
         Raises:
-            asyncio.CancelledError: If the operation is cancelled.
+            asyncio.CancelledError: If the coordinator is cancelled.
             WorkerError: If any child worker fails.
             GateFailedError: If a quality gate check fails.
         """
-        logger.info(f"Starting research cycle: {operation_id}")
-        cycle_start_time = time.time()
+        logger.info("Coordinator started")
 
-        with tracer.start_as_current_span("agent.research_cycle") as span:
-            span.set_attribute("operation.id", operation_id)
-            span.set_attribute("operation.type", "agent_research")
+        with tracer.start_as_current_span("agent.coordinator") as span:
+            span.set_attribute("operation.type", "coordinator")
+
+            # Initialize before loop to handle early cancellation
+            active_ops: list = []
 
             try:
                 while True:
-                    # Get current parent state
-                    op = await self.ops.get_operation(operation_id)
-                    if op is None:
-                        raise WorkerError(f"Parent operation not found: {operation_id}")
+                    # Query all active research operations
+                    active_ops = await self._get_active_research_operations()
 
-                    phase = op.metadata.parameters.get("phase", "idle")
+                    if not active_ops:
+                        logger.info("No active researches, coordinator stopping")
+                        break
 
-                    # Get current child operation if any
-                    child_op_id = self._get_child_op_id(op, phase)
-                    child_op = None
-                    if child_op_id:
-                        child_op = await self.ops.get_operation(child_op_id)
-
-                    # State machine logic
-                    if phase == "idle":
-                        # Start the first phase (designing)
-                        await self._start_design(operation_id)
-
-                    elif phase == "designing":
-                        await self._handle_designing_phase(operation_id, child_op)
-
-                    elif phase == "training":
-                        await self._handle_training_phase(operation_id, child_op)
-
-                    elif phase == "backtesting":
-                        await self._handle_backtesting_phase(operation_id, child_op)
-
-                    elif phase == "assessing":
-                        result = await self._handle_assessing_phase(
-                            operation_id, child_op
-                        )
-                        if result is not None:
-                            # Record successful cycle metrics
-                            cycle_duration = time.time() - cycle_start_time
-                            record_cycle_duration(cycle_duration)
-                            record_cycle_outcome("completed")
-                            span.set_attribute("outcome", "completed")
-                            return result
+                    # Advance each active research one step
+                    for op in active_ops:
+                        try:
+                            await self._advance_research(op)
+                        except (WorkerError, GateFailedError) as e:
+                            # Log error but continue with other researches
+                            logger.error(f"Research {op.operation_id} failed: {e}")
+                            # Save checkpoint before marking failed (for resume capability)
+                            await self._save_checkpoint(op.operation_id, "failure")
+                            # Mark the operation as failed
+                            await self.ops.fail_operation(op.operation_id, str(e))
+                            record_cycle_outcome("failed")
 
                     # Poll interval
                     await self._cancellable_sleep(self.POLL_INTERVAL)
 
             except asyncio.CancelledError:
-                logger.info(f"Research cycle cancelled: {operation_id}")
-                # Record cancelled cycle metrics
-                cycle_duration = time.time() - cycle_start_time
-                record_cycle_duration(cycle_duration)
-                record_cycle_outcome("cancelled")
+                logger.info("Coordinator cancelled")
                 span.set_attribute("outcome", "cancelled")
+                # Save checkpoints for all active operations before cancellation
+                for op in active_ops:
+                    await self._save_checkpoint(op.operation_id, "cancellation")
                 # Propagate cancellation to active child
                 await self._cancel_current_child()
                 raise
-            except (WorkerError, GateFailedError) as e:
-                # Record failed cycle metrics
-                cycle_duration = time.time() - cycle_start_time
-                record_cycle_duration(cycle_duration)
-                record_cycle_outcome("failed")
-                span.set_attribute("outcome", "failed")
-                span.set_attribute("error", str(e))
-                span.record_exception(e)
-                raise
             except Exception as e:
-                # Record failed cycle metrics
-                cycle_duration = time.time() - cycle_start_time
-                record_cycle_duration(cycle_duration)
-                record_cycle_outcome("failed")
                 span.set_attribute("outcome", "failed")
                 span.set_attribute("error", str(e))
                 span.record_exception(e)
-                logger.error(f"Research cycle failed: {operation_id}, error={e}")
+                logger.error(f"Coordinator error: {e}")
                 raise
+
+        logger.info("Coordinator completed")
 
     async def _start_design(self, operation_id: str) -> None:
         """Start the design phase with design worker.
@@ -844,11 +813,25 @@ class AgentResearchWorker:
                 OperationProgress(percentage=100.0, current_step="Complete"),
             )
 
-            return {
+            # Mark operation as complete (multi-research: completion handled in loop)
+            completion_result = {
                 "success": True,
                 "strategy_name": strategy_name,
                 "verdict": result.get("verdict", "unknown"),
             }
+            await self.ops.complete_operation(operation_id, completion_result)
+
+            # Delete checkpoint on successful completion (no longer needed for resume)
+            await self._delete_checkpoint(operation_id)
+
+            # Record cycle metrics (duration from created_at to now)
+            cycle_duration = time.time() - parent_op.created_at.timestamp()
+            record_cycle_duration(cycle_duration)
+            record_cycle_outcome("completed")
+
+            logger.info(f"Research completed: {operation_id}")
+
+            return completion_result
 
         elif child_op.status == OperationStatus.FAILED:
             raise WorkerError(f"Assessment failed: {child_op.error_message}")
@@ -883,6 +866,58 @@ class AgentResearchWorker:
         output_cost = (output_tokens / 1_000_000) * pricing["output"]
 
         return input_cost + output_cost
+
+    async def _get_active_research_operations(self) -> list[Any]:
+        """Query all active AGENT_RESEARCH operations.
+
+        Returns operations with RUNNING or PENDING status.
+        Used by the multi-research coordinator to iterate over all active researches.
+
+        Returns:
+            List of active operations (may be empty).
+        """
+        result: list[Any] = []
+        for status in [OperationStatus.RUNNING, OperationStatus.PENDING]:
+            ops, _, _ = await self.ops.list_operations(
+                operation_type=OperationType.AGENT_RESEARCH,
+                status=status,
+            )
+            result.extend(ops)
+        return result
+
+    async def _advance_research(self, op: Any) -> None:
+        """Advance a single research one step through its phase.
+
+        Called by the coordinator loop for each active research operation.
+        Determines the current phase and calls the appropriate handler.
+
+        Args:
+            op: The research operation to advance.
+        """
+        operation_id = op.operation_id
+        phase = op.metadata.parameters.get("phase", "idle")
+
+        # Get current child operation if any
+        child_op_id = self._get_child_op_id(op, phase)
+        child_op = None
+        if child_op_id:
+            child_op = await self.ops.get_operation(child_op_id)
+
+        # State machine logic - advance one step
+        if phase == "idle":
+            await self._start_design(operation_id)
+
+        elif phase == "designing":
+            await self._handle_designing_phase(operation_id, child_op)
+
+        elif phase == "training":
+            await self._handle_training_phase(operation_id, child_op)
+
+        elif phase == "backtesting":
+            await self._handle_backtesting_phase(operation_id, child_op)
+
+        elif phase == "assessing":
+            await self._handle_assessing_phase(operation_id, child_op)
 
     def _get_child_op_id(self, op: Any, phase: str) -> str | None:
         """Get child operation ID for current phase.
@@ -941,3 +976,64 @@ class AgentResearchWorker:
         while elapsed < seconds:
             await asyncio.sleep(interval)
             elapsed += interval
+
+    async def _save_checkpoint(
+        self,
+        operation_id: str,
+        checkpoint_type: str,
+    ) -> None:
+        """Save checkpoint for an operation.
+
+        Builds checkpoint state from the operation metadata and saves it.
+
+        Args:
+            operation_id: The operation ID to checkpoint.
+            checkpoint_type: Type of checkpoint (failure, cancellation, etc.).
+        """
+        if self._checkpoint_service is None:
+            logger.debug(
+                f"Checkpoint service not available, skipping checkpoint save: {operation_id}"
+            )
+            return
+
+        try:
+            op = await self.ops.get_operation(operation_id)
+            if op is None:
+                logger.warning(
+                    f"Cannot save checkpoint - operation not found: {operation_id}"
+                )
+                return
+
+            checkpoint_state = build_agent_checkpoint_state(op)
+
+            await self._checkpoint_service.save_checkpoint(
+                operation_id=operation_id,
+                checkpoint_type=checkpoint_type,
+                state=checkpoint_state.to_dict(),
+                artifacts=None,
+            )
+
+            logger.info(
+                f"Agent checkpoint saved: {operation_id} "
+                f"(type={checkpoint_type}, phase={checkpoint_state.phase})"
+            )
+
+        except Exception as e:
+            logger.warning(f"Failed to save agent checkpoint: {e}")
+
+    async def _delete_checkpoint(self, operation_id: str) -> None:
+        """Delete checkpoint for an operation.
+
+        Called when an operation completes successfully.
+
+        Args:
+            operation_id: The operation ID whose checkpoint should be deleted.
+        """
+        if self._checkpoint_service is None:
+            return
+
+        try:
+            await self._checkpoint_service.delete_checkpoint(operation_id)
+            logger.debug(f"Checkpoint deleted for completed operation: {operation_id}")
+        except Exception as e:
+            logger.warning(f"Failed to delete checkpoint: {e}")

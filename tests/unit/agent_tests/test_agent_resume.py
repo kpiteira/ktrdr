@@ -70,7 +70,7 @@ def mock_operations_service():
             operations[operation_id].status = OperationStatus.CANCELLED
             operations[operation_id].error_message = reason
 
-    async def async_start_operation(operation_id, task):
+    async def async_start_operation(operation_id, task=None):
         if operation_id in operations:
             operations[operation_id].status = OperationStatus.RUNNING
             operations[operation_id].started_at = datetime.now(timezone.utc)

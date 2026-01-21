@@ -68,7 +68,7 @@ def mock_operations_service():
             operations[operation_id].status = OperationStatus.CANCELLED
             operations[operation_id].error_message = reason
 
-    async def async_start_operation(operation_id, task):
+    async def async_start_operation(operation_id, task=None):
         if operation_id in operations:
             operations[operation_id].status = OperationStatus.RUNNING
             operations[operation_id].started_at = datetime.now(timezone.utc)
@@ -172,26 +172,42 @@ class TestAgentServiceTrigger:
         assert op.operation_type == OperationType.AGENT_RESEARCH
 
     @pytest.mark.asyncio
-    async def test_trigger_rejects_when_cycle_active(self, mock_operations_service):
-        """Trigger returns triggered=False if cycle already active."""
+    async def test_trigger_rejects_when_at_capacity(
+        self, mock_operations_service, monkeypatch
+    ):
+        """Trigger returns triggered=False with at_capacity when at limit."""
+        from unittest.mock import MagicMock, patch
+
         from ktrdr.api.services.agent_service import AgentService
 
-        service = AgentService(operations_service=mock_operations_service)
+        # Set capacity limit to 1 for this test
+        monkeypatch.setenv("AGENT_MAX_CONCURRENT_RESEARCHES", "1")
 
-        # First trigger should succeed
-        result1 = await service.trigger()
-        assert result1["triggered"] is True
+        # Create mock worker registry (needed for capacity check)
+        mock_registry = MagicMock()
+        mock_registry.list_workers.return_value = []
 
-        # Mark the operation as running (simulating started worker)
-        op_id = result1["operation_id"]
-        mock_operations_service._operations[op_id].status = OperationStatus.RUNNING
+        with patch(
+            "ktrdr.api.endpoints.workers.get_worker_registry",
+            return_value=mock_registry,
+        ):
+            service = AgentService(operations_service=mock_operations_service)
 
-        # Second trigger should fail
-        result2 = await service.trigger()
+            # First trigger should succeed
+            result1 = await service.trigger()
+            assert result1["triggered"] is True
 
-        assert result2["triggered"] is False
-        assert result2["reason"] == "active_cycle_exists"
-        assert result2["operation_id"] == op_id
+            # Mark the operation as running (simulating started worker)
+            op_id = result1["operation_id"]
+            mock_operations_service._operations[op_id].status = OperationStatus.RUNNING
+
+            # Second trigger should fail (at capacity with limit=1)
+            result2 = await service.trigger()
+
+            assert result2["triggered"] is False
+            assert result2["reason"] == "at_capacity"
+            assert result2["active_count"] == 1
+            assert result2["limit"] == 1
 
     @pytest.mark.asyncio
     async def test_trigger_starts_worker_in_background(self, mock_operations_service):
@@ -770,13 +786,8 @@ class TestAgentServiceBudget:
         ):
             service = AgentService(operations_service=mock_operations_service)
 
-            # Manually call _run_worker to test spend recording
-            op = await mock_operations_service.create_operation(
-                operation_type=OperationType.AGENT_RESEARCH,
-                metadata=OperationMetadata(parameters={"phase": "idle"}),
-            )
-
-            await service._run_worker(op.operation_id, mock_worker)
+            # Manually call _run_coordinator to test spend recording
+            await service._run_coordinator(mock_worker)
 
         # Service should NOT record spend - worker records per-phase
         mock_budget_tracker.record_spend.assert_not_called()
@@ -801,13 +812,8 @@ class TestAgentServiceBudget:
         ):
             service = AgentService(operations_service=mock_operations_service)
 
-            op = await mock_operations_service.create_operation(
-                operation_type=OperationType.AGENT_RESEARCH,
-                metadata=OperationMetadata(parameters={"phase": "idle"}),
-            )
-
             with pytest.raises(Exception, match="Worker failed"):
-                await service._run_worker(op.operation_id, mock_worker)
+                await service._run_coordinator(mock_worker)
 
         # Spend should NOT have been recorded
         mock_budget_tracker.record_spend.assert_not_called()
@@ -832,13 +838,8 @@ class TestAgentServiceBudget:
         ):
             service = AgentService(operations_service=mock_operations_service)
 
-            op = await mock_operations_service.create_operation(
-                operation_type=OperationType.AGENT_RESEARCH,
-                metadata=OperationMetadata(parameters={"phase": "idle"}),
-            )
-
             with pytest.raises(asyncio.CancelledError):
-                await service._run_worker(op.operation_id, mock_worker)
+                await service._run_coordinator(mock_worker)
 
         # Spend should NOT have been recorded
         mock_budget_tracker.record_spend.assert_not_called()
@@ -937,3 +938,128 @@ class TestAgentServiceBudget:
             assert (
                 0.01 < cost < 0.05
             ), f"Haiku design cost should be ~$0.02, got ${cost}"
+
+
+class TestAgentServiceResumeIfNeeded:
+    """Test resume_if_needed() method - M1 Task 1.6.
+
+    Tests that:
+    - Coordinator starts on backend startup if active researches exist
+    - No coordinator started when no active researches
+    - No duplicate coordinators created if already running
+    """
+
+    @pytest.fixture(autouse=True)
+    def use_stub_workers(self, monkeypatch):
+        """Use stub workers to avoid real API calls in unit tests."""
+        monkeypatch.setenv("USE_STUB_WORKERS", "true")
+        monkeypatch.setenv("STUB_WORKER_FAST", "true")
+
+    @pytest.mark.asyncio
+    async def test_resume_starts_coordinator_when_active_ops_exist(
+        self, mock_operations_service
+    ):
+        """resume_if_needed() starts coordinator when active ops exist."""
+        from ktrdr.api.services.agent_service import AgentService
+
+        # Create an active research operation
+        op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "training"}),
+        )
+        mock_operations_service._operations[op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        # Initially no coordinator
+        assert service._coordinator_task is None
+
+        # Call resume_if_needed
+        await service.resume_if_needed()
+
+        # Coordinator should be started
+        assert service._coordinator_task is not None
+        assert not service._coordinator_task.done()
+
+    @pytest.mark.asyncio
+    async def test_resume_does_nothing_when_no_active_ops(
+        self, mock_operations_service
+    ):
+        """resume_if_needed() does nothing when no active ops exist."""
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        # No active operations
+        assert len(mock_operations_service._operations) == 0
+
+        # Call resume_if_needed
+        await service.resume_if_needed()
+
+        # Coordinator should NOT be started
+        assert service._coordinator_task is None
+
+    @pytest.mark.asyncio
+    async def test_resume_does_nothing_when_coordinator_already_running(
+        self, mock_operations_service
+    ):
+        """resume_if_needed() does nothing if coordinator already running."""
+        from unittest.mock import MagicMock
+
+        from ktrdr.api.services.agent_service import AgentService
+
+        # Create an active research operation
+        op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "training"}),
+        )
+        mock_operations_service._operations[op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        # Simulate already-running coordinator
+        mock_task = MagicMock()
+        mock_task.done.return_value = False
+        service._coordinator_task = mock_task
+
+        # Call resume_if_needed
+        await service.resume_if_needed()
+
+        # Should not have replaced the existing task
+        assert service._coordinator_task is mock_task
+
+    @pytest.mark.asyncio
+    async def test_resume_starts_coordinator_when_previous_task_done(
+        self, mock_operations_service
+    ):
+        """resume_if_needed() starts coordinator if previous task completed."""
+        from unittest.mock import MagicMock
+
+        from ktrdr.api.services.agent_service import AgentService
+
+        # Create an active research operation
+        op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "training"}),
+        )
+        mock_operations_service._operations[op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        # Simulate completed coordinator task
+        mock_task = MagicMock()
+        mock_task.done.return_value = True
+        service._coordinator_task = mock_task
+
+        # Call resume_if_needed
+        await service.resume_if_needed()
+
+        # Should have started a new coordinator
+        assert service._coordinator_task is not mock_task
+        assert service._coordinator_task is not None
