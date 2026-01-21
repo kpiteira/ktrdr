@@ -495,6 +495,7 @@ class TestSpanAttributes:
         try:
             await worker._handle_training_phase("op_test", child_op)
         except Exception:
+            # Intentionally ignore: we only care that telemetry spans were recorded
             pass
 
         spans = exporter.get_finished_spans()
@@ -553,6 +554,7 @@ class TestSpanAttributes:
         try:
             await worker._handle_training_phase("op_test", child_op)
         except Exception:
+            # Intentionally ignore: we only care that telemetry spans were recorded
             pass
 
         spans = exporter.get_finished_spans()

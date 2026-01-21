@@ -233,6 +233,9 @@ class AgentResearchWorker:
         with tracer.start_as_current_span("agent.coordinator") as span:
             span.set_attribute("operation.type", "coordinator")
 
+            # Initialize before loop to handle early cancellation
+            active_ops: list = []
+
             try:
                 while True:
                     # Query all active research operations
