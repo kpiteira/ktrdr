@@ -28,3 +28,32 @@ The `run()` method's per-research exception handling now catches:
 Task 2.2 adds `_save_checkpoint()` helper. This method **already exists** (added in M1, lines 980-1022). Task 2.2 may just need verification that it works correctly with the new handlers, or the task may be a no-op.
 
 ---
+
+## Task 2.2 Complete: Add Checkpoint Save Helper
+
+### Implementation Notes
+
+**Task 2.2 was effectively a no-op** - the `_save_checkpoint()` method already existed from M1 implementation (lines 1027-1069). The method:
+
+1. Checks for checkpoint service availability (returns early if None)
+2. Retrieves the operation
+3. Builds checkpoint state via `build_agent_checkpoint_state()`
+4. Calls checkpoint service to persist
+5. Handles all exceptions gracefully (logs warning, doesn't crash)
+
+The helper was already being called by:
+- `_handle_research_cancelled()` (line 939) - saves with type "cancellation"
+- `_handle_research_failed()` (line 961) - saves with type "failure"
+
+### Test Coverage
+
+Tests already existed (added during M1/Task 2.1):
+- `tests/unit/agents/test_error_isolation.py::TestCheckpointOnFailure` - failure checkpoint tests
+- `tests/unit/agents/test_error_isolation.py::TestCancelledErrorIsolation::test_cancelled_research_has_checkpoint_saved`
+- `tests/unit/agent_tests/test_agent_checkpoint_integration.py::TestResearchWorkerCheckpointHelpers` - edge cases (missing service, missing operation)
+
+### Next Task Notes (Task 2.3)
+
+Task 2.3 is about writing unit and integration tests for error isolation. The unit tests already exist in `tests/unit/agents/test_error_isolation.py`. Task 2.3 may just need to verify coverage or add integration tests.
+
+---
