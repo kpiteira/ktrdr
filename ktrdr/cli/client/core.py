@@ -12,7 +12,6 @@ from typing import Any, Optional
 import httpx
 
 from ktrdr.cli.client.errors import APIError
-from ktrdr.cli.commands import get_api_url_override
 from ktrdr.cli.ib_diagnosis import (
     detect_ib_issue_from_api_response,
     should_show_ib_diagnosis,
@@ -42,16 +41,12 @@ def resolve_url(explicit_url: Optional[str] = None) -> str:
 
     URL resolution priority:
     1. Explicit URL parameter (passed directly to client)
-    2. --url flag override (global CLI state from _commands_base)
+    2. --url flag override (global state from sandbox_detect)
     3. Sandbox detection (from .env.sandbox file)
     4. Config default (from host_services settings)
 
     For --url flag values that don't include an API path, /api/v1 is
     automatically appended to maintain compatibility with host:port URLs.
-
-    NOTE: Priority 3 was added to fix issue #252 - M2 commands (research, train,
-    etc.) use app.py's callback which doesn't set the legacy _cli_state. This
-    ensures sandbox detection works even when get_api_url_override() returns None.
 
     Args:
         explicit_url: Explicitly provided URL, highest priority
@@ -59,10 +54,13 @@ def resolve_url(explicit_url: Optional[str] = None) -> str:
     Returns:
         Resolved API base URL with trailing slash stripped
     """
+    from ktrdr.cli import sandbox_detect
+
     if explicit_url:
         return explicit_url.rstrip("/")
 
-    url_override = get_api_url_override()
+    # Priority 2: --url flag override (set by CLI callback)
+    url_override = sandbox_detect.get_url_override()
     if url_override:
         effective_url = url_override.rstrip("/")
         # Auto-append /api/v1 if no API path present (for --url flag)
@@ -70,16 +68,13 @@ def resolve_url(explicit_url: Optional[str] = None) -> str:
             effective_url = f"{effective_url}/api/v1"
         return effective_url
 
-    # Priority 3: Check sandbox detection (fixes issue #252)
-    # M2 commands use app.py callback which doesn't set legacy _cli_state,
-    # so we need to check sandbox detection directly as a fallback.
-    from ktrdr.cli import sandbox_detect
-
+    # Priority 3: Sandbox detection from .env.sandbox file
     if sandbox_detect.find_env_sandbox() is not None:
         # Sandbox detected - use resolved URL with /api/v1 path
         sandbox_url = sandbox_detect.resolve_api_url()
         return f"{sandbox_url}/api/v1"
 
+    # Priority 4: Config default
     return get_api_base_url().rstrip("/")
 
 

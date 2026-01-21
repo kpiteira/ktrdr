@@ -10,13 +10,13 @@ from typing import Any, Optional
 
 from rich.console import Console
 
-from ktrdr.cli.commands import get_effective_api_url
 from ktrdr.cli.ib_diagnosis import (
     IBProblemType,
     detect_ib_issue_from_api_response,
     get_ib_recovery_suggestions,
     should_show_ib_diagnosis,
 )
+from ktrdr.cli.sandbox_detect import get_effective_api_url
 from ktrdr.errors import DataError, ValidationError
 from ktrdr.errors.exceptions import (
     ServiceConfigurationError,

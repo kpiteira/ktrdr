@@ -13,10 +13,14 @@ from pathlib import Path
 import pytest
 
 from ktrdr.cli.sandbox_detect import (
+    DEFAULT_API_PORT,
     find_env_sandbox,
     get_sandbox_context,
+    get_url_override,
+    normalize_api_url,
     parse_dotenv_file,
     resolve_api_url,
+    set_url_override,
 )
 
 
@@ -253,3 +257,114 @@ class TestGetSandboxContext:
 
         assert result is not None
         assert result["KTRDR_API_PORT"] == "8002"
+
+
+class TestDefaultApiPort:
+    """Tests for DEFAULT_API_PORT constant."""
+
+    def test_default_api_port_is_8000(self) -> None:
+        """Default API port should be 8000."""
+        assert DEFAULT_API_PORT == 8000
+
+
+class TestUrlOverride:
+    """Tests for set_url_override() and get_url_override() functions.
+
+    These functions manage the global URL override set by the --url flag.
+    """
+
+    def test_url_override_initially_none(self) -> None:
+        """URL override is None when not set."""
+        # Clear any previous state
+        set_url_override(None)
+        assert get_url_override() is None
+
+    def test_set_and_get_url_override(self) -> None:
+        """Can set and retrieve URL override."""
+        try:
+            set_url_override("http://home-lab:8000/api/v1")
+            assert get_url_override() == "http://home-lab:8000/api/v1"
+        finally:
+            set_url_override(None)
+
+    def test_url_override_can_be_cleared(self) -> None:
+        """URL override can be cleared by setting to None."""
+        try:
+            set_url_override("http://example.com:8000/api/v1")
+            assert get_url_override() is not None
+
+            set_url_override(None)
+            assert get_url_override() is None
+        finally:
+            set_url_override(None)
+
+
+class TestNormalizeApiUrl:
+    """Tests for normalize_api_url() function.
+
+    This function normalizes URLs by:
+    - Adding http:// if no protocol specified
+    - Adding default port (8000) if no port specified
+    - Adding /api/v1 if no API path present
+    - Stripping trailing slashes
+    """
+
+    def test_normalize_adds_http_protocol(self) -> None:
+        """Adds http:// when no protocol specified."""
+        result = normalize_api_url("localhost:8000")
+        assert result.startswith("http://")
+
+    def test_normalize_preserves_http_protocol(self) -> None:
+        """Preserves existing http:// protocol."""
+        result = normalize_api_url("http://localhost:8000")
+        assert result.startswith("http://")
+        assert "http://http://" not in result
+
+    def test_normalize_preserves_https_protocol(self) -> None:
+        """Preserves existing https:// protocol."""
+        result = normalize_api_url("https://secure.example.com:8000")
+        assert result.startswith("https://")
+
+    def test_normalize_adds_default_port(self) -> None:
+        """Adds default port (8000) when no port specified."""
+        result = normalize_api_url("http://localhost")
+        assert ":8000" in result
+
+    def test_normalize_preserves_custom_port(self) -> None:
+        """Preserves custom port when specified."""
+        result = normalize_api_url("http://localhost:9000")
+        assert ":9000" in result
+        assert ":8000" not in result
+
+    def test_normalize_adds_api_v1_path(self) -> None:
+        """Adds /api/v1 when no API path present."""
+        result = normalize_api_url("http://localhost:8000")
+        assert result.endswith("/api/v1")
+
+    def test_normalize_preserves_existing_api_path(self) -> None:
+        """Preserves existing /api/ path."""
+        result = normalize_api_url("http://localhost:8000/api/v2")
+        assert result.endswith("/api/v2")
+        assert "/api/v1" not in result
+
+    def test_normalize_strips_trailing_slash(self) -> None:
+        """Strips trailing slash before adding API path."""
+        result = normalize_api_url("http://localhost:8000/")
+        assert not result.endswith("/api/v1/")
+        assert result.endswith("/api/v1")
+
+    def test_normalize_handles_empty_string(self) -> None:
+        """Returns empty string for empty input."""
+        result = normalize_api_url("")
+        assert result == ""
+
+    def test_normalize_full_transformation(self) -> None:
+        """Tests full transformation from minimal to complete URL."""
+        result = normalize_api_url("backend.example.com")
+        assert result == "http://backend.example.com:8000/api/v1"
+
+    def test_normalize_already_complete_url(self) -> None:
+        """Preserves already complete URL."""
+        url = "http://localhost:8001/api/v1"
+        result = normalize_api_url(url)
+        assert result == url

@@ -14,7 +14,6 @@ from typing import Optional
 
 import typer
 
-from ktrdr.cli.commands import normalize_api_url
 from ktrdr.cli.commands.backtest import backtest
 from ktrdr.cli.commands.cancel import cancel
 from ktrdr.cli.commands.follow import follow
@@ -27,7 +26,11 @@ from ktrdr.cli.commands.show import show_app
 from ktrdr.cli.commands.status import status
 from ktrdr.cli.commands.train import train
 from ktrdr.cli.commands.validate import validate_cmd
-from ktrdr.cli.sandbox_detect import resolve_api_url
+from ktrdr.cli.sandbox_detect import (
+    normalize_api_url,
+    resolve_api_url,
+    set_url_override,
+)
 from ktrdr.cli.state import CLIState
 
 app = typer.Typer(
@@ -71,6 +74,17 @@ def main(
 
     # Normalize URL (add protocol if missing, add default port if missing)
     normalized_url = normalize_api_url(resolved_url)
+
+    # Set global URL override for HTTP clients to use
+    # Only set if not the default URL (allows sandbox detection to work as fallback)
+    if resolved_url != "http://localhost:8000":
+        set_url_override(normalized_url)
+
+        # Reconfigure telemetry to send traces to the same host as the API
+        # This enables distributed tracing when targeting remote servers
+        from ktrdr.cli import reconfigure_telemetry_for_url
+
+        reconfigure_telemetry_for_url(normalized_url)
 
     # Create immutable state and store in context
     state = CLIState(
