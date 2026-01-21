@@ -15,6 +15,7 @@ import pytest
 from ktrdr.cli.sandbox_detect import (
     DEFAULT_API_PORT,
     find_env_sandbox,
+    get_effective_api_url,
     get_sandbox_context,
     get_url_override,
     normalize_api_url,
@@ -297,6 +298,77 @@ class TestUrlOverride:
             assert get_url_override() is None
         finally:
             set_url_override(None)
+
+
+class TestGetEffectiveApiUrl:
+    """Tests for get_effective_api_url() function.
+
+    This function returns the URL that will appear in error messages.
+    It follows the same priority as URL resolution:
+    1. URL override (if set via --url flag)
+    2. Sandbox detection (if .env.sandbox exists)
+    3. Config default
+    """
+
+    def test_returns_url_override_when_set(self) -> None:
+        """Returns URL override when set (highest priority)."""
+        try:
+            set_url_override("http://home-lab:8000/api/v1")
+            result = get_effective_api_url()
+            assert result == "http://home-lab:8000/api/v1"
+        finally:
+            set_url_override(None)
+
+    def test_returns_sandbox_url_when_in_sandbox(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Returns sandbox URL when .env.sandbox exists and no override."""
+        # Create a sandbox .env file with custom port
+        env_file = tmp_path / ".env.sandbox"
+        env_file.write_text("KTRDR_API_PORT=8002\n")
+        monkeypatch.chdir(tmp_path)
+
+        # Ensure no URL override
+        set_url_override(None)
+
+        result = get_effective_api_url()
+
+        assert "8002" in result
+        assert result == "http://localhost:8002/api/v1"
+
+    def test_url_override_beats_sandbox_detection(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """URL override takes priority over sandbox detection."""
+        # Create a sandbox .env file
+        env_file = tmp_path / ".env.sandbox"
+        env_file.write_text("KTRDR_API_PORT=8002\n")
+        monkeypatch.chdir(tmp_path)
+
+        try:
+            # Set URL override - should win over sandbox
+            set_url_override("http://prod-server:8000/api/v1")
+
+            result = get_effective_api_url()
+
+            assert result == "http://prod-server:8000/api/v1"
+            assert "8002" not in result
+        finally:
+            set_url_override(None)
+
+    def test_returns_config_default_when_no_override_or_sandbox(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Returns config default when no override and no sandbox."""
+        # tmp_path has no .env.sandbox
+        monkeypatch.chdir(tmp_path)
+        set_url_override(None)
+
+        result = get_effective_api_url()
+
+        # Should be the config default (localhost:8000)
+        assert "localhost" in result or "127.0.0.1" in result
+        assert "8000" in result
 
 
 class TestNormalizeApiUrl:

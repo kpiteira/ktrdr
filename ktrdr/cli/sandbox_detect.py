@@ -49,15 +49,26 @@ def get_url_override() -> Optional[str]:
 def get_effective_api_url() -> str:
     """Get the effective API URL for display in error messages.
 
-    Returns the --url override if set, otherwise the default localhost URL.
+    Follows the same priority as URL resolution:
+    1. URL override (if set via --url flag)
+    2. Sandbox detection (if .env.sandbox exists)
+    3. Config default
+
     This is useful for error messages to show users what URL is being targeted.
 
     Returns:
         The effective API URL being used.
     """
+    # Priority 1: URL override from --url flag
     if _url_override:
         return _url_override
 
+    # Priority 2: Sandbox detection
+    if find_env_sandbox() is not None:
+        sandbox_url = resolve_api_url()
+        return f"{sandbox_url}/api/v1"
+
+    # Priority 3: Config default
     from ktrdr.config.host_services import get_api_base_url
 
     return get_api_base_url()
