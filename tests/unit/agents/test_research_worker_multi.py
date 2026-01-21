@@ -868,6 +868,31 @@ class TestCoordinatorLifecycle:
         # Coordinator should NOT be started (we couldn't check for ops)
         assert service._coordinator_task is None
 
+    @pytest.mark.asyncio
+    async def test_resume_if_needed_handles_connection_errors_gracefully(self):
+        """Startup hook handles database connection errors gracefully.
+
+        In CI or test environments without a database, connection errors
+        should be handled gracefully without crashing backend startup.
+        """
+        from unittest.mock import AsyncMock, MagicMock
+
+        from ktrdr.api.services.agent_service import AgentService
+
+        # Create a mock operations service that raises connection error
+        mock_ops = MagicMock()
+        mock_ops.list_operations = AsyncMock(
+            side_effect=OSError("Connect call failed ('127.0.0.1', 5432)")
+        )
+
+        service = AgentService(operations_service=mock_ops)
+
+        # Should NOT raise - should handle gracefully
+        await service.resume_if_needed()
+
+        # Coordinator should NOT be started (we couldn't check for ops)
+        assert service._coordinator_task is None
+
 
 # ============================================================================
 # TestOperationCompletion

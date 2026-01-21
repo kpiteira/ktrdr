@@ -646,13 +646,20 @@ class AgentService:
                 )
                 self._start_coordinator()
         except Exception as e:
-            # Handle case where database tables don't exist yet (fresh install).
-            # This can happen on first startup before alembic migrations run.
+            # Handle cases where database isn't ready:
+            # - Tables don't exist yet (fresh install before migrations)
+            # - Database not reachable (CI environment, no DB configured)
             error_str = str(e).lower()
-            if "does not exist" in error_str or "undefined" in error_str:
+            is_db_not_ready = (
+                "does not exist" in error_str
+                or "undefined" in error_str
+                or "connect call failed" in error_str
+                or "connection refused" in error_str
+            )
+            if is_db_not_ready:
                 logger.warning(
-                    "Database tables not yet initialized, skipping coordinator resume. "
-                    "This is expected on first startup before migrations."
+                    "Database not ready for coordinator resume, skipping. "
+                    "This is expected on first startup or in test environments."
                 )
             else:
                 # Re-raise unexpected errors

@@ -62,6 +62,10 @@ class TestLifespanOrphanDetector:
                 new_callable=AsyncMock,
             ),
             patch("ktrdr.api.database.close_database", AsyncMock()),
+            patch(
+                "ktrdr.api.services.agent_service.get_agent_service",
+                return_value=MagicMock(resume_if_needed=AsyncMock()),
+            ),
         ):
             async with lifespan(mock_app):
                 # Inside lifespan, verify start was called
@@ -111,6 +115,10 @@ class TestLifespanOrphanDetector:
                 new_callable=AsyncMock,
             ),
             patch("ktrdr.api.database.close_database", AsyncMock()),
+            patch(
+                "ktrdr.api.services.agent_service.get_agent_service",
+                return_value=MagicMock(resume_if_needed=AsyncMock()),
+            ),
         ):
             async with lifespan(mock_app):
                 pass  # Enter and exit lifespan
@@ -158,6 +166,10 @@ class TestLifespanOrphanDetector:
                 new_callable=AsyncMock,
             ),
             patch("ktrdr.api.database.close_database", AsyncMock()),
+            patch(
+                "ktrdr.api.services.agent_service.get_agent_service",
+                return_value=MagicMock(resume_if_needed=AsyncMock()),
+            ),
         ):
             async with lifespan(mock_app):
                 pass
@@ -210,6 +222,10 @@ class TestLifespanOrphanDetector:
                 new_callable=AsyncMock,
             ),
             patch("ktrdr.api.database.close_database", AsyncMock()),
+            patch(
+                "ktrdr.api.services.agent_service.get_agent_service",
+                return_value=MagicMock(resume_if_needed=AsyncMock()),
+            ),
             patch("ktrdr.api.startup.logger") as mock_logger,
         ):
             async with lifespan(mock_app):
