@@ -240,3 +240,161 @@ class TestOperationRunnerInit:
         assert runner.state.json_mode is True
         assert runner.state.verbose is True
         assert runner.state.api_url == "http://test:8000"
+
+
+class TestOperationRunnerResultDisplay:
+    """Tests for consistent result display across operation types."""
+
+    def test_display_results_training_json_mode(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        """Training results output valid JSON in JSON mode."""
+        from ktrdr.cli.operation_runner import OperationRunner
+
+        state = CLIState(json_mode=True)
+        runner = OperationRunner(state)
+
+        op_data = {
+            "status": "completed",
+            "operation_id": "op_train_123",
+            "result_summary": {
+                "training_metrics": {
+                    "epochs_trained": 50,
+                    "final_loss": 0.0234,
+                    "final_val_loss": 0.0312,
+                },
+                "model_path": "/models/test_model.pt",
+            },
+        }
+
+        runner._display_results(op_data, "training")
+
+        captured = capsys.readouterr()
+        output = json.loads(captured.out)
+        assert output["operation_type"] == "training"
+        assert output["results"]["epochs_trained"] == 50
+        assert output["results"]["final_loss"] == 0.0234
+
+    def test_display_results_backtest_json_mode(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        """Backtest results output valid JSON in JSON mode."""
+        from ktrdr.cli.operation_runner import OperationRunner
+
+        state = CLIState(json_mode=True)
+        runner = OperationRunner(state)
+
+        op_data = {
+            "status": "completed",
+            "operation_id": "op_bt_456",
+            "result_summary": {
+                "metrics": {
+                    "total_return_pct": 0.15,
+                    "sharpe_ratio": 1.8,
+                    "max_drawdown_pct": 0.05,
+                    "total_trades": 42,
+                    "win_rate": 0.65,
+                },
+            },
+        }
+
+        runner._display_results(op_data, "backtest")
+
+        captured = capsys.readouterr()
+        output = json.loads(captured.out)
+        assert output["operation_type"] == "backtest"
+        assert output["results"]["total_return_pct"] == 0.15
+        assert output["results"]["sharpe_ratio"] == 1.8
+
+    def test_display_results_unknown_type_json_mode(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        """Unknown operation types output their result_summary as JSON."""
+        from ktrdr.cli.operation_runner import OperationRunner
+
+        state = CLIState(json_mode=True)
+        runner = OperationRunner(state)
+
+        op_data = {
+            "status": "completed",
+            "operation_id": "op_custom_789",
+            "result_summary": {
+                "custom_field": "custom_value",
+                "count": 100,
+            },
+        }
+
+        runner._display_results(op_data, "custom_operation")
+
+        captured = capsys.readouterr()
+        output = json.loads(captured.out)
+        assert output["operation_type"] == "custom_operation"
+        assert output["results"]["custom_field"] == "custom_value"
+
+    def test_display_results_human_uses_consistent_header(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        """Human-readable output uses consistent header format."""
+        from ktrdr.cli.operation_runner import OperationRunner
+
+        state = CLIState(json_mode=False)
+        runner = OperationRunner(state)
+
+        # Training results
+        training_data = {
+            "result_summary": {
+                "training_metrics": {"epochs_trained": 10, "final_loss": 0.05},
+            },
+        }
+        runner._display_results(training_data, "training")
+        training_output = capsys.readouterr().out
+
+        # Backtest results
+        backtest_data = {
+            "result_summary": {
+                "metrics": {"total_return_pct": 0.10, "sharpe_ratio": 1.5},
+            },
+        }
+        runner._display_results(backtest_data, "backtest")
+        backtest_output = capsys.readouterr().out
+
+        # Both should use "Results:" header pattern
+        assert "Results:" in training_output or "Results" in training_output
+        assert "Results:" in backtest_output or "Results" in backtest_output
+
+    def test_display_results_empty_summary_json_mode(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        """Empty result_summary outputs empty results object in JSON mode."""
+        from ktrdr.cli.operation_runner import OperationRunner
+
+        state = CLIState(json_mode=True)
+        runner = OperationRunner(state)
+
+        op_data = {"status": "completed", "result_summary": {}}
+
+        runner._display_results(op_data, "training")
+
+        captured = capsys.readouterr()
+        # Should still output valid JSON (even if empty or minimal)
+        output = json.loads(captured.out)
+        assert output["operation_type"] == "training"
+
+    def test_display_results_none_summary_json_mode(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        """None result_summary outputs appropriate JSON in JSON mode."""
+        from ktrdr.cli.operation_runner import OperationRunner
+
+        state = CLIState(json_mode=True)
+        runner = OperationRunner(state)
+
+        op_data = {"status": "completed", "result_summary": None}
+
+        runner._display_results(op_data, "training")
+
+        captured = capsys.readouterr()
+        # Should output valid JSON indicating no results
+        output = json.loads(captured.out)
+        assert output["operation_type"] == "training"
+        assert output["results"] is None or output["results"] == {}
