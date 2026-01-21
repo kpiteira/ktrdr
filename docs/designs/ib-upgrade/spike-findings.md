@@ -128,9 +128,85 @@ Our current pattern works well. The ib_async improvements just make it more robu
 
 ---
 
+## Test 3: Live IB Gateway Testing ✅
+
+**Tested: 2026-01-20**
+
+### Connection Test Results
+
+| API Method | Status | Notes |
+|------------|--------|-------|
+| `connectAsync()` | ✅ | Connected successfully |
+| `managedAccounts()` | ✅ | Returns `['DUK113382']` |
+| `reqContractDetailsAsync()` | ✅ | AAPL → "APPLE INC" |
+| `reqHistoricalDataAsync()` | ✅ | 7 bars returned |
+| `reqHeadTimeStampAsync()` | ✅ | 1980-12-12 14:30:00 |
+| `disconnect()` | ✅ | Clean disconnect |
+
+### Host Service Test Results
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| `IbConnection` | ✅ | Creates, starts, stops correctly |
+| `IbDataFetcher` | ✅ | Full data fetch works |
+| Connection pool | ✅ | Pool creates connections correctly |
+| Health check | ✅ | `is_healthy()` returns True |
+
+### Sample Output
+
+```
+IB REQUEST: AAPL (STK) 2026-01-16 to 2026-01-21
+├─ Contract: Stock(symbol='AAPL', exchange='SMART', currency='USD')
+├─ Duration: 5 D, Bar Size: 1 day
+└─ IB RESPONSE: 5 bars returned
+
+Stats: {'requests_made': 1, 'successful_requests': 1, 'failed_requests': 0, 'success_rate': 1.0}
+```
+
+---
+
+## Migration Summary
+
+### Changes Required
+
+**Total: 5 files, import changes only**
+
+```diff
+- from ib_insync import IB, Contract, Forex, Stock, Future
++ from ib_async import IB, Contract, Forex, Stock, Future
+```
+
+### Files Modified
+
+1. `ib-host-service/ib/connection.py`
+2. `ib-host-service/ib/data_fetcher.py`
+3. `ib-host-service/ib/symbol_validator.py`
+4. `tests/host_service/conftest.py`
+5. `scripts/basic_ib_connection_check.py`
+
+### Risk Assessment: LOW
+
+- All APIs work identically
+- Dataclass change is transparent
+- Threading model unchanged
+- Cache serialization works
+- Live testing passed
+
+---
+
+## Recommendation
+
+**Proceed with migration.** The spike confirms ib_async is a drop-in replacement:
+
+1. Merge this spike branch
+2. Run extended stability testing (24h) with real IB Gateway
+3. Monitor for any edge cases
+
+---
+
 ## Next Steps
 
-1. [ ] Test with live IB Gateway connection
+1. [x] Test with live IB Gateway connection
 2. [x] Verify cache serialization with dataclass contracts
 3. [x] Evaluate threading model simplification opportunities
-4. [x] Run full host service with ib_async imports (imports work)
+4. [x] Run full host service with ib_async imports

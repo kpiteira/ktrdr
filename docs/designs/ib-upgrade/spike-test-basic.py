@@ -103,20 +103,22 @@ async def test_connection():
         print(f"  [PASS] managedAccounts() = {accounts}")
 
         # Test 4c: reqContractDetails (used in symbol_validator)
-        print("\n  Testing reqContractDetails()...")
+        # Use async version since we're in async context
+        print("\n  Testing reqContractDetailsAsync()...")
         stock = Stock("AAPL", "SMART", "USD")
-        details = ib.reqContractDetails(stock)
-        print(f"  [PASS] reqContractDetails() returned {len(details)} results")
+        details = await ib.reqContractDetailsAsync(stock)
+        print(f"  [PASS] reqContractDetailsAsync() returned {len(details)} results")
         if details:
             d = details[0]
             print(f"  [INFO] Contract: {d.contract.symbol}, {d.longName}")
             print(f"  [INFO] Result is dataclass: {is_dataclass(d)}")
 
         # Test 4d: reqHistoricalData (used in data_fetcher)
-        print("\n  Testing reqHistoricalData()...")
+        # Use async version since we're in async context
+        print("\n  Testing reqHistoricalDataAsync()...")
         from datetime import datetime, timezone
         end_dt = datetime.now(timezone.utc)
-        bars = ib.reqHistoricalData(
+        bars = await ib.reqHistoricalDataAsync(
             contract=stock,
             endDateTime=end_dt,
             durationStr="1 D",
@@ -125,20 +127,21 @@ async def test_connection():
             useRTH=True,
             formatDate=1
         )
-        print(f"  [PASS] reqHistoricalData() returned {len(bars)} bars")
+        print(f"  [PASS] reqHistoricalDataAsync() returned {len(bars)} bars")
         if bars:
             print(f"  [INFO] First bar: {bars[0]}")
             print(f"  [INFO] Bar is dataclass: {is_dataclass(bars[0])}")
 
         # Test 4e: reqHeadTimeStamp (used in symbol_validator)
-        print("\n  Testing reqHeadTimeStamp()...")
-        head_ts = ib.reqHeadTimeStamp(
+        # Use async version since we're in async context
+        print("\n  Testing reqHeadTimeStampAsync()...")
+        head_ts = await ib.reqHeadTimeStampAsync(
             contract=stock,
             whatToShow="TRADES",
             useRTH=False,
             formatDate=1
         )
-        print(f"  [PASS] reqHeadTimeStamp() = {head_ts}")
+        print(f"  [PASS] reqHeadTimeStampAsync() = {head_ts}")
 
     except Exception as e:
         print(f"  [FAIL] API call error: {e}")
