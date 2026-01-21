@@ -14,15 +14,15 @@ import sys
 import time
 from pathlib import Path
 
-# Add project root to path so we can import ib_insync
+# Add project root to path so we can import ib_async
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
-    from ib_insync import IB
+    from ib_async import IB
 
-    print("✅ ib_insync imported successfully")
+    print("✅ ib_async imported successfully")
 except ImportError as e:
-    print(f"❌ Failed to import ib_insync: {e}")
+    print(f"❌ Failed to import ib_async: {e}")
     sys.exit(1)
 
 
@@ -157,11 +157,11 @@ def main():
     print(f"Testing at: {time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     try:
-        import ib_insync
+        import ib_async
 
-        print(f"ib_insync version: {ib_insync.__version__}")
+        print(f"ib_async version: {ib_async.__version__}")
     except Exception:
-        print("Could not determine ib_insync version")
+        print("Could not determine ib_async version")
 
     # Run all tests
     results = []

@@ -31,7 +31,7 @@ from datetime import timezone
 from pathlib import Path
 from typing import Optional
 
-from ib_insync import Contract, Forex, Future, Stock
+from ib_async import Contract, Forex, Future, Stock
 
 from ib.pace_manager import IbPaceManager
 from ib.pool_manager import get_shared_ib_pool
