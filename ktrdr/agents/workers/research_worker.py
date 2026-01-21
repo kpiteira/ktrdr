@@ -245,18 +245,22 @@ class AgentResearchWorker:
                         logger.info("No active researches, coordinator stopping")
                         break
 
-                    # Advance each active research one step
+                    # Advance each active research one step (error isolation per-research)
                     for op in active_ops:
                         try:
                             await self._advance_research(op)
-                        except (WorkerError, GateFailedError) as e:
-                            # Log error but continue with other researches
-                            logger.error(f"Research {op.operation_id} failed: {e}")
-                            # Save checkpoint before marking failed (for resume capability)
-                            await self._save_checkpoint(op.operation_id, "failure")
-                            # Mark the operation as failed
-                            await self.ops.fail_operation(op.operation_id, str(e))
-                            record_cycle_outcome("failed")
+                        except asyncio.CancelledError:
+                            # Per-research cancellation (e.g., child operation was cancelled)
+                            await self._handle_research_cancelled(op)
+                        except (WorkerError, GateError) as e:
+                            # Known error types - log and fail the research
+                            await self._handle_research_failed(op, e)
+                        except Exception as e:
+                            # Unexpected errors - log with details and fail the research
+                            logger.error(
+                                f"Unexpected error in research {op.operation_id}: {e}"
+                            )
+                            await self._handle_research_failed(op, e)
 
                     # Poll interval
                     await self._cancellable_sleep(self.POLL_INTERVAL)
@@ -918,6 +922,49 @@ class AgentResearchWorker:
 
         elif phase == "assessing":
             await self._handle_assessing_phase(operation_id, child_op)
+
+    async def _handle_research_cancelled(self, op: Any) -> None:
+        """Handle cancellation for a single research.
+
+        Called when a per-research CancelledError is caught (e.g., child operation
+        was cancelled). Saves checkpoint and marks the research as cancelled.
+
+        Args:
+            op: The research operation that was cancelled.
+        """
+        operation_id = op.operation_id
+        logger.info(f"Research cancelled: {operation_id}")
+
+        # Save checkpoint for resume capability
+        await self._save_checkpoint(operation_id, "cancellation")
+
+        # Mark the operation as cancelled
+        await self.ops.cancel_operation(operation_id, "Cancelled")
+
+        # Record metrics
+        record_cycle_outcome("cancelled")
+
+    async def _handle_research_failed(self, op: Any, error: Exception) -> None:
+        """Handle failure for a single research.
+
+        Called when an error is caught per-research. Saves checkpoint,
+        marks the research as failed, and records metrics.
+
+        Args:
+            op: The research operation that failed.
+            error: The exception that caused the failure.
+        """
+        operation_id = op.operation_id
+        logger.error(f"Research failed: {operation_id}, error={error}")
+
+        # Save checkpoint for resume capability
+        await self._save_checkpoint(operation_id, "failure")
+
+        # Mark the operation as failed
+        await self.ops.fail_operation(operation_id, str(error))
+
+        # Record metrics
+        record_cycle_outcome("failed")
 
     def _get_child_op_id(self, op: Any, phase: str) -> str | None:
         """Get child operation ID for current phase.
