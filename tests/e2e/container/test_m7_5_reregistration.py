@@ -13,14 +13,16 @@ Usage:
     pytest tests/e2e/container/test_m7_5_reregistration.py -v --tb=short
 """
 
+import os
 import subprocess
 import time
 
 import httpx
 import pytest
 
-# Test configuration
-API_BASE_URL = "http://localhost:8000/api/v1"
+# Test configuration - sandbox-aware
+API_PORT = os.getenv("KTRDR_API_PORT", "8000")
+API_BASE_URL = f"http://localhost:{API_PORT}/api/v1"
 API_TIMEOUT = 30.0
 BACKEND_RESTART_WAIT = 15  # seconds to wait for backend to restart
 
