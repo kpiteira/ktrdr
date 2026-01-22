@@ -274,7 +274,8 @@ class TestUpCommand:
         env_file.write_text("INSTANCE_ID=test\nSLOT_NUMBER=1\n")
 
         with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
-            result = runner.invoke(cli_app, ["sandbox", "up"])
+            with patch("ktrdr.cli.sandbox.check_ports_available", return_value=[]):
+                result = runner.invoke(cli_app, ["sandbox", "up"])
 
         assert result.exit_code == 1
         assert "compose" in result.output.lower() or "docker" in result.output.lower()
@@ -312,11 +313,12 @@ class TestUpCommand:
         )
 
         with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
-            with patch("subprocess.run"):  # Mock docker compose up
-                with patch(
-                    "ktrdr.cli.sandbox.run_gate", return_value=mock_gate_result
-                ) as mock_run_gate:
-                    result = runner.invoke(cli_app, ["sandbox", "up"])
+            with patch("ktrdr.cli.sandbox.check_ports_available", return_value=[]):
+                with patch("subprocess.run"):  # Mock docker compose up
+                    with patch(
+                        "ktrdr.cli.sandbox.run_gate", return_value=mock_gate_result
+                    ) as mock_run_gate:
+                        result = runner.invoke(cli_app, ["sandbox", "up"])
 
         # Gate should have been called
         mock_run_gate.assert_called_once()
@@ -334,9 +336,10 @@ class TestUpCommand:
         compose_file.touch()
 
         with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
-            with patch("subprocess.run"):  # Mock docker compose up
-                with patch("ktrdr.cli.sandbox.run_gate") as mock_run_gate:
-                    result = runner.invoke(cli_app, ["sandbox", "up", "--no-wait"])
+            with patch("ktrdr.cli.sandbox.check_ports_available", return_value=[]):
+                with patch("subprocess.run"):  # Mock docker compose up
+                    with patch("ktrdr.cli.sandbox.run_gate") as mock_run_gate:
+                        result = runner.invoke(cli_app, ["sandbox", "up", "--no-wait"])
 
         # Gate should NOT have been called
         mock_run_gate.assert_not_called()
@@ -373,9 +376,12 @@ class TestUpCommand:
         )
 
         with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
-            with patch("subprocess.run"):  # Mock docker compose up
-                with patch("ktrdr.cli.sandbox.run_gate", return_value=mock_gate_result):
-                    result = runner.invoke(cli_app, ["sandbox", "up"])
+            with patch("ktrdr.cli.sandbox.check_ports_available", return_value=[]):
+                with patch("subprocess.run"):  # Mock docker compose up
+                    with patch(
+                        "ktrdr.cli.sandbox.run_gate", return_value=mock_gate_result
+                    ):
+                        result = runner.invoke(cli_app, ["sandbox", "up"])
 
         # Should exit with code 2 on gate failure
         assert result.exit_code == 2
@@ -406,9 +412,12 @@ class TestUpCommand:
         )
 
         with patch("ktrdr.cli.sandbox.Path.cwd", return_value=tmp_path):
-            with patch("subprocess.run"):
-                with patch("ktrdr.cli.sandbox.run_gate", return_value=mock_gate_result):
-                    result = runner.invoke(cli_app, ["sandbox", "up"])
+            with patch("ktrdr.cli.sandbox.check_ports_available", return_value=[]):
+                with patch("subprocess.run"):
+                    with patch(
+                        "ktrdr.cli.sandbox.run_gate", return_value=mock_gate_result
+                    ):
+                        result = runner.invoke(cli_app, ["sandbox", "up"])
 
         # Check that results show check names
         assert "database" in result.output.lower()
