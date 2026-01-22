@@ -1,5 +1,6 @@
 """Unit tests for ModelTrainer resume context integration (M4 Task 4.5)."""
 
+import warnings
 from io import BytesIO
 
 import torch
@@ -331,9 +332,11 @@ class TestModelTrainerResumeContextEdgeCases:
             checkpoint_optimizer, step_size=2, gamma=0.1
         )
 
-        # Advance scheduler a few steps
-        for _ in range(3):
-            checkpoint_scheduler.step()
+        # Advance scheduler a few steps (suppress warning about step order - intentional for testing)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message=".*lr_scheduler.step.*optimizer.step.*")
+            for _ in range(3):
+                checkpoint_scheduler.step()
 
         # Serialize scheduler state
         scheduler_buffer = BytesIO()
