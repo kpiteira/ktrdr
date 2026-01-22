@@ -52,8 +52,29 @@ Tests already existed (added during M1/Task 2.1):
 - `tests/unit/agents/test_error_isolation.py::TestCancelledErrorIsolation::test_cancelled_research_has_checkpoint_saved`
 - `tests/unit/agent_tests/test_agent_checkpoint_integration.py::TestResearchWorkerCheckpointHelpers` - edge cases (missing service, missing operation)
 
-### Next Task Notes (Task 2.3)
+---
 
-Task 2.3 is about writing unit and integration tests for error isolation. The unit tests already exist in `tests/unit/agents/test_error_isolation.py`. Task 2.3 may just need to verify coverage or add integration tests.
+## Task 2.3 Complete: Unit and Integration Tests for Error Isolation
+
+### Implementation Notes
+
+- **Unit tests** already existed in `tests/unit/agents/test_error_isolation.py` (from Task 2.1)
+- **Integration tests** created in `tests/integration/test_error_isolation.py` with 5 new tests:
+  1. `test_one_research_fails_others_continue_three_ops` - Primary E2E test per M2 spec
+  2. `test_checkpoint_saved_for_failed_research` - DB verification for checkpoint
+  3. `test_gate_error_isolates_single_research` - GateError isolation
+  4. `test_multiple_failures_dont_crash_coordinator` - Stress test
+  5. `test_unexpected_error_type_isolated` - RuntimeError isolation
+
+### Test Coverage Summary
+
+| Requirement | Unit Test | Integration Test |
+|-------------|-----------|------------------|
+| WorkerError isolation | ✅ test_worker_error_in_one_research_doesnt_stop_others | ✅ test_one_research_fails_others_continue_three_ops |
+| GateError isolation | ✅ test_gate_error_in_one_research_doesnt_stop_others | ✅ test_gate_error_isolates_single_research |
+| Unexpected error isolation | ✅ test_unexpected_error_in_one_research_doesnt_stop_others | ✅ test_unexpected_error_type_isolated |
+| CancelledError isolation | ✅ test_cancelled_error_in_one_research_cancels_only_that_research | N/A |
+| Checkpoint on failure | ✅ test_checkpoint_saved_on_worker_error | ✅ test_checkpoint_saved_for_failed_research |
+| Missing service graceful | ✅ test_save_checkpoint_handles_missing_service | N/A |
 
 ---
