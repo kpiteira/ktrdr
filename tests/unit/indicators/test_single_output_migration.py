@@ -8,13 +8,11 @@ Tests verify that single-output indicators return unnamed Series
 import pandas as pd
 import pytest
 
-from ktrdr.indicators.ad_line import ADLineIndicator
 from ktrdr.indicators.atr_indicator import ATRIndicator
 from ktrdr.indicators.bollinger_band_width_indicator import (
     BollingerBandWidthIndicator,
 )
 from ktrdr.indicators.cci_indicator import CCIIndicator
-from ktrdr.indicators.cmf_indicator import CMFIndicator
 from ktrdr.indicators.distance_from_ma_indicator import DistanceFromMAIndicator
 from ktrdr.indicators.ma_indicators import ExponentialMovingAverage, SimpleMovingAverage
 from ktrdr.indicators.mfi_indicator import MFIIndicator
@@ -23,7 +21,6 @@ from ktrdr.indicators.obv_indicator import OBVIndicator
 from ktrdr.indicators.parabolic_sar_indicator import ParabolicSARIndicator
 from ktrdr.indicators.roc_indicator import ROCIndicator
 from ktrdr.indicators.rsi_indicator import RSIIndicator
-from ktrdr.indicators.rvi_indicator import RVIIndicator
 from ktrdr.indicators.squeeze_intensity_indicator import SqueezeIntensityIndicator
 from ktrdr.indicators.volume_ratio_indicator import VolumeRatioIndicator
 from ktrdr.indicators.vwap_indicator import VWAPIndicator
@@ -109,19 +106,6 @@ class TestMomentumOscillatorMigration:
         assert result.name is None, "Williams %R Series should have no name (unnamed)"
         assert len(result) == len(sample_ohlcv_data)
 
-    def test_rvi_returns_unnamed_series(self, sample_ohlcv_data):
-        """RVI indicator returns Series with no name (if single-output)."""
-        indicator = RVIIndicator(period=14)
-        result = indicator.compute(sample_ohlcv_data)
-
-        # RVI might be multi-output - check
-        if indicator.is_multi_output():
-            pytest.skip("RVI is multi-output, will be handled in M3b")
-        else:
-            assert isinstance(result, pd.Series), "RVI should return a Series"
-            assert result.name is None, "RVI Series should have no name (unnamed)"
-            assert len(result) == len(sample_ohlcv_data)
-
     def test_squeeze_intensity_returns_unnamed_series(self, sample_ohlcv_data):
         """Squeeze Intensity indicator returns Series with no name."""
         indicator = SqueezeIntensityIndicator(bb_period=20, kc_period=20)
@@ -173,14 +157,6 @@ class TestVolumeTrendMigration:
         assert result.name is None, "OBV Series should have no name (unnamed)"
         assert len(result) == len(sample_ohlcv_data)
 
-    def test_cmf_skipped_multi_output(self, sample_ohlcv_data):
-        """CMF is multi-output, skip for M3a."""
-        indicator = CMFIndicator(period=21)
-
-        # Verify this is multi-output (should be handled in M3b)
-        if indicator.is_multi_output():
-            pytest.skip("CMF is multi-output, will be handled in M3b")
-
     def test_vwap_returns_unnamed_series(self, sample_ohlcv_data):
         """VWAP indicator returns Series with no name."""
         indicator = VWAPIndicator(period=20)
@@ -199,13 +175,6 @@ class TestVolumeTrendMigration:
         assert result.name is None, "Volume Ratio Series should have no name (unnamed)"
         assert len(result) == len(sample_ohlcv_data)
 
-    def test_ad_line_skipped_multi_output(self, sample_ohlcv_data):
-        """A/D Line is multi-output, skip for M3a."""
-        indicator = ADLineIndicator()
-
-        # Verify this is multi-output (should be handled in M3b)
-        if indicator.is_multi_output():
-            pytest.skip("A/D Line is multi-output, will be handled in M3b")
 
     def test_atr_returns_unnamed_series(self, sample_ohlcv_data):
         """ATR indicator returns Series with no name."""
