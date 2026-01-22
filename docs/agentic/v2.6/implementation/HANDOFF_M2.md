@@ -91,3 +91,107 @@ While verifying M2 tests, discovered and fixed 2 pre-existing issues in integrat
 - `test_compute_indicator.py`: ktrdr.cli missing `indicator_commands`
 
 ---
+
+## Bug Fix: Stub Worker Results Not Propagated
+
+### Discovery
+
+During E2E testing, researches were failing with:
+```
+Strategy file not found: unknown.yaml
+```
+
+### Root Cause
+
+The `run_child()` wrapper functions in `_start_design` and `_start_assessment` did not return the worker's result:
+
+```python
+# BEFORE (broken)
+async def run_child():
+    await self.design_worker.run(operation_id, model=model, brief=brief)
+    # No return! task.result() returns None
+```
+
+When the stub worker completed, `task.result()` returned `None` instead of the dict containing `strategy_path`. This caused `_design_results[operation_id]` to be empty, and the training phase couldn't find the strategy file.
+
+### Fix
+
+Added `return` statement to both wrapper functions:
+
+```python
+# AFTER (fixed)
+async def run_child():
+    return await self.design_worker.run(operation_id, model=model, brief=brief)
+```
+
+This ensures the stub worker's result (containing `strategy_path`, `strategy_name`, etc.) is properly captured and stored in `_design_results` for use by subsequent phases.
+
+### Files Modified
+
+- `ktrdr/agents/workers/research_worker.py` (lines 316, 781)
+
+---
+
+## Bug Fix: strategy_path Not Persisted for Backtest Phase
+
+### Discovery
+
+After fixing the return statement, researches still failed with:
+```
+expected str, bytes or os.PathLike object, not NoneType
+```
+
+### Root Cause
+
+In the stub flow, `strategy_path` was stored in `_design_results` but NOT in `parent_op.metadata.parameters`. When `_start_backtest` runs, it reads from `params.get("strategy_path")` which was None.
+
+### Fix
+
+Added metadata persistence in the stub flow handler (line 354):
+
+```python
+if parent_op:
+    # Store strategy_path in metadata for backtest phase
+    parent_op.metadata.parameters["strategy_path"] = result.get("strategy_path")
+```
+
+---
+
+## Bug Fix: StubAssessmentWorker Missing gate_rejection_reason Parameter
+
+### Discovery
+
+After fixing the path issue, researches failed with:
+```
+StubAssessmentWorker.run() got an unexpected keyword argument 'gate_rejection_reason'
+```
+
+### Fix
+
+Added `gate_rejection_reason` parameter to `StubAssessmentWorker.run()`:
+
+```python
+async def run(
+    self,
+    operation_id: str,
+    results: dict[str, Any],
+    model: str | None = None,
+    gate_rejection_reason: str | None = None,  # Added
+) -> dict[str, Any]:
+```
+
+---
+
+## E2E Validation Complete
+
+Final E2E test (3 concurrent researches):
+- **Research A**: COMPLETED ✅
+- **Research B** (INJECT_FAILURE): FAILED ✅
+- **Research C**: COMPLETED ✅
+
+This proves M2 error isolation is working correctly:
+1. One research failing doesn't affect others
+2. Stub workers properly propagate results
+3. All phases (design, training, backtest, assessment) work with stubs
+
+---

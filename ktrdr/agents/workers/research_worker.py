@@ -172,7 +172,10 @@ class AgentResearchWorker:
 
         # Track current child for cancellation propagation
         self._current_child_op_id: str | None = None
-        self._current_child_task: asyncio.Task | None = None
+        # Track child tasks per operation (for multi-research support)
+        self._child_tasks: dict[str, asyncio.Task] = {}
+        # Store design results per operation (for stub worker flow)
+        self._design_results: dict[str, dict] = {}
 
     @property
     def training_service(self) -> Any:
@@ -310,11 +313,11 @@ class AgentResearchWorker:
         async def run_child():
             # Pass parent operation_id - worker creates and manages its own child op
             # Worker stores child op ID in parent metadata (design_op_id) for tracking
-            await self.design_worker.run(operation_id, model=model, brief=brief)
+            return await self.design_worker.run(operation_id, model=model, brief=brief)
 
-        # Start as asyncio task
+        # Start as asyncio task (keyed by operation_id for multi-research support)
         task = asyncio.create_task(run_child())
-        self._current_child_task = task
+        self._child_tasks[operation_id] = task
         # Note: child op ID will be available in parent metadata after worker starts
 
     async def _handle_designing_phase(self, operation_id: str, child_op: Any) -> None:
@@ -325,7 +328,52 @@ class AgentResearchWorker:
             child_op: Design child operation.
         """
         if child_op is None:
-            # No child yet, start design
+            # Check if there's a task running for THIS operation (stub workers)
+            task = self._child_tasks.get(operation_id)
+            if task is not None:
+                if task.done():
+                    # Task completed - check for exceptions
+                    exc = task.exception()
+                    if exc is not None:
+                        del self._child_tasks[operation_id]
+                        raise exc
+                    # Task completed successfully - stub worker case
+                    # Get result and store for later use in training
+                    result = task.result()
+                    del self._child_tasks[operation_id]
+
+                    # Store design result for stub flow (persists across get_operation calls)
+                    if isinstance(result, dict):
+                        self._design_results[operation_id] = result
+
+                        # Record design phase metrics
+                        parent_op = await self.ops.get_operation(operation_id)
+                        if parent_op:
+                            # Store strategy_path in metadata for backtest phase
+                            parent_op.metadata.parameters["strategy_path"] = result.get(
+                                "strategy_path"
+                            )
+                            phase_start = parent_op.metadata.parameters.get(
+                                "phase_start_time"
+                            )
+                            if phase_start:
+                                record_phase_duration(
+                                    "designing", time.time() - phase_start
+                                )
+
+                        # Record token usage from design
+                        input_tokens = result.get("input_tokens", 0) or 0
+                        output_tokens = result.get("output_tokens", 0) or 0
+                        if input_tokens or output_tokens:
+                            record_tokens("design", input_tokens + output_tokens)
+
+                    await self._start_training(operation_id)
+                    return
+                else:
+                    # Task still running, wait
+                    return
+
+            # No child op and no task, start design
             await self._start_design(operation_id)
             return
 
@@ -404,7 +452,10 @@ class AgentResearchWorker:
             operation_id: Parent operation ID.
         """
         parent_op = await self.ops.get_operation(operation_id)
-        strategy_path = parent_op.metadata.parameters.get("strategy_path")
+
+        # Check stub design results first (for stub worker flow)
+        design_result = self._design_results.get(operation_id, {})
+        strategy_path = design_result.get("strategy_path") or parent_op.metadata.parameters.get("strategy_path")
 
         # Load strategy config to get training params
         config = self._load_strategy_config(strategy_path)
@@ -731,16 +782,16 @@ class AgentResearchWorker:
         async def run_child():
             # Pass parent operation_id - worker creates and manages its own child op
             # Worker stores child op ID in parent metadata (assessment_op_id) for tracking
-            await self.assessment_worker.run(
+            return await self.assessment_worker.run(
                 operation_id,
                 results,
                 model=model,
                 gate_rejection_reason=gate_rejection_reason,
             )
 
-        # Start as asyncio task
+        # Start as asyncio task (keyed by operation_id for multi-research support)
         task = asyncio.create_task(run_child())
-        self._current_child_task = task
+        self._child_tasks[operation_id] = task
         # Note: child op ID will be available in parent metadata after worker starts
 
     async def _handle_assessing_phase(
@@ -756,7 +807,55 @@ class AgentResearchWorker:
             Final result dict if assessment complete, None otherwise.
         """
         if child_op is None:
-            # No child yet, start assessment
+            # Check if there's a task running for THIS operation (stub workers)
+            task = self._child_tasks.get(operation_id)
+            if task is not None:
+                if task.done():
+                    # Task completed - check for exceptions
+                    exc = task.exception()
+                    if exc is not None:
+                        del self._child_tasks[operation_id]
+                        raise exc
+                    # Task completed successfully but no child op - stub worker case
+                    # Complete the research operation
+                    del self._child_tasks[operation_id]
+                    parent_op = await self.ops.get_operation(operation_id)
+                    strategy_name = (
+                        parent_op.metadata.parameters.get("strategy_name", "unknown")
+                        if parent_op
+                        else "unknown"
+                    )
+
+                    # Update progress to 100% on completion
+                    await self.ops.update_progress(
+                        operation_id,
+                        OperationProgress(percentage=100.0, current_step="Complete"),
+                    )
+
+                    # Mark operation as complete
+                    completion_result = {
+                        "success": True,
+                        "strategy_name": strategy_name,
+                        "verdict": "stub_completed",
+                    }
+                    await self.ops.complete_operation(operation_id, completion_result)
+
+                    # Delete checkpoint on successful completion
+                    await self._delete_checkpoint(operation_id)
+
+                    # Record cycle metrics
+                    if parent_op:
+                        cycle_duration = time.time() - parent_op.created_at.timestamp()
+                        record_cycle_duration(cycle_duration)
+                    record_cycle_outcome("completed")
+
+                    logger.info(f"Research completed (stub): {operation_id}")
+                    return completion_result
+                else:
+                    # Task still running, wait
+                    return None
+
+            # No child op and no task, start assessment
             await self._start_assessment(operation_id)
             return None
 
@@ -988,9 +1087,9 @@ class AgentResearchWorker:
         return None
 
     async def _cancel_current_child(self) -> None:
-        """Cancel the currently running child operation.
+        """Cancel all running child operations/tasks.
 
-        Called when parent is cancelled to propagate cancellation.
+        Called when coordinator is cancelled to propagate cancellation.
         """
         if self._current_child_op_id:
             try:
@@ -1000,12 +1099,15 @@ class AgentResearchWorker:
             except Exception as e:
                 logger.warning(f"Failed to cancel child operation: {e}")
 
-        if self._current_child_task and not self._current_child_task.done():
-            self._current_child_task.cancel()
-            try:
-                await self._current_child_task
-            except asyncio.CancelledError:
-                pass
+        # Cancel all active child tasks (multi-research support)
+        for op_id, task in list(self._child_tasks.items()):
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+            del self._child_tasks[op_id]
 
     async def _cancellable_sleep(self, seconds: float) -> None:
         """Sleep in small intervals for cancellation responsiveness.

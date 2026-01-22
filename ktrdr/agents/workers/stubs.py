@@ -51,23 +51,40 @@ class StubDesignWorker:
     """Stub that simulates strategy design.
 
     Returns mock strategy configuration as if Claude had designed it.
+    Supports error injection via brief parameter containing "INJECT_FAILURE".
     """
 
-    async def run(self, operation_id: str, model: str | None = None) -> dict[str, Any]:
+    async def run(
+        self,
+        operation_id: str,
+        model: str | None = None,
+        brief: str | None = None,
+    ) -> dict[str, Any]:
         """Simulate design phase.
 
         Args:
             operation_id: The operation ID for tracking.
             model: Model to use (ignored in stub, for interface compatibility).
+            brief: Research brief. If contains "INJECT_FAILURE", raises WorkerError.
 
         Returns:
             Mock design result with strategy name, path, and token usage.
+
+        Raises:
+            WorkerError: If brief contains "INJECT_FAILURE" (for E2E testing).
         """
         await _cancellable_sleep(_get_phase_delay())
+
+        # Error injection support for E2E testing
+        if brief and "INJECT_FAILURE" in brief:
+            from ktrdr.agents.workers.research_worker import WorkerError
+
+            raise WorkerError(f"Injected failure for testing: {brief}")
+
         return {
             "success": True,
-            "strategy_name": "stub_momentum_v1",
-            "strategy_path": "/app/strategies/stub_momentum_v1.yaml",
+            "strategy_name": "v3_minimal",
+            "strategy_path": "/app/strategies/v3_minimal.yaml",
             "input_tokens": 2500,
             "output_tokens": 1800,
         }
@@ -80,7 +97,11 @@ class StubAssessmentWorker:
     """
 
     async def run(
-        self, operation_id: str, results: dict[str, Any], model: str | None = None
+        self,
+        operation_id: str,
+        results: dict[str, Any],
+        model: str | None = None,
+        gate_rejection_reason: str | None = None,
     ) -> dict[str, Any]:
         """Simulate assessment phase.
 
@@ -88,6 +109,7 @@ class StubAssessmentWorker:
             operation_id: The operation ID for tracking.
             results: Combined training and backtest results.
             model: Model to use (ignored in stub, for interface compatibility).
+            gate_rejection_reason: Gate rejection reason (ignored in stub).
 
         Returns:
             Mock assessment with verdict, strengths, weaknesses, suggestions.
