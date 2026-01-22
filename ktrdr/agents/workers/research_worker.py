@@ -840,6 +840,10 @@ class AgentResearchWorker:
                     }
                     await self.ops.complete_operation(operation_id, completion_result)
 
+                    # Clean up per-operation state to prevent memory leaks
+                    self._child_tasks.pop(operation_id, None)
+                    self._design_results.pop(operation_id, None)
+
                     # Delete checkpoint on successful completion
                     await self._delete_checkpoint(operation_id)
 
@@ -923,6 +927,10 @@ class AgentResearchWorker:
                 "verdict": result.get("verdict", "unknown"),
             }
             await self.ops.complete_operation(operation_id, completion_result)
+
+            # Clean up per-operation state to prevent memory leaks
+            self._child_tasks.pop(operation_id, None)
+            self._design_results.pop(operation_id, None)
 
             # Delete checkpoint on successful completion (no longer needed for resume)
             await self._delete_checkpoint(operation_id)
@@ -1034,6 +1042,10 @@ class AgentResearchWorker:
         operation_id = op.operation_id
         logger.info(f"Research cancelled: {operation_id}")
 
+        # Clean up per-operation state to prevent memory leaks
+        self._child_tasks.pop(operation_id, None)
+        self._design_results.pop(operation_id, None)
+
         # Save checkpoint for resume capability
         await self._save_checkpoint(operation_id, "cancellation")
 
@@ -1055,6 +1067,10 @@ class AgentResearchWorker:
         """
         operation_id = op.operation_id
         logger.error(f"Research failed: {operation_id}, error={error}")
+
+        # Clean up per-operation state to prevent memory leaks
+        self._child_tasks.pop(operation_id, None)
+        self._design_results.pop(operation_id, None)
 
         # Save checkpoint for resume capability
         await self._save_checkpoint(operation_id, "failure")
@@ -1104,9 +1120,15 @@ class AgentResearchWorker:
             if not task.done():
                 task.cancel()
                 try:
-                    await task
+                    # Wait with timeout to prevent hanging on unresponsive tasks
+                    await asyncio.wait_for(task, timeout=5.0)
                 except asyncio.CancelledError:
-                    pass
+                    # Expected when task cancellation succeeds
+                    logger.debug(f"Child task {op_id} cancelled successfully")
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        f"Child task {op_id} did not respond to cancellation within timeout"
+                    )
             del self._child_tasks[op_id]
 
     async def _cancellable_sleep(self, seconds: float) -> None:
