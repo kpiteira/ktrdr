@@ -129,26 +129,63 @@ class TestDonchianChannelsIndicator:
         for col in expected_cols:
             assert col in result.columns
 
-    @pytest.mark.skip(
-        reason="M3b: compute() no longer returns position column; helper method needs update"
-    )
     def test_donchian_channels_position_calculation(self):
-        """Test position within channel calculation (DEPRECATED - needs helper method update)."""
-        pass
+        """Test position within channel calculation via get_signals()."""
+        data = create_sample_ohlcv_data(days=30)
+        indicator = DonchianChannelsIndicator(period=10)
 
-    @pytest.mark.skip(
-        reason="M3b: get_signals() helper method needs update to use semantic column names"
-    )
+        signals = indicator.get_signals(data)
+
+        # Position should be between 0 and 1 (where valid)
+        assert "position" in signals.columns
+        valid_positions = signals["position"].dropna()
+        assert (valid_positions >= 0).all()
+        assert (valid_positions <= 1).all()
+
     def test_donchian_channels_signals(self):
-        """Test Donchian Channels signal generation (DEPRECATED - needs helper method update)."""
-        pass
+        """Test Donchian Channels signal generation."""
+        data = create_sample_ohlcv_data(days=30)
+        indicator = DonchianChannelsIndicator(period=10)
 
-    @pytest.mark.skip(
-        reason="M3b: get_analysis() helper method needs update to use semantic column names"
-    )
+        signals = indicator.get_signals(data)
+
+        # Check all expected signal columns exist
+        expected_cols = [
+            "upper_breakout", "lower_breakout",
+            "overbought", "oversold",
+            "strong_uptrend", "strong_downtrend",
+            "position"
+        ]
+        for col in expected_cols:
+            assert col in signals.columns
+
+        # Breakout signals should be boolean
+        assert signals["upper_breakout"].dtype == bool
+        assert signals["lower_breakout"].dtype == bool
+
     def test_donchian_channels_analysis(self):
-        """Test comprehensive analysis functionality (DEPRECATED - needs helper method update)."""
-        pass
+        """Test comprehensive analysis functionality."""
+        data = create_sample_ohlcv_data(days=50)
+        indicator = DonchianChannelsIndicator(period=10)
+
+        analysis = indicator.get_analysis(data)
+
+        # Check structure
+        assert "current_values" in analysis
+        assert "market_state" in analysis
+        assert "volatility_analysis" in analysis
+        assert "breakout_analysis" in analysis
+        assert "support_resistance" in analysis
+        assert "signals" in analysis
+
+        # Check current_values has expected keys
+        cv = analysis["current_values"]
+        assert "upper_channel" in cv
+        assert "lower_channel" in cv
+        assert "position_in_channel" in cv
+
+        # Upper should be >= lower
+        assert cv["upper_channel"] >= cv["lower_channel"]
 
     def test_donchian_channels_data_validation(self):
         """Test data validation."""
@@ -169,20 +206,49 @@ class TestDonchianChannelsIndicator:
         with pytest.raises(DataError):
             indicator.compute(invalid_data)
 
-    @pytest.mark.skip(reason="M3b: Test needs update for semantic column names")
     def test_donchian_channels_edge_cases(self):
-        """Test edge cases and boundary conditions (DEPRECATED - needs update)."""
-        pass
+        """Test edge cases and boundary conditions."""
+        indicator = DonchianChannelsIndicator(period=5)
 
-    @pytest.mark.skip(reason="M3b: Test needs update for semantic column names")
+        # Minimum data (exactly period length)
+        data = create_sample_ohlcv_data(days=5)
+        result = indicator.compute(data)
+        assert len(result) == 5
+        # Only last row should have valid values
+        assert not pd.isna(result["upper"].iloc[-1])
+
     def test_donchian_channels_different_periods(self):
-        """Test Donchian Channels with different period settings (DEPRECATED - needs update)."""
-        pass
+        """Test Donchian Channels with different period settings."""
+        data = create_sample_ohlcv_data(days=50)
 
-    @pytest.mark.skip(reason="M3b: Test needs update for semantic column names")
+        for period in [5, 10, 20]:
+            indicator = DonchianChannelsIndicator(period=period)
+            result = indicator.compute(data)
+
+            assert "upper" in result.columns
+            assert "lower" in result.columns
+            assert "middle" in result.columns
+
+            # Longer periods should have more NaN values at start
+            nan_count = result["upper"].isna().sum()
+            assert nan_count == period - 1
+
     def test_donchian_channels_mathematical_properties(self):
-        """Test mathematical properties of Donchian Channels (DEPRECATED - needs update)."""
-        pass
+        """Test mathematical properties of Donchian Channels."""
+        data = create_sample_ohlcv_data(days=30)
+        indicator = DonchianChannelsIndicator(period=10)
+        result = indicator.compute(data)
+
+        # Upper >= Middle >= Lower (where valid)
+        valid_mask = ~result["upper"].isna()
+        assert (result.loc[valid_mask, "upper"] >= result.loc[valid_mask, "middle"]).all()
+        assert (result.loc[valid_mask, "middle"] >= result.loc[valid_mask, "lower"]).all()
+
+        # Middle should be exactly (upper + lower) / 2
+        expected_middle = (result["upper"] + result["lower"]) / 2
+        pd.testing.assert_series_equal(
+            result["middle"], expected_middle, check_names=False
+        )
 
     def test_donchian_channels_alias(self):
         """Test that the alias works correctly."""

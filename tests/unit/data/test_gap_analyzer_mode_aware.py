@@ -28,8 +28,8 @@ from ktrdr.data.acquisition.gap_classifier import (
 from ktrdr.data.loading_modes import DataLoadingMode
 
 
-class TestGapInfo:
-    """Simplified GapInfo for testing mode-aware functionality."""
+class GapInfoStub:
+    """Simplified GapInfo stub for testing mode-aware functionality."""
 
     def __init__(
         self, start_time: datetime, end_time: datetime, gap_type: str, priority: int = 1
@@ -170,8 +170,8 @@ class TestModeAwareGapAnalysis:
         # Should fail initially - method doesn't exist yet
 
         gaps = [
-            TestGapInfo(datetime(2023, 1, 1), datetime(2023, 1, 2), "missing_data", 1),
-            TestGapInfo(datetime(2023, 1, 5), datetime(2023, 1, 6), "missing_data", 1),
+            GapInfoStub(datetime(2023, 1, 1), datetime(2023, 1, 2), "missing_data", 1),
+            GapInfoStub(datetime(2023, 1, 5), datetime(2023, 1, 6), "missing_data", 1),
         ]
 
         prioritized = gap_analyzer.prioritize_gaps_by_mode(gaps, DataLoadingMode.LOCAL)
@@ -184,13 +184,13 @@ class TestModeAwareGapAnalysis:
         # Should fail initially - method doesn't exist yet
 
         gaps = [
-            TestGapInfo(
+            GapInfoStub(
                 datetime(2023, 1, 1), datetime(2023, 1, 2), "missing_data", 1
             ),  # Old
-            TestGapInfo(
+            GapInfoStub(
                 datetime(2023, 1, 8), datetime(2023, 1, 9), "missing_data", 1
             ),  # Recent
-            TestGapInfo(
+            GapInfoStub(
                 datetime(2023, 1, 5), datetime(2023, 1, 6), "missing_data", 1
             ),  # Middle
         ]
@@ -210,13 +210,13 @@ class TestModeAwareGapAnalysis:
         # Should fail initially - method doesn't exist yet
 
         gaps = [
-            TestGapInfo(
+            GapInfoStub(
                 datetime(2023, 1, 8), datetime(2023, 1, 9), "missing_data", 1
             ),  # Recent
-            TestGapInfo(
+            GapInfoStub(
                 datetime(2023, 1, 1), datetime(2023, 1, 2), "missing_data", 1
             ),  # Old
-            TestGapInfo(
+            GapInfoStub(
                 datetime(2023, 1, 5), datetime(2023, 1, 6), "missing_data", 1
             ),  # Middle
         ]
@@ -238,13 +238,13 @@ class TestModeAwareGapAnalysis:
         # Should fail initially - method doesn't exist yet
 
         gaps = [
-            TestGapInfo(
+            GapInfoStub(
                 datetime(2023, 1, 1), datetime(2023, 1, 2), "missing_data", 2
             ),  # Old, high priority
-            TestGapInfo(
+            GapInfoStub(
                 datetime(2023, 1, 8), datetime(2023, 1, 9), "missing_data", 1
             ),  # Recent, low priority
-            TestGapInfo(
+            GapInfoStub(
                 datetime(2023, 1, 5), datetime(2023, 1, 6), "market_closure", 1
             ),  # Middle, market closure
         ]

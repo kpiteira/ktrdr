@@ -174,7 +174,6 @@ class TestCLIGenericProgressMigration:
         result = example_function(state)
         assert "Processing test at 20.0%" == result
 
-    @pytest.mark.skip(reason="Will pass after migration is complete")
     def test_progress_display_enhanced_imports_generic_state(self):
         """Test that progress_display_enhanced.py imports GenericProgressState instead of ProgressState."""
         # This test will pass after the migration is complete
@@ -193,7 +192,6 @@ class TestCLIGenericProgressMigration:
             not in source
         )
 
-    @pytest.mark.skip(reason="Will pass after migration is complete")
     def test_data_commands_imports_generic_state(self):
         """Test that data_commands.py imports GenericProgressState instead of ProgressState."""
         # This test will pass after the migration is complete

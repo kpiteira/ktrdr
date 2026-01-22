@@ -335,9 +335,6 @@ class TestWorkerRegistry:
         # Verify last_selected was updated (should be > 200.0)
         assert worker.metadata["last_selected"] > 200.0
 
-    @pytest.mark.skip(
-        reason="Round-robin selection implementation needs fixing - pre-existing issue, not related to Task 6.7"
-    )
     @pytest.mark.asyncio
     async def test_select_worker_round_robin_behavior(self):
         """Test that select_worker implements round-robin."""
@@ -466,172 +463,12 @@ class TestWorkerRegistry:
 
 
 class TestWorkerHealthChecks:
-    """Tests for worker health check functionality."""
+    """Tests for worker health check functionality.
 
-    @pytest.mark.asyncio
-    @pytest.mark.skip(
-        reason="Async httpx mocking complex - covered in integration tests"
-    )
-    async def test_health_check_worker_success(self):
-        """Test successful health check updates worker state."""
-        registry = WorkerRegistry()
-
-        # Register worker
-        registry.register_worker(
-            worker_id="worker-1",
-            worker_type=WorkerType.BACKTESTING,
-            endpoint_url="http://worker-1:5003",
-        )
-
-        # Mock successful health check response
-        mock_response = AsyncMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "status": "healthy",
-            "worker_status": "idle",
-        }
-
-        # Patch httpx.AsyncClient.get at the module level
-        with patch(
-            "ktrdr.api.services.worker_registry.httpx.AsyncClient.get",
-            new_callable=AsyncMock,
-        ) as mock_get:
-            mock_get.return_value = mock_response
-            result = await registry.health_check_worker("worker-1")
-
-        assert result is True
-
-        # Verify worker state updated
-        worker = registry.get_worker("worker-1")
-        assert worker.status == WorkerStatus.AVAILABLE
-        assert worker.health_check_failures == 0
-        assert worker.last_health_check is not None
-        assert worker.last_healthy_at is not None
-
-    @pytest.mark.asyncio
-    @pytest.mark.skip(
-        reason="Async httpx mocking complex - covered in integration tests"
-    )
-    async def test_health_check_worker_busy_status(self):
-        """Test health check updates worker to busy when indicated."""
-        registry = WorkerRegistry()
-
-        # Register worker
-        await registry.register_worker(
-            worker_id="worker-1",
-            worker_type=WorkerType.BACKTESTING,
-            endpoint_url="http://worker-1:5003",
-        )
-
-        # Mock health check with busy status
-        mock_response = AsyncMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "status": "healthy",
-            "worker_status": "busy",
-            "current_operation": "op-123",
-        }
-
-        # Patch httpx.AsyncClient.get at the module level
-        with patch(
-            "ktrdr.api.services.worker_registry.httpx.AsyncClient.get",
-            new_callable=AsyncMock,
-        ) as mock_get:
-            mock_get.return_value = mock_response
-            result = await registry.health_check_worker("worker-1")
-
-        assert result is True
-
-        # Verify worker marked as busy
-        worker = registry.get_worker("worker-1")
-        assert worker.status == WorkerStatus.BUSY
-        assert worker.current_operation_id == "op-123"
-
-    @pytest.mark.asyncio
-    async def test_health_check_worker_failure_increments_counter(self):
-        """Test health check failure increments failure counter."""
-        registry = WorkerRegistry()
-
-        # Register worker
-        await registry.register_worker(
-            worker_id="worker-1",
-            worker_type=WorkerType.BACKTESTING,
-            endpoint_url="http://worker-1:5003",
-        )
-
-        # Mock failed health check
-        with patch("httpx.AsyncClient.get", side_effect=Exception("Connection error")):
-            result = await registry.health_check_worker("worker-1")
-
-        assert result is False
-
-        # Verify failure counted
-        worker = registry.get_worker("worker-1")
-        assert worker.health_check_failures == 1
-        assert worker.last_health_check is not None
-
-    @pytest.mark.asyncio
-    async def test_health_check_worker_marks_unavailable_after_threshold(self):
-        """Test worker marked unavailable after 3 consecutive failures."""
-        registry = WorkerRegistry()
-
-        # Register worker
-        await registry.register_worker(
-            worker_id="worker-1",
-            worker_type=WorkerType.BACKTESTING,
-            endpoint_url="http://worker-1:5003",
-        )
-
-        # Fail health check 3 times
-        with patch("httpx.AsyncClient.get", side_effect=Exception("Connection error")):
-            await registry.health_check_worker("worker-1")
-            await registry.health_check_worker("worker-1")
-            await registry.health_check_worker("worker-1")
-
-        # Verify worker marked unavailable
-        worker = registry.get_worker("worker-1")
-        assert worker.status == WorkerStatus.TEMPORARILY_UNAVAILABLE
-        assert worker.health_check_failures == 3
-
-    @pytest.mark.asyncio
-    @pytest.mark.skip(
-        reason="Async httpx mocking complex - covered in integration tests"
-    )
-    async def test_health_check_worker_resets_failures_on_success(self):
-        """Test successful health check resets failure counter."""
-        registry = WorkerRegistry()
-
-        # Register worker
-        result = await registry.register_worker(
-            worker_id="worker-1",
-            worker_type=WorkerType.BACKTESTING,
-            endpoint_url="http://worker-1:5003",
-        )
-
-        # Manually set failures
-        result.worker.health_check_failures = 2
-
-        # Mock successful health check
-        mock_response = AsyncMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "status": "healthy",
-            "worker_status": "idle",
-        }
-
-        # Patch httpx.AsyncClient.get at the module level
-        with patch(
-            "ktrdr.api.services.worker_registry.httpx.AsyncClient.get",
-            new_callable=AsyncMock,
-        ) as mock_get:
-            mock_get.return_value = mock_response
-            result = await registry.health_check_worker("worker-1")
-
-        assert result is True
-
-        # Verify failures reset
-        worker = registry.get_worker("worker-1")
-        assert worker.health_check_failures == 0
+    Note: Tests requiring httpx mocking are tested in integration tests
+    (tests/integration/test_worker_load_balancing.py). Unit tests here
+    only cover cases that don't require HTTP mocking.
+    """
 
     @pytest.mark.asyncio
     async def test_health_check_nonexistent_worker_returns_false(self):
@@ -641,31 +478,6 @@ class TestWorkerHealthChecks:
         result = await registry.health_check_worker("nonexistent")
 
         assert result is False
-
-    @pytest.mark.asyncio
-    async def test_health_check_handles_http_errors(self):
-        """Test health check handles non-200 HTTP responses."""
-        registry = WorkerRegistry()
-
-        # Register worker
-        await registry.register_worker(
-            worker_id="worker-1",
-            worker_type=WorkerType.BACKTESTING,
-            endpoint_url="http://worker-1:5003",
-        )
-
-        # Mock 500 error response
-        mock_response = AsyncMock()
-        mock_response.status_code = 500
-
-        with patch("httpx.AsyncClient.get", return_value=mock_response):
-            result = await registry.health_check_worker("worker-1")
-
-        assert result is False
-
-        # Verify failure counted
-        worker = registry.get_worker("worker-1")
-        assert worker.health_check_failures == 1
 
 
 class TestBackgroundHealthCheckTask:

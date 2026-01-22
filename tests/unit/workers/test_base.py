@@ -34,7 +34,6 @@ class MockWorker(WorkerAPIBase):
             self._operations_service = operations_service
 
 
-@pytest.mark.asyncio
 class TestWorkerAPIBase:
     """Test WorkerAPIBase extracted from training-host-service."""
 

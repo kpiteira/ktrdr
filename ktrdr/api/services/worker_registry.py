@@ -315,9 +315,8 @@ class WorkerRegistry:
         capable_workers = [
             w for w in self._workers.values() if w.worker_type == worker_type
         ]
-        available_workers = [
-            w for w in capable_workers if w.status == WorkerStatus.AVAILABLE
-        ]
+        # Use get_available_workers to get properly sorted list (LRU first)
+        available_workers = self.get_available_workers(worker_type)
 
         # Add telemetry attributes to current span
         if span and span.is_recording():

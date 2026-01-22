@@ -159,55 +159,43 @@ class DonchianChannelsIndicator(BaseIndicator):
         Generate trading signals based on Donchian Channels.
 
         Args:
-            data: DataFrame with calculated Donchian Channels
+            data: DataFrame with OHLCV data OR computed Donchian Channels.
+                  If semantic columns (upper, lower) not present, will compute them.
 
         Returns:
-            DataFrame with signal columns added
+            DataFrame with signal columns (semantic names)
         """
-        result = pd.DataFrame(
-            index=data.index
-        )  # CRITICAL FIX: Only return computed columns
+        result = pd.DataFrame(index=data.index)
 
-        period = self.params.get("period", 20)
-        upper_col = f"DC_Upper_{period}"
-        lower_col = f"DC_Lower_{period}"
-        position_col = f"DC_Position_{period}"
-
-        # If columns not in data, compute them
-        if upper_col not in data.columns or lower_col not in data.columns:
+        # Check if we need to compute channels first
+        if "upper" not in data.columns or "lower" not in data.columns:
             computed = self.compute(data)
-            # Merge computed columns into data for signal calculations
-            for col in computed.columns:
-                if col not in data.columns:
-                    data = data.copy()
-                    data[col] = computed[col]
+            # Need close price for signals, so merge with original
+            work_data = data.copy()
+            work_data["upper"] = computed["upper"]
+            work_data["lower"] = computed["lower"]
+            work_data["middle"] = computed["middle"]
+        else:
+            work_data = data
 
-        # Breakout signals - use data (which has 'close') not result
-        # Upper breakout: Close above upper channel
-        upper_breakout = data["close"] > data[upper_col]
-        result[f"DC_Upper_Breakout_{period}"] = upper_breakout
+        # Calculate position within channel (0 = at lower, 1 = at upper)
+        channel_range = work_data["upper"] - work_data["lower"]
+        position = (work_data["close"] - work_data["lower"]) / channel_range.replace(0, float("nan"))
 
-        # Lower breakout: Close below lower channel
-        lower_breakout = data["close"] < data[lower_col]
-        result[f"DC_Lower_Breakout_{period}"] = lower_breakout
+        # Breakout signals
+        result["upper_breakout"] = work_data["close"] > work_data["upper"]
+        result["lower_breakout"] = work_data["close"] < work_data["lower"]
 
-        # Channel position signals
-        # Overbought: Position > 0.8
-        overbought = data[position_col] > 0.8
-        result[f"DC_Overbought_{period}"] = overbought
-
-        # Oversold: Position < 0.2
-        oversold = data[position_col] < 0.2
-        result[f"DC_Oversold_{period}"] = oversold
+        # Position-based signals
+        result["overbought"] = position > 0.8
+        result["oversold"] = position < 0.2
 
         # Trend signals based on channel position
-        # Strong uptrend: Position consistently > 0.7
-        strong_uptrend = data[position_col].rolling(window=3).mean() > 0.7
-        result[f"DC_Strong_Uptrend_{period}"] = strong_uptrend
+        result["strong_uptrend"] = position.rolling(window=3).mean() > 0.7
+        result["strong_downtrend"] = position.rolling(window=3).mean() < 0.3
 
-        # Strong downtrend: Position consistently < 0.3
-        strong_downtrend = data[position_col].rolling(window=3).mean() < 0.3
-        result[f"DC_Strong_Downtrend_{period}"] = strong_downtrend
+        # Include position for analysis
+        result["position"] = position
 
         return result
 
@@ -216,43 +204,44 @@ class DonchianChannelsIndicator(BaseIndicator):
         Get comprehensive analysis of Donchian Channels.
 
         Args:
-            data: DataFrame with calculated Donchian Channels
+            data: DataFrame with OHLCV data OR computed Donchian Channels
 
         Returns:
             Dictionary with analysis results
         """
-        period = self.params.get("period", 20)
-        upper_col = f"DC_Upper_{period}"
-        lower_col = f"DC_Lower_{period}"
-        width_col = f"DC_Width_{period}"
-        position_col = f"DC_Position_{period}"
-
-        # If columns not in data, compute them and merge
-        if upper_col not in data.columns:
+        # Check if we need to compute channels first
+        if "upper" not in data.columns or "lower" not in data.columns:
             computed = self.compute(data)
-            # Merge computed columns into data
-            for col in computed.columns:
-                if col not in data.columns:
-                    data = data.copy()
-                    data[col] = computed[col]
+            work_data = data.copy()
+            work_data["upper"] = computed["upper"]
+            work_data["lower"] = computed["lower"]
+            work_data["middle"] = computed["middle"]
+        else:
+            work_data = data
+
+        # Calculate derived values
+        work_data = work_data.copy()
+        work_data["width"] = work_data["upper"] - work_data["lower"]
+        channel_range = work_data["width"].replace(0, float("nan"))
+        work_data["position"] = (work_data["close"] - work_data["lower"]) / channel_range
 
         # Get recent values (last 20 periods)
-        recent_data = data.tail(20)
-        latest = data.iloc[-1]
+        recent_data = work_data.tail(20)
+        latest = work_data.iloc[-1]
 
         # Current channel values
-        current_upper = latest[upper_col]
-        current_lower = latest[lower_col]
-        current_width = latest[width_col]
-        current_position = latest[position_col]
+        current_upper = latest["upper"]
+        current_lower = latest["lower"]
+        current_width = latest["width"]
+        current_position = latest["position"]
         current_price = latest["close"]
 
         # Channel width analysis
-        avg_width = recent_data[width_col].mean()
+        avg_width = recent_data["width"].mean()
+        width_range = recent_data["width"].max() - recent_data["width"].min()
         width_percentile = (
-            (current_width - recent_data[width_col].min())
-            / (recent_data[width_col].max() - recent_data[width_col].min())
-            * 100
+            ((current_width - recent_data["width"].min()) / width_range * 100)
+            if width_range > 0 else 50.0
         )
 
         # Breakout analysis
@@ -260,18 +249,12 @@ class DonchianChannelsIndicator(BaseIndicator):
         days_since_lower_breakout = 0
 
         for i in range(len(recent_data)):
-            if (
-                recent_data.iloc[-(i + 1)]["close"]
-                > recent_data.iloc[-(i + 1)][upper_col]
-            ):
+            if recent_data.iloc[-(i + 1)]["close"] > recent_data.iloc[-(i + 1)]["upper"]:
                 days_since_upper_breakout = i
                 break
 
         for i in range(len(recent_data)):
-            if (
-                recent_data.iloc[-(i + 1)]["close"]
-                < recent_data.iloc[-(i + 1)][lower_col]
-            ):
+            if recent_data.iloc[-(i + 1)]["close"] < recent_data.iloc[-(i + 1)]["lower"]:
                 days_since_lower_breakout = i
                 break
 

@@ -239,6 +239,8 @@ class ModelTrainer:
 
         # Detect if using GPU (CUDA or MPS)
         is_gpu = self.device.type in ("cuda", "mps")
+        # pin_memory only works with CUDA, not MPS (Apple Silicon)
+        use_pin_memory = self.device.type == "cuda"
 
         # Keep training data on CPU for efficient DataLoader operation
         # It will be transferred to GPU batch-by-batch during training
@@ -264,7 +266,7 @@ class ModelTrainer:
             train_dataset,
             batch_size=batch_size,
             shuffle=True,
-            pin_memory=is_gpu,  # Enable pinned memory for async GPU transfer
+            pin_memory=use_pin_memory,  # Enable pinned memory for CUDA only (not MPS)
             num_workers=0,  # Keep 0 for now (tensors already in memory, workers add overhead)
         )
 
