@@ -10,14 +10,14 @@
 
 ### Implementation Notes
 
-Added `_is_training_worker_available()` helper method (line 997-1010):
+Added `_is_training_worker_available()` helper method (lines 1015-1029):
 - Imports `get_worker_registry` and `WorkerType` inside method
 - Calls `registry.get_available_workers(WorkerType.TRAINING)`
 - Returns `True` if list is non-empty
 
 Worker availability check added in two locations:
 1. **Stub worker flow** (line 370-375): After design task completes successfully
-2. **Real child op flow** (line 443-449): After design child operation completes
+2. **Real child op flow** (lines 450-455): After design child operation completes
 
 Retry scenario handled (line 383-393):
 - When `child_op is None` and no task running, check `_design_results` first
@@ -51,14 +51,14 @@ Task 3.2 adds the same pattern for training→backtest transition:
 
 ### Implementation Notes
 
-Added `_is_backtest_worker_available()` helper method (lines 1024-1035):
+Added `_is_backtest_worker_available()` helper method (lines 1031-1045):
 - Same pattern as `_is_training_worker_available()`
 - Calls `registry.get_available_workers(WorkerType.BACKTESTING)`
 - Returns `True` if list is non-empty
 
-Worker availability check added after gate passes (line 596-601):
+Worker availability check added after gate passes (lines 597-602):
 - Check is placed after `record_gate_result()` and before `_start_backtest()`
-- Gate rejection path bypasses worker check (goes directly to assessment at line 591)
+- Gate rejection path bypasses worker check (goes directly to assessment at lines 591-595)
 - If no worker available, returns early (stays in training phase)
 
 ### Files Modified
