@@ -42,9 +42,67 @@ Unit tests added for cancel(operation_id):
 
 Endpoint tests updated for new path format.
 
-### Next Task Notes (Task 4.3)
+---
 
-Task 4.3 updates the CLI cancel command:
-- Change from `ktrdr agent cancel` (no args) to `ktrdr agent cancel <operation_id>`
-- Update the httpx call to use the new endpoint path: `DELETE /agent/cancel/{operation_id}`
-- Handle the new error responses (not_found, not_research, not_cancellable)
+## Task 4.3: N/A (CLI Restructure)
+
+Task 4.3 was written assuming the old CLI structure (`ktrdr agent cancel`). The CLI has since been restructured:
+
+- `ktrdr agent cancel` → `ktrdr cancel`
+- `ktrdr cancel <operation_id>` already exists and works
+- Uses general `/operations/{id}` endpoint which cancels any operation type
+
+The general cancel is actually **better** for CLI users - they can cancel research ops or child ops (training/backtest) without caring about operation types. The agent-specific `/agent/cancel/{id}` endpoint remains available for API consumers who want strict validation.
+
+**Decision**: Task 4.3 is complete - no changes needed.
+
+---
+
+## Task 4.4 Complete: Track Child Tasks Per Operation
+
+### Summary
+
+Updated `_handle_research_cancelled` to properly cancel child tasks when a research is cancelled. The `_child_tasks` dict already existed but the cancellation method wasn't using it properly.
+
+### The Bug
+
+The existing code in `_handle_research_cancelled` just popped tasks from the tracking dict without actually cancelling them:
+
+```python
+# OLD - just removes, doesn't cancel!
+self._child_tasks.pop(operation_id, None)
+```
+
+### The Fix
+
+Now properly cancels the task before removing (`research_worker.py:1107-1118`):
+
+```python
+# Cancel child task if running
+if operation_id in self._child_tasks:
+    task = self._child_tasks[operation_id]
+    if not task.done():
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+    del self._child_tasks[operation_id]
+```
+
+### Test Coverage
+
+Added `TestChildTaskCancellation` class in `test_research_worker_multi.py`:
+- Task tracked when design starts
+- Task tracked when assessment starts
+- **Task cancelled when research cancelled** (the key test)
+- Task not cancelled if already done
+- Task removed on completion
+- No memory leak - tasks cleaned on failure
+
+### Implementation Notes
+
+- `_child_tasks: dict[str, asyncio.Task]` was already in place (line 176)
+- Design and assessment already track tasks properly
+- Cleanup on completion/failure already works
+- Only `_handle_research_cancelled` was missing the actual cancellation step

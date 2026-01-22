@@ -1100,7 +1100,8 @@ class AgentResearchWorker:
         """Handle cancellation for a single research.
 
         Called when a per-research CancelledError is caught (e.g., child operation
-        was cancelled). Saves checkpoint and marks the research as cancelled.
+        was cancelled). Cancels any running child task, saves checkpoint, and
+        marks the research as cancelled.
 
         Args:
             op: The research operation that was cancelled.
@@ -1108,8 +1109,18 @@ class AgentResearchWorker:
         operation_id = op.operation_id
         logger.info(f"Research cancelled: {operation_id}")
 
-        # Clean up per-operation state to prevent memory leaks
-        self._child_tasks.pop(operation_id, None)
+        # Cancel child task if running (Task 4.4: propagate cancellation)
+        if operation_id in self._child_tasks:
+            task = self._child_tasks[operation_id]
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+            del self._child_tasks[operation_id]
+
+        # Clean up remaining per-operation state to prevent memory leaks
         self._design_results.pop(operation_id, None)
 
         # Save checkpoint for resume capability

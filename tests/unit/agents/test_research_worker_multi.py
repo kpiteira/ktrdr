@@ -1059,3 +1059,286 @@ class TestOperationCompletion:
         assert advance_calls[op1.operation_id] == 1
         # op2 should be advanced multiple times (continuing after op1 completes)
         assert advance_calls[op2.operation_id] >= 2
+
+
+# ============================================================================
+# TestChildTaskCancellation (Task 4.4)
+# ============================================================================
+
+
+class TestChildTaskCancellation:
+    """Tests for child task cancellation when research is cancelled.
+
+    Task 4.4: Track child tasks per operation for clean cancellation.
+    When a research is cancelled, its in-process child task should be cancelled too.
+    """
+
+    @pytest.mark.asyncio
+    async def test_child_task_tracked_when_design_starts(
+        self, mock_operations_service, mock_design_worker, mock_assessment_worker
+    ):
+        """Child task is tracked in _child_tasks when design starts."""
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
+        worker = AgentResearchWorker(
+            operations_service=mock_operations_service,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
+        )
+
+        # Create parent operation
+        parent_op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "idle"}),
+        )
+
+        # Start design
+        await worker._start_design(parent_op.operation_id)
+
+        # Task should be tracked
+        assert parent_op.operation_id in worker._child_tasks
+        assert isinstance(worker._child_tasks[parent_op.operation_id], asyncio.Task)
+
+        # Clean up
+        worker._child_tasks[parent_op.operation_id].cancel()
+        try:
+            await worker._child_tasks[parent_op.operation_id]
+        except asyncio.CancelledError:
+            pass
+
+    @pytest.mark.asyncio
+    async def test_child_task_tracked_when_assessment_starts(
+        self, mock_operations_service, mock_design_worker, mock_assessment_worker
+    ):
+        """Child task is tracked in _child_tasks when assessment starts."""
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
+        worker = AgentResearchWorker(
+            operations_service=mock_operations_service,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
+        )
+
+        # Create parent operation with required metadata
+        parent_op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(
+                parameters={
+                    "phase": "backtesting",
+                    "training_result": {"accuracy": 0.85},
+                    "backtest_result": {"sharpe_ratio": 1.5},
+                }
+            ),
+        )
+
+        # Start assessment
+        await worker._start_assessment(parent_op.operation_id)
+
+        # Task should be tracked
+        assert parent_op.operation_id in worker._child_tasks
+        assert isinstance(worker._child_tasks[parent_op.operation_id], asyncio.Task)
+
+        # Clean up
+        worker._child_tasks[parent_op.operation_id].cancel()
+        try:
+            await worker._child_tasks[parent_op.operation_id]
+        except asyncio.CancelledError:
+            pass
+
+    @pytest.mark.asyncio
+    async def test_child_task_cancelled_when_research_cancelled(
+        self, mock_operations_service, mock_design_worker, mock_assessment_worker
+    ):
+        """Child task is cancelled when _handle_research_cancelled is called."""
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
+        worker = AgentResearchWorker(
+            operations_service=mock_operations_service,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
+        )
+
+        # Create parent operation
+        parent_op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "designing"}),
+        )
+        mock_operations_service._operations[parent_op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+
+        # Create a slow task that simulates a running child task
+        async def slow_task():
+            try:
+                await asyncio.sleep(10)  # Long sleep to simulate running task
+            except asyncio.CancelledError:
+                raise
+
+        task = asyncio.create_task(slow_task())
+        worker._child_tasks[parent_op.operation_id] = task
+
+        # Verify task is running
+        assert not task.done()
+
+        # Handle cancellation
+        with (
+            patch("ktrdr.agents.workers.research_worker.record_cycle_outcome"),
+            patch.object(worker, "_save_checkpoint", new_callable=AsyncMock),
+        ):
+            await worker._handle_research_cancelled(parent_op)
+
+        # Task should have been cancelled
+        assert task.done()
+        assert task.cancelled()
+
+        # Task should be removed from tracking
+        assert parent_op.operation_id not in worker._child_tasks
+
+    @pytest.mark.asyncio
+    async def test_child_task_not_cancelled_if_already_done(
+        self, mock_operations_service, mock_design_worker, mock_assessment_worker
+    ):
+        """Already-done task is just removed, not cancelled."""
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
+        worker = AgentResearchWorker(
+            operations_service=mock_operations_service,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
+        )
+
+        # Create parent operation
+        parent_op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "designing"}),
+        )
+        mock_operations_service._operations[parent_op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+
+        # Create a task that's already done
+        async def instant_task():
+            return "done"
+
+        task = asyncio.create_task(instant_task())
+        await task  # Wait for completion
+        worker._child_tasks[parent_op.operation_id] = task
+
+        # Task is already done
+        assert task.done()
+        assert not task.cancelled()
+
+        # Handle cancellation - should not raise
+        with (
+            patch("ktrdr.agents.workers.research_worker.record_cycle_outcome"),
+            patch.object(worker, "_save_checkpoint", new_callable=AsyncMock),
+        ):
+            await worker._handle_research_cancelled(parent_op)
+
+        # Task should be removed from tracking
+        assert parent_op.operation_id not in worker._child_tasks
+
+    @pytest.mark.asyncio
+    async def test_child_task_removed_on_completion(
+        self, mock_operations_service, mock_design_worker, mock_assessment_worker
+    ):
+        """Child task is removed from tracking when research completes."""
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
+        worker = AgentResearchWorker(
+            operations_service=mock_operations_service,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
+        )
+
+        # Create parent operation in assessing phase
+        parent_op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(
+                parameters={
+                    "phase": "assessing",
+                    "strategy_name": "test_strategy",
+                    "assessment_op_id": "op_assessment_1",
+                }
+            ),
+        )
+        mock_operations_service._operations[parent_op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+
+        # Add a task to track (simulating design task that was tracked)
+        async def completed_task():
+            return "done"
+
+        task = asyncio.create_task(completed_task())
+        await task
+        worker._child_tasks[parent_op.operation_id] = task
+
+        # Create completed child assessment
+        child_op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_ASSESSMENT,
+            metadata=OperationMetadata(),
+        )
+        mock_operations_service._operations[child_op.operation_id].status = (
+            OperationStatus.COMPLETED
+        )
+        mock_operations_service._operations[child_op.operation_id].result_summary = {
+            "verdict": "PROMISING"
+        }
+
+        # Handle assessing phase completion
+        with (
+            patch("ktrdr.agents.workers.research_worker.record_cycle_duration"),
+            patch("ktrdr.agents.workers.research_worker.record_cycle_outcome"),
+        ):
+            await worker._handle_assessing_phase(parent_op.operation_id, child_op)
+
+        # Task should be removed from tracking
+        assert parent_op.operation_id not in worker._child_tasks
+
+    @pytest.mark.asyncio
+    async def test_no_memory_leak_tasks_cleaned_on_failure(
+        self, mock_operations_service, mock_design_worker, mock_assessment_worker
+    ):
+        """Tasks are cleaned up when research fails (no memory leak)."""
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
+        worker = AgentResearchWorker(
+            operations_service=mock_operations_service,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
+        )
+
+        # Create parent operation
+        parent_op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "designing"}),
+        )
+        mock_operations_service._operations[parent_op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+
+        # Add a tracked task
+        async def slow_task():
+            await asyncio.sleep(10)
+
+        task = asyncio.create_task(slow_task())
+        worker._child_tasks[parent_op.operation_id] = task
+
+        # Simulate failure
+        error = Exception("Test error")
+        with (
+            patch("ktrdr.agents.workers.research_worker.record_cycle_outcome"),
+            patch.object(worker, "_save_checkpoint", new_callable=AsyncMock),
+        ):
+            await worker._handle_research_failed(parent_op, error)
+
+        # Task should be removed from tracking (preventing memory leak)
+        assert parent_op.operation_id not in worker._child_tasks
+
+        # Clean up the task
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
