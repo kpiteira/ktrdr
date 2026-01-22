@@ -367,13 +367,31 @@ class AgentResearchWorker:
                         if input_tokens or output_tokens:
                             record_tokens("design", input_tokens + output_tokens)
 
+                    # Check training worker availability before transitioning
+                    if not await self._is_training_worker_available():
+                        logger.debug(
+                            f"Research {operation_id}: design complete, waiting for training worker"
+                        )
+                        return  # Stay in designing, retry next cycle
+
                     await self._start_training(operation_id)
                     return
                 else:
                     # Task still running, wait
                     return
 
-            # No child op and no task, start design
+            # Check if design already completed (retry scenario - waiting for worker)
+            if operation_id in self._design_results:
+                # Design completed earlier, waiting for training worker
+                if await self._is_training_worker_available():
+                    await self._start_training(operation_id)
+                else:
+                    logger.debug(
+                        f"Research {operation_id}: still waiting for training worker"
+                    )
+                return
+
+            # No child op, no task, no stored results - start design
             await self._start_design(operation_id)
             return
 
@@ -429,6 +447,13 @@ class AgentResearchWorker:
                     budget.record_spend(estimated_cost, operation_id)
                     record_budget_spend(estimated_cost)
 
+            # Check training worker availability before transitioning
+            if not await self._is_training_worker_available():
+                logger.debug(
+                    f"Research {operation_id}: design complete, waiting for training worker"
+                )
+                return  # Stay in designing, retry next cycle
+
             # Start training via service
             await self._start_training(operation_id)
 
@@ -455,7 +480,9 @@ class AgentResearchWorker:
 
         # Check stub design results first (for stub worker flow)
         design_result = self._design_results.get(operation_id, {})
-        strategy_path = design_result.get("strategy_path") or parent_op.metadata.parameters.get("strategy_path")
+        strategy_path = design_result.get(
+            "strategy_path"
+        ) or parent_op.metadata.parameters.get("strategy_path")
 
         # Load strategy config to get training params
         config = self._load_strategy_config(strategy_path)
@@ -566,6 +593,13 @@ class AgentResearchWorker:
                     gate_rejection_reason=f"Training gate: {reason}",
                 )
                 return
+
+            # Check backtest worker availability before transitioning
+            if not await self._is_backtest_worker_available():
+                logger.debug(
+                    f"Research {operation_id}: training complete, waiting for backtest worker"
+                )
+                return  # Stay in training, retry next cycle
 
             # Start backtest via service
             await self._start_backtest(operation_id)
@@ -977,6 +1011,38 @@ class AgentResearchWorker:
         output_cost = (output_tokens / 1_000_000) * pricing["output"]
 
         return input_cost + output_cost
+
+    async def _is_training_worker_available(self) -> bool:
+        """Check if a training worker is available.
+
+        Used by the coordinator to implement natural queuing - researches
+        wait in designing phase until a training worker becomes available.
+
+        Returns:
+            True if at least one training worker is available, False otherwise.
+        """
+        from ktrdr.api.endpoints.workers import get_worker_registry
+        from ktrdr.api.models.workers import WorkerType
+
+        registry = get_worker_registry()
+        available = registry.get_available_workers(WorkerType.TRAINING)
+        return len(available) > 0
+
+    async def _is_backtest_worker_available(self) -> bool:
+        """Check if a backtest worker is available.
+
+        Used by the coordinator to implement natural queuing - researches
+        wait in training phase until a backtest worker becomes available.
+
+        Returns:
+            True if at least one backtest worker is available, False otherwise.
+        """
+        from ktrdr.api.endpoints.workers import get_worker_registry
+        from ktrdr.api.models.workers import WorkerType
+
+        registry = get_worker_registry()
+        available = registry.get_available_workers(WorkerType.BACKTESTING)
+        return len(available) > 0
 
     async def _get_active_research_operations(self) -> list[Any]:
         """Query all active AGENT_RESEARCH operations.
