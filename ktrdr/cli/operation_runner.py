@@ -6,7 +6,9 @@ fire-and-forget (return immediately with operation ID) and follow mode
 """
 
 import asyncio
+import json
 import signal
+from typing import Any
 
 from rich.console import Console
 from rich.progress import (
@@ -16,6 +18,7 @@ from rich.progress import (
     TextColumn,
     TimeElapsedColumn,
 )
+from rich.table import Table
 
 from ktrdr.cli.client import AsyncCLIClient
 from ktrdr.cli.client.operations import OperationAdapter
@@ -326,81 +329,182 @@ class OperationRunner:
     def _display_results(self, op_data: dict, operation_type: str) -> None:
         """Display operation results based on type.
 
+        Provides consistent result formatting across all operation types.
+        In JSON mode, outputs structured JSON. In human mode, uses Rich tables.
+
         Args:
             op_data: Operation data from API including result_summary.
             operation_type: Type of operation (training, backtest, etc.)
         """
-        result_summary = op_data.get("result_summary", {})
-        if not result_summary:
-            return
+        result_summary = op_data.get("result_summary") or {}
 
-        if operation_type == "training":
-            self._display_training_results(result_summary)
-        elif operation_type in ("backtest", "backtesting"):
-            self._display_backtest_results(result_summary)
+        # Extract results based on operation type
+        results = self._extract_results(result_summary, operation_type)
 
-    def _display_training_results(self, result_summary: dict) -> None:
-        """Display training-specific results.
+        if self.state.json_mode:
+            self._display_results_json(operation_type, results)
+        else:
+            self._display_results_human(operation_type, results)
+
+    def _extract_results(
+        self, result_summary: dict[str, Any], operation_type: str
+    ) -> dict[str, Any]:
+        """Extract normalized results from result_summary based on operation type.
 
         Args:
-            result_summary: Training result summary from API.
+            result_summary: Raw result summary from API.
+            operation_type: Type of operation.
+
+        Returns:
+            Normalized results dictionary.
         """
-        training_metrics = result_summary.get("training_metrics", {})
-        if not training_metrics:
+        if operation_type == "training":
+            training_metrics = result_summary.get("training_metrics", {})
+            results = {
+                "epochs_trained": training_metrics.get("epochs_trained"),
+                "final_loss": training_metrics.get("final_loss"),
+                "final_val_loss": training_metrics.get("final_val_loss"),
+            }
+            if result_summary.get("model_path"):
+                results["model_path"] = result_summary.get("model_path")
+            # Remove None values
+            return {k: v for k, v in results.items() if v is not None}
+
+        elif operation_type in ("backtest", "backtesting"):
+            metrics = result_summary.get("metrics", {})
+            if metrics:
+                return {
+                    k: v
+                    for k, v in {
+                        "total_return_pct": metrics.get("total_return_pct"),
+                        "sharpe_ratio": metrics.get("sharpe_ratio"),
+                        "max_drawdown_pct": metrics.get("max_drawdown_pct"),
+                        "total_trades": metrics.get("total_trades"),
+                        "win_rate": metrics.get("win_rate"),
+                    }.items()
+                    if v is not None
+                }
+            return {}
+
+        else:
+            # For unknown operation types, return the full result_summary
+            return result_summary
+
+    def _display_results_json(
+        self, operation_type: str, results: dict[str, Any]
+    ) -> None:
+        """Display results in JSON format.
+
+        Args:
+            operation_type: Type of operation.
+            results: Extracted results dictionary.
+        """
+        output = {
+            "operation_type": operation_type,
+            "results": results,
+        }
+        print(json.dumps(output, indent=2, default=str))
+
+    def _display_results_human(
+        self,
+        operation_type: str,
+        results: dict[str, Any],
+    ) -> None:
+        """Display results in human-readable format.
+
+        Args:
+            operation_type: Type of operation.
+            results: Extracted results dictionary.
+        """
+        if not results:
             self.console.print(
-                "[yellow]No training metrics were returned for this operation.[/yellow]"
+                f"[yellow]No results were returned for this {operation_type}.[/yellow]"
             )
             return
 
+        # Use operation-specific display methods for better formatting
+        if operation_type == "training":
+            self._display_training_results_human(results)
+        elif operation_type in ("backtest", "backtesting"):
+            self._display_backtest_results_human(results)
+        else:
+            self._display_generic_results_human(operation_type, results)
+
+    def _display_training_results_human(self, results: dict[str, Any]) -> None:
+        """Display training-specific results in human-readable format.
+
+        Args:
+            results: Extracted training results.
+        """
         self.console.print("📊 [bold green]Training Results:[/bold green]")
 
-        epochs_trained = training_metrics.get("epochs_trained")
-        if epochs_trained:
-            self.console.print(f"   Epochs Trained: {epochs_trained}")
+        if "epochs_trained" in results:
+            self.console.print(f"   Epochs Trained: {results['epochs_trained']}")
 
-        final_loss = training_metrics.get("final_loss")
-        if final_loss is not None:
-            self.console.print(f"   Final Loss: {final_loss:.6f}")
+        if "final_loss" in results:
+            self.console.print(f"   Final Loss: {results['final_loss']:.6f}")
 
-        final_val_loss = training_metrics.get("final_val_loss")
-        if final_val_loss is not None:
-            self.console.print(f"   Final Validation Loss: {final_val_loss:.6f}")
+        if "final_val_loss" in results:
+            self.console.print(
+                f"   Final Validation Loss: {results['final_val_loss']:.6f}"
+            )
 
-        model_path = result_summary.get("model_path")
-        if model_path:
-            self.console.print(f"   Model saved to: {model_path}")
+        if "model_path" in results:
+            self.console.print(f"   Model saved to: {results['model_path']}")
 
-    def _display_backtest_results(self, result_summary: dict) -> None:
-        """Display backtest-specific results.
+    def _display_backtest_results_human(self, results: dict[str, Any]) -> None:
+        """Display backtest-specific results in human-readable format.
 
         Args:
-            result_summary: Backtest result summary from API.
+            results: Extracted backtest results.
         """
-        metrics = result_summary.get("metrics", {})
-        if not metrics:
-            self.console.print(
-                "[yellow]No performance metrics were returned for this backtest.[/yellow]"
-            )
-            return
-
         self.console.print("📊 [bold green]Backtest Results:[/bold green]")
 
-        total_return_pct = metrics.get("total_return_pct")
-        if total_return_pct is not None:
-            self.console.print(f"   Total Return: {total_return_pct:.2%}")
+        if "total_return_pct" in results:
+            self.console.print(f"   Total Return: {results['total_return_pct']:.2%}")
 
-        sharpe_ratio = metrics.get("sharpe_ratio")
-        if sharpe_ratio is not None:
-            self.console.print(f"   Sharpe Ratio: {sharpe_ratio:.2f}")
+        if "sharpe_ratio" in results:
+            self.console.print(f"   Sharpe Ratio: {results['sharpe_ratio']:.2f}")
 
-        max_drawdown_pct = metrics.get("max_drawdown_pct")
-        if max_drawdown_pct is not None:
-            self.console.print(f"   Max Drawdown: {max_drawdown_pct:.2%}")
+        if "max_drawdown_pct" in results:
+            self.console.print(f"   Max Drawdown: {results['max_drawdown_pct']:.2%}")
 
-        total_trades = metrics.get("total_trades")
-        if total_trades is not None:
-            self.console.print(f"   Total Trades: {total_trades}")
+        if "total_trades" in results:
+            self.console.print(f"   Total Trades: {results['total_trades']}")
 
-        win_rate = metrics.get("win_rate")
-        if win_rate is not None:
-            self.console.print(f"   Win Rate: {win_rate:.2%}")
+        if "win_rate" in results:
+            self.console.print(f"   Win Rate: {results['win_rate']:.2%}")
+
+    def _display_generic_results_human(
+        self, operation_type: str, results: dict[str, Any]
+    ) -> None:
+        """Display generic results for unknown operation types.
+
+        Uses a Rich table for consistent presentation of any result structure.
+
+        Args:
+            operation_type: Type of operation.
+            results: Results dictionary.
+        """
+        title = f"{operation_type.replace('_', ' ').title()} Results"
+        self.console.print(f"📊 [bold green]{title}:[/bold green]")
+
+        table = Table(show_header=False, box=None, padding=(0, 2, 0, 3))
+        table.add_column("Key", style="cyan")
+        table.add_column("Value")
+
+        for key, value in results.items():
+            display_key = key.replace("_", " ").title()
+            if isinstance(value, float):
+                key_lower = key.lower()
+                if "pct" in key_lower or "rate" in key_lower:
+                    display_value = f"{value:.2%}"
+                else:
+                    display_value = f"{value:.4g}"
+            elif isinstance(value, dict):
+                display_value = json.dumps(value, default=str)
+            else:
+                display_value = str(value)
+            table.add_row(display_key, display_value)
+
+        self.console.print(table)
