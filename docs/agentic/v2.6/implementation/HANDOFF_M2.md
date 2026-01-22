@@ -77,4 +77,17 @@ Tests already existed (added during M1/Task 2.1):
 | Checkpoint on failure | ✅ test_checkpoint_saved_on_worker_error | ✅ test_checkpoint_saved_for_failed_research |
 | Missing service graceful | ✅ test_save_checkpoint_handles_missing_service | N/A |
 
+### Pre-existing Test Failures Fixed
+
+While verifying M2 tests, discovered and fixed 2 pre-existing issues in integration CLI tests (broken since commit c4fb5a39):
+
+1. **Missing `runner` fixture**: `tests/integration/cli/test_sandbox_commands.py` referenced fixture that didn't exist. Created `tests/integration/cli/conftest.py`.
+
+2. **Missing `check_ports_available` mock**: 5 `test_up_*` tests weren't mocking port checks, causing real port conflicts.
+
+**Other pre-existing failures on main** (not in scope for M2):
+- `test_host_orchestrator.py`: ImportError for HostTrainingOrchestrator
+- `test_local_orchestrator.py`: TrainingPipeline missing `train_strategy`
+- `test_compute_indicator.py`: ktrdr.cli missing `indicator_commands`
+
 ---
