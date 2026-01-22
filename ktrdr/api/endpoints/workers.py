@@ -8,7 +8,7 @@ in the distributed training and backtesting architecture.
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ktrdr import get_logger
 from ktrdr.api.models.workers import CompletedOperationReport, WorkerType
@@ -62,10 +62,8 @@ class WorkerRegistrationRequest(BaseModel):
         description="Operations that completed while backend was unavailable",
     )
 
-    class Config:
-        """Pydantic model configuration."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "worker_id": "backtest-worker-1",
                 "worker_type": "backtesting",
@@ -75,6 +73,7 @@ class WorkerRegistrationRequest(BaseModel):
                 "completed_operations": [],
             }
         }
+    )
 
 
 @router.post(

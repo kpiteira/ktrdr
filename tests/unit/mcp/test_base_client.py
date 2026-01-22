@@ -7,7 +7,6 @@ import pytest
 from clients.base import BaseAPIClient, KTRDRAPIError
 
 
-@pytest.mark.asyncio
 class TestBaseAPIClient:
     """Test BaseAPIClient functionality"""
 

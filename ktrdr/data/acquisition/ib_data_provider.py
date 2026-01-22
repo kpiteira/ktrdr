@@ -15,6 +15,7 @@ It only communicates with IB via HTTP through the host service.
 """
 
 from datetime import datetime, timezone
+from io import StringIO
 from typing import Any, Optional
 
 import pandas as pd
@@ -291,7 +292,7 @@ class IbDataProvider(ExternalDataProvider, AsyncServiceAdapter):
 
             # Convert JSON response back to DataFrame
             if response.get("data"):
-                result = pd.read_json(response["data"], orient="index")
+                result = pd.read_json(StringIO(response["data"]), orient="index")
                 # Ensure datetime index
                 if not result.empty:
                     result.index = pd.to_datetime(result.index)

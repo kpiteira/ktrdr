@@ -14,6 +14,7 @@ Source: training-host-service/
 import asyncio
 import os
 import signal
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any, Optional
 
@@ -138,11 +139,12 @@ class WorkerAPIBase:
         self._operations_service = get_operations_service()
         logger.info(f"Using shared OperationsService in {worker_type.value} worker")
 
-        # Create FastAPI app
+        # Create FastAPI app with lifespan for startup/shutdown
         self.app = FastAPI(
             title=f"{worker_type.value.title()} Worker Service",
             description=f"{worker_type.value.title()} worker execution service",
             version="1.0.0",
+            lifespan=self._create_lifespan(),
         )
 
         # Add CORS middleware (for Docker communication)
@@ -190,12 +192,41 @@ class WorkerAPIBase:
         self._register_health_endpoint()
         self._register_metrics_endpoint()
         self._register_root_endpoint()
-        self._register_startup_event()
         self._register_shutdown_notification_endpoint()
 
     def get_operations_service(self) -> OperationsService:
         """Get OperationsService singleton."""
         return self._operations_service
+
+    def _create_lifespan(self):
+        """Create lifespan context manager for FastAPI startup/shutdown."""
+        worker = self  # Capture self for use in nested function
+
+        @asynccontextmanager
+        async def lifespan(app: FastAPI):
+            """Handle startup and shutdown lifecycle events."""
+            # Startup
+            logger.info(f"Starting {worker.worker_type.value} worker...")
+            logger.info(f"Worker ID: {worker.worker_id}")
+            logger.info(f"Worker port: {worker.worker_port}")
+            logger.info(
+                f"✅ OperationsService initialized (cache_ttl={worker._operations_service._cache_ttl}s)"
+            )
+
+            # Setup signal handlers for graceful shutdown (M6 Task 6.1)
+            worker._setup_signal_handlers()
+
+            # Self-register with backend
+            await worker.self_register()
+
+            # Start re-registration monitor (Task 1.7)
+            await worker._start_reregistration_monitor()
+
+            yield  # App is running
+
+            # Shutdown (if any cleanup needed)
+
+        return lifespan
 
     def _register_operations_endpoints(self) -> None:
         """
@@ -488,27 +519,6 @@ class WorkerAPIBase:
                 "timestamp": datetime.now(UTC).isoformat(),
                 "worker_id": self.worker_id,
             }
-
-    def _register_startup_event(self) -> None:
-        """Register startup event for self-registration."""
-
-        @self.app.on_event("startup")
-        async def startup():
-            logger.info(f"Starting {self.worker_type.value} worker...")
-            logger.info(f"Worker ID: {self.worker_id}")
-            logger.info(f"Worker port: {self.worker_port}")
-            logger.info(
-                f"✅ OperationsService initialized (cache_ttl={self._operations_service._cache_ttl}s)"
-            )
-
-            # Setup signal handlers for graceful shutdown (M6 Task 6.1)
-            self._setup_signal_handlers()
-
-            # Self-register with backend
-            await self.self_register()
-
-            # Start re-registration monitor (Task 1.7)
-            await self._start_reregistration_monitor()
 
     def _register_shutdown_notification_endpoint(self) -> None:
         """
