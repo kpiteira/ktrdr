@@ -24,23 +24,23 @@ def client(app):
 
 
 class TestCancelEndpoint:
-    """Test DELETE /agent/cancel endpoint."""
+    """Test DELETE /agent/cancel/{operation_id} endpoint - M4 Task 4.2."""
 
-    def test_cancel_returns_200_when_cycle_cancelled(self, client):
-        """Cancel returns 200 with success data when cycle is cancelled."""
+    def test_cancel_returns_200_when_research_cancelled(self, client):
+        """Cancel returns 200 with success data when research is cancelled."""
         mock_service = AsyncMock()
         mock_service.cancel.return_value = {
             "success": True,
             "operation_id": "op_agent_research_1",
             "child_cancelled": "op_training_2",
-            "message": "Research cycle cancelled",
+            "message": "Research cancelled",
         }
 
         with patch(
             "ktrdr.api.endpoints.agent._get_agent_service",
             return_value=mock_service,
         ):
-            response = client.delete("/agent/cancel")
+            response = client.delete("/agent/cancel/op_agent_research_1")
 
         assert response.status_code == 200
         data = response.json()
@@ -48,25 +48,65 @@ class TestCancelEndpoint:
         assert data["operation_id"] == "op_agent_research_1"
         assert data["child_cancelled"] == "op_training_2"
 
-    def test_cancel_returns_404_when_no_active_cycle(self, client):
-        """Cancel returns 404 when no active cycle exists."""
+    def test_cancel_returns_404_when_operation_not_found(self, client):
+        """Cancel returns 404 when operation is not found."""
         mock_service = AsyncMock()
         mock_service.cancel.return_value = {
             "success": False,
-            "reason": "no_active_cycle",
-            "message": "No active research cycle to cancel",
+            "reason": "not_found",
+            "message": "Operation not found: op_nonexistent",
         }
 
         with patch(
             "ktrdr.api.endpoints.agent._get_agent_service",
             return_value=mock_service,
         ):
-            response = client.delete("/agent/cancel")
+            response = client.delete("/agent/cancel/op_nonexistent")
 
         assert response.status_code == 404
         data = response.json()
         assert data["success"] is False
-        assert data["reason"] == "no_active_cycle"
+        assert data["reason"] == "not_found"
+
+    def test_cancel_returns_404_when_not_research(self, client):
+        """Cancel returns 404 when operation is not a research type."""
+        mock_service = AsyncMock()
+        mock_service.cancel.return_value = {
+            "success": False,
+            "reason": "not_research",
+            "message": "Operation is not a research: op_training_1",
+        }
+
+        with patch(
+            "ktrdr.api.endpoints.agent._get_agent_service",
+            return_value=mock_service,
+        ):
+            response = client.delete("/agent/cancel/op_training_1")
+
+        assert response.status_code == 404
+        data = response.json()
+        assert data["success"] is False
+        assert data["reason"] == "not_research"
+
+    def test_cancel_returns_409_when_not_cancellable(self, client):
+        """Cancel returns 409 when operation is not in a cancellable state."""
+        mock_service = AsyncMock()
+        mock_service.cancel.return_value = {
+            "success": False,
+            "reason": "not_cancellable",
+            "message": "Cannot cancel completed operation",
+        }
+
+        with patch(
+            "ktrdr.api.endpoints.agent._get_agent_service",
+            return_value=mock_service,
+        ):
+            response = client.delete("/agent/cancel/op_agent_research_1")
+
+        assert response.status_code == 409
+        data = response.json()
+        assert data["success"] is False
+        assert data["reason"] == "not_cancellable"
 
     def test_cancel_returns_500_on_exception(self, client):
         """Cancel returns 500 when service raises exception."""
@@ -77,7 +117,7 @@ class TestCancelEndpoint:
             "ktrdr.api.endpoints.agent._get_agent_service",
             return_value=mock_service,
         ):
-            response = client.delete("/agent/cancel")
+            response = client.delete("/agent/cancel/op_agent_research_1")
 
         assert response.status_code == 500
 
@@ -88,18 +128,36 @@ class TestCancelEndpoint:
             "success": True,
             "operation_id": "op_agent_research_1",
             "child_cancelled": None,
-            "message": "Research cycle cancelled",
+            "message": "Research cancelled",
         }
 
         with patch(
             "ktrdr.api.endpoints.agent._get_agent_service",
             return_value=mock_service,
         ):
-            response = client.delete("/agent/cancel")
+            response = client.delete("/agent/cancel/op_agent_research_1")
 
         assert response.status_code == 200
         data = response.json()
         assert data["child_cancelled"] is None
+
+    def test_cancel_passes_operation_id_to_service(self, client):
+        """Cancel endpoint passes operation_id to service."""
+        mock_service = AsyncMock()
+        mock_service.cancel.return_value = {
+            "success": True,
+            "operation_id": "op_agent_research_123",
+            "child_cancelled": None,
+            "message": "Research cancelled",
+        }
+
+        with patch(
+            "ktrdr.api.endpoints.agent._get_agent_service",
+            return_value=mock_service,
+        ):
+            client.delete("/agent/cancel/op_agent_research_123")
+
+        mock_service.cancel.assert_called_once_with("op_agent_research_123")
 
 
 class TestBudgetEndpoint:

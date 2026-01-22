@@ -77,21 +77,36 @@ async def get_agent_status(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@router.delete("/cancel")
+@router.delete("/cancel/{operation_id}")
 async def cancel_agent(
+    operation_id: str,
     service: AgentService = Depends(get_agent_service),
 ):
-    """Cancel the active research cycle.
+    """Cancel a specific research by operation_id.
 
-    Returns 200 with cancellation details if cancelled.
-    Returns 404 if no active cycle.
+    Args:
+        operation_id: The operation ID to cancel.
+
+    Returns:
+        200 with cancellation details if cancelled.
+        404 if operation not found or not a research.
+        409 if operation is not in a cancellable state.
     """
     try:
-        result = await service.cancel()
+        result = await service.cancel(operation_id)
 
         if result["success"]:
             return result
-        return JSONResponse(result, status_code=404)
+
+        # Map reason to appropriate HTTP status code
+        reason = result.get("reason", "")
+        if reason == "not_found":
+            return JSONResponse(result, status_code=404)
+        if reason == "not_research":
+            return JSONResponse(result, status_code=404)
+        if reason == "not_cancellable":
+            return JSONResponse(result, status_code=409)
+        return JSONResponse(result, status_code=400)
 
     except Exception as e:
         logger.error(f"Failed to cancel agent: {e}")
