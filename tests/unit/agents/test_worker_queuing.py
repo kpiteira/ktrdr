@@ -528,3 +528,254 @@ class TestTrainingToBacktestWorkerCheck:
         mock_registry.get_available_workers.assert_called_once_with(
             WorkerType.BACKTESTING
         )
+
+
+class TestMultipleResearchesQueuing:
+    """Tests for natural queuing behavior with multiple researches."""
+
+    @pytest.fixture
+    def mock_ops(self):
+        """Create mock operations service."""
+        ops = MagicMock()
+        ops.get_operation = AsyncMock()
+        ops.list_operations = AsyncMock(return_value=([], 0, None))
+        ops.update_progress = AsyncMock()
+        return ops
+
+    @pytest.fixture
+    def worker(self, mock_ops):
+        """Create AgentResearchWorker with mocked dependencies."""
+        design_worker = MagicMock()
+        assessment_worker = MagicMock()
+        return AgentResearchWorker(
+            operations_service=mock_ops,
+            design_worker=design_worker,
+            assessment_worker=assessment_worker,
+        )
+
+    def create_research_op(self, op_id: str, phase: str = "designing"):
+        """Helper to create a research operation in a specific phase."""
+        op = MagicMock()
+        op.operation_id = op_id
+        op.status = OperationStatus.RUNNING
+        op.created_at = datetime.now(timezone.utc)
+        op.metadata = MagicMock()
+        op.metadata.parameters = {
+            "phase": phase,
+            "phase_start_time": 1000.0,
+            "strategy_path": "/tmp/test_strategy.yaml",
+        }
+        return op
+
+    async def test_multiple_researches_queue_for_training_worker(
+        self, worker, mock_ops
+    ):
+        """With 1 training worker and 3 researches, only one transitions at a time."""
+        # Setup: Three researches all have completed design
+        # Only one training worker available
+
+        # Create three parent operations
+        op_a = self.create_research_op("op_research_A", "designing")
+        op_b = self.create_research_op("op_research_B", "designing")
+        op_c = self.create_research_op("op_research_C", "designing")
+
+        # Store completed design results for all three
+        worker._design_results["op_research_A"] = {
+            "strategy_name": "strategy_A",
+            "strategy_path": "/tmp/strategy_a.yaml",
+        }
+        worker._design_results["op_research_B"] = {
+            "strategy_name": "strategy_B",
+            "strategy_path": "/tmp/strategy_b.yaml",
+        }
+        worker._design_results["op_research_C"] = {
+            "strategy_name": "strategy_C",
+            "strategy_path": "/tmp/strategy_c.yaml",
+        }
+
+        # Mock training service
+        worker._training_service = MagicMock()
+        training_call_count = 0
+
+        async def mock_start_training(**kwargs):
+            nonlocal training_call_count
+            training_call_count += 1
+            return {"operation_id": f"op_training_{training_call_count}"}
+
+        worker._training_service.start_training = AsyncMock(
+            side_effect=mock_start_training
+        )
+
+        # Simulate worker availability: starts with 1 available, then 0, then 0
+        # First research gets the worker, others must wait
+        available_workers = [
+            [MagicMock(worker_id="training-worker-1")],  # First call: 1 available
+            [],  # Second call: 0 available (worker busy)
+            [],  # Third call: 0 available (worker still busy)
+        ]
+        call_idx = [0]
+
+        def get_available_side_effect(worker_type):
+            result = available_workers[min(call_idx[0], len(available_workers) - 1)]
+            call_idx[0] += 1
+            return result
+
+        mock_registry = MagicMock()
+        mock_registry.get_available_workers.side_effect = get_available_side_effect
+
+        # Return appropriate op based on operation_id
+        def get_op_side_effect(op_id):
+            ops = {
+                "op_research_A": op_a,
+                "op_research_B": op_b,
+                "op_research_C": op_c,
+            }
+            return ops.get(op_id)
+
+        mock_ops.get_operation.side_effect = get_op_side_effect
+
+        with patch(
+            "ktrdr.api.endpoints.workers.get_worker_registry",
+            return_value=mock_registry,
+        ):
+            # Process research A - should get the worker
+            await worker._handle_designing_phase("op_research_A", None)
+
+            # Process research B - should wait (no worker)
+            await worker._handle_designing_phase("op_research_B", None)
+
+            # Process research C - should wait (no worker)
+            await worker._handle_designing_phase("op_research_C", None)
+
+        # Only ONE training should have been started
+        assert training_call_count == 1
+        assert worker._training_service.start_training.call_count == 1
+
+        # Research A should have transitioned to training
+        assert op_a.metadata.parameters["phase"] == "training"
+
+        # Researches B and C should still be in designing (waiting)
+        assert op_b.metadata.parameters["phase"] == "designing"
+        assert op_c.metadata.parameters["phase"] == "designing"
+
+        # B and C should still have their design results stored for retry
+        assert "op_research_B" in worker._design_results
+        assert "op_research_C" in worker._design_results
+
+    async def test_queued_research_proceeds_when_worker_frees_up(
+        self, worker, mock_ops
+    ):
+        """When a worker becomes available, the waiting research proceeds."""
+        # Setup: Research B was waiting for a training worker
+        op_b = self.create_research_op("op_research_B", "designing")
+
+        # B has completed design and is stored in _design_results
+        worker._design_results["op_research_B"] = {
+            "strategy_name": "strategy_B",
+            "strategy_path": "/tmp/strategy_b.yaml",
+        }
+
+        mock_ops.get_operation.return_value = op_b
+
+        # Now a training worker becomes available
+        mock_registry = MagicMock()
+        mock_registry.get_available_workers.return_value = [
+            MagicMock(worker_id="training-worker-1")
+        ]
+
+        worker._training_service = MagicMock()
+        worker._training_service.start_training = AsyncMock(
+            return_value={"operation_id": "op_training_B"}
+        )
+
+        with patch(
+            "ktrdr.api.endpoints.workers.get_worker_registry",
+            return_value=mock_registry,
+        ):
+            # Process research B - worker now available
+            await worker._handle_designing_phase("op_research_B", None)
+
+        # B should now transition to training
+        worker._training_service.start_training.assert_called_once()
+        assert op_b.metadata.parameters["phase"] == "training"
+
+        # Design results should be cleaned up (used)
+        # Note: _design_results cleanup happens in _start_training
+        # but since we're mocking the training service, it might still be there
+
+    async def test_backtest_queuing_with_multiple_researches(self, worker, mock_ops):
+        """With 1 backtest worker and 2 researches, only one backtests at a time."""
+        # Setup: Two researches have completed training and passed gate
+        op_a = self.create_research_op("op_research_A", "training")
+        op_a.metadata.parameters["training_result"] = {
+            "accuracy": 0.8,
+            "final_loss": 0.2,
+        }
+
+        op_b = self.create_research_op("op_research_B", "training")
+        op_b.metadata.parameters["training_result"] = {
+            "accuracy": 0.75,
+            "final_loss": 0.25,
+        }
+
+        # Create completed training operations
+        training_op_a = MagicMock()
+        training_op_a.operation_id = "op_training_A"
+        training_op_a.status = OperationStatus.COMPLETED
+        training_op_a.result_summary = {"accuracy": 0.8, "final_loss": 0.2}
+
+        training_op_b = MagicMock()
+        training_op_b.operation_id = "op_training_B"
+        training_op_b.status = OperationStatus.COMPLETED
+        training_op_b.result_summary = {"accuracy": 0.75, "final_loss": 0.25}
+
+        # Mock backtest service
+        worker._backtest_service = MagicMock()
+        backtest_call_count = 0
+
+        async def mock_run_backtest(**kwargs):
+            nonlocal backtest_call_count
+            backtest_call_count += 1
+            return {"operation_id": f"op_backtest_{backtest_call_count}"}
+
+        worker._backtest_service.run_backtest = AsyncMock(side_effect=mock_run_backtest)
+
+        # Simulate worker availability: 1 available, then 0
+        available_workers = [
+            [MagicMock(worker_id="backtest-worker-1")],  # First call: 1 available
+            [],  # Second call: 0 available
+        ]
+        call_idx = [0]
+
+        def get_available_side_effect(worker_type):
+            result = available_workers[min(call_idx[0], len(available_workers) - 1)]
+            call_idx[0] += 1
+            return result
+
+        mock_registry = MagicMock()
+        mock_registry.get_available_workers.side_effect = get_available_side_effect
+
+        def get_op_side_effect(op_id):
+            ops = {"op_research_A": op_a, "op_research_B": op_b}
+            return ops.get(op_id)
+
+        mock_ops.get_operation.side_effect = get_op_side_effect
+
+        with patch(
+            "ktrdr.api.endpoints.workers.get_worker_registry",
+            return_value=mock_registry,
+        ):
+            # Process research A - should get the backtest worker
+            await worker._handle_training_phase("op_research_A", training_op_a)
+
+            # Process research B - should wait (no worker)
+            await worker._handle_training_phase("op_research_B", training_op_b)
+
+        # Only ONE backtest should have been started
+        assert backtest_call_count == 1
+
+        # Research A should have transitioned to backtesting
+        assert op_a.metadata.parameters["phase"] == "backtesting"
+
+        # Research B should still be in training (waiting)
+        assert op_b.metadata.parameters["phase"] == "training"

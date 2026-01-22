@@ -75,3 +75,70 @@ Task 3.3 adds comprehensive unit and integration tests for worker queuing:
 - Most unit tests are already written in Task 3.1 and 3.2
 - Focus on integration tests that verify the full queuing behavior with multiple researches
 - Key scenario: 2 training workers, 3 researches → A and B train in parallel, C waits
+
+---
+
+## Task 3.3 Complete: Unit and Integration Tests for Worker Queuing
+
+### Test Coverage Summary
+
+**Unit Tests** (in `tests/unit/agents/test_worker_queuing.py`):
+- `TestDesignToTrainingWorkerCheck` (5 tests) - from Task 3.1
+- `TestDesignToTrainingWithRealChildOp` (2 tests) - from Task 3.1
+- `TestTrainingToBacktestWorkerCheck` (4 tests) - from Task 3.2
+- `TestMultipleResearchesQueuing` (3 tests) - NEW in Task 3.3
+
+**Integration Tests** (in `tests/integration/test_worker_queuing.py`):
+- `test_natural_queuing_with_limited_training_workers` - E2E scenario: 2 workers, 3 researches
+- `test_queuing_preserves_order_of_completion` - First-come-first-served ordering
+- `test_no_starvation_all_researches_eventually_proceed` - All queued researches get workers
+
+### Implementation Notes
+
+Unit test `TestMultipleResearchesQueuing` tests:
+- Multiple researches competing for limited training workers
+- Queued research proceeds when worker frees up
+- Multiple researches competing for limited backtest workers
+
+Integration tests simulate the full coordinator polling cycle:
+- Create multiple research operations in same phase
+- Mock worker registry to control availability
+- Verify phase transitions happen only when workers available
+- Verify all researches eventually complete
+
+### Key Test Patterns
+
+**Worker availability simulation**:
+```python
+available_count = [2]  # Mutable to track availability
+def get_available_workers(worker_type):
+    if available_count[0] > 0:
+        available_count[0] -= 1  # Worker gets assigned
+        return [MagicMock(worker_id="worker-1")]
+    return []
+```
+
+**Phase verification**:
+```python
+updated = await mock_operations_service.get_operation(op.operation_id)
+assert updated.metadata.parameters["phase"] == "training"  # or "designing"
+```
+
+### Files Created/Modified
+
+- `tests/unit/agents/test_worker_queuing.py`:
+  - Added `TestMultipleResearchesQueuing` class with 3 tests
+- `tests/integration/test_worker_queuing.py`:
+  - NEW file with 3 integration tests
+
+### Milestone Completion Notes
+
+M3 Worker Queuing is now complete:
+- ✅ Task 3.1: Design→training worker availability check
+- ✅ Task 3.2: Training→backtest worker availability check
+- ✅ Task 3.3: Unit and integration tests
+
+**Test Results:**
+- Unit tests: 4244 passed
+- Integration tests (worker queuing): 3 passed
+- Quality checks: All passing
