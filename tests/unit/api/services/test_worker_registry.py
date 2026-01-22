@@ -335,9 +335,6 @@ class TestWorkerRegistry:
         # Verify last_selected was updated (should be > 200.0)
         assert worker.metadata["last_selected"] > 200.0
 
-    @pytest.mark.skip(
-        reason="Round-robin selection implementation needs fixing - pre-existing issue, not related to Task 6.7"
-    )
     @pytest.mark.asyncio
     async def test_select_worker_round_robin_behavior(self):
         """Test that select_worker implements round-robin."""
