@@ -38,3 +38,40 @@ Task 3.2 adds the same pattern for training→backtest transition:
 - Check `get_available_workers(WorkerType.BACKTESTING)` in `_handle_training_phase()`
 - Gate rejection path should bypass worker check (goes directly to assessment)
 - No need for retry scenario handling (training results stored in parent_op.metadata.parameters, not a separate dict)
+
+---
+
+## Task 3.2 Complete: Add Worker Availability Check to Training→Backtest Transition
+
+### Gotchas
+
+- **Same patching approach as 3.1**: The `get_worker_registry` import is inside `_is_backtest_worker_available()`. When testing, patch `ktrdr.api.endpoints.workers.get_worker_registry`.
+
+- **No retry scenario needed**: Unlike design→training, there's no separate `_training_results` dict. Training results are stored in `parent_op.metadata.parameters["training_result"]` which persists across poll cycles. The research simply stays in "training" phase and re-evaluates worker availability on next cycle.
+
+### Implementation Notes
+
+Added `_is_backtest_worker_available()` helper method (lines 1024-1035):
+- Same pattern as `_is_training_worker_available()`
+- Calls `registry.get_available_workers(WorkerType.BACKTESTING)`
+- Returns `True` if list is non-empty
+
+Worker availability check added after gate passes (line 596-601):
+- Check is placed after `record_gate_result()` and before `_start_backtest()`
+- Gate rejection path bypasses worker check (goes directly to assessment at line 591)
+- If no worker available, returns early (stays in training phase)
+
+### Files Modified
+
+- `ktrdr/agents/workers/research_worker.py`:
+  - Added `_is_backtest_worker_available()` method
+  - Added worker availability check before `_start_backtest()` call
+- `tests/unit/agents/test_worker_queuing.py`:
+  - Added `TestTrainingToBacktestWorkerCheck` class with 4 tests
+
+### Next Task Notes (Task 3.3)
+
+Task 3.3 adds comprehensive unit and integration tests for worker queuing:
+- Most unit tests are already written in Task 3.1 and 3.2
+- Focus on integration tests that verify the full queuing behavior with multiple researches
+- Key scenario: 2 training workers, 3 researches → A and B train in parallel, C waits

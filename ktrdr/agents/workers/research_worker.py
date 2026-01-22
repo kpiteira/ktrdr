@@ -594,6 +594,13 @@ class AgentResearchWorker:
                 )
                 return
 
+            # Check backtest worker availability before transitioning
+            if not await self._is_backtest_worker_available():
+                logger.debug(
+                    f"Research {operation_id}: training complete, waiting for backtest worker"
+                )
+                return  # Stay in training, retry next cycle
+
             # Start backtest via service
             await self._start_backtest(operation_id)
 
@@ -1019,6 +1026,22 @@ class AgentResearchWorker:
 
         registry = get_worker_registry()
         available = registry.get_available_workers(WorkerType.TRAINING)
+        return len(available) > 0
+
+    async def _is_backtest_worker_available(self) -> bool:
+        """Check if a backtest worker is available.
+
+        Used by the coordinator to implement natural queuing - researches
+        wait in training phase until a backtest worker becomes available.
+
+        Returns:
+            True if at least one backtest worker is available, False otherwise.
+        """
+        from ktrdr.api.endpoints.workers import get_worker_registry
+        from ktrdr.api.models.workers import WorkerType
+
+        registry = get_worker_registry()
+        available = registry.get_available_workers(WorkerType.BACKTESTING)
         return len(available) > 0
 
     async def _get_active_research_operations(self) -> list[Any]:

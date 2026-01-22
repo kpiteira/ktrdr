@@ -356,3 +356,175 @@ class TestDesignToTrainingWithRealChildOp:
         worker._training_service.start_training.assert_not_called()
         # Phase should remain "designing"
         assert parent_op.metadata.parameters["phase"] == "designing"
+
+
+class TestTrainingToBacktestWorkerCheck:
+    """Tests for worker availability check in training→backtest transition."""
+
+    @pytest.fixture
+    def mock_ops(self):
+        """Create mock operations service."""
+        ops = MagicMock()
+        ops.get_operation = AsyncMock()
+        ops.list_operations = AsyncMock(return_value=([], 0, None))
+        ops.update_progress = AsyncMock()
+        return ops
+
+    @pytest.fixture
+    def worker(self, mock_ops):
+        """Create AgentResearchWorker with mocked dependencies."""
+        design_worker = MagicMock()
+        assessment_worker = MagicMock()
+        return AgentResearchWorker(
+            operations_service=mock_ops,
+            design_worker=design_worker,
+            assessment_worker=assessment_worker,
+        )
+
+    @pytest.fixture
+    def parent_op(self):
+        """Create parent research operation in training phase."""
+        op = MagicMock()
+        op.operation_id = "op_research_123"
+        op.status = OperationStatus.RUNNING
+        op.created_at = datetime.now(timezone.utc)
+        op.metadata = MagicMock()
+        op.metadata.parameters = {
+            "phase": "training",
+            "phase_start_time": 1000.0,
+            "strategy_path": "/tmp/test_strategy.yaml",
+            "model_path": "/tmp/test_model.pt",
+            "bypass_gates": False,
+        }
+        return op
+
+    @pytest.fixture
+    def completed_training_op(self):
+        """Create completed training operation."""
+        op = MagicMock()
+        op.operation_id = "op_training_456"
+        op.status = OperationStatus.COMPLETED
+        op.result_summary = {
+            "accuracy": 0.75,
+            "final_loss": 0.25,
+        }
+        return op
+
+    async def test_training_proceeds_when_backtest_worker_available(
+        self, worker, mock_ops, parent_op, completed_training_op
+    ):
+        """When a backtest worker is available, training→backtest transition happens."""
+        mock_ops.get_operation.return_value = parent_op
+
+        # Mock worker registry with an available backtest worker
+        mock_registry = MagicMock()
+        mock_worker = MagicMock()
+        mock_worker.worker_id = "backtest-worker-1"
+        mock_registry.get_available_workers.return_value = [mock_worker]
+
+        # Mock backtest service
+        worker._backtest_service = MagicMock()
+        worker._backtest_service.run_backtest = AsyncMock(
+            return_value={"operation_id": "op_backtest_789"}
+        )
+
+        with patch(
+            "ktrdr.api.endpoints.workers.get_worker_registry",
+            return_value=mock_registry,
+        ):
+            await worker._handle_training_phase(
+                "op_research_123", completed_training_op
+            )
+
+        # Verify: backtest was started
+        worker._backtest_service.run_backtest.assert_called_once()
+        # Phase should be updated to backtesting
+        assert parent_op.metadata.parameters["phase"] == "backtesting"
+
+    async def test_training_waits_when_no_backtest_worker_available(
+        self, worker, mock_ops, parent_op, completed_training_op
+    ):
+        """When no backtest worker is available, stay in training phase."""
+        mock_ops.get_operation.return_value = parent_op
+
+        # Mock worker registry with NO available backtest workers
+        mock_registry = MagicMock()
+        mock_registry.get_available_workers.return_value = []
+
+        # Mock backtest service (should NOT be called)
+        worker._backtest_service = MagicMock()
+        worker._backtest_service.run_backtest = AsyncMock()
+
+        with patch(
+            "ktrdr.api.endpoints.workers.get_worker_registry",
+            return_value=mock_registry,
+        ):
+            await worker._handle_training_phase(
+                "op_research_123", completed_training_op
+            )
+
+        # Verify: backtest was NOT started
+        worker._backtest_service.run_backtest.assert_not_called()
+        # Phase should still be training
+        assert parent_op.metadata.parameters["phase"] == "training"
+
+    async def test_gate_rejection_skips_worker_check(
+        self, worker, mock_ops, parent_op, completed_training_op
+    ):
+        """Gate rejection goes to assessment without checking workers."""
+        # Training result that fails the gate (very low accuracy - below 10% threshold)
+        completed_training_op.result_summary = {
+            "accuracy": 0.05,  # 5%, below 10% threshold
+            "final_loss": 0.9,  # High loss
+        }
+        mock_ops.get_operation.return_value = parent_op
+
+        # Mock worker registry - should NOT be called for gate rejection
+        mock_registry = MagicMock()
+        mock_registry.get_available_workers.return_value = []  # No workers
+
+        # Mock services
+        worker._backtest_service = MagicMock()
+        worker._backtest_service.run_backtest = AsyncMock()
+
+        with patch(
+            "ktrdr.api.endpoints.workers.get_worker_registry",
+            return_value=mock_registry,
+        ):
+            await worker._handle_training_phase(
+                "op_research_123", completed_training_op
+            )
+
+        # Backtest should NOT be started (gate rejection)
+        worker._backtest_service.run_backtest.assert_not_called()
+        # Phase should be "assessing" (gate rejection routes there)
+        assert parent_op.metadata.parameters["phase"] == "assessing"
+        # Worker check should NOT have been called for backtest
+        # (gate rejection bypasses the worker availability check entirely)
+
+    async def test_worker_check_uses_correct_worker_type(
+        self, worker, mock_ops, parent_op, completed_training_op
+    ):
+        """Worker availability check uses WorkerType.BACKTESTING."""
+        mock_ops.get_operation.return_value = parent_op
+
+        mock_registry = MagicMock()
+        mock_registry.get_available_workers.return_value = []  # No workers
+
+        worker._backtest_service = MagicMock()
+        worker._backtest_service.run_backtest = AsyncMock()
+
+        with patch(
+            "ktrdr.api.endpoints.workers.get_worker_registry",
+            return_value=mock_registry,
+        ):
+            await worker._handle_training_phase(
+                "op_research_123", completed_training_op
+            )
+
+        # Verify the correct WorkerType was used
+        from ktrdr.api.models.workers import WorkerType
+
+        mock_registry.get_available_workers.assert_called_once_with(
+            WorkerType.BACKTESTING
+        )
