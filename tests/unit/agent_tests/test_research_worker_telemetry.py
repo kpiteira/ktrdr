@@ -76,13 +76,25 @@ def mock_operations_service():
             filtered = [op for op in filtered if op.status == status]
         return filtered, len(filtered), len(filtered)
 
+    async def fail_operation(op_id, error=None):
+        """Update status to FAILED when fail_operation is called."""
+        if op_id in operations:
+            operations[op_id].status = OperationStatus.FAILED
+            operations[op_id].error_message = error
+
+    async def cancel_operation(op_id, reason=None):
+        """Update status to CANCELLED when cancel_operation is called."""
+        if op_id in operations:
+            operations[op_id].status = OperationStatus.CANCELLED
+            operations[op_id].error_message = reason
+
     service.get_operation.side_effect = get_operation
     service.list_operations.side_effect = list_operations
     service.create_operation.return_value = None
     service.start_operation.return_value = None
     service.complete_operation.return_value = None
-    service.fail_operation.return_value = None
-    service.cancel_operation.return_value = None
+    service.fail_operation.side_effect = fail_operation
+    service.cancel_operation.side_effect = cancel_operation
     service.update_progress.return_value = None
 
     # Expose operations dict for test manipulation
@@ -577,7 +589,14 @@ class TestOutcomeRecording:
         mock_design_worker,
         mock_assessment_worker,
     ):
-        """Test that cancelled outcome is recorded in coordinator span."""
+        """Test that cancelled outcome is recorded via record_cycle_outcome.
+
+        M2 Error Isolation: Per-research CancelledError is handled per-research
+        and doesn't propagate up. The coordinator span completes normally.
+        Cancellation is recorded via record_cycle_outcome("cancelled").
+        """
+        from unittest.mock import patch
+
         from ktrdr.agents.workers.research_worker import AgentResearchWorker
 
         provider, exporter = tracer_provider
@@ -599,35 +618,45 @@ class TestOutcomeRecording:
         )
         worker.POLL_INTERVAL = 0
 
-        # Make _start_design raise CancelledError to simulate cancellation
+        # Make _start_design raise CancelledError to simulate per-research cancellation
         async def raise_cancelled(*args, **kwargs):
             raise asyncio.CancelledError("Test cancellation")
 
         worker._start_design = raise_cancelled
 
-        with pytest.raises(asyncio.CancelledError):
-            await worker.run()
+        # M2: Per-research CancelledError is caught, doesn't propagate
+        # Verify record_cycle_outcome is called with "cancelled"
+        with patch(
+            "ktrdr.agents.workers.research_worker.record_cycle_outcome"
+        ) as mock_record:
+            await worker.run()  # Should complete without raising
+            mock_record.assert_called_with("cancelled")
 
+        # Coordinator span should exist (coordinator completed normally)
         spans = exporter.get_finished_spans()
         coordinator_spans = [s for s in spans if s.name == "agent.coordinator"]
-
         assert len(coordinator_spans) >= 1
-        span = coordinator_spans[0]
-        assert span.attributes.get("outcome") == "cancelled"
 
 
 class TestErrorRecording:
     """Tests for error recording in spans."""
 
     @pytest.mark.asyncio
-    async def test_exception_recorded_in_coordinator_span(
+    async def test_error_recorded_for_failed_research(
         self,
         tracer_provider,
         mock_operations_service,
         mock_design_worker,
         mock_assessment_worker,
     ):
-        """Test that exceptions are recorded in coordinator span."""
+        """Test that per-research errors result in FAILED status and metrics.
+
+        M2 Error Isolation: Per-research exceptions are caught and handled
+        without propagating. The research is marked FAILED and the coordinator
+        continues (but exits when no more active operations).
+        """
+        from unittest.mock import patch
+
         from ktrdr.agents.workers.research_worker import AgentResearchWorker
 
         provider, exporter = tracer_provider
@@ -655,13 +684,18 @@ class TestErrorRecording:
 
         worker._start_design = raise_error
 
-        with pytest.raises(RuntimeError):
-            await worker.run()
+        # M2: Per-research errors are caught, don't propagate
+        # Verify the error results in "failed" outcome being recorded
+        with patch(
+            "ktrdr.agents.workers.research_worker.record_cycle_outcome"
+        ) as mock_record:
+            await worker.run()  # Should complete without raising
+            mock_record.assert_called_with("failed")
 
+        # Operation should be marked FAILED
+        assert parent_op.status == OperationStatus.FAILED
+
+        # Coordinator span should exist (coordinator completed normally)
         spans = exporter.get_finished_spans()
         coordinator_spans = [s for s in spans if s.name == "agent.coordinator"]
-
         assert len(coordinator_spans) >= 1
-        span = coordinator_spans[0]
-        assert span.attributes.get("outcome") == "failed"
-        assert "Test error" in str(span.attributes.get("error", ""))

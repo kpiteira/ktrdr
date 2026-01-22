@@ -235,13 +235,22 @@ class TestResearchWorkerCheckpointOnFailure:
 
 
 class TestResearchWorkerCheckpointOnCancellation:
-    """Test checkpoint saved on cancellation in AgentResearchWorker."""
+    """Test checkpoint saved on cancellation in AgentResearchWorker.
+
+    M2 Error Isolation: Per-research CancelledError is handled per-research
+    (mark cancelled, save checkpoint, continue others). Coordinator-level
+    cancellation (task.cancel()) still saves checkpoints for all and re-raises.
+    """
 
     @pytest.mark.asyncio
-    async def test_checkpoint_saved_when_coordinator_cancelled(
+    async def test_checkpoint_saved_when_research_cancelled(
         self, mock_operations_service, mock_checkpoint_service
     ):
-        """Checkpoint is saved for active operations when coordinator is cancelled."""
+        """Checkpoint is saved when a single research is cancelled (per-research handling).
+
+        M2: CancelledError from _advance_research is handled per-research.
+        The research is marked CANCELLED, checkpoint saved, and loop continues.
+        """
         from ktrdr.agents.workers.research_worker import AgentResearchWorker
 
         mock_design_worker = AsyncMock()
@@ -267,11 +276,11 @@ class TestResearchWorkerCheckpointOnCancellation:
             OperationStatus.RUNNING
         )
 
-        # Mock _advance_research to raise CancelledError (simulating cancellation)
+        # Mock _advance_research to raise CancelledError (per-research cancellation)
         worker._advance_research = AsyncMock(side_effect=asyncio.CancelledError())
 
-        with pytest.raises(asyncio.CancelledError):
-            await worker.run()
+        # M2: Per-research CancelledError is caught, does NOT propagate
+        await worker.run()  # Should complete without raising
 
         # Checkpoint should have been saved with type "cancellation"
         mock_checkpoint_service.save_checkpoint.assert_called_once()
@@ -279,11 +288,21 @@ class TestResearchWorkerCheckpointOnCancellation:
         assert call_args[1]["operation_id"] == op.operation_id
         assert call_args[1]["checkpoint_type"] == "cancellation"
 
+        # Operation should be marked CANCELLED
+        assert (
+            mock_operations_service._operations[op.operation_id].status
+            == OperationStatus.CANCELLED
+        )
+
     @pytest.mark.asyncio
-    async def test_checkpoint_saved_for_all_active_ops_on_cancellation(
+    async def test_per_research_cancellation_continues_others(
         self, mock_operations_service, mock_checkpoint_service
     ):
-        """Checkpoints saved for all active operations when coordinator cancelled."""
+        """Per-research cancellation doesn't stop other researches (M2 error isolation).
+
+        When CancelledError is raised from _advance_research for one operation,
+        only that operation gets checkpointed and cancelled. Others continue.
+        """
         from ktrdr.agents.workers.research_worker import AgentResearchWorker
 
         mock_design_worker = AsyncMock()
@@ -295,6 +314,7 @@ class TestResearchWorkerCheckpointOnCancellation:
             assessment_worker=mock_assessment_worker,
             checkpoint_service=mock_checkpoint_service,
         )
+        worker.POLL_INTERVAL = 0.01  # Fast for testing
 
         # Create two active operations
         op1 = await mock_operations_service.create_operation(
@@ -312,20 +332,38 @@ class TestResearchWorkerCheckpointOnCancellation:
             OperationStatus.RUNNING
         )
 
-        # Mock _advance_research to raise CancelledError
-        worker._advance_research = AsyncMock(side_effect=asyncio.CancelledError())
+        call_count = {op1.operation_id: 0, op2.operation_id: 0}
 
-        with pytest.raises(asyncio.CancelledError):
-            await worker.run()
+        async def selective_cancel(op):
+            """Cancel op1 on first call, complete op2 on second call."""
+            call_count[op.operation_id] += 1
+            if op.operation_id == op1.operation_id:
+                raise asyncio.CancelledError("Child cancelled")
+            # op2 completes after 2 calls
+            if call_count[op2.operation_id] >= 2:
+                mock_operations_service._operations[op2.operation_id].status = (
+                    OperationStatus.COMPLETED
+                )
 
-        # Both operations should have checkpoints saved
-        assert mock_checkpoint_service.save_checkpoint.call_count == 2
-        saved_op_ids = [
-            call[1]["operation_id"]
-            for call in mock_checkpoint_service.save_checkpoint.call_args_list
-        ]
-        assert op1.operation_id in saved_op_ids
-        assert op2.operation_id in saved_op_ids
+        worker._advance_research = AsyncMock(side_effect=selective_cancel)
+
+        # Should complete without raising (per-research handling)
+        await worker.run()
+
+        # op1 should be cancelled with checkpoint
+        assert (
+            mock_operations_service._operations[op1.operation_id].status
+            == OperationStatus.CANCELLED
+        )
+        # op2 should have continued and completed
+        assert (
+            mock_operations_service._operations[op2.operation_id].status
+            == OperationStatus.COMPLETED
+        )
+        # Only op1 should have checkpoint saved (op2 completed successfully)
+        assert mock_checkpoint_service.save_checkpoint.call_count == 1
+        call_args = mock_checkpoint_service.save_checkpoint.call_args
+        assert call_args[1]["operation_id"] == op1.operation_id
 
 
 class TestResearchWorkerCheckpointStateShape:
