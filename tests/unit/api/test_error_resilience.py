@@ -1,9 +1,10 @@
 """Tests for API error handling resilience (Issue #276).
 
 Verifies that:
-1. StrategyValidationError is caught and returns 422 (not 500)
-2. Error responses include retryable field
-3. Proper status codes for different error types
+1. StrategyValidationError is caught and converted to ValueError (422 not 500)
+2. APIError.retryable is derived correctly from status_code and details
+3. CLI retry logic (should_retry) respects status_code and retryable semantics
+4. APIError string and verbose formatting are clean and informative
 """
 
 from unittest.mock import AsyncMock, patch
@@ -97,16 +98,17 @@ class TestStrategyValidationErrorHandling:
 class TestAPIErrorRetryable:
     """Tests for APIError retryable field."""
 
-    def test_api_error_has_retryable_attribute(self):
-        """APIError should have retryable attribute."""
+    def test_api_error_has_retryable_property(self):
+        """APIError should have retryable property that returns correct value."""
         from ktrdr.cli.client.errors import APIError
 
         error = APIError(
             message="Test error", status_code=422, details={"retryable": False}
         )
 
-        # The error should expose retryable status
-        assert hasattr(error, "retryable") or "retryable" in error.details
+        # Verify the property exists and returns the expected value
+        assert hasattr(error, "retryable"), "APIError must have retryable property"
+        assert error.retryable is False, "retryable should respect details override"
 
     def test_api_error_422_not_retryable(self):
         """422 errors should be marked as not retryable."""
