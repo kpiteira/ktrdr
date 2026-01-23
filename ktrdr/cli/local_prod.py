@@ -406,7 +406,7 @@ def _get_host_service_env() -> dict[str, str]:
     """
     if not check_1password_authenticated():
         error_console.print("[red]Error:[/red] Not authenticated to 1Password")
-        error_console.print("Run: eval $(op signin)")
+        error_console.print("Run: op signin")
         raise typer.Exit(1)
 
     try:
@@ -422,6 +422,21 @@ def _get_host_service_env() -> dict[str, str]:
     for secret_key, env_var in HOST_SERVICE_SECRETS_MAP.items():
         if secret_key in secrets:
             env[env_var] = secrets[secret_key]
+
+    # Validate required secrets are present
+    required_secrets = [
+        "db_password"
+    ]  # DB_PASSWORD is required for database connection
+    missing = [s for s in required_secrets if s not in secrets]
+    if missing:
+        error_console.print("[red]Error:[/red] Missing required secrets in 1Password:")
+        for secret in missing:
+            env_var = HOST_SERVICE_SECRETS_MAP.get(secret, secret.upper())
+            error_console.print(f"  - {secret} (for {env_var})")
+        error_console.print(
+            f"\nAdd these fields to the '{LOCAL_PROD_SECRETS_ITEM}' item in 1Password."
+        )
+        raise typer.Exit(1)
 
     # Add database connection settings for local-prod (slot 0)
     env["DB_HOST"] = "localhost"
@@ -497,7 +512,11 @@ def _start_host_service(cwd: Path, service_id: str, env: dict[str, str]) -> int:
     pid_file = cwd / config["pid_file"]
 
     # Set PYTHONPATH to include the repo root for ktrdr imports
-    env["PYTHONPATH"] = f"{cwd}:{env.get('PYTHONPATH', '')}"
+    existing_pythonpath = env.get("PYTHONPATH")
+    if existing_pythonpath:
+        env["PYTHONPATH"] = os.pathsep.join([str(cwd), existing_pythonpath])
+    else:
+        env["PYTHONPATH"] = str(cwd)
 
     # Start the service
     with open(log_file, "w") as log:
