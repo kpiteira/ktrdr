@@ -500,14 +500,17 @@ class TestAgentServiceDesignWorkerWiring:
         assert worker.design_worker.ops is mock_ops
 
 
-class TestAgentServiceCancel:
-    """Test cancel() method - Task 6.1."""
+class TestAgentServiceCancelById:
+    """Test cancel(operation_id) method - M4 Task 4.1.
+
+    The cancel method now requires an operation_id parameter to cancel
+    a specific research, enabling individual cancellation in multi-research
+    scenarios.
+    """
 
     @pytest.mark.asyncio
-    async def test_cancel_returns_success_when_cycle_active(
-        self, mock_operations_service
-    ):
-        """Cancel returns success=True when an active cycle exists."""
+    async def test_cancel_succeeds_for_running_research(self, mock_operations_service):
+        """Cancel succeeds for a running research operation."""
         from ktrdr.api.services.agent_service import AgentService
 
         service = AgentService(operations_service=mock_operations_service)
@@ -521,11 +524,117 @@ class TestAgentServiceCancel:
             OperationStatus.RUNNING
         )
 
-        result = await service.cancel()
+        result = await service.cancel(op.operation_id)
 
         assert result["success"] is True
         assert result["operation_id"] == op.operation_id
-        assert result["message"] == "Research cycle cancelled"
+        assert result["message"] == "Research cancelled"
+
+    @pytest.mark.asyncio
+    async def test_cancel_succeeds_for_pending_research(self, mock_operations_service):
+        """Cancel succeeds for a pending research operation."""
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        # Create a pending operation (not yet started)
+        op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "idle"}),
+        )
+        # Status remains PENDING by default
+
+        result = await service.cancel(op.operation_id)
+
+        assert result["success"] is True
+        assert result["operation_id"] == op.operation_id
+
+    @pytest.mark.asyncio
+    async def test_cancel_returns_not_found_for_unknown_operation(
+        self, mock_operations_service
+    ):
+        """Cancel returns not_found for unknown operation_id."""
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        result = await service.cancel("op_nonexistent_12345")
+
+        assert result["success"] is False
+        assert result["reason"] == "not_found"
+        assert "not found" in result["message"].lower()
+
+    @pytest.mark.asyncio
+    async def test_cancel_returns_not_research_for_non_research_operation(
+        self, mock_operations_service
+    ):
+        """Cancel returns not_research for non-research operation types."""
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        # Create a training operation (not an AGENT_RESEARCH)
+        op = await mock_operations_service.create_operation(
+            operation_type=OperationType.TRAINING,
+            metadata=OperationMetadata(parameters={}),
+        )
+        mock_operations_service._operations[op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+
+        result = await service.cancel(op.operation_id)
+
+        assert result["success"] is False
+        assert result["reason"] == "not_research"
+        assert "not a research" in result["message"].lower()
+
+    @pytest.mark.asyncio
+    async def test_cancel_returns_not_cancellable_for_completed_research(
+        self, mock_operations_service
+    ):
+        """Cancel returns not_cancellable for already completed research."""
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        # Create a completed operation
+        op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "completed"}),
+        )
+        mock_operations_service._operations[op.operation_id].status = (
+            OperationStatus.COMPLETED
+        )
+
+        result = await service.cancel(op.operation_id)
+
+        assert result["success"] is False
+        assert result["reason"] == "not_cancellable"
+        assert "completed" in result["message"].lower()
+
+    @pytest.mark.asyncio
+    async def test_cancel_returns_not_cancellable_for_failed_research(
+        self, mock_operations_service
+    ):
+        """Cancel returns not_cancellable for already failed research."""
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        # Create a failed operation
+        op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "training"}),
+        )
+        mock_operations_service._operations[op.operation_id].status = (
+            OperationStatus.FAILED
+        )
+
+        result = await service.cancel(op.operation_id)
+
+        assert result["success"] is False
+        assert result["reason"] == "not_cancellable"
+        assert "failed" in result["message"].lower()
 
     @pytest.mark.asyncio
     async def test_cancel_returns_child_operation_id(self, mock_operations_service):
@@ -548,54 +657,16 @@ class TestAgentServiceCancel:
             OperationStatus.RUNNING
         )
 
-        result = await service.cancel()
+        result = await service.cancel(op.operation_id)
 
         assert result["success"] is True
         assert result["child_cancelled"] == "op_training_123"
 
     @pytest.mark.asyncio
-    async def test_cancel_returns_none_child_when_no_child_op(
-        self, mock_operations_service
-    ):
-        """Cancel returns None for child_cancelled when no child op exists."""
-        from ktrdr.api.services.agent_service import AgentService
-
-        service = AgentService(operations_service=mock_operations_service)
-
-        # Create operation without child op
-        op = await mock_operations_service.create_operation(
-            operation_type=OperationType.AGENT_RESEARCH,
-            metadata=OperationMetadata(parameters={"phase": "idle"}),
-        )
-        mock_operations_service._operations[op.operation_id].status = (
-            OperationStatus.RUNNING
-        )
-
-        result = await service.cancel()
-
-        assert result["success"] is True
-        assert result["child_cancelled"] is None
-
-    @pytest.mark.asyncio
-    async def test_cancel_returns_failure_when_no_active_cycle(
-        self, mock_operations_service
-    ):
-        """Cancel returns success=False with reason when no active cycle."""
-        from ktrdr.api.services.agent_service import AgentService
-
-        service = AgentService(operations_service=mock_operations_service)
-
-        result = await service.cancel()
-
-        assert result["success"] is False
-        assert result["reason"] == "no_active_cycle"
-        assert result["message"] == "No active research cycle to cancel"
-
-    @pytest.mark.asyncio
     async def test_cancel_calls_operations_service_cancel(
         self, mock_operations_service
     ):
-        """Cancel calls ops.cancel_operation() on the active operation."""
+        """Cancel calls ops.cancel_operation() on the specified operation."""
         from ktrdr.api.services.agent_service import AgentService
 
         service = AgentService(operations_service=mock_operations_service)
@@ -609,11 +680,67 @@ class TestAgentServiceCancel:
             OperationStatus.RUNNING
         )
 
-        await service.cancel()
+        await service.cancel(op.operation_id)
 
         # Check that operation was cancelled
         cancelled_op = await mock_operations_service.get_operation(op.operation_id)
         assert cancelled_op.status == OperationStatus.CANCELLED
+
+    @pytest.mark.asyncio
+    async def test_cancel_specific_research_while_others_continue(
+        self, mock_operations_service
+    ):
+        """Cancelling one research doesn't affect other active researches."""
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        # Create three running operations
+        op_a = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "training"}),
+        )
+        mock_operations_service._operations[op_a.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+
+        op_b = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "designing"}),
+        )
+        mock_operations_service._operations[op_b.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+
+        op_c = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "backtesting"}),
+        )
+        mock_operations_service._operations[op_c.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+
+        # Cancel only op_b
+        result = await service.cancel(op_b.operation_id)
+
+        assert result["success"] is True
+        assert result["operation_id"] == op_b.operation_id
+
+        # op_b should be cancelled
+        assert (
+            mock_operations_service._operations[op_b.operation_id].status
+            == OperationStatus.CANCELLED
+        )
+
+        # op_a and op_c should still be running
+        assert (
+            mock_operations_service._operations[op_a.operation_id].status
+            == OperationStatus.RUNNING
+        )
+        assert (
+            mock_operations_service._operations[op_c.operation_id].status
+            == OperationStatus.RUNNING
+        )
 
     @pytest.mark.asyncio
     async def test_cancel_gets_child_id_for_each_phase(self, mock_operations_service):
@@ -642,7 +769,7 @@ class TestAgentServiceCancel:
                 OperationStatus.RUNNING
             )
 
-            result = await service.cancel()
+            result = await service.cancel(op.operation_id)
 
             assert result["child_cancelled"] == child_id, f"Failed for phase {phase}"
 

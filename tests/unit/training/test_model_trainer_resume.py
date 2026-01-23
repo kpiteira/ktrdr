@@ -334,7 +334,9 @@ class TestModelTrainerResumeContextEdgeCases:
 
         # Advance scheduler a few steps (suppress warning about step order - intentional for testing)
         with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", message=".*lr_scheduler.step.*optimizer.step.*")
+            warnings.filterwarnings(
+                "ignore", message=".*lr_scheduler.step.*optimizer.step.*"
+            )
             for _ in range(3):
                 checkpoint_scheduler.step()
 

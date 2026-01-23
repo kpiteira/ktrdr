@@ -328,38 +328,68 @@ class AgentService:
         return {"status": "idle", "last_cycle": None}
 
     @trace_service_method("agent.cancel")
-    async def cancel(self) -> dict[str, Any]:
-        """Cancel the active research cycle.
+    async def cancel(self, operation_id: str) -> dict[str, Any]:
+        """Cancel a specific research by operation_id.
+
+        Args:
+            operation_id: The operation ID to cancel.
 
         Returns:
-            Dict with cancellation result including operation IDs cancelled.
+            Dict with cancellation result. Includes:
+            - success: True if cancelled, False otherwise
+            - operation_id: The operation that was cancelled (on success)
+            - child_cancelled: Child operation ID if any (on success)
+            - reason: Error reason code (on failure)
+            - message: Human-readable message
         """
-        active = await self._get_active_research_op()
+        # Get the operation
+        op = await self.ops.get_operation(operation_id)
 
-        if not active:
+        if op is None:
             return {
                 "success": False,
-                "reason": "no_active_cycle",
-                "message": "No active research cycle to cancel",
+                "reason": "not_found",
+                "message": f"Operation not found: {operation_id}",
             }
 
-        # Get current child operation ID based on phase
-        child_op_id = self._get_child_op_id_for_phase(
-            active, active.metadata.parameters.get("phase", "")
-        )
+        # Verify it's an agent research
+        if op.operation_type != OperationType.AGENT_RESEARCH:
+            return {
+                "success": False,
+                "reason": "not_research",
+                "message": f"Operation is not a research: {operation_id}",
+            }
+
+        # Verify it's cancellable (RUNNING or PENDING)
+        if op.status not in [OperationStatus.RUNNING, OperationStatus.PENDING]:
+            return {
+                "success": False,
+                "reason": "not_cancellable",
+                "message": f"Cannot cancel {op.status.value} operation",
+            }
+
+        # Get child operation ID for cancellation propagation
+        phase = op.metadata.parameters.get("phase", "")
+        child_op_id = self._get_child_op_id_for_phase(op, phase)
 
         # Cancel the parent operation
-        await self.ops.cancel_operation(active.operation_id, "Cancelled by user")
+        await self.ops.cancel_operation(operation_id, "Cancelled by user")
 
-        logger.info(
-            f"Research cycle cancelled: {active.operation_id}, child: {child_op_id}"
-        )
+        # Also cancel child operation directly for faster propagation
+        # (worker will also detect parent cancellation, but this is more immediate)
+        if child_op_id:
+            try:
+                await self.ops.cancel_operation(child_op_id, "Parent cancelled by user")
+            except Exception as e:
+                logger.warning(f"Failed to cancel child operation {child_op_id}: {e}")
+
+        logger.info(f"Research cancelled: {operation_id}, child: {child_op_id}")
 
         return {
             "success": True,
-            "operation_id": active.operation_id,
+            "operation_id": operation_id,
             "child_cancelled": child_op_id,
-            "message": "Research cycle cancelled",
+            "message": "Research cancelled",
         }
 
     @trace_service_method("agent.resume")
