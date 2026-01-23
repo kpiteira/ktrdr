@@ -282,50 +282,120 @@ class AgentService:
 
     @trace_service_method("agent.get_status")
     async def get_status(self) -> dict[str, Any]:
-        """Get current agent status.
+        """Get status of all active researches with worker/budget/capacity info.
+
+        Returns a comprehensive status including:
+        - List of all active researches with phases and durations
+        - Worker utilization by type (busy/total)
+        - Budget status (remaining/limit)
+        - Capacity info (active count/limit)
 
         Returns:
-            Dict with current status, phase, and last cycle info.
+            Dict with status, active_researches list, workers, budget, capacity.
         """
-        active = await self._get_active_research_op()
+        from datetime import datetime, timezone
 
-        if active:
-            # Get child operation ID for current phase
-            phase = active.metadata.parameters.get("phase", "unknown")
-            child_op_id = self._get_child_op_id_for_phase(active, phase)
+        active_ops = await self._get_all_active_research_ops()
 
-            return {
-                "status": "active",
-                "operation_id": active.operation_id,
-                "phase": phase,
-                "child_operation_id": child_op_id,
-                "progress": active.progress.model_dump() if active.progress else None,
-                "strategy_name": active.metadata.parameters.get("strategy_name"),
-                "started_at": (
-                    active.started_at.isoformat() if active.started_at else None
-                ),
-            }
+        # Common fields for both idle and active states
+        workers = self._get_worker_status()
+        budget = self._get_budget_status()
+        capacity = {
+            "active": len(active_ops),
+            "limit": self._get_concurrency_limit(),
+        }
 
-        # Find last completed/failed
-        last = await self._get_last_research_op()
-        if last:
+        if not active_ops:
+            # Return idle status with last completed
+            last = await self._get_last_research_op()
             return {
                 "status": "idle",
-                "last_cycle": {
-                    "operation_id": last.operation_id,
-                    "outcome": last.status.value,
-                    "strategy_name": (
-                        last.result_summary.get("strategy_name")
-                        if last.result_summary
-                        else None
-                    ),
-                    "completed_at": (
-                        last.completed_at.isoformat() if last.completed_at else None
-                    ),
-                },
+                "active_researches": [],
+                "last_cycle": self._format_last_cycle(last) if last else None,
+                "workers": workers,
+                "budget": budget,
+                "capacity": capacity,
             }
 
-        return {"status": "idle", "last_cycle": None}
+        # Build active research list
+        active_researches = []
+        now = datetime.now(timezone.utc)
+        for op in active_ops:
+            phase = op.metadata.parameters.get("phase", "unknown")
+            child_op_id = self._get_child_op_id_for_phase(op, phase)
+            started_at = op.started_at or op.created_at
+
+            duration_seconds = int((now - started_at).total_seconds())
+
+            active_researches.append(
+                {
+                    "operation_id": op.operation_id,
+                    "phase": phase,
+                    "strategy_name": op.metadata.parameters.get("strategy_name"),
+                    "duration_seconds": duration_seconds,
+                    "child_operation_id": child_op_id,
+                }
+            )
+
+        return {
+            "status": "active",
+            "active_researches": active_researches,
+            "workers": workers,
+            "budget": budget,
+            "capacity": capacity,
+        }
+
+    def _get_worker_status(self) -> dict[str, dict[str, int]]:
+        """Get worker utilization by type.
+
+        Returns:
+            Dict mapping worker type to busy/total counts.
+        """
+        from ktrdr.api.endpoints.workers import get_worker_registry
+        from ktrdr.api.models.workers import WorkerStatus, WorkerType
+
+        registry = get_worker_registry()
+        result = {}
+
+        for worker_type in [WorkerType.TRAINING, WorkerType.BACKTESTING]:
+            all_workers = registry.list_workers(worker_type=worker_type)
+            busy_workers = [w for w in all_workers if w.status == WorkerStatus.BUSY]
+            result[worker_type.value] = {
+                "busy": len(busy_workers),
+                "total": len(all_workers),
+            }
+
+        return result
+
+    def _get_budget_status(self) -> dict[str, float]:
+        """Get budget remaining and limit.
+
+        Returns:
+            Dict with remaining budget and daily limit.
+        """
+        budget = get_budget_tracker()
+        return {
+            "remaining": budget.get_remaining(),
+            "daily_limit": budget.daily_limit,
+        }
+
+    def _format_last_cycle(self, op: OperationInfo) -> dict[str, Any]:
+        """Format last completed/failed cycle info.
+
+        Args:
+            op: The last operation.
+
+        Returns:
+            Dict with operation_id, outcome, strategy_name, completed_at.
+        """
+        return {
+            "operation_id": op.operation_id,
+            "outcome": op.status.value,
+            "strategy_name": (
+                op.result_summary.get("strategy_name") if op.result_summary else None
+            ),
+            "completed_at": (op.completed_at.isoformat() if op.completed_at else None),
+        }
 
     @trace_service_method("agent.cancel")
     async def cancel(self, operation_id: str) -> dict[str, Any]:
