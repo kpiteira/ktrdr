@@ -124,7 +124,9 @@ class TestGateRejectionRecordsExperiment:
                     timeout=10.0,
                 )
                 status = status_resp.json()
-                phase = status.get("phase")
+                # Get phase from first active research (M5 multi-research format)
+                active = status.get("active_researches", [])
+                phase = active[0]["phase"] if active else None
 
                 # Check if idle (cycle completed)
                 if status.get("status") == "idle":
