@@ -38,15 +38,20 @@ async def trigger_agent(
     Use brief to guide the agent's strategy design:
     - {"brief": "Design a simple RSI strategy for EURUSD 1h."}
 
+    Use strategy to skip design and train an existing strategy directly:
+    - {"strategy": "v3_minimal"} - Skip design, start training with v3_minimal
+    Note: strategy and brief are mutually exclusive.
+
     Use bypass_gates to skip quality gates (for testing):
     - {"bypass_gates": true} - Skip training and backtest gates
 
-    Returns 202 if triggered, 409 if cycle already active, 422 if invalid model.
+    Returns 202 if triggered, 409 if cycle already active, 422 if invalid model/strategy.
     """
     try:
         result = await service.trigger(
             model=request.model,
             brief=request.brief,
+            strategy=request.strategy,
             bypass_gates=request.bypass_gates,
         )
 

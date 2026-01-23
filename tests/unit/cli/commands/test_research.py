@@ -11,20 +11,23 @@ from unittest.mock import AsyncMock, patch
 class TestResearchCommandArguments:
     """Tests for research command required arguments."""
 
-    def test_research_command_requires_goal(self, runner) -> None:
-        """Research command requires a goal argument."""
+    def test_research_command_requires_goal_or_strategy(self, runner) -> None:
+        """Research command requires either goal argument or --strategy option."""
         from ktrdr.cli.app import app
         from ktrdr.cli.commands.research import research
 
         app.command()(research)
 
         try:
-            # Invoke without goal argument
+            # Invoke without goal argument or --strategy
             result = runner.invoke(app, ["research"])
-            # Should fail due to missing goal
+            # Should fail due to missing goal or strategy
             assert result.exit_code != 0
+            # Error message should mention either goal or strategy is required
             assert (
-                "Missing argument" in result.output or "goal" in result.output.lower()
+                "either" in result.output.lower()
+                or "required" in result.output.lower()
+                or "goal" in result.output.lower()
             )
         finally:
             app.registered_commands = [
@@ -386,6 +389,187 @@ class TestResearchCommandErrors:
                 result = runner.invoke(app, ["research", "test goal"])
 
                 assert result.exit_code == 1
+
+        finally:
+            app.registered_commands = [
+                cmd for cmd in app.registered_commands if cmd.name != "research"
+            ]
+
+
+class TestResearchCommandStrategy:
+    """Tests for --strategy option to skip design phase."""
+
+    def test_research_command_has_strategy_option(self) -> None:
+        """Research command has --strategy option."""
+        import inspect
+
+        from ktrdr.cli.commands.research import research
+
+        sig = inspect.signature(research)
+        params = sig.parameters
+
+        assert "strategy" in params
+        param = params["strategy"]
+        assert param.default.default is None
+
+    def test_research_command_strategy_sends_to_api(self, runner) -> None:
+        """Research command sends strategy in request body (not brief)."""
+        from ktrdr.cli.app import app
+        from ktrdr.cli.commands.research import research
+
+        app.command()(research)
+
+        try:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
+                mock_client = AsyncMock()
+                mock_client.__aenter__.return_value = mock_client
+                mock_client.__aexit__.return_value = None
+                mock_client.post.return_value = {
+                    "triggered": True,
+                    "operation_id": "op_strategy_test",
+                }
+                mock_client_class.return_value = mock_client
+
+                runner.invoke(app, ["research", "--strategy", "v3_minimal"])
+
+                call_args = mock_client.post.call_args
+                json = call_args[1]["json"]
+                assert json["strategy"] == "v3_minimal"
+                assert "brief" not in json
+
+        finally:
+            app.registered_commands = [
+                cmd for cmd in app.registered_commands if cmd.name != "research"
+            ]
+
+    def test_research_command_strategy_shorthand_works(self, runner) -> None:
+        """Research command accepts -s shorthand for strategy."""
+        from ktrdr.cli.app import app
+        from ktrdr.cli.commands.research import research
+
+        app.command()(research)
+
+        try:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
+                mock_client = AsyncMock()
+                mock_client.__aenter__.return_value = mock_client
+                mock_client.__aexit__.return_value = None
+                mock_client.post.return_value = {
+                    "triggered": True,
+                    "operation_id": "op_strategy_test",
+                }
+                mock_client_class.return_value = mock_client
+
+                runner.invoke(app, ["research", "-s", "v3_minimal"])
+
+                call_args = mock_client.post.call_args
+                json = call_args[1]["json"]
+                assert json["strategy"] == "v3_minimal"
+
+        finally:
+            app.registered_commands = [
+                cmd for cmd in app.registered_commands if cmd.name != "research"
+            ]
+
+    def test_research_command_strategy_with_model(self, runner) -> None:
+        """Research command accepts --strategy with --model."""
+        from ktrdr.cli.app import app
+        from ktrdr.cli.commands.research import research
+
+        app.command()(research)
+
+        try:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
+                mock_client = AsyncMock()
+                mock_client.__aenter__.return_value = mock_client
+                mock_client.__aexit__.return_value = None
+                mock_client.post.return_value = {
+                    "triggered": True,
+                    "operation_id": "op_strategy_test",
+                }
+                mock_client_class.return_value = mock_client
+
+                runner.invoke(
+                    app, ["research", "--strategy", "v3_minimal", "--model", "haiku"]
+                )
+
+                call_args = mock_client.post.call_args
+                json = call_args[1]["json"]
+                assert json["strategy"] == "v3_minimal"
+                assert json["model"] == "haiku"
+
+        finally:
+            app.registered_commands = [
+                cmd for cmd in app.registered_commands if cmd.name != "research"
+            ]
+
+    def test_research_command_rejects_both_goal_and_strategy(self, runner) -> None:
+        """Research command rejects both goal and --strategy."""
+        from ktrdr.cli.app import app
+        from ktrdr.cli.commands.research import research
+
+        app.command()(research)
+
+        try:
+            result = runner.invoke(
+                app, ["research", "build momentum strategy", "--strategy", "v3_minimal"]
+            )
+
+            # Should fail due to mutual exclusivity
+            assert result.exit_code != 0
+            assert "cannot" in result.output.lower() or "both" in result.output.lower()
+
+        finally:
+            app.registered_commands = [
+                cmd for cmd in app.registered_commands if cmd.name != "research"
+            ]
+
+    def test_research_command_requires_goal_or_strategy(self, runner) -> None:
+        """Research command requires either goal or --strategy."""
+        from ktrdr.cli.app import app
+        from ktrdr.cli.commands.research import research
+
+        app.command()(research)
+
+        try:
+            result = runner.invoke(app, ["research"])
+
+            # Should fail due to missing required argument
+            assert result.exit_code != 0
+            assert (
+                "either" in result.output.lower()
+                or "required" in result.output.lower()
+                or "missing" in result.output.lower()
+            )
+
+        finally:
+            app.registered_commands = [
+                cmd for cmd in app.registered_commands if cmd.name != "research"
+            ]
+
+    def test_research_command_goal_optional_with_strategy(self, runner) -> None:
+        """Research command allows omitting goal when --strategy provided."""
+        from ktrdr.cli.app import app
+        from ktrdr.cli.commands.research import research
+
+        app.command()(research)
+
+        try:
+            with patch("ktrdr.cli.client.AsyncCLIClient") as mock_client_class:
+                mock_client = AsyncMock()
+                mock_client.__aenter__.return_value = mock_client
+                mock_client.__aexit__.return_value = None
+                mock_client.post.return_value = {
+                    "triggered": True,
+                    "operation_id": "op_strategy_only",
+                }
+                mock_client_class.return_value = mock_client
+
+                result = runner.invoke(app, ["research", "--strategy", "v3_minimal"])
+
+                # Should succeed without goal argument
+                assert result.exit_code == 0
+                assert "op_strategy_only" in result.output
 
         finally:
             app.registered_commands = [

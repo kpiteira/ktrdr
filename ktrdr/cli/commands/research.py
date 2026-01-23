@@ -18,12 +18,20 @@ from ktrdr.cli.telemetry import trace_cli_command
 @trace_cli_command("research")
 def research(
     ctx: typer.Context,
-    goal: str = typer.Argument(..., help="Research goal or brief"),
+    goal: Optional[str] = typer.Argument(
+        None, help="Research goal or brief (required unless --strategy is provided)"
+    ),
     model: Optional[str] = typer.Option(
         None,
         "--model",
         "-m",
         help="Model to use: opus, sonnet, haiku, or full model ID",
+    ),
+    strategy: Optional[str] = typer.Option(
+        None,
+        "--strategy",
+        "-s",
+        help="Existing v3 strategy name to train directly (skips design phase)",
     ),
     follow: bool = typer.Option(
         False,
@@ -38,13 +46,27 @@ def research(
     By default, returns immediately with the operation ID. Use --follow
     to watch progress until completion.
 
+    Use --strategy to skip the design phase and train an existing strategy directly.
+
     Examples:
         ktrdr research "build a momentum strategy for AAPL"
 
         ktrdr research "analyze volatility patterns" --follow
 
         ktrdr research "test strategy" --model haiku -f
+
+        ktrdr research --strategy v3_minimal --follow
     """
+    # Validate: either goal or strategy must be provided (but not both)
+    if goal is None and strategy is None:
+        raise typer.BadParameter(
+            "Either a goal argument or --strategy option is required."
+        )
+    if goal is not None and strategy is not None:
+        raise typer.BadParameter(
+            "Cannot specify both goal and --strategy. "
+            "Use goal to design a new strategy, or --strategy to train an existing one."
+        )
     # Lazy imports for fast CLI startup
     import asyncio
 
@@ -61,7 +83,11 @@ def research(
     async def _research_async() -> None:
         """Async implementation of research command."""
         # Build request body
-        json_data: dict = {"brief": goal}
+        json_data: dict = {}
+        if strategy:
+            json_data["strategy"] = strategy
+        elif goal:
+            json_data["brief"] = goal
         if model:
             json_data["model"] = model
 

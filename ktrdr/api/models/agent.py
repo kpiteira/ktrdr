@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 
 class AgentTriggerRequest(BaseModel):
@@ -23,6 +23,20 @@ class AgentTriggerRequest(BaseModel):
 
     bypass_gates: bool = False
     """If True, skip quality gates between phases (for testing)."""
+
+    strategy: Optional[str] = None
+    """Name of an existing v3 strategy to train directly (skips design phase).
+    Mutually exclusive with 'brief'. Example: 'v3_minimal' or 'momentum_rsi_v2'."""
+
+    @model_validator(mode="after")
+    def check_brief_strategy_mutual_exclusivity(self) -> "AgentTriggerRequest":
+        """Ensure brief and strategy are mutually exclusive."""
+        if self.brief is not None and self.strategy is not None:
+            raise ValueError(
+                "Cannot specify both 'brief' and 'strategy'. "
+                "Use 'brief' to design a new strategy, or 'strategy' to train an existing one."
+            )
+        return self
 
     @field_validator("model")
     @classmethod
