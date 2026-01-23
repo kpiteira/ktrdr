@@ -170,8 +170,8 @@ class AgentResearchWorker:
         # Read poll interval from environment
         self.POLL_INTERVAL = _get_poll_interval()
 
-        # Track current child for cancellation propagation
-        self._current_child_op_id: str | None = None
+        # Track current service child operation (training/backtest) for cancellation
+        self._current_service_child_op_id: str | None = None
         # Track child tasks per operation (for multi-research support)
         self._child_tasks: dict[str, asyncio.Task] = {}
         # Store design results per operation (for stub worker flow)
@@ -514,7 +514,7 @@ class AgentResearchWorker:
         parent_op.metadata.parameters["phase"] = "training"
         parent_op.metadata.parameters["training_op_id"] = training_op_id
         parent_op.metadata.parameters["phase_start_time"] = time.time()
-        self._current_child_op_id = training_op_id
+        self._current_service_child_op_id = training_op_id
 
         logger.info(f"Training started: {training_op_id}")
 
@@ -673,7 +673,7 @@ class AgentResearchWorker:
         params["phase"] = "backtesting"
         params["backtest_op_id"] = backtest_op_id
         params["phase_start_time"] = time.time()
-        self._current_child_op_id = backtest_op_id
+        self._current_service_child_op_id = backtest_op_id
 
         logger.info(f"Backtest started: {backtest_op_id}")
 
@@ -1117,7 +1117,7 @@ class AgentResearchWorker:
                 try:
                     await task
                 except asyncio.CancelledError:
-                    pass
+                    pass  # Expected when cancelling in-progress child task
             del self._child_tasks[operation_id]
 
         # Clean up remaining per-operation state to prevent memory leaks
@@ -1184,10 +1184,10 @@ class AgentResearchWorker:
 
         Called when coordinator is cancelled to propagate cancellation.
         """
-        if self._current_child_op_id:
+        if self._current_service_child_op_id:
             try:
                 await self.ops.cancel_operation(
-                    self._current_child_op_id, "Parent cancelled"
+                    self._current_service_child_op_id, "Parent cancelled"
                 )
             except Exception as e:
                 logger.warning(f"Failed to cancel child operation: {e}")

@@ -1104,7 +1104,7 @@ class TestChildTaskCancellation:
         try:
             await worker._child_tasks[parent_op.operation_id]
         except asyncio.CancelledError:
-            pass
+            pass  # Expected during test cleanup after explicit cancel
 
     @pytest.mark.asyncio
     async def test_child_task_tracked_when_assessment_starts(
@@ -1143,7 +1143,7 @@ class TestChildTaskCancellation:
         try:
             await worker._child_tasks[parent_op.operation_id]
         except asyncio.CancelledError:
-            pass
+            pass  # Expected during test cleanup after explicit cancel
 
     @pytest.mark.asyncio
     async def test_child_task_cancelled_when_research_cancelled(
@@ -1341,4 +1341,4 @@ class TestChildTaskCancellation:
         try:
             await task
         except asyncio.CancelledError:
-            pass
+            pass  # Expected during test cleanup after explicit cancel

@@ -368,12 +368,20 @@ class AgentService:
                 "message": f"Cannot cancel {op.status.value} operation",
             }
 
-        # Get child operation ID for logging
+        # Get child operation ID for cancellation propagation
         phase = op.metadata.parameters.get("phase", "")
         child_op_id = self._get_child_op_id_for_phase(op, phase)
 
-        # Cancel the operation
+        # Cancel the parent operation
         await self.ops.cancel_operation(operation_id, "Cancelled by user")
+
+        # Also cancel child operation directly for faster propagation
+        # (worker will also detect parent cancellation, but this is more immediate)
+        if child_op_id:
+            try:
+                await self.ops.cancel_operation(child_op_id, "Parent cancelled by user")
+            except Exception as e:
+                logger.warning(f"Failed to cancel child operation {child_op_id}: {e}")
 
         logger.info(f"Research cancelled: {operation_id}, child: {child_op_id}")
 
