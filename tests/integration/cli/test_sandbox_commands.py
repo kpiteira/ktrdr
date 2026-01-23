@@ -721,10 +721,10 @@ class TestStatusCommand:
             "KTRDR_GRAFANA_PORT=3001\n"
             "KTRDR_JAEGER_UI_PORT=16687\n"
             "KTRDR_PROMETHEUS_PORT=9091\n"
-            "KTRDR_WORKER_PORT_1=5010\n"
-            "KTRDR_WORKER_PORT_2=5011\n"
-            "KTRDR_WORKER_PORT_3=5012\n"
-            "KTRDR_WORKER_PORT_4=5013\n"
+            "KTRDR_WORKER_PORT_1=5007\n"
+            "KTRDR_WORKER_PORT_2=5008\n"
+            "KTRDR_WORKER_PORT_3=5009\n"
+            "KTRDR_WORKER_PORT_4=5010\n"
         )
         compose_file = tmp_path / "docker-compose.sandbox.yml"
         compose_file.touch()
@@ -742,11 +742,11 @@ class TestStatusCommand:
         assert "3001" in result.output  # Grafana
         assert "16687" in result.output  # Jaeger
         assert "9091" in result.output  # Prometheus
-        # Should show worker ports
+        # Should show worker ports (slot 1: 5007-5010)
+        assert "5007" in result.output
+        assert "5008" in result.output
+        assert "5009" in result.output
         assert "5010" in result.output
-        assert "5011" in result.output
-        assert "5012" in result.output
-        assert "5013" in result.output
 
     def test_status_works_when_stopped(self, runner, tmp_path):
         """Verify status works even when containers are stopped."""

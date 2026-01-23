@@ -19,8 +19,7 @@ class PortAllocation:
     Each sandbox instance is assigned a slot (0-10) with deterministic
     port mappings. This enables multiple parallel instances without conflicts.
 
-    Slot 0 (local-prod) gets 8 worker ports for extra workers.
-    Slots 1-10 (sandboxes) get 4 worker ports.
+    All slots get 4 worker ports matching the 4 workers defined in compose.
     """
 
     slot: int
@@ -31,7 +30,7 @@ class PortAllocation:
     jaeger_otlp_grpc: int
     jaeger_otlp_http: int
     prometheus: int
-    worker_ports: list[int]  # 4 ports for sandboxes, 8 for local-prod (slot 0)
+    worker_ports: list[int]  # 4 worker ports
 
     def to_env_dict(self) -> dict[str, str]:
         """Convert to environment variable dict for .env.sandbox.
@@ -39,9 +38,8 @@ class PortAllocation:
         Returns environment variables following the KTRDR_<SERVICE>_PORT
         naming convention established in M1.
 
-        Slot 0 (local-prod) includes KTRDR_WORKER_PORT_5-8 for extra workers.
         """
-        env = {
+        return {
             "SLOT_NUMBER": str(self.slot),
             "KTRDR_API_PORT": str(self.backend),
             "KTRDR_DB_PORT": str(self.db),
@@ -56,19 +54,10 @@ class PortAllocation:
             "KTRDR_WORKER_PORT_4": str(self.worker_ports[3]),
         }
 
-        # Add extra worker ports for slot 0 (local-prod)
-        if len(self.worker_ports) > 4:
-            env["KTRDR_WORKER_PORT_5"] = str(self.worker_ports[4])
-            env["KTRDR_WORKER_PORT_6"] = str(self.worker_ports[5])
-            env["KTRDR_WORKER_PORT_7"] = str(self.worker_ports[6])
-            env["KTRDR_WORKER_PORT_8"] = str(self.worker_ports[7])
-
-        return env
-
     def all_ports(self) -> list[int]:
         """Return all ports for conflict checking.
 
-        Returns a list of all ports (7 services + 4-8 workers).
+        Returns a list of all ports (7 services + 4 workers).
         """
         return [
             self.backend,
@@ -100,7 +89,7 @@ def get_ports(slot: int) -> PortAllocation:
         raise ValueError(f"Slot must be 0-10, got {slot}")
 
     if slot == 0:
-        # Slot 0 (local-prod) gets 8 worker ports for --profile local-prod
+        # Slot 0 (local-prod) uses standard ports matching docker-compose defaults
         return PortAllocation(
             slot=0,
             backend=8000,
@@ -110,10 +99,10 @@ def get_ports(slot: int) -> PortAllocation:
             jaeger_otlp_grpc=4317,
             jaeger_otlp_http=4318,
             prometheus=9090,
-            worker_ports=[5003, 5004, 5005, 5006, 5007, 5008, 5009, 5010],
+            worker_ports=[5003, 5004, 5005, 5006],
         )
 
-    # Slots 1-10 use offset worker ports starting at 5011 to avoid slot 0's 5003-5010
+    # Slots 1-10 use offset worker ports starting at 5007 to avoid slot 0's 5003-5006
     return PortAllocation(
         slot=slot,
         backend=8000 + slot,
@@ -124,10 +113,10 @@ def get_ports(slot: int) -> PortAllocation:
         jaeger_otlp_http=4318 + slot * 10,  # 4328, 4338, ...
         prometheus=9090 + slot,
         worker_ports=[
-            5011 + (slot - 1) * 10,  # 5011, 5021, 5031, ... (shifted +1 to avoid 5010)
-            5011 + (slot - 1) * 10 + 1,  # 5012, 5022, 5032, ...
-            5011 + (slot - 1) * 10 + 2,  # 5013, 5023, 5033, ...
-            5011 + (slot - 1) * 10 + 3,  # 5014, 5024, 5034, ...
+            5007 + (slot - 1) * 10,  # 5007, 5017, 5027, ...
+            5007 + (slot - 1) * 10 + 1,  # 5008, 5018, 5028, ...
+            5007 + (slot - 1) * 10 + 2,  # 5009, 5019, 5029, ...
+            5007 + (slot - 1) * 10 + 3,  # 5010, 5020, 5030, ...
         ],
     )
 
