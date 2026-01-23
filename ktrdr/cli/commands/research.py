@@ -57,6 +57,12 @@ def research(
 
         ktrdr research --strategy v3_minimal --follow
     """
+    # Normalize empty/whitespace strings to None for consistent validation
+    if goal is not None and not goal.strip():
+        goal = None
+    if strategy is not None and not strategy.strip():
+        strategy = None
+
     # Validate: either goal or strategy must be provided (but not both)
     if goal is None and strategy is None:
         raise typer.BadParameter(

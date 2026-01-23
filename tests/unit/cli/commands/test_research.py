@@ -401,8 +401,6 @@ class TestResearchCommandStrategy:
 
     def test_research_command_has_strategy_option(self) -> None:
         """Research command has --strategy option."""
-        import inspect
-
         from ktrdr.cli.commands.research import research
 
         sig = inspect.signature(research)
