@@ -327,6 +327,26 @@ class AgentResearchWorker:
             operation_id: Parent operation ID.
             child_op: Design child operation.
         """
+        # Check for pre-loaded strategy (skip-design mode via --strategy CLI option)
+        parent_op = await self.ops.get_operation(operation_id)
+        if parent_op and parent_op.metadata.parameters.get("design_complete"):
+            # Strategy was provided at trigger time, design phase is complete
+            # Wait for training worker availability (natural queuing)
+            if not await self._is_training_worker_available():
+                logger.debug(
+                    f"Research {operation_id}: design complete (pre-loaded strategy), "
+                    "waiting for training worker"
+                )
+                return  # Retry next cycle
+
+            # Start training directly
+            logger.info(
+                f"Research {operation_id}: starting training with pre-loaded strategy "
+                f"{parent_op.metadata.parameters.get('strategy_name')}"
+            )
+            await self._start_training(operation_id)
+            return
+
         if child_op is None:
             # Check if there's a task running for THIS operation (stub workers)
             task = self._child_tasks.get(operation_id)

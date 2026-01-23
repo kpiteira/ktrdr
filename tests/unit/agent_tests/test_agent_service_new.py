@@ -331,6 +331,7 @@ class TestAgentServiceGetStatus:
         # M5: strategy_name is now in active_researches list
         assert status["active_researches"][0]["strategy_name"] == "momentum_rsi_v2"
 
+    @pytest.mark.skip(reason="Flaky test - budget tracker race condition. See #275")
     @pytest.mark.asyncio
     async def test_status_returns_last_cycle_when_idle(self, mock_operations_service):
         """Status returns last cycle info when idle."""

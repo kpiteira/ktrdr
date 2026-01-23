@@ -177,6 +177,7 @@ class AgentService:
         self,
         model: str | None = None,
         brief: str | None = None,
+        strategy: str | None = None,
         bypass_gates: bool = False,
     ) -> dict[str, Any]:
         """Start a new research cycle.
@@ -186,16 +187,23 @@ class AgentService:
                    If None, uses AGENT_MODEL env var or default (opus).
             brief: Natural language guidance for the strategy designer.
                    Injected into the agent's prompt to guide design decisions.
+            strategy: Name of an existing v3 strategy to train directly.
+                      Skips the design phase. Mutually exclusive with brief.
             bypass_gates: If True, skip quality gates between phases (for testing).
 
         Returns:
             Dict with triggered status, operation_id, model, or rejection reason.
 
         Raises:
-            ValueError: If model is invalid.
+            ValueError: If model is invalid or strategy not found/invalid.
         """
         # Resolve model (validates and converts alias to full ID)
         resolved_model = resolve_model(model)
+
+        # Validate strategy if provided (skip-design mode)
+        strategy_path: str | None = None
+        if strategy is not None:
+            strategy_path = self._validate_and_resolve_strategy(strategy)
 
         # Check budget first
         budget = get_budget_tracker()
@@ -220,11 +228,22 @@ class AgentService:
                 "message": f"At capacity ({len(active_ops)}/{limit} researches active)",
             }
 
-        # Create operation with model, brief, and bypass_gates in metadata
+        # Create operation with model, brief/strategy, and bypass_gates in metadata
         # Agent operations are backend-local (run in backend process, not workers)
-        params: dict[str, Any] = {"phase": "idle", "model": resolved_model}
-        if brief is not None:
-            params["brief"] = brief
+        if strategy is not None:
+            # Skip-design mode: start at "designing" with design_complete flag
+            params: dict[str, Any] = {
+                "phase": "designing",
+                "design_complete": True,
+                "model": resolved_model,
+                "strategy_name": strategy,
+                "strategy_path": strategy_path,
+            }
+        else:
+            # Normal mode: start at "idle" for design phase
+            params = {"phase": "idle", "model": resolved_model}
+            if brief is not None:
+                params["brief"] = brief
         if bypass_gates:
             params["bypass_gates"] = True
         op = await self.ops.create_operation(
@@ -660,6 +679,49 @@ class AgentService:
                         result.append(op)
 
         return result
+
+    def _validate_and_resolve_strategy(self, strategy_name: str) -> str:
+        """Validate an existing strategy exists and is v3 format.
+
+        Args:
+            strategy_name: Name of the strategy (without .yaml extension).
+
+        Returns:
+            Resolved absolute path to the strategy file.
+
+        Raises:
+            ValueError: If strategy not found or not v3 format.
+        """
+        from ktrdr.api.services.training.context import (
+            DEFAULT_STRATEGY_PATHS,
+            _resolve_strategy_path,
+        )
+        from ktrdr.config.strategy_loader import strategy_loader
+        from ktrdr.errors import ValidationError as KtrdrValidationError
+
+        # Resolve strategy path
+        try:
+            strategy_path = _resolve_strategy_path(
+                strategy_name, DEFAULT_STRATEGY_PATHS
+            )
+        except KtrdrValidationError as e:
+            raise ValueError(f"Strategy not found: {strategy_name}. {e}") from e
+
+        # Validate it's v3 format (required for training)
+        try:
+            strategy_loader.load_v3_strategy(strategy_path)
+        except ValueError as e:
+            raise ValueError(
+                f"Strategy '{strategy_name}' is not v3 format. "
+                f"Run 'ktrdr strategy migrate' to upgrade. Error: {e}"
+            ) from e
+        except FileNotFoundError as e:
+            raise ValueError(f"Strategy not found: {strategy_name}") from e
+
+        logger.info(
+            f"Validated strategy for skip-design: {strategy_name} at {strategy_path}"
+        )
+        return str(strategy_path)
 
     def _get_concurrency_limit(self) -> int:
         """Calculate max concurrent researches from worker pool.
