@@ -151,10 +151,13 @@ class TestDonchianChannelsIndicator:
 
         # Check all expected signal columns exist
         expected_cols = [
-            "upper_breakout", "lower_breakout",
-            "overbought", "oversold",
-            "strong_uptrend", "strong_downtrend",
-            "position"
+            "upper_breakout",
+            "lower_breakout",
+            "overbought",
+            "oversold",
+            "strong_uptrend",
+            "strong_downtrend",
+            "position",
         ]
         for col in expected_cols:
             assert col in signals.columns
@@ -241,8 +244,12 @@ class TestDonchianChannelsIndicator:
 
         # Upper >= Middle >= Lower (where valid)
         valid_mask = ~result["upper"].isna()
-        assert (result.loc[valid_mask, "upper"] >= result.loc[valid_mask, "middle"]).all()
-        assert (result.loc[valid_mask, "middle"] >= result.loc[valid_mask, "lower"]).all()
+        assert (
+            result.loc[valid_mask, "upper"] >= result.loc[valid_mask, "middle"]
+        ).all()
+        assert (
+            result.loc[valid_mask, "middle"] >= result.loc[valid_mask, "lower"]
+        ).all()
 
         # Middle should be exactly (upper + lower) / 2
         expected_middle = (result["upper"] + result["lower"]) / 2

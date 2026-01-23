@@ -180,7 +180,9 @@ class DonchianChannelsIndicator(BaseIndicator):
 
         # Calculate position within channel (0 = at lower, 1 = at upper)
         channel_range = work_data["upper"] - work_data["lower"]
-        position = (work_data["close"] - work_data["lower"]) / channel_range.replace(0, float("nan"))
+        position = (work_data["close"] - work_data["lower"]) / channel_range.replace(
+            0, float("nan")
+        )
 
         # Breakout signals
         result["upper_breakout"] = work_data["close"] > work_data["upper"]
@@ -223,7 +225,9 @@ class DonchianChannelsIndicator(BaseIndicator):
         work_data = work_data.copy()
         work_data["width"] = work_data["upper"] - work_data["lower"]
         channel_range = work_data["width"].replace(0, float("nan"))
-        work_data["position"] = (work_data["close"] - work_data["lower"]) / channel_range
+        work_data["position"] = (
+            work_data["close"] - work_data["lower"]
+        ) / channel_range
 
         # Get recent values (last 20 periods)
         recent_data = work_data.tail(20)
@@ -241,7 +245,8 @@ class DonchianChannelsIndicator(BaseIndicator):
         width_range = recent_data["width"].max() - recent_data["width"].min()
         width_percentile = (
             ((current_width - recent_data["width"].min()) / width_range * 100)
-            if width_range > 0 else 50.0
+            if width_range > 0
+            else 50.0
         )
 
         # Breakout analysis
@@ -249,12 +254,18 @@ class DonchianChannelsIndicator(BaseIndicator):
         days_since_lower_breakout = 0
 
         for i in range(len(recent_data)):
-            if recent_data.iloc[-(i + 1)]["close"] > recent_data.iloc[-(i + 1)]["upper"]:
+            if (
+                recent_data.iloc[-(i + 1)]["close"]
+                > recent_data.iloc[-(i + 1)]["upper"]
+            ):
                 days_since_upper_breakout = i
                 break
 
         for i in range(len(recent_data)):
-            if recent_data.iloc[-(i + 1)]["close"] < recent_data.iloc[-(i + 1)]["lower"]:
+            if (
+                recent_data.iloc[-(i + 1)]["close"]
+                < recent_data.iloc[-(i + 1)]["lower"]
+            ):
                 days_since_lower_breakout = i
                 break
 

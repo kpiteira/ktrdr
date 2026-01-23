@@ -175,7 +175,6 @@ class TestVolumeTrendMigration:
         assert result.name is None, "Volume Ratio Series should have no name (unnamed)"
         assert len(result) == len(sample_ohlcv_data)
 
-
     def test_atr_returns_unnamed_series(self, sample_ohlcv_data):
         """ATR indicator returns Series with no name."""
         indicator = ATRIndicator(period=14)
