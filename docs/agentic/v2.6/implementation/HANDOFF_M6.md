@@ -88,6 +88,42 @@ Added 4 new tests to `TestStartupResume` class testing `AgentService.resume_if_n
 
 ---
 
+## E2E Validation Complete
+
+### Test Results
+
+**Scenario:** Restart backend during training phase
+
+| Criterion | Status | Notes |
+|-----------|--------|-------|
+| Training continues on worker | ✅ PASS | Worker completed training, model saved |
+| Coordinator resumes | ⚠️ PARTIAL | Called but no active ops (reconciliation ran first) |
+| Research completes | ❌ FAIL | Marked FAILED by startup reconciliation |
+
+### Key Finding: Worker/Backend Reconnection Gap
+
+Training DID complete on the worker, but backend marked it failed because:
+1. Startup reconciliation marks backend-local ops (research parent) as FAILED
+2. Orphan detector marks worker-based ops as FAILED after 60s if no worker claims
+3. Workers don't re-report running operations when backend reconnects
+
+**This is a system-level gap beyond M6 scope.** The M6 coordinator-level orphan detection works correctly (verified by unit/integration tests), but full system restart involves additional components.
+
+### Recommendations
+
+1. **Worker re-registration should report running operations** to backend on reconnect
+2. **Or backend should query workers** for their running operations on startup
+3. **Startup reconciliation timing** could be adjusted to run AFTER workers reconnect
+
+### Unit/Integration Test Validity
+
+The M6 tests remain valid because they test the coordinator-level behavior:
+- Orphan detection in `_advance_research()` works correctly
+- `resume_if_needed()` correctly starts coordinator when ops exist
+- Training/backtest phases are correctly excluded from orphan detection
+
+---
+
 ## Test Coverage
 
 | Scenario | Unit Test | Integration Test |
