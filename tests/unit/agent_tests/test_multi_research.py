@@ -1066,6 +1066,7 @@ class TestMultiResearchCoordinatorLoop:
         self, mock_ops_service_for_worker, mock_design_worker, mock_assessment_worker
     ):
         """_advance_research() calls _handle_designing_phase for designing phase."""
+        import asyncio
         from unittest.mock import patch
 
         from ktrdr.agents.workers.research_worker import AgentResearchWorker
@@ -1097,12 +1098,27 @@ class TestMultiResearchCoordinatorLoop:
         )
         mock_ops_service_for_worker._operations["op_design_1"] = child_op
 
-        with patch.object(worker, "_handle_designing_phase") as mock_handler:
-            await worker._advance_research(op)
-            mock_handler.assert_called_once()
-            # First arg is operation_id, second is child_op
-            call_args = mock_handler.call_args
-            assert call_args[0][0] == "op_test"
+        # Add a task to _child_tasks to prevent orphan detection
+        # (M6 restart recovery checks for orphaned tasks)
+        async def fake_task():
+            await asyncio.sleep(100)
+
+        task = asyncio.create_task(fake_task())
+        worker._child_tasks["op_test"] = task
+
+        try:
+            with patch.object(worker, "_handle_designing_phase") as mock_handler:
+                await worker._advance_research(op)
+                mock_handler.assert_called_once()
+                # First arg is operation_id, second is child_op
+                call_args = mock_handler.call_args
+                assert call_args[0][0] == "op_test"
+        finally:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass  # Expected during test cleanup: task was explicitly cancelled
 
     @pytest.mark.asyncio
     async def test_run_exits_when_no_active_operations(
