@@ -544,6 +544,13 @@ async def get_strategy_features(strategy_name: str) -> StrategyFeaturesResponse:
 
     except HTTPException:
         raise
+    except ValueError as e:
+        # Validation errors should return 422
+        logger.error(f"Invalid strategy format for {strategy_name}: {e}")
+        raise HTTPException(
+            status_code=422,
+            detail=f"Strategy validation failed: {str(e)}",
+        ) from e
     except Exception as e:
         logger.error(f"Error getting features for strategy {strategy_name}: {e}")
         raise HTTPException(

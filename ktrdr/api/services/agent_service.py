@@ -697,6 +697,7 @@ class AgentService:
             _resolve_strategy_path,
         )
         from ktrdr.config.strategy_loader import strategy_loader
+        from ktrdr.config.strategy_validator import StrategyValidationError
         from ktrdr.errors import ValidationError as KtrdrValidationError
 
         # Resolve strategy path
@@ -710,6 +711,9 @@ class AgentService:
         # Validate it's v3 format (required for training)
         try:
             strategy_loader.load_v3_strategy(strategy_path)
+        except StrategyValidationError as e:
+            # Convert validation errors to ValueError for 422 response
+            raise ValueError(f"Strategy validation failed: {e}") from e
         except ValueError as e:
             raise ValueError(
                 f"Strategy '{strategy_name}' is not v3 format. "
