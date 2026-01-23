@@ -48,10 +48,36 @@ The `get_status()` method now returns a comprehensive status with:
 - **duration_seconds**: Calculated from `started_at` or `created_at` (fallback), requires timezone-aware datetime
 - Tests must set `started_at` on mock operations for duration calculation
 
-### Next Task Notes (5.2: CLI Status Display)
+## Task 5.2 Complete: Update CLI Status Display
 
-- Parse the new `active_researches` list
-- Format duration using `format_duration(seconds)` helper
-- Workers: show "training X/Y, backtest X/Y"
-- Budget: show "$X.XX remaining today"
-- Capacity: show "X/Y researches"
+### Key Changes
+
+Created new `ktrdr agent status` command that displays multi-research status:
+- New `ktrdr/cli/commands/agent.py` module with `agent_app` Typer group
+- Registered in `app.py` as a subcommand group
+- Calls `/agent/status` API endpoint
+
+### Output Format
+
+```
+Active researches: 2
+
+  op_abc123  training     strategy: rsi_variant_7      (2m 15s)
+  op_def456  designing    strategy: -                  (0m 30s)
+
+Workers: training 2/3, backtest 1/2
+Budget: $3.42 remaining today
+Capacity: 2/6 researches
+```
+
+### Gotchas
+
+- **Patch location for tests**: Patch `ktrdr.cli.client.AsyncCLIClient`, not the module where it's used (lazy imports inside function body)
+- **Duration format**: Uses `format_duration(seconds)` helper → "Xm Ys" with zero-padded seconds
+- **Strategy name**: Shows "-" when None (no strategy designed yet)
+
+### Next Task Notes (5.3: Unit and Integration Tests)
+
+- Unit tests already exist in `tests/unit/cli/test_agent_status.py`
+- Need integration test that calls real API with test data
+- Test existing patterns in `tests/unit/cli/commands/` for mock patterns

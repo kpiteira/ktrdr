@@ -14,6 +14,7 @@ from typing import Optional
 
 import typer
 
+from ktrdr.cli.commands.agent import agent_app
 from ktrdr.cli.commands.backtest import backtest
 from ktrdr.cli.commands.cancel import cancel
 from ktrdr.cli.commands.follow import follow
@@ -110,6 +111,9 @@ app.add_typer(list_app)  # ktrdr list strategies/models/checkpoints
 app.add_typer(show_app)  # ktrdr show data/features
 app.command("validate")(validate_cmd)  # ktrdr validate <name|path>
 app.command("migrate")(migrate_cmd)  # ktrdr migrate <path>
+
+# Register agent subcommand group
+app.add_typer(agent_app)  # ktrdr agent status
 
 
 def _register_subgroups() -> None:
