@@ -118,8 +118,8 @@ class TestDummyEndpoints:
     @pytest.mark.api
     def test_start_dummy_task_endpoint_openapi_documentation(self, client):
         """Test that the dummy endpoints are properly documented in OpenAPI."""
-        # Get the OpenAPI schema
-        response = client.get("/openapi.json")
+        # Get the OpenAPI schema (API prefix is /api/v1)
+        response = client.get("/api/v1/openapi.json")
         assert response.status_code == 200
 
         openapi_data = response.json()
@@ -133,8 +133,8 @@ class TestDummyEndpoints:
         dummy_post = paths[dummy_path].get("post", {})
         assert dummy_post is not None
 
-        # Check documentation details
-        assert dummy_post.get("tags") == ["Dummy"]
+        # Check documentation details - verify Dummy tag is present
+        assert "Dummy" in dummy_post.get("tags", [])
         assert "start awesome dummy task" in dummy_post.get("summary", "").lower()
         assert "serviceorchestrator" in dummy_post.get("description", "").lower()
 

@@ -26,7 +26,7 @@ class TestWorkerLoadBalancing:
 
         # Register 3 workers
         for i in range(1, 4):
-            registry.register_worker(
+            await registry.register_worker(
                 worker_id=f"worker-{i}",
                 worker_type=WorkerType.BACKTESTING,
                 endpoint_url=f"http://worker-{i}:5003",
@@ -66,7 +66,7 @@ class TestWorkerLoadBalancing:
 
         # Register 5 workers
         for i in range(1, 6):
-            registry.register_worker(
+            await registry.register_worker(
                 worker_id=f"worker-{i}",
                 worker_type=WorkerType.BACKTESTING,
                 endpoint_url=f"http://worker-{i}:5003",
@@ -101,12 +101,12 @@ class TestWorkerLoadBalancing:
         registry = WorkerRegistry()
 
         # Register 2 workers
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-1",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://worker-1:5003",
         )
-        registry.register_worker(
+        await registry.register_worker(
             worker_id="worker-2",
             worker_type=WorkerType.BACKTESTING,
             endpoint_url="http://worker-2:5003",
@@ -143,7 +143,7 @@ class TestWorkerLoadBalancing:
 
         # Register 3 workers
         for i in range(1, 4):
-            registry.register_worker(
+            await registry.register_worker(
                 worker_id=f"worker-{i}",
                 worker_type=WorkerType.BACKTESTING,
                 endpoint_url=f"http://worker-{i}:5003",
@@ -181,7 +181,7 @@ class TestWorkerLoadBalancing:
 
         # Register 4 workers
         for i in range(1, 5):
-            registry.register_worker(
+            await registry.register_worker(
                 worker_id=f"worker-{i}",
                 worker_type=WorkerType.BACKTESTING,
                 endpoint_url=f"http://worker-{i}:5003",
@@ -212,7 +212,7 @@ class TestWorkerLoadBalancing:
 
         # Register 3 workers
         for i in range(1, 4):
-            registry.register_worker(
+            await registry.register_worker(
                 worker_id=f"worker-{i}",
                 worker_type=WorkerType.BACKTESTING,
                 endpoint_url=f"http://worker-{i}:5003",
@@ -247,7 +247,7 @@ class TestWorkerLoadBalancing:
 
         # Register 3 workers
         for i in range(1, 4):
-            registry.register_worker(
+            await registry.register_worker(
                 worker_id=f"worker-{i}",
                 worker_type=WorkerType.BACKTESTING,
                 endpoint_url=f"http://worker-{i}:5003",
@@ -308,7 +308,7 @@ class TestWorkerLoadBalancing:
 
         # Register 2 workers
         for i in range(1, 3):
-            registry.register_worker(
+            await registry.register_worker(
                 worker_id=f"worker-{i}",
                 worker_type=WorkerType.BACKTESTING,
                 endpoint_url=f"http://worker-{i}:5003",

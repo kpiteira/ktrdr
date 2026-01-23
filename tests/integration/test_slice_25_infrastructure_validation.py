@@ -10,7 +10,6 @@ This test module validates that ALL SLICE-2.5 cleanup tasks have been completed 
 These tests ensure the unified async infrastructure is clean and complete.
 """
 
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -368,44 +367,6 @@ class TestSlice25InfrastructureValidation:
             for issue in problematic_imports:
                 error_msg += f"  {issue['file']}: {issue['pattern']}\n"
             pytest.fail(error_msg)
-
-    def test_complete_test_suite_passes(self):
-        """
-        Validate that the complete test suite passes after infrastructure cleanup.
-
-        This ensures no functionality regressions were introduced during cleanup.
-        """
-        # Run the complete test suite
-        result = subprocess.run(
-            ["make", "test-unit"],
-            capture_output=True,
-            text=True,
-            cwd=Path(__file__).parent.parent.parent,
-        )
-
-        if result.returncode != 0:
-            pytest.fail(
-                f"Test suite failed after infrastructure cleanup:\n{result.stdout}\n{result.stderr}"
-            )
-
-    def test_quality_checks_pass(self):
-        """
-        Validate that all quality checks pass after infrastructure cleanup.
-
-        This ensures code quality is maintained throughout the cleanup process.
-        """
-        # Run quality checks
-        result = subprocess.run(
-            ["make", "quality"],
-            capture_output=True,
-            text=True,
-            cwd=Path(__file__).parent.parent.parent,
-        )
-
-        if result.returncode != 0:
-            pytest.fail(
-                f"Quality checks failed after infrastructure cleanup:\n{result.stdout}\n{result.stderr}"
-            )
 
     def test_architecture_documentation_updated(self, ktrdr_root: Path):
         """

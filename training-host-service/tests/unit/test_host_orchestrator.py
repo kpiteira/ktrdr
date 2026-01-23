@@ -1,22 +1,18 @@
-"""Integration tests for HostTrainingOrchestrator."""
+"""Unit tests for HostTrainingOrchestrator.
+
+These tests verify the HostTrainingOrchestrator class behavior with mocked
+dependencies. They belong in the training-host-service test suite since they
+test code that lives in this service.
+"""
 
 import asyncio
-import sys
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any, Optional
 from unittest.mock import Mock, patch
 
 import pytest
 
-# Add training-host-service to path for imports
-training_host_service_path = (
-    Path(__file__).parent.parent.parent.parent / "training-host-service"
-)
-if str(training_host_service_path) not in sys.path:
-    sys.path.insert(0, str(training_host_service_path))
-
-from ktrdr.training.model_storage import ModelStorage  # noqa: E402
+from ktrdr.training.model_storage import ModelStorage
 
 
 # Mock TrainingSession class for testing

@@ -5,7 +5,7 @@ Tests the training endpoints that start training operations and retrieve results
 with properly mocked external dependencies.
 """
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -39,6 +39,8 @@ def mock_training_service():
     # Mock successful get_model_performance response
     service_mock.get_model_performance.return_value = {
         "success": True,
+        "task_id": "completed_training_789",
+        "status": "completed",
         "training_metrics": {
             "accuracy": 0.85,
             "loss": 0.15,
@@ -123,12 +125,10 @@ class TestTrainingEndpoints:
         )
 
     @pytest.mark.api
-    @patch("ktrdr.api.endpoints.training.get_training_service")
     def test_start_training_with_optional_params(
-        self, mock_get_service, client, mock_training_service
+        self, client_with_mocked_training, mock_training_service
     ):
         """Test starting training with optional parameters."""
-        mock_get_service.return_value = mock_training_service
         # Update mock response for this test
         mock_training_service.start_training.return_value["symbols"] = ["MSFT"]
         mock_training_service.start_training.return_value["timeframes"] = ["1d"]
@@ -140,7 +140,9 @@ class TestTrainingEndpoints:
             "task_id": "custom_task_id",
         }
 
-        response = client.post("/api/v1/trainings/start", json=payload)
+        response = client_with_mocked_training.post(
+            "/api/v1/trainings/start", json=payload
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -176,9 +178,8 @@ class TestTrainingEndpoints:
         assert response.status_code == 422  # Validation error
 
     @pytest.mark.api
-    @patch("ktrdr.api.endpoints.training.get_training_service")
     def test_start_training_service_error(
-        self, mock_get_service, client, mock_training_service
+        self, client_with_mocked_training, mock_training_service
     ):
         """Test handling service errors during training start."""
         # Configure service to raise an exception
@@ -187,7 +188,6 @@ class TestTrainingEndpoints:
         mock_training_service.start_training.side_effect = DataError(
             "Insufficient training data"
         )
-        mock_get_service.return_value = mock_training_service
 
         payload = {
             "symbols": ["AAPL"],
@@ -195,21 +195,22 @@ class TestTrainingEndpoints:
             "strategy_name": "rsi_mean_reversion",
         }
 
-        response = client.post("/api/v1/trainings/start", json=payload)
+        response = client_with_mocked_training.post(
+            "/api/v1/trainings/start", json=payload
+        )
 
         # Should return 500 error when service fails
         assert response.status_code == 500
         assert "Insufficient training data" in response.json()["detail"]
 
     @pytest.mark.api
-    @patch("ktrdr.api.endpoints.training.get_training_service")
     def test_get_model_performance_success(
-        self, mock_get_service, client, mock_training_service
+        self, client_with_mocked_training, mock_training_service
     ):
         """Test getting model performance for completed training."""
-        mock_get_service.return_value = mock_training_service
-
-        response = client.get("/api/v1/trainings/completed_training_789/performance")
+        response = client_with_mocked_training.get(
+            "/api/v1/trainings/completed_training_789/performance"
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -224,9 +225,8 @@ class TestTrainingEndpoints:
         )
 
     @pytest.mark.api
-    @patch("ktrdr.api.endpoints.training.get_training_service")
     def test_get_model_performance_not_completed(
-        self, mock_get_service, client, mock_training_service
+        self, client_with_mocked_training, mock_training_service
     ):
         """Test getting performance for non-completed training."""
         from ktrdr.errors import DataError
@@ -234,11 +234,13 @@ class TestTrainingEndpoints:
         mock_training_service.get_model_performance.side_effect = DataError(
             "Training not completed"
         )
-        mock_get_service.return_value = mock_training_service
 
-        response = client.get("/api/v1/trainings/running_training/performance")
+        response = client_with_mocked_training.get(
+            "/api/v1/trainings/running_training/performance"
+        )
 
-        assert response.status_code == 500
+        # DataError returns 400 (Bad Request), not 500
+        assert response.status_code == 400
         assert "Training not completed" in response.json()["detail"]
 
     @pytest.mark.api
@@ -257,13 +259,10 @@ class TestTrainingEndpoints:
         assert response.status_code == 422
 
     @pytest.mark.api
-    @patch("ktrdr.api.endpoints.training.get_training_service")
     def test_training_config_defaults(
-        self, mock_get_service, client, mock_training_service
+        self, client_with_mocked_training, mock_training_service
     ):
         """Test that training configuration uses proper defaults."""
-        mock_get_service.return_value = mock_training_service
-
         # Minimal payload - should use defaults for most config
         payload = {
             "symbols": ["AAPL"],
@@ -271,7 +270,9 @@ class TestTrainingEndpoints:
             "strategy_name": "rsi_mean_reversion",
         }
 
-        response = client.post("/api/v1/trainings/start", json=payload)
+        response = client_with_mocked_training.post(
+            "/api/v1/trainings/start", json=payload
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -279,13 +280,10 @@ class TestTrainingEndpoints:
         assert data["timeframes"] == ["1h"]
 
     @pytest.mark.api
-    @patch("ktrdr.api.endpoints.training.get_training_service")
     def test_training_large_config(
-        self, mock_get_service, client, mock_training_service
+        self, client_with_mocked_training, mock_training_service
     ):
         """Test training with large/complex configuration."""
-        mock_get_service.return_value = mock_training_service
-
         payload = {
             "symbols": ["AAPL"],
             "timeframes": ["1m"],
@@ -294,7 +292,9 @@ class TestTrainingEndpoints:
             "end_date": "2024-01-01",
         }
 
-        response = client.post("/api/v1/trainings/start", json=payload)
+        response = client_with_mocked_training.post(
+            "/api/v1/trainings/start", json=payload
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -317,13 +317,10 @@ class TestTrainingEndpoints:
         assert response.status_code == 404
 
     @pytest.mark.api
-    @patch("ktrdr.api.endpoints.training.get_training_service")
     def test_training_with_custom_task_id(
-        self, mock_get_service, client, mock_training_service
+        self, client_with_mocked_training, mock_training_service
     ):
         """Test starting training with custom task ID."""
-        mock_get_service.return_value = mock_training_service
-
         payload = {
             "symbols": ["AAPL"],
             "timeframes": ["1h"],
@@ -331,7 +328,9 @@ class TestTrainingEndpoints:
             "task_id": "my_custom_training_id",
         }
 
-        response = client.post("/api/v1/trainings/start", json=payload)
+        response = client_with_mocked_training.post(
+            "/api/v1/trainings/start", json=payload
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -339,12 +338,10 @@ class TestTrainingEndpoints:
         assert data["task_id"] == "op_training_12345"
 
     @pytest.mark.api
-    @patch("ktrdr.api.endpoints.training.get_training_service")
     def test_training_with_multiple_timeframes(
-        self, mock_get_service, client, mock_training_service
+        self, client_with_mocked_training, mock_training_service
     ):
         """Test training with multiple timeframes."""
-        mock_get_service.return_value = mock_training_service
         # Update mock response for multiple timeframes
         mock_training_service.start_training.return_value["timeframes"] = ["1h", "1d"]
 
@@ -354,7 +351,9 @@ class TestTrainingEndpoints:
             "strategy_name": "rsi_mean_reversion",
         }
 
-        response = client.post("/api/v1/trainings/start", json=payload)
+        response = client_with_mocked_training.post(
+            "/api/v1/trainings/start", json=payload
+        )
 
         assert response.status_code == 200
         data = response.json()

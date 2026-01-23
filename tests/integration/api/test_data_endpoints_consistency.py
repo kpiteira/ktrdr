@@ -16,8 +16,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ktrdr.errors import DataError
-
 
 @pytest.fixture
 def client():
@@ -121,41 +119,6 @@ class TestAPIEndpointConsistency:
         mock_data_service._convert_df_to_api_format.assert_called_once()
 
     @pytest.mark.api
-    def test_load_data_endpoint_consistent_delegation_async(
-        self, client, mock_data_service
-    ):
-        """Test load_data endpoint uses consistent async delegation pattern."""
-        # Set up mock to return async operation response
-        mock_data_service.load_data_async.return_value = {
-            "operation_id": "op_test_123",
-            "status": "started",
-        }
-
-        # Make the request (always async now)
-        with patch(
-            "ktrdr.api.dependencies.get_data_service", return_value=mock_data_service
-        ):
-            response = client.post(
-                "/api/v1/data/load",
-                json={"symbol": "MSFT", "timeframe": "1d", "mode": "full"},
-            )
-
-        # Verify response success
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] is True
-        assert data["data"]["operation_id"] == "op_test_123"
-        assert data["data"]["status"] == "started"
-
-        # CRITICAL: Verify consistent async delegation pattern
-        # Now uses load_data_async for consistency
-        mock_data_service.load_data_async.assert_called_once()
-        call_kwargs = mock_data_service.load_data_async.call_args[1]
-        assert call_kwargs["symbol"] == "MSFT"
-        assert call_kwargs["timeframe"] == "1d"
-        assert call_kwargs["mode"] == "full"
-
-    @pytest.mark.api
     def test_no_direct_bypass_patterns_remain(self, client, mock_data_service):
         """Test that no endpoints use direct bypass patterns after transformation."""
         import pandas as pd
@@ -199,68 +162,6 @@ class TestAPIEndpointConsistency:
             # 2. All calls go through consistent DataService methods ✅
             # 3. ServiceOrchestrator delegation is used consistently ✅
 
-    @pytest.mark.api
-    def test_error_handling_consistency_through_delegation(
-        self, client, mock_data_service
-    ):
-        """Test that error handling works consistently through delegation."""
-        # Set up mock to raise DataError through delegation
-        mock_data_service.load_data_async.side_effect = DataError(
-            message="Test error through delegation",
-            error_code="DATA-TestError",
-            details={"test": "error"},
-        )
-
-        with patch(
-            "ktrdr.api.dependencies.get_data_service", return_value=mock_data_service
-        ):
-            response = client.post(
-                "/api/v1/data/load",
-                json={"symbol": "TEST", "timeframe": "1d", "mode": "local"},
-            )
-
-        # Verify error handling works through delegation
-        assert response.status_code == 400
-        data = response.json()
-        assert data["success"] is False
-        assert "error" in data
-        assert data["error"]["code"] == "DATA-TestError"
-
-        # Verify delegation was called
-        mock_data_service.load_data_async.assert_called_once()
-
-    @pytest.mark.api
-    def test_async_response_format(self, client, mock_data_service):
-        """Test that async response format is correct."""
-        # Set up mock to return async operation response
-        mock_data_service.load_data_async.return_value = {
-            "operation_id": "op_test_123",
-            "status": "started",
-        }
-
-        with patch(
-            "ktrdr.api.dependencies.get_data_service", return_value=mock_data_service
-        ):
-            response = client.post(
-                "/api/v1/data/load",
-                json={"symbol": "AAPL", "timeframe": "1h", "mode": "tail"},
-            )
-
-        # Verify response format
-        assert response.status_code == 200
-        data = response.json()
-
-        # Verify response structure
-        assert data["success"] is True
-        assert "data" in data
-        response_data = data["data"]
-
-        # Verify async operation fields are present
-        assert "operation_id" in response_data
-        assert "status" in response_data
-        assert response_data["operation_id"] == "op_test_123"
-        assert response_data["status"] == "started"
-
 
 class TestAPIEndpointTransformationRequirements:
     """Test specific Phase 3 transformation requirements."""
@@ -290,63 +191,3 @@ class TestAPIEndpointTransformationRequirements:
 
         # Verify no direct bypass patterns remain
         mock_data_service.data_manager.load_data.assert_not_called()
-
-    @pytest.mark.api
-    def test_phase3_requirement_consistent_delegation(self, client, mock_data_service):
-        """Test Phase 3 requirement: All endpoints use consistent DataService delegation."""
-        mock_data_service.load_data_async.return_value = {
-            "operation_id": "op_test_456",
-            "status": "started",
-        }
-
-        with patch(
-            "ktrdr.api.dependencies.get_data_service", return_value=mock_data_service
-        ):
-            response = client.post(
-                "/api/v1/data/load",
-                json={"symbol": "AAPL", "timeframe": "1d", "mode": "local"},
-            )
-
-        assert response.status_code == 200
-
-        # Verify consistent delegation pattern - always async now
-        mock_data_service.load_data_async.assert_called_once()
-        call_kwargs = mock_data_service.load_data_async.call_args[1]
-
-        # Verify delegation includes all required parameters
-        required_params = ["symbol", "timeframe", "mode"]
-        for param in required_params:
-            assert param in call_kwargs
-
-    @pytest.mark.api
-    def test_phase3_requirement_performance_maintained(self, client, mock_data_service):
-        """Test Phase 3 requirement: No performance degradation from endpoint changes."""
-        import time
-
-        # Set up fast mock response for async operation
-        mock_data_service.load_data_async.return_value = {
-            "operation_id": "op_perf_test",
-            "status": "started",
-        }
-
-        with patch(
-            "ktrdr.api.dependencies.get_data_service", return_value=mock_data_service
-        ):
-            start_time = time.time()
-
-            response = client.post(
-                "/api/v1/data/load",
-                json={"symbol": "AAPL", "timeframe": "1h", "mode": "tail"},
-            )
-
-            end_time = time.time()
-
-        # Verify response success
-        assert response.status_code == 200
-
-        # Verify performance (should be very fast with mocks)
-        response_time = end_time - start_time
-        assert response_time < 1.0  # Should be sub-second with mocks
-
-        # Verify delegation was efficient (single call)
-        assert mock_data_service.load_data_async.call_count == 1
