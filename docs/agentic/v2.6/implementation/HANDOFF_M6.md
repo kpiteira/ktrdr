@@ -67,6 +67,27 @@ Task 6.3 adds unit and integration tests for restart recovery. The test files al
 
 ---
 
+## Task 6.3 Complete: Unit and Integration Tests
+
+### Test Coverage Summary
+
+Added 4 new tests to `TestStartupResume` class testing `AgentService.resume_if_needed()`:
+- `test_resume_starts_coordinator_when_active_ops_exist` - Verifies coordinator starts when active researches exist
+- `test_resume_noop_when_no_active_ops` - Verifies no-op when operations dict is empty
+- `test_resume_noop_when_only_completed_ops` - Verifies no-op when only completed ops exist
+- `test_resume_detects_orphans_on_first_cycle` - Verifies orphan detection after resume
+
+### Test File Locations
+
+- **Unit tests**: `tests/unit/agents/test_restart_recovery.py` (11 tests)
+- **Integration tests**: `tests/integration/test_restart_recovery.py` (3 tests)
+
+### Gotchas
+
+- **AgentService cleanup**: No `_stop_coordinator()` method exists. To clean up in tests, cancel the task directly: `service._coordinator_task.cancel()` and await it catching CancelledError.
+
+---
+
 ## Test Coverage
 
 | Scenario | Unit Test | Integration Test |

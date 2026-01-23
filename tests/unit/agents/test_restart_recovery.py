@@ -580,3 +580,146 @@ class TestOrphanDetectionLogging:
         assert any(
             "orphan" in record.message.lower() for record in caplog.records
         ), f"Expected 'orphan' in logs, got: {[r.message for r in caplog.records]}"
+
+
+# ============================================================================
+# TestStartupResume
+# ============================================================================
+
+
+class TestStartupResume:
+    """Tests for startup hook resumption via AgentService.resume_if_needed()."""
+
+    @pytest.fixture
+    def mock_agent_service(self, mock_operations_service):
+        """Create a mock agent service for testing resume_if_needed."""
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=mock_operations_service)
+        return service
+
+    @pytest.mark.asyncio
+    async def test_resume_starts_coordinator_when_active_ops_exist(
+        self,
+        mock_operations_service,
+        mock_agent_service,
+    ):
+        """resume_if_needed starts coordinator when active operations exist."""
+        # Create an active research operation
+        parent_op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "training"}),
+        )
+        parent_op.status = OperationStatus.RUNNING
+
+        # Verify coordinator not running initially
+        assert mock_agent_service._coordinator_task is None
+
+        # Call resume_if_needed
+        await mock_agent_service.resume_if_needed()
+
+        # Coordinator should be started
+        assert mock_agent_service._coordinator_task is not None
+        assert not mock_agent_service._coordinator_task.done()
+
+        # Cleanup - cancel the coordinator task
+        mock_agent_service._coordinator_task.cancel()
+        try:
+            await mock_agent_service._coordinator_task
+        except asyncio.CancelledError:
+            pass
+
+    @pytest.mark.asyncio
+    async def test_resume_noop_when_no_active_ops(
+        self,
+        mock_operations_service,
+        mock_agent_service,
+    ):
+        """resume_if_needed does nothing when no active operations exist."""
+        # No operations in system - operations dict is empty
+        assert len(mock_operations_service._operations) == 0
+
+        # Call resume_if_needed
+        await mock_agent_service.resume_if_needed()
+
+        # Coordinator should NOT be started
+        assert mock_agent_service._coordinator_task is None
+
+    @pytest.mark.asyncio
+    async def test_resume_noop_when_only_completed_ops(
+        self,
+        mock_operations_service,
+        mock_agent_service,
+    ):
+        """resume_if_needed does nothing when only completed operations exist."""
+        # Create a completed research operation
+        parent_op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "complete"}),
+        )
+        parent_op.status = OperationStatus.COMPLETED
+
+        # Call resume_if_needed
+        await mock_agent_service.resume_if_needed()
+
+        # Coordinator should NOT be started
+        assert mock_agent_service._coordinator_task is None
+
+    @pytest.mark.asyncio
+    async def test_resume_detects_orphans_on_first_cycle(
+        self,
+        mock_operations_service,
+        mock_design_worker,
+        mock_assessment_worker,
+        mock_checkpoint_service,
+    ):
+        """Resumed coordinator detects orphaned tasks on first cycle.
+
+        When coordinator resumes and finds orphaned in-process tasks,
+        it should detect and handle them.
+        """
+        # Setup: Create research in designing phase with orphaned child
+        parent_op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(
+                parameters={"phase": "designing", "design_op_id": "orphan_on_resume"}
+            ),
+        )
+        parent_op.status = OperationStatus.RUNNING
+
+        child_op = OperationInfo(
+            operation_id="orphan_on_resume",
+            operation_type=OperationType.AGENT_DESIGN,
+            status=OperationStatus.RUNNING,
+            created_at=datetime.now(timezone.utc),
+            metadata=OperationMetadata(),
+        )
+        mock_operations_service._operations["orphan_on_resume"] = child_op
+
+        # Create fresh coordinator (simulates restart - no _child_tasks)
+        worker = AgentResearchWorker(
+            operations_service=mock_operations_service,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
+            checkpoint_service=mock_checkpoint_service,
+        )
+        worker.POLL_INTERVAL = 0.01
+
+        # Track design restarts
+        design_restarted = False
+
+        async def track_restart(op_id):
+            nonlocal design_restarted
+            design_restarted = True
+            # Complete operation to exit loop
+            parent_op.status = OperationStatus.COMPLETED
+
+        worker._start_design = track_restart
+
+        # Run coordinator (simulates what happens after resume_if_needed)
+        await worker.run()
+
+        # Orphan should be detected and phase restarted
+        assert child_op.status == OperationStatus.FAILED
+        assert "orphaned" in child_op.error_message.lower()
+        assert design_restarted
