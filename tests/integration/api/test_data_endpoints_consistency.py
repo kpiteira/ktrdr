@@ -16,8 +16,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ktrdr.errors import DataError
-
 
 @pytest.fixture
 def client():
@@ -164,6 +162,7 @@ class TestAPIEndpointConsistency:
             # 2. All calls go through consistent DataService methods ✅
             # 3. ServiceOrchestrator delegation is used consistently ✅
 
+
 class TestAPIEndpointTransformationRequirements:
     """Test specific Phase 3 transformation requirements."""
 
@@ -192,4 +191,3 @@ class TestAPIEndpointTransformationRequirements:
 
         # Verify no direct bypass patterns remain
         mock_data_service.data_manager.load_data.assert_not_called()
-

@@ -443,15 +443,24 @@ class TestM6ShutdownSavesCheckpoint:
         artifacts = create_model_artifacts(10)
         worker.set_current_artifacts(artifacts)
 
-        # Trigger shutdown immediately
-        worker._shutdown_event.set()
+        operation_started = asyncio.Event()
 
         async def operation() -> str:
+            operation_started.set()
             await asyncio.sleep(10)
             return "done"
 
+        async def trigger_shutdown() -> None:
+            await operation_started.wait()
+            await asyncio.sleep(0.01)
+            worker._shutdown_event.set()
+
+        shutdown_task = asyncio.create_task(trigger_shutdown())
+
         with pytest.raises(GracefulShutdownError):
             await worker.run_with_graceful_shutdown(operation_id, operation())
+
+        await shutdown_task
 
         # Load checkpoint with artifacts
         checkpoint = await checkpoint_service.load_checkpoint(
@@ -487,15 +496,24 @@ class TestM6ShutdownUpdatesStatus:
 
         worker.set_current_state({"epoch": 5})
 
-        # Trigger shutdown immediately
-        worker._shutdown_event.set()
+        operation_started = asyncio.Event()
 
         async def operation() -> str:
+            operation_started.set()
             await asyncio.sleep(10)
             return "done"
 
+        async def trigger_shutdown() -> None:
+            await operation_started.wait()
+            await asyncio.sleep(0.01)
+            worker._shutdown_event.set()
+
+        shutdown_task = asyncio.create_task(trigger_shutdown())
+
         with pytest.raises(GracefulShutdownError):
             await worker.run_with_graceful_shutdown(operation_id, operation())
+
+        await shutdown_task
 
         # Verify status was updated to CANCELLED
         op = operations_repo.get(operation_id)
@@ -513,14 +531,25 @@ class TestM6ShutdownUpdatesStatus:
         await operations_repo.create(operation_id, "training", status="running")
 
         worker.set_current_state({"epoch": 3})
-        worker._shutdown_event.set()
+
+        operation_started = asyncio.Event()
 
         async def operation() -> str:
+            operation_started.set()
             await asyncio.sleep(10)
             return "done"
 
+        async def trigger_shutdown() -> None:
+            await operation_started.wait()
+            await asyncio.sleep(0.01)
+            worker._shutdown_event.set()
+
+        shutdown_task = asyncio.create_task(trigger_shutdown())
+
         with pytest.raises(GracefulShutdownError):
             await worker.run_with_graceful_shutdown(operation_id, operation())
+
+        await shutdown_task
 
         op = operations_repo.get(operation_id)
         assert op is not None
@@ -571,15 +600,24 @@ class TestM6ResumeAfterShutdown:
         worker.set_current_state(training_state.to_dict())
         worker.set_current_artifacts(create_model_artifacts(shutdown_epoch))
 
-        # Trigger shutdown
-        worker._shutdown_event.set()
+        operation_started = asyncio.Event()
 
         async def operation() -> str:
+            operation_started.set()
             await asyncio.sleep(10)
             return "done"
 
+        async def trigger_shutdown() -> None:
+            await operation_started.wait()
+            await asyncio.sleep(0.01)
+            worker._shutdown_event.set()
+
+        shutdown_task = asyncio.create_task(trigger_shutdown())
+
         with pytest.raises(GracefulShutdownError):
             await worker.run_with_graceful_shutdown(operation_id, operation())
+
+        await shutdown_task
 
         # Step 3: Verify checkpoint exists with type="shutdown"
         assert checkpoint_service.checkpoint_exists(operation_id)
@@ -649,14 +687,24 @@ class TestM6ResumeAfterShutdown:
             }
         )
 
-        worker._shutdown_event.set()
+        operation_started = asyncio.Event()
 
         async def operation() -> str:
+            operation_started.set()
             await asyncio.sleep(10)
             return "done"
 
+        async def trigger_shutdown() -> None:
+            await operation_started.wait()
+            await asyncio.sleep(0.01)
+            worker._shutdown_event.set()
+
+        shutdown_task = asyncio.create_task(trigger_shutdown())
+
         with pytest.raises(GracefulShutdownError):
             await worker.run_with_graceful_shutdown(operation_id, operation())
+
+        await shutdown_task
 
         # Load checkpoint and restore model
         checkpoint = await checkpoint_service.load_checkpoint(
@@ -683,33 +731,38 @@ class TestM6EdgeCases:
     """Tests for edge cases in graceful shutdown."""
 
     @pytest.mark.asyncio
-    async def test_shutdown_before_operation_starts(
+    async def test_stale_shutdown_event_is_cleared(
         self,
         worker: GracefulShutdownTestWorker,
         checkpoint_service: IntegrationCheckpointService,
         operations_repo: MockOperationsRepository,
     ):
-        """Test shutdown signal before operation begins execution."""
-        operation_id = "op_immediate_shutdown"
+        """Test that stale shutdown events are cleared before new operations.
+
+        This tests the scenario where a shutdown event was set from a previous
+        operation (e.g., after backend restart) but the worker survived. The
+        stale event should be cleared so new operations can run normally.
+        """
+        operation_id = "op_stale_event_cleared"
         await operations_repo.create(operation_id, "training", status="running")
 
         worker.set_current_state({"epoch": 0, "train_loss": 1.0})
 
-        # Set shutdown before running operation
+        # Set a "stale" shutdown event (simulating leftover from previous op)
         worker._shutdown_event.set()
 
-        async def operation() -> str:
-            await asyncio.sleep(0.1)
-            return "done"
+        async def quick_operation() -> str:
+            return "completed"
 
-        with pytest.raises(GracefulShutdownError):
-            await worker.run_with_graceful_shutdown(operation_id, operation())
+        # Operation should complete normally - stale event is cleared
+        result = await worker.run_with_graceful_shutdown(
+            operation_id, quick_operation()
+        )
 
-        # Verify checkpoint saved even for immediate shutdown
-        assert checkpoint_service.checkpoint_exists(operation_id)
-        checkpoint = await checkpoint_service.load_checkpoint(operation_id)
-        assert checkpoint is not None
-        assert checkpoint["checkpoint_type"] == "shutdown"
+        assert result == "completed"
+
+        # No shutdown checkpoint should be saved (operation completed normally)
+        assert not checkpoint_service.checkpoint_exists(operation_id)
 
     @pytest.mark.asyncio
     async def test_multiple_shutdown_signals(
@@ -717,23 +770,33 @@ class TestM6EdgeCases:
         worker: GracefulShutdownTestWorker,
         operations_repo: MockOperationsRepository,
     ):
-        """Test that multiple shutdown signals don't cause issues."""
+        """Test that multiple shutdown signals during operation don't cause issues."""
         operation_id = "op_multiple_signals"
         await operations_repo.create(operation_id, "training", status="running")
 
         worker.set_current_state({"epoch": 5})
 
-        # Set shutdown multiple times (should be idempotent)
-        worker._shutdown_event.set()
-        worker._shutdown_event.set()
-        worker._shutdown_event.set()
+        operation_started = asyncio.Event()
 
         async def operation() -> str:
+            operation_started.set()
             await asyncio.sleep(10)
             return "done"
 
+        async def trigger_multiple_shutdowns() -> None:
+            await operation_started.wait()
+            await asyncio.sleep(0.01)
+            # Set shutdown multiple times (should be idempotent)
+            worker._shutdown_event.set()
+            worker._shutdown_event.set()
+            worker._shutdown_event.set()
+
+        shutdown_task = asyncio.create_task(trigger_multiple_shutdowns())
+
         with pytest.raises(GracefulShutdownError):
             await worker.run_with_graceful_shutdown(operation_id, operation())
+
+        await shutdown_task
 
         # Should complete without errors
         op = operations_repo.get(operation_id)

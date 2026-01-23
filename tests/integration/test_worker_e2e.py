@@ -9,7 +9,7 @@ This test verifies the complete flow:
 
 import asyncio
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -86,7 +86,10 @@ class TestWorkerEndToEnd:
             # Create mock client class that simulates backend registration
             MockAsyncClient = create_mock_httpx_client_class(registry, mock_response)
 
-            with patch("ktrdr.backtesting.worker_registration.httpx.AsyncClient", MockAsyncClient):
+            with patch(
+                "ktrdr.backtesting.worker_registration.httpx.AsyncClient",
+                MockAsyncClient,
+            ):
                 # 5. Worker: Perform registration
                 success = await worker_reg.register()
                 assert success is True, "Worker registration should succeed"
@@ -187,7 +190,10 @@ class TestWorkerEndToEnd:
 
             MockAsyncClient = create_mock_httpx_client_class(registry, mock_response)
 
-            with patch("ktrdr.backtesting.worker_registration.httpx.AsyncClient", MockAsyncClient):
+            with patch(
+                "ktrdr.backtesting.worker_registration.httpx.AsyncClient",
+                MockAsyncClient,
+            ):
                 await worker_reg.register()
 
             # Verify first registration
@@ -210,7 +216,10 @@ class TestWorkerEndToEnd:
 
             MockAsyncClient2 = create_mock_httpx_client_class(registry, mock_response)
 
-            with patch("ktrdr.backtesting.worker_registration.httpx.AsyncClient", MockAsyncClient2):
+            with patch(
+                "ktrdr.backtesting.worker_registration.httpx.AsyncClient",
+                MockAsyncClient2,
+            ):
                 await worker_reg2.register()
 
             # Verify still only one worker (idempotent)
@@ -274,7 +283,10 @@ class TestWorkerEndToEnd:
                     }
                     return mock_response
 
-            with patch("ktrdr.backtesting.worker_registration.httpx.AsyncClient", FlakyAsyncClient):
+            with patch(
+                "ktrdr.backtesting.worker_registration.httpx.AsyncClient",
+                FlakyAsyncClient,
+            ):
                 success = await worker_reg.register()
 
             # Verify registration eventually succeeded

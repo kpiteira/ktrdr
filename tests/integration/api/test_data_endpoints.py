@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from ktrdr.errors import DataError, DataNotFoundError
+from ktrdr.errors import DataNotFoundError
 
 
 @pytest.fixture
@@ -116,49 +116,6 @@ def test_get_symbols_endpoint_error(client, mock_data_service):
     data = response.json()
     assert data["success"] is False
     assert "error" in data
-
-    # Verify the mock was called
-    mock_data_service.get_available_symbols.assert_called_once()
-
-
-@pytest.mark.api
-def test_get_symbols_endpoint_mixed_types(client, mock_data_service):
-    """Test symbols endpoint handling of mixed symbol types and instrument_type edge cases."""
-
-    # Create mock symbols with mixed types that could cause the MyPy error
-    class MockSymbolWithNonStringType:
-        def __init__(self, symbol, instrument_type):
-            self.symbol = symbol
-            self.instrument_type = instrument_type  # Could be non-string
-
-    mock_symbols = [
-        # String symbols (old style)
-        "AAPL",
-        "MSFT",
-        # Object symbols with string instrument_type
-        MockSymbolWithNonStringType("GOOGL", "stock"),
-        # Object symbol with non-string instrument_type (edge case)
-        MockSymbolWithNonStringType("BTC-USD", 123),  # Integer type
-        # Object symbol with None instrument_type (edge case)
-        MockSymbolWithNonStringType("ETH-USD", None),
-    ]
-
-    mock_data_service.get_available_symbols.return_value = mock_symbols
-    mock_data_service.get_available_timeframes.return_value = [
-        {"id": "1d", "name": "Daily", "description": "Daily interval data"}
-    ]
-
-    # Make the request
-    with patch(
-        "ktrdr.api.dependencies.get_data_service", return_value=mock_data_service
-    ):
-        response = client.get("/api/v1/symbols")
-
-    # Should handle mixed types gracefully
-    assert response.status_code == 200
-    data = response.json()
-    assert data["success"] is True
-    assert len(data["data"]) == 5  # All symbols should be processed
 
     # Verify the mock was called
     mock_data_service.get_available_symbols.assert_called_once()

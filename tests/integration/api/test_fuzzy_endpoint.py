@@ -169,7 +169,9 @@ class TestFuzzyDataEndpoint:
 
         assert response.status_code == 422  # Validation error
         data = response.json()
-        assert "symbol" in str(data["detail"]).lower()
+        # API returns custom validation error format with 'errors' or 'detail' list
+        response_str = str(data).lower()
+        assert "symbol" in response_str
 
     def test_get_fuzzy_overlay_data_missing_timeframe(self):
         """Test error handling for missing timeframe parameter."""
@@ -177,7 +179,9 @@ class TestFuzzyDataEndpoint:
 
         assert response.status_code == 422  # Validation error
         data = response.json()
-        assert "timeframe" in str(data["detail"]).lower()
+        # API returns custom validation error format with 'errors' or 'detail' list
+        response_str = str(data).lower()
+        assert "timeframe" in response_str
 
     def test_get_fuzzy_overlay_data_data_error(self):
         """Test handling of DataError (no data available)."""

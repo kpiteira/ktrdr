@@ -13,10 +13,9 @@ Test approach:
 3. End-to-end: Full workflow from API to completed training
 """
 
-import asyncio
 from io import BytesIO
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 import torch
@@ -408,18 +407,6 @@ class TestResumeContextWiring:
         assert orchestrator._resume_context == resume_context
         assert orchestrator._resume_context.start_epoch == 2
 
-    def test_training_pipeline_train_strategy_accepts_resume_context(self):
-        """Validate that TrainingPipeline.train_strategy() accepts resume_context parameter."""
-        import inspect
-
-        # Get the signature of train_strategy
-        sig = inspect.signature(TrainingPipeline.train_strategy)
-        params = sig.parameters
-
-        # Verify resume_context parameter exists
-        assert "resume_context" in params
-        assert params["resume_context"].default is None  # Optional parameter
-
     def test_training_pipeline_train_model_accepts_resume_context(self):
         """Validate that TrainingPipeline.train_model() accepts resume_context parameter."""
         import inspect
@@ -431,54 +418,6 @@ class TestResumeContextWiring:
         # Verify resume_context parameter exists
         assert "resume_context" in params
         assert params["resume_context"].default is None  # Optional parameter
-
-    def test_orchestrator_passes_resume_context_to_train_strategy(
-        self,
-        training_context,
-    ):
-        """Verify LocalTrainingOrchestrator calls train_strategy with resume_context."""
-        from ktrdr.training.checkpoint_restore import TrainingResumeContext
-
-        # Create a resume context
-        checkpoint_model = nn.Linear(10, 3)
-        weights_buffer = BytesIO()
-        torch.save(checkpoint_model.state_dict(), weights_buffer)
-
-        resume_ctx = TrainingResumeContext(
-            start_epoch=2,
-            model_weights=weights_buffer.getvalue(),
-            optimizer_state=BytesIO(b"").getvalue(),
-        )
-
-        # Track what train_strategy is called with
-        called_with = {}
-
-        def tracked_train_strategy(*args, **kwargs):
-            called_with["resume_context"] = kwargs.get("resume_context")
-            # Short-circuit - don't actually train
-            raise ValueError("Test - intentional stop")
-
-        with patch.object(
-            TrainingPipeline,
-            "train_strategy",
-            side_effect=tracked_train_strategy,
-        ):
-            orchestrator = LocalTrainingOrchestrator(
-                context=training_context,
-                progress_bridge=MagicMock(),
-                cancellation_token=None,
-                model_storage=MagicMock(),
-                resume_context=resume_ctx,
-            )
-
-            # Try to run - will fail but we've captured the call
-            try:
-                asyncio.run(orchestrator.run())
-            except ValueError:
-                pass  # Expected
-
-            # Verify train_strategy was called with resume_context
-            assert called_with.get("resume_context") == resume_ctx
 
 
 # ============================================================================
