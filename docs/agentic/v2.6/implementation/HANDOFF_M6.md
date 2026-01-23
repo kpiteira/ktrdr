@@ -33,6 +33,40 @@ Task 6.2 is a RESEARCH/verification task - verify that training/backtest operati
 
 ---
 
+## Task 6.2 Complete: Verify Training/Backtest Resume Naturally
+
+### Verification Findings
+
+Training and backtest operations naturally survive backend restarts due to architecture:
+
+1. **Workers are separate containers** - They continue running during backend restart
+2. **Operations persist in PostgreSQL** - RUNNING status survives restart
+3. **Orphan detection excludes worker phases** - Lines 1088-1093 in `research_worker.py` explicitly skip orphan checks for training/backtesting
+4. **Coordinator simply polls** - `_handle_training_phase()` and `_handle_backtesting_phase()` just check child operation status
+
+### Key Code Evidence
+
+```python
+# From _advance_research() - orphan detection only for in-process phases
+if phase in ("designing", "assessing"):
+    if await self._check_and_handle_orphan(operation_id, phase, child_op):
+        return
+# Training and backtesting phases fall through to their handlers
+# which simply poll child_op.status
+```
+
+### Test Evidence
+
+- `test_training_continues_after_simulated_restart` - Fresh coordinator doesn't disrupt training
+- `test_training_not_affected_by_orphan_detection` - Training explicitly not orphaned
+- `test_backtesting_not_affected_by_orphan_detection` - Backtest explicitly not orphaned
+
+### Next Task Notes (Task 6.3)
+
+Task 6.3 adds unit and integration tests for restart recovery. The test files already exist from Task 6.1 with good coverage (10 tests). Task 6.3 may need to add any missing tests from the milestone spec.
+
+---
+
 ## Test Coverage
 
 | Scenario | Unit Test | Integration Test |
