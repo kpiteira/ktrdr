@@ -76,8 +76,33 @@ Capacity: 2/6 researches
 - **Duration format**: Uses `format_duration(seconds)` helper → "Xm Ys" with zero-padded seconds
 - **Strategy name**: Shows "-" when None (no strategy designed yet)
 
-### Next Task Notes (5.3: Unit and Integration Tests)
+## Task 5.3 Complete: Unit and Integration Tests for Status
 
-- Unit tests already exist in `tests/unit/cli/test_agent_status.py`
-- Need integration test that calls real API with test data
-- Test existing patterns in `tests/unit/cli/commands/` for mock patterns
+### Test Coverage
+
+Three test files cover the status functionality:
+
+1. **`tests/unit/agent_tests/test_agent_service_new.py`** - AgentService.get_status() unit tests (already existed from Task 5.1)
+   - `TestAgentServiceGetStatus` - basic status tests
+   - `TestAgentServiceMultiResearchStatus` - M5 multi-research tests
+
+2. **`tests/unit/cli/test_agent_status.py`** - CLI display tests (created in Task 5.2)
+   - 11 tests covering idle/active display, worker/budget/capacity formatting
+
+3. **`tests/integration/test_agent_status.py`** - Integration tests (created in Task 5.3)
+   - 8 tests verifying end-to-end status flow with mocked services
+
+### Key Testing Patterns
+
+- **Mock operations service fixture**: Use `mock_operations_service` fixture pattern from `test_multi_research.py`
+- **Worker registry mocking**: Patch at `ktrdr.api.endpoints.workers.get_worker_registry`
+- **Budget tracker mocking**: Patch at `ktrdr.api.services.agent_service.get_budget_tracker`
+- **Setting started_at**: Required for duration_seconds calculation in tests
+
+### E2E Validation Notes (Next)
+
+The E2E test should:
+1. Trigger 2 researches via CLI
+2. Call `ktrdr agent status`
+3. Verify both researches appear with phases
+4. Verify workers/budget/capacity shown
