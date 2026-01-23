@@ -9,13 +9,43 @@ This test verifies the complete flow:
 
 import asyncio
 import os
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from ktrdr.api.models.workers import WorkerStatus, WorkerType
 from ktrdr.api.services.worker_registry import WorkerRegistry
 from ktrdr.backtesting.worker_registration import WorkerRegistration
+
+
+def create_mock_httpx_client_class(registry: WorkerRegistry, mock_response):
+    """Create a mock httpx.AsyncClient class that simulates backend registration.
+
+    The mock intercepts POST requests and calls registry.register_worker()
+    to simulate what the backend endpoint does.
+    """
+
+    class MockAsyncClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            return None
+
+        async def post(self, url, **kwargs):
+            json_data = kwargs.get("json", {})
+            await registry.register_worker(
+                worker_id=json_data["worker_id"],
+                worker_type=WorkerType(json_data["worker_type"]),
+                endpoint_url=json_data["endpoint_url"],
+                capabilities=json_data.get("capabilities"),
+            )
+            return mock_response
+
+    return MockAsyncClient
 
 
 class TestWorkerEndToEnd:
@@ -43,7 +73,7 @@ class TestWorkerEndToEnd:
             assert worker_reg.worker_type == "backtesting"
 
             # 4. Worker: Simulate successful HTTP registration
-            mock_response = AsyncMock()
+            mock_response = MagicMock()
             mock_response.status_code = 200
             mock_response.json.return_value = {
                 "worker_id": "backtest-worker-1",
@@ -53,19 +83,10 @@ class TestWorkerEndToEnd:
                 "capabilities": worker_reg.get_capabilities(),
             }
 
-            # Mock the HTTP call, but actually register in the registry
-            async def mock_register(*args, **kwargs):
-                # Simulate what the backend endpoint does
-                json_data = kwargs.get("json", {})
-                registry.register_worker(
-                    worker_id=json_data["worker_id"],
-                    worker_type=WorkerType(json_data["worker_type"]),
-                    endpoint_url=json_data["endpoint_url"],
-                    capabilities=json_data.get("capabilities"),
-                )
-                return mock_response
+            # Create mock client class that simulates backend registration
+            MockAsyncClient = create_mock_httpx_client_class(registry, mock_response)
 
-            with patch("httpx.AsyncClient.post", side_effect=mock_register):
+            with patch("ktrdr.backtesting.worker_registration.httpx.AsyncClient", MockAsyncClient):
                 # 5. Worker: Perform registration
                 success = await worker_reg.register()
                 assert success is True, "Worker registration should succeed"
@@ -123,7 +144,7 @@ class TestWorkerEndToEnd:
         ]
 
         for config in workers_config:
-            registry.register_worker(**config)
+            await registry.register_worker(**config)
 
         # 3. Verify all workers registered
         all_workers = registry.list_workers()
@@ -151,29 +172,22 @@ class TestWorkerEndToEnd:
             {
                 "WORKER_ID": "backtest-1",
                 "WORKER_PORT": "5003",
+                "KTRDR_API_URL": "http://backend:8000",
             },
         ):
             worker_reg = WorkerRegistration()
 
             # Mock first registration
-            mock_response = AsyncMock()
+            mock_response = MagicMock()
             mock_response.status_code = 200
             mock_response.json.return_value = {
                 "worker_id": "backtest-1",
                 "worker_type": "backtesting",
             }
 
-            async def mock_register_v1(*args, **kwargs):
-                json_data = kwargs.get("json", {})
-                registry.register_worker(
-                    worker_id=json_data["worker_id"],
-                    worker_type=WorkerType(json_data["worker_type"]),
-                    endpoint_url=json_data["endpoint_url"],
-                    capabilities=json_data.get("capabilities"),
-                )
-                return mock_response
+            MockAsyncClient = create_mock_httpx_client_class(registry, mock_response)
 
-            with patch("httpx.AsyncClient.post", side_effect=mock_register_v1):
+            with patch("ktrdr.backtesting.worker_registration.httpx.AsyncClient", MockAsyncClient):
                 await worker_reg.register()
 
             # Verify first registration
@@ -189,21 +203,14 @@ class TestWorkerEndToEnd:
             {
                 "WORKER_ID": "backtest-1",
                 "WORKER_PORT": "5003",
+                "KTRDR_API_URL": "http://backend:8000",
             },
         ):
             worker_reg2 = WorkerRegistration()
 
-            async def mock_register_v2(*args, **kwargs):
-                json_data = kwargs.get("json", {})
-                registry.register_worker(
-                    worker_id=json_data["worker_id"],
-                    worker_type=WorkerType(json_data["worker_type"]),
-                    endpoint_url=json_data["endpoint_url"],
-                    capabilities=json_data.get("capabilities"),
-                )
-                return mock_response
+            MockAsyncClient2 = create_mock_httpx_client_class(registry, mock_response)
 
-            with patch("httpx.AsyncClient.post", side_effect=mock_register_v2):
+            with patch("ktrdr.backtesting.worker_registration.httpx.AsyncClient", MockAsyncClient2):
                 await worker_reg2.register()
 
             # Verify still only one worker (idempotent)
@@ -223,44 +230,56 @@ class TestWorkerEndToEnd:
             {
                 "WORKER_ID": "backtest-1",
                 "WORKER_PORT": "5003",
+                "KTRDR_API_URL": "http://backend:8000",
             },
         ):
             # Configure worker with shorter retry parameters for faster test
             worker_reg = WorkerRegistration(max_retries=3, retry_delay=0.05)
 
-            attempt_count = 0
+            attempt_count = [0]  # Use list to allow mutation in nested class
 
-            async def mock_flaky_register(*args, **kwargs):
-                nonlocal attempt_count
-                attempt_count += 1
+            class FlakyAsyncClient:
+                """Client that fails twice then succeeds."""
 
-                # Fail first 2 attempts, succeed on 3rd
-                if attempt_count < 3:
-                    raise Exception("Connection refused")
+                def __init__(self, **kwargs):
+                    pass
 
-                # Success on 3rd attempt
-                json_data = kwargs.get("json", {})
-                registry.register_worker(
-                    worker_id=json_data["worker_id"],
-                    worker_type=WorkerType(json_data["worker_type"]),
-                    endpoint_url=json_data["endpoint_url"],
-                    capabilities=json_data.get("capabilities"),
-                )
+                async def __aenter__(self):
+                    return self
 
-                mock_response = AsyncMock()
-                mock_response.status_code = 200
-                mock_response.json.return_value = {
-                    "worker_id": "backtest-1",
-                    "worker_type": "backtesting",
-                }
-                return mock_response
+                async def __aexit__(self, exc_type, exc_val, exc_tb):
+                    return None
 
-            with patch("httpx.AsyncClient.post", side_effect=mock_flaky_register):
+                async def post(self, url, **kwargs):
+                    attempt_count[0] += 1
+
+                    # Fail first 2 attempts, succeed on 3rd
+                    if attempt_count[0] < 3:
+                        raise Exception("Connection refused")
+
+                    # Success on 3rd attempt
+                    json_data = kwargs.get("json", {})
+                    await registry.register_worker(
+                        worker_id=json_data["worker_id"],
+                        worker_type=WorkerType(json_data["worker_type"]),
+                        endpoint_url=json_data["endpoint_url"],
+                        capabilities=json_data.get("capabilities"),
+                    )
+
+                    mock_response = MagicMock()
+                    mock_response.status_code = 200
+                    mock_response.json.return_value = {
+                        "worker_id": "backtest-1",
+                        "worker_type": "backtesting",
+                    }
+                    return mock_response
+
+            with patch("ktrdr.backtesting.worker_registration.httpx.AsyncClient", FlakyAsyncClient):
                 success = await worker_reg.register()
 
             # Verify registration eventually succeeded
             assert success is True
-            assert attempt_count == 3, "Should have retried 3 times"
+            assert attempt_count[0] == 3, "Should have retried 3 times"
             assert len(registry.list_workers()) == 1
 
     @pytest.mark.asyncio
@@ -271,6 +290,7 @@ class TestWorkerEndToEnd:
             {
                 "WORKER_ID": "backtest-1",
                 "WORKER_PORT": "5003",
+                "KTRDR_API_URL": "http://backend:8000",
             },
         ):
             worker_reg = WorkerRegistration()

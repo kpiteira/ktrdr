@@ -1,4 +1,9 @@
-"""Integration tests for LocalTrainingOrchestrator."""
+"""Unit tests for LocalTrainingOrchestrator.
+
+These tests verify the LocalTrainingOrchestrator class with mocked
+TrainingPipeline and other dependencies. They are unit tests because
+they mock nearly all external dependencies.
+"""
 
 import asyncio
 from pathlib import Path
