@@ -1118,7 +1118,7 @@ class TestMultiResearchCoordinatorLoop:
             try:
                 await task
             except asyncio.CancelledError:
-                pass
+                pass  # Expected during test cleanup: task was explicitly cancelled
 
     @pytest.mark.asyncio
     async def test_run_exits_when_no_active_operations(

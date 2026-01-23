@@ -280,7 +280,7 @@ class TestOrphanedDesignDetection:
             try:
                 await task
             except asyncio.CancelledError:
-                pass
+                pass  # Expected during test cleanup: fake_task was explicitly cancelled
 
 
 # ============================================================================
@@ -627,7 +627,7 @@ class TestStartupResume:
         try:
             await mock_agent_service._coordinator_task
         except asyncio.CancelledError:
-            pass
+            pass  # Expected during cleanup: coordinator task was explicitly cancelled
 
     @pytest.mark.asyncio
     async def test_resume_noop_when_no_active_ops(
