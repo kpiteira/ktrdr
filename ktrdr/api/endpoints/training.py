@@ -288,7 +288,12 @@ async def start_training(
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except DataError as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        # DataError indicates data unavailability - return 503
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except ValueError as e:
+        # Validation errors should return 422
+        logger.error(f"Invalid parameter in training request: {str(e)}")
+        raise HTTPException(status_code=422, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Failed to start training: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to start training") from e
@@ -328,7 +333,11 @@ async def get_model_performance(
     except ValidationError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except DataError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        # DataError indicates data unavailability - return 503
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except ValueError as e:
+        # Validation errors should return 422
+        raise HTTPException(status_code=422, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Failed to get model performance: {str(e)}")
         raise HTTPException(

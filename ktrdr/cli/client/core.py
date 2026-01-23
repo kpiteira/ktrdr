@@ -78,27 +78,43 @@ def resolve_url(explicit_url: Optional[str] = None) -> str:
     return get_api_base_url().rstrip("/")
 
 
-def should_retry(status_code: int, attempt: int, max_retries: int) -> bool:
+def should_retry(
+    status_code: int,
+    attempt: int,
+    max_retries: int,
+    retryable: Optional[bool] = None,
+) -> bool:
     """Determine if a request should be retried based on status code and attempt count.
 
-    Only server errors (5xx) are retried. Client errors (4xx) and success
-    responses are not retried as they indicate issues that won't be resolved
-    by retrying.
+    By default, only server errors (5xx) are retried. Client errors (4xx) and
+    success responses are not retried as they indicate issues that won't be
+    resolved by retrying.
+
+    The explicit retryable parameter can override status code logic:
+    - retryable=False: Never retry (e.g., validation errors returned as 500)
+    - retryable=True: Force retry even on 4xx (rare, but API can indicate)
+    - retryable=None: Use status code based logic (default)
 
     Args:
         status_code: HTTP response status code
         attempt: Current attempt number (0-indexed)
         max_retries: Maximum number of retries allowed
+        retryable: Explicit retryable flag from API response. If provided,
+                   overrides status code based logic.
 
     Returns:
         True if the request should be retried, False otherwise
     """
-    # Only retry on server errors (5xx)
-    if not (500 <= status_code < 600):
+    # Check if we have attempts remaining first
+    if attempt >= max_retries:
         return False
 
-    # Check if we have attempts remaining
-    return attempt < max_retries
+    # Explicit retryable flag overrides status code logic
+    if retryable is not None:
+        return retryable
+
+    # Only retry on server errors (5xx) by default
+    return 500 <= status_code < 600
 
 
 def calculate_backoff(attempt: int, base_delay: float) -> float:
