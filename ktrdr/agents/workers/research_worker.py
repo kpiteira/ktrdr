@@ -1068,6 +1068,11 @@ class AgentResearchWorker:
         Called by the coordinator loop for each active research operation.
         Determines the current phase and calls the appropriate handler.
 
+        Also detects orphaned in-process tasks after backend restart.
+        Design and assessment phases run as asyncio tasks - if the backend
+        restarts, the task is lost but the child operation may still show
+        RUNNING. This orphaned state is detected and the phase is restarted.
+
         Args:
             op: The research operation to advance.
         """
@@ -1079,6 +1084,13 @@ class AgentResearchWorker:
         child_op = None
         if child_op_id:
             child_op = await self.ops.get_operation(child_op_id)
+
+        # Check for orphaned in-process tasks (design/assessment only)
+        # Training and backtest run on external workers, so they survive restarts
+        if phase in ("designing", "assessing"):
+            if await self._check_and_handle_orphan(operation_id, phase, child_op):
+                # Orphan was detected and handled, return early
+                return
 
         # State machine logic - advance one step
         if phase == "idle":
@@ -1095,6 +1107,51 @@ class AgentResearchWorker:
 
         elif phase == "assessing":
             await self._handle_assessing_phase(operation_id, child_op)
+
+    async def _check_and_handle_orphan(
+        self, operation_id: str, phase: str, child_op: Any
+    ) -> bool:
+        """Check for and handle orphaned in-process tasks.
+
+        After backend restart, design/assessment child operations may show
+        RUNNING but no asyncio task exists. This orphaned state needs
+        detection and recovery.
+
+        Args:
+            operation_id: Parent research operation ID.
+            phase: Current phase name ("designing" or "assessing").
+            child_op: Child operation for this phase (may be None).
+
+        Returns:
+            True if an orphan was detected and handled, False otherwise.
+        """
+        # Only check if child operation exists and is RUNNING
+        if child_op is None:
+            return False
+
+        if child_op.status != OperationStatus.RUNNING:
+            return False
+
+        # Check if we have an active task for this operation
+        # If task exists, it's not orphaned
+        if operation_id in self._child_tasks:
+            return False
+
+        # Orphaned! Child is RUNNING but no task exists
+        logger.warning(f"Detected orphaned {phase} task for {operation_id}, restarting")
+
+        # Mark old child as failed
+        await self.ops.fail_operation(
+            child_op.operation_id, "Orphaned by backend restart"
+        )
+
+        # Restart the phase
+        if phase == "designing":
+            await self._start_design(operation_id)
+        else:  # assessing
+            await self._start_assessment(operation_id)
+
+        return True
 
     async def _handle_research_cancelled(self, op: Any) -> None:
         """Handle cancellation for a single research.
