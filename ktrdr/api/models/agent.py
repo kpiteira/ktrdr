@@ -1,6 +1,6 @@
 """Agent API Pydantic models."""
 
-from typing import Any, Optional
+from typing import Optional
 
 from pydantic import BaseModel, field_validator
 
@@ -51,17 +51,56 @@ class LastCycleInfo(BaseModel):
     completed_at: Optional[str] = None
 
 
+class ActiveResearchInfo(BaseModel):
+    """Information about an active research operation."""
+
+    operation_id: str
+    phase: str
+    strategy_name: Optional[str] = None
+    duration_seconds: int
+    child_operation_id: Optional[str] = None
+
+
+class WorkerUtilization(BaseModel):
+    """Worker utilization counts."""
+
+    busy: int
+    total: int
+
+
+class WorkersStatus(BaseModel):
+    """Worker status by type."""
+
+    training: WorkerUtilization
+    backtesting: WorkerUtilization
+
+
+class BudgetStatus(BaseModel):
+    """Budget tracking status."""
+
+    remaining: float
+    daily_limit: float
+
+
+class CapacityStatus(BaseModel):
+    """Concurrency capacity status."""
+
+    active: int
+    limit: int
+
+
 class AgentStatusResponse(BaseModel):
-    """Response model for GET /agent/status."""
+    """Response model for GET /agent/status.
+
+    Returns multi-research status with worker utilization, budget, and capacity.
+    """
 
     status: str  # "active" or "idle"
-    operation_id: Optional[str] = None
-    phase: Optional[str] = None
-    child_operation_id: Optional[str] = None
-    progress: Optional[dict[str, Any]] = None
-    strategy_name: Optional[str] = None
-    started_at: Optional[str] = None
+    active_researches: list[ActiveResearchInfo] = []
     last_cycle: Optional[LastCycleInfo] = None
+    workers: Optional[WorkersStatus] = None
+    budget: Optional[BudgetStatus] = None
+    capacity: Optional[CapacityStatus] = None
 
 
 class AgentTriggerResponse(BaseModel):

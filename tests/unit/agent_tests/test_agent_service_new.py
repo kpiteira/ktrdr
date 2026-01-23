@@ -264,11 +264,16 @@ class TestAgentServiceGetStatus:
         mock_operations_service._operations[op.operation_id].status = (
             OperationStatus.RUNNING
         )
+        mock_operations_service._operations[op.operation_id].started_at = datetime.now(
+            timezone.utc
+        )
 
         status = await service.get_status()
 
         assert status["status"] == "active"
-        assert status["operation_id"] == op.operation_id
+        # M5: operation_id is now in active_researches list
+        assert len(status["active_researches"]) == 1
+        assert status["active_researches"][0]["operation_id"] == op.operation_id
 
     @pytest.mark.asyncio
     async def test_status_returns_phase_from_metadata(self, mock_operations_service):
@@ -285,10 +290,14 @@ class TestAgentServiceGetStatus:
         mock_operations_service._operations[op.operation_id].status = (
             OperationStatus.RUNNING
         )
+        mock_operations_service._operations[op.operation_id].started_at = datetime.now(
+            timezone.utc
+        )
 
         status = await service.get_status()
 
-        assert status["phase"] == "backtesting"
+        # M5: phase is now in active_researches list
+        assert status["active_researches"][0]["phase"] == "backtesting"
 
     @pytest.mark.asyncio
     async def test_status_returns_strategy_name_when_active(
@@ -312,11 +321,15 @@ class TestAgentServiceGetStatus:
         mock_operations_service._operations[op.operation_id].status = (
             OperationStatus.RUNNING
         )
+        mock_operations_service._operations[op.operation_id].started_at = datetime.now(
+            timezone.utc
+        )
 
         status = await service.get_status()
 
         assert status["status"] == "active"
-        assert status["strategy_name"] == "momentum_rsi_v2"
+        # M5: strategy_name is now in active_researches list
+        assert status["active_researches"][0]["strategy_name"] == "momentum_rsi_v2"
 
     @pytest.mark.asyncio
     async def test_status_returns_last_cycle_when_idle(self, mock_operations_service):
@@ -353,6 +366,7 @@ class TestAgentServiceMetadataContract:
     """Test metadata contract per ARCHITECTURE.md Task 1.13.
 
     Status response should include child_operation_id when active.
+    M5: child_operation_id is now in active_researches list items.
     """
 
     @pytest.mark.asyncio
@@ -377,12 +391,17 @@ class TestAgentServiceMetadataContract:
         mock_operations_service._operations[op.operation_id].status = (
             OperationStatus.RUNNING
         )
+        mock_operations_service._operations[op.operation_id].started_at = datetime.now(
+            timezone.utc
+        )
 
         status = await service.get_status()
 
         assert status["status"] == "active"
-        assert "child_operation_id" in status
-        assert status["child_operation_id"] == "op_training_123"
+        # M5: child_operation_id is now in active_researches list
+        assert len(status["active_researches"]) == 1
+        assert "child_operation_id" in status["active_researches"][0]
+        assert status["active_researches"][0]["child_operation_id"] == "op_training_123"
 
     @pytest.mark.asyncio
     async def test_status_child_operation_id_matches_current_phase(
@@ -408,11 +427,17 @@ class TestAgentServiceMetadataContract:
         mock_operations_service._operations[op.operation_id].status = (
             OperationStatus.RUNNING
         )
+        mock_operations_service._operations[op.operation_id].started_at = datetime.now(
+            timezone.utc
+        )
 
         status = await service.get_status()
 
+        # M5: child_operation_id is in active_researches list
         # Should return the backtest child, not design or training
-        assert status["child_operation_id"] == "op_backtesting_3"
+        assert (
+            status["active_researches"][0]["child_operation_id"] == "op_backtesting_3"
+        )
 
 
 class TestAgentServiceNoResearchAgentsImports:
@@ -1190,3 +1215,195 @@ class TestAgentServiceResumeIfNeeded:
         # Should have started a new coordinator
         assert service._coordinator_task is not mock_task
         assert service._coordinator_task is not None
+
+
+class TestAgentServiceMultiResearchStatus:
+    """Test get_status() for multi-research response (M5 Task 5.1)."""
+
+    @pytest.mark.asyncio
+    async def test_status_returns_empty_active_researches_when_idle(
+        self, mock_operations_service
+    ):
+        """Returns empty active_researches list when no active researches."""
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        status = await service.get_status()
+
+        assert status["status"] == "idle"
+        assert status["active_researches"] == []
+
+    @pytest.mark.asyncio
+    async def test_status_returns_all_active_researches(self, mock_operations_service):
+        """Returns all active researches in active_researches list."""
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        # Create multiple running operations
+        op1 = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(
+                parameters={"phase": "training", "strategy_name": "strat_1"}
+            ),
+        )
+        mock_operations_service._operations[op1.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+        mock_operations_service._operations[op1.operation_id].started_at = datetime.now(
+            timezone.utc
+        )
+
+        op2 = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(
+                parameters={"phase": "designing", "strategy_name": "strat_2"}
+            ),
+        )
+        mock_operations_service._operations[op2.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+        mock_operations_service._operations[op2.operation_id].started_at = datetime.now(
+            timezone.utc
+        )
+
+        status = await service.get_status()
+
+        assert status["status"] == "active"
+        assert len(status["active_researches"]) == 2
+
+        # Verify each research has expected fields
+        op_ids = [r["operation_id"] for r in status["active_researches"]]
+        assert op1.operation_id in op_ids
+        assert op2.operation_id in op_ids
+
+        for research in status["active_researches"]:
+            assert "operation_id" in research
+            assert "phase" in research
+            assert "strategy_name" in research
+            assert "duration_seconds" in research
+            assert "child_operation_id" in research
+
+    @pytest.mark.asyncio
+    async def test_status_includes_worker_utilization(self, mock_operations_service):
+        """Status includes worker utilization by type."""
+        from unittest.mock import MagicMock, patch
+
+        from ktrdr.api.models.workers import WorkerStatus, WorkerType
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        # Mock worker registry
+        mock_registry = MagicMock()
+
+        # Create mock workers
+        training_worker_1 = MagicMock()
+        training_worker_1.status = WorkerStatus.BUSY
+        training_worker_2 = MagicMock()
+        training_worker_2.status = WorkerStatus.AVAILABLE
+
+        backtest_worker_1 = MagicMock()
+        backtest_worker_1.status = WorkerStatus.BUSY
+
+        def mock_list_workers(worker_type=None):
+            if worker_type == WorkerType.TRAINING:
+                return [training_worker_1, training_worker_2]
+            elif worker_type == WorkerType.BACKTESTING:
+                return [backtest_worker_1]
+            return []
+
+        mock_registry.list_workers = mock_list_workers
+
+        # Patch at the import location (inside _get_worker_status)
+        with patch(
+            "ktrdr.api.endpoints.workers.get_worker_registry",
+            return_value=mock_registry,
+        ):
+            status = await service.get_status()
+
+        assert "workers" in status
+        assert status["workers"]["training"]["busy"] == 1
+        assert status["workers"]["training"]["total"] == 2
+        assert status["workers"]["backtesting"]["busy"] == 1
+        assert status["workers"]["backtesting"]["total"] == 1
+
+    @pytest.mark.asyncio
+    async def test_status_includes_budget_status(self, mock_operations_service):
+        """Status includes budget remaining and limit."""
+        from unittest.mock import MagicMock, patch
+
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        # Mock budget tracker
+        mock_budget = MagicMock()
+        mock_budget.get_remaining.return_value = 3.42
+        mock_budget.daily_limit = 5.0
+
+        with patch(
+            "ktrdr.api.services.agent_service.get_budget_tracker",
+            return_value=mock_budget,
+        ):
+            status = await service.get_status()
+
+        assert "budget" in status
+        assert status["budget"]["remaining"] == 3.42
+        assert status["budget"]["daily_limit"] == 5.0
+
+    @pytest.mark.asyncio
+    async def test_status_includes_capacity_info(self, mock_operations_service):
+        """Status includes capacity active count and limit."""
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        # Create 2 running operations
+        for _ in range(2):
+            op = await mock_operations_service.create_operation(
+                operation_type=OperationType.AGENT_RESEARCH,
+                metadata=OperationMetadata(parameters={"phase": "training"}),
+            )
+            mock_operations_service._operations[op.operation_id].status = (
+                OperationStatus.RUNNING
+            )
+            mock_operations_service._operations[op.operation_id].started_at = (
+                datetime.now(timezone.utc)
+            )
+
+        status = await service.get_status()
+
+        assert "capacity" in status
+        assert status["capacity"]["active"] == 2
+        assert "limit" in status["capacity"]
+        assert status["capacity"]["limit"] > 0  # Should have a reasonable limit
+
+    @pytest.mark.asyncio
+    async def test_status_research_duration_calculation(self, mock_operations_service):
+        """Duration is calculated correctly from started_at."""
+        from datetime import timedelta
+
+        from ktrdr.api.services.agent_service import AgentService
+
+        service = AgentService(operations_service=mock_operations_service)
+
+        # Create a running operation started 2 minutes ago
+        op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(parameters={"phase": "training"}),
+        )
+        mock_operations_service._operations[op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+        mock_operations_service._operations[op.operation_id].started_at = datetime.now(
+            timezone.utc
+        ) - timedelta(minutes=2, seconds=30)
+
+        status = await service.get_status()
+
+        assert len(status["active_researches"]) == 1
+        research = status["active_researches"][0]
+        # Should be around 150 seconds (2m 30s), allow 5s tolerance
+        assert 145 <= research["duration_seconds"] <= 155
