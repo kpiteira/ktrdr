@@ -11,15 +11,27 @@ Key differences from sandbox:
 - Uses different 1Password item: 'ktrdr-local-prod'
 
 Commands are thin wrappers over instance_core.py - no duplicated Docker logic.
+
+Host services (training-host, ib-host) run natively on the host machine with GPU access.
+They require secrets from 1Password to connect to the database.
 """
 
+import os
+import signal
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TypedDict
 
 import typer
 from rich.console import Console
+from rich.table import Table
 
+from ktrdr.cli.helpers import (
+    OnePasswordError,
+    check_1password_authenticated,
+    fetch_secrets_from_1password,
+)
 from ktrdr.cli.instance_core import (
     generate_env_file,
     load_env_file,
@@ -36,6 +48,18 @@ from ktrdr.cli.sandbox_registry import (
     local_prod_exists,
     set_local_prod,
 )
+
+
+class HostServiceConfig(TypedDict):
+    """Type definition for host service configuration."""
+
+    name: str
+    subdir: str
+    main: str
+    port: int
+    pid_file: str
+    log_file: str
+
 
 local_prod_app = typer.Typer(
     name="local-prod",
@@ -333,3 +357,358 @@ def logs(
 
     if exit_code != 0:
         raise typer.Exit(exit_code)
+
+
+# =============================================================================
+# Host Services Management
+# =============================================================================
+# Host services run natively on the host machine (not in Docker) for GPU access.
+# They need secrets from 1Password to connect to the database.
+
+# Mapping from 1Password field labels to environment variable names
+HOST_SERVICE_SECRETS_MAP = {
+    "db_password": "DB_PASSWORD",
+    "anthropic_api_key": "ANTHROPIC_API_KEY",
+}
+
+# Host service configurations
+HOST_SERVICES: dict[str, HostServiceConfig] = {
+    "training-host": {
+        "name": "Training Host Service",
+        "subdir": "training-host-service",
+        "main": "main.py",
+        "port": 5002,
+        "pid_file": ".training-host.pid",
+        "log_file": "logs/training-host-service.log",
+    },
+    "ib-host": {
+        "name": "IB Host Service",
+        "subdir": "ib-host-service",
+        "main": "main.py",
+        "port": 5001,
+        "pid_file": ".ib-host.pid",
+        "log_file": "logs/ib-host-service.log",
+    },
+}
+
+
+def _get_host_service_env() -> dict[str, str]:
+    """Get environment variables for host services from 1Password.
+
+    Fetches secrets from 1Password and maps them to environment variables.
+    Also includes database connection settings for local-prod.
+
+    Returns:
+        Dict of environment variable name -> value
+
+    Raises:
+        typer.Exit: If 1Password authentication fails
+    """
+    if not check_1password_authenticated():
+        error_console.print("[red]Error:[/red] Not authenticated to 1Password")
+        error_console.print("Run: op signin")
+        raise typer.Exit(1)
+
+    try:
+        secrets = fetch_secrets_from_1password(LOCAL_PROD_SECRETS_ITEM)
+    except OnePasswordError as e:
+        error_console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1) from None
+
+    # Build environment with secrets
+    env = os.environ.copy()
+
+    # Map secrets to environment variables
+    for secret_key, env_var in HOST_SERVICE_SECRETS_MAP.items():
+        if secret_key in secrets:
+            env[env_var] = secrets[secret_key]
+
+    # Validate required secrets are present
+    required_secrets = [
+        "db_password"
+    ]  # DB_PASSWORD is required for database connection
+    missing = [s for s in required_secrets if s not in secrets]
+    if missing:
+        error_console.print("[red]Error:[/red] Missing required secrets in 1Password:")
+        for secret in missing:
+            env_var = HOST_SERVICE_SECRETS_MAP.get(secret, secret.upper())
+            error_console.print(f"  - {secret} (for {env_var})")
+        error_console.print(
+            f"\nAdd these fields to the '{LOCAL_PROD_SECRETS_ITEM}' item in 1Password."
+        )
+        raise typer.Exit(1)
+
+    # Add database connection settings for local-prod (slot 0)
+    env["DB_HOST"] = "localhost"
+    env["DB_PORT"] = "5432"
+    env["DB_NAME"] = "ktrdr"
+    env["DB_USER"] = "ktrdr"
+
+    return env
+
+
+def _get_host_service_pid(cwd: Path, service_id: str) -> Optional[int]:
+    """Get PID of running host service.
+
+    Args:
+        cwd: Local-prod directory
+        service_id: Service identifier (e.g., 'training-host')
+
+    Returns:
+        PID if service is running, None otherwise
+    """
+    config = HOST_SERVICES.get(service_id)
+    if not config:
+        return None
+
+    pid_file = cwd / config["pid_file"]
+    if not pid_file.exists():
+        return None
+
+    try:
+        pid = int(pid_file.read_text().strip())
+        # Check if process is actually running
+        os.kill(pid, 0)
+        return pid
+    except (ValueError, ProcessLookupError, PermissionError):
+        # PID file exists but process is not running - clean up
+        pid_file.unlink(missing_ok=True)
+        return None
+
+
+def _start_host_service(cwd: Path, service_id: str, env: dict[str, str]) -> int:
+    """Start a host service as a background process.
+
+    Args:
+        cwd: Local-prod directory
+        service_id: Service identifier (e.g., 'training-host')
+        env: Environment variables including secrets
+
+    Returns:
+        PID of started process, or 0 if failed
+    """
+    config = HOST_SERVICES.get(service_id)
+    if not config:
+        error_console.print(f"[red]Error:[/red] Unknown service: {service_id}")
+        return 0
+
+    service_dir = cwd / config["subdir"]
+    if not service_dir.exists():
+        error_console.print(
+            f"[red]Error:[/red] Service directory not found: {service_dir}"
+        )
+        return 0
+
+    main_file = service_dir / config["main"]
+    if not main_file.exists():
+        error_console.print(f"[red]Error:[/red] Main file not found: {main_file}")
+        return 0
+
+    # Create logs directory
+    logs_dir = cwd / "logs"
+    logs_dir.mkdir(exist_ok=True)
+
+    log_file = cwd / config["log_file"]
+    pid_file = cwd / config["pid_file"]
+
+    # Set PYTHONPATH to include the repo root for ktrdr imports
+    existing_pythonpath = env.get("PYTHONPATH")
+    if existing_pythonpath:
+        env["PYTHONPATH"] = os.pathsep.join([str(cwd), existing_pythonpath])
+    else:
+        env["PYTHONPATH"] = str(cwd)
+
+    # Start the service
+    with open(log_file, "w") as log:
+        process = subprocess.Popen(
+            ["uv", "run", "python", str(main_file)],
+            cwd=str(service_dir),
+            env=env,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,  # Detach from terminal
+        )
+
+    # Save PID
+    pid_file.write_text(str(process.pid))
+
+    return process.pid
+
+
+def _stop_host_service(cwd: Path, service_id: str) -> bool:
+    """Stop a running host service.
+
+    Args:
+        cwd: Local-prod directory
+        service_id: Service identifier (e.g., 'training-host')
+
+    Returns:
+        True if stopped successfully, False otherwise
+    """
+    pid = _get_host_service_pid(cwd, service_id)
+    if pid is None:
+        return False
+
+    config = HOST_SERVICES[service_id]
+    pid_file = cwd / config["pid_file"]
+
+    try:
+        # Send SIGTERM for graceful shutdown
+        os.kill(pid, signal.SIGTERM)
+        pid_file.unlink(missing_ok=True)
+        return True
+    except ProcessLookupError:
+        # Process already dead
+        pid_file.unlink(missing_ok=True)
+        return True
+    except PermissionError:
+        error_console.print(f"[red]Error:[/red] Permission denied stopping PID {pid}")
+        return False
+
+
+@local_prod_app.command("start-training-host")
+def start_training_host() -> None:
+    """Start the training host service with GPU access.
+
+    The training host service runs natively (not in Docker) to access GPU.
+    Secrets are fetched from 1Password item 'ktrdr-local-prod'.
+
+    The service will be available at http://localhost:5002
+    """
+    _require_local_prod_context()
+    cwd = Path.cwd()
+
+    # Check if already running
+    if _get_host_service_pid(cwd, "training-host"):
+        error_console.print(
+            "[yellow]Warning:[/yellow] Training host service already running"
+        )
+        error_console.print("Use 'ktrdr local-prod stop-hosts' to stop it first")
+        raise typer.Exit(1)
+
+    console.print("Starting training host service...")
+    console.print("  Fetching secrets from 1Password...")
+
+    env = _get_host_service_env()
+
+    console.print("  Launching service...")
+    pid = _start_host_service(cwd, "training-host", env)
+
+    if pid:
+        config = HOST_SERVICES["training-host"]
+        console.print("\n[green]Training host service started[/green]")
+        console.print(f"  PID: {pid}")
+        console.print(f"  URL: http://localhost:{config['port']}")
+        console.print(f"  Logs: {cwd / config['log_file']}")
+    else:
+        error_console.print("[red]Failed to start training host service[/red]")
+        raise typer.Exit(1)
+
+
+@local_prod_app.command("start-ib-host")
+def start_ib_host() -> None:
+    """Start the IB host service for Interactive Brokers access.
+
+    The IB host service runs natively (not in Docker) to connect to IB Gateway.
+    Secrets are fetched from 1Password item 'ktrdr-local-prod'.
+
+    The service will be available at http://localhost:5001
+    """
+    _require_local_prod_context()
+    cwd = Path.cwd()
+
+    # Check if already running
+    if _get_host_service_pid(cwd, "ib-host"):
+        error_console.print("[yellow]Warning:[/yellow] IB host service already running")
+        error_console.print("Use 'ktrdr local-prod stop-hosts' to stop it first")
+        raise typer.Exit(1)
+
+    console.print("Starting IB host service...")
+    console.print("  Fetching secrets from 1Password...")
+
+    env = _get_host_service_env()
+
+    console.print("  Launching service...")
+    pid = _start_host_service(cwd, "ib-host", env)
+
+    if pid:
+        config = HOST_SERVICES["ib-host"]
+        console.print("\n[green]IB host service started[/green]")
+        console.print(f"  PID: {pid}")
+        console.print(f"  URL: http://localhost:{config['port']}")
+        console.print(f"  Logs: {cwd / config['log_file']}")
+    else:
+        error_console.print("[red]Failed to start IB host service[/red]")
+        raise typer.Exit(1)
+
+
+@local_prod_app.command("host-status")
+def host_status() -> None:
+    """Show status of host services (training-host, ib-host)."""
+    _require_local_prod_context()
+    cwd = Path.cwd()
+
+    table = Table(title="Host Services Status")
+    table.add_column("Service", style="cyan")
+    table.add_column("Status", style="bold")
+    table.add_column("PID")
+    table.add_column("URL")
+
+    for service_id, config in HOST_SERVICES.items():
+        pid = _get_host_service_pid(cwd, service_id)
+
+        if pid:
+            status = "[green]Running[/green]"
+            pid_str = str(pid)
+        else:
+            status = "[dim]Stopped[/dim]"
+            pid_str = "-"
+
+        table.add_row(
+            config["name"],
+            status,
+            pid_str,
+            f"http://localhost:{config['port']}",
+        )
+
+    console.print(table)
+
+
+@local_prod_app.command("stop-hosts")
+def stop_hosts(
+    service: Optional[str] = typer.Argument(
+        None, help="Specific service to stop (training-host or ib-host)"
+    ),
+) -> None:
+    """Stop host services.
+
+    Without arguments, stops all running host services.
+    Specify a service name to stop only that service.
+    """
+    _require_local_prod_context()
+    cwd = Path.cwd()
+
+    services_to_stop = [service] if service else list(HOST_SERVICES.keys())
+
+    stopped_any = False
+    for service_id in services_to_stop:
+        if service_id not in HOST_SERVICES:
+            error_console.print(f"[red]Error:[/red] Unknown service: {service_id}")
+            continue
+
+        config = HOST_SERVICES[service_id]
+        pid = _get_host_service_pid(cwd, service_id)
+
+        if pid:
+            if _stop_host_service(cwd, service_id):
+                console.print(f"  ✓ Stopped {config['name']} (PID {pid})")
+                stopped_any = True
+            else:
+                error_console.print(f"  ✗ Failed to stop {config['name']}")
+        else:
+            console.print(f"  - {config['name']} not running")
+
+    if stopped_any:
+        console.print("\n[green]Host services stopped[/green]")
+    else:
+        console.print("\n[dim]No running host services to stop[/dim]")
