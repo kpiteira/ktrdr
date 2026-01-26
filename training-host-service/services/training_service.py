@@ -732,15 +732,20 @@ class TrainingService:
             span.set_attribute("training.session_id", session.session_id)
 
             try:
-                # Import orchestrator
-                import sys
+                # Import orchestrator using importlib to avoid module cache conflicts
+                # The parent directory contains both orchestrator.py (what we want) and
+                # ktrdr-prod/orchestrator/ package (Claude orchestration) - naive sys.path
+                # manipulation fails because Python caches the package resolution
+                import importlib.util
                 from pathlib import Path
 
-                orchestrator_path = Path(__file__).parent.parent
-                if str(orchestrator_path) not in sys.path:
-                    sys.path.insert(0, str(orchestrator_path))
-
-                from orchestrator import HostTrainingOrchestrator
+                orchestrator_file = Path(__file__).parent.parent / "orchestrator.py"
+                spec = importlib.util.spec_from_file_location(
+                    "host_orchestrator", orchestrator_file
+                )
+                orchestrator_module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(orchestrator_module)
+                HostTrainingOrchestrator = orchestrator_module.HostTrainingOrchestrator
 
                 # Host service has its own ModelStorage instance configured at service level
                 # This provides situational awareness - the service knows where models should be saved
