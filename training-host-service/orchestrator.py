@@ -19,9 +19,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from ktrdr import get_logger
 from ktrdr.async_infrastructure.cancellation import CancellationToken
+from ktrdr.config.feature_resolver import FeatureResolver
+from ktrdr.config.strategy_loader import StrategyConfigurationLoader
 from ktrdr.data.repository import DataRepository
 from ktrdr.training.model_storage import ModelStorage
-from ktrdr.training.training_pipeline import TrainingPipeline
+from ktrdr.training.training_pipeline import TrainingPipeline, TrainingPipelineV3
 
 logger = get_logger(__name__)
 
@@ -169,28 +171,26 @@ class HostTrainingOrchestrator:
             self._session.message = "Starting training pipeline"
 
             # CRITICAL: Run training in thread pool to avoid blocking the async event loop
-            # TrainingPipeline.train_strategy() is CPU-bound synchronous code that takes
-            # 18+ seconds. If we call it directly, it blocks the FastAPI event loop and
+            # Training is CPU-bound synchronous code that takes 18+ seconds.
+            # If we call it directly, it blocks the FastAPI event loop and
             # prevents /status endpoint from responding during training.
             import asyncio
             import functools
 
             # Use get_running_loop() instead of deprecated get_event_loop()
-            # This gets the event loop for the current async context
             loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(
                 None,  # Use default executor (ThreadPoolExecutor)
                 functools.partial(
-                    TrainingPipeline.train_strategy,
+                    self._execute_v3_training,
+                    strategy_config=strategy_config,
                     symbols=symbols,
                     timeframes=timeframes,
-                    strategy_config=strategy_config,
                     start_date=start_date_str,
                     end_date=end_date_str,
-                    model_storage=self._model_storage,
+                    repository=repository,
                     progress_callback=progress_callback,
                     cancellation_token=cancellation_token,
-                    repository=repository,
                 ),
             )
 
@@ -629,3 +629,248 @@ class HostTrainingOrchestrator:
             device_info["device_name"] = "Apple MPS"
 
         return device_info
+
+    def _execute_v3_training(
+        self,
+        strategy_config: dict[str, Any],
+        symbols: list[str],
+        timeframes: list[str],
+        start_date: str,
+        end_date: str,
+        repository: DataRepository,
+        progress_callback,
+        cancellation_token,
+    ) -> dict[str, Any]:
+        """
+        Execute v3 training using TrainingPipelineV3.
+
+        This follows the same pattern as LocalTrainingOrchestrator._execute_v3_training(),
+        using step-by-step pipeline calls instead of a single train_strategy() method.
+
+        Args:
+            strategy_config: Parsed strategy YAML configuration
+            symbols: List of symbols to train on
+            timeframes: List of timeframes to use
+            start_date: Training start date
+            end_date: Training end date
+            repository: DataRepository for loading market data
+            progress_callback: Callback for progress updates
+            cancellation_token: Token for cancellation checking
+
+        Returns:
+            Training result dictionary with model_path, metrics, etc.
+        """
+        import numpy as np
+
+        logger.info("Starting v3 training pipeline execution")
+
+        # Write strategy config to temp file for loader (it expects a file path)
+        import tempfile
+        import yaml
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False
+        ) as f:
+            yaml.dump(strategy_config, f)
+            strategy_path = f.name
+
+        try:
+            # Load as typed v3 config
+            loader = StrategyConfigurationLoader()
+            v3_config = loader.load_v3_strategy(strategy_path)
+
+            # Resolve features to get canonical order
+            resolver = FeatureResolver()
+            resolved = resolver.resolve(v3_config)
+            resolved_features = [f.feature_id for f in resolved]
+
+            logger.info(f"V3 training: {len(resolved_features)} resolved features")
+
+            # Create v3 pipeline
+            pipeline = TrainingPipelineV3(v3_config)
+
+            # Load market data for all symbols
+            all_data: dict[str, dict[str, Any]] = {}
+            for i, symbol in enumerate(symbols, 1):
+                if progress_callback:
+                    progress_callback(0, 0, {
+                        "progress_type": "preprocessing",
+                        "symbol": symbol,
+                        "symbol_index": i,
+                        "total_symbols": len(symbols),
+                        "step": "loading_data",
+                    })
+
+                symbol_data = TrainingPipeline.load_market_data(
+                    symbol=symbol,
+                    timeframes=timeframes,
+                    start_date=start_date,
+                    end_date=end_date,
+                    repository=repository,
+                )
+                all_data[symbol] = symbol_data
+
+            # Check cancellation
+            if cancellation_token and cancellation_token.is_cancelled():
+                raise RuntimeError("Training cancelled")
+
+            # Prepare features using v3 pipeline
+            logger.info("Preparing features with TrainingPipelineV3...")
+            if progress_callback:
+                progress_callback(0, 0, {
+                    "progress_type": "preparation",
+                    "phase": "preparing_features",
+                })
+            features_df = pipeline.prepare_features(all_data)
+
+            # Handle NaN values before converting to tensor
+            features_array = features_df.values
+            nan_count = np.isnan(features_array).sum()
+            if nan_count > 0:
+                logger.warning(f"Replacing {nan_count} NaN values in features with 0.0")
+                features_array = np.nan_to_num(features_array, nan=0.0)
+
+            features = torch.FloatTensor(features_array)
+            feature_names = list(features_df.columns)
+
+            # Generate labels from price data (use first symbol's base timeframe)
+            base_symbol = symbols[0]
+            price_data = all_data[base_symbol]
+
+            # Extract training section and label config from v3 config
+            training_section = strategy_config.get("training", {})
+            labels_config = training_section.get("labels", {})
+
+            # Build v2-compatible label config for create_labels()
+            label_config = {
+                "zigzag_threshold": labels_config.get("zigzag_threshold", 0.02),
+                "label_lookahead": labels_config.get("label_lookahead", 10),
+            }
+
+            labels = TrainingPipeline.create_labels(price_data, label_config)
+
+            # Align features and labels
+            min_len = min(len(features), len(labels))
+            if min_len == 0:
+                raise ValueError(
+                    f"No aligned samples: features={len(features)}, labels={len(labels)}"
+                )
+            features_aligned = features[-min_len:]
+            labels_aligned = labels[-min_len:]
+
+            logger.info(f"V3 features: {features_aligned.shape}, labels: {labels_aligned.shape}")
+
+            # Split data
+            if progress_callback:
+                progress_callback(0, 0, {
+                    "progress_type": "preparation",
+                    "phase": "splitting_data",
+                    "total_samples": len(features_aligned),
+                })
+
+            data_split = training_section.get("data_split", {})
+            train_ratio = data_split.get("train", 0.7)
+            val_ratio = data_split.get("validation", 0.15)
+
+            total_samples = len(features_aligned)
+            train_end = int(total_samples * train_ratio)
+            val_end = int(total_samples * (train_ratio + val_ratio))
+
+            X_train = features_aligned[:train_end]
+            y_train = labels_aligned[:train_end]
+            X_val = features_aligned[train_end:val_end]
+            y_val = labels_aligned[train_end:val_end]
+            X_test = features_aligned[val_end:]
+            y_test = labels_aligned[val_end:]
+
+            logger.info(f"V3 splits: train={len(X_train)}, val={len(X_val)}, test={len(X_test)}")
+
+            # Create model
+            if progress_callback:
+                progress_callback(0, 0, {
+                    "progress_type": "preparation",
+                    "phase": "creating_model",
+                    "input_dim": features.shape[1],
+                })
+
+            model_config = strategy_config.get("model", {})
+            model = TrainingPipeline.create_model(
+                input_dim=features.shape[1],
+                output_dim=3,  # Buy, Hold, Sell
+                model_config=model_config,
+            )
+
+            # Train model
+            training_config = model_config.get("training", {})
+            training_results = TrainingPipeline.train_model(
+                model=model,
+                X_train=X_train,
+                y_train=y_train,
+                X_val=X_val,
+                y_val=y_val,
+                training_config=training_config,
+                progress_callback=progress_callback,
+                cancellation_token=cancellation_token,
+            )
+
+            # Evaluate model
+            test_metrics = TrainingPipeline.evaluate_model(
+                model=model,
+                X_test=X_test,
+                y_test=y_test,
+            )
+
+            # Save model
+            strategy_name = strategy_config.get("name", "unnamed")
+            base_timeframe = timeframes[0] if timeframes else "1h"
+            model_path = self._model_storage.save_model(
+                strategy_name=strategy_name,
+                timeframe=base_timeframe,
+                model=model,
+                metadata={
+                    "feature_names": feature_names,
+                    "symbols": symbols,
+                    "timeframes": timeframes,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "training_config": training_config,
+                },
+            )
+
+            logger.info(f"Model saved to: {model_path}")
+
+            # Build result
+            result = {
+                "model_path": str(model_path),
+                "model_info": {
+                    "architecture": model_config.get("architecture", "v3_mlp"),
+                    "parameters_count": sum(p.numel() for p in model.parameters()),
+                    "trainable_parameters": sum(
+                        p.numel() for p in model.parameters() if p.requires_grad
+                    ),
+                },
+                "training_metrics": training_results.get("training_metrics", {}),
+                "test_metrics": test_metrics,
+                "data_summary": {
+                    "symbols": symbols,
+                    "timeframes": timeframes,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "total_samples": total_samples,
+                    "feature_count": len(feature_names),
+                },
+                "artifacts": {
+                    "feature_importance": None,
+                    "per_symbol_metrics": None,
+                },
+            }
+
+            return result
+
+        finally:
+            # Clean up temp file
+            import os
+            try:
+                os.unlink(strategy_path)
+            except Exception:
+                pass
