@@ -438,6 +438,7 @@ def _get_host_service_env() -> dict[str, str]:
         )
         raise typer.Exit(1)
 
+
     # Add database connection settings for local-prod (slot 0)
     env["DB_HOST"] = "localhost"
     env["DB_PORT"] = "5432"
