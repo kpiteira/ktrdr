@@ -392,11 +392,14 @@ HOST_SERVICES: dict[str, HostServiceConfig] = {
 }
 
 
-def _get_host_service_env() -> dict[str, str]:
+def _get_host_service_env(cwd: Path) -> dict[str, str]:
     """Get environment variables for host services from 1Password.
 
     Fetches secrets from 1Password and maps them to environment variables.
-    Also includes database connection settings for local-prod.
+    Also includes database connection settings and shared directories for local-prod.
+
+    Args:
+        cwd: Local-prod directory (ktrdr-prod root)
 
     Returns:
         Dict of environment variable name -> value
@@ -444,6 +447,12 @@ def _get_host_service_env() -> dict[str, str]:
     env["DB_PORT"] = "5432"
     env["DB_NAME"] = "ktrdr"
     env["DB_USER"] = "ktrdr"
+
+    # Set shared directories (absolute paths for host services)
+    # These ensure host services use the same data/models/strategies as the main system
+    env["DATA_DIR"] = str(cwd / "data")
+    env["MODELS_DIR"] = str(cwd / "models")
+    env["STRATEGIES_DIR"] = str(cwd / "strategies")
 
     return env
 
@@ -590,7 +599,7 @@ def start_training_host() -> None:
     console.print("Starting training host service...")
     console.print("  Fetching secrets from 1Password...")
 
-    env = _get_host_service_env()
+    env = _get_host_service_env(cwd)
 
     console.print("  Launching service...")
     pid = _start_host_service(cwd, "training-host", env)
@@ -627,7 +636,7 @@ def start_ib_host() -> None:
     console.print("Starting IB host service...")
     console.print("  Fetching secrets from 1Password...")
 
-    env = _get_host_service_env()
+    env = _get_host_service_env(cwd)
 
     console.print("  Launching service...")
     pid = _start_host_service(cwd, "ib-host", env)
