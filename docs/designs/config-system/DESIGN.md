@@ -1,8 +1,8 @@
 # Configuration System Redesign: Design
 
-> **Status:** Design complete, validation paused.
-> **Dependency:** Requires M6/M7 (sandbox merge) before implementation.
-> See `VALIDATION_NOTES.md` for detailed session notes.
+> **Status:** Design complete, ready for validation.
+> **Dependency:** M6/M7 (sandbox → local-prod) landed on main. Blocker resolved.
+> See `VALIDATION_NOTES.md` for session notes from 2026-01-18.
 
 ## Problem Statement
 
@@ -56,14 +56,15 @@ class DatabaseSettings(BaseSettings):
     port: int = 5432
     name: str = "ktrdr"
     user: str = "ktrdr"
-    password: str  # Required, no default
+    password: str = "localdev"  # Insecure default — triggers startup warning
     echo: bool = False
 
     model_config = SettingsConfigDict(env_prefix="KTRDR_DB_")
 
-# Clear: DB password is required, set via KTRDR_DB_PASSWORD
+# Clear: DB password defaults to "localdev" for zero-config local dev
 # Clear: All DB settings use KTRDR_DB_ prefix
 # Clear: Types and defaults are visible
+# Clear: Insecure defaults emit BIG WARNING at startup (see Decision 3)
 ```
 
 ### Scenario 2: Developer wants to override a setting locally
@@ -94,42 +95,92 @@ ktrdr deploy up --env production
 
 Secrets never touch disk. Fetched from 1Password, injected as env vars, containers start.
 
+### How Secrets Flow (Detail)
+
+Understanding the actual mechanism, since the design depends on it:
+
+```
+1Password item ("ktrdr-local-prod")
+    │
+    ▼
+ktrdr local-prod up / ktrdr sandbox up
+    │  calls fetch_sandbox_secrets() → op CLI → 1Password
+    │  returns dict of secret env vars
+    ▼
+compose_env = os.environ.copy()
+compose_env.update(sandbox_env)    # ports, metadata from .env.sandbox
+compose_env.update(secrets_env)    # 1Password secrets (highest priority)
+    │
+    ▼
+subprocess.run(["docker", "compose", "up", ...], env=compose_env)
+    │
+    ▼
+Container inherits env vars → Pydantic Settings reads them
+```
+
+**Key points:**
+- Secrets are injected at CLI invocation time, not at container runtime
+- Hot reload (uvicorn `--reload`) restarts the Python process, NOT the container — secrets persist
+- 1Password CLI caches sessions in `~/.op/sessions` — no re-prompting on hot reload
+- Secrets only re-fetched on full `docker compose down` + `up` cycle
+- If 1Password is not authenticated, `local-prod up` falls back to insecure defaults with warnings
+
 ### Scenario 4: New developer onboards
 
 ```bash
-# Clone repo
-git clone ...
+# Clone repo and set up local-prod (see scripts/setup-local-prod.sh)
+git clone https://github.com/kpiteira/ktrdr.git ~/Documents/dev/ktrdr-prod
+cd ~/Documents/dev/ktrdr-prod
+uv sync
+uv run ktrdr local-prod init
+uv run ktrdr local-prod up
 
-# Start with defaults (insecure but works for local dev)
-docker compose up
-
-# Backend starts with:
-# - DB: localhost:5432/ktrdr/ktrdr/localdev (defaults)
-# - API: 0.0.0.0:8000 (defaults)
-# - No secrets required for basic local dev
+# Backend starts with insecure defaults + BIG WARNING:
+# ========================================
+# WARNING: INSECURE DEFAULT CONFIGURATION
+# ========================================
+# The following settings are using insecure defaults:
+#   - KTRDR_DB_PASSWORD: Using default "localdev"
+#   - KTRDR_AUTH_JWT_SECRET: Using default "local-dev-secret-..."
+# ========================================
 ```
 
-Zero config for basic local development. Secure defaults are overridden only when needed.
+Zero config for basic local development. Insecure state is loud, not silent.
+With 1Password configured, `local-prod up` injects real secrets and no warning appears.
 
 ### Scenario 5: Config validation fails at startup
+
+**Type errors and truly invalid config always fail, regardless of environment:**
 
 ```
 $ docker compose up
 backend-1  | CONFIGURATION ERROR
 backend-1  | ====================
-backend-1  | Missing required settings:
-backend-1  |   - KTRDR_DB_PASSWORD: Database password (no default, must be set)
-backend-1  |   - KTRDR_AUTH_JWT_SECRET: JWT signing secret (no default, must be set)
-backend-1  |
 backend-1  | Invalid settings:
 backend-1  |   - KTRDR_API_PORT: 'abc' is not a valid integer
+backend-1  |   - KTRDR_DB_PORT: '-1' is not a valid port number
 backend-1  |
 backend-1  | See: docs/configuration.md for all available settings
 backend-1  | ====================
 backend-1 exited with code 1
 ```
 
-Fail fast, fail clearly. No silent fallbacks to wrong values.
+**In production mode, insecure defaults also fail:**
+
+```
+$ KTRDR_ENV=production docker compose up
+backend-1  | CONFIGURATION ERROR
+backend-1  | ====================
+backend-1  | Insecure defaults not allowed in production:
+backend-1  |   - KTRDR_DB_PASSWORD: Must be explicitly set (not "localdev")
+backend-1  |   - KTRDR_AUTH_JWT_SECRET: Must be explicitly set
+backend-1  |
+backend-1  | See: docs/configuration.md for all available settings
+backend-1  | ====================
+backend-1 exited with code 1
+```
+
+Fail fast, fail clearly. Dev mode warns loudly; production mode rejects insecure defaults entirely.
 
 ### Scenario 6: Worker needs config
 
@@ -214,13 +265,27 @@ class DatabaseSettings(BaseSettings):
 - 1Password integration (via sandbox system) provides secure path
 - Production deployments use 1Password injection, never see defaults
 
-**Warning mechanism (to be implemented):**
+**Warning mechanism:**
 - Validation module detects when insecure defaults are active
-- Emits prominent warning at startup (not a failure)
-- Consider `KTRDR_ENV=production` flag that converts warnings to failures
+- Emits prominent boxed warning at startup (not a failure in dev mode)
+- `KTRDR_ENV=production` converts these warnings to hard failures
+- Warning appears once at startup, not on every request
 
-> **Note:** This decision was revised during validation session (2025-01-18).
-> See `VALIDATION_NOTES.md` for full context.
+**Insecure default detection:**
+```python
+# Each secret field declares its insecure default explicitly:
+INSECURE_DEFAULTS = {
+    "KTRDR_DB_PASSWORD": "localdev",
+    "KTRDR_AUTH_JWT_SECRET": "local-dev-secret-do-not-use-in-production",
+}
+
+# At startup, check if current values match insecure defaults
+# If KTRDR_ENV=production and any match → ConfigurationError
+# Otherwise → prominent warning to stderr
+```
+
+**Suppression:** `KTRDR_ACKNOWLEDGE_INSECURE_DEFAULTS=true` suppresses the warning
+for CI/test environments that intentionally use defaults.
 
 ### Decision 4: Project metadata stays in pyproject.toml
 
@@ -342,8 +407,26 @@ Issues to resolve during implementation:
 
 ---
 
+## Existing Partial Implementation
+
+The codebase already has fragments that align with this design. These are starting points, not obstacles:
+
+| What Exists | Where | Alignment |
+|-------------|-------|-----------|
+| `APISettings`, `LoggingSettings`, `OrphanDetectorSettings`, `CheckpointSettings` | `ktrdr/config/settings.py` | Already Pydantic BaseSettings with `KTRDR_` prefix. Keep and extend. |
+| `APIConfig` with `KTRDR_API_` prefix | `ktrdr/api/config.py` | Overlaps with above. Consolidate into `settings.py`. |
+| `metadata.py` with YAML loading | `ktrdr/metadata.py` | Replace with `importlib.metadata` for project info. |
+| `ConfigLoader` for YAML | `ktrdr/config/loader.py` | Used by strategy/indicator loading. Keep for domain data, remove for system config. |
+| Host service config models | `ktrdr/config/host_services.py` | Merge into Settings classes. |
+| IB config | `ktrdr/config/ib_config.py` | Merge into `IBSettings`. |
+| `.env.sandbox` with port config | Generated by sandbox system | Already env-var based. Align naming with `KTRDR_` prefix. |
+
+The migration is additive: build the new system alongside the old, migrate consumers one at a time, then delete the old code.
+
 ## Next Steps
 
-1. **Architecture doc** — Define the specific classes, modules, and migration approach
-2. **Validation via /kdesign-validate** — Trace scenarios through proposed architecture
-3. **Implementation milestones** — Incremental migration, one settings group at a time
+1. ~~**Architecture doc**~~ — Done. See `ARCHITECTURE.md`.
+2. **Resume validation** — Trace scenarios through the architecture (`/kdesign-validate`)
+3. **Complete gap analysis** — Resolve remaining open questions
+4. **Define implementation milestones** — Vertical slices, one settings group at a time
+5. **Implement** — Following the phased migration plan in `ARCHITECTURE.md`

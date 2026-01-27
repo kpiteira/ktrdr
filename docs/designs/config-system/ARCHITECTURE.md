@@ -1,8 +1,8 @@
 # Configuration System Redesign: Architecture
 
-> **Status:** Architecture defined, validation paused.
-> **Dependency:** Requires M6/M7 (sandbox merge) before implementation.
-> See `VALIDATION_NOTES.md` for detailed session notes.
+> **Status:** Architecture defined, ready for validation.
+> **Dependency:** M6/M7 (sandbox → local-prod) landed on main. Blocker resolved.
+> See `VALIDATION_NOTES.md` for session notes from 2026-01-18.
 
 ## Overview
 
