@@ -660,13 +660,14 @@ class HostTrainingOrchestrator:
         Returns:
             Training result dictionary with model_path, metrics, etc.
         """
+        import tempfile
+
         import numpy as np
+        import yaml
 
         logger.info("Starting v3 training pipeline execution")
 
         # Write strategy config to temp file for loader (it expects a file path)
-        import tempfile
-        import yaml
 
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".yaml", delete=False
