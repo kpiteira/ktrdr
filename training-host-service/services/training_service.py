@@ -308,15 +308,18 @@ class TrainingService:
         self.session_timeout_minutes = session_timeout_minutes
         self.sessions: dict[str, TrainingSession] = {}
 
-        # Model storage - host service has situational awareness of shared models path
-        # Host service runs from training-host-service/, models are in project root
+        # Model storage - use MODELS_DIR env var (set by local_prod.py from .env.sandbox)
+        # Falls back to project root if env var not set
+        import os
         from pathlib import Path
 
         from ktrdr.training.model_storage import ModelStorage
 
-        project_root = Path(__file__).parent.parent.parent
-        models_path = project_root / "models"
-        self.model_storage = ModelStorage(base_path=str(models_path))
+        models_dir = os.getenv("MODELS_DIR")
+        if not models_dir:
+            project_root = Path(__file__).parent.parent.parent
+            models_dir = str(project_root / "models")
+        self.model_storage = ModelStorage(base_path=models_dir)
 
         # Global resource managers
         self.global_gpu_manager: Optional[GPUMemoryManager] = None

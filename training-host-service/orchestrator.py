@@ -825,17 +825,19 @@ class HostTrainingOrchestrator:
             strategy_name = strategy_config.get("name", "unnamed")
             base_timeframe = timeframes[0] if timeframes else "1h"
             model_path = self._model_storage.save_model(
-                strategy_name=strategy_name,
-                timeframe=base_timeframe,
                 model=model,
-                metadata={
-                    "feature_names": feature_names,
+                strategy_name=strategy_name,
+                symbol=symbols[0] if symbols else "universal",
+                timeframe=base_timeframe,
+                config=strategy_config,
+                training_metrics={
+                    **training_results,
+                    **test_metrics,
                     "symbols": symbols,
-                    "timeframes": timeframes,
                     "start_date": start_date,
                     "end_date": end_date,
-                    "training_config": training_config,
                 },
+                feature_names=feature_names,
             )
 
             logger.info(f"Model saved to: {model_path}")
