@@ -447,11 +447,26 @@ def _get_host_service_env(cwd: Path) -> dict[str, str]:
     env["DB_NAME"] = "ktrdr"
     env["DB_USER"] = "ktrdr"
 
-    # Set shared directories (absolute paths for host services)
-    # These ensure host services use the same data/models/strategies as the main system
-    env["DATA_DIR"] = str(cwd / "data")
-    env["MODELS_DIR"] = str(cwd / "models")
-    env["STRATEGIES_DIR"] = str(cwd / "strategies")
+    # Read shared directory paths from .env.sandbox
+    # (These are set by instance_core.py to point to ~/.ktrdr/shared/)
+    sandbox_env = load_env_file(cwd)
+    if sandbox_env:
+        shared_fallback = Path.home() / ".ktrdr" / "shared"
+        env["DATA_DIR"] = sandbox_env.get(
+            "KTRDR_DATA_DIR", str(shared_fallback / "data")
+        )
+        env["MODELS_DIR"] = sandbox_env.get(
+            "KTRDR_MODELS_DIR", str(shared_fallback / "models")
+        )
+        env["STRATEGIES_DIR"] = sandbox_env.get(
+            "KTRDR_STRATEGIES_DIR", str(shared_fallback / "strategies")
+        )
+    else:
+        # Fallback to canonical shared directory if .env.sandbox missing
+        shared_dir = Path.home() / ".ktrdr" / "shared"
+        env["DATA_DIR"] = str(shared_dir / "data")
+        env["MODELS_DIR"] = str(shared_dir / "models")
+        env["STRATEGIES_DIR"] = str(shared_dir / "strategies")
 
     return env
 
