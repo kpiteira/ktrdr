@@ -1,8 +1,12 @@
 # Configuration System: Validation Notes
 
+> **Superseded:** This file captures the initial validation session (2025-01-18).
+> The full validation was completed on 2026-01-27 — see `SCENARIOS.md` for final results.
+> All gaps and next steps listed below have been resolved.
+
 **Date:** 2025-01-18
-**Status:** Paused — blocked on M6/M7 (sandbox merge)
-**Branch:** `doc/config-system-design`
+**Status:** Completed — superseded by `SCENARIOS.md`
+**Original Branch:** `doc/config-system-design` (work continued on `doc/config-system-design-v2`)
 
 ---
 
@@ -169,5 +173,6 @@ To suppress this warning:
 | File | Purpose |
 |------|---------|
 | `DESIGN.md` | Problem, goals, decisions, user scenarios |
-| `ARCHITECTURE.md` | Components, data flow, migration plan |
-| `VALIDATION_NOTES.md` | This file — validation session notes |
+| `ARCHITECTURE.md` | Components, data flow, file changes, migration plan, testing strategy |
+| `SCENARIOS.md` | Validation results, gaps, audit, interface contracts, milestones |
+| `VALIDATION_NOTES.md` | This file — initial validation session notes (historical) |

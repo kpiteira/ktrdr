@@ -23,7 +23,7 @@ Additionally performed a comprehensive codebase audit that expanded scope from ~
 | H1 | Backend startup with all `KTRDR_*` env vars set | `validate_all("backend")` instantiates all Settings classes, all pass, no warnings |
 | H2 | Backend startup with insecure defaults (dev mode) | Settings load with defaults, `detect_insecure_defaults()` emits BIG WARNING, app starts |
 | H3 | Hot reload during development | uvicorn restarts Python process, `lru_cache` clears naturally, new Settings instances created, container env vars persist |
-| H4 | Worker startup with valid config | `validate_all("worker")` checks DB + logging + worker + checkpoint settings, passes |
+| H4 | Worker startup with valid config | `validate_all("worker")` checks DB + logging + observability + worker + checkpoint settings, passes |
 | H5 | CLI command (e.g., `ktrdr --help`) | No validation called — import doesn't trigger validation. Works without any env vars |
 | H6 | Local-prod startup | `ktrdr local-prod up` sets `KTRDR_ENV=production`, passes compose env to Docker, backend validates strictly |
 
@@ -146,9 +146,9 @@ password: str = deprecated_field("localdev", "KTRDR_DB_PASSWORD", "DB_PASSWORD")
 | Duplicated config concepts | 6 |
 | Bugs found | 1 |
 | Settings classes needed | 16 |
-| Deprecated name mappings | ~50 |
+| Deprecated name mappings | ~75 |
 | YAML files to delete | 10 |
-| Python modules to delete | 5 (metadata.py, ib_config.py, host_services.py, api/config.py, and YAML files) |
+| Python modules to delete | 5 (metadata.py, ib_config.py, host_services.py, api/config.py, credentials.py) |
 
 ### Duplications Found
 
@@ -156,7 +156,7 @@ password: str = deprecated_field("localdev", "KTRDR_DB_PASSWORD", "DB_PASSWORD")
 2. **Environment concept** — Three different env var names: `KTRDR_ENVIRONMENT`, `ENVIRONMENT`, `KTRDR_API_ENVIRONMENT`. All mean the same thing.
 3. **`USE_IB_HOST_SERVICE`** — Read in 4 separate places with different defaults (`"false"` vs `"true"` vs no default).
 4. **`WORKER_PORT`** — Defaults to 5002 in `training_worker.py` but 5004 in `worker_registration.py`. **Bug: worker could register with wrong port.**
-5. **`KTRDR_API_URL` vs `KTRDR_API_CLIENT_BASE_URL`** — Same concept (backend URL for workers/CLI), different names.
+5. **`KTRDR_API_URL` vs `KTRDR_API_CLIENT_BASE_URL` vs `WorkerSettings.backend_url`** — Same concept (backend URL for workers/CLI), different names. Resolved: single `APIClientSettings.base_url`, deprecated mapping for `KTRDR_API_URL`, `backend_url` removed from `WorkerSettings`.
 6. **metadata YAML → Settings → YAML loop** — Some values exist in metadata YAML, are loaded into Settings, and the Settings default reads from YAML. Three layers for one value.
 
 ### Config Patterns Found (All to Consolidate)
@@ -182,7 +182,7 @@ password: str = deprecated_field("localdev", "KTRDR_DB_PASSWORD", "DB_PASSWORD")
 # ktrdr/config/settings.py
 
 class DatabaseSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="KTRDR_DB_")
+    model_config = SettingsConfigDict(env_prefix="KTRDR_DB_", env_file=".env.local")
 
     host: str = "localhost"
     port: int = 5432
@@ -272,40 +272,40 @@ validate_all(component="worker")
 
 ## Proposed Milestone Structure
 
-### Milestone 1: Foundation Settings Classes
-- Create/expand all 16 Settings classes with `deprecated_field()` support
-- Implement `deprecated_field()` helper
-- Write unit tests for all classes (defaults, overrides, aliases, validation)
-- No existing code changes
+These milestones map to the Phases in ARCHITECTURE.md's Migration Plan.
 
-### Milestone 2: Validation & Deprecation Infrastructure
-- Rewrite `validation.py` with `KTRDR_ENV`-aware startup validation
+### Milestone 1: Foundation (= ARCHITECTURE.md Phase 1)
+- Expand `settings.py` from 4 to 16 Settings classes with `deprecated_field()` support
+- Implement `deprecated_field()` helper
+- Rewrite `validation.py` with `KTRDR_ENV`-aware explicit startup validation
 - Create `deprecation.py` with complete old→new mapping
 - Update `__init__.py` public API
-- Write unit tests for validation and deprecation
-- Integrate validation into backend startup (`main.py`)
+- Write unit tests for all Settings classes, validation, and deprecation
+- **No existing consumer code changes** — both systems coexist
 
-### Milestone 3: Consumer Migration (Core)
+### Milestone 2: Consumer Migration — Core (= ARCHITECTURE.md Phase 2, steps 1-4)
 - Migrate database, API, auth, logging, observability consumers
+- Integrate `validate_all("backend")` + `warn_deprecated_env_vars()` into `main.py`
 - Delete `ktrdr/api/config.py` (resolves duplication #1)
-- Update docker-compose files with new env var names
 - Each domain in a separate commit
 
-### Milestone 4: Consumer Migration (Workers & Agent)
+### Milestone 3: Consumer Migration — Workers & Infrastructure (= ARCHITECTURE.md Phase 2, steps 5-10)
 - Migrate IB, host services, workers, agent, data consumers
-- Delete `ktrdr/config/ib_config.py`, `ktrdr/config/host_services.py`
-- Fix WORKER_PORT bug
+- Delete `ktrdr/config/ib_config.py`, `ktrdr/config/credentials.py`, `ktrdr/config/host_services.py`
+- Fix WORKER_PORT bug (inconsistent defaults 5002 vs 5004)
 - Each domain in a separate commit
 
-### Milestone 5: Cleanup & Documentation
+### Milestone 4: Docker Compose, CLI & Cleanup (= ARCHITECTURE.md Phase 2 steps 11-12 + Phase 3)
+- Update docker-compose files with `KTRDR_*` env var names
+- Set `KTRDR_ENV` in CLI commands (local-prod → production, sandbox → development)
 - Delete `ktrdr/metadata.py` and all `metadata.get()` calls
-- Delete unused YAML files
-- Simplify `loader.py`
+- Delete unused YAML files (10 files)
+- Simplify `loader.py` — keep only domain config loading
 - Move version to `importlib.metadata`
 - Generate config reference docs from Pydantic schemas
 - Verify zero remaining scattered config reads
 
-### Future: Phase 4 — Deprecation Removal
+### Future: Deprecation Removal (= ARCHITECTURE.md Phase 4)
 - Remove `AliasChoices` support for old names
 - Remove `deprecation.py`
 - All systems use only `KTRDR_*` names

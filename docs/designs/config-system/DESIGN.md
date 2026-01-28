@@ -71,7 +71,7 @@ class DatabaseSettings(BaseSettings):
     password: str = "localdev"  # Insecure default — triggers startup warning
     echo: bool = False
 
-    model_config = SettingsConfigDict(env_prefix="KTRDR_DB_")
+    model_config = SettingsConfigDict(env_prefix="KTRDR_DB_", env_file=".env.local")
 
 # Clear: DB password defaults to "localdev" for zero-config local dev
 # Clear: All DB settings use KTRDR_DB_ prefix
@@ -197,16 +197,20 @@ Fail fast, fail clearly. Dev mode warns loudly; production mode rejects insecure
 ### Scenario 6: Worker needs config
 
 ```python
-# Workers import only what they need:
+# Workers use only the settings they need:
 from ktrdr.config import (
-    DatabaseSettings,
-    LoggingSettings,
-    ObservabilitySettings,
-    WorkerSettings,
+    get_db_settings,
+    get_logging_settings,
+    get_observability_settings,
+    get_worker_settings,
+    get_checkpoint_settings,
 )
 
-# They don't import APISettings, AuthSettings, etc.
-# Validation only fails for settings they actually use
+db = get_db_settings()           # Cached after first call
+worker = get_worker_settings()   # Same
+
+# They don't call get_api_settings(), get_auth_settings(), etc.
+# validate_all("worker") only checks worker-relevant settings
 ```
 
 Workers share core settings but don't need API-specific config.
@@ -234,7 +238,8 @@ Workers share core settings but don't need API-specific config.
 **Choice:** All environment variables use `KTRDR_` prefix with logical grouping:
 - `KTRDR_ENV` — Environment mode (production/development/test)
 - `KTRDR_DB_*` — Database
-- `KTRDR_API_*` — API server + API client
+- `KTRDR_API_*` — API server
+- `KTRDR_API_CLIENT_*` — API client (CLI and workers connecting to backend)
 - `KTRDR_AUTH_*` — Authentication and secrets
 - `KTRDR_IB_*` — Interactive Brokers connection
 - `KTRDR_IB_HOST_*` — IB host service proxy
@@ -345,16 +350,15 @@ WorkerSettings      # Would duplicate DB settings
 
 ```python
 class DatabaseSettings(BaseSettings):
-    host: str = Field(default="localhost", validation_alias=AliasChoices(
-        "KTRDR_DB_HOST",  # New name (preferred)
-        "DB_HOST",         # Old name (deprecated)
-    ))
+    host: str = deprecated_field("localhost", "KTRDR_DB_HOST", "DB_HOST")
+    # See Decision 9 for why deprecated_field() is mandatory
 ```
 
 **Rationale:**
 - Allows gradual migration without breaking existing deployments
 - Clear warning at startup: "DB_HOST is deprecated, use KTRDR_DB_HOST"
 - Can remove old aliases after migration period (1-2 releases)
+- Uses `deprecated_field()` helper (Decision 9) to avoid Pydantic v2 `AliasChoices` gotcha
 
 ### Decision 7: Validation runs at explicit startup call (not import time)
 
@@ -423,7 +427,7 @@ def deprecated_field(default, new_env: str, old_env: str, **kwargs) -> Field:
 class DatabaseSettings(BaseSettings):
     host: str = deprecated_field("localhost", "KTRDR_DB_HOST", "DB_HOST")
     port: int = 5432  # No deprecated name → env_prefix works normally
-    model_config = SettingsConfigDict(env_prefix="KTRDR_DB_")
+    model_config = SettingsConfigDict(env_prefix="KTRDR_DB_", env_file=".env.local")
 ```
 
 **Rule:** Fields WITHOUT deprecated names use `env_prefix` normally (no `validation_alias`). Fields WITH deprecated names use `deprecated_field()` (which sets `validation_alias`).
@@ -497,7 +501,7 @@ Full audit performed 2026-01-27. See `ARCHITECTURE.md` → Complete Migration Ma
 
 **By the numbers:**
 - **~90 env vars** to standardize into **16 Settings classes**
-- **~50 deprecated name mappings** (old → new)
+- **~75 deprecated name mappings** (old → new)
 - **10 YAML files** to delete
 - **5 Python modules** to delete (`metadata.py`, `api/config.py`, `ib_config.py`, `host_services.py`, `credentials.py`)
 - **~30 scattered reads** to consolidate into single cached getters

@@ -30,11 +30,11 @@ This is a full cleanup — every duplication resolved, every scattered `os.geten
 |-------|--------|--------|---------|
 | `DatabaseSettings` | `KTRDR_DB_` | host, port, name, user, password, echo | PostgreSQL connection |
 | `APISettings` | `KTRDR_API_` | title, description, version, host, port, reload, log_level, prefix, cors_* | FastAPI server (merges `APIConfig` + old `APISettings`) |
-| `AuthSettings` | `KTRDR_AUTH_` | jwt_secret, anthropic_api_key | Secrets and authentication |
+| `AuthSettings` | `KTRDR_AUTH_` | jwt_secret, anthropic_key | Secrets and authentication |
 | `IBSettings` | `KTRDR_IB_` | host, port, client_id, timeout, readonly, rate_limit, rate_period, max_retries, retry_delay, retry_max_delay, pacing_delay, max_requests_10min, username, account_id, api_key | IB connection (merges `IbConfig` dataclass + credentials) |
 | `IBHostServiceSettings` | `KTRDR_IB_HOST_` | enabled, url, timeout, health_interval, max_retries, retry_delay | IB host service proxy |
 | `TrainingHostServiceSettings` | `KTRDR_TRAINING_HOST_` | enabled, url, timeout, health_interval, max_retries, retry_delay, poll_interval, session_timeout | Training host service proxy |
-| `WorkerSettings` | `KTRDR_WORKER_` | id, port, type, public_url, backend_url, shutdown_timeout | Worker process config |
+| `WorkerSettings` | `KTRDR_WORKER_` | id, port, type, public_url, shutdown_timeout | Worker process config |
 | `ObservabilitySettings` | `KTRDR_OTEL_` | endpoint, service_name | OpenTelemetry/Jaeger |
 | `LoggingSettings` | `KTRDR_LOG_` | level, format | Logging config |
 | `CheckpointSettings` | `KTRDR_CHECKPOINT_` | epoch_interval, time_interval, dir, max_age_days | Operation checkpoints |
@@ -50,6 +50,11 @@ This is a full cleanup — every duplication resolved, every scattered `os.geten
 @lru_cache
 def get_db_settings() -> DatabaseSettings:
     return DatabaseSettings()
+```
+
+Each Settings class includes `env_file=".env.local"` in its `model_config` (file is optional — Pydantic handles missing files gracefully):
+```python
+model_config = SettingsConfigDict(env_prefix="KTRDR_DB_", env_file=".env.local")
 ```
 
 This ensures settings are loaded once and reused. Tests call `clear_settings_cache()` to reset.
@@ -152,14 +157,14 @@ Environment:
 | `ENVIRONMENT` | `KTRDR_ENV` |
 | `KTRDR_ENVIRONMENT` | `KTRDR_ENV` |
 | `KTRDR_API_ENVIRONMENT` | `KTRDR_ENV` |
-| `APP_VERSION` | `KTRDR_VERSION` (or importlib.metadata) |
+| `APP_VERSION` | Remove (use `importlib.metadata.version("ktrdr")`) |
 
 Auth/Secrets:
 
 | Old Name | New Name |
 |----------|----------|
 | `JWT_SECRET` | `KTRDR_AUTH_JWT_SECRET` |
-| `ANTHROPIC_API_KEY` | `KTRDR_AUTH_ANTHROPIC_KEY` |
+| `ANTHROPIC_API_KEY` | `KTRDR_AUTH_ANTHROPIC_KEY` (field: `anthropic_key`) |
 
 Logging:
 
@@ -277,6 +282,12 @@ Data:
 | `MODELS_DIR` | `KTRDR_DATA_MODELS_DIR` |
 | `STRATEGIES_DIR` | `KTRDR_DATA_STRATEGIES_DIR` |
 
+API Client:
+
+| Old Name | New Name |
+|----------|----------|
+| `KTRDR_API_URL` | `KTRDR_API_CLIENT_BASE_URL` |
+
 Operations:
 
 | Old Name | New Name |
@@ -319,7 +330,10 @@ Operations:
 │  2. validate_all(component="backend")                            │
 │     - Instantiate each Settings class                            │
 │     - Collect validation errors                                  │
-│     - If errors: print message, raise ConfigurationError         │
+│     - Detect insecure defaults (secrets at dev default values)   │
+│     - If KTRDR_ENV=production: insecure defaults → hard failure  │
+│     - If KTRDR_ENV=development: insecure defaults → BIG WARNING  │
+│     - If any hard errors: print message, raise ConfigurationError│
 │     - If valid: continue                                         │
 └─────────────────────────────────────────────────────────────────┘
                                 │
@@ -333,11 +347,10 @@ Operations:
 
 ### Settings Resolution Order
 
-For each field, Pydantic BaseSettings checks (in order):
-1. Environment variable with prefix (e.g., `KTRDR_DB_HOST`)
-2. Environment variable from `AliasChoices` (e.g., `DB_HOST` — deprecated)
-3. `.env.local` file (if exists, gitignored)
-4. Python default in field definition
+For each field, Pydantic v2 BaseSettings resolves values in this order (first match wins):
+1. **Environment variables** — checks all names for the field: the prefixed name (e.g., `KTRDR_DB_HOST`) and any `AliasChoices` alternatives (e.g., `DB_HOST`) in the order listed. These are the same priority level — `AliasChoices` just provides alternative names, not a separate tier.
+2. **`.env.local` file** (if exists, gitignored) — loaded via `env_file` in `model_config`
+3. **Python default** in field definition
 
 ---
 
@@ -354,7 +367,7 @@ Current code calls various config loaders. After migration:
 
 Each worker entrypoint:
 1. Call `validate_all(component="worker")`
-2. Workers validate only the settings they need (DB, logging, worker, checkpoint)
+2. Workers validate only the settings they need (DB, logging, observability, worker, checkpoint)
 
 ### Database Connection (`ktrdr/api/database.py`)
 
@@ -400,7 +413,7 @@ All existing code that reads config:
 | `ktrdr/workers/backtest/backtest_worker.py` | Use settings getters |
 | `ktrdr/workers/training/training_worker.py` | Use settings getters, fix WORKER_PORT inconsistency (bug) |
 | `ktrdr/workers/training/worker_registration.py` | Use settings getters, fix WORKER_PORT inconsistency (bug) |
-| `ktrdr/config/credentials.py` | Use `get_ib_settings()` instead of direct env reads |
+| `ktrdr/config/credentials.py` consumers | Use `get_ib_settings()` instead of `CredentialProvider` |
 | `ktrdr/data/ib_*.py` | Replace IB config reads with `get_ib_settings()` |
 | `ktrdr/async_infrastructure/service_orchestrator.py` | Use settings getters for host service config |
 | `ktrdr/models/training/*.py` | Use `get_checkpoint_settings()` and `get_training_host_settings()` |
@@ -420,6 +433,7 @@ All existing code that reads config:
 | `ktrdr/config/host_services.py` | Merged into `settings.py` (`IBHostServiceSettings`, `TrainingHostServiceSettings`) |
 | `ktrdr/config/ib_config.py` | Merged into `settings.py` (`IBSettings`) |
 | `ktrdr/api/config.py` | Merged into `settings.py` (`APISettings`) — resolves duplication |
+| `ktrdr/config/credentials.py` | Merged into `settings.py` (`IBSettings`) — fields absorbed |
 | `config/ktrdr_metadata.yaml` | Project info → `pyproject.toml`, settings → Settings classes |
 | `config/settings.yaml` | All values move to Settings class defaults |
 | `config/environment/*.yaml` | No more YAML environment layering |
@@ -457,9 +471,9 @@ These tests run real containers and verify the system actually works. They are N
 
 | Test | What It Verifies | How |
 |------|------------------|-----|
-| **Backend starts with valid config** | New settings system works in production | Start backend container with all required env vars, verify `/health` returns 200 |
-| **Backend fails with missing DB password** | Validation catches missing required settings | Start backend WITHOUT `KTRDR_DB_PASSWORD`, verify container exits with code 1 and stderr contains "KTRDR_DB_PASSWORD" |
-| **Backend fails with missing JWT secret** | Validation catches missing auth settings | Start backend WITHOUT `KTRDR_AUTH_JWT_SECRET`, verify container exits with code 1 and stderr contains "KTRDR_AUTH_JWT_SECRET" |
+| **Backend starts with valid config** | New settings system works in production | Start backend container with all required env vars set to non-default values, verify `/health` returns 200 |
+| **Insecure defaults fail in production** | Production rejects insecure defaults | Start backend with `KTRDR_ENV=production` and default passwords, verify container exits with code 1 and stderr contains "KTRDR_DB_PASSWORD" |
+| **Insecure defaults warn in development** | Dev mode warns but starts | Start backend with `KTRDR_ENV=development` and default passwords, verify container starts and stderr contains "INSECURE DEFAULT" warning |
 | **Backend fails with invalid port** | Validation catches type errors | Start backend with `KTRDR_API_PORT=not_a_number`, verify container exits with code 1 and error message is clear |
 | **Deprecated env vars work** | Backward compatibility during migration | Start backend with `DB_PASSWORD` (old name), verify it starts successfully |
 | **Deprecated env vars emit warning** | Users know to update their config | Start backend with `DB_PASSWORD`, verify stderr contains deprecation warning |
@@ -477,8 +491,8 @@ The error messages must be actionable. These tests verify humans can debug confi
 
 | Scenario | Required in Error Output |
 |----------|-------------------------|
-| Missing `KTRDR_DB_PASSWORD` | "KTRDR_DB_PASSWORD", "required", "database" |
-| Missing `KTRDR_AUTH_JWT_SECRET` | "KTRDR_AUTH_JWT_SECRET", "required", "JWT" |
+| Insecure `KTRDR_DB_PASSWORD` in production | "KTRDR_DB_PASSWORD", "insecure", "production" |
+| Insecure `KTRDR_AUTH_JWT_SECRET` in production | "KTRDR_AUTH_JWT_SECRET", "insecure", "production" |
 | Invalid `KTRDR_API_PORT=abc` | "KTRDR_API_PORT", "integer", "abc" |
 | Multiple missing settings | ALL missing settings listed (not just first) |
 | Any config error | "See: docs/configuration.md" |
@@ -563,7 +577,7 @@ Each step is a separate PR. Order chosen to resolve duplications first, then mov
 2. **API Server** — `ktrdr/api/main.py`, `ktrdr/api/dependencies.py`: Replace `APIConfig` usage → `get_api_settings()`, add startup validation. **Deletes `ktrdr/api/config.py`** (resolves duplication #1)
 3. **Auth/Secrets** — Scattered `os.getenv("JWT_SECRET")`, `os.getenv("ANTHROPIC_API_KEY")` → `get_auth_settings()`
 4. **Logging & Observability** — `ktrdr/utils/logging.py` and tracing setup: Replace `os.getenv("LOG_LEVEL")`, `os.getenv("OTLP_ENDPOINT")` → `get_logging_settings()`, `get_observability_settings()`
-5. **IB Connection** — `ktrdr/config/ib_config.py` consumers, `ktrdr/data/ib_*.py`, `ktrdr/config/credentials.py`: Replace `IbConfig` dataclass → `get_ib_settings()`. **Deletes `ktrdr/config/ib_config.py`** (resolves duplication)
+5. **IB Connection** — `ktrdr/config/ib_config.py` consumers, `ktrdr/data/ib_*.py`, `ktrdr/config/credentials.py` consumers: Replace `IbConfig` dataclass and `CredentialProvider` → `get_ib_settings()`. **Deletes `ktrdr/config/ib_config.py` and `ktrdr/config/credentials.py`** (fields absorbed into `IBSettings`)
 6. **Host Services** — `ktrdr/async_infrastructure/service_orchestrator.py`, data proxy, training proxy: Replace `os.getenv("USE_IB_HOST_SERVICE")` (read in 4 places) → `get_ib_host_settings().enabled`. **Deletes `ktrdr/config/host_services.py`** (resolves duplication)
 7. **Workers** — `ktrdr/workers/base.py`, `ktrdr/workers/training/training_worker.py`, `ktrdr/workers/training/worker_registration.py`: Replace `os.getenv("WORKER_*")` → `get_worker_settings()`. **Fixes WORKER_PORT bug** (inconsistent defaults 5002 vs 5004)
 8. **Operational** — Checkpoint, orphan detector, operations service: Already partially migrated (existing Settings classes), align with new naming
@@ -580,12 +594,14 @@ Each step is a separate PR. Order chosen to resolve duplications first, then mov
 
 ### Phase 3: Cleanup
 
-**Goal:** Remove all old config code, YAML files, and metadata system.
+**Goal:** Remove metadata system, YAML files, and remaining old code.
 
-1. Delete deprecated Python modules (see Files to Delete): `metadata.py`, `ib_config.py`, `host_services.py`, `api/config.py`
-2. Delete unused YAML files: `config/settings.yaml`, `config/ktrdr_metadata.yaml`, `config/environment/*.yaml`, `config/indicators.yaml`, `config/ib_host_service.yaml`, `config/training_host_service.yaml`
-3. Simplify `ktrdr/config/loader.py` — remove system config loading, keep only domain config (indicator/strategy YAML)
-4. Remove all `metadata.get()` calls and `from ktrdr.metadata import metadata` imports
+Note: `api/config.py` (Phase 2 step 2), `ib_config.py` (step 5), `host_services.py` (step 6), and `credentials.py` (step 5) are deleted during Phase 2 when their consumers are migrated. Phase 3 handles everything else.
+
+1. Remove all `metadata.get()` calls and `from ktrdr.metadata import metadata` imports
+2. Delete `ktrdr/metadata.py`
+3. Delete unused YAML files: `config/settings.yaml`, `config/ktrdr_metadata.yaml`, `config/environment/*.yaml`, `config/indicators.yaml`, `config/ib_host_service.yaml`, `config/training_host_service.yaml`
+4. Simplify `ktrdr/config/loader.py` — remove system config loading, keep only domain config (indicator/strategy YAML)
 5. Move project version to `importlib.metadata.version("ktrdr")`
 6. Update documentation
 7. Generate config reference from Pydantic model schemas
