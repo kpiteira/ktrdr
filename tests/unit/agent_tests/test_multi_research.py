@@ -4,10 +4,12 @@ Task 1.1: Tests for _get_all_active_research_ops() method.
 Task 1.2: Tests for _get_concurrency_limit() method.
 """
 
+import asyncio
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
 import pytest
+import pytest_asyncio
 
 from ktrdr.api.models.operations import (
     OperationInfo,
@@ -629,6 +631,18 @@ class TestTriggerCapacityCheck:
         """Use stub workers to avoid real API calls in unit tests."""
         monkeypatch.setenv("USE_STUB_WORKERS", "true")
         monkeypatch.setenv("STUB_WORKER_FAST", "true")
+
+    @pytest_asyncio.fixture(autouse=True)
+    async def cleanup_coordinator(self):
+        """Cancel leaked background coordinator tasks after each test."""
+        yield
+        for task in asyncio.all_tasks():
+            if task is not asyncio.current_task() and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
 
     @pytest.fixture(autouse=True)
     def mock_budget(self):

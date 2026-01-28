@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
 import pytest
+import pytest_asyncio
 
 from ktrdr.api.models.operations import (
     OperationInfo,
@@ -127,6 +128,18 @@ class TestAgentServiceTrigger:
         monkeypatch.setenv("USE_STUB_WORKERS", "true")
         monkeypatch.setenv("STUB_WORKER_FAST", "true")
 
+    @pytest_asyncio.fixture(autouse=True)
+    async def cleanup_coordinator(self):
+        """Cancel leaked background coordinator tasks after each test."""
+        yield
+        for task in asyncio.all_tasks():
+            if task is not asyncio.current_task() and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
+
     @pytest.fixture(autouse=True)
     def mock_budget(self):
         """Mock budget tracker to allow triggers in tests."""
@@ -234,6 +247,21 @@ class TestAgentServiceTrigger:
 class TestAgentServiceGetStatus:
     """Test get_status() method."""
 
+    @pytest.fixture(autouse=True)
+    def mock_budget(self):
+        """Mock budget tracker to prevent filesystem access in unit tests."""
+        from unittest.mock import MagicMock, patch
+
+        mock_tracker = MagicMock()
+        mock_tracker.get_remaining.return_value = 5.0
+        mock_tracker.daily_limit = 5.0
+
+        with patch(
+            "ktrdr.api.services.agent_service.get_budget_tracker",
+            return_value=mock_tracker,
+        ):
+            yield mock_tracker
+
     @pytest.mark.asyncio
     async def test_status_returns_idle_when_no_active_cycle(
         self, mock_operations_service
@@ -331,7 +359,6 @@ class TestAgentServiceGetStatus:
         # M5: strategy_name is now in active_researches list
         assert status["active_researches"][0]["strategy_name"] == "momentum_rsi_v2"
 
-    @pytest.mark.skip(reason="Flaky test - budget tracker race condition. See #275")
     @pytest.mark.asyncio
     async def test_status_returns_last_cycle_when_idle(self, mock_operations_service):
         """Status returns last cycle info when idle."""
@@ -369,6 +396,21 @@ class TestAgentServiceMetadataContract:
     Status response should include child_operation_id when active.
     M5: child_operation_id is now in active_researches list items.
     """
+
+    @pytest.fixture(autouse=True)
+    def mock_budget(self):
+        """Mock budget tracker to prevent filesystem access in unit tests."""
+        from unittest.mock import MagicMock, patch
+
+        mock_tracker = MagicMock()
+        mock_tracker.get_remaining.return_value = 5.0
+        mock_tracker.daily_limit = 5.0
+
+        with patch(
+            "ktrdr.api.services.agent_service.get_budget_tracker",
+            return_value=mock_tracker,
+        ):
+            yield mock_tracker
 
     @pytest.mark.asyncio
     async def test_status_includes_child_operation_id_when_active(
@@ -1220,6 +1262,21 @@ class TestAgentServiceResumeIfNeeded:
 
 class TestAgentServiceMultiResearchStatus:
     """Test get_status() for multi-research response (M5 Task 5.1)."""
+
+    @pytest.fixture(autouse=True)
+    def mock_budget(self):
+        """Mock budget tracker to prevent filesystem access in unit tests."""
+        from unittest.mock import MagicMock, patch
+
+        mock_tracker = MagicMock()
+        mock_tracker.get_remaining.return_value = 5.0
+        mock_tracker.daily_limit = 5.0
+
+        with patch(
+            "ktrdr.api.services.agent_service.get_budget_tracker",
+            return_value=mock_tracker,
+        ):
+            yield mock_tracker
 
     @pytest.mark.asyncio
     async def test_status_returns_empty_active_researches_when_idle(

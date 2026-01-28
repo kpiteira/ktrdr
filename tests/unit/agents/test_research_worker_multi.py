@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import pytest_asyncio
 
 from ktrdr.api.models.operations import (
     OperationInfo,
@@ -567,6 +568,18 @@ class TestCapacityCheck:
         monkeypatch.setenv("USE_STUB_WORKERS", "true")
         monkeypatch.setenv("STUB_WORKER_FAST", "true")
 
+    @pytest_asyncio.fixture(autouse=True)
+    async def cleanup_coordinator(self):
+        """Cancel leaked background coordinator tasks after each test."""
+        yield
+        for task in asyncio.all_tasks():
+            if task is not asyncio.current_task() and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
+
     @pytest.fixture(autouse=True)
     def mock_budget(self):
         """Mock budget tracker to allow triggers."""
@@ -714,6 +727,18 @@ class TestCoordinatorLifecycle:
         """Use stub workers to avoid real API calls."""
         monkeypatch.setenv("USE_STUB_WORKERS", "true")
         monkeypatch.setenv("STUB_WORKER_FAST", "true")
+
+    @pytest_asyncio.fixture(autouse=True)
+    async def cleanup_coordinator(self):
+        """Cancel leaked background coordinator tasks after each test."""
+        yield
+        for task in asyncio.all_tasks():
+            if task is not asyncio.current_task() and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
 
     @pytest.fixture(autouse=True)
     def mock_budget(self):
