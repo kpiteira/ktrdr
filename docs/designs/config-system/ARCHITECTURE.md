@@ -1,12 +1,14 @@
 # Configuration System Redesign: Architecture
 
-> **Status:** Architecture defined, ready for validation.
+> **Status:** Validated. Ready for implementation planning.
 > **Dependency:** M6/M7 (sandbox → local-prod) landed on main. Blocker resolved.
-> See `VALIDATION_NOTES.md` for session notes from 2026-01-18.
+> See `SCENARIOS.md` for validation results. See `VALIDATION_NOTES.md` for earlier session notes.
 
 ## Overview
 
-The new configuration system consolidates all KTRDR settings into Pydantic BaseSettings classes organized by concern. Configuration flows from Python defaults, overridden by environment variables. Secrets are injected via 1Password at deploy time. The system validates all settings at import time, failing fast with clear error messages.
+The new configuration system consolidates all ~90 KTRDR environment variables and 14 YAML config files into 16 Pydantic BaseSettings classes organized by concern. Configuration flows from Python defaults, overridden by environment variables. Secrets are injected via 1Password at deploy time. The system validates all settings at explicit startup call, failing fast with clear error messages.
+
+This is a full cleanup — every duplication resolved, every scattered `os.getenv()` replaced with a single cached getter, every inconsistent name standardized to `KTRDR_*`.
 
 ## Components
 
@@ -22,22 +24,26 @@ The new configuration system consolidates all KTRDR settings into Pydantic BaseS
 - `AliasChoices` for deprecated env var names during migration
 - Cached getter function (e.g., `get_db_settings()`)
 
-**Settings Classes to Create:**
+**Settings Classes (16 total):**
 
-| Class | Prefix | Purpose |
-|-------|--------|---------|
-| `DatabaseSettings` | `KTRDR_DB_` | PostgreSQL connection |
-| `APISettings` | `KTRDR_API_` | FastAPI server config |
-| `AuthSettings` | `KTRDR_AUTH_` | JWT and security |
-| `IBSettings` | `KTRDR_IB_` | Interactive Brokers connection |
-| `IBHostServiceSettings` | `KTRDR_IB_HOST_SERVICE_` | IB proxy for Docker |
-| `TrainingHostServiceSettings` | `KTRDR_TRAINING_HOST_` | GPU training proxy |
-| `WorkerSettings` | `KTRDR_WORKER_` | Worker process config |
-| `ObservabilitySettings` | `KTRDR_OTEL_` | OpenTelemetry/Jaeger |
-| `LoggingSettings` | `KTRDR_LOG_` | Logging config |
-| `CheckpointSettings` | `KTRDR_CHECKPOINT_` | Operation checkpoints |
-| `OrphanDetectorSettings` | `KTRDR_ORPHAN_` | Orphan operation detection |
-| `AgentSettings` | `KTRDR_AGENT_` | AI agent config |
+| Class | Prefix | Fields | Purpose |
+|-------|--------|--------|---------|
+| `DatabaseSettings` | `KTRDR_DB_` | host, port, name, user, password, echo | PostgreSQL connection |
+| `APISettings` | `KTRDR_API_` | title, description, version, host, port, reload, log_level, prefix, cors_* | FastAPI server (merges `APIConfig` + old `APISettings`) |
+| `AuthSettings` | `KTRDR_AUTH_` | jwt_secret, anthropic_api_key | Secrets and authentication |
+| `IBSettings` | `KTRDR_IB_` | host, port, client_id, timeout, readonly, rate_limit, rate_period, max_retries, retry_delay, retry_max_delay, pacing_delay, max_requests_10min, username, account_id, api_key | IB connection (merges `IbConfig` dataclass + credentials) |
+| `IBHostServiceSettings` | `KTRDR_IB_HOST_` | enabled, url, timeout, health_interval, max_retries, retry_delay | IB host service proxy |
+| `TrainingHostServiceSettings` | `KTRDR_TRAINING_HOST_` | enabled, url, timeout, health_interval, max_retries, retry_delay, poll_interval, session_timeout | Training host service proxy |
+| `WorkerSettings` | `KTRDR_WORKER_` | id, port, type, public_url, backend_url, shutdown_timeout | Worker process config |
+| `ObservabilitySettings` | `KTRDR_OTEL_` | endpoint, service_name | OpenTelemetry/Jaeger |
+| `LoggingSettings` | `KTRDR_LOG_` | level, format | Logging config |
+| `CheckpointSettings` | `KTRDR_CHECKPOINT_` | epoch_interval, time_interval, dir, max_age_days | Operation checkpoints |
+| `OrphanDetectorSettings` | `KTRDR_ORPHAN_` | timeout, check_interval | Orphan operation detection |
+| `AgentSettings` | `KTRDR_AGENT_` | enabled, model, max_tokens, timeout, max_iterations, max_input_tokens, daily_budget, budget_dir, poll_interval, trigger_interval, training_start/end, backtest_start/end, max_concurrent, concurrency_buffer, use_stubs, stub_fast, stub_delay | AI agent config |
+| `AgentGateSettings` | `KTRDR_GATE_` | training_min_accuracy, training_max_loss, training_min_loss_decrease, backtest_min_win_rate, backtest_max_drawdown, backtest_min_sharpe | Quality gate thresholds |
+| `DataSettings` | `KTRDR_DATA_` | dir, format, max_segment_size, save_interval, models_dir, strategies_dir | Data storage and acquisition |
+| `OperationsSettings` | `KTRDR_OPS_` | cache_ttl | Operations service |
+| `APIClientSettings` | `KTRDR_API_CLIENT_` | base_url, timeout, max_retries, retry_delay | API client for CLI/workers |
 
 **Key Pattern — Cached Getters:**
 ```python
@@ -52,20 +58,36 @@ This ensures settings are loaded once and reused. Tests call `clear_settings_cac
 
 ### Component 2: Validation Module
 
-**Responsibility:** Validate all required settings at startup, fail fast with clear errors.
+**Responsibility:** Validate all required settings at explicit startup call, detect insecure defaults, fail fast with clear errors.
 
-**Location:** `ktrdr/config/validation.py`
+**Location:** `ktrdr/config/validation.py` (existing file, to be rewritten)
+
+**Critical Design Choice:** Validation is an **explicit startup call**, NOT import-time.
+This is because CLI commands like `ktrdr --help` or `ktrdr data show` must work without a database password.
+Only `ktrdr/api/main.py` and worker entrypoints call `validate_all()`.
 
 **Behavior:**
-1. Attempt to instantiate each required Settings class
-2. Collect all validation errors (don't stop at first)
-3. If any errors, print formatted error message and raise `ConfigurationError`
-4. Called at app startup before serving requests
+1. Read `KTRDR_ENV` via `os.getenv()` (NOT from a Settings class — avoids circular dependency)
+2. Attempt to instantiate each required Settings class for the given component
+3. Collect all validation errors (don't stop at first)
+4. Detect insecure defaults in use (secrets still at their dev default values)
+5. **If `KTRDR_ENV=production`:** Insecure defaults are **hard failures** (local-prod IS production)
+6. **If `KTRDR_ENV=development` or unset:** Insecure defaults emit BIG WARNING but don't fail
+7. If any hard errors, print formatted error message and raise `ConfigurationError`
 
-**Key Function:**
+**Key Functions:**
 - `validate_all(component: str)` — Validates settings for "backend", "worker", or "all"
+- `detect_insecure_defaults()` — Checks if secrets are still at their default values
 
-**Error Output Format:**
+**Insecure Defaults Detection:**
+```python
+INSECURE_DEFAULTS = {
+    "KTRDR_DB_PASSWORD": "localdev",
+    "KTRDR_AUTH_JWT_SECRET": "local-dev-secret-do-not-use-in-production",
+}
+```
+
+**Error Output Format (missing required settings):**
 ```
 CONFIGURATION ERROR
 ====================
@@ -75,6 +97,24 @@ Missing required settings:
 
 See: docs/configuration.md
 ====================
+```
+
+**Warning Output Format (insecure defaults in dev mode):**
+```
+========================================
+WARNING: INSECURE DEFAULT CONFIGURATION
+========================================
+The following settings are using insecure defaults:
+  - KTRDR_DB_PASSWORD: Using default "localdev"
+  - KTRDR_AUTH_JWT_SECRET: Using default "local-dev-secret..."
+
+This is fine for local development but MUST NOT be used in production.
+
+To suppress this warning:
+  - Set these values via 1Password (recommended)
+  - Or create .env.local with secure values
+  - Or set KTRDR_ACKNOWLEDGE_INSECURE_DEFAULTS=true
+========================================
 ```
 
 ---
@@ -91,20 +131,157 @@ See: docs/configuration.md
 3. Emit `DeprecationWarning` for each
 4. Old names still work (via `AliasChoices` in Settings fields)
 
-**Deprecated Names to Support:**
+**Complete Deprecated Names Map (from codebase audit 2026-01-27):**
+
+Database:
 
 | Old Name | New Name |
 |----------|----------|
 | `DB_HOST` | `KTRDR_DB_HOST` |
+| `DB_PORT` | `KTRDR_DB_PORT` |
+| `DB_NAME` | `KTRDR_DB_NAME` |
+| `DB_USER` | `KTRDR_DB_USER` |
 | `DB_PASSWORD` | `KTRDR_DB_PASSWORD` |
+| `DB_ECHO` | `KTRDR_DB_ECHO` |
+| `DATABASE_URL` | Remove (compute from parts) |
+
+Environment:
+
+| Old Name | New Name |
+|----------|----------|
+| `ENVIRONMENT` | `KTRDR_ENV` |
+| `KTRDR_ENVIRONMENT` | `KTRDR_ENV` |
+| `KTRDR_API_ENVIRONMENT` | `KTRDR_ENV` |
+| `APP_VERSION` | `KTRDR_VERSION` (or importlib.metadata) |
+
+Auth/Secrets:
+
+| Old Name | New Name |
+|----------|----------|
+| `JWT_SECRET` | `KTRDR_AUTH_JWT_SECRET` |
+| `ANTHROPIC_API_KEY` | `KTRDR_AUTH_ANTHROPIC_KEY` |
+
+Logging:
+
+| Old Name | New Name |
+|----------|----------|
+| `LOG_LEVEL` | `KTRDR_LOG_LEVEL` |
+| `KTRDR_LOGGING_LEVEL` | `KTRDR_LOG_LEVEL` |
+| `KTRDR_LOGGING_FORMAT` | `KTRDR_LOG_FORMAT` |
+
+Observability:
+
+| Old Name | New Name |
+|----------|----------|
+| `OTLP_ENDPOINT` | `KTRDR_OTEL_ENDPOINT` |
+
+IB Connection:
+
+| Old Name | New Name |
+|----------|----------|
 | `IB_HOST` | `KTRDR_IB_HOST` |
 | `IB_PORT` | `KTRDR_IB_PORT` |
-| `JWT_SECRET` | `KTRDR_AUTH_JWT_SECRET` |
-| `USE_IB_HOST_SERVICE` | `KTRDR_IB_HOST_SERVICE_ENABLED` |
-| `OTLP_ENDPOINT` | `KTRDR_OTEL_ENDPOINT` |
-| `LOG_LEVEL` | `KTRDR_LOG_LEVEL` |
-| `ANTHROPIC_API_KEY` | `KTRDR_AGENT_API_KEY` |
-| (full list in implementation) | |
+| `IB_CLIENT_ID` | `KTRDR_IB_CLIENT_ID` |
+| `IB_TIMEOUT` | `KTRDR_IB_TIMEOUT` |
+| `IB_READONLY` | `KTRDR_IB_READONLY` |
+| `IB_RATE_LIMIT` | `KTRDR_IB_RATE_LIMIT` |
+| `IB_RATE_PERIOD` | `KTRDR_IB_RATE_PERIOD` |
+| `IB_MAX_RETRIES` | `KTRDR_IB_MAX_RETRIES` |
+| `IB_RETRY_DELAY` | `KTRDR_IB_RETRY_DELAY` |
+| `IB_RETRY_MAX_DELAY` | `KTRDR_IB_RETRY_MAX_DELAY` |
+| `IB_PACING_DELAY` | `KTRDR_IB_PACING_DELAY` |
+| `IB_MAX_REQUESTS_10MIN` | `KTRDR_IB_MAX_REQUESTS_10MIN` |
+
+IB Host Service:
+
+| Old Name | New Name |
+|----------|----------|
+| `USE_IB_HOST_SERVICE` | `KTRDR_IB_HOST_ENABLED` |
+| `IB_HOST_SERVICE_URL` | `KTRDR_IB_HOST_URL` |
+
+Training Host Service:
+
+| Old Name | New Name |
+|----------|----------|
+| `USE_TRAINING_HOST_SERVICE` | `KTRDR_TRAINING_HOST_ENABLED` |
+| `TRAINING_HOST_SERVICE_URL` | `KTRDR_TRAINING_HOST_URL` |
+
+Workers:
+
+| Old Name | New Name |
+|----------|----------|
+| `WORKER_ID` | `KTRDR_WORKER_ID` |
+| `WORKER_PORT` | `KTRDR_WORKER_PORT` |
+| `WORKER_TYPE` | `KTRDR_WORKER_TYPE` |
+| `WORKER_PUBLIC_BASE_URL` | `KTRDR_WORKER_PUBLIC_URL` |
+| `WORKER_ENDPOINT_URL` | `KTRDR_WORKER_PUBLIC_URL` (merge) |
+
+Orphan Detector:
+
+| Old Name | New Name |
+|----------|----------|
+| `ORPHAN_TIMEOUT_SECONDS` | `KTRDR_ORPHAN_TIMEOUT` |
+| `ORPHAN_CHECK_INTERVAL_SECONDS` | `KTRDR_ORPHAN_CHECK_INTERVAL` |
+
+Checkpoint:
+
+| Old Name | New Name |
+|----------|----------|
+| `CHECKPOINT_EPOCH_INTERVAL` | `KTRDR_CHECKPOINT_EPOCH_INTERVAL` |
+| `CHECKPOINT_TIME_INTERVAL_SECONDS` | `KTRDR_CHECKPOINT_TIME_INTERVAL` |
+| `CHECKPOINT_DIR` | `KTRDR_CHECKPOINT_DIR` |
+| `CHECKPOINT_MAX_AGE_DAYS` | `KTRDR_CHECKPOINT_MAX_AGE_DAYS` |
+
+Agent:
+
+| Old Name | New Name |
+|----------|----------|
+| `AGENT_ENABLED` | `KTRDR_AGENT_ENABLED` |
+| `AGENT_MODEL` | `KTRDR_AGENT_MODEL` |
+| `AGENT_MAX_TOKENS` | `KTRDR_AGENT_MAX_TOKENS` |
+| `AGENT_TIMEOUT_SECONDS` | `KTRDR_AGENT_TIMEOUT` |
+| `AGENT_MAX_ITERATIONS` | `KTRDR_AGENT_MAX_ITERATIONS` |
+| `AGENT_MAX_INPUT_TOKENS` | `KTRDR_AGENT_MAX_INPUT_TOKENS` |
+| `AGENT_DAILY_BUDGET` | `KTRDR_AGENT_DAILY_BUDGET` |
+| `AGENT_BUDGET_DIR` | `KTRDR_AGENT_BUDGET_DIR` |
+| `AGENT_POLL_INTERVAL` | `KTRDR_AGENT_POLL_INTERVAL` |
+| `AGENT_TRIGGER_INTERVAL_SECONDS` | `KTRDR_AGENT_TRIGGER_INTERVAL` |
+| `AGENT_TRAINING_START_DATE` | `KTRDR_AGENT_TRAINING_START` |
+| `AGENT_TRAINING_END_DATE` | `KTRDR_AGENT_TRAINING_END` |
+| `AGENT_BACKTEST_START_DATE` | `KTRDR_AGENT_BACKTEST_START` |
+| `AGENT_BACKTEST_END_DATE` | `KTRDR_AGENT_BACKTEST_END` |
+| `AGENT_MAX_CONCURRENT_RESEARCHES` | `KTRDR_AGENT_MAX_CONCURRENT` |
+| `AGENT_CONCURRENCY_BUFFER` | `KTRDR_AGENT_CONCURRENCY_BUFFER` |
+| `USE_STUB_WORKERS` | `KTRDR_AGENT_USE_STUBS` |
+| `STUB_WORKER_FAST` | `KTRDR_AGENT_STUB_FAST` |
+| `STUB_WORKER_DELAY` | `KTRDR_AGENT_STUB_DELAY` |
+
+Quality Gates:
+
+| Old Name | New Name |
+|----------|----------|
+| `TRAINING_GATE_MIN_ACCURACY` | `KTRDR_GATE_TRAINING_MIN_ACCURACY` |
+| `TRAINING_GATE_MAX_LOSS` | `KTRDR_GATE_TRAINING_MAX_LOSS` |
+| `TRAINING_GATE_MIN_LOSS_DECREASE` | `KTRDR_GATE_TRAINING_MIN_LOSS_DECREASE` |
+| `BACKTEST_GATE_MIN_WIN_RATE` | `KTRDR_GATE_BACKTEST_MIN_WIN_RATE` |
+| `BACKTEST_GATE_MAX_DRAWDOWN` | `KTRDR_GATE_BACKTEST_MAX_DRAWDOWN` |
+| `BACKTEST_GATE_MIN_SHARPE` | `KTRDR_GATE_BACKTEST_MIN_SHARPE` |
+
+Data:
+
+| Old Name | New Name |
+|----------|----------|
+| `DATA_DIR` | `KTRDR_DATA_DIR` |
+| `DATA_MAX_SEGMENT_SIZE` | `KTRDR_DATA_MAX_SEGMENT_SIZE` |
+| `DATA_PERIODIC_SAVE_MIN` | `KTRDR_DATA_SAVE_INTERVAL` |
+| `MODELS_DIR` | `KTRDR_DATA_MODELS_DIR` |
+| `STRATEGIES_DIR` | `KTRDR_DATA_STRATEGIES_DIR` |
+
+Operations:
+
+| Old Name | New Name |
+|----------|----------|
+| `OPERATIONS_CACHE_TTL` | `KTRDR_OPS_CACHE_TTL` |
 
 ---
 
@@ -200,36 +377,55 @@ All existing code that reads config:
 
 | File | Purpose |
 |------|---------|
-| `ktrdr/config/settings.py` | All Settings classes |
-| `ktrdr/config/validation.py` | Startup validation |
-| `ktrdr/config/deprecation.py` | Deprecated name warnings |
+| `ktrdr/config/deprecation.py` | Deprecated name warnings and mapping |
 
-### Files to Modify
+### Files to Modify (Significantly Rewrite)
 
 | File | Change |
 |------|--------|
-| `ktrdr/config/__init__.py` | New public API |
-| `ktrdr/api/main.py` | Add validation at startup |
-| `ktrdr/api/database.py` | Use `get_db_settings()` |
-| Worker entrypoints | Add validation at startup |
-| Docker compose files | Update env var names |
+| `ktrdr/config/settings.py` | Expand from 4 to 16 Settings classes (exists, has `APISettings`, `LoggingSettings`, `OrphanDetectorSettings`, `CheckpointSettings`) |
+| `ktrdr/config/validation.py` | Rewrite for explicit startup validation with `KTRDR_ENV` awareness (exists, currently has different validation logic) |
+| `ktrdr/config/__init__.py` | New public API exporting all Settings classes, getters, and utilities |
+| `ktrdr/config/loader.py` | Remove system config loading, keep domain config loading (indicator specs, strategy YAML) |
+
+### Files to Modify (Consumer Migration)
+
+| File | Change |
+|------|--------|
+| `ktrdr/api/main.py` | Add `validate_all("backend")` + `warn_deprecated_env_vars()` at startup |
+| `ktrdr/api/database.py` | Replace `os.getenv("DB_*")` with `get_db_settings()` |
+| `ktrdr/api/dependencies.py` | Use settings getters instead of direct env reads |
+| `ktrdr/api/services/*.py` | Replace scattered `os.getenv()` calls with settings getters |
+| `ktrdr/workers/base.py` | Replace `os.getenv("WORKER_*")` with `get_worker_settings()` |
+| `ktrdr/workers/backtest/backtest_worker.py` | Use settings getters |
+| `ktrdr/workers/training/training_worker.py` | Use settings getters, fix WORKER_PORT inconsistency (bug) |
+| `ktrdr/workers/training/worker_registration.py` | Use settings getters, fix WORKER_PORT inconsistency (bug) |
+| `ktrdr/config/credentials.py` | Use `get_ib_settings()` instead of direct env reads |
+| `ktrdr/data/ib_*.py` | Replace IB config reads with `get_ib_settings()` |
+| `ktrdr/async_infrastructure/service_orchestrator.py` | Use settings getters for host service config |
+| `ktrdr/models/training/*.py` | Use `get_checkpoint_settings()` and `get_training_host_settings()` |
+| `ktrdr/agent/*.py` | Use `get_agent_settings()` and `get_agent_gate_settings()` |
+| `ktrdr/cli/local_prod.py` | Set `KTRDR_ENV=production` in compose env |
+| `ktrdr/cli/sandbox.py` | Set `KTRDR_ENV=development` in compose env |
+| `deploy/environments/local/docker-compose.yml` | Update all env var names to `KTRDR_*` |
+| `docker-compose.sandbox.yml` | Update all env var names to `KTRDR_*` |
 | `.env.*` templates | Update env var names |
+| Worker Dockerfiles / entrypoints | Add `validate_all("worker")` at startup |
 
 ### Files to Delete (After Migration)
 
 | File | Reason |
 |------|--------|
-| `ktrdr/metadata.py` | Replaced by settings + pyproject.toml |
-| `ktrdr/config/loader.py` | No more YAML loading |
-| `ktrdr/config/host_services.py` | Merged into settings.py |
-| `ktrdr/config/ib_config.py` | Merged into settings.py |
-| `ktrdr/api/config.py` | Merged into settings.py |
-| `config/ktrdr_metadata.yaml` | Project info → pyproject.toml |
-| `config/settings.yaml` | Merged into settings.py |
-| `config/environment/*.yaml` | No more YAML layering |
-| `config/indicators.yaml` | Unused |
-| `config/ib_host_service.yaml` | Merged into settings.py |
-| `config/training_host_service.yaml` | Merged into settings.py |
+| `ktrdr/metadata.py` | Replaced by settings + `importlib.metadata` for version |
+| `ktrdr/config/host_services.py` | Merged into `settings.py` (`IBHostServiceSettings`, `TrainingHostServiceSettings`) |
+| `ktrdr/config/ib_config.py` | Merged into `settings.py` (`IBSettings`) |
+| `ktrdr/api/config.py` | Merged into `settings.py` (`APISettings`) — resolves duplication |
+| `config/ktrdr_metadata.yaml` | Project info → `pyproject.toml`, settings → Settings classes |
+| `config/settings.yaml` | All values move to Settings class defaults |
+| `config/environment/*.yaml` | No more YAML environment layering |
+| `config/indicators.yaml` | Unused (domain indicator specs are separate) |
+| `config/ib_host_service.yaml` | Merged into `IBHostServiceSettings` |
+| `config/training_host_service.yaml` | Merged into `TrainingHostServiceSettings` |
 
 ---
 
@@ -341,56 +537,76 @@ def reset_settings():
 
 ### Phase 1: Foundation (No Breaking Changes)
 
-**Goal:** Create new settings module alongside existing code.
+**Goal:** Create new settings infrastructure alongside existing code.
 
-1. Create `ktrdr/config/settings.py` with all Settings classes
-2. Create `ktrdr/config/validation.py`
-3. Create `ktrdr/config/deprecation.py`
-4. Update `ktrdr/config/__init__.py`
-5. Write comprehensive tests
-6. **Existing code unchanged** — both systems coexist
+1. Expand `ktrdr/config/settings.py` from 4 to 16 Settings classes with all ~90 env vars
+2. Add `deprecated_field()` helper with `AliasChoices` (Decision 9)
+3. Rewrite `ktrdr/config/validation.py` with `KTRDR_ENV`-aware explicit startup validation
+4. Create `ktrdr/config/deprecation.py` with complete old→new name map
+5. Update `ktrdr/config/__init__.py` public API
+6. Write comprehensive unit tests for all Settings classes
+7. **Existing code unchanged** — both systems coexist
 
 **Verification:**
 - All new tests pass
 - Existing tests still pass
 - Can import from `ktrdr.config` and use new settings
+- `deprecated_field()` correctly handles `AliasChoices` + `env_prefix` interaction
 
 ### Phase 2: Incremental Migration
 
-**Goal:** Migrate existing code to use new settings, one area at a time.
+**Goal:** Migrate all existing code to use new settings, one domain at a time.
 
-Order of migration (each is a separate PR):
-1. Database settings (`ktrdr/api/database.py`)
-2. API settings (`ktrdr/api/main.py`, `ktrdr/api/config.py`)
-3. IB settings (`ktrdr/config/ib_config.py` usages)
-4. Host service settings
-5. Worker settings
-6. Operational settings (checkpoint, orphan, observability)
-7. Agent settings
+Each step is a separate PR. Order chosen to resolve duplications first, then move outward:
 
-**For each migration:**
+1. **Database** — `ktrdr/api/database.py`: Replace `os.getenv("DB_*")` → `get_db_settings()`
+2. **API Server** — `ktrdr/api/main.py`, `ktrdr/api/dependencies.py`: Replace `APIConfig` usage → `get_api_settings()`, add startup validation. **Deletes `ktrdr/api/config.py`** (resolves duplication #1)
+3. **Auth/Secrets** — Scattered `os.getenv("JWT_SECRET")`, `os.getenv("ANTHROPIC_API_KEY")` → `get_auth_settings()`
+4. **Logging & Observability** — `ktrdr/utils/logging.py` and tracing setup: Replace `os.getenv("LOG_LEVEL")`, `os.getenv("OTLP_ENDPOINT")` → `get_logging_settings()`, `get_observability_settings()`
+5. **IB Connection** — `ktrdr/config/ib_config.py` consumers, `ktrdr/data/ib_*.py`, `ktrdr/config/credentials.py`: Replace `IbConfig` dataclass → `get_ib_settings()`. **Deletes `ktrdr/config/ib_config.py`** (resolves duplication)
+6. **Host Services** — `ktrdr/async_infrastructure/service_orchestrator.py`, data proxy, training proxy: Replace `os.getenv("USE_IB_HOST_SERVICE")` (read in 4 places) → `get_ib_host_settings().enabled`. **Deletes `ktrdr/config/host_services.py`** (resolves duplication)
+7. **Workers** — `ktrdr/workers/base.py`, `ktrdr/workers/training/training_worker.py`, `ktrdr/workers/training/worker_registration.py`: Replace `os.getenv("WORKER_*")` → `get_worker_settings()`. **Fixes WORKER_PORT bug** (inconsistent defaults 5002 vs 5004)
+8. **Operational** — Checkpoint, orphan detector, operations service: Already partially migrated (existing Settings classes), align with new naming
+9. **Agent** — `ktrdr/agent/*.py`: Replace ~20 `os.getenv("AGENT_*")` calls → `get_agent_settings()`, `get_agent_gate_settings()`
+10. **Data** — `ktrdr/data/*.py`: Replace `os.getenv("DATA_DIR")` etc → `get_data_settings()`
+11. **Docker Compose** — Update both `docker-compose.yml` and `docker-compose.sandbox.yml` env var names to `KTRDR_*`
+12. **CLI** — `ktrdr/cli/local_prod.py` sets `KTRDR_ENV=production`, `ktrdr/cli/sandbox.py` sets `KTRDR_ENV=development`
+
+**For each migration step:**
 - Update code to use new getter
 - Update tests
-- Verify deprecated names still work
-- Delete old code only when fully migrated
+- Verify deprecated names still work via `AliasChoices`
+- Delete old config module only when ALL its consumers are migrated
 
 ### Phase 3: Cleanup
 
-**Goal:** Remove all old config code and files.
+**Goal:** Remove all old config code, YAML files, and metadata system.
 
-1. Delete deprecated modules (see Files to Delete above)
-2. Delete unused YAML files
-3. Update documentation
-4. Generate config reference from Pydantic models
+1. Delete deprecated Python modules (see Files to Delete): `metadata.py`, `ib_config.py`, `host_services.py`, `api/config.py`
+2. Delete unused YAML files: `config/settings.yaml`, `config/ktrdr_metadata.yaml`, `config/environment/*.yaml`, `config/indicators.yaml`, `config/ib_host_service.yaml`, `config/training_host_service.yaml`
+3. Simplify `ktrdr/config/loader.py` — remove system config loading, keep only domain config (indicator/strategy YAML)
+4. Remove all `metadata.get()` calls and `from ktrdr.metadata import metadata` imports
+5. Move project version to `importlib.metadata.version("ktrdr")`
+6. Update documentation
+7. Generate config reference from Pydantic model schemas
+
+**Verification:**
+- `grep -r "os.getenv" ktrdr/` returns zero hits for any migrated env var
+- `grep -r "metadata.get" ktrdr/` returns zero hits
+- `grep -r "from ktrdr.metadata" ktrdr/` returns zero hits
+- All tests pass
+- Full E2E stack starts cleanly
 
 ### Phase 4: Deprecation Removal (Future Release)
 
-**Goal:** Remove support for old env var names.
+**Goal:** Remove support for old env var names after migration period.
 
-1. Remove `AliasChoices` for deprecated names
-2. Update docker-compose to use only new names
-3. Update all `.env` templates
-4. Update documentation
+1. Remove `AliasChoices` from all `deprecated_field()` calls
+2. Convert `deprecated_field()` back to standard `Field()`
+3. Update docker-compose to use only new `KTRDR_*` names
+4. Update all `.env` templates
+5. Delete `ktrdr/config/deprecation.py`
+6. Update documentation
 
 ---
 

@@ -1,12 +1,24 @@
 # Configuration System Redesign: Design
 
-> **Status:** Design complete, ready for validation.
+> **Status:** Validated. Ready for implementation planning.
 > **Dependency:** M6/M7 (sandbox → local-prod) landed on main. Blocker resolved.
-> See `VALIDATION_NOTES.md` for session notes from 2026-01-18.
+> See `SCENARIOS.md` for validation results and `VALIDATION_NOTES.md` for earlier session notes.
 
 ## Problem Statement
 
-KTRDR's configuration system has grown organically and now suffers from multiple overlapping patterns, unclear precedence, and scattered settings. There are 4+ different ways to define configuration (metadata.py with YAML, Pydantic BaseSettings, dataclasses with env lambdas, direct os.getenv calls), 14+ YAML files, 60+ environment variables with inconsistent naming, and no startup validation. This makes it difficult to understand where any given setting is configured, leads to subtle bugs when precedence is unclear, and creates maintenance burden.
+KTRDR's configuration system has grown organically and now suffers from multiple overlapping patterns, unclear precedence, and scattered settings.
+
+**Quantified (from codebase audit, 2026-01-27):**
+- **5 config patterns**: Pydantic BaseSettings, dataclasses with `os.getenv()` lambdas, direct `os.getenv()` calls, YAML via metadata.py, YAML via ConfigLoader
+- **~90 unique environment variable names** across production code
+- **14 YAML files** providing configuration (10 to delete)
+- **6 major duplications** (e.g., `APIConfig` vs `APISettings` — two classes, same prefix, overlapping fields)
+- **3 names for "environment"**: `KTRDR_ENVIRONMENT`, `ENVIRONMENT`, `KTRDR_API_ENVIRONMENT`
+- **~30 scattered reads** where the same env var is read via `os.getenv()` in 3+ separate files
+- **1 bug**: `WORKER_PORT` defaults to 5002 in `training_worker.py` but 5004 in `training/worker_registration.py`
+- **No startup validation** — invalid config silently fails at runtime
+
+See `ARCHITECTURE.md` → Complete Migration Map for the full audit.
 
 ## Goals
 
@@ -220,13 +232,22 @@ Workers share core settings but don't need API-specific config.
 ### Decision 2: Standardize all env vars to KTRDR_ prefix
 
 **Choice:** All environment variables use `KTRDR_` prefix with logical grouping:
+- `KTRDR_ENV` — Environment mode (production/development/test)
 - `KTRDR_DB_*` — Database
-- `KTRDR_API_*` — API server
-- `KTRDR_AUTH_*` — Authentication
-- `KTRDR_IB_*` — Interactive Brokers
-- `KTRDR_WORKER_*` — Worker settings
+- `KTRDR_API_*` — API server + API client
+- `KTRDR_AUTH_*` — Authentication and secrets
+- `KTRDR_IB_*` — Interactive Brokers connection
+- `KTRDR_IB_HOST_*` — IB host service proxy
+- `KTRDR_TRAINING_HOST_*` — Training host service proxy
+- `KTRDR_WORKER_*` — Worker process settings
 - `KTRDR_LOG_*` — Logging
 - `KTRDR_OTEL_*` — Observability/telemetry
+- `KTRDR_ORPHAN_*` — Orphan operation detection
+- `KTRDR_CHECKPOINT_*` — Operation checkpoints
+- `KTRDR_AGENT_*` — AI agent settings
+- `KTRDR_GATE_*` — Agent quality gate thresholds
+- `KTRDR_DATA_*` — Data storage and acquisition
+- `KTRDR_OPS_*` — Operations service
 
 **Alternatives considered:**
 - Keep current mixed naming (DB_HOST, IB_PORT, KTRDR_API_PORT, ORPHAN_TIMEOUT_SECONDS)
@@ -335,15 +356,77 @@ class DatabaseSettings(BaseSettings):
 - Clear warning at startup: "DB_HOST is deprecated, use KTRDR_DB_HOST"
 - Can remove old aliases after migration period (1-2 releases)
 
-### Decision 7: Validation runs at import time
+### Decision 7: Validation runs at explicit startup call (not import time)
 
-**Choice:** Settings are validated when the settings module is imported, before the application starts serving requests.
+**Choice:** Settings are validated via an explicit `validate_all()` call in each entrypoint, NOT at module import time.
+
+```python
+# ktrdr/api/main.py (backend entrypoint)
+from ktrdr.config import validate_all, warn_deprecated_env_vars
+warn_deprecated_env_vars()
+validate_all("backend")
+
+# ktrdr/training/training_worker.py (worker entrypoint)
+warn_deprecated_env_vars()
+validate_all("worker")
+
+# ktrdr/cli/__init__.py (CLI entrypoint)
+# NO validate_all() call — CLI is a client, doesn't need DB/auth config
+```
+
+**Why not import time:** Import-time validation would break the CLI. When a user runs `ktrdr data show AAPL 1d`, the CLI imports `ktrdr` modules but doesn't have database credentials. If validation ran at import, `ktrdr --help` would fail.
 
 **Rationale:**
-- Fail fast: broken config never serves traffic
-- Clear errors: all validation errors reported together
-- Testable: can test config loading in isolation
-- Current behavior for Pydantic Settings (keep it)
+- Fail fast: backend/worker entrypoints validate before serving traffic
+- CLI not blocked: clients don't need server config
+- Explicit is better than implicit
+- Testable: tests don't trigger validation on import
+
+### Decision 8: `KTRDR_ENV` controls validation strictness; local-prod is production
+
+**Choice:** `KTRDR_ENV` is a standalone env var (not in any Settings class) read by the validation module.
+
+- `KTRDR_ENV=production` — Insecure defaults are hard failures. Set by `ktrdr local-prod up` and production deploys.
+- `KTRDR_ENV=development` — Insecure defaults are loud warnings. Set by `ktrdr sandbox up`. Default if not set.
+- `KTRDR_ENV=test` — Reserved for CI. Same behavior as development.
+
+**Key decision: local-prod IS production.** It runs IB Gateway, GPU training, real money decisions. It must not silently use insecure defaults.
+
+```python
+# ktrdr/cli/local_prod.py
+compose_env["KTRDR_ENV"] = "production"
+
+# ktrdr/cli/sandbox.py
+compose_env["KTRDR_ENV"] = "development"
+```
+
+### Decision 9: `deprecated_field()` helper prevents AliasChoices gotcha
+
+**Choice:** A helper function enforces correct usage of `validation_alias` with `AliasChoices`.
+
+**The gotcha:** When `validation_alias` is set on a Pydantic Settings field, `env_prefix` is completely ignored for that field. The prefixed env var name must be explicitly listed in `AliasChoices`. Forgetting this causes the `KTRDR_*` name to silently not work.
+
+```python
+def deprecated_field(default, new_env: str, old_env: str, **kwargs) -> Field:
+    """Create a field with both new and deprecated env var names.
+
+    CRITICAL: validation_alias OVERRIDES env_prefix for that field.
+    new_env MUST match what env_prefix would produce.
+    """
+    return Field(
+        default=default,
+        validation_alias=AliasChoices(new_env, old_env),
+        **kwargs,
+    )
+
+# Usage:
+class DatabaseSettings(BaseSettings):
+    host: str = deprecated_field("localhost", "KTRDR_DB_HOST", "DB_HOST")
+    port: int = 5432  # No deprecated name → env_prefix works normally
+    model_config = SettingsConfigDict(env_prefix="KTRDR_DB_")
+```
+
+**Rule:** Fields WITHOUT deprecated names use `env_prefix` normally (no `validation_alias`). Fields WITH deprecated names use `deprecated_field()` (which sets `validation_alias`).
 
 ## Resolved Questions
 
@@ -398,35 +481,32 @@ Issues to resolve during implementation:
 
 | Aspect | Current State | New State |
 |--------|--------------|-----------|
-| Config mechanism | 4+ patterns (YAML, Pydantic, dataclass, raw env) | 1 pattern (Pydantic Settings) |
-| Env var naming | Mixed (DB_*, IB_*, KTRDR_*, ORPHAN_*) | Consistent (KTRDR_*) |
-| Settings location | 14+ YAML files + scattered Python | One settings.py module |
-| Secrets handling | Mix of .env files and 1Password | 1Password only, injected at deploy |
-| Startup validation | Partial/none | Complete, fail-fast |
-| Discoverability | Hunt through multiple files | Open settings.py, see everything |
+| Config mechanism | 5 patterns (YAML, Pydantic, dataclass, raw env, metadata.py) | 1 pattern (Pydantic Settings) |
+| Env var naming | ~90 vars with mixed naming (DB_\*, IB_\*, KTRDR_\*, ORPHAN_\*, AGENT_\*, etc.) | Consistent (KTRDR_\*) across ~90 vars in 16 Settings classes |
+| Settings location | 14 YAML files + 5 Python modules + scattered `os.getenv()` in ~30 files | One `settings.py` module |
+| Duplications | 6 major (APIConfig vs APISettings, 3 names for "environment", etc.) | Zero — single source of truth per concept |
+| Secrets handling | Mix of .env files, compose defaults, and 1Password | 1Password only; insecure defaults with loud warnings |
+| Startup validation | None — invalid config fails at runtime | Complete, fail-fast at startup |
+| Discoverability | Hunt through 14+ files | Open settings.py, see everything |
 
 ---
 
-## Existing Partial Implementation
+## Scope of Migration (From Codebase Audit)
 
-The codebase already has fragments that align with this design. These are starting points, not obstacles:
+Full audit performed 2026-01-27. See `ARCHITECTURE.md` → Complete Migration Map for every env var.
 
-| What Exists | Where | Alignment |
-|-------------|-------|-----------|
-| `APISettings`, `LoggingSettings`, `OrphanDetectorSettings`, `CheckpointSettings` | `ktrdr/config/settings.py` | Already Pydantic BaseSettings with `KTRDR_` prefix. Keep and extend. |
-| `APIConfig` with `KTRDR_API_` prefix | `ktrdr/api/config.py` | Overlaps with above. Consolidate into `settings.py`. |
-| `metadata.py` with YAML loading | `ktrdr/metadata.py` | Replace with `importlib.metadata` for project info. |
-| `ConfigLoader` for YAML | `ktrdr/config/loader.py` | Used by strategy/indicator loading. Keep for domain data, remove for system config. |
-| Host service config models | `ktrdr/config/host_services.py` | Merge into Settings classes. |
-| IB config | `ktrdr/config/ib_config.py` | Merge into `IBSettings`. |
-| `.env.sandbox` with port config | Generated by sandbox system | Already env-var based. Align naming with `KTRDR_` prefix. |
-
-The migration is additive: build the new system alongside the old, migrate consumers one at a time, then delete the old code.
+**By the numbers:**
+- **~90 env vars** to standardize into **16 Settings classes**
+- **~50 deprecated name mappings** (old → new)
+- **10 YAML files** to delete
+- **5 Python modules** to delete (`metadata.py`, `api/config.py`, `ib_config.py`, `host_services.py`, `credentials.py`)
+- **~30 scattered reads** to consolidate into single cached getters
+- **6 duplications** to resolve
+- **1 bug to fix** (`WORKER_PORT` inconsistency between training worker and registration)
 
 ## Next Steps
 
 1. ~~**Architecture doc**~~ — Done. See `ARCHITECTURE.md`.
-2. **Resume validation** — Trace scenarios through the architecture (`/kdesign-validate`)
-3. **Complete gap analysis** — Resolve remaining open questions
-4. **Define implementation milestones** — Vertical slices, one settings group at a time
-5. **Implement** — Following the phased migration plan in `ARCHITECTURE.md`
+2. ~~**Validation**~~ — Done. See `SCENARIOS.md`.
+3. **Define implementation milestones** — Vertical slices, one settings group at a time
+4. **Implement** — Following the phased migration plan in `ARCHITECTURE.md`
