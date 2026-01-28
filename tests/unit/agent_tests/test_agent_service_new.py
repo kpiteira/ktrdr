@@ -138,7 +138,7 @@ class TestAgentServiceTrigger:
                 try:
                     await task
                 except (asyncio.CancelledError, Exception):
-                    pass
+                    pass  # Best-effort cleanup: ignore errors from cancelled tasks
 
     @pytest.fixture(autouse=True)
     def mock_budget(self):
@@ -256,9 +256,15 @@ class TestAgentServiceGetStatus:
         mock_tracker.get_remaining.return_value = 5.0
         mock_tracker.daily_limit = 5.0
 
-        with patch(
-            "ktrdr.api.services.agent_service.get_budget_tracker",
-            return_value=mock_tracker,
+        with (
+            patch(
+                "ktrdr.api.services.agent_service.get_budget_tracker",
+                return_value=mock_tracker,
+            ),
+            patch(
+                "ktrdr.agents.workers.research_worker.get_budget_tracker",
+                return_value=mock_tracker,
+            ),
         ):
             yield mock_tracker
 
@@ -406,9 +412,15 @@ class TestAgentServiceMetadataContract:
         mock_tracker.get_remaining.return_value = 5.0
         mock_tracker.daily_limit = 5.0
 
-        with patch(
-            "ktrdr.api.services.agent_service.get_budget_tracker",
-            return_value=mock_tracker,
+        with (
+            patch(
+                "ktrdr.api.services.agent_service.get_budget_tracker",
+                return_value=mock_tracker,
+            ),
+            patch(
+                "ktrdr.agents.workers.research_worker.get_budget_tracker",
+                return_value=mock_tracker,
+            ),
         ):
             yield mock_tracker
 
@@ -1272,9 +1284,15 @@ class TestAgentServiceMultiResearchStatus:
         mock_tracker.get_remaining.return_value = 5.0
         mock_tracker.daily_limit = 5.0
 
-        with patch(
-            "ktrdr.api.services.agent_service.get_budget_tracker",
-            return_value=mock_tracker,
+        with (
+            patch(
+                "ktrdr.api.services.agent_service.get_budget_tracker",
+                return_value=mock_tracker,
+            ),
+            patch(
+                "ktrdr.agents.workers.research_worker.get_budget_tracker",
+                return_value=mock_tracker,
+            ),
         ):
             yield mock_tracker
 

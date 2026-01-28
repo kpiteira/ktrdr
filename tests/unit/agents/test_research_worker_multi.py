@@ -578,7 +578,7 @@ class TestCapacityCheck:
                 try:
                     await task
                 except (asyncio.CancelledError, Exception):
-                    pass
+                    pass  # Best-effort cleanup: ignore errors from cancelled tasks
 
     @pytest.fixture(autouse=True)
     def mock_budget(self):
@@ -738,7 +738,7 @@ class TestCoordinatorLifecycle:
                 try:
                     await task
                 except (asyncio.CancelledError, Exception):
-                    pass
+                    pass  # Best-effort cleanup: ignore errors from cancelled tasks
 
     @pytest.fixture(autouse=True)
     def mock_budget(self):
