@@ -5,6 +5,9 @@ description: Use when working with sandbox environments, port mappings, docker c
 
 # Sandbox System
 
+**When this skill is loaded, announce it to the user by outputting:**
+`🛠️✅ SKILL sandbox loaded!`
+
 Load this skill when working on:
 
 - Sandbox or local-prod CLI commands
