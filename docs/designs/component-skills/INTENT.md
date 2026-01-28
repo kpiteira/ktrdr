@@ -64,40 +64,40 @@ Full inventory of components, prioritized by value (how much pain Claude redisco
 | Priority | Component | Status | Why | Notes |
 |----------|-----------|--------|-----|-------|
 | 1 | **Configuration** | Blocked | Multiple overlapping patterns (YAML, Pydantic, dataclass), redesign pending | Blocked by `doc/config-system-design` branch work in `ktrdr2-spec-work`. Create skill for current state once redesign lands. |
-| 2 | **Training Pipeline** | To do | 20+ modules, GPU/CPU paths, error handling, checkpoint flow. Hardest subsystem to reason about cold | Highest complexity in the codebase (~948KB). |
-| 3 | **Strategy Grammar (V3)** | To do | Pydantic models, feature resolver, validation, fuzzy set shorthand — very specific patterns Claude must follow exactly | Recent work, patterns not yet internalized. |
+| 2 | **Training Pipeline** | Done | 20+ modules, GPU/CPU paths, error handling, checkpoint flow. Hardest subsystem to reason about cold | `.claude/skills/training-pipeline/SKILL.md` |
+| 3 | **Strategy Grammar (V3)** | Done | Pydantic models, feature resolver, validation, fuzzy set shorthand — very specific patterns Claude must follow exactly | `.claude/skills/strategy-grammar-v3/SKILL.md` |
 | 4 | **Sandbox** | Done | Port mappings, compose project names, env files, local-prod — easy to get wrong | `.claude/skills/sandbox/SKILL.md` |
-| 5 | **Agent System** | To do | Prompts, tool execution, assessment parsing, multi-research coordinator, memory — actively evolving | Most actively developed subsystem. |
+| 5 | **Agent System** | Done | Prompts, tool execution, assessment parsing, multi-research coordinator, memory — actively evolving | `.claude/skills/agent-system/SKILL.md` |
 
 ### Tier 2: High Value, Moderate Frequency
 
 | Priority | Component | Status | Why |
 |----------|-----------|--------|-----|
-| 6 | **Data Acquisition / IB** | To do | IB rate limiting, chunking, gap analysis, host service proxy, trading hours — many edge cases |
-| 7 | **CLI Architecture** | To do | Lazy loading, sandbox detection, async client, operation runner, progress display — non-obvious patterns |
-| 8 | **Backtesting Engine** | To do | Position management, performance metrics, worker integration, checkpoint flow |
+| 6 | **Data Acquisition / IB** | Done | IB rate limiting, chunking, gap analysis, host service proxy, trading hours — many edge cases |
+| 7 | **CLI Architecture** | Done | Lazy loading, sandbox detection, async client, operation runner, progress display — non-obvious patterns |
+| 8 | **Backtesting Engine** | Done | Position management, performance metrics, worker integration, checkpoint flow |
 
 ### Tier 3: Moderate Value
 
 | Priority | Component | Status | Why |
 |----------|-----------|--------|-----|
-| 9 | **Async Infrastructure** | To do | ServiceOrchestrator, progress tracking, cancellation — foundational but rarely changed |
-| 10 | **Checkpoint System** | To do | Persistence, restore logic, policies — cross-cuts training and backtesting |
-| 11 | **Fuzzy Logic Engine** | To do | Membership functions, configuration-driven — moderate complexity |
-| 12 | **Technical Indicators** | To do | 70+ indicators, but `docs/adding_new_indicators.md` already exists |
-| 13 | **Error Handling** | To do | Exception hierarchy, retry logic — moderate complexity, standard patterns |
+| 9 | **Async Infrastructure** | Done | ServiceOrchestrator, progress tracking, cancellation — foundational but rarely changed |
+| 10 | **Checkpoint System** | Done | Persistence, restore logic, policies — cross-cuts training and backtesting |
+| 11 | **Fuzzy Logic Engine** | Done | Membership functions, configuration-driven — moderate complexity |
+| 12 | **Technical Indicators** | Done | 70+ indicators, but `docs/adding_new_indicators.md` already exists |
+| 13 | **Error Handling** | Done | Exception hierarchy, retry logic — moderate complexity, standard patterns |
 
 ### Tier 4: Low Value (Simple, Rarely Touched, or Already Documented)
 
 | Priority | Component | Status | Why |
 |----------|-----------|--------|-----|
-| 14 | **Decision Engine** | To do | Small, stable, rarely modified |
-| 15 | **Neural Networks** | To do | Standard PyTorch, small surface area |
-| 16 | **Visualization** | To do | Plotly wrappers, rarely touched |
+| 14 | **Decision Engine** | Done | Small, stable, rarely modified |
+| 15 | **Neural Networks** | Done | Standard PyTorch, small surface area |
+| 16 | **Visualization** | Done | TradingView lightweight-charts, rarely touched |
 | 17 | **Monitoring / Observability** | Exists | Already covered by `observability` skill |
-| 18 | **Logging** | To do | Standard patterns, stable |
-| 19 | **MCP Server** | To do | Thin wrappers, separate concern |
-| 20 | **Frontend** | To do | Has its own `CLAUDE.md`, separate concern |
+| 18 | **Logging** | Done | Standard patterns, stable |
+| 19 | **MCP Server** | Done | Thin wrappers, separate concern |
+| 20 | **Frontend** | Skip | Has its own `CLAUDE.md`, separate concern |
 | 21 | **Utilities** | Skip | Too simple to warrant a skill |
 
 ### Already Covered by Existing Skills
