@@ -116,17 +116,17 @@ from ktrdr.data.repository import DataRepository
 repository = DataRepository()
 
 # Read
-data = repository.load(symbol="AAPL", timeframe="1d")
-data = repository.load(symbol="AAPL", timeframe="1h",
-                       start_date="2024-01-01", end_date="2024-12-31")
+data = repository.load_from_cache(symbol="AAPL", timeframe="1d")
+data = repository.load_from_cache(symbol="AAPL", timeframe="1h",
+                                  start_date="2024-01-01", end_date="2024-12-31")
 
 # Write
-repository.save(symbol="AAPL", timeframe="1d", data=df)
+repository.save_to_cache(symbol="AAPL", timeframe="1d", data=df)
 
 # Metadata
-has_data = repository.has_data(symbol="AAPL", timeframe="1d")
-date_range = repository.get_date_range(symbol="AAPL", timeframe="1d")
-symbols = repository.list_symbols()
+range_info = repository.get_data_range(symbol="AAPL", timeframe="1d")
+symbols = repository.get_available_symbols()
+stats = repository.get_cache_stats()
 ```
 
 ### File structure
@@ -250,6 +250,8 @@ cd ib-host-service && ./start.sh  # Port 5001
 
 - `POST /data/historical` — Fetch historical bars
 - `POST /data/validate` — Validate symbol and get metadata
+- `GET /data/symbol-info/{symbol}` — Get symbol contract info
+- `GET /data/head-timestamp` — Get earliest available data timestamp
 - `GET /health` — Health check
 
 ### IB Rate Limiting (PaceManager)
@@ -364,7 +366,7 @@ ktrdr ib cleanup --force
 ```
 GET    /data/{symbol}/{timeframe}     → Cached OHLCV data
 POST   /data/acquire/download         → Async data download (returns operation_id)
-GET    /data/range                     → Date range for cached data
+POST   /data/range                     → Date range for cached data
 GET    /symbols                        → Available symbols
 GET    /timeframes                     → Supported timeframes
 GET    /operations/{id}                → Poll async operation status
@@ -381,7 +383,7 @@ DELETE /operations/{id}                → Cancel async operation
 from ktrdr.data.repository import DataRepository
 
 repository = DataRepository()
-data = repository.load(symbol="AAPL", timeframe="1d")
+data = repository.load_from_cache(symbol="AAPL", timeframe="1d")
 ```
 
 ### Downloading data (requires IB)
@@ -399,9 +401,9 @@ result = await service.download_data(
 
 ```python
 repository = DataRepository()
-has = repository.has_data(symbol="AAPL", timeframe="1d")
-range_info = repository.get_date_range(symbol="AAPL", timeframe="1d")
-all_symbols = repository.list_symbols()
+range_info = repository.get_data_range(symbol="AAPL", timeframe="1d")
+all_symbols = repository.get_available_symbols()
+all_files = repository.get_available_data_files()  # Returns list of (symbol, timeframe) tuples
 ```
 
 ---

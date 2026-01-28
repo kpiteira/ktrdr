@@ -24,7 +24,7 @@ The data module now uses a clean separation between cached data access and exter
 from ktrdr.data.repository.data_repository import DataRepository
 
 repository = DataRepository()
-data = repository.load(symbol="AAPL", timeframe="1d")
+data = repository.load_from_cache(symbol="AAPL", timeframe="1d")
 
 # ✅ For downloading new data - DataAcquisitionService
 from ktrdr.data.acquisition.acquisition_service import DataAcquisitionService
@@ -57,9 +57,9 @@ with open("data/1d/AAPL_1d.csv") as f:
 ```python
 # ✅ Reading cached data
 repository = DataRepository()
-data = repository.load(symbol="AAPL", timeframe="1d")
-symbols = repository.list_symbols()
-date_range = repository.get_date_range(symbol="AAPL", timeframe="1d")
+data = repository.load_from_cache(symbol="AAPL", timeframe="1d")
+symbols = repository.get_available_symbols()
+range_info = repository.get_data_range(symbol="AAPL", timeframe="1d")
 
 # ✅ Downloading new data (async)
 acquisition_service = DataAcquisitionService()
@@ -77,7 +77,7 @@ result = await acquisition_service.download_data(
 ### DataRepository
 - **Purpose**: Access cached OHLCV data
 - **Location**: `ktrdr/data/repository/data_repository.py`
-- **Operations**: load, save, list_symbols, get_date_range, has_data
+- **Operations**: load_from_cache, save_to_cache, get_available_symbols, get_data_range, get_cache_stats
 
 ### DataAcquisitionService
 - **Purpose**: Download data from external providers (IB)
@@ -121,7 +121,7 @@ Format:
 
 ```python
 repository = DataRepository()
-data = repository.load(symbol="AAPL", timeframe="1d")
+data = repository.load_from_cache(symbol="AAPL", timeframe="1d")
 ```
 
 ### Downloading new data with gap detection
@@ -139,8 +139,8 @@ result = await acquisition_service.download_data(
 
 ```python
 repository = DataRepository()
-has_data = repository.has_data(symbol="AAPL", timeframe="1d")
-date_range = repository.get_date_range(symbol="AAPL", timeframe="1d")
+range_info = repository.get_data_range(symbol="AAPL", timeframe="1d")
+symbols = repository.get_available_symbols()
 ```
 
 ### Handling IB errors

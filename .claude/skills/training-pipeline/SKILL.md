@@ -124,7 +124,7 @@ Stateless, synchronous functions. No side effects except file I/O for model savi
 ### Phase 1: Data Loading
 
 ```python
-load_market_data(symbols, timeframes, start_date, end_date)
+load_market_data(symbol, timeframes, start_date, end_date)
 ```
 - Loads from local cache only — **no downloads during training**
 - User must run `ktrdr data load SYMBOL TIMEFRAME` first

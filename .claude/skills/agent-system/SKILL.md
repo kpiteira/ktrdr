@@ -319,22 +319,25 @@ from ktrdr.agents.memory import (
 
 **Location:** `ktrdr/agents/assessment_parser.py`
 
-### Two Paths
+### Two Paths (with different verdict systems)
 
-1. **Primary:** Claude calls `save_assessment` tool → structured data captured directly
-2. **Fallback:** Claude returns prose → `parse_assessment()` uses a separate Claude API call (Haiku) to semantically extract verdict/strengths/weaknesses/suggestions
+1. **Primary:** Claude calls `save_assessment` tool → structured data with verdicts: `promising`, `mediocre`, `poor`
+2. **Fallback:** Claude returns prose → `parse_assessment()` uses a separate Claude API call (Haiku) to extract structured data with verdicts: `strong_signal`, `weak_signal`, `no_signal`, `overfit`
 
-### ParsedAssessment
+Note: The two paths use different verdict vocabularies. The tool schema (primary) uses `promising/mediocre/poor`. The fallback parser produces `strong_signal/weak_signal/no_signal/overfit`.
+
+### ParsedAssessment (fallback parser output)
 
 ```python
 @dataclass
 class ParsedAssessment:
-    verdict: str               # strong_signal, weak_signal, no_signal, overfit
+    verdict: str                    # strong_signal, weak_signal, no_signal, overfit
     observations: list[str]
-    hypotheses: list[str]
+    hypotheses: list[dict]          # [{"text": "...", "status": "untested"}]
     limitations: list[str]
     capability_requests: list[str]
     tested_hypothesis_ids: list[str]  # H_001, H_002 references
+    raw_text: str                   # Original output for reference
 ```
 
 ---
@@ -515,9 +518,9 @@ The memory system degrades gracefully — empty lists if files are missing. Don'
 
 `POST /agent/trigger` accepts either `brief` (research direction) or `strategy` (pre-made YAML), not both. The API validates this.
 
-### Assessment parsing has two paths
+### Assessment parsing has two paths with different verdicts
 
-Primary: Claude calls `save_assessment` tool (structured). Fallback: parse text response with a separate Claude API call. The fallback is slower and less reliable. System prompts should guide Claude to use the tool.
+Primary: Claude calls `save_assessment` tool (verdicts: `promising/mediocre/poor`). Fallback: parse text response with a separate Claude API call (verdicts: `strong_signal/weak_signal/no_signal/overfit`). The fallback is slower and less reliable. System prompts should guide Claude to use the tool. Be aware of the different verdict vocabularies when processing results.
 
 ---
 
