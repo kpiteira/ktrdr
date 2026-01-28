@@ -76,7 +76,7 @@ ktrdr --help
 # Data operations
 ktrdr data show AAPL 1d --start-date 2024-01-01
 ktrdr data load EURUSD 1h --start-date 2024-01-01 --end-date 2024-12-31
-ktrdr data get-range AAPL 1d
+ktrdr data range AAPL 1d
 
 # Training operations
 ktrdr train config/strategies/example.yaml --start-date 2024-01-01 --end-date 2024-06-01
@@ -87,8 +87,8 @@ ktrdr status <operation-id>
 ktrdr cancel <operation-id>
 
 # IB Gateway integration
-ktrdr ib test-connection
-ktrdr ib check-status
+ktrdr ib test
+ktrdr ib status
 ```
 
 ---
@@ -152,7 +152,7 @@ ssh root@proxmox "pct start 100"
 # 3. Deploy code
 ./scripts/deploy/deploy-code.sh --target 192.168.1.100
 
-# 4. Clone workers (5 example)
+# 4. Clone workers (5 example — deploy-code.sh is the only deploy script)
 for i in {1..5}; do
   CTID=$((200 + i))
   IP=$((200 + i))
@@ -169,21 +169,14 @@ curl http://192.168.1.100:8000/api/v1/workers | jq
 ### Operations & Maintenance
 
 ```bash
-# Deploy new version (rolling update, zero downtime)
-./scripts/deploy/deploy-to-proxmox.sh --env production --version v1.5.2
+# Deploy code to a host
+./scripts/deploy/deploy-code.sh --target <ip-address>
 
 # Add workers during high load
 ./scripts/lxc/provision-worker.sh --count 10 --start-id 211
-
-# Health check all workers
-./scripts/ops/system-status.sh
-
-# View logs across all LXCs
-./scripts/ops/view-logs.sh all "1 hour ago"
-
-# Check resource usage
-./scripts/ops/check-resources.sh
 ```
+
+> **Note:** Only `scripts/deploy/deploy-code.sh` and `scripts/lxc/provision-worker.sh` exist. There are no `scripts/ops/` convenience scripts yet.
 
 ### When to Use Proxmox vs Docker
 
@@ -206,12 +199,13 @@ curl http://localhost:8000/api/v1/workers | jq
 lsof -i :5001  # IB Host Service
 lsof -i :5002  # Training Host Service
 
-# Test connectivity from Docker
-docker exec ktrdr-backend curl http://host.docker.internal:5001/health
-docker exec ktrdr-backend curl http://host.docker.internal:5002/health
+# Test connectivity from Docker (container name varies by project)
+# Format: {project}-backend-1 (e.g., ktrdr--stream-b-backend-1)
+docker exec $(docker compose ps -q backend) curl http://host.docker.internal:5001/health
+docker exec $(docker compose ps -q backend) curl http://host.docker.internal:5002/health
 
 # Check environment in container
-docker exec ktrdr-backend env | grep -E "(IB|TRAINING)"
+docker exec $(docker compose ps -q backend) env | grep -E "(IB|TRAINING)"
 ```
 
 ---

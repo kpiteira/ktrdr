@@ -35,28 +35,25 @@ ktrdr/api/
 
 ## Async Operation Pattern
 
-For long-running tasks (training, backtesting, data downloads):
+For long-running tasks (training, backtesting, data downloads), KTRDR uses **ServiceOrchestrator** pattern (not FastAPI's BackgroundTasks):
 
 ```python
-from ktrdr.api.services.operations_service import OperationsService
+from ktrdr.api.services.operations_service import OperationsService, OperationProgress
 
 @router.post("/long-operation")
 async def start_operation(
-    background_tasks: BackgroundTasks,
+    request: OperationRequest,
     operations_service: OperationsService = Depends(get_operations_service)
 ):
-    # Register operation
-    operation_id = await operations_service.register_operation(
+    # Create operation (returns operation_id)
+    operation_id = await operations_service.create_operation(
         operation_type=OperationType.TRAINING,
         description="Training model..."
     )
 
-    # Start background task
-    background_tasks.add_task(
-        run_operation,
-        operation_id,
-        operations_service
-    )
+    # Dispatch to worker via ServiceOrchestrator
+    # Workers handle execution; backend just orchestrates
+    await service_orchestrator.dispatch_to_worker(operation_id, request)
 
     return {"operation_id": operation_id}
 ```
@@ -64,38 +61,38 @@ async def start_operation(
 ### Key Components
 
 - **OperationsService**: Tracks all operations, progress, and status
-- **BackgroundTasks**: FastAPI's mechanism for fire-and-forget tasks
+- **ServiceOrchestrator**: Dispatches work to workers (never executes locally)
 - **operation_id**: Returned immediately so client can poll for status
+
+> **Note:** KTRDR does NOT use FastAPI's `BackgroundTasks`. All long-running operations are dispatched to workers.
 
 ---
 
 ## Progress Tracking
 
-Operations should report progress for long-running tasks:
+Operations report progress via `OperationProgress` object:
 
 ```python
+from ktrdr.api.services.operations_service import OperationsService, OperationProgress
+
 async def run_operation(operation_id: str, ops_service: OperationsService):
     try:
-        await ops_service.update_status(operation_id, OperationStatus.RUNNING)
-        
+        # update_status takes a string, not enum
+        await ops_service.update_status(operation_id, "running")
+
         for i, step in enumerate(steps):
-            # Do work
             await process_step(step)
-            
-            # Update progress
-            await ops_service.update_progress(
-                operation_id,
+
+            # update_progress takes an OperationProgress object
+            progress = OperationProgress(
                 percentage=(i + 1) / len(steps) * 100,
                 phase=f"Processing step {i + 1}"
             )
-        
-        await ops_service.update_status(operation_id, OperationStatus.COMPLETED)
+            await ops_service.update_progress(operation_id, progress)
+
+        await ops_service.update_status(operation_id, "completed")
     except Exception as e:
-        await ops_service.update_status(
-            operation_id, 
-            OperationStatus.FAILED,
-            error=str(e)
-        )
+        await ops_service.update_status(operation_id, "failed")
         raise
 ```
 
@@ -109,12 +106,13 @@ Standard endpoints for operation management:
 @router.get("/operations/{operation_id}")
 async def get_operation_status(operation_id: str):
     """Get current status of an operation."""
-    
+
 @router.get("/operations/{operation_id}/metrics")
 async def get_operation_metrics(operation_id: str):
     """Get detailed metrics for an operation."""
 
-@router.delete("/operations/{operation_id}/cancel")
+# Cancel uses DELETE on the operation resource (no /cancel suffix)
+@router.delete("/operations/{operation_id}")
 async def cancel_operation(operation_id: str):
     """Request cancellation of a running operation."""
 ```
@@ -123,22 +121,24 @@ async def cancel_operation(operation_id: str):
 
 ## Pydantic Models
 
-### Request Models
+### Request Models (Pydantic v2)
 
 ```python
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 class TrainingRequest(BaseModel):
     strategy_path: str = Field(..., description="Path to strategy YAML")
     symbol: str = Field(..., description="Trading symbol")
-    
-    class Config:
-        json_schema_extra = {
+
+    # Pydantic v2 uses model_config, NOT class Config:
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "strategy_path": "config/strategies/example.yaml",
                 "symbol": "AAPL"
             }
         }
+    )
 ```
 
 ### Response Models

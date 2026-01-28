@@ -135,6 +135,9 @@ See [e2e-tester agent](../../agents/e2e-tester.md) for full details.
 | [cli/operations-workflow](tests/cli/operations-workflow.md) | CLI (Restructure) | ~90s | CLI restructure M2 - operation commands |
 | [cli/information-commands](tests/cli/information-commands.md) | CLI (Restructure) | ~30s | CLI restructure M3 - list/show/validate |
 | [cli/performance](tests/cli/performance.md) | CLI (Restructure) | ~10s | CLI restructure M4 - startup performance |
+| [cli/research-strategy-cycle](tests/cli/research-strategy-cycle.md) | CLI (Research) | ~2min | Research agent full cycle |
+| [cli/research-strategy-validation](tests/cli/research-strategy-validation.md) | CLI (Research) | ~30s | Strategy validation after research |
+| [cli/url-resolution](tests/cli/url-resolution.md) | CLI (Utility) | ~5s | URL resolution for CLI commands |
 
 ## Pre-Flight Modules
 

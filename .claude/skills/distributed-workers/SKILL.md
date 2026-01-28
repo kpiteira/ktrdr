@@ -36,7 +36,7 @@ KTRDR uses a distributed workers architecture where the backend orchestrates ope
 ┌───────┐ ┌───────┐ ┌───────┐ ┌───────┐   ┌──────────────┐
 │Backtest││Backtest││Training││Training│   │IB Host Service│
 │Worker 1││Worker 2││Worker 1││Worker 2│   │(Port 5001)   │
-│:5003   ││:5003   ││:5004   ││:5004   │   │Direct IB TCP │
+│:5003   ││:5004   ││:5005   ││:5006   │   │Direct IB TCP │
 └────────┘└────────┘└────────┘└────────┘   └──────────────┘
 CPU-only  CPU-only  CPU-only  CPU-only    Direct IB Gateway
 
@@ -188,9 +188,11 @@ docker-compose up -d --scale backtest-worker=5 --scale training-worker=3
 cd training-host-service && ./start.sh
 
 # Workers self-register at:
-# - Backtest: http://localhost:5003
-# - Training (CPU): http://localhost:5004
-# - Training (GPU): http://localhost:5002
+# - Backtest Worker 1: http://localhost:5003
+# - Backtest Worker 2: http://localhost:5004
+# - Training Worker 1 (CPU): http://localhost:5005
+# - Training Worker 2 (CPU): http://localhost:5006
+# - Training Host Service (GPU): http://localhost:5002
 ```
 
 ### Verification
@@ -232,7 +234,7 @@ if token.is_cancelled():
 All CLI commands use `AsyncCLIClient` for API communication:
 
 ```python
-from ktrdr.cli.helpers.async_cli_client import AsyncCLIClient
+from ktrdr.cli.client.async_client import AsyncCLIClient
 
 async def some_command(symbol: str):
     async with AsyncCLIClient() as client:

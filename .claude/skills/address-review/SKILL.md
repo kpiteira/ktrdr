@@ -28,24 +28,25 @@ This aligns with CLAUDE.md: *"Push back if something feels wrong"*
 
 ### Step 1: Fetch ALL Review Comments
 
-**IMPORTANT**: Reviews come from TWO different sources. You must check BOTH:
+**IMPORTANT**: Reviews come from TWO different GitHub APIs. You must check BOTH:
 
 ```bash
-# Get PR number from current branch
+# Get PR number and repo info from current branch
 PR_NUMBER=$(gh pr view --json number -q '.number' 2>/dev/null)
+REPO=$(gh repo view --json nameWithOwner -q '.nameWithOwner')
 
-# 1. Fetch inline review comments (Copilot posts here)
-gh api repos/{owner}/{repo}/pulls/$PR_NUMBER/comments
+# 1. Fetch inline review comments (Copilot posts line-specific comments here)
+gh api "repos/$REPO/pulls/$PR_NUMBER/comments" | jq '.[].body'
 
-# 2. Fetch issue comments (Claude posts here via GitHub Actions)
-gh pr view $PR_NUMBER --comments --json comments
+# 2. Fetch general PR comments (Claude GitHub Action posts here)
+gh api "repos/$REPO/issues/$PR_NUMBER/comments" | jq '.[].body'
 ```
 
 **Why two sources?**
-- **Pull request comments** (`/pulls/.../comments`): Inline code review comments attached to specific lines. Copilot uses this.
-- **Issue comments** (`--comments`): General PR comments not attached to code lines. Claude (via GitHub Actions) posts here.
+- **Pull request review comments** (`/pulls/.../comments`): Comments attached to specific code lines during a review. Copilot typically posts here.
+- **Issue comments** (`/issues/.../comments`): General PR-level comments not attached to specific lines. Claude (via GitHub Actions) typically posts here.
 
-If you only check one source, you WILL miss reviews. Always check both.
+> **Note:** `gh pr view --comments` only shows issue comments, not inline review comments. Use the API calls above to get both.
 
 ### Step 2: Assess Each Comment
 
@@ -211,12 +212,12 @@ Shall I proceed with implementing the valuable changes and drafting push-back re
 - Miss project-specific patterns
 - Suggest over-abstraction
 
-### Claude (as reviewer) Tends To:
+### Claude (as reviewer) May:
 - Be more context-aware but sometimes over-thorough
 - Suggest documentation where code is self-documenting
 - Sometimes miss that simpler is better
-- **Miss structural/syntactic bugs** while praising high-level architecture
-- Give false confidence ("LGTM") while bugs exist — don't treat approval as validation
+- Focus on high-level patterns while missing low-level bugs
+- Provide positive feedback that shouldn't be treated as comprehensive validation
 
 ---
 
@@ -227,10 +228,17 @@ When both reviewers have commented on a PR, generate a comparison summary.
 ### How to Identify Reviewer Source
 
 ```bash
-# Copilot comments have user.login = "Copilot" or similar bot identifier
-# Claude comments may come from a GitHub Action or specific bot account
+# Get repo info
+REPO=$(gh repo view --json nameWithOwner -q '.nameWithOwner')
 
-gh api repos/{owner}/{repo}/pulls/$PR_NUMBER/comments | jq '
+# Group inline review comments by author
+gh api "repos/$REPO/pulls/$PR_NUMBER/comments" | jq '
+  group_by(.user.login) |
+  map({reviewer: .[0].user.login, count: length, comments: map(.body[:80])})
+'
+
+# Group issue comments by author
+gh api "repos/$REPO/issues/$PR_NUMBER/comments" | jq '
   group_by(.user.login) |
   map({reviewer: .[0].user.login, count: length, comments: map(.body[:80])})
 '
