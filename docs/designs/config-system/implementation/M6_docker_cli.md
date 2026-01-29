@@ -7,11 +7,11 @@ architecture: ../ARCHITECTURE.md
 
 **Goal:** Full stack runs with only `KTRDR_*` env var names in docker-compose files. CLI commands set `KTRDR_ENV` appropriately.
 
-**Why M6:** Infrastructure files need updating to use the new naming convention. This can be done in parallel with M3-M5 but is sequenced here for clarity.
+**Why M6:** Infrastructure files need updating to use the new naming convention. Should be done after all Settings classes are defined (M1-M5) so we know all the env var names.
 
 **Branch:** `feature/config-m6-docker-cli`
 
-**Depends on:** M2 (API, Auth & Logging) — can be done in parallel with M3-M5
+**Depends on:** M5 (Agent & Data) — requires all Settings classes to be defined so docker-compose can use final `KTRDR_*` names
 
 ---
 

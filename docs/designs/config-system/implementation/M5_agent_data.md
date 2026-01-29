@@ -258,8 +258,8 @@ Validate M5 is complete with E2E scenarios.
 ### Scenario 1: Agent reads config
 ```bash
 docker compose up -d backend
-# Run agent with specific settings
-KTRDR_AGENT_DRY_RUN=true uv run ktrdr agent run --strategy test
+# Run agent with specific settings (dry_run is in AgentGateSettings)
+KTRDR_GATE_DRY_RUN=true uv run ktrdr agent run --strategy test
 # Expected: agent runs in dry run mode
 docker compose down
 ```

@@ -111,7 +111,7 @@ Remove system config loading from `loader.py`. Keep only domain config loading (
 **Task Categories:** Wiring/DI
 
 **Description:**
-Replace any `APP_VERSION` env var or metadata YAML reads with `importlib.metadata.version("ktrdr")`. This reads the version from `pyproject.toml` at runtime.
+Replace any `APP_VERSION` env var or metadata YAML reads with `importlib.metadata.version("ktrdr")`. This reads the version from the installed package metadata (generated from `pyproject.toml` at build/install time), not from `pyproject.toml` directly. Works correctly in both editable installs and production containers.
 
 **Implementation Notes:**
 - Find all places that read version (env var, metadata, hardcoded)
@@ -261,6 +261,66 @@ docker compose down
 - [ ] Version from `importlib.metadata`
 - [ ] Documentation complete
 - [ ] All tests pass
+
+---
+
+## Task 7.8: Full Distributed System Integration Test
+
+**Type:** VALIDATION
+
+**Description:**
+Validate the complete config system works across all components: Backend, Workers, and CLI working together. This is the final validation that the entire migration succeeded.
+
+**E2E Test Scenarios:**
+
+### Scenario 1: Full stack startup and operation
+```bash
+# Start full stack
+docker compose up -d
+
+# Verify backend healthy
+curl -f http://localhost:8000/health
+
+# Verify workers registered
+curl http://localhost:8000/api/v1/workers | jq 'length > 0'
+# Expected: true (at least one worker registered)
+
+# CLI can connect and fetch data
+uv run ktrdr data show AAPL 1d --start-date 2024-01-01 --limit 5
+# Expected: data displayed (proves CLI → API connection)
+
+# Create an operation via CLI (proves Backend → Worker flow)
+uv run ktrdr ops list
+# Expected: operation list displayed
+
+docker compose down
+```
+
+### Scenario 2: All components use new config
+```bash
+docker compose up -d
+
+# Check no deprecation warnings anywhere
+docker compose logs 2>&1 | grep -i "deprecated"
+# Expected: no output (all components using KTRDR_* names)
+
+# Check backend validation passed
+docker compose logs backend 2>&1 | grep -i "configuration error"
+# Expected: no output
+
+# Check workers validated their config
+docker compose logs training-worker 2>&1 | grep -i "configuration error"
+# Expected: no output
+
+docker compose down
+```
+
+**Success Criteria:**
+- [ ] Full stack starts with all components
+- [ ] Workers register successfully
+- [ ] CLI communicates with backend
+- [ ] No deprecation warnings in any component logs
+- [ ] No configuration errors in any component
 
 ---
 

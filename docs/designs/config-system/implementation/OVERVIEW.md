@@ -5,28 +5,32 @@
 | # | Name | Tasks | E2E Test | Status |
 |---|------|-------|----------|--------|
 | M1 | Database Settings | 8 | Backend connects to DB with new settings | Pending |
-| M2 | API, Auth & Logging | ~10 | Backend serves requests, logs correctly, traces to Jaeger | Pending |
-| M3 | IB & Host Services | ~8 | Backend proxies to host services with new settings | Pending |
-| M4 | Workers | ~8 | Worker starts, registers, validates config subset | Pending |
-| M5 | Agent & Data | ~6 | Agent reads config, data paths correct | Pending |
-| M6 | Docker Compose & CLI | ~4 | Full stack with only `KTRDR_*` names | Pending |
-| M7 | Cleanup | ~5 | Zero `metadata.get()`, zero scattered `os.getenv()` | Pending |
+| M2 | API, Auth & Logging | 12 | Backend serves requests, logs correctly, traces to Jaeger | Pending |
+| M3 | IB & Host Services | 9 | Backend proxies to host services with new settings | Pending |
+| M4 | Workers | 10 | Worker starts, registers, validates config subset | Pending |
+| M5 | Agent & Data | 10 | Agent reads config, data paths correct | Pending |
+| M6 | Docker Compose & CLI | 5 | Full stack with only `KTRDR_*` names | Pending |
+| M7 | Cleanup | 8 | Zero `metadata.get()`, zero scattered `os.getenv()` | Pending |
 
 ## Dependency Graph
 
 ```
 M1 (Database)
     ↓
-M2 (API/Auth/Logging) ──→ M6 (Docker/CLI)
-    ↓                          ↓
-M3 (IB/Host Services)         M7 (Cleanup)
+M2 (API/Auth/Logging)
+    ↓
+M3 (IB/Host Services)
     ↓
 M4 (Workers)
     ↓
 M5 (Agent/Data)
+    ↓
+M6 (Docker/CLI)
+    ↓
+M7 (Cleanup)
 ```
 
-M1 must complete first (proves the pattern). M2-M5 can proceed somewhat in parallel but are ordered by dependency depth. M6 updates infrastructure. M7 is final cleanup.
+M1 must complete first (proves the pattern). M2-M5 build on each other. M6 updates docker-compose after all Settings classes are defined. M7 is final cleanup and validation.
 
 ## Architecture Alignment
 

@@ -26,9 +26,9 @@ architecture: ../ARCHITECTURE.md
 Add `WorkerSettings` class for worker process configuration.
 
 **Implementation Notes:**
-- Include: worker_id, backend_url, port, heartbeat_interval, etc.
+- Include: worker_id, port, heartbeat_interval, etc.
 - Fix duplication #4 from audit: `WORKER_PORT` defaults to 5002 in one place, 5004 in another — use single authoritative default
-- Note: `backend_url` should reference `APIClientSettings.base_url` (M5) for consistency — for now, keep as standalone field
+- **No `backend_url` field** — workers should use `get_api_client_settings().base_url` from M5's `APIClientSettings` (single source of truth for backend connection)
 
 **Key signatures:**
 ```python

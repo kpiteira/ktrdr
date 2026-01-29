@@ -85,10 +85,10 @@ class DatabaseSettings(BaseSettings):
 # In .env.local (gitignored):
 KTRDR_DB_HOST=localhost
 KTRDR_DB_PASSWORD=localdev
-KTRDR_API_LOG_LEVEL=DEBUG
+KTRDR_LOG_LEVEL=DEBUG
 
 # Or inline:
-KTRDR_API_LOG_LEVEL=DEBUG docker compose up
+KTRDR_LOG_LEVEL=DEBUG docker compose up
 ```
 
 No YAML files to hunt through. One mechanism: environment variables.
