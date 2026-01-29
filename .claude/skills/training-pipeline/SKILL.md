@@ -403,7 +403,7 @@ Training never downloads data. Run `ktrdr data load SYMBOL TIMEFRAME` first. Oth
 V3 strategies define `nn_inputs` order in YAML. This order MUST be preserved through checkpointing and resume. Mismatched feature order = garbage model.
 
 ### prefix_columns=False in indicators
-`IndicatorEngine.calculate()` must use `prefix_columns=False` because `FuzzyNeuralProcessor` handles column prefixing. Double-prefixing breaks feature matching.
+`IndicatorEngine.apply_multi_timeframe()` must use `prefix_columns=False` because `FuzzyNeuralProcessor` handles column prefixing. Double-prefixing breaks feature matching.
 
 ### Labels must use base timeframe
 For multi-timeframe training, labels are generated from the **base timeframe** (highest frequency). Using a different timeframe causes size mismatches.

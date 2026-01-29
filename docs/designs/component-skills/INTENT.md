@@ -14,7 +14,7 @@ Create **on-demand skills** for each major component of the system. Skills are m
 
 - **How the component works** (architecture, key files, patterns)
 - **How to modify it** (where to add things, what patterns to follow)
-- **What to avoid** (known pitfalls, deprecated patterns, things that look right but isn't)
+- **What to avoid** (known pitfalls, deprecated patterns, things that look right but aren't)
 - **Key decisions and their rationale** (why it works this way, not some other way)
 
 ## How Skills Work
@@ -84,7 +84,7 @@ Full inventory of components, prioritized by value (how much pain Claude redisco
 | 9 | **Async Infrastructure** | Done | ServiceOrchestrator, progress tracking, cancellation — foundational but rarely changed |
 | 10 | **Checkpoint System** | Done | Persistence, restore logic, policies — cross-cuts training and backtesting |
 | 11 | **Fuzzy Logic Engine** | Done | Membership functions, configuration-driven — moderate complexity |
-| 12 | **Technical Indicators** | Done | 70+ indicators, but `docs/adding_new_indicators.md` already exists |
+| 12 | **Technical Indicators** | Done | ~25 indicator types, and `docs/adding_new_indicators.md` already exists |
 | 13 | **Error Handling** | Done | Exception hierarchy, retry logic — moderate complexity, standard patterns |
 
 ### Tier 4: Low Value (Simple, Rarely Touched, or Already Documented)
@@ -93,7 +93,7 @@ Full inventory of components, prioritized by value (how much pain Claude redisco
 |----------|-----------|--------|-----|
 | 14 | **Decision Engine** | Done | Small, stable, rarely modified |
 | 15 | **Neural Networks** | Done | Standard PyTorch, small surface area |
-| 16 | **Visualization** | Done | TradingView lightweight-charts, rarely touched |
+| 16 | **Visualization** | Deleted | Deprecated component, skill removed |
 | 17 | **Monitoring / Observability** | Exists | Already covered by `observability` skill |
 | 18 | **Logging** | Done | Standard patterns, stable |
 | 19 | **MCP Server** | Done | Thin wrappers, separate concern |

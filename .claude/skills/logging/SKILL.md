@@ -79,7 +79,7 @@ with with_context(LogContext(operation_id="op_123", module="training")):
 ## Helper Decorators
 
 ```python
-from ktrdr.logging.helpers import log_entry_exit, log_performance, log_error
+from ktrdr.logging.helpers import log_entry_exit, log_performance, log_data_operation, log_error
 
 @log_entry_exit()           # Logs function entry and exit
 @log_performance()          # Logs execution time

@@ -335,7 +335,7 @@ IndicatorEngine only accepts `dict[str, IndicatorDefinition]`. Legacy list forma
 
 ### prefix_columns=False for training pipeline
 
-`IndicatorEngine.calculate()` must use `prefix_columns=False` when computing for fuzzy processing, because `FuzzyNeuralProcessor` handles all column prefixing. Double-prefixing breaks feature matching.
+`IndicatorEngine.apply()` must use `prefix_columns=False` when computing for fuzzy processing, because `FuzzyNeuralProcessor` handles all column prefixing. Double-prefixing breaks feature matching.
 
 ### Indicator state resets at symbol boundaries
 

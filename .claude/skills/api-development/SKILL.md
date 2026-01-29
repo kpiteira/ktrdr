@@ -38,24 +38,32 @@ ktrdr/api/
 For long-running tasks (training, backtesting, data downloads), KTRDR uses **ServiceOrchestrator** pattern (not FastAPI's BackgroundTasks):
 
 ```python
-from ktrdr.api.services.operations_service import OperationsService, OperationProgress
+from ktrdr.api.services.operations_service import OperationsService
+from ktrdr.api.models.operations import OperationMetadata, OperationType
 
 @router.post("/long-operation")
 async def start_operation(
     request: OperationRequest,
     operations_service: OperationsService = Depends(get_operations_service)
 ):
-    # Create operation (returns operation_id)
-    operation_id = await operations_service.create_operation(
+    # Create operation metadata
+    metadata = OperationMetadata(
+        symbol=request.symbol,
+        timeframe=request.timeframe,
+        parameters={"strategy": request.strategy_name}
+    )
+
+    # Create operation (returns OperationInfo, not just operation_id)
+    operation_info = await operations_service.create_operation(
         operation_type=OperationType.TRAINING,
-        description="Training model..."
+        metadata=metadata
     )
 
     # Dispatch to worker via ServiceOrchestrator
     # Workers handle execution; backend just orchestrates
-    await service_orchestrator.dispatch_to_worker(operation_id, request)
+    await service_orchestrator.dispatch_to_worker(operation_info.operation_id, request)
 
-    return {"operation_id": operation_id}
+    return {"operation_id": operation_info.operation_id}
 ```
 
 ### Key Components
@@ -73,7 +81,8 @@ async def start_operation(
 Operations report progress via `OperationProgress` object:
 
 ```python
-from ktrdr.api.services.operations_service import OperationsService, OperationProgress
+from ktrdr.api.services.operations_service import OperationsService
+from ktrdr.api.models.operations import OperationProgress
 
 async def run_operation(operation_id: str, ops_service: OperationsService):
     try:
@@ -84,9 +93,12 @@ async def run_operation(operation_id: str, ops_service: OperationsService):
             await process_step(step)
 
             # update_progress takes an OperationProgress object
+            # Fields: percentage, current_step, steps_completed, steps_total, items_processed, items_total
             progress = OperationProgress(
                 percentage=(i + 1) / len(steps) * 100,
-                phase=f"Processing step {i + 1}"
+                current_step=f"Processing step {i + 1}",
+                steps_completed=i + 1,
+                steps_total=len(steps)
             )
             await ops_service.update_progress(operation_id, progress)
 

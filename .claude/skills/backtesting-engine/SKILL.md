@@ -272,7 +272,7 @@ with torch.no_grad():
     prediction = output.argmax(dim=1).item()
     confidence = output.softmax(dim=1).max().item()
 
-# Map to signal: 0=BUY, 1=SELL, 2=HOLD
+# Map to signal: 0=BUY, 1=HOLD, 2=SELL
 ```
 
 ---
