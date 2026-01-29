@@ -36,16 +36,6 @@
 
 **Validation errors collected before raising**: All settings classes are validated and errors are collected into a single list before raising `ConfigurationError`. This ensures users see all issues at once.
 
-### Known Issue: Pre-existing Test Failure (Unrelated to M1)
-
-**Test:** `tests/unit/data/acquisition/test_acquisition_service_gap_analysis.py::TestHeadTimestampMethods::test_fetch_head_timestamp_caches_result`
-
-**Root cause:** The test expects `DataAcquisitionService._fetch_head_timestamp()` to call the provider, but `SymbolCache` loads from persistent file `data/backend_symbol_cache.json`. If AAPL has cached head_timestamps (which it does), the provider is never called.
-
-**Evidence:** AAPL is in cache with `head_timestamps: {'1d': '2024-01-01T00:00:00+00:00'}`.
-
-**Fix needed (out of scope for M1):** Test should clear cache or mock `symbol_cache` before running. This is a pre-existing issue on `main` branch.
-
 ### Next Task Notes (1.3: Deprecation Module)
 
 - Import pattern: `from ktrdr.config.validation import validate_all, detect_insecure_defaults`
