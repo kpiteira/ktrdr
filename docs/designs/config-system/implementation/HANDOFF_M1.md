@@ -19,3 +19,36 @@
 - Import `DatabaseSettings` via `from ktrdr.config.settings import DatabaseSettings`
 - `INSECURE_DEFAULTS` dict should include `"KTRDR_DB_PASSWORD": "localdev"`
 - Validation module reads `KTRDR_ENV` via `os.getenv()` (not from a Settings class)
+
+## Task 1.2 Complete: Create Validation Module
+
+### Gotchas
+
+**Lazy initialization of BACKEND_SETTINGS/WORKER_SETTINGS lists**: The lists are initialized lazily via `_init_settings_lists()` to avoid circular imports. Call this function before accessing the lists, or call `validate_all()` which does it automatically.
+
+**Use `details` dict for error context**: The `ConfigurationError` class stores structured data in `details`, not in the main message. Tests should check `exc.details.get("insecure_settings", [])` for the list of insecure env vars, not `str(exc)`.
+
+**Pydantic validation errors need conversion**: When `settings_class()` raises `PydanticValidationError`, extract error details from `e.errors()` and format them into user-friendly messages. The raw error format is not readable.
+
+### Emergent Patterns
+
+**Warning format matches ARCHITECTURE.md**: The boxed warning format with `========` borders is specified in ARCHITECTURE.md. Use `logger.warning()` (not `print()`) for the warning output.
+
+**Validation errors collected before raising**: All settings classes are validated and errors are collected into a single list before raising `ConfigurationError`. This ensures users see all issues at once.
+
+### Known Issue: Pre-existing Test Failure (Unrelated to M1)
+
+**Test:** `tests/unit/data/acquisition/test_acquisition_service_gap_analysis.py::TestHeadTimestampMethods::test_fetch_head_timestamp_caches_result`
+
+**Root cause:** The test expects `DataAcquisitionService._fetch_head_timestamp()` to call the provider, but `SymbolCache` loads from persistent file `data/backend_symbol_cache.json`. If AAPL has cached head_timestamps (which it does), the provider is never called.
+
+**Evidence:** AAPL is in cache with `head_timestamps: {'1d': '2024-01-01T00:00:00+00:00'}`.
+
+**Fix needed (out of scope for M1):** Test should clear cache or mock `symbol_cache` before running. This is a pre-existing issue on `main` branch.
+
+### Next Task Notes (1.3: Deprecation Module)
+
+- Import pattern: `from ktrdr.config.validation import validate_all, detect_insecure_defaults`
+- `DEPRECATED_NAMES` dict maps old → new names: `{"DB_HOST": "KTRDR_DB_HOST", ...}`
+- Use `warnings.warn()` with `DeprecationWarning` category
+- Check `os.environ` directly for deprecated names (fast lookup)
