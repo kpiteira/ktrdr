@@ -80,19 +80,17 @@ curl -s "http://localhost:16686/api/traces?tag=operation.id:$OPERATION_ID" | jq 
 ### Pattern 1: Operation Stuck
 
 ```bash
-# Check for worker selection and dispatch
+# Check for worker selection and dispatch (worker attributes on service spans)
 curl -s "http://localhost:16686/api/traces?tag=operation.id:$OP_ID" | jq '
   .data[0].spans[] |
-  select(.operationName == "worker_registry.select_worker") |
-  .tags[] |
-  select(.key | startswith("worker_registry.")) |
-  {key: .key, value: .value}'
+  select(.tags[] | .key | startswith("worker.")) |
+  {span: .operationName, attributes: [.tags[] | select(.key | startswith("worker.")) | {key: .key, value: .value}]}'
 ```
 
 Look for:
-- `worker_registry.total_workers: 0` → No workers started
-- `worker_registry.capable_workers: 0` → No capable workers
-- `worker_registry.selection_status: NO_WORKERS_AVAILABLE` → All busy
+- `worker.total_workers: 0` → No workers started
+- `worker.capable_workers: 0` → No capable workers
+- `worker.selection_status: NO_WORKERS_AVAILABLE` → All busy
 
 ### Pattern 2: Operation Failed
 
@@ -161,11 +159,11 @@ Look for:
 - `operation.status` — PENDING, RUNNING, COMPLETED, FAILED
 
 ### Worker Selection
-- `worker_registry.total_workers` — Total registered workers
-- `worker_registry.available_workers` — Available workers
-- `worker_registry.capable_workers` — Capable workers for this operation
-- `worker_registry.selected_worker_id` — Which worker was chosen
-- `worker_registry.selection_status` — SUCCESS, NO_WORKERS_AVAILABLE, NO_CAPABLE_WORKERS
+- `worker.total_workers` — Total registered workers
+- `worker.available_workers` — Available workers
+- `worker.capable_workers` — Capable workers for this operation
+- `worker.selected_id` — Which worker was chosen
+- `worker.selection_status` — SUCCESS, NO_WORKERS_AVAILABLE, NO_CAPABLE_WORKERS
 
 ### Progress Tracking
 - `progress.percentage` — Current progress (0-100)

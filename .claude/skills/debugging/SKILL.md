@@ -149,13 +149,13 @@ Check in this order:
 
 ```bash
 # Check if data exists locally
-ktrdr data get-range AAPL 1d
+ktrdr data range AAPL 1d
 
 # Test IB connection
-ktrdr ib test-connection
+ktrdr ib test
 
 # Check IB status
-ktrdr ib check-status
+ktrdr ib status
 ```
 
 ---
@@ -179,8 +179,8 @@ curl http://localhost:8000/api/v1/workers | jq
 ### Worker logs
 
 ```bash
-docker-compose logs -f backtest-worker
-docker-compose logs -f training-worker
+docker compose logs -f backtest-worker-1 backtest-worker-2
+docker compose logs -f training-worker-1 training-worker-2
 ```
 
 ---
@@ -250,7 +250,7 @@ make test-integration PYTEST_ARGS="-v -s"
 docker-compose ps
 
 # Check backend health
-curl http://localhost:8000/health | jq
+curl http://localhost:8000/api/v1/health | jq
 
 # Check workers
 curl http://localhost:8000/api/v1/workers | jq

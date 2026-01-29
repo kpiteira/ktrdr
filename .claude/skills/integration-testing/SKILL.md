@@ -112,15 +112,18 @@ Use this template:
 | Service | URL | Purpose |
 |---------|-----|---------|
 | Backend API | http://localhost:8000/api/v1 | Main entry point |
-| Training Host | http://localhost:5002 | GPU training |
+| Training Host | http://localhost:5002 | GPU training (host service) |
+| Training Worker 1 | http://localhost:5005 | CPU training (container) |
+| Training Worker 2 | http://localhost:5006 | CPU training (container) |
 | IB Host | http://localhost:5001 | IB Gateway access |
-| Backtest Worker | http://localhost:5003 | Backtesting |
+| Backtest Worker 1 | http://localhost:5003 | Backtesting (container) |
+| Backtest Worker 2 | http://localhost:5004 | Backtesting (container) |
 
 ### Health Checks
 
 ```bash
 # Backend
-curl -s http://localhost:8000/health | jq
+curl -s http://localhost:8000/api/v1/health | jq
 
 # Training host
 curl -s http://localhost:5002/health | jq
@@ -128,10 +131,14 @@ curl -s http://localhost:5002/health | jq
 # IB host (check IB Gateway connection)
 curl -s http://localhost:5001/health | jq '{status, ib_connected}'
 
-# All services quick check
-for port in 8000 5001 5002 5003; do
+# All services quick check (backend, IB host, training host, workers)
+for port in 8000 5001 5002 5003 5004 5005 5006; do
   echo -n "Port $port: "
-  curl -s --max-time 2 http://localhost:$port/health | jq -r '.status // "not responding"'
+  if [ $port -eq 8000 ]; then
+    curl -s --max-time 2 http://localhost:$port/api/v1/health | jq -r '.status // "not responding"'
+  else
+    curl -s --max-time 2 http://localhost:$port/health | jq -r '.status // "not responding"'
+  fi
 done
 ```
 
@@ -238,7 +245,7 @@ curl -s -X POST http://localhost:8000/api/v1/trainings/start \
   -d '{
     "symbols": ["EURUSD"],
     "timeframes": ["1d"],
-    "strategy_name": "test_e2e_local_pull",
+    "strategy_name": "neuro_mean_reversion",
     "start_date": "2024-01-01",
     "end_date": "2024-12-31"
   }'
@@ -306,13 +313,13 @@ curl -s -X POST http://localhost:8000/api/v1/backtests/start \
 
 ```bash
 # Local bridge registered (training in backend)
-grep "Registered local training bridge" 
+grep "Registered local bridge for operation"
 
 # Remote proxy registered (training on host)
 grep "Registered remote proxy"
 
 # Data saved to cache
-grep "Saved.*rows to cache"
+grep "Successfully saved data to cache"
 ```
 
 ### Error Indicators
@@ -402,7 +409,7 @@ Cancellation test (~30 seconds)
 
 **Step 3: Test Data**
 - 2 years 5m data (long enough to cancel mid-operation)
-- Strategy: test_e2e_local_pull
+- Strategy: neuro_mean_reversion
 
 **Step 4: Scenario**
 
@@ -423,7 +430,7 @@ Cancellation test (~30 seconds)
 ```bash
 RESPONSE=$(curl -s -X POST http://localhost:8000/api/v1/trainings/start \
   -H "Content-Type: application/json" \
-  -d '{"symbols":["EURUSD"],"timeframes":["5m"],"strategy_name":"test_e2e_local_pull","start_date":"2023-01-01","end_date":"2025-01-01"}')
+  -d '{"symbols":["EURUSD"],"timeframes":["5m"],"strategy_name":"neuro_mean_reversion","start_date":"2023-01-01","end_date":"2025-01-01"}')
 TASK_ID=$(echo "$RESPONSE" | jq -r '.task_id')
 ```
 
@@ -460,5 +467,5 @@ curl -s "http://localhost:8000/api/v1/operations/$TASK_ID" | jq '.data.status'
 ## Full Documentation
 
 For comprehensive scenario library:
-- `docs/testing/SCENARIOS.md` — All test scenarios with results
-- `docs/testing/TESTING_GUIDE.md` — Complete API reference and troubleshooting
+- `docs/testing/archive/SCENARIOS.md` — All test scenarios with results
+- `docs/testing/archive/TESTING_GUIDE.md` — Complete API reference and troubleshooting
