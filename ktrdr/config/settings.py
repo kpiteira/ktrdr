@@ -6,8 +6,9 @@ overrides and environment variable support.
 """
 
 from functools import lru_cache
+from typing import Any, TypeVar
 
-from pydantic import Field
+from pydantic import AliasChoices, Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .. import metadata
@@ -16,6 +17,34 @@ from .host_services import (
     get_api_service_settings,
 )
 from .ib_config import IbConfig, get_ib_config
+
+T = TypeVar("T")
+
+
+def deprecated_field(default: T, new_env: str, old_env: str, **kwargs: Any) -> T:
+    """Create a field with both new and deprecated env var names.
+
+    CRITICAL: When validation_alias is set, env_prefix is completely ignored
+    for that field. The new_env name MUST be the full prefixed name (e.g.,
+    KTRDR_DB_HOST, not just HOST).
+
+    The new name is listed first in AliasChoices so it takes precedence.
+
+    Args:
+        default: The default value for the field.
+        new_env: The new (preferred) env var name (e.g., KTRDR_DB_HOST).
+        old_env: The deprecated env var name (e.g., DB_HOST).
+        **kwargs: Additional kwargs passed to Field().
+
+    Returns:
+        A Pydantic FieldInfo configured with AliasChoices for both names.
+        TypeVar ensures return type matches the default's type for mypy.
+    """
+    return Field(
+        default=default,
+        validation_alias=AliasChoices(new_env, old_env),
+        **kwargs,
+    )
 
 
 class APISettings(BaseSettings):
@@ -110,6 +139,46 @@ class CheckpointSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="CHECKPOINT_")
 
 
+class DatabaseSettings(BaseSettings):
+    """Database connection settings.
+
+    Provides PostgreSQL connection configuration with support for both
+    new (KTRDR_DB_*) and deprecated (DB_*) environment variable names.
+
+    Environment variables (new names - preferred):
+        KTRDR_DB_HOST: Database host. Default: localhost
+        KTRDR_DB_PORT: Database port. Default: 5432
+        KTRDR_DB_NAME: Database name. Default: ktrdr
+        KTRDR_DB_USER: Database user. Default: ktrdr
+        KTRDR_DB_PASSWORD: Database password. Default: localdev (insecure)
+        KTRDR_DB_ECHO: Enable SQLAlchemy echo mode. Default: false
+
+    Deprecated names (still work, emit warnings at startup):
+        DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, DB_ECHO
+    """
+
+    host: str = deprecated_field("localhost", "KTRDR_DB_HOST", "DB_HOST")
+    port: int = deprecated_field(5432, "KTRDR_DB_PORT", "DB_PORT")
+    name: str = deprecated_field("ktrdr", "KTRDR_DB_NAME", "DB_NAME")
+    user: str = deprecated_field("ktrdr", "KTRDR_DB_USER", "DB_USER")
+    password: str = deprecated_field("localdev", "KTRDR_DB_PASSWORD", "DB_PASSWORD")
+    echo: bool = deprecated_field(False, "KTRDR_DB_ECHO", "DB_ECHO")
+
+    model_config = SettingsConfigDict(env_prefix="KTRDR_DB_", env_file=".env.local")
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def url(self) -> str:
+        """Async database connection URL for asyncpg."""
+        return f"postgresql+asyncpg://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def sync_url(self) -> str:
+        """Sync database connection URL for psycopg2."""
+        return f"postgresql+psycopg2://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
+
+
 # Cache settings to avoid repeated disk/env access
 @lru_cache
 def get_api_settings() -> APISettings:
@@ -135,6 +204,12 @@ def get_checkpoint_settings() -> CheckpointSettings:
     return CheckpointSettings()
 
 
+@lru_cache
+def get_db_settings() -> DatabaseSettings:
+    """Get database settings with caching."""
+    return DatabaseSettings()
+
+
 # Compatibility aliases for existing code
 CLISettings = ApiServiceSettings  # CLI uses API service settings for client connections
 
@@ -152,21 +227,28 @@ def clear_settings_cache() -> None:
     get_api_service_settings.cache_clear()
     get_orphan_detector_settings.cache_clear()
     get_checkpoint_settings.cache_clear()
+    get_db_settings.cache_clear()
 
 
 # Export IB config for convenience
 __all__ = [
+    # Settings classes
     "APISettings",
     "LoggingSettings",
     "OrphanDetectorSettings",
     "CheckpointSettings",
+    "DatabaseSettings",
     "ApiServiceSettings",
+    # Cached getters
     "get_api_settings",
     "get_logging_settings",
     "get_orphan_detector_settings",
     "get_checkpoint_settings",
+    "get_db_settings",
     "get_api_service_settings",
+    # Utilities
     "clear_settings_cache",
+    "deprecated_field",
     # Compatibility aliases
     "CLISettings",
     "get_cli_settings",
