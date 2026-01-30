@@ -16,10 +16,9 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from fastapi.templating import Jinja2Templates
 
-from ktrdr.api.config import APIConfig
 from ktrdr.api.middleware import add_middleware
 from ktrdr.api.startup import lifespan
-from ktrdr.config import validate_all, warn_deprecated_env_vars
+from ktrdr.config import get_api_settings, validate_all, warn_deprecated_env_vars
 from ktrdr.errors import (
     ConfigurationError,
     ConnectionError,
@@ -74,7 +73,7 @@ def create_application() -> FastAPI:
         FastAPI: Configured FastAPI application instance
     """
     # Load API configuration
-    config = APIConfig()
+    config = get_api_settings()
     logger.info(f"API configuration loaded: environment={config.environment}")
 
     # Create FastAPI app with configured title, description, and version
@@ -468,7 +467,7 @@ app = create_application()
 if __name__ == "__main__":
     import uvicorn
 
-    config = APIConfig()
+    config = get_api_settings()
     uvicorn.run(
         "ktrdr.api.main:app",
         host=config.host,

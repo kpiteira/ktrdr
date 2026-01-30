@@ -8,11 +8,12 @@ circular imports and to keep workers from loading unnecessary modules.
 Import directly from ktrdr.api.main instead.
 """
 
-# Import version from centralized version module
-from ktrdr.api.config import APIConfig
+# Re-export APISettings for backward compatibility
+# Note: APIConfig was removed in M2.5 - use APISettings from ktrdr.config.settings
+from ktrdr.config.settings import APISettings
 from ktrdr.version import __version__
 
 # Public API
 __all__ = [
-    "APIConfig",
+    "APISettings",
 ]

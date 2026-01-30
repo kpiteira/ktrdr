@@ -87,3 +87,35 @@
 - Replace `APIConfig()` usages with `get_api_settings()`
 - Delete `ktrdr/api/config.py` after migration
 - Check `ktrdr/api/main.py`, `ktrdr/api/server.py`, and CORS setup code
+
+---
+
+## Task 2.5 Complete: Migrate API Consumers and Delete `ktrdr/api/config.py`
+
+### Gotchas
+
+**`ktrdr/config/__init__.py` needed updating**: The new settings classes and getters weren't exported from `ktrdr.config`. Added all M2 settings to the package exports so `from ktrdr.config import get_api_settings` works.
+
+**Additional files outside `ktrdr/api/` also used `APIConfig`**:
+- `tests/api/test_api_setup.py` - updated to use `get_api_settings()`
+- `scripts/run_api_server.py` - updated, removed `APIConfig.from_env()` call (was no-op anyway)
+- `tests/unit/api/test_config.py` - **deleted** (tested old `APIConfig`, replaced by `tests/unit/config/test_api_settings.py`)
+
+**`from_env()` method was deleted**: The old `APIConfig.from_env()` method doesn't exist in `APISettings`. Environment variables are read automatically by pydantic-settings. The script that used it was updated.
+
+### Emergent Patterns
+
+**Re-export from package `__init__.py`**: Updated `ktrdr/config/__init__.py` to export all M2 settings classes and getters, making imports cleaner: `from ktrdr.config import get_api_settings`.
+
+**Backward compatibility export**: `ktrdr/api/__init__.py` now re-exports `APISettings` (not `APIConfig`) for any external code that imports from there.
+
+### Files Deleted
+
+- `ktrdr/api/config.py` — duplicate `APIConfig` class (resolves duplication #1 from audit)
+- `tests/unit/api/test_config.py` — tests for deleted `APIConfig`
+
+### Next Task Notes (2.6: Migrate Auth Consumers)
+
+- No auth code exists yet (no `ktrdr/api/auth/` directory)
+- Task may be a no-op if there are no auth consumers to migrate
+- Check for any `os.getenv("JWT_*")` calls in the codebase

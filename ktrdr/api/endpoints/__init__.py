@@ -8,7 +8,6 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
-from ktrdr.api.config import APIConfig
 from ktrdr.api.dependencies import get_api_config
 from ktrdr.api.endpoints.agent import router as agent_router
 from ktrdr.api.endpoints.backtesting import router as backtesting_router
@@ -24,6 +23,7 @@ from ktrdr.api.endpoints.operations import router as operations_router
 from ktrdr.api.endpoints.strategies import router as strategies_router
 from ktrdr.api.endpoints.training import router as training_router
 from ktrdr.api.endpoints.workers import router as workers_router
+from ktrdr.config.settings import APISettings
 
 # Create main API router
 api_router = APIRouter()
@@ -53,7 +53,7 @@ def _get_orphan_detector_status() -> dict[str, Any] | None:
 
 # Define API endpoints
 @api_router.get("/health")
-async def health_check(config: APIConfig = Depends(get_api_config)):
+async def health_check(config: APISettings = Depends(get_api_config)):
     """
     Health check endpoint.
 
