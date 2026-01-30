@@ -204,6 +204,48 @@ class LoggingSettings(BaseSettings):
         return v.upper()
 
 
+class ObservabilitySettings(BaseSettings):
+    """Observability Settings.
+
+    Provides OpenTelemetry/Jaeger tracing configuration with support for
+    environment variables.
+
+    Environment variables (all prefixed with KTRDR_OTEL_):
+        KTRDR_OTEL_ENABLED: Enable tracing. Default: true
+        KTRDR_OTEL_OTLP_ENDPOINT: OTLP gRPC endpoint for Jaeger. Default: http://jaeger:4317
+        KTRDR_OTEL_SERVICE_NAME: Service name for traces. Default: ktrdr
+        KTRDR_OTEL_CONSOLE_OUTPUT: Also output traces to console. Default: false
+
+    Deprecated names (still work, emit warnings at startup):
+        OTLP_ENDPOINT → KTRDR_OTEL_OTLP_ENDPOINT
+    """
+
+    enabled: bool = Field(
+        default=True,
+        description="Enable OpenTelemetry tracing",
+    )
+    otlp_endpoint: str = deprecated_field(
+        "http://jaeger:4317",
+        "KTRDR_OTEL_OTLP_ENDPOINT",
+        "OTLP_ENDPOINT",
+        description="OTLP gRPC endpoint for Jaeger",
+    )
+    service_name: str = Field(
+        default="ktrdr",
+        description="Service name for traces",
+    )
+    console_output: bool = Field(
+        default=False,
+        description="Also output traces to console (for debugging)",
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_OTEL_",
+        env_file=".env.local",
+        extra="ignore",
+    )
+
+
 class OrphanDetectorSettings(BaseSettings):
     """Orphan Detector Settings.
 
@@ -337,6 +379,12 @@ def get_logging_settings() -> LoggingSettings:
 
 
 @lru_cache
+def get_observability_settings() -> ObservabilitySettings:
+    """Get observability settings with caching."""
+    return ObservabilitySettings()
+
+
+@lru_cache
 def get_orphan_detector_settings() -> OrphanDetectorSettings:
     """Get orphan detector settings with caching."""
     return OrphanDetectorSettings()
@@ -369,6 +417,7 @@ def clear_settings_cache() -> None:
     get_api_settings.cache_clear()
     get_auth_settings.cache_clear()
     get_logging_settings.cache_clear()
+    get_observability_settings.cache_clear()
     get_api_service_settings.cache_clear()
     get_orphan_detector_settings.cache_clear()
     get_checkpoint_settings.cache_clear()
@@ -381,6 +430,7 @@ __all__ = [
     "APISettings",
     "AuthSettings",
     "LoggingSettings",
+    "ObservabilitySettings",
     "OrphanDetectorSettings",
     "CheckpointSettings",
     "DatabaseSettings",
@@ -389,6 +439,7 @@ __all__ = [
     "get_api_settings",
     "get_auth_settings",
     "get_logging_settings",
+    "get_observability_settings",
     "get_orphan_detector_settings",
     "get_checkpoint_settings",
     "get_db_settings",

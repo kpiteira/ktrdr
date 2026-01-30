@@ -66,3 +66,24 @@
 - Fields: `jaeger_host`, `jaeger_port`, `service_name`, `enabled`
 - Check existing Jaeger env vars in the codebase (grep for `JAEGER_*`, `OTEL_*`)
 - Follow same pattern: `@lru_cache` getter, add to `clear_settings_cache()`, add to `__all__`
+
+---
+
+## Task 2.4 Complete: Create `ObservabilitySettings` Class
+
+### Gotchas
+
+**Used `otlp_endpoint` instead of separate host/port**: The codebase uses `OTLP_ENDPOINT` as a full URL (`http://jaeger:4317`), not separate host/port. Kept this pattern for compatibility.
+
+**Deprecated name for `OTLP_ENDPOINT`**: Added `deprecated_field()` support so existing `OTLP_ENDPOINT` env var continues to work while new code can use `KTRDR_OTEL_OTLP_ENDPOINT`.
+
+### Emergent Patterns
+
+**Full URL better than separate host/port**: For OTLP endpoints, a full URL is more flexible (can include path, protocol) than separate host/port fields. The monitoring code already uses this pattern.
+
+### Next Task Notes (2.5: Migrate API Consumers)
+
+- Replace all `os.getenv("KTRDR_API_*")` and `os.getenv("API_*")` calls in `ktrdr/api/`
+- Replace `APIConfig()` usages with `get_api_settings()`
+- Delete `ktrdr/api/config.py` after migration
+- Check `ktrdr/api/main.py`, `ktrdr/api/server.py`, and CORS setup code
