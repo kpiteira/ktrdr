@@ -42,6 +42,32 @@ def calculate_indicator(data: pd.DataFrame, period: int) -> pd.Series:
     """
 ```
 
+### Pydantic Field Wrappers
+When wrapping `Field()` in a helper function, use `TypeVar` so mypy understands the return type:
+
+```python
+from typing import TypeVar
+T = TypeVar("T")
+
+def my_field(default: T, ...) -> T:
+    """Wrapper that preserves type information for mypy."""
+    return Field(default=default, ...)
+
+# Usage - mypy knows `name` is str
+class MyModel(BaseModel):
+    name: str = my_field("default", ...)
+```
+
+The Pydantic mypy plugin recognizes `Field()` and handles this pattern correctly. No type ignores needed.
+
+For `@computed_field` stacked on `@property`, mypy needs a type ignore:
+```python
+@computed_field  # type: ignore[prop-decorator]
+@property
+def full_name(self) -> str:
+    return f"{self.first} {self.last}"
+```
+
 ## 🚫 BACKEND ANTI-PATTERNS
 
 ❌ Hardcoded values or magic numbers
