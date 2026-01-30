@@ -42,3 +42,21 @@
 - `DEPRECATED_NAMES` dict maps old → new names: `{"DB_HOST": "KTRDR_DB_HOST", ...}`
 - Use `warnings.warn()` with `DeprecationWarning` category
 - Check `os.environ` directly for deprecated names (fast lookup)
+
+## Task 1.3 Complete: Create Deprecation Module
+
+### Gotchas
+
+**`warnings.warn()` stacklevel matters**: Use `stacklevel=2` so the warning points to the caller of `warn_deprecated_env_vars()`, not the function itself. This makes the warning more useful for users.
+
+**Test with `warnings.catch_warnings(record=True)`**: When testing warning emission, use this context manager with `warnings.simplefilter("always")` to capture all warnings. Filter the captured list for `DeprecationWarning` category since other warnings may be emitted.
+
+### Emergent Patterns
+
+**Dict iteration order is stable**: Python 3.7+ guarantees dict iteration order matches insertion order. The returned list of deprecated vars will always be in the same order as `DEPRECATED_NAMES` keys.
+
+### Next Task Notes (1.4: Update `__init__.py` Public API)
+
+- Export `warn_deprecated_env_vars` and `DEPRECATED_NAMES` from `ktrdr.config`
+- Import from: `from ktrdr.config.deprecation import warn_deprecated_env_vars, DEPRECATED_NAMES`
+- Keep existing exports for backward compatibility
