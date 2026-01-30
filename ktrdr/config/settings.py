@@ -7,6 +7,7 @@ overrides and environment variable support.
 
 from functools import lru_cache
 from typing import Any, TypeVar
+from urllib.parse import quote_plus
 
 from pydantic import AliasChoices, Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -169,14 +170,24 @@ class DatabaseSettings(BaseSettings):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def url(self) -> str:
-        """Async database connection URL for asyncpg."""
-        return f"postgresql+asyncpg://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
+        """Async database connection URL for asyncpg.
+
+        Credentials are URL-encoded to handle special characters like @, :, /, etc.
+        """
+        user = quote_plus(self.user)
+        password = quote_plus(self.password)
+        return f"postgresql+asyncpg://{user}:{password}@{self.host}:{self.port}/{self.name}"
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def sync_url(self) -> str:
-        """Sync database connection URL for psycopg2."""
-        return f"postgresql+psycopg2://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
+        """Sync database connection URL for psycopg2.
+
+        Credentials are URL-encoded to handle special characters like @, :, /, etc.
+        """
+        user = quote_plus(self.user)
+        password = quote_plus(self.password)
+        return f"postgresql+psycopg2://{user}:{password}@{self.host}:{self.port}/{self.name}"
 
 
 # Cache settings to avoid repeated disk/env access

@@ -109,10 +109,9 @@ def _format_insecure_warning(insecure: dict[str, str]) -> str:
         "The following settings are using insecure defaults:",
     ]
 
-    for env_var, value in insecure.items():
-        # Truncate long values for display
-        display_value = value if len(value) <= 20 else f"{value[:17]}..."
-        lines.append(f'  - {env_var}: Using default "{display_value}"')
+    for env_var in insecure:
+        # Don't log actual password values - just indicate they're at default
+        lines.append(f"  - {env_var}: Using default value (not shown for security)")
 
     lines.extend(
         [
@@ -222,10 +221,18 @@ def validate_all(component: Literal["backend", "worker", "all"] = "all") -> None
         settings_classes = BACKEND_SETTINGS
     elif component == "worker":
         settings_classes = WORKER_SETTINGS
-    else:  # "all"
-        # Combine both, but use set to avoid duplicates
-        all_classes = set(BACKEND_SETTINGS) | set(WORKER_SETTINGS)
-        settings_classes = list(all_classes)
+    elif component == "all":
+        # Combine both, preserving order (backend first, then worker) while avoiding duplicates
+        settings_classes = []
+        seen: set[type[BaseSettings]] = set()
+        for cls in list(BACKEND_SETTINGS) + list(WORKER_SETTINGS):
+            if cls not in seen:
+                seen.add(cls)
+                settings_classes.append(cls)
+    else:
+        raise ValueError(
+            f"Unknown component '{component}'. Expected one of: 'backend', 'worker', 'all'."
+        )
 
     # Collect validation errors
     errors: list[str] = []

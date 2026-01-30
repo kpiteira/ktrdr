@@ -100,6 +100,7 @@ training-host-service/models
 .secrets/
 .env
 .env.dev
+.env.local
 credentials.json
 
 # Local development storage

@@ -151,11 +151,9 @@ class TestValidateAllBackend:
                 # Should NOT raise, just warn
                 validate_all("backend")  # Should not raise
 
-    def test_validate_all_collects_multiple_errors(self):
-        """validate_all('backend') should collect all errors, not stop at first."""
-        # This test would require multiple invalid settings
-        # For M1, we only have DatabaseSettings, so we test with one
-        # Future milestones will add more settings classes
+    def test_validate_all_collects_errors_in_details(self):
+        """validate_all('backend') should collect errors in details dict."""
+        # Test that validation errors are collected and returned in structured format
         with patch.dict(
             os.environ,
             {"KTRDR_ENV": "production", "KTRDR_DB_PORT": "invalid_port"},
@@ -165,8 +163,14 @@ class TestValidateAllBackend:
             env_copy.pop("KTRDR_DB_PASSWORD", None)
             with patch.dict(os.environ, env_copy, clear=True):
                 clear_settings_cache()
-                with pytest.raises(ConfigurationError):
+                with pytest.raises(ConfigurationError) as exc_info:
                     validate_all("backend")
+                # Verify errors are collected in details
+                error = exc_info.value
+                assert "errors" in error.details
+                assert len(error.details["errors"]) >= 1
+                # Verify the port error is captured
+                assert any("port" in e.lower() for e in error.details["errors"])
 
 
 class TestValidateAllWorker:
