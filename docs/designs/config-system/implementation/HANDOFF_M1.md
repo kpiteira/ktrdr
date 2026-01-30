@@ -114,3 +114,22 @@
 - Most unit tests were written alongside each task (TDD)
 - Task 1.7 is mainly verification that all tests from 1.1-1.4 are implemented
 - Run `make test-unit` to verify all pass
+
+## Task 1.7 Complete: Write Unit Tests
+
+### Verification Summary
+
+All unit tests from Tasks 1.1-1.4 were already implemented during TDD:
+- `test_database_settings.py` - 32 tests covering `deprecated_field()`, defaults, env var overrides, precedence, computed URLs, validation, caching
+- `test_startup_validation.py` - 21 tests covering `validate_all()`, `detect_insecure_defaults()`, error formats, acknowledgment flag
+- `test_deprecation.py` - 17 tests covering `DEPRECATED_NAMES`, warning emission, message content
+- `test_config_exports.py` - 12 tests covering public API imports and backward compatibility
+
+All 82 tests pass. Coverage on new code >90%.
+
+### Next Task Notes (1.8: Execute E2E Test)
+
+- Task 1.8 is a VALIDATION task - run E2E scenarios from milestone file
+- 5 scenarios: new name works, old name with warning, invalid type fails, insecure default in production fails, insecure default in development warns
+- Use `docker compose up backend` to start the backend
+- Check logs with `docker compose logs backend`
