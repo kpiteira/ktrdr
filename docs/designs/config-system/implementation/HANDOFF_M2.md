@@ -119,3 +119,22 @@
 - No auth code exists yet (no `ktrdr/api/auth/` directory)
 - Task may be a no-op if there are no auth consumers to migrate
 - Check for any `os.getenv("JWT_*")` calls in the codebase
+
+---
+
+## Task 2.6 Complete: Migrate Auth Consumers
+
+### Summary
+
+**No-op task** — No auth consumers exist to migrate. The `ktrdr/api/auth/` directory does not exist, and there are no `os.getenv()` calls for JWT, AUTH, SECRET, or TOKEN in the `ktrdr/` codebase (the `AGENT_*` env vars in `ktrdr/agents/invoker.py` are for LLM token limits, not authentication).
+
+### Acceptance Criteria Met
+
+- Zero direct auth env var reads — confirmed via grep
+- Auth functionality unchanged — no auth functionality exists
+
+### Next Task Notes (2.7: Migrate Logging Consumers)
+
+- Check `ktrdr/logging/` directory for `os.getenv("LOG_LEVEL")` calls
+- Replace with `get_logging_settings().level`
+- Check existing logging setup code (likely in `__init__.py` or similar)
