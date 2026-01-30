@@ -140,3 +140,54 @@ class TestGetLoggingSettings:
         clear_settings_cache()
         settings2 = get_logging_settings()
         assert settings1 is not settings2
+
+
+class TestLoggingSettingsLevelConversion:
+    """Test conversion of string level to Python logging level."""
+
+    def setup_method(self):
+        """Clear cache before each test."""
+        clear_settings_cache()
+
+    def teardown_method(self):
+        """Clear cache after each test."""
+        clear_settings_cache()
+
+    def test_get_log_level_int_returns_logging_constant(self):
+        """get_log_level_int() should return Python logging level constant."""
+        import logging
+
+        settings = LoggingSettings()
+        assert settings.get_log_level_int() == logging.INFO
+
+    def test_get_log_level_int_debug(self):
+        """DEBUG level should map to logging.DEBUG."""
+        import logging
+
+        with patch.dict(os.environ, {"KTRDR_LOG_LEVEL": "DEBUG"}, clear=False):
+            settings = LoggingSettings()
+            assert settings.get_log_level_int() == logging.DEBUG
+
+    def test_get_log_level_int_warning(self):
+        """WARNING level should map to logging.WARNING."""
+        import logging
+
+        with patch.dict(os.environ, {"KTRDR_LOG_LEVEL": "WARNING"}, clear=False):
+            settings = LoggingSettings()
+            assert settings.get_log_level_int() == logging.WARNING
+
+    def test_get_log_level_int_error(self):
+        """ERROR level should map to logging.ERROR."""
+        import logging
+
+        with patch.dict(os.environ, {"KTRDR_LOG_LEVEL": "ERROR"}, clear=False):
+            settings = LoggingSettings()
+            assert settings.get_log_level_int() == logging.ERROR
+
+    def test_get_log_level_int_critical(self):
+        """CRITICAL level should map to logging.CRITICAL."""
+        import logging
+
+        with patch.dict(os.environ, {"KTRDR_LOG_LEVEL": "CRITICAL"}, clear=False):
+            settings = LoggingSettings()
+            assert settings.get_log_level_int() == logging.CRITICAL

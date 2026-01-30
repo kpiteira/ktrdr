@@ -138,3 +138,32 @@
 - Check `ktrdr/logging/` directory for `os.getenv("LOG_LEVEL")` calls
 - Replace with `get_logging_settings().level`
 - Check existing logging setup code (likely in `__init__.py` or similar)
+
+---
+
+## Task 2.7 Complete: Migrate Logging Consumers
+
+### What Was Done
+
+The logging module (`ktrdr/logging/*.py`) already had zero direct `os.getenv()` calls — it's configured via parameters to `configure_logging()`. The wiring needed was in `ktrdr/__init__.py` where logging is initialized.
+
+**Changes made:**
+1. Added `get_log_level_int()` method to `LoggingSettings` to convert string level to Python logging constant
+2. Updated `ktrdr/__init__.py` to use `get_logging_settings()` when calling `configure_logging()`
+3. Wired `LoggingSettings.level` → `console_level` parameter
+4. Wired `LoggingSettings.format` → `config["console_format"]` parameter
+
+### Gotchas
+
+**Import timing matters**: The `get_logging_settings()` import is done inside the `if not _is_testing:` block, after `load_dotenv()` is called. This ensures environment variables are loaded before settings are read.
+
+### Emergent Patterns
+
+**Settings provide the values, modules stay decoupled**: Rather than having `ktrdr/logging/config.py` import from settings (which could cause circular imports), the wiring happens at the application entry point (`ktrdr/__init__.py`). The logging module remains a pure utility that takes parameters.
+
+### Next Task Notes (2.8: Migrate Observability/Tracing Consumers)
+
+- Check `ktrdr/monitoring/` for Jaeger/OTEL env var reads
+- Look for `OTLP_ENDPOINT`, `JAEGER_*`, `OTEL_*` patterns
+- Replace with `get_observability_settings().field`
+- May need to add helper methods similar to `get_log_level_int()`

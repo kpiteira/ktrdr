@@ -5,6 +5,7 @@ This module provides access to configuration settings with environment-specific
 overrides and environment variable support.
 """
 
+import logging as python_logging
 from functools import lru_cache
 from typing import Any, TypeVar
 from urllib.parse import quote_plus
@@ -202,6 +203,21 @@ class LoggingSettings(BaseSettings):
         if v.upper() not in allowed:
             raise ValueError(f"Log level must be one of {allowed}, got '{v}'")
         return v.upper()
+
+    def get_log_level_int(self) -> int:
+        """Convert string log level to Python logging constant.
+
+        Returns:
+            Python logging level constant (e.g., logging.INFO, logging.DEBUG)
+        """
+        level_map = {
+            "DEBUG": python_logging.DEBUG,
+            "INFO": python_logging.INFO,
+            "WARNING": python_logging.WARNING,
+            "ERROR": python_logging.ERROR,
+            "CRITICAL": python_logging.CRITICAL,
+        }
+        return level_map[self.level]
 
 
 class ObservabilitySettings(BaseSettings):
