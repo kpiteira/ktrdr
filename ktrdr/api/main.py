@@ -6,7 +6,6 @@ for the KTRDR API backend.
 """
 
 import logging
-import os
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -18,7 +17,12 @@ from fastapi.templating import Jinja2Templates
 
 from ktrdr.api.middleware import add_middleware
 from ktrdr.api.startup import lifespan
-from ktrdr.config import get_api_settings, validate_all, warn_deprecated_env_vars
+from ktrdr.config import (
+    get_api_settings,
+    get_observability_settings,
+    validate_all,
+    warn_deprecated_env_vars,
+)
 from ktrdr.errors import (
     ConfigurationError,
     ConnectionError,
@@ -46,12 +50,11 @@ warn_deprecated_env_vars()
 validate_all("backend")
 
 # Setup monitoring BEFORE creating app
-otlp_endpoint = os.getenv("OTLP_ENDPOINT")
+otel_settings = get_observability_settings()
 setup_monitoring(
     service_name="ktrdr-api",
-    otlp_endpoint=otlp_endpoint,
-    # Disable console output when OTLP is configured (reduce noise)
-    console_output=otlp_endpoint is None,
+    otlp_endpoint=otel_settings.otlp_endpoint if otel_settings.enabled else None,
+    console_output=otel_settings.console_output,
 )
 
 # Setup metrics (Phase 5: Prometheus metrics)

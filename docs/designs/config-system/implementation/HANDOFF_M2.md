@@ -167,3 +167,29 @@ The logging module (`ktrdr/logging/*.py`) already had zero direct `os.getenv()` 
 - Look for `OTLP_ENDPOINT`, `JAEGER_*`, `OTEL_*` patterns
 - Replace with `get_observability_settings().field`
 - May need to add helper methods similar to `get_log_level_int()`
+
+---
+
+## Task 2.8 Complete: Migrate Observability/Tracing Consumers
+
+### What Was Done
+
+Migrated 4 files from `os.getenv("OTLP_ENDPOINT")` to `get_observability_settings()`:
+
+1. **ktrdr/api/main.py** — API monitoring setup now uses `otel_settings.otlp_endpoint` and `otel_settings.console_output`
+2. **ktrdr/cli/__init__.py** — CLI endpoint derivation compares against settings default to detect explicit user setting
+3. **ktrdr/training/training_worker.py** — Training worker uses settings for OTLP endpoint and console output
+4. **ktrdr/backtesting/backtest_worker.py** — Backtest worker uses settings (same pattern as training)
+
+### Gotchas
+
+**CLI endpoint derivation has special logic**: The CLI needs to detect "did user explicitly set OTLP endpoint?" vs "using default". Solution: compare `settings.otlp_endpoint` to known default `"http://jaeger:4317"`. If different, user explicitly set it.
+
+**`enabled` flag controls endpoint**: When `otel_settings.enabled` is False, pass `None` to `setup_monitoring()` instead of the endpoint. This disables OTLP export.
+
+**APP_VERSION and ENVIRONMENT are not observability settings**: These env vars in `ktrdr/monitoring/setup.py` are deployment metadata used in trace resources, not observability configuration. They were left as-is.
+
+### Next Task Notes (2.9: Update Validation Module for M2 Settings)
+
+- Add `APISettings`, `AuthSettings`, `LoggingSettings`, `ObservabilitySettings` to `BACKEND_SETTINGS` in `validation.py`
+- Add `AuthSettings.jwt_secret` to `INSECURE_DEFAULTS` (detect insecure "insecure-dev-secret" in production)

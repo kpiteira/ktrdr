@@ -31,9 +31,14 @@ def _derive_otlp_endpoint_from_url(api_url: str | None) -> str:
     Returns:
         OTLP endpoint URL (same host, port 4317)
     """
-    # Explicit OTLP endpoint always takes priority
-    if otlp := os.getenv("OTLP_ENDPOINT"):
-        return otlp
+    # Explicit OTLP endpoint (via settings) always takes priority
+    # If user set KTRDR_OTEL_OTLP_ENDPOINT or OTLP_ENDPOINT, it will differ from default
+    from ktrdr.config.settings import get_observability_settings
+
+    otel_settings = get_observability_settings()
+    default_endpoint = "http://jaeger:4317"
+    if otel_settings.otlp_endpoint != default_endpoint:
+        return otel_settings.otlp_endpoint
 
     # Derive from provided API URL
     if api_url:
