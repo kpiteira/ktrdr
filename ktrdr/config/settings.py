@@ -9,7 +9,7 @@ from functools import lru_cache
 from typing import Any, TypeVar
 from urllib.parse import quote_plus
 
-from pydantic import AliasChoices, Field, computed_field
+from pydantic import AliasChoices, Field, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .. import metadata
@@ -49,19 +49,86 @@ def deprecated_field(default: T, new_env: str, old_env: str, **kwargs: Any) -> T
 
 
 class APISettings(BaseSettings):
-    """API Server Settings."""
+    """API Server Settings.
 
+    Provides API configuration with support for environment variables.
+    Merges functionality from the previous ktrdr/api/config.py::APIConfig.
+
+    Environment variables (all prefixed with KTRDR_API_):
+        KTRDR_API_HOST: Host to bind. Default: 127.0.0.1
+        KTRDR_API_PORT: Port to bind. Default: 8000
+        KTRDR_API_ENVIRONMENT: Deployment environment (development/staging/production)
+        KTRDR_API_LOG_LEVEL: Log level (DEBUG/INFO/WARNING/ERROR/CRITICAL)
+        KTRDR_API_CORS_ORIGINS: Comma-separated list of allowed origins
+        KTRDR_API_CORS_ALLOW_CREDENTIALS: Allow credentials for CORS
+        KTRDR_API_CORS_ALLOW_METHODS: Comma-separated list of allowed methods
+        KTRDR_API_CORS_ALLOW_HEADERS: Comma-separated list of allowed headers
+        KTRDR_API_CORS_MAX_AGE: Max age for CORS preflight cache (seconds)
+    """
+
+    # API metadata
     title: str = Field(default=metadata.API_TITLE)
     description: str = Field(default=metadata.API_DESCRIPTION)
     version: str = Field(default=metadata.VERSION)
-    host: str = Field(default=metadata.get("api.host", "127.0.0.1"))
-    port: int = Field(default=metadata.get("api.port", 8000))
-    reload: bool = Field(default=metadata.get("api.reload", True))
-    log_level: str = Field(default=metadata.get("api.log_level", "INFO"))
-    api_prefix: str = Field(default=metadata.API_PREFIX)
-    cors_origins: list = Field(default=metadata.get("api.cors_origins", ["*"]))
 
-    model_config = SettingsConfigDict(env_prefix="KTRDR_API_")
+    # Server configuration
+    host: str = Field(default="127.0.0.1", description="Host to bind the API server")
+    port: int = Field(default=8000, description="Port to bind the API server")
+    reload: bool = Field(default=True, description="Enable auto-reload for development")
+    log_level: str = Field(
+        default="INFO", description="Logging level for the API server"
+    )
+
+    # Environment
+    environment: str = Field(
+        default="development",
+        description="Deployment environment (development, staging, production)",
+    )
+
+    # API routing
+    api_prefix: str = Field(default=metadata.API_PREFIX)
+
+    # CORS configuration
+    cors_origins: list[str] = Field(
+        default=["*"], description="List of allowed origins for CORS"
+    )
+    cors_allow_credentials: bool = Field(
+        default=True, description="Allow credentials for CORS requests"
+    )
+    cors_allow_methods: list[str] = Field(
+        default=["*"], description="List of allowed HTTP methods for CORS"
+    )
+    cors_allow_headers: list[str] = Field(
+        default=["*"], description="List of allowed HTTP headers for CORS"
+    )
+    cors_max_age: int = Field(
+        default=600,
+        description="Maximum age (seconds) of CORS preflight responses to cache",
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_API_",
+        env_file=".env.local",
+        extra="ignore",
+    )
+
+    @field_validator("environment")
+    @classmethod
+    def validate_environment(cls, v: str) -> str:
+        """Validate that environment is one of the allowed values."""
+        allowed = ["development", "staging", "production"]
+        if v.lower() not in allowed:
+            raise ValueError(f"Environment must be one of {allowed}, got '{v}'")
+        return v.lower()
+
+    @field_validator("log_level")
+    @classmethod
+    def validate_log_level(cls, v: str) -> str:
+        """Validate that log_level is one of the allowed values."""
+        allowed = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+        if v.upper() not in allowed:
+            raise ValueError(f"Log level must be one of {allowed}, got '{v}'")
+        return v.upper()
 
 
 class LoggingSettings(BaseSettings):
