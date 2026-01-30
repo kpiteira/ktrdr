@@ -19,6 +19,7 @@ from fastapi.templating import Jinja2Templates
 from ktrdr.api.config import APIConfig
 from ktrdr.api.middleware import add_middleware
 from ktrdr.api.startup import lifespan
+from ktrdr.config import validate_all, warn_deprecated_env_vars
 from ktrdr.errors import (
     ConfigurationError,
     ConnectionError,
@@ -35,6 +36,15 @@ from ktrdr.monitoring.setup import (
 
 # Setup module-level logger
 logger = logging.getLogger(__name__)
+
+# =============================================================================
+# Startup Validation (M1: Config System)
+# =============================================================================
+# These MUST run before any other initialization to fail fast on invalid config.
+# 1. warn_deprecated_env_vars() emits DeprecationWarning for old env var names
+# 2. validate_all("backend") raises ConfigurationError if config is invalid
+warn_deprecated_env_vars()
+validate_all("backend")
 
 # Setup monitoring BEFORE creating app
 otlp_endpoint = os.getenv("OTLP_ENDPOINT")

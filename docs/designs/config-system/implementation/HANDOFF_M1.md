@@ -96,3 +96,21 @@
 - Call `warn_deprecated_env_vars()` first (emit deprecation warnings)
 - Call `validate_all("backend")` second (fail fast if invalid)
 - These must run BEFORE `app = FastAPI(...)` creation
+
+## Task 1.6 Complete: Add Startup Validation to main.py
+
+### Gotchas
+
+**Import order matters for ruff**: When adding new imports, keep them alphabetically sorted within the `ktrdr.*` block. `ktrdr.config` comes before `ktrdr.errors`.
+
+**Validation runs at module import**: The `warn_deprecated_env_vars()` and `validate_all("backend")` calls run when main.py is imported, not when `create_application()` is called. This is intentional - fail fast before any other initialization.
+
+### Emergent Patterns
+
+**Section comment for visibility**: Added a clear section header `# Startup Validation (M1: Config System)` with explanation of the two-step process. This makes the validation calls visible and documents their purpose.
+
+### Next Task Notes (1.7: Write Unit Tests)
+
+- Most unit tests were written alongside each task (TDD)
+- Task 1.7 is mainly verification that all tests from 1.1-1.4 are implemented
+- Run `make test-unit` to verify all pass
