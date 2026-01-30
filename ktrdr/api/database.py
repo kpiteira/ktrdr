@@ -1,41 +1,30 @@
 """Database configuration and session management.
 
 Provides async database session management for the API layer.
-Uses the same environment variables as the Docker Compose setup.
+Uses DatabaseSettings from ktrdr.config for configuration.
 """
 
-import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from ktrdr.config import get_db_settings
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
 
 
 def get_database_url() -> str:
-    """Construct database URL from environment variables.
+    """Get the async database connection URL.
 
-    Uses the same environment variables as the Docker Compose setup:
-    - DB_HOST (default: localhost)
-    - DB_PORT (default: 5432)
-    - DB_NAME (default: ktrdr)
-    - DB_USER (default: ktrdr)
-    - DB_PASSWORD (default: localdev)
+    Uses DatabaseSettings which supports both new (KTRDR_DB_*) and
+    deprecated (DB_*) environment variable names.
 
     Returns:
-        PostgreSQL async connection URL.
+        PostgreSQL async connection URL (asyncpg driver).
     """
-    host = os.getenv("DB_HOST", "localhost")
-    port = os.getenv("DB_PORT", "5432")
-    name = os.getenv("DB_NAME", "ktrdr")
-    user = os.getenv("DB_USER", "ktrdr")
-    password = os.getenv("DB_PASSWORD", "localdev")
-
-    # Use asyncpg driver for async support
-    return f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{name}"
+    return get_db_settings().url
 
 
 # Global engine and session factory (lazily initialized)
@@ -47,17 +36,16 @@ def get_engine():
     """Get or create the async database engine."""
     global _engine
     if _engine is None:
-        database_url = get_database_url()
+        settings = get_db_settings()
         _engine = create_async_engine(
-            database_url,
-            echo=os.getenv("DB_ECHO", "false").lower() == "true",
+            settings.url,
+            echo=settings.echo,
             pool_pre_ping=True,
         )
         # Log connection info without sensitive data (host/port/db only)
-        db_host = os.getenv("DB_HOST", "localhost")
-        db_port = os.getenv("DB_PORT", "5432")
-        db_name = os.getenv("DB_NAME", "ktrdr")
-        logger.info(f"Database engine created for: {db_host}:{db_port}/{db_name}")
+        logger.info(
+            f"Database engine created for: {settings.host}:{settings.port}/{settings.name}"
+        )
     return _engine
 
 

@@ -77,3 +77,22 @@
 - Use `get_db_settings().url` for async connection string
 - Use `get_db_settings().sync_url` for sync connection string
 - Import: `from ktrdr.config import get_db_settings`
+
+## Task 1.5 Complete: Migrate database.py to Use get_db_settings()
+
+### Gotchas
+
+**Reset `_engine` global when testing**: The database module uses global `_engine` and `_session_factory` for lazy initialization. In tests, reset these to `None` before each test to ensure clean state.
+
+**Use settings.url directly**: The `get_database_url()` function is now a thin wrapper around `get_db_settings().url`. Could be removed in a future cleanup, but kept for backward compatibility.
+
+### Emergent Patterns
+
+**Single settings call for multiple fields**: In `get_engine()`, call `settings = get_db_settings()` once and access multiple fields (url, echo, host, port, name) from the cached instance. This is more efficient than calling `get_db_settings()` multiple times.
+
+### Next Task Notes (1.6: Add Startup Validation to main.py)
+
+- Import: `from ktrdr.config import warn_deprecated_env_vars, validate_all`
+- Call `warn_deprecated_env_vars()` first (emit deprecation warnings)
+- Call `validate_all("backend")` second (fail fast if invalid)
+- These must run BEFORE `app = FastAPI(...)` creation
