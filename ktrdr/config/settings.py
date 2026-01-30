@@ -165,16 +165,43 @@ class AuthSettings(BaseSettings):
 
 
 class LoggingSettings(BaseSettings):
-    """Logging Settings."""
+    """Logging Settings.
 
-    level: str = Field(default=metadata.get("logging.level", "INFO"))
+    Provides logging configuration with support for environment variables.
+
+    Environment variables (all prefixed with KTRDR_LOG_):
+        KTRDR_LOG_LEVEL: Log level (DEBUG/INFO/WARNING/ERROR/CRITICAL). Default: INFO
+        KTRDR_LOG_FORMAT: Log message format string. Default: timestamp + level + name + message
+        KTRDR_LOG_JSON_OUTPUT: Enable JSON structured logging. Default: false
+    """
+
+    level: str = Field(
+        default="INFO",
+        description="Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+    )
     format: str = Field(
-        default=metadata.get(
-            "logging.format", "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-        )
+        default="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        description="Log message format string",
+    )
+    json_output: bool = Field(
+        default=False,
+        description="Enable JSON structured logging output",
     )
 
-    model_config = SettingsConfigDict(env_prefix="KTRDR_LOGGING_")
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_LOG_",
+        env_file=".env.local",
+        extra="ignore",
+    )
+
+    @field_validator("level")
+    @classmethod
+    def validate_level(cls, v: str) -> str:
+        """Validate that level is one of the allowed values."""
+        allowed = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+        if v.upper() not in allowed:
+            raise ValueError(f"Log level must be one of {allowed}, got '{v}'")
+        return v.upper()
 
 
 class OrphanDetectorSettings(BaseSettings):

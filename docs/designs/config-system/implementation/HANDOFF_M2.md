@@ -45,3 +45,24 @@
 - Check if it needs `env_file=".env.local"` and `extra="ignore"` for consistency
 - Fields: `level`, `format`, maybe `json_output`
 - Verify it's already in `clear_settings_cache()` and `__all__`
+
+---
+
+## Task 2.3 Complete: Create `LoggingSettings` Class
+
+### Gotchas
+
+**Changed env prefix from `KTRDR_LOGGING_` to `KTRDR_LOG_`**: The original skeleton used `KTRDR_LOGGING_` but the task description (and other settings) use shorter prefixes. Changed to `KTRDR_LOG_` for consistency (e.g., `KTRDR_LOG_LEVEL` not `KTRDR_LOGGING_LEVEL`).
+
+**Removed `metadata.get()` for defaults**: The skeleton used `metadata.get("logging.level", "INFO")` which was reading from metadata.yaml. Changed to direct defaults for consistency with other settings classes. Environment variables override these anyway.
+
+### Emergent Patterns
+
+**Level validation pattern reused**: Copied the level validation pattern from `APISettings.validate_log_level()` to `LoggingSettings.validate_level()` — same allowed values, same case normalization to uppercase.
+
+### Next Task Notes (2.4: Create ObservabilitySettings)
+
+- Add `ObservabilitySettings` class with `env_prefix="KTRDR_OTEL_"`
+- Fields: `jaeger_host`, `jaeger_port`, `service_name`, `enabled`
+- Check existing Jaeger env vars in the codebase (grep for `JAEGER_*`, `OTEL_*`)
+- Follow same pattern: `@lru_cache` getter, add to `clear_settings_cache()`, add to `__all__`
