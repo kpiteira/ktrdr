@@ -60,3 +60,20 @@
 - Export `warn_deprecated_env_vars` and `DEPRECATED_NAMES` from `ktrdr.config`
 - Import from: `from ktrdr.config.deprecation import warn_deprecated_env_vars, DEPRECATED_NAMES`
 - Keep existing exports for backward compatibility
+
+## Task 1.4 Complete: Update `__init__.py` Public API
+
+### Gotchas
+
+**Import order matters for circular dependencies**: The deprecation module has no internal dependencies, so it can be imported early. The validation module imports from settings, so keep that import after settings.
+
+### Emergent Patterns
+
+**Group exports by milestone/feature**: The `__all__` list is organized with comments grouping related exports (# New config system (M1), # Validation (M1.2), # Deprecation (M1.3)).
+
+### Next Task Notes (1.5: Migrate database.py)
+
+- Replace `os.getenv("DB_*")` calls with `get_db_settings().field`
+- Use `get_db_settings().url` for async connection string
+- Use `get_db_settings().sync_url` for sync connection string
+- Import: `from ktrdr.config import get_db_settings`
