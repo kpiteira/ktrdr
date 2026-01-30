@@ -26,3 +26,22 @@
 - Include `jwt_secret` field (will need insecure default detection later)
 - Include `jwt_algorithm`, `token_expire_minutes`
 - Follow same pattern: `@lru_cache` getter, add to `clear_settings_cache()`
+
+---
+
+## Task 2.2 Complete: Create `AuthSettings` Class
+
+### Gotchas
+
+**Insecure default for jwt_secret**: The default `"insecure-dev-secret"` is intentionally insecure. Task 2.9 will add validation to reject this in production mode.
+
+### Emergent Patterns
+
+**Minimal validation, explicit defaults**: Unlike `APISettings` which has validators for `environment` and `log_level`, `AuthSettings` keeps it simple. The `jwt_algorithm` is a plain string (no validation for valid algorithms like HS256/HS512/RS256) — if an invalid algorithm is used, it will fail at JWT sign/verify time, which is clear enough. YAGNI applies.
+
+### Next Task Notes (2.3: Create LoggingSettings)
+
+- `LoggingSettings` already exists (skeleton from earlier) but may need enhancement
+- Check if it needs `env_file=".env.local"` and `extra="ignore"` for consistency
+- Fields: `level`, `format`, maybe `json_output`
+- Verify it's already in `clear_settings_cache()` and `__all__`

@@ -131,6 +131,39 @@ class APISettings(BaseSettings):
         return v.upper()
 
 
+class AuthSettings(BaseSettings):
+    """Authentication Settings.
+
+    Provides JWT and authentication configuration with support for
+    environment variables.
+
+    Environment variables (all prefixed with KTRDR_AUTH_):
+        KTRDR_AUTH_JWT_SECRET: Secret key for JWT signing. Default: insecure-dev-secret
+        KTRDR_AUTH_JWT_ALGORITHM: JWT algorithm. Default: HS256
+        KTRDR_AUTH_TOKEN_EXPIRE_MINUTES: Token expiration in minutes. Default: 60
+    """
+
+    jwt_secret: str = Field(
+        default="insecure-dev-secret",
+        description="Secret key for JWT token signing (MUST be changed in production)",
+    )
+    jwt_algorithm: str = Field(
+        default="HS256",
+        description="Algorithm used for JWT signing",
+    )
+    token_expire_minutes: int = Field(
+        default=60,
+        gt=0,
+        description="Token expiration time in minutes",
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_AUTH_",
+        env_file=".env.local",
+        extra="ignore",
+    )
+
+
 class LoggingSettings(BaseSettings):
     """Logging Settings."""
 
@@ -265,6 +298,12 @@ def get_api_settings() -> APISettings:
 
 
 @lru_cache
+def get_auth_settings() -> AuthSettings:
+    """Get auth settings with caching."""
+    return AuthSettings()
+
+
+@lru_cache
 def get_logging_settings() -> LoggingSettings:
     """Get logging settings with caching."""
     return LoggingSettings()
@@ -301,6 +340,7 @@ def get_cli_settings() -> ApiServiceSettings:
 def clear_settings_cache() -> None:
     """Clear settings cache."""
     get_api_settings.cache_clear()
+    get_auth_settings.cache_clear()
     get_logging_settings.cache_clear()
     get_api_service_settings.cache_clear()
     get_orphan_detector_settings.cache_clear()
@@ -312,6 +352,7 @@ def clear_settings_cache() -> None:
 __all__ = [
     # Settings classes
     "APISettings",
+    "AuthSettings",
     "LoggingSettings",
     "OrphanDetectorSettings",
     "CheckpointSettings",
@@ -319,6 +360,7 @@ __all__ = [
     "ApiServiceSettings",
     # Cached getters
     "get_api_settings",
+    "get_auth_settings",
     "get_logging_settings",
     "get_orphan_detector_settings",
     "get_checkpoint_settings",
