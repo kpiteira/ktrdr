@@ -20,7 +20,7 @@ from pydantic import Field
 from ktrdr.api.models.operations import OperationMetadata, OperationType
 from ktrdr.api.models.workers import WorkerType
 from ktrdr.async_infrastructure.cancellation import CancellationError
-from ktrdr.config.settings import get_checkpoint_settings
+from ktrdr.config.settings import get_checkpoint_settings, get_observability_settings
 
 # Note: TrainingProgressBridge requires TrainingOperationContext which is complex
 # For now, we'll use direct progress callbacks instead
@@ -34,11 +34,11 @@ logger = get_logger(__name__)
 worker_id = os.getenv("WORKER_ID", uuid.uuid4().hex[:8])
 
 # Setup monitoring BEFORE creating worker
-otlp_endpoint = os.getenv("OTLP_ENDPOINT", "http://jaeger:4317")
+otel_settings = get_observability_settings()
 setup_monitoring(
     service_name=f"ktrdr-training-worker-{worker_id}",
-    otlp_endpoint=otlp_endpoint,
-    console_output=os.getenv("ENVIRONMENT") == "development",
+    otlp_endpoint=otel_settings.otlp_endpoint if otel_settings.enabled else None,
+    console_output=otel_settings.console_output,
 )
 
 

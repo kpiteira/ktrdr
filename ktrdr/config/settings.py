@@ -5,11 +5,12 @@ This module provides access to configuration settings with environment-specific
 overrides and environment variable support.
 """
 
+import logging as python_logging
 from functools import lru_cache
 from typing import Any, TypeVar
 from urllib.parse import quote_plus
 
-from pydantic import AliasChoices, Field, computed_field
+from pydantic import AliasChoices, Field, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .. import metadata
@@ -49,32 +50,219 @@ def deprecated_field(default: T, new_env: str, old_env: str, **kwargs: Any) -> T
 
 
 class APISettings(BaseSettings):
-    """API Server Settings."""
+    """API Server Settings.
 
+    Provides API configuration with support for environment variables.
+    Merges functionality from the previous ktrdr/api/config.py::APIConfig.
+
+    Environment variables (all prefixed with KTRDR_API_):
+        KTRDR_API_HOST: Host to bind. Default: 127.0.0.1
+        KTRDR_API_PORT: Port to bind. Default: 8000
+        KTRDR_API_ENVIRONMENT: Deployment environment (development/staging/production)
+        KTRDR_API_LOG_LEVEL: Log level (DEBUG/INFO/WARNING/ERROR/CRITICAL)
+        KTRDR_API_CORS_ORIGINS: JSON array of allowed origins
+            (e.g. '["http://localhost:3000","http://localhost:8080"]')
+        KTRDR_API_CORS_ALLOW_CREDENTIALS: Allow credentials for CORS
+        KTRDR_API_CORS_ALLOW_METHODS: JSON array of allowed HTTP methods
+            (e.g. '["GET","POST","OPTIONS"]')
+        KTRDR_API_CORS_ALLOW_HEADERS: JSON array of allowed HTTP headers
+            (e.g. '["Authorization","Content-Type"]')
+        KTRDR_API_CORS_MAX_AGE: Max age for CORS preflight cache (seconds)
+    """
+
+    # API metadata
     title: str = Field(default=metadata.API_TITLE)
     description: str = Field(default=metadata.API_DESCRIPTION)
     version: str = Field(default=metadata.VERSION)
-    host: str = Field(default=metadata.get("api.host", "127.0.0.1"))
-    port: int = Field(default=metadata.get("api.port", 8000))
-    reload: bool = Field(default=metadata.get("api.reload", True))
-    log_level: str = Field(default=metadata.get("api.log_level", "INFO"))
-    api_prefix: str = Field(default=metadata.API_PREFIX)
-    cors_origins: list = Field(default=metadata.get("api.cors_origins", ["*"]))
 
-    model_config = SettingsConfigDict(env_prefix="KTRDR_API_")
+    # Server configuration
+    host: str = Field(default="127.0.0.1", description="Host to bind the API server")
+    port: int = Field(default=8000, description="Port to bind the API server")
+    reload: bool = Field(default=True, description="Enable auto-reload for development")
+    log_level: str = Field(
+        default="INFO", description="Logging level for the API server"
+    )
+
+    # Environment
+    environment: str = Field(
+        default="development",
+        description="Deployment environment (development, staging, production)",
+    )
+
+    # API routing
+    api_prefix: str = Field(default=metadata.API_PREFIX)
+
+    # CORS configuration
+    cors_origins: list[str] = Field(
+        default=["*"], description="List of allowed origins for CORS"
+    )
+    cors_allow_credentials: bool = Field(
+        default=True, description="Allow credentials for CORS requests"
+    )
+    cors_allow_methods: list[str] = Field(
+        default=["*"], description="List of allowed HTTP methods for CORS"
+    )
+    cors_allow_headers: list[str] = Field(
+        default=["*"], description="List of allowed HTTP headers for CORS"
+    )
+    cors_max_age: int = Field(
+        default=600,
+        description="Maximum age (seconds) of CORS preflight responses to cache",
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_API_",
+        env_file=".env.local",
+        extra="ignore",
+    )
+
+    @field_validator("environment")
+    @classmethod
+    def validate_environment(cls, v: str) -> str:
+        """Validate that environment is one of the allowed values."""
+        allowed = ["development", "staging", "production"]
+        if v.lower() not in allowed:
+            raise ValueError(f"Environment must be one of {allowed}, got '{v}'")
+        return v.lower()
+
+    @field_validator("log_level")
+    @classmethod
+    def validate_log_level(cls, v: str) -> str:
+        """Validate that log_level is one of the allowed values."""
+        allowed = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+        if v.upper() not in allowed:
+            raise ValueError(f"Log level must be one of {allowed}, got '{v}'")
+        return v.upper()
+
+
+class AuthSettings(BaseSettings):
+    """Authentication Settings.
+
+    Provides JWT and authentication configuration with support for
+    environment variables.
+
+    Environment variables (all prefixed with KTRDR_AUTH_):
+        KTRDR_AUTH_JWT_SECRET: Secret key for JWT signing. Default: insecure-dev-secret
+        KTRDR_AUTH_JWT_ALGORITHM: JWT algorithm. Default: HS256
+        KTRDR_AUTH_TOKEN_EXPIRE_MINUTES: Token expiration in minutes. Default: 60
+    """
+
+    jwt_secret: str = Field(
+        default="insecure-dev-secret",
+        description="Secret key for JWT token signing (MUST be changed in production)",
+    )
+    jwt_algorithm: str = Field(
+        default="HS256",
+        description="Algorithm used for JWT signing",
+    )
+    token_expire_minutes: int = Field(
+        default=60,
+        gt=0,
+        description="Token expiration time in minutes",
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_AUTH_",
+        env_file=".env.local",
+        extra="ignore",
+    )
 
 
 class LoggingSettings(BaseSettings):
-    """Logging Settings."""
+    """Logging Settings.
 
-    level: str = Field(default=metadata.get("logging.level", "INFO"))
+    Provides logging configuration with support for environment variables.
+
+    Environment variables (all prefixed with KTRDR_LOG_):
+        KTRDR_LOG_LEVEL: Log level (DEBUG/INFO/WARNING/ERROR/CRITICAL). Default: INFO
+        KTRDR_LOG_FORMAT: Log message format string. Default: timestamp + level + name + message
+        KTRDR_LOG_JSON_OUTPUT: Enable JSON structured logging. Default: false
+    """
+
+    level: str = Field(
+        default="INFO",
+        description="Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+    )
     format: str = Field(
-        default=metadata.get(
-            "logging.format", "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-        )
+        default="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        description="Log message format string",
+    )
+    json_output: bool = Field(
+        default=False,
+        description="Enable JSON structured logging output",
     )
 
-    model_config = SettingsConfigDict(env_prefix="KTRDR_LOGGING_")
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_LOG_",
+        env_file=".env.local",
+        extra="ignore",
+    )
+
+    @field_validator("level")
+    @classmethod
+    def validate_level(cls, v: str) -> str:
+        """Validate that level is one of the allowed values."""
+        allowed = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+        if v.upper() not in allowed:
+            raise ValueError(f"Log level must be one of {allowed}, got '{v}'")
+        return v.upper()
+
+    def get_log_level_int(self) -> int:
+        """Convert string log level to Python logging constant.
+
+        Returns:
+            Python logging level constant (e.g., logging.INFO, logging.DEBUG)
+        """
+        level_map = {
+            "DEBUG": python_logging.DEBUG,
+            "INFO": python_logging.INFO,
+            "WARNING": python_logging.WARNING,
+            "ERROR": python_logging.ERROR,
+            "CRITICAL": python_logging.CRITICAL,
+        }
+        return level_map[self.level]
+
+
+class ObservabilitySettings(BaseSettings):
+    """Observability Settings.
+
+    Provides OpenTelemetry/Jaeger tracing configuration with support for
+    environment variables.
+
+    Environment variables (all prefixed with KTRDR_OTEL_):
+        KTRDR_OTEL_ENABLED: Enable tracing. Default: true
+        KTRDR_OTEL_OTLP_ENDPOINT: OTLP gRPC endpoint for Jaeger. Default: http://jaeger:4317
+        KTRDR_OTEL_SERVICE_NAME: Service name for traces. Default: ktrdr
+        KTRDR_OTEL_CONSOLE_OUTPUT: Also output traces to console. Default: false
+
+    Deprecated names (still work, emit warnings at startup):
+        OTLP_ENDPOINT → KTRDR_OTEL_OTLP_ENDPOINT
+    """
+
+    enabled: bool = Field(
+        default=True,
+        description="Enable OpenTelemetry tracing",
+    )
+    otlp_endpoint: str = deprecated_field(
+        "http://jaeger:4317",
+        "KTRDR_OTEL_OTLP_ENDPOINT",
+        "OTLP_ENDPOINT",
+        description="OTLP gRPC endpoint for Jaeger",
+    )
+    service_name: str = Field(
+        default="ktrdr",
+        description="Service name for traces",
+    )
+    console_output: bool = Field(
+        default=False,
+        description="Also output traces to console (for debugging)",
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_OTEL_",
+        env_file=".env.local",
+        extra="ignore",
+    )
 
 
 class OrphanDetectorSettings(BaseSettings):
@@ -198,9 +386,21 @@ def get_api_settings() -> APISettings:
 
 
 @lru_cache
+def get_auth_settings() -> AuthSettings:
+    """Get auth settings with caching."""
+    return AuthSettings()
+
+
+@lru_cache
 def get_logging_settings() -> LoggingSettings:
     """Get logging settings with caching."""
     return LoggingSettings()
+
+
+@lru_cache
+def get_observability_settings() -> ObservabilitySettings:
+    """Get observability settings with caching."""
+    return ObservabilitySettings()
 
 
 @lru_cache
@@ -234,7 +434,9 @@ def get_cli_settings() -> ApiServiceSettings:
 def clear_settings_cache() -> None:
     """Clear settings cache."""
     get_api_settings.cache_clear()
+    get_auth_settings.cache_clear()
     get_logging_settings.cache_clear()
+    get_observability_settings.cache_clear()
     get_api_service_settings.cache_clear()
     get_orphan_detector_settings.cache_clear()
     get_checkpoint_settings.cache_clear()
@@ -245,14 +447,18 @@ def clear_settings_cache() -> None:
 __all__ = [
     # Settings classes
     "APISettings",
+    "AuthSettings",
     "LoggingSettings",
+    "ObservabilitySettings",
     "OrphanDetectorSettings",
     "CheckpointSettings",
     "DatabaseSettings",
     "ApiServiceSettings",
     # Cached getters
     "get_api_settings",
+    "get_auth_settings",
     "get_logging_settings",
+    "get_observability_settings",
     "get_orphan_detector_settings",
     "get_checkpoint_settings",
     "get_db_settings",

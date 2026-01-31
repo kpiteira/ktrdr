@@ -8,8 +8,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from ktrdr import metadata  # Import the metadata module
-from ktrdr.api.config import APIConfig
 from ktrdr.api.main import create_application
+from ktrdr.config.settings import get_api_settings
 
 
 @pytest.fixture
@@ -39,7 +39,7 @@ def test_api_health_check(client):
 
 def test_api_openapi_spec(client):
     """Test that the OpenAPI specification is generated correctly."""
-    config = APIConfig()
+    config = get_api_settings()
     response = client.get(f"{config.api_prefix}/openapi.json")
     assert response.status_code == 200
 

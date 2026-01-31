@@ -12,7 +12,7 @@ import sys
 
 import uvicorn
 
-from ktrdr.api.config import APIConfig
+from ktrdr.config.settings import get_api_settings
 
 # Configure logging
 logging.basicConfig(
@@ -26,7 +26,7 @@ logger = logging.getLogger("ktrdr.api.run")
 
 def parse_args():
     """Parse command line arguments."""
-    config = APIConfig()  # Load default config
+    config = get_api_settings()  # Load default config
 
     parser = argparse.ArgumentParser(description="Run the KTRDR API server")
     parser.add_argument(
@@ -103,12 +103,9 @@ def main():
     if hasattr(args, "cors_origins") and args.cors_origins:
         env_vars["KTRDR_API_CORS_ORIGINS"] = args.cors_origins
 
-    # Apply configuration overrides
-    try:
-        APIConfig.from_env(env_vars)
-    except Exception as e:
-        logger.error(f"Failed to load configuration: {str(e)}")
-        sys.exit(1)
+    # Note: Environment variables in env_vars are used for logging/info purposes.
+    # The actual configuration comes from get_api_settings() which reads env vars automatically.
+    # Command-line args are passed directly to uvicorn below.
 
     # Log startup information
     logger.info(f"Starting KTRDR API server: host={args.host}, port={args.port}")

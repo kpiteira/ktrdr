@@ -173,9 +173,9 @@ async def get_system_config() -> ApiResponse:
     """
     try:
         # Get configuration details
-        from ktrdr.api.config import APIConfig
+        from ktrdr.config.settings import get_api_settings
 
-        api_config = APIConfig()
+        api_config = get_api_settings()
 
         return ApiResponse(
             success=True,

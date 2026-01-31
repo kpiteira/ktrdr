@@ -9,7 +9,6 @@ from typing import Annotated, Optional
 
 from fastapi import Depends
 
-from ktrdr.api.config import APIConfig
 from ktrdr.api.services.data_service import DataService
 from ktrdr.api.services.fuzzy_service import FuzzyService
 from ktrdr.api.services.indicator_service import IndicatorService
@@ -17,17 +16,18 @@ from ktrdr.api.services.operations_service import (
     OperationsService,
     get_operations_service,
 )
+from ktrdr.config.settings import APISettings, get_api_settings
 from ktrdr.data.acquisition.acquisition_service import DataAcquisitionService
 
 
-def get_api_config() -> APIConfig:
+def get_api_config() -> APISettings:
     """
     Dependency for providing the API configuration.
 
     Returns:
-        APIConfig: The current API configuration
+        APISettings: The current API configuration
     """
-    return APIConfig()
+    return get_api_settings()
 
 
 # Data service dependency
@@ -98,7 +98,7 @@ def get_operations_service_dep() -> OperationsService:
 
 
 # Define common dependencies with annotations for usage in route functions
-ConfigDep = Annotated[APIConfig, Depends(get_api_config)]
+ConfigDep = Annotated[APISettings, Depends(get_api_config)]
 DataServiceDep = Annotated[DataService, Depends(get_data_service)]
 IndicatorServiceDep = Annotated[IndicatorService, Depends(get_indicator_service)]
 FuzzyServiceDep = Annotated[FuzzyService, Depends(get_fuzzy_service)]

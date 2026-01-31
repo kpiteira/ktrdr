@@ -18,6 +18,7 @@ from ktrdr.config.deprecation import DEPRECATED_NAMES, warn_deprecated_env_vars
 class TestDeprecatedNamesMapping:
     """Test the DEPRECATED_NAMES dict configuration."""
 
+    # M1: Database deprecated names
     def test_deprecated_names_contains_db_host(self):
         """DEPRECATED_NAMES should map DB_HOST to KTRDR_DB_HOST."""
         assert "DB_HOST" in DEPRECATED_NAMES
@@ -47,6 +48,12 @@ class TestDeprecatedNamesMapping:
         """DEPRECATED_NAMES should map DB_ECHO to KTRDR_DB_ECHO."""
         assert "DB_ECHO" in DEPRECATED_NAMES
         assert DEPRECATED_NAMES["DB_ECHO"] == "KTRDR_DB_ECHO"
+
+    # M2: Observability deprecated names
+    def test_deprecated_names_contains_otlp_endpoint(self):
+        """DEPRECATED_NAMES should map OTLP_ENDPOINT to KTRDR_OTEL_OTLP_ENDPOINT."""
+        assert "OTLP_ENDPOINT" in DEPRECATED_NAMES
+        assert DEPRECATED_NAMES["OTLP_ENDPOINT"] == "KTRDR_OTEL_OTLP_ENDPOINT"
 
 
 class TestWarnDeprecatedEnvVarsNoDeprecated:
@@ -188,3 +195,33 @@ class TestWarnDeprecatedEnvVarsIsolation:
         ):
             result = warn_deprecated_env_vars()
             assert result == ["DB_HOST"]
+
+
+class TestM2DeprecatedNames:
+    """Test M2 (API, Auth, Logging, Observability) deprecated name warnings."""
+
+    def test_warns_for_otlp_endpoint(self):
+        """Should emit warning when OTLP_ENDPOINT is set."""
+        with patch.dict(
+            os.environ, {"OTLP_ENDPOINT": "http://localhost:4317"}, clear=True
+        ):
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                result = warn_deprecated_env_vars()
+                assert "OTLP_ENDPOINT" in result
+                dep_warnings = [
+                    x for x in w if issubclass(x.category, DeprecationWarning)
+                ]
+                assert len(dep_warnings) == 1
+                assert "OTLP_ENDPOINT" in str(dep_warnings[0].message)
+                assert "KTRDR_OTEL_OTLP_ENDPOINT" in str(dep_warnings[0].message)
+
+    def test_does_not_warn_for_new_otel_name(self):
+        """Should not warn when new KTRDR_OTEL_* names are used."""
+        with patch.dict(
+            os.environ,
+            {"KTRDR_OTEL_OTLP_ENDPOINT": "http://localhost:4317"},
+            clear=True,
+        ):
+            result = warn_deprecated_env_vars()
+            assert result == []

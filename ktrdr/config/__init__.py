@@ -9,10 +9,18 @@ from .. import metadata
 from .deprecation import DEPRECATED_NAMES, warn_deprecated_env_vars
 from .loader import ConfigLoader
 from .settings import (
+    APISettings,
+    AuthSettings,
     DatabaseSettings,
+    LoggingSettings,
+    ObservabilitySettings,
     clear_settings_cache,
     deprecated_field,
+    get_api_settings,
+    get_auth_settings,
     get_db_settings,
+    get_logging_settings,
+    get_observability_settings,
 )
 from .strategy_validator import StrategyValidator
 from .validation import (
@@ -30,9 +38,19 @@ __all__ = [
     "sanitize_parameter",
     "sanitize_parameters",
     "StrategyValidator",
-    # New config system (M1)
+    # Settings classes (M1 + M2)
+    "APISettings",
+    "AuthSettings",
     "DatabaseSettings",
+    "LoggingSettings",
+    "ObservabilitySettings",
+    # Cached getters (M1 + M2)
+    "get_api_settings",
+    "get_auth_settings",
     "get_db_settings",
+    "get_logging_settings",
+    "get_observability_settings",
+    # Utilities
     "clear_settings_cache",
     "deprecated_field",
     # Validation (M1.2)
