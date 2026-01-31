@@ -2,20 +2,28 @@
 Membership function definitions for fuzzy logic.
 
 This module defines the abstract base class for membership functions
-and implements the triangular membership function for Phase 1.
+and provides auto-registration via __init_subclass__ to MEMBERSHIP_REGISTRY.
 """
 
+import inspect
 from abc import ABC, abstractmethod
-from typing import Union
+from typing import Any, Union
 
 import numpy as np
 import pandas as pd
+from pydantic import BaseModel
 
 from ktrdr import get_logger
+from ktrdr.core.type_registry import TypeRegistry
 from ktrdr.errors import ConfigurationError
 
 # Set up module-level logger
 logger = get_logger(__name__)
+
+# Global registry for all membership function types
+MEMBERSHIP_REGISTRY: TypeRegistry["MembershipFunction"] = TypeRegistry(
+    "membership function"
+)
 
 
 class MembershipFunction(ABC):
@@ -24,7 +32,53 @@ class MembershipFunction(ABC):
 
     All membership functions must implement the evaluate method
     that converts input values to membership degrees.
+
+    Subclasses are automatically registered to MEMBERSHIP_REGISTRY via
+    __init_subclass__. The canonical name is derived from the class name
+    with "MF" suffix stripped (e.g., TriangularMF -> "triangular").
+
+    Subclasses can define a Params nested class for Pydantic validation
+    and an _aliases list for alternative lookup names.
     """
+
+    class Params(BaseModel):
+        """Base parameter schema. Subclasses can override with validators."""
+
+        parameters: list[float]
+
+    # Optional aliases for registry lookup (e.g., ["tri", "triangle"])
+    _aliases: list[str] = []
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Auto-register concrete membership function subclasses."""
+        super().__init_subclass__(**kwargs)
+
+        # Skip abstract classes
+        if inspect.isabstract(cls):
+            return
+
+        # Skip test classes (various module naming patterns from pytest)
+        module = cls.__module__
+        if (
+            module.startswith("tests.")
+            or ".tests." in module
+            or module.startswith("test_")
+            or "_test" in module
+        ):
+            return
+
+        # Derive canonical name from class name
+        name = cls.__name__
+        if name.endswith("MF"):
+            name = name[:-2]  # Strip "MF" suffix
+        canonical = name.lower()
+
+        # Build aliases list (always include full class name lowercase)
+        aliases = [cls.__name__.lower()]
+        if cls._aliases:
+            aliases.extend(cls._aliases)
+
+        MEMBERSHIP_REGISTRY.register(cls, canonical, aliases)
 
     @abstractmethod
     def evaluate(
