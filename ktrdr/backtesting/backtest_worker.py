@@ -19,7 +19,7 @@ from ktrdr.api.models.workers import WorkerType
 from ktrdr.async_infrastructure.cancellation import CancellationError
 from ktrdr.backtesting.engine import BacktestConfig, BacktestingEngine
 from ktrdr.backtesting.progress_bridge import BacktestProgressBridge
-from ktrdr.config.settings import get_observability_settings
+from ktrdr.config.settings import get_observability_settings, get_worker_settings
 from ktrdr.logging import get_logger
 from ktrdr.monitoring.setup import instrument_app, setup_monitoring
 from ktrdr.workers.base import WorkerAPIBase, WorkerOperationMixin
@@ -71,8 +71,9 @@ def _translate_model_path(model_path: str | None) -> str | None:
     return model_path
 
 
-# Get worker ID for unique service identification
-worker_id = os.getenv("WORKER_ID", uuid.uuid4().hex[:8])
+# Get worker ID for unique service identification (from settings, or generate if None)
+_worker_settings = get_worker_settings()
+worker_id = _worker_settings.worker_id or uuid.uuid4().hex[:8]
 
 # Setup monitoring BEFORE creating worker
 otel_settings = get_observability_settings()
@@ -704,9 +705,9 @@ class BacktestWorker(WorkerAPIBase):
             raise
 
 
-# Create worker instance
+# Create worker instance (port from settings, backend URL still from env)
 worker = BacktestWorker(
-    worker_port=int(os.getenv("WORKER_PORT", "5003")),
+    worker_port=_worker_settings.port,
     backend_url=os.getenv("KTRDR_API_URL", "http://backend:8000"),
 )
 

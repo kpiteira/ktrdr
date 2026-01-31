@@ -20,7 +20,11 @@ from pydantic import Field
 from ktrdr.api.models.operations import OperationMetadata, OperationType
 from ktrdr.api.models.workers import WorkerType
 from ktrdr.async_infrastructure.cancellation import CancellationError
-from ktrdr.config.settings import get_checkpoint_settings, get_observability_settings
+from ktrdr.config.settings import (
+    get_checkpoint_settings,
+    get_observability_settings,
+    get_worker_settings,
+)
 
 # Note: TrainingProgressBridge requires TrainingOperationContext which is complex
 # For now, we'll use direct progress callbacks instead
@@ -30,8 +34,9 @@ from ktrdr.workers.base import WorkerAPIBase, WorkerOperationMixin
 
 logger = get_logger(__name__)
 
-# Get worker ID for unique service identification
-worker_id = os.getenv("WORKER_ID", uuid.uuid4().hex[:8])
+# Get worker settings and ID for unique service identification
+_worker_settings = get_worker_settings()
+worker_id = _worker_settings.worker_id or uuid.uuid4().hex[:8]
 
 # Setup monitoring BEFORE creating worker
 otel_settings = get_observability_settings()
@@ -897,9 +902,9 @@ class TrainingWorker(WorkerAPIBase):
         }
 
 
-# Create worker instance
+# Create worker instance (port from settings, backend URL still from env)
 worker = TrainingWorker(
-    worker_port=int(os.getenv("WORKER_PORT", "5002")),
+    worker_port=_worker_settings.port,
     backend_url=os.getenv("KTRDR_API_URL", "http://backend:8000"),
 )
 

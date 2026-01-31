@@ -18,7 +18,6 @@ Usage (DEPRECATED):
 """
 
 import logging
-import os
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Optional
 
@@ -32,6 +31,7 @@ from ktrdr.api.services.training import extract_symbols_timeframes_from_strategy
 from ktrdr.api.services.worker_registry import WorkerRegistry
 from ktrdr.backtesting.backtesting_service import BacktestingService
 from ktrdr.backtesting.worker_registration import WorkerRegistration
+from ktrdr.config.settings import get_worker_settings
 from ktrdr.errors import ConfigurationError, ValidationError
 
 if TYPE_CHECKING:
@@ -271,7 +271,8 @@ async def start_backtest(request: BacktestStartRequest) -> BacktestStartResponse
         # Get worker ID for logging
         import socket
 
-        worker_id = os.getenv("WORKER_ID") or f"backtest-{socket.gethostname()}"
+        worker_settings = get_worker_settings()
+        worker_id = worker_settings.worker_id or f"backtest-{socket.gethostname()}"
 
         # Call BacktestingService (will run in LOCAL mode)
         logger.info(

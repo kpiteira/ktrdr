@@ -85,3 +85,46 @@ New class created with prefix `KTRDR_OPS_`:
 - Watch for worker_id generation — settings returns None, runtime should generate if needed
 
 ---
+
+## Task 4.5 Complete: Migrate Worker Consumers
+
+### Gotchas
+
+**Settings are cached via `lru_cache`**: Tests that patch environment variables via `monkeypatch.setenv()` or `patch.dict(os.environ, ...)` must call `clear_settings_cache()` before creating worker instances. Otherwise, the cached settings from a previous test will be used instead of the patched env vars.
+
+**worker_id runtime generation**: When `worker_settings.worker_id` is None, the worker code generates an ID at runtime using either:
+- `uuid.uuid4().hex[:8]` — for module-level worker_id (backtest_worker.py, training_worker.py)
+- `f"{worker_type}-{socket.gethostname()}"` — for class __init__ (WorkerRegistration, WorkerAPIBase)
+- `f"{worker_type}-worker-{os.urandom(4).hex()}"` — for WorkerAPIBase.__init__
+
+**Keep `os` import when needed**: Files may still need `import os` for:
+- `os.getenv("KTRDR_API_URL")` — backend URL (not a WORKER_* var)
+- `os.path.exists()` — file system checks
+- `os.cpu_count()` — capability detection
+- `os.urandom()` — random ID generation
+
+**Test default port expectations changed**: All workers now use canonical default port 5003 (not 5004 for training). Tests that expected `registration.port == 5004` for training workers needed to be updated to expect 5003.
+
+### Files Migrated
+
+| File | Changes |
+|------|---------|
+| `ktrdr/workers/base.py` | `WORKER_PUBLIC_BASE_URL` → `get_worker_settings().public_base_url`, `WORKER_ID` → settings in __init__ |
+| `ktrdr/backtesting/backtest_worker.py` | `WORKER_ID` → settings, `WORKER_PORT` → settings |
+| `ktrdr/backtesting/worker_registration.py` | `WORKER_ID`, `WORKER_PORT`, `WORKER_ENDPOINT_URL` → settings |
+| `ktrdr/backtesting/remote_api.py` | `WORKER_ID` → settings |
+| `ktrdr/training/training_worker.py` | `WORKER_ID` → settings, `WORKER_PORT` → settings |
+| `ktrdr/training/worker_registration.py` | `WORKER_ID`, `WORKER_PORT`, `WORKER_ENDPOINT_URL` → settings |
+| `ktrdr/training/training_worker_api.py` | `WORKER_ID` → settings |
+
+### Added Tests
+
+`tests/unit/config/test_worker_migration.py` — verifies no `os.getenv("WORKER_*")` calls remain in worker code.
+
+### Next Task Notes (4.6: Add Worker Startup Validation)
+
+- Add `warn_deprecated_env_vars()` and `validate_all("worker")` at worker entrypoints
+- Files: `ktrdr/workers/base.py` (in `__init__` or lifespan), `ktrdr/backtesting/backtest_worker.py`, `ktrdr/training/training_worker.py`
+- Workers should fail fast on invalid config
+
+---
