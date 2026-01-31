@@ -61,3 +61,27 @@ Identical pattern to Task 4.2:
 - Check for any existing operation-related env vars in the codebase
 
 ---
+
+## Task 4.4 Complete: Create `OperationsSettings` Class
+
+### Implementation Notes
+
+New class created with prefix `KTRDR_OPS_`:
+- `cache_ttl` (float, default 1.0) — matches existing `OPERATIONS_CACHE_TTL` env var in operations_service.py
+- `max_operations` (int, default 10000) — maximum operations to track in memory
+- `cleanup_interval_seconds` (int, default 3600) — interval between cleanup runs
+- `retention_days` (int, default 7) — days to retain completed operations
+
+**Deprecated name support:** `OPERATIONS_CACHE_TTL` → `KTRDR_OPS_CACHE_TTL`
+
+### Gotchas
+
+**cache_ttl uses `ge=0` not `gt=0`**: Unlike other interval fields, cache_ttl of 0 is valid (means no caching). Used `ge=0` constraint instead of `gt=0`.
+
+### Next Task Notes (4.5: Migrate Worker Consumers)
+
+- Replace all `os.getenv("WORKER_*")` calls with `get_worker_settings().field`
+- Files: `ktrdr/workers/*.py`, `ktrdr/training/training_worker.py`, `ktrdr/backtesting/backtest_worker.py`
+- Watch for worker_id generation — settings returns None, runtime should generate if needed
+
+---

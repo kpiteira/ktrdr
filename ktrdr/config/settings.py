@@ -301,6 +301,58 @@ class OrphanDetectorSettings(BaseSettings):
     )
 
 
+class OperationsSettings(BaseSettings):
+    """Operations Service Settings.
+
+    Provides configuration for the operations tracking service with support
+    for both new (KTRDR_OPS_*) and deprecated (OPERATIONS_*) environment
+    variable names.
+
+    Environment variables (new names - preferred):
+        KTRDR_OPS_CACHE_TTL: Cache TTL in seconds for operation lookups. Default: 1.0
+        KTRDR_OPS_MAX_OPERATIONS: Maximum operations to track in memory. Default: 10000
+        KTRDR_OPS_CLEANUP_INTERVAL_SECONDS: Interval between cleanup runs. Default: 3600
+        KTRDR_OPS_RETENTION_DAYS: Days to retain completed operations. Default: 7
+
+    Deprecated names (still work, emit warnings at startup):
+        OPERATIONS_CACHE_TTL → KTRDR_OPS_CACHE_TTL
+    """
+
+    # Cache settings
+    cache_ttl: float = deprecated_field(
+        1.0,
+        "KTRDR_OPS_CACHE_TTL",
+        "OPERATIONS_CACHE_TTL",
+        ge=0,
+        description="Cache TTL in seconds for operation lookups (0 = no cache)",
+    )
+
+    # Capacity settings
+    max_operations: int = Field(
+        default=10000,
+        gt=0,
+        description="Maximum operations to track in memory",
+    )
+
+    # Cleanup settings
+    cleanup_interval_seconds: int = Field(
+        default=3600,
+        gt=0,
+        description="Interval in seconds between cleanup runs",
+    )
+    retention_days: int = Field(
+        default=7,
+        gt=0,
+        description="Days to retain completed operations",
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_OPS_",
+        env_file=".env.local",
+        extra="ignore",
+    )
+
+
 class CheckpointSettings(BaseSettings):
     """Checkpoint Settings.
 
@@ -904,6 +956,12 @@ def get_orphan_detector_settings() -> OrphanDetectorSettings:
 
 
 @lru_cache
+def get_operations_settings() -> OperationsSettings:
+    """Get operations settings with caching."""
+    return OperationsSettings()
+
+
+@lru_cache
 def get_checkpoint_settings() -> CheckpointSettings:
     """Get checkpoint settings with caching."""
     return CheckpointSettings()
@@ -975,6 +1033,7 @@ def clear_settings_cache() -> None:
     get_observability_settings.cache_clear()
     get_api_service_settings.cache_clear()
     get_orphan_detector_settings.cache_clear()
+    get_operations_settings.cache_clear()
     get_checkpoint_settings.cache_clear()
     get_db_settings.cache_clear()
     get_ib_settings.cache_clear()
@@ -991,6 +1050,7 @@ __all__ = [
     "LoggingSettings",
     "ObservabilitySettings",
     "OrphanDetectorSettings",
+    "OperationsSettings",
     "CheckpointSettings",
     "DatabaseSettings",
     "ApiServiceSettings",
@@ -1004,6 +1064,7 @@ __all__ = [
     "get_logging_settings",
     "get_observability_settings",
     "get_orphan_detector_settings",
+    "get_operations_settings",
     "get_checkpoint_settings",
     "get_db_settings",
     "get_api_service_settings",
