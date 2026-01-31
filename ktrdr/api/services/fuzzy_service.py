@@ -61,11 +61,13 @@ class FuzzyService(BaseService):
             # Create a minimal v3 configuration
             # TODO: Implement proper v3 config loading from strategy files
             self.config: dict[str, FuzzySetDefinition] = {
-                "rsi_default": FuzzySetDefinition(
-                    indicator="rsi",
-                    low={"type": "triangular", "parameters": [0, 25, 40]},
-                    neutral={"type": "triangular", "parameters": [30, 50, 70]},
-                    high={"type": "triangular", "parameters": [60, 75, 100]},
+                "rsi_default": FuzzySetDefinition.model_validate(
+                    {
+                        "indicator": "rsi",
+                        "low": {"type": "triangular", "parameters": [0, 25, 40]},
+                        "neutral": {"type": "triangular", "parameters": [30, 50, 70]},
+                        "high": {"type": "triangular", "parameters": [60, 75, 100]},
+                    }
                 )
             }
 
@@ -261,22 +263,22 @@ class FuzzyService(BaseService):
             result = self.fuzzy_engine.fuzzify(indicator, series)
 
             # Convert result to dictionary
-            fuzzified_values = {}
+            fuzzified_values: dict[str, Any] = {}
             if hasattr(result, "columns"):  # It's a DataFrame
                 for col in result.columns:
                     col_data = result[col]
                     if hasattr(col_data, "tolist"):
-                        fuzzified_values[col] = col_data.tolist()
+                        fuzzified_values[str(col)] = col_data.tolist()
                     else:
-                        fuzzified_values[col] = (
+                        fuzzified_values[str(col)] = (
                             [col_data] if not isinstance(col_data, list) else col_data
                         )
             else:  # It's already a dict
                 for key, value in result.items():
                     if hasattr(value, "tolist"):
-                        fuzzified_values[key] = value.tolist()
+                        fuzzified_values[str(key)] = value.tolist()
                     else:
-                        fuzzified_values[key] = (
+                        fuzzified_values[str(key)] = (
                             [value] if not isinstance(value, list) else value
                         )
 

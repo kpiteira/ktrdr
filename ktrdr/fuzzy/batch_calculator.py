@@ -161,16 +161,17 @@ class BatchFuzzyCalculator:
                 details={"type": type(values_series).__name__},
             )
 
-        # Check if indicator exists in fuzzy engine
-        available_indicators = self._fuzzy_engine.get_available_indicators()
-        if indicator_name not in available_indicators:
-            logger.error(f"Unknown indicator: {indicator_name}")
+        # Check if fuzzy_set_id exists in fuzzy engine
+        # Note: In v3, indicator_name parameter is actually fuzzy_set_id
+        available_fuzzy_sets = list(self._fuzzy_engine._fuzzy_sets.keys())
+        if indicator_name not in available_fuzzy_sets:
+            logger.error(f"Unknown fuzzy set: {indicator_name}")
             raise ProcessingError(
-                message=f"Unknown indicator: {indicator_name}",
-                error_code="BATCH-UnknownIndicator",
+                message=f"Unknown fuzzy set: {indicator_name}",
+                error_code="BATCH-UnknownFuzzySet",
                 details={
-                    "indicator": indicator_name,
-                    "available_indicators": available_indicators,
+                    "fuzzy_set_id": indicator_name,
+                    "available_fuzzy_sets": available_fuzzy_sets,
                 },
             )
 
@@ -222,7 +223,7 @@ class BatchFuzzyCalculator:
                 result[column_name] = membership_df[column_name]
         else:
             # membership_df is a dict for scalar inputs
-            result = membership_df  # type: ignore[assignment]
+            result = membership_df
 
         return result
 
@@ -274,10 +275,11 @@ class BatchFuzzyCalculator:
         Returns:
             Dictionary with empty Series for each fuzzy set
         """
-        fuzzy_sets = self._fuzzy_engine.get_fuzzy_sets(indicator_name)
+        # Note: In v3, indicator_name parameter is actually fuzzy_set_id
+        membership_names = self._fuzzy_engine.get_membership_names(indicator_name)
         result = {}
 
-        for set_name in fuzzy_sets:
+        for set_name in membership_names:
             output_name = f"{indicator_name}_{set_name}"
             result[output_name] = pd.Series(dtype=float, index=index)
 

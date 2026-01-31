@@ -109,6 +109,22 @@
 - Training pipeline converts legacy indicator-keyed format to fuzzy_set_id-keyed format
 - input_transform support removed — callers should pre-transform data if needed
 
-**Next Task Notes (3.6 - Update __init__.py exports):**
-- Task 3.6 may already be complete (exports updated in this task)
-- Verify `from ktrdr.fuzzy import MEMBERSHIP_REGISTRY` works
+---
+
+## Task 3.6 Complete: Update `__init__.py` exports
+
+**Verified (exports already updated in Task 3.5):**
+- `MEMBERSHIP_REGISTRY` exported from `ktrdr/fuzzy/__init__.py`
+- No v2 exports remain (no FuzzyConfig, FuzzyConfigLoader, FuzzySetConfig)
+
+**Test file created:**
+- `tests/unit/fuzzy/test_fuzzy_migration_complete.py` — M3 E2E validation tests
+
+**Type errors fixed (leftover from Task 3.5):**
+- `ktrdr/fuzzy/batch_calculator.py` — Updated to use v3 API (`_fuzzy_sets.keys()`, `get_membership_names()`)
+- `ktrdr/api/services/fuzzy_service.py` — Fixed type annotations for dict operations
+- `ktrdr/training/training_pipeline.py` — Added explicit `dict[str, Any]` type annotation
+
+**Next Task Notes (3.7 - Execute M3 E2E Test):**
+- The E2E test file is ready at `tests/unit/fuzzy/test_fuzzy_migration_complete.py`
+- All 26 tests pass, validating the full M3 success criteria

@@ -354,7 +354,7 @@ class TrainingPipeline:
             v3_config: dict[str, FuzzySetDefinition] = {}
             for indicator_name, memberships in fuzzy_configs.items():
                 # Filter out non-membership fields like "input_transform"
-                mf_data = {
+                mf_data: dict[str, Any] = {
                     k: v
                     for k, v in memberships.items()
                     if k != "input_transform" and isinstance(v, dict)
