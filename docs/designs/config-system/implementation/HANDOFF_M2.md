@@ -219,3 +219,27 @@ Migrated 4 files from `os.getenv("OTLP_ENDPOINT")` to `get_observability_setting
 - Add deprecated name mappings in `deprecation.py`
 - Already handled via `deprecated_field()` in settings (e.g., `OTLP_ENDPOINT` → `KTRDR_OTEL_OTLP_ENDPOINT`)
 - May need to check if there are other deprecated names to add
+
+---
+
+## Task 2.10 Complete: Update Deprecation Module for M2 Names
+
+### What Was Done
+
+Added `OTLP_ENDPOINT → KTRDR_OTEL_OTLP_ENDPOINT` to the `DEPRECATED_NAMES` dict. This ensures `warn_deprecated_env_vars()` emits a warning when the old `OTLP_ENDPOINT` env var is set.
+
+**Why only one mapping?** API, Auth, and Logging settings don't have deprecated names — they're new prefixes (`KTRDR_API_*`, `KTRDR_AUTH_*`, `KTRDR_LOG_*`) without legacy equivalents. Only observability had a pre-existing env var (`OTLP_ENDPOINT`).
+
+### Emergent Patterns
+
+**Two mechanisms for deprecated names:**
+1. `deprecated_field()` in settings — allows Pydantic to read from both old and new env var names
+2. `DEPRECATED_NAMES` in deprecation.py — enables startup warnings via `warn_deprecated_env_vars()`
+
+Both are needed: `deprecated_field()` makes the old name work, `DEPRECATED_NAMES` warns users to migrate.
+
+### Next Task Notes (2.11: Write Unit Tests)
+
+- Unit tests for all M2 Settings classes already exist (created in 2.1-2.4)
+- This task may just be verification that coverage is complete
+- Check `tests/unit/config/test_*_settings.py` files exist

@@ -5,8 +5,9 @@ This module provides utilities to detect and warn about deprecated
 environment variable names that are still supported for backward
 compatibility.
 
-For M1, only DB_* → KTRDR_DB_* mappings are included.
-More mappings will be added in later milestones.
+Deprecated name mappings:
+- M1: DB_* → KTRDR_DB_* (database settings)
+- M2: OTLP_ENDPOINT → KTRDR_OTEL_OTLP_ENDPOINT (observability)
 """
 
 import os
@@ -14,14 +15,16 @@ import warnings
 
 # Mapping of deprecated env var names to their new names.
 # The deprecated names are still supported but emit warnings at startup.
-# For M1, only database-related mappings are included.
 DEPRECATED_NAMES: dict[str, str] = {
+    # M1: Database settings
     "DB_HOST": "KTRDR_DB_HOST",
     "DB_PORT": "KTRDR_DB_PORT",
     "DB_NAME": "KTRDR_DB_NAME",
     "DB_USER": "KTRDR_DB_USER",
     "DB_PASSWORD": "KTRDR_DB_PASSWORD",
     "DB_ECHO": "KTRDR_DB_ECHO",
+    # M2: Observability settings
+    "OTLP_ENDPOINT": "KTRDR_OTEL_OTLP_ENDPOINT",
 }
 
 
