@@ -181,7 +181,9 @@ Claude shares the draft and asks:
 
 ### Step 4: Draft Architecture Document
 
-With the design settled, Claude drafts the architecture:
+With the design settled, Claude drafts the architecture.
+
+**Remember:** Use the Rosetta stone approach — diagrams for humans, structured tables/lists for implementation planning. See "What Makes a Good Architecture Document" above.
 
 ```markdown
 # [Feature Name]: Architecture
@@ -190,80 +192,86 @@ With the design settled, Claude drafts the architecture:
 
 [1-2 paragraph summary of the technical approach]
 
+## Component Diagram
+
+[ASCII diagram showing major components and their relationships]
+
+### Component Relationships (Structured Summary)
+
+| Component | Type | Depends On | Used By |
+|-----------|------|------------|---------|
+| [Component 1] | [Class/Module/Service] | [Dependencies] | [Consumers] |
+| [Component 2] | ... | ... | ... |
+
 ## Components
 
 ### [Component 1]
-**Responsibility:** [What it does]
 **Location:** [File/module path]
-**Dependencies:** [What it needs]
+**Purpose:** [What it does — 1-2 sentences]
+**Key behaviors:** [Bullet list of main responsibilities]
+
+**Interface** (illustrative):
+[Method signatures only — no implementations]
 
 ### [Component 2]
 ...
 
 ## Data Flow
 
-[Description or diagram of how data moves through the system]
+[ASCII diagram showing how data moves through the system]
 
-```
-[ASCII diagram if helpful]
-```
-
-## API Contracts
-
-### [Endpoint/Interface 1]
-```
-[Method] [Path]
-Request: [shape]
-Response: [shape]
-Errors: [possible errors]
-```
-
-### [Endpoint/Interface 2]
-...
+**Flow Steps (Structured Summary):**
+1. [Step 1]
+2. [Step 2]
+3. [Step 3]
 
 ## State Management
 
-### [State 1]
-**Where:** [Storage location]
-**Shape:** [Data structure]
-**Transitions:** [How it changes]
-
-### [State 2]
-...
+| State | Where | Lifecycle |
+|-------|-------|-----------|
+| [State 1] | [Location] | [When created, when destroyed] |
+| [State 2] | ... | ... |
 
 ## Error Handling
 
-### [Error Category 1]
-**When:** [Condition]
-**Response:** [How system handles it]
-**User experience:** [What user sees]
-
-### [Error Category 2]
-...
+| Situation | Error Type | Message/Behavior |
+|-----------|------------|------------------|
+| [Condition 1] | [Exception] | [What happens] |
+| [Condition 2] | ... | ... |
 
 ## Integration Points
 
-How this feature connects to existing systems:
-- [Integration 1]: [Description]
-- [Integration 2]: [Description]
+| Component | Current State | Change Needed |
+|-----------|---------------|---------------|
+| [Existing component 1] | [How it works now] | [What changes] |
+| [Existing component 2] | ... | ... |
 
-## Migration / Rollout
+## Migration Considerations
 
-[If applicable: How we get from current state to new state]
+[Brief notes on what existing code/data needs to change — NOT a phased rollout plan. Implementation planning handles the "how to get there."]
 
-## Verification Strategy
+## Verification Approach
 
-For each component, specify how its correctness will be verified beyond unit tests.
-This prevents "components work in isolation but aren't connected" bugs.
+| Component | How to Verify |
+|-----------|---------------|
+| [Component 1] | [Test strategy] |
+| [Component 2] | ... |
 
-### [Component 1]
-**Type:** [Persistence | Wiring/DI | State Machine | Background | etc.]
-**Unit Test Focus:** [What unit tests verify]
-**Integration Test:** [What integration tests verify — wiring, DB persistence, etc.]
-**Smoke Test:** [Quick manual verification command]
+## Implementation Planning Summary
 
-### [Component 2]
-...
+[Structured summary for handoff to implementation planning]
+
+### New Components to Create
+| Component | Location | Purpose |
+|-----------|----------|---------|
+
+### Existing Components to Modify
+| Component | Location | Changes Required |
+|-----------|----------|------------------|
+
+### Files to Delete (if any)
+| File | Reason |
+|------|--------|
 ```
 
 ---
@@ -304,6 +312,64 @@ docs/designs/
 ```
 
 Or wherever your project organizes design docs.
+
+---
+
+## What Makes a Good Architecture Document
+
+### Architecture vs Implementation Planning
+
+**Architecture describes the finished system** — what components exist, how they interact, where state lives, what can go wrong.
+
+**Implementation planning describes how to build it** — phases, task breakdown, ordering, dependencies.
+
+Keep them separate. The architecture doc should describe the system as it will be when complete, not the steps to get there.
+
+### The Rosetta Stone Approach
+
+Architecture docs serve two audiences with different needs:
+
+**For humans:** Diagrams clarify relationships and flows at a glance. Use ASCII diagrams for:
+- Component relationships (box-and-arrow)
+- Data/control flow sequences
+- State transitions
+
+**For LLM-based implementation planning:** Structured lists and tables are more parseable. Accompany each diagram with:
+- A table or list capturing the same relationships
+- Numbered steps for flows
+- Structured summaries for implementation planning handoff
+
+Example pattern:
+```
+[ASCII diagram showing component relationships]
+
+### Component Relationships (Structured Summary)
+
+| Component | Depends On | Used By |
+|-----------|------------|---------|
+| A         | None       | B, C    |
+| B         | A          | D       |
+```
+
+### Code in Architecture Docs
+
+**YES:**
+- Interface signatures (method names, parameters, return types)
+- Illustrative snippets (3-5 lines max) showing patterns
+
+**NO:**
+- Full method implementations
+- "Pseudocode" that could be copy-pasted as working code
+- Step-by-step implementation logic
+
+Test: If someone could copy-paste it as working code, it's too much.
+
+### Level of Detail
+
+The goal: enough detail that implementation planning can break it into tasks, not so much that you've done the implementation.
+
+Good architecture doc → someone can create a task list from it
+Over-detailed doc → someone could skip planning and just copy-paste
 
 ---
 
