@@ -625,6 +625,102 @@ class IBHostServiceSettings(BaseSettings):
         return f"{self.base_url}/health/detailed"
 
 
+class TrainingHostServiceSettings(BaseSettings):
+    """Training Host Service Settings.
+
+    Provides Training Host Service connection configuration with support for both
+    new (KTRDR_TRAINING_HOST_*) and deprecated (USE_TRAINING_HOST_SERVICE)
+    environment variable names.
+
+    The Training Host Service is a native process that provides GPU-accelerated
+    model training. The backend proxies training requests through this service.
+
+    Environment variables (new names - preferred):
+        KTRDR_TRAINING_HOST_HOST: Training host service host. Default: localhost
+        KTRDR_TRAINING_HOST_PORT: Training host service port. Default: 5002
+        KTRDR_TRAINING_HOST_ENABLED: Enable training host service. Default: false
+        KTRDR_TRAINING_HOST_TIMEOUT: Request timeout in seconds. Default: 30.0
+        KTRDR_TRAINING_HOST_HEALTH_CHECK_INTERVAL: Health check interval. Default: 10.0
+        KTRDR_TRAINING_HOST_MAX_RETRIES: Max retry attempts. Default: 3
+        KTRDR_TRAINING_HOST_RETRY_DELAY: Delay between retries. Default: 1.0
+
+    Deprecated names (still work, emit warnings at startup):
+        USE_TRAINING_HOST_SERVICE → KTRDR_TRAINING_HOST_ENABLED
+    """
+
+    # Connection settings
+    host: str = Field(
+        default="localhost",
+        description="Training host service hostname",
+    )
+    port: int = Field(
+        default=5002,
+        ge=1,
+        le=65535,
+        description="Training host service port",
+    )
+    enabled: bool = deprecated_field(
+        False,
+        "KTRDR_TRAINING_HOST_ENABLED",
+        "USE_TRAINING_HOST_SERVICE",
+        description="Whether training host service is enabled",
+    )
+
+    # Request settings
+    timeout: float = Field(
+        default=30.0,
+        gt=0,
+        description="Default timeout for requests in seconds",
+    )
+    health_check_interval: float = Field(
+        default=10.0,
+        gt=0,
+        description="Seconds between health checks",
+    )
+    max_retries: int = Field(
+        default=3,
+        ge=0,
+        description="Maximum retry attempts for failed requests",
+    )
+    retry_delay: float = Field(
+        default=1.0,
+        ge=0,
+        description="Delay between retries in seconds",
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_TRAINING_HOST_",
+        env_file=".env.local",
+        extra="ignore",
+    )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def base_url(self) -> str:
+        """Computed base URL from host and port.
+
+        Returns:
+            Base URL for the training host service (e.g., http://localhost:5002)
+        """
+        return f"http://{self.host}:{self.port}"
+
+    def get_health_url(self) -> str:
+        """Get the health check endpoint URL.
+
+        Returns:
+            Health endpoint URL (e.g., http://localhost:5002/health)
+        """
+        return f"{self.base_url}/health"
+
+    def get_detailed_health_url(self) -> str:
+        """Get the detailed health check endpoint URL.
+
+        Returns:
+            Detailed health endpoint URL (e.g., http://localhost:5002/health/detailed)
+        """
+        return f"{self.base_url}/health/detailed"
+
+
 # Cache settings to avoid repeated disk/env access
 @lru_cache
 def get_api_settings() -> APISettings:
@@ -680,6 +776,12 @@ def get_ib_host_service_settings() -> IBHostServiceSettings:
     return IBHostServiceSettings()
 
 
+@lru_cache
+def get_training_host_service_settings() -> TrainingHostServiceSettings:
+    """Get training host service settings with caching."""
+    return TrainingHostServiceSettings()
+
+
 # Compatibility aliases for existing code
 CLISettings = ApiServiceSettings  # CLI uses API service settings for client connections
 
@@ -702,6 +804,7 @@ def clear_settings_cache() -> None:
     get_db_settings.cache_clear()
     get_ib_settings.cache_clear()
     get_ib_host_service_settings.cache_clear()
+    get_training_host_service_settings.cache_clear()
 
 
 # Export settings classes and getters
@@ -717,6 +820,7 @@ __all__ = [
     "ApiServiceSettings",
     "IBSettings",
     "IBHostServiceSettings",
+    "TrainingHostServiceSettings",
     # Cached getters
     "get_api_settings",
     "get_auth_settings",
@@ -728,6 +832,7 @@ __all__ = [
     "get_api_service_settings",
     "get_ib_settings",
     "get_ib_host_service_settings",
+    "get_training_host_service_settings",
     # Utilities
     "clear_settings_cache",
     "deprecated_field",

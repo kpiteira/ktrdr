@@ -49,3 +49,24 @@
 - Default port is likely 5002 based on the pattern
 
 ---
+
+## Task 3.3 Complete: Create `TrainingHostServiceSettings` Class
+
+### Gotchas
+
+**No existing TrainingHostServiceSettings class**: Unlike `IbHostServiceSettings` in `host_services.py`, there was no existing `TrainingHostServiceSettings` class to migrate from. The comment in `host_services.py` states "Training and backtesting now use distributed workers (WorkerRegistry). Workers register themselves on startup - no host service configuration needed." However, the milestone explicitly requires this class for consistency with the config system design.
+
+**Deprecated env var is `USE_TRAINING_HOST_SERVICE`**: Found in multiple places across the codebase (especially in `specification/current/gpu-acceleration-implementation-plan.md` and `docs/training-host-service-fix-plan.md`). The `TRAINING_HOST_SERVICE_URL` env var was also used historically but is now replaced by separate host/port fields.
+
+### Emergent Patterns
+
+**Consistent structure with IBHostServiceSettings**: Used identical structure - same fields (host, port, enabled, timeout, health_check_interval, max_retries, retry_delay), same computed `base_url` property, same helper methods (`get_health_url()`, `get_detailed_health_url()`). The only difference is default port (5002 vs 5001) and env prefix.
+
+### Next Task Notes (3.4: Migrate IB Consumers)
+
+- Find all `IbConfig()` instantiations and replace with `get_ib_settings()`
+- Find direct `os.getenv("IB_*")` calls and replace
+- Delete `ktrdr/config/ib_config.py` after migration
+- Check imports in `ktrdr/services/ib/*.py` and other IB-related files
+
+---
