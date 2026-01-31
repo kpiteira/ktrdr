@@ -8,11 +8,11 @@ a security has traded at throughout the day, weighted by volume.
 from typing import Union
 
 import pandas as pd
+from pydantic import Field
 
 from ktrdr import get_logger
 from ktrdr.errors import DataError
 from ktrdr.indicators.base_indicator import BaseIndicator
-from ktrdr.indicators.schemas import VWAP_SCHEMA
 
 logger = get_logger(__name__)
 
@@ -62,25 +62,24 @@ class VWAPIndicator(BaseIndicator):
     Returns Series with VWAP values
     """
 
-    def __init__(self, period: int = 20, use_typical_price: bool = True):
-        """
-        Initialize VWAP indicator.
+    class Params(BaseIndicator.Params):
+        """VWAP parameter schema with validation."""
 
-        Args:
-            period: Period for rolling VWAP (default: 20, use 0 for cumulative)
-            use_typical_price: Use typical price (H+L+C)/3 vs close price (default: True)
-        """
-        # Call parent constructor with display_as_overlay=True (price overlay)
-        super().__init__(
-            name="VWAP",
-            display_as_overlay=True,
-            period=period,
-            use_typical_price=use_typical_price,
+        period: int = Field(
+            default=20,
+            ge=0,
+            le=200,
+            strict=True,
+            description="Period for rolling VWAP (0 for cumulative)",
+        )
+        use_typical_price: bool = Field(
+            default=True,
+            strict=True,
+            description="Use typical price (H+L+C)/3 vs close price",
         )
 
-    def _validate_params(self, params):
-        """Validate parameters using schema."""
-        return VWAP_SCHEMA.validate(params)
+    # VWAP is displayed as overlay on price charts
+    display_as_overlay = True
 
     def compute(self, data: pd.DataFrame) -> Union[pd.Series, pd.DataFrame]:
         """
@@ -95,10 +94,9 @@ class VWAPIndicator(BaseIndicator):
         Raises:
             DataError: If required columns are missing or insufficient data
         """
-        # Validate parameters
-        validated_params = self._validate_params(self.params)
-        period = validated_params["period"]
-        use_typical_price = validated_params["use_typical_price"]
+        # Get parameters from self.params (validated by BaseIndicator)
+        period: int = self.params["period"]
+        use_typical_price: bool = self.params["use_typical_price"]
 
         # Required columns
         required_columns = ["volume"]

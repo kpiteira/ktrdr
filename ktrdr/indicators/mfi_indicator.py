@@ -17,9 +17,8 @@ The MFI oscillates between 0 and 100, with values above 80 typically indicating
 overbought conditions and values below 20 indicating oversold conditions.
 """
 
-from typing import Any
-
 import pandas as pd
+from pydantic import Field
 
 from ktrdr import get_logger
 from ktrdr.errors import DataError
@@ -39,54 +38,19 @@ class MFIIndicator(BaseIndicator):
         period: Period for the MFI calculation (default: 14)
     """
 
-    def __init__(self, period: int = 14):
-        """
-        Initialize the MFI indicator.
+    class Params(BaseIndicator.Params):
+        """MFI parameter schema with validation."""
 
-        Args:
-            period: Period for the MFI calculation (must be >= 1)
+        period: int = Field(
+            default=14,
+            ge=1,
+            le=100,
+            strict=True,
+            description="Period for MFI calculation",
+        )
 
-        Raises:
-            DataError: If parameters are invalid
-        """
-        # Initialize base class with parameters
-        super().__init__(name="MFI", period=period)
-
-        logger.debug(f"Initialized MFI indicator with period={period}")
-
-    def _validate_params(self, params: dict[str, Any]) -> dict[str, Any]:
-        """
-        Validate MFI parameters.
-
-        Args:
-            params: Dictionary of parameters to validate
-
-        Returns:
-            Dictionary of validated parameters
-
-        Raises:
-            DataError: If any parameter is invalid
-        """
-        validated_params = {}
-
-        # Validate period
-        period = params.get("period", 14)
-        if not isinstance(period, int) or period < 1:
-            raise DataError(
-                message="MFI period must be an integer >= 1",
-                error_code="INDICATOR-InvalidParameter",
-                details={"parameter": "period", "value": period, "minimum": 1},
-            )
-
-        if period > 100:
-            raise DataError(
-                message="MFI period must be <= 100",
-                error_code="INDICATOR-InvalidParameter",
-                details={"parameter": "period", "value": period, "maximum": 100},
-            )
-        validated_params["period"] = period
-
-        return validated_params
+    # MFI is displayed in a separate panel (oscillator)
+    display_as_overlay = False
 
     def _validate_data(self, data: pd.DataFrame):
         """

@@ -154,3 +154,51 @@ Same pattern as previous tasks:
 Task 2.4 migrates volume indicators (5): obv, vwap, mfi, cmf, ad_line.
 
 Follow the same pattern. Watch for existing tests that check specific error messages.
+
+---
+
+## Task 2.4 Complete: Add Params to volume indicators (5)
+
+### Implementation Notes
+
+Migrated all 5 volume indicators to the Params pattern:
+- OBV, VWAP, MFI, CMF, ADLine
+
+### Pattern Applied
+
+Same pattern as previous tasks:
+1. Added `class Params(BaseIndicator.Params)` with Field definitions
+2. Removed explicit `__init__` method
+3. Removed `_validate_params` method and schema imports
+4. Set `display_as_overlay` as class attribute
+5. Updated `compute()` to read from `self.params["field"]` directly
+
+### Gotchas
+
+**OBV has no parameters**: OBV is unique - it has no configurable parameters. Its Params class is empty (`pass`). Extra kwargs passed to constructor are ignored.
+
+**Keep `typing.Any` import**: CMF and ADLine have `get_signals()` and `get_analysis()` methods that return `dict[str, Any]`, so the `Any` import must be preserved.
+
+**Old tests check error message text**: Tests in `test_mfi_indicator.py` and `test_vwap_indicator.py` checked for specific error message text like `"period must be"`. Updated to check `error_code == "INDICATOR-InvalidParameters"` instead.
+
+### Key Changes
+
+| Indicator | Params Fields | display_as_overlay | Notes |
+|-----------|--------------|-------------------|-------|
+| OBV | (none) | False | No configurable params |
+| VWAP | period (0-200), use_typical_price | True | period=0 for cumulative |
+| MFI | period (1-100) | False | |
+| CMF | period (2-500) | False | Multi-output |
+| ADLine | use_sma_smoothing, smoothing_period (2-200) | False | Multi-output |
+
+### Tests Added/Updated
+
+- `tests/unit/indicators/test_volume_params_migration.py`: New test file with 45 tests
+- `tests/unit/indicators/test_mfi_indicator.py`: Updated validation tests to use error_code
+- `tests/unit/indicators/test_vwap_indicator.py`: Updated validation tests to use error_code
+
+### Next Task Notes
+
+Task 2.5 migrates remaining indicators (13): volume_ratio, distance_from_ma, squeeze_intensity, zigzag, plus others.
+
+Verify the full list by cross-referencing with indicator_factory.py to ensure all 39 are covered.

@@ -12,6 +12,7 @@ Author: KTRDR
 from typing import Any
 
 import pandas as pd
+from pydantic import Field
 
 from ktrdr import get_logger
 from ktrdr.errors import DataError
@@ -46,6 +47,20 @@ class CMFIndicator(BaseIndicator):
     - period: 21 (most common), 10, 14, 20
     """
 
+    class Params(BaseIndicator.Params):
+        """CMF parameter schema with validation."""
+
+        period: int = Field(
+            default=21,
+            ge=2,
+            le=500,
+            strict=True,
+            description="Period for CMF calculation",
+        )
+
+    # CMF is displayed in a separate panel (oscillator)
+    display_as_overlay = False
+
     @classmethod
     def is_multi_output(cls) -> bool:
         """CMF produces multiple output columns."""
@@ -64,31 +79,6 @@ class CMFIndicator(BaseIndicator):
             "above_zero",
             "below_zero",
         ]
-
-    def __init__(self, period: int = 21):
-        """
-        Initialize CMF indicator.
-
-        Args:
-            period: Period for CMF calculation (default: 21)
-        """
-        # Call parent constructor - CMF is typically displayed in separate panel
-        super().__init__(name="CMF", display_as_overlay=False, period=period)
-
-    def _validate_params(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Validate indicator parameters."""
-        period = params.get("period", 21)
-
-        if not isinstance(period, int) or period < 1:
-            raise ValueError("period must be a positive integer")
-
-        if period < 2:
-            raise ValueError("period must be at least 2")
-
-        if period > 500:
-            raise ValueError("period should not exceed 500 for practical purposes")
-
-        return {"period": period}
 
     def compute(self, data: pd.DataFrame) -> pd.DataFrame:
         """

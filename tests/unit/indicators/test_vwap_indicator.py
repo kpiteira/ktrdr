@@ -149,19 +149,19 @@ class TestVWAPIndicator:
         # Negative period should raise error
         with pytest.raises(DataError) as exc_info:
             VWAPIndicator(period=-1)
-        assert "period" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
         # Period too large should raise error
         with pytest.raises(DataError) as exc_info:
             VWAPIndicator(period=201)
-        assert "period" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_use_typical_price(self):
         """Test parameter validation for use_typical_price."""
         # Invalid type should raise error
         with pytest.raises(DataError) as exc_info:
             VWAPIndicator(use_typical_price="invalid")
-        assert "use_typical_price" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_missing_ohlcv_data(self):
         """Test VWAP with missing required OHLCV columns."""
