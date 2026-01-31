@@ -60,10 +60,13 @@ class APISettings(BaseSettings):
         KTRDR_API_PORT: Port to bind. Default: 8000
         KTRDR_API_ENVIRONMENT: Deployment environment (development/staging/production)
         KTRDR_API_LOG_LEVEL: Log level (DEBUG/INFO/WARNING/ERROR/CRITICAL)
-        KTRDR_API_CORS_ORIGINS: Comma-separated list of allowed origins
+        KTRDR_API_CORS_ORIGINS: JSON array of allowed origins
+            (e.g. '["http://localhost:3000","http://localhost:8080"]')
         KTRDR_API_CORS_ALLOW_CREDENTIALS: Allow credentials for CORS
-        KTRDR_API_CORS_ALLOW_METHODS: Comma-separated list of allowed methods
-        KTRDR_API_CORS_ALLOW_HEADERS: Comma-separated list of allowed headers
+        KTRDR_API_CORS_ALLOW_METHODS: JSON array of allowed HTTP methods
+            (e.g. '["GET","POST","OPTIONS"]')
+        KTRDR_API_CORS_ALLOW_HEADERS: JSON array of allowed HTTP headers
+            (e.g. '["Authorization","Content-Type"]')
         KTRDR_API_CORS_MAX_AGE: Max age for CORS preflight cache (seconds)
     """
 

@@ -4,7 +4,7 @@ Unit tests for APISettings configuration.
 Tests verify:
 - APISettings loads defaults correctly
 - KTRDR_API_* env vars override defaults
-- CORS settings parse comma-separated strings
+- CORS settings parse JSON arrays from environment variables
 - Environment and log_level validation works
 - get_api_settings() caching works
 """
