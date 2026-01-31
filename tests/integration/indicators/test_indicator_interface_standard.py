@@ -1,7 +1,7 @@
 """
 Integration test for indicator interface standard.
 
-This test verifies that ALL registered indicators in BUILT_IN_INDICATORS
+This test verifies that ALL registered indicators in INDICATOR_REGISTRY
 follow the M1 interface standard:
 - Multi-output indicators must have get_output_names() returning non-empty list
 - Single-output indicators must have get_output_names() returning empty list
@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from ktrdr.indicators.indicator_factory import BUILT_IN_INDICATORS
+from ktrdr.indicators.base_indicator import INDICATOR_REGISTRY
 
 
 def create_sample_ohlcv(rows: int = 100) -> pd.DataFrame:
@@ -65,12 +65,15 @@ def test_all_indicators_follow_interface_standard():
     - Single-output indicators have empty output names
     - Primary output matches first output name
     """
-    # Get all unique indicator classes from factory registry
+    # Get all unique indicator classes from registry (list_types returns canonical names)
     tested = set()
     failed_indicators = []
 
-    for indicator_type, indicator_class in BUILT_IN_INDICATORS.items():
-        # Skip aliases (same class, different name)
+    for indicator_type in INDICATOR_REGISTRY.list_types():
+        indicator_class = INDICATOR_REGISTRY.get(indicator_type)
+        if indicator_class is None:
+            continue
+        # Skip already-tested classes (registry only returns canonical names)
         if indicator_class in tested:
             continue
         tested.add(indicator_class)
@@ -121,7 +124,10 @@ def test_all_indicators_compute_without_error():
     tested = set()
     failed_indicators = []
 
-    for indicator_type, indicator_class in BUILT_IN_INDICATORS.items():
+    for indicator_type in INDICATOR_REGISTRY.list_types():
+        indicator_class = INDICATOR_REGISTRY.get(indicator_type)
+        if indicator_class is None:
+            continue
         if indicator_class in tested:
             continue
         tested.add(indicator_class)

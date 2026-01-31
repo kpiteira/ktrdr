@@ -329,3 +329,42 @@ Task 2.8 deletes indicator_factory.py and schemas.py. Before deleting, verify no
 ```bash
 git grep -l "BUILT_IN_INDICATORS" -- "*.py" | grep -v __pycache__ | grep -v indicator_factory.py
 ```
+
+---
+
+## Task 2.8 Complete: Delete indicator_factory.py and schemas.py
+
+### Implementation Notes
+
+Deleted the legacy indicator factory and schemas files. Updated all remaining references to use INDICATOR_REGISTRY.
+
+### Files Changed
+
+**Deleted:**
+- `ktrdr/indicators/indicator_factory.py`
+- `ktrdr/indicators/schemas.py`
+
+**Updated to use INDICATOR_REGISTRY:**
+- `ktrdr/api/endpoints/strategies.py`: Replaced BUILT_IN_INDICATORS with INDICATOR_REGISTRY
+- `ktrdr/api/services/indicator_service.py`: Updated to iterate over registry types
+
+**Tests updated:**
+- `tests/integration/indicators/test_indicator_interface_standard.py`: Uses INDICATOR_REGISTRY
+- `tests/unit/indicators/test_atr_indicator.py`: Removed schema import, updated tests
+- `tests/unit/indicators/test_bollinger_bands_indicator.py`: Removed schema import
+- `tests/unit/indicators/test_obv_indicator.py`: Removed schema import, updated tests
+- `tests/unit/indicators/test_stochastic_indicator.py`: Removed schema import, updated tests
+- `tests/unit/indicators/test_williams_r_indicator.py`: Removed schema import, updated tests
+- `tests/unit/indicators/test_parameter_schema.py`: Removed schema tests (kept ParameterDefinition tests)
+
+### Gotchas
+
+**Test class naming**: Schema validation test classes were renamed from `TestXxxSchemaValidation` to `TestXxxParamsValidation` to reflect the new validation pattern.
+
+**Error codes changed**: Old schemas used specific error codes like `PARAM-BelowMinimum`. New Params validation uses `INDICATOR-InvalidParameters`. Tests updated accordingly.
+
+**parameter_schema.py still exists**: The ParameterDefinition and ParameterConstraint classes in `parameter_schema.py` are still available as utilities, though the ParameterSchema class is no longer used.
+
+### Next Task Notes
+
+Task 2.9 executes the M2 E2E test to verify all 31 indicators are registered and the factory/schemas files are deleted.

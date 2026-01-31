@@ -21,9 +21,9 @@ from ktrdr.api.models.indicators import (
 from ktrdr.api.services.base import BaseService
 from ktrdr.data.repository import DataRepository
 from ktrdr.errors import ConfigurationError, DataError, ProcessingError
+from ktrdr.indicators.base_indicator import INDICATOR_REGISTRY
 from ktrdr.indicators.categories import get_indicator_category
 from ktrdr.indicators.indicator_engine import IndicatorEngine
-from ktrdr.indicators.indicator_factory import BUILT_IN_INDICATORS
 from ktrdr.monitoring.service_telemetry import trace_service_method
 
 # Create module-level logger
@@ -59,13 +59,10 @@ class IndicatorService(BaseService):
         try:
             indicators: list[IndicatorMetadata] = []
 
-            # Process built-in indicators
-            for id_name, indicator_class in BUILT_IN_INDICATORS.items():
-                # Skip aliases (shorter names for the same indicator)
-                if (
-                    id_name != indicator_class.__name__
-                    and id_name in BUILT_IN_INDICATORS
-                ):
+            # Process registered indicators (list_types returns canonical names only)
+            for indicator_name in INDICATOR_REGISTRY.list_types():
+                indicator_class = INDICATOR_REGISTRY.get(indicator_name)
+                if indicator_class is None:
                     continue
 
                 # Create a temporary instance to get default parameters
@@ -167,7 +164,7 @@ class IndicatorService(BaseService):
 
                 except Exception as e:
                     logger.warning(
-                        f"Failed to extract metadata for indicator {id_name}: {str(e)}"
+                        f"Failed to extract metadata for indicator {indicator_name}: {str(e)}"
                     )
 
             logger.info(f"Retrieved metadata for {len(indicators)} indicators")
@@ -252,7 +249,7 @@ class IndicatorService(BaseService):
             indicator_dict: dict[str, dict] = {}
             for indicator_config in request.indicators:
                 # Verify indicator type is known
-                if indicator_config.id not in BUILT_IN_INDICATORS:
+                if INDICATOR_REGISTRY.get(indicator_config.id) is None:
                     raise ConfigurationError(
                         message=f"Unknown indicator: {indicator_config.id}",
                         error_code="CONFIG-UnknownIndicator",
@@ -358,10 +355,8 @@ class IndicatorService(BaseService):
         """
         try:
             # Check available indicators
-            indicator_count = len(BUILT_IN_INDICATORS)
-
-            # Get a list of indicator names
-            indicator_names = list(BUILT_IN_INDICATORS.keys())
+            indicator_names = INDICATOR_REGISTRY.list_types()
+            indicator_count = len(indicator_names)
 
             return {
                 "status": "healthy",

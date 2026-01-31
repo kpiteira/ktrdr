@@ -12,7 +12,6 @@ import pytest
 
 from ktrdr.errors import DataError
 from ktrdr.indicators.bollinger_bands_indicator import BollingerBandsIndicator
-from ktrdr.indicators.schemas import BOLLINGER_BANDS_SCHEMA
 
 
 class TestBollingerBandsIndicator:
@@ -324,17 +323,17 @@ class TestBollingerBandsIndicator:
         with pytest.raises(DataError, match="Insufficient data"):
             bb.compute(data)
 
-    def test_schema_integration(self):
-        """Test integration with parameter schema system."""
-        # Test that the schema is properly defined
-        assert BOLLINGER_BANDS_SCHEMA.name == "BollingerBands"
-        assert len(BOLLINGER_BANDS_SCHEMA.parameters) == 3
+    def test_params_class_structure(self):
+        """Test integration with Params class structure."""
+        # Test that the Params class is properly defined
+        from ktrdr.indicators.bollinger_bands_indicator import BollingerBandsIndicator
 
-        # Test parameter names (parameters is a dict)
-        param_names = list(BOLLINGER_BANDS_SCHEMA.parameters.keys())
-        assert "period" in param_names
-        assert "multiplier" in param_names
-        assert "source" in param_names
+        # Test that Params fields are accessible via model_fields
+        params_class = BollingerBandsIndicator.Params
+        field_names = list(params_class.model_fields.keys())
+        assert "period" in field_names
+        assert "multiplier" in field_names
+        assert "source" in field_names
 
     def test_with_real_market_data_pattern(self):
         """Test with realistic market data patterns."""

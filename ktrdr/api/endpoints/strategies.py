@@ -56,7 +56,7 @@ from pydantic import BaseModel
 
 from ktrdr import get_logger
 from ktrdr.errors import ConfigurationError
-from ktrdr.indicators.indicator_factory import BUILT_IN_INDICATORS
+from ktrdr.indicators.base_indicator import INDICATOR_REGISTRY
 from ktrdr.training.model_storage import ModelStorage
 
 logger = get_logger(__name__)
@@ -426,7 +426,7 @@ async def validate_strategy(strategy_name: str) -> StrategyValidationResponse:
         issues = _validate_strategy_config(config, strategy_name)
 
         # Get available indicators for reference
-        available_indicators = sorted(set(BUILT_IN_INDICATORS.keys()))
+        available_indicators = sorted(INDICATOR_REGISTRY.list_types())
 
         # Determine if validation passed
         has_errors = any(issue.severity == "error" for issue in issues)
@@ -477,7 +477,7 @@ async def validate_strategy(strategy_name: str) -> StrategyValidationResponse:
                     details={"error": str(e)},
                 )
             ],
-            available_indicators=sorted(set(BUILT_IN_INDICATORS.keys())),
+            available_indicators=sorted(INDICATOR_REGISTRY.list_types()),
             message="Validation failed due to system error",
         )
 
