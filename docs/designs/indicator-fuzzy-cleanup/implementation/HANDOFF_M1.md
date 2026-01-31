@@ -65,9 +65,25 @@ gain: pd.Series = delta.copy()  # Explicit annotation fixes mypy
 - `self.period` (new style, direct attribute)
 - `self.params["period"]` (old style, dict access)
 
-### Next Task Notes (1.4)
+---
 
-Task 1.4 updates IndicatorEngine with registry fallback. The engine should:
-1. Try `INDICATOR_REGISTRY.get(definition.type)` first
-2. Fall back to `BUILT_IN_INDICATORS` for non-migrated indicators
-3. Combine available types from both sources in error messages
+## Task 1.4 Complete: Update IndicatorEngine with registry fallback
+
+### Implementation Notes
+
+- Modified `_create_indicator()` in `indicator_engine.py` to try `INDICATOR_REGISTRY.get()` first
+- Falls back to `BUILT_IN_INDICATORS.get()` for non-migrated indicators
+- Error messages combine available types from both registry and fallback
+
+### Key Pattern
+
+```python
+# Try registry first, then fallback
+indicator_class = INDICATOR_REGISTRY.get(definition.type)
+if indicator_class is None:
+    indicator_class = BUILT_IN_INDICATORS.get(definition.type.lower())
+```
+
+### Next Task Notes (1.5)
+
+Task 1.5 exports `INDICATOR_REGISTRY` from `ktrdr/indicators/__init__.py` so `from ktrdr.indicators import INDICATOR_REGISTRY` works.
