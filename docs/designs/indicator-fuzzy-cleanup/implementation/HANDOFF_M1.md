@@ -94,6 +94,38 @@ if indicator_class is None:
 - Added `INDICATOR_REGISTRY` to `__all__` list
 - Now `from ktrdr.indicators import INDICATOR_REGISTRY` works
 
-### Next Task Notes (1.6)
+---
 
-Task 1.6 is the final M1 validation task — run the E2E test to confirm everything works end-to-end.
+## Task 1.6 Complete: M1 E2E Validation
+
+### Validation Results
+
+All E2E success criteria passed:
+- ✓ INDICATOR_REGISTRY exists with get, list_types, get_params_schema methods
+- ✓ 'rsi' in list_types()
+- ✓ All case variants (RSI, rsi, RSIIndicator, rsiindicator) resolve to RSIIndicator
+- ✓ get_params_schema('rsi') returns Pydantic model with period, source fields
+- ✓ RSI() with defaults creates instance with period=14, source='close'
+- ✓ RSI(period=-1) raises DataError with error_code
+- ✓ IndicatorEngine creates RSI for all type name variants
+- ✓ Engine.compute() produces valid RSI column
+
+### Quality Gates
+
+- ✓ `make test-unit` — 4513 passed
+- ✓ `make quality` — All checks passed
+
+---
+
+## M1 Complete: Registry Foundation
+
+**Summary:** TypeRegistry pattern proven end-to-end with RSI indicator.
+
+**Key deliverables:**
+1. `TypeRegistry[T]` generic class in `ktrdr/core/type_registry.py`
+2. `INDICATOR_REGISTRY` with auto-registration via `__init_subclass__`
+3. RSI migrated to Params-based validation
+4. IndicatorEngine uses registry-first lookup
+5. Package exports INDICATOR_REGISTRY
+
+**Ready for M2:** Migrate remaining indicators to Params pattern.
