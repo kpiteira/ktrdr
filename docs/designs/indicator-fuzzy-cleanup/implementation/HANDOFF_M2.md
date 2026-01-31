@@ -293,3 +293,39 @@ from ktrdr.indicators.bollinger_bands_indicator import BollingerBandsIndicator  
 ### Next Task Notes
 
 Task 2.7 updates StrategyValidator to use the registry. The validator still imports BUILT_IN_INDICATORS via lazy import workaround - this needs to be cleaned up.
+
+---
+
+## Task 2.7 Complete: Update StrategyValidator to use registry
+
+### Implementation Notes
+
+Updated StrategyValidator to use INDICATOR_REGISTRY instead of BUILT_IN_INDICATORS:
+- Removed lazy import workaround
+- Added top-level import of INDICATOR_REGISTRY
+- Simplified `_get_normalized_indicator_names()` to use registry directly
+
+### Changes Made
+
+1. **strategy_validator.py**: Replaced all BUILT_IN_INDICATORS usage with INDICATOR_REGISTRY
+   - Added `from ktrdr.indicators.base_indicator import INDICATOR_REGISTRY` at top level
+   - `_get_normalized_indicator_names()` now returns `set(INDICATOR_REGISTRY.list_types())`
+   - `validate_v3_strategy()` uses `INDICATOR_REGISTRY.get()` for dot notation validation
+   - Removed lazy import caching mechanism (no longer needed)
+
+### Gotchas
+
+**Registry returns canonical names only**: `INDICATOR_REGISTRY.list_types()` returns canonical names (e.g., "bollingerbands") not aliases (e.g., "bbands"). The registry's `get()` method handles aliases for lookups, but `list_types()` only shows canonical names. This is fine for validation since `get()` is case-insensitive and handles aliases.
+
+**No more circular import risk**: The original lazy import was to avoid circular imports. With the registry pattern and proper module organization, we can now import INDICATOR_REGISTRY at the top level without issues.
+
+### Tests Added/Updated
+
+- `tests/unit/config/test_strategy_validator_registry.py`: New test file with 8 tests verifying INDICATOR_REGISTRY usage
+
+### Next Task Notes
+
+Task 2.8 deletes indicator_factory.py and schemas.py. Before deleting, verify no remaining imports of BUILT_IN_INDICATORS exist:
+```bash
+git grep -l "BUILT_IN_INDICATORS" -- "*.py" | grep -v __pycache__ | grep -v indicator_factory.py
+```

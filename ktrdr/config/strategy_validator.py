@@ -4,7 +4,7 @@ This module provides comprehensive validation for KTRDR strategy configurations,
 including validation for agent-generated strategies.
 
 Agent-Specific Validations (Task 1.2):
-- Indicator type existence (validates against BUILT_IN_INDICATORS)
+- Indicator type existence (validates against INDICATOR_REGISTRY)
 - Fuzzy membership parameter validation (correct param counts for types)
 - Duplicate strategy name detection
 - Dict-based validation (for agent-generated configs, not just files)
@@ -26,6 +26,7 @@ from ktrdr.config.models import (
     StrategyConfigurationV3,
 )
 from ktrdr.config.strategy_loader import strategy_loader
+from ktrdr.indicators.base_indicator import INDICATOR_REGISTRY
 
 logger = get_logger(__name__)
 
@@ -160,29 +161,17 @@ class StrategyValidator:
     }
 
     def __init__(self):
-        """Initialize StrategyValidator with lazy-loaded indicator names cache."""
-        self._cached_indicator_names: Optional[set[str]] = None
+        """Initialize StrategyValidator."""
+        pass
 
     def _get_normalized_indicator_names(self) -> set[str]:
         """
-        Lazy-load indicator names to avoid circular import.
-
-        BUILT_IN_INDICATORS is imported only when validation is actually needed,
-        not at module load time. This breaks the circular dependency:
-        BaseIndicator → InputValidator → StrategyValidator → BUILT_IN_INDICATORS.
-
-        The result is cached after first load for performance.
+        Get normalized indicator names from the registry.
 
         Returns:
             set[str]: Lowercase indicator names for case-insensitive matching
         """
-        if self._cached_indicator_names is None:
-            from ktrdr.indicators.indicator_factory import BUILT_IN_INDICATORS
-
-            self._cached_indicator_names = {
-                name.lower() for name in BUILT_IN_INDICATORS.keys()
-            }
-        return self._cached_indicator_names
+        return set(INDICATOR_REGISTRY.list_types())
 
     def _format_pydantic_error(
         self, error: PydanticValidationError
@@ -765,7 +754,7 @@ Missing feature_ids: {', '.join(missing_list)}
         result: ValidationResult,
     ) -> None:
         """
-        Validate that indicator types exist in KTRDR's BUILT_IN_INDICATORS.
+        Validate that indicator types exist in KTRDR's INDICATOR_REGISTRY.
 
         This is an agent-specific validation (Task 1.2) that ensures the agent
         only uses indicators that actually exist in KTRDR.
@@ -774,7 +763,7 @@ Missing feature_ids: {', '.join(missing_list)}
             indicators: List of indicator configuration dictionaries
             result: ValidationResult to update with errors/suggestions
         """
-        # Lazy-load indicator names (cached after first call)
+        # Get indicator names from registry
         normalized_names = self._get_normalized_indicator_names()
 
         for idx, indicator_dict in enumerate(indicators):
@@ -784,7 +773,7 @@ Missing feature_ids: {', '.join(missing_list)}
             if not indicator_type:
                 continue  # Will be caught by Pydantic validation
 
-            # Check case-insensitively against BUILT_IN_INDICATORS
+            # Check case-insensitively against INDICATOR_REGISTRY
             indicator_type_lower = indicator_type.lower()
             if indicator_type_lower not in normalized_names:
                 result.is_valid = False
@@ -1094,9 +1083,7 @@ def validate_v3_strategy(
 
             # Get indicator class to check output names
             try:
-                from ktrdr.indicators.indicator_factory import BUILT_IN_INDICATORS
-
-                indicator_class = BUILT_IN_INDICATORS.get(indicator_type.lower())
+                indicator_class = INDICATOR_REGISTRY.get(indicator_type)
                 if indicator_class is None:
                     # Unknown indicator type - skip validation
                     logger.warning(
