@@ -50,6 +50,23 @@
 - `training_pipeline.py:353` still uses v2 FuzzyConfig → needs update in Task 3.5
 - Test file `test_fuzzy_engine_v3.py::test_v2_mode_raises_valueerror` removed (tested v2 mode)
 
-**Next Task Notes (3.4 - Update MultiTimeframeFuzzyEngine):**
-- Check if there's MF dispatch code to replace with registry
-- May be minimal work if it delegates to FuzzyEngine
+---
+
+## Task 3.4 Complete: Update MultiTimeframeFuzzyEngine
+
+**Implemented:**
+- Replaced v2 config imports (`FuzzyConfig`, `FuzzySetConfig`, `*MFConfig` classes) with `MEMBERSHIP_REGISTRY`
+- Replaced if/elif MF dispatch in `_build_timeframe_configs` with `MEMBERSHIP_REGISTRY.get_or_raise()`
+- Updated `_create_merged_config` to return `dict[str, FuzzySetDefinition]` (v3 format) instead of v2 `FuzzyConfig`
+- Updated `TimeframeConfig` dataclass to store raw config dicts instead of v2 `FuzzySetConfig`
+- Removed backward compatibility mode for v2 `FuzzyConfig` — now dict-only
+
+**Key patterns followed:**
+- Wrap registry `ValueError` in `ConfigurationError` with error_code `MTFUZZY-UnknownMFType`
+- Validate parameters by instantiating MF class (triggers Params validation)
+- Case-insensitive lookup via registry's built-in case handling
+
+**Next Task Notes (3.5 - Delete v2 fuzzy files):**
+- Delete `ktrdr/fuzzy/config.py` and `ktrdr/fuzzy/migration.py`
+- Many tests will need deletion (those using v2 format)
+- Files still using v2: `training_pipeline.py:353`, `decision/orchestrator.py:445`, `fuzzy_service.py` (multiple places)

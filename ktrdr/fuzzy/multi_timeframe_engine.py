@@ -6,20 +6,17 @@ data with timeframe-specific fuzzy sets and configurations.
 """
 
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional
 
 import pandas as pd
 
 from ktrdr import get_logger
 from ktrdr.errors import ConfigurationError, DataValidationError, ProcessingError
-from ktrdr.fuzzy.config import (
-    FuzzyConfig,
-    FuzzySetConfig,
-    GaussianMFConfig,
-    TrapezoidalMFConfig,
-    TriangularMFConfig,
-)
 from ktrdr.fuzzy.engine import FuzzyEngine
+from ktrdr.fuzzy.membership import MEMBERSHIP_REGISTRY
+
+if TYPE_CHECKING:
+    from ktrdr.config.models import FuzzySetDefinition
 
 # Set up module-level logger
 logger = get_logger(__name__)
@@ -31,7 +28,9 @@ class TimeframeConfig:
 
     timeframe: str
     indicators: list[str]
-    fuzzy_sets: dict[str, FuzzySetConfig]
+    fuzzy_sets: dict[
+        str, dict[str, dict[str, Any]]
+    ]  # {indicator: {set_name: mf_config}}
     weight: float = 1.0
     enabled: bool = True
 
@@ -77,37 +76,34 @@ class MultiTimeframeFuzzyEngine(FuzzyEngine):
         ```
     """
 
-    def __init__(self, config: Union[FuzzyConfig, dict[str, Any]]):
+    def __init__(self, config: dict[str, Any]):
         """
         Initialize the MultiTimeframeFuzzyEngine.
 
         Args:
-            config: Either a FuzzyConfig for backward compatibility or a dict
-                   containing multi-timeframe fuzzy configuration
+            config: Multi-timeframe fuzzy configuration dict
 
         Raises:
             ConfigurationError: If the configuration is invalid
         """
         logger.debug("Initializing MultiTimeframeFuzzyEngine")
 
-        # Handle backward compatibility with single-timeframe configs
-        if isinstance(config, FuzzyConfig):
-            logger.info(
-                "Backward compatibility mode: converting single-timeframe config"
+        if not isinstance(config, dict):
+            raise ConfigurationError(
+                message="MultiTimeframeFuzzyEngine requires dict config",
+                error_code="MTFUZZY-InvalidConfigType",
+                details={"received_type": type(config).__name__},
             )
-            super().__init__(config)
-            self._timeframe_configs = {}
-            self._is_multi_timeframe = False
-        else:
-            # Multi-timeframe configuration
-            self._multi_config = config
-            self._validate_multi_timeframe_config()
-            self._timeframe_configs = self._build_timeframe_configs()
-            self._is_multi_timeframe = True
 
-            # Initialize base class with merged config for compatibility
-            merged_config = self._create_merged_config()
-            super().__init__(merged_config)
+        # Multi-timeframe configuration
+        self._multi_config = config
+        self._validate_multi_timeframe_config()
+        self._timeframe_configs = self._build_timeframe_configs()
+        self._is_multi_timeframe = True
+
+        # Initialize base class with merged config for compatibility
+        merged_config = self._create_merged_config()
+        super().__init__(merged_config)
 
         logger.info(
             f"MultiTimeframeFuzzyEngine initialized "
@@ -202,37 +198,47 @@ class MultiTimeframeFuzzyEngine(FuzzyEngine):
         """
         Build TimeframeConfig objects from the configuration.
 
+        Validates membership function types via MEMBERSHIP_REGISTRY and
+        validates parameters by instantiating the MF classes.
+
         Returns:
             Dictionary mapping timeframe names to TimeframeConfig objects
+
+        Raises:
+            ConfigurationError: If MF type unknown or parameters invalid
         """
         configs = {}
 
         for tf_name, tf_config in self._multi_config["timeframes"].items():
-            # Convert fuzzy sets to FuzzySetConfig objects
-            fuzzy_sets = {}
+            # Store fuzzy sets as raw config dicts, validated via registry
+            fuzzy_sets: dict[str, dict[str, dict[str, Any]]] = {}
             for indicator, sets in tf_config["fuzzy_sets"].items():
+                indicator_sets: dict[str, dict[str, Any]] = {}
                 for set_name, mf_config in sets.items():
-                    key = f"{indicator}_{set_name}"
-
-                    # Create the appropriate membership function config based on type
-                    mf_type = mf_config["type"].lower()
-                    if mf_type == "triangular":
-                        mf_instance = TriangularMFConfig(**mf_config)
-                    elif mf_type == "trapezoidal":
-                        mf_instance = TrapezoidalMFConfig(**mf_config)  # type: ignore
-                    elif mf_type == "gaussian":
-                        mf_instance = GaussianMFConfig(**mf_config)  # type: ignore
-                    else:
+                    # Validate MF type via registry lookup
+                    mf_type = mf_config["type"]
+                    try:
+                        mf_class = MEMBERSHIP_REGISTRY.get_or_raise(mf_type)
+                    except ValueError as e:
                         raise ConfigurationError(
-                            message=f"Unknown membership function type: {mf_type}",
+                            message=str(e),
                             error_code="MTFUZZY-UnknownMFType",
                             details={
                                 "type": mf_type,
-                                "supported": ["triangular", "trapezoidal", "gaussian"],
+                                "supported": MEMBERSHIP_REGISTRY.list_types(),
                             },
-                        )
+                        ) from e
 
-                    fuzzy_sets[key] = FuzzySetConfig(**{set_name: mf_instance})  # type: ignore[arg-type]
+                    # Validate parameters by instantiating (raises ConfigurationError)
+                    parameters = mf_config.get("parameters", [])
+                    mf_class(parameters)  # Validates parameters
+
+                    # Store normalized config
+                    indicator_sets[set_name] = {
+                        "type": mf_type.lower(),
+                        "parameters": parameters,
+                    }
+                fuzzy_sets[indicator] = indicator_sets
 
             configs[tf_name] = TimeframeConfig(
                 timeframe=tf_name,
@@ -244,37 +250,39 @@ class MultiTimeframeFuzzyEngine(FuzzyEngine):
 
         return configs
 
-    def _create_merged_config(self) -> FuzzyConfig:
+    def _create_merged_config(self) -> dict[str, "FuzzySetDefinition"]:
         """
-        Create a merged FuzzyConfig for base class compatibility.
+        Create a merged v3 config (dict[str, FuzzySetDefinition]) for base class.
 
         Returns:
-            FuzzyConfig with all timeframe configurations merged
+            Dict mapping fuzzy_set_id to FuzzySetDefinition
         """
-        merged_indicators = {}
+        from ktrdr.config.models import FuzzySetDefinition
+
+        merged_config: dict[str, FuzzySetDefinition] = {}
 
         for tf_name, tf_config in self._timeframe_configs.items():
             if not tf_config.enabled:
                 continue
 
             for indicator in tf_config.indicators:
-                # Create timeframe-specific indicator name
-                tf_indicator = f"{indicator}_{tf_name}"
+                # Create timeframe-specific fuzzy set id
+                fuzzy_set_id = f"{indicator}_{tf_name}"
 
-                # Get fuzzy sets for this indicator from timeframe config
-                indicator_fuzzy_sets = {}
-                for key, fuzzy_set_config in tf_config.fuzzy_sets.items():
-                    if key.startswith(f"{indicator}_"):
-                        key[len(f"{indicator}_") :]
-                        for fs_name, mf_config in fuzzy_set_config.root.items():
-                            indicator_fuzzy_sets[fs_name] = mf_config
+                # Get membership functions for this indicator
+                if indicator not in tf_config.fuzzy_sets:
+                    continue
 
-                if indicator_fuzzy_sets:
-                    merged_indicators[tf_indicator] = FuzzySetConfig(
-                        **indicator_fuzzy_sets  # type: ignore[arg-type]
-                    )
+                indicator_sets = tf_config.fuzzy_sets[indicator]
 
-        return FuzzyConfig(root=merged_indicators)
+                # Build FuzzySetDefinition with indicator + membership functions
+                definition_data: dict[str, Any] = {"indicator": indicator}
+                for set_name, mf_config in indicator_sets.items():
+                    definition_data[set_name] = mf_config
+
+                merged_config[fuzzy_set_id] = FuzzySetDefinition(**definition_data)
+
+        return merged_config
 
     def fuzzify_multi_timeframe(
         self,
