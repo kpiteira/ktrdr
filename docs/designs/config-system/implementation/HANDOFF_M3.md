@@ -149,10 +149,26 @@ Added 14 deprecated name mappings to `DEPRECATED_NAMES` dict in `deprecation.py`
 
 The mappings match the `deprecated_field()` calls in settings.py exactly. Note: `IB_RETRY_DELAY` maps to `KTRDR_IB_RETRY_BASE_DELAY` (not `KTRDR_IB_RETRY_DELAY`) per Task 3.1 design decision.
 
-### Next Task Notes (3.8: Write Unit Tests)
+---
 
-- M3 settings classes already have unit tests from Tasks 3.1-3.3
-- This task may focus on consolidation or additional edge case tests
-- Check `tests/unit/config/test_ib_settings.py` and `tests/unit/config/test_host_service_settings.py`
+## Task 3.8 Complete: Write Unit Tests
+
+### Implementation Notes
+
+This was a **verification task** - all unit tests were already written during Tasks 3.1-3.3 (following TDD). Verified:
+
+- `test_ib_settings.py` — 56 tests for IBSettings
+- `test_ib_host_service_settings.py` — 27 tests for IBHostServiceSettings
+- `test_training_host_service_settings.py` — 27 tests for TrainingHostServiceSettings
+- `test_deprecation.py` — 19 M3 tests for deprecated name mappings (added in Task 3.7)
+
+All 4538 unit tests pass with `make test-unit`.
+
+### Next Task Notes (3.9: Execute E2E Test)
+
+- Task 3.9 is a VALIDATION task - run the E2E scenarios from the milestone
+- Requires Docker stack: `docker compose up -d`
+- Test deprecated env var warnings: `USE_IB_HOST_SERVICE=true docker compose up -d backend`
+- Verify IB and Training host service settings work end-to-end
 
 ---
