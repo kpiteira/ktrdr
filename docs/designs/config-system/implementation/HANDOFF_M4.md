@@ -252,3 +252,52 @@ All 4676 unit tests pass.
 - Scenarios: worker starts/registers, invalid config fails, port default consistent, deprecated names warn
 
 ---
+
+## Task 4.10 Complete: Execute E2E Test
+
+### E2E Test Results
+
+All 4 scenarios passed:
+
+| Scenario | Result | Notes |
+|----------|--------|-------|
+| 1. Worker starts and registers | ✅ PASSED | Both training and backtest workers registered with backend |
+| 2. Worker validates config at startup | ✅ PASSED | Invalid KTRDR_WORKER_PORT=abc exits with code 1 |
+| 3. Worker uses consistent port default | ✅ PASSED | After fixing remaining hardcoded defaults |
+| 4. Deprecated names work with warnings | ✅ PASSED | WORKER_PORT triggers warning, value is used |
+
+### Gotchas
+
+**Remaining hardcoded port defaults found during E2E**: The initial run of Scenario 3 found two remaining hardcoded port values:
+- `ktrdr/training/training_worker.py:104` — default `worker_port: int = 5002` (changed to 5003)
+- `ktrdr/training/training_worker_api.py:16` — documentation showed port 5004 (changed to 5003)
+
+These were fixed and committed before re-running the scenario.
+
+### E2E Test Catalog
+
+4 new E2E test specifications were created in `.claude/skills/e2e-testing/tests/workers/`:
+- `startup-registration.md` — Worker starts and registers with backend
+- `config-validation.md` — Invalid config causes exit code 1
+- `port-defaults.md` — Consistent port default (bug #4 fix)
+- `deprecated-names.md` — Deprecated env var names work with warnings
+
+A new preflight file was also created: `.claude/skills/e2e-testing/preflight/workers.md`
+
+---
+
+## M4 Milestone Complete
+
+All tasks 4.1-4.10 are complete:
+- [x] Task 4.1: WorkerSettings class created
+- [x] Task 4.2: CheckpointSettings aligned with KTRDR prefix
+- [x] Task 4.3: OrphanDetectorSettings aligned with KTRDR prefix
+- [x] Task 4.4: OperationsSettings class created
+- [x] Task 4.5: Worker consumers migrated to settings
+- [x] Task 4.6: Worker startup validation added
+- [x] Task 4.7: WORKER_SETTINGS list updated
+- [x] Task 4.8: M4 deprecated names added
+- [x] Task 4.9: Unit tests verified (88 tests, all pass)
+- [x] Task 4.10: E2E tests pass (4 scenarios)
+
+---
