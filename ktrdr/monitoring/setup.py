@@ -24,16 +24,15 @@ logger = logging.getLogger(__name__)
 def _is_testing() -> bool:
     """Check if running in test mode.
 
-    Uses PYTEST_CURRENT_TEST (set per-test) or checks if pytest is loaded.
+    Uses PYTEST_CURRENT_TEST env var which is set per-test during execution.
     This must be a function checked at runtime, not import time.
+
+    Note: We intentionally do NOT check `"pytest" in sys.modules` because
+    that would prevent integration tests from testing actual instrumentation.
+    Tests that need real monitoring can temporarily unset PYTEST_CURRENT_TEST.
     """
     # PYTEST_CURRENT_TEST is set during test execution
-    if os.environ.get("PYTEST_CURRENT_TEST"):
-        return True
-    # Also check if pytest module is loaded (covers collection phase)
-    import sys
-
-    return "pytest" in sys.modules
+    return bool(os.environ.get("PYTEST_CURRENT_TEST"))
 
 
 def setup_monitoring(
