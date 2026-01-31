@@ -49,20 +49,20 @@ class TestTriangularMF:
         # Wrong number of parameters
         with pytest.raises(ConfigurationError) as exc_info:
             TriangularMF([0, 50])
-        assert "requires exactly 3 parameters" in str(exc_info.value)
+        assert exc_info.value.error_code == "MF-InvalidParameters"
 
         with pytest.raises(ConfigurationError) as exc_info:
             TriangularMF([0, 50, 100, 150])
-        assert "requires exactly 3 parameters" in str(exc_info.value)
+        assert exc_info.value.error_code == "MF-InvalidParameters"
 
         # Invalid parameter ordering
         with pytest.raises(ConfigurationError) as exc_info:
             TriangularMF([50, 0, 100])  # a > b
-        assert "parameters must satisfy: a ≤ b ≤ c" in str(exc_info.value)
+        assert exc_info.value.error_code == "MF-InvalidParameters"
 
         with pytest.raises(ConfigurationError) as exc_info:
             TriangularMF([0, 100, 50])  # b > c
-        assert "parameters must satisfy: a ≤ b ≤ c" in str(exc_info.value)
+        assert exc_info.value.error_code == "MF-InvalidParameters"
 
     def test_scalar_evaluation(self):
         """Test evaluation with scalar inputs."""
@@ -143,7 +143,8 @@ class TestTriangularMF:
     def test_repr(self):
         """Test the string representation of the triangular MF."""
         mf = TriangularMF([0, 50, 100])
-        assert repr(mf) == "TriangularMF(a=0, b=50, c=100)"
+        # Parameters stored as floats after Pydantic validation
+        assert repr(mf) == "TriangularMF(a=0.0, b=50.0, c=100.0)"
 
     def test_unsupported_input_type(self):
         """Test that an error is raised for unsupported input types."""
@@ -190,24 +191,24 @@ class TestTrapezoidalMF:
         # Wrong number of parameters
         with pytest.raises(ConfigurationError) as exc_info:
             TrapezoidalMF([0, 25, 75])
-        assert "requires exactly 4 parameters" in str(exc_info.value)
+        assert exc_info.value.error_code == "MF-InvalidParameters"
 
         with pytest.raises(ConfigurationError) as exc_info:
             TrapezoidalMF([0, 25, 75, 100, 125])
-        assert "requires exactly 4 parameters" in str(exc_info.value)
+        assert exc_info.value.error_code == "MF-InvalidParameters"
 
         # Invalid parameter ordering
         with pytest.raises(ConfigurationError) as exc_info:
             TrapezoidalMF([100, 25, 75, 0])  # a > b
-        assert "must satisfy: a ≤ b ≤ c ≤ d" in str(exc_info.value)
+        assert exc_info.value.error_code == "MF-InvalidParameters"
 
         with pytest.raises(ConfigurationError) as exc_info:
             TrapezoidalMF([0, 75, 25, 100])  # b > c
-        assert "must satisfy: a ≤ b ≤ c ≤ d" in str(exc_info.value)
+        assert exc_info.value.error_code == "MF-InvalidParameters"
 
         with pytest.raises(ConfigurationError) as exc_info:
             TrapezoidalMF([0, 25, 100, 75])  # c > d
-        assert "must satisfy: a ≤ b ≤ c ≤ d" in str(exc_info.value)
+        assert exc_info.value.error_code == "MF-InvalidParameters"
 
     def test_scalar_evaluation(self):
         """Test evaluation with scalar inputs."""
@@ -284,7 +285,8 @@ class TestTrapezoidalMF:
     def test_repr(self):
         """Test the string representation of the trapezoidal MF."""
         mf = TrapezoidalMF([0, 25, 75, 100])
-        assert repr(mf) == "TrapezoidalMF(a=0, b=25, c=75, d=100)"
+        # Parameters stored as floats after Pydantic validation
+        assert repr(mf) == "TrapezoidalMF(a=0.0, b=25.0, c=75.0, d=100.0)"
 
     def test_unsupported_input_type(self):
         """Test that an error is raised for unsupported input types."""
@@ -318,20 +320,20 @@ class TestGaussianMF:
         # Wrong number of parameters
         with pytest.raises(ConfigurationError) as exc_info:
             GaussianMF([50])
-        assert "requires exactly 2 parameters" in str(exc_info.value)
+        assert exc_info.value.error_code == "MF-InvalidParameters"
 
         with pytest.raises(ConfigurationError) as exc_info:
             GaussianMF([50, 10, 5])
-        assert "requires exactly 2 parameters" in str(exc_info.value)
+        assert exc_info.value.error_code == "MF-InvalidParameters"
 
         # Invalid sigma (must be > 0)
         with pytest.raises(ConfigurationError) as exc_info:
             GaussianMF([50, 0])
-        assert "sigma must be greater than 0" in str(exc_info.value)
+        assert exc_info.value.error_code == "MF-InvalidParameters"
 
         with pytest.raises(ConfigurationError) as exc_info:
             GaussianMF([50, -5])
-        assert "sigma must be greater than 0" in str(exc_info.value)
+        assert exc_info.value.error_code == "MF-InvalidParameters"
 
     def test_scalar_evaluation(self):
         """Test evaluation with scalar inputs."""
@@ -420,7 +422,8 @@ class TestGaussianMF:
     def test_repr(self):
         """Test the string representation of the Gaussian MF."""
         mf = GaussianMF([50, 10])
-        assert repr(mf) == "GaussianMF(μ=50, σ=10)"
+        # Parameters stored as floats after Pydantic validation
+        assert repr(mf) == "GaussianMF(μ=50.0, σ=10.0)"
 
     def test_unsupported_input_type(self):
         """Test that an error is raised for unsupported input types."""

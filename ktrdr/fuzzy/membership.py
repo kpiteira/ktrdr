@@ -11,7 +11,7 @@ from typing import Any, Union
 
 import numpy as np
 import pandas as pd
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError, field_validator
 
 from ktrdr import get_logger
 from ktrdr.core.type_registry import TypeRegistry
@@ -80,6 +80,38 @@ class MembershipFunction(ABC):
 
         MEMBERSHIP_REGISTRY.register(cls, canonical, aliases)
 
+    def __init__(self, parameters: list[float]) -> None:
+        """
+        Initialize a membership function with validated parameters.
+
+        Args:
+            parameters: List of parameters for this membership function type
+
+        Raises:
+            ConfigurationError: If parameters are invalid
+        """
+        try:
+            validated = self.__class__.Params(parameters=parameters)
+        except ValidationError as e:
+            raise ConfigurationError(
+                f"Invalid parameters for {self.__class__.__name__}",
+                error_code="MF-InvalidParameters",
+                details={"validation_errors": e.errors()},
+            ) from e
+        self._init_from_params(validated.parameters)
+
+    @abstractmethod
+    def _init_from_params(self, parameters: list[float]) -> None:
+        """
+        Initialize instance attributes from validated parameters.
+
+        Subclasses implement this to set their specific attributes.
+
+        Args:
+            parameters: Validated list of parameters
+        """
+        pass
+
     @abstractmethod
     def evaluate(
         self, x: Union[float, pd.Series, np.ndarray]
@@ -116,41 +148,27 @@ class TriangularMF(MembershipFunction):
     - If a = b = c, then μ(x) = 1 only at x = a = b = c, and 0 elsewhere
     """
 
-    def __init__(self, parameters: list[float]):
-        """
-        Initialize a triangular membership function with parameters [a, b, c].
+    class Params(MembershipFunction.Params):
+        """Parameter validation for triangular MF."""
 
-        Args:
-            parameters: List of three parameters [a, b, c] where:
-                        a: start point (membership = 0)
-                        b: peak point (membership = 1)
-                        c: end point (membership = 0)
+        @field_validator("parameters")
+        @classmethod
+        def validate_parameters(cls, v: list[float]) -> list[float]:
+            """Validate triangular MF parameters [a, b, c]."""
+            if len(v) != 3:
+                raise ValueError(
+                    f"Triangular requires exactly 3 parameters [a, b, c], got {len(v)}"
+                )
+            a, b, c = v
+            if not (a <= b <= c):
+                raise ValueError(
+                    f"Parameters must satisfy a <= b <= c, got a={a}, b={b}, c={c}"
+                )
+            return v
 
-        Raises:
-            ConfigurationError: If parameters are invalid
-        """
-        if len(parameters) != 3:
-            logger.error(
-                f"Invalid triangular MF parameters: expected 3, got {len(parameters)}"
-            )
-            raise ConfigurationError(
-                message="Triangular membership function requires exactly 3 parameters [a, b, c]",
-                error_code="MF-InvalidParameterCount",
-                details={"expected": 3, "actual": len(parameters)},
-            )
-
+    def _init_from_params(self, parameters: list[float]) -> None:
+        """Initialize triangular MF from validated parameters."""
         self.a, self.b, self.c = parameters
-
-        # Validate parameter ordering
-        if not (self.a <= self.b <= self.c):
-            logger.error(
-                f"Invalid triangular MF parameter order: a={self.a}, b={self.b}, c={self.c}"
-            )
-            raise ConfigurationError(
-                message="Triangular membership function parameters must satisfy: a ≤ b ≤ c",
-                error_code="MF-InvalidParameterOrder",
-                details={"parameters": {"a": self.a, "b": self.b, "c": self.c}},
-            )
 
         # Handle degenerate cases for division operations
         self._ab_diff = max(
@@ -273,44 +291,27 @@ class TrapezoidalMF(MembershipFunction):
     - μ(x) = (d - x) / (d - c), if c < x < d
     """
 
-    def __init__(self, parameters: list[float]):
-        """
-        Initialize a trapezoidal membership function with parameters [a, b, c, d].
+    class Params(MembershipFunction.Params):
+        """Parameter validation for trapezoidal MF."""
 
-        Args:
-            parameters: List of four parameters [a, b, c, d] where:
-                        a: start point (membership = 0)
-                        b: start of plateau (membership = 1)
-                        c: end of plateau (membership = 1)
-                        d: end point (membership = 0)
+        @field_validator("parameters")
+        @classmethod
+        def validate_parameters(cls, v: list[float]) -> list[float]:
+            """Validate trapezoidal MF parameters [a, b, c, d]."""
+            if len(v) != 4:
+                raise ValueError(
+                    f"Trapezoidal requires exactly 4 parameters [a, b, c, d], got {len(v)}"
+                )
+            a, b, c, d = v
+            if not (a <= b <= c <= d):
+                raise ValueError(
+                    f"Parameters must satisfy a <= b <= c <= d, got a={a}, b={b}, c={c}, d={d}"
+                )
+            return v
 
-        Raises:
-            ConfigurationError: If parameters are invalid
-        """
-        if len(parameters) != 4:
-            logger.error(
-                f"Invalid trapezoidal MF parameters: expected 4, got {len(parameters)}"
-            )
-            raise ConfigurationError(
-                message="Trapezoidal membership function requires exactly 4 parameters [a, b, c, d]",
-                error_code="MF-InvalidParameterCount",
-                details={"expected": 4, "actual": len(parameters)},
-            )
-
+    def _init_from_params(self, parameters: list[float]) -> None:
+        """Initialize trapezoidal MF from validated parameters."""
         self.a, self.b, self.c, self.d = parameters
-
-        # Validate parameter ordering
-        if not (self.a <= self.b <= self.c <= self.d):
-            logger.error(
-                f"Invalid trapezoidal MF parameter order: a={self.a}, b={self.b}, c={self.c}, d={self.d}"
-            )
-            raise ConfigurationError(
-                message="Trapezoidal membership function parameters must satisfy: a ≤ b ≤ c ≤ d",
-                error_code="MF-InvalidParameterOrder",
-                details={
-                    "parameters": {"a": self.a, "b": self.b, "c": self.c, "d": self.d}
-                },
-            )
 
         # Handle degenerate cases for division operations
         self._ab_diff = max(self.b - self.a, np.finfo(float).eps)
@@ -419,38 +420,25 @@ class GaussianMF(MembershipFunction):
     μ(x) = exp(-0.5 * ((x - μ) / σ)²)
     """
 
-    def __init__(self, parameters: list[float]):
-        """
-        Initialize a Gaussian membership function with parameters [μ, σ].
+    class Params(MembershipFunction.Params):
+        """Parameter validation for Gaussian MF."""
 
-        Args:
-            parameters: List of two parameters [μ, σ] where:
-                        μ: center/mean of the Gaussian curve
-                        σ: standard deviation (must be > 0)
+        @field_validator("parameters")
+        @classmethod
+        def validate_parameters(cls, v: list[float]) -> list[float]:
+            """Validate Gaussian MF parameters [μ, σ]."""
+            if len(v) != 2:
+                raise ValueError(
+                    f"Gaussian requires exactly 2 parameters [μ, σ], got {len(v)}"
+                )
+            mu, sigma = v
+            if sigma <= 0:
+                raise ValueError(f"Sigma must be > 0, got {sigma}")
+            return v
 
-        Raises:
-            ConfigurationError: If parameters are invalid
-        """
-        if len(parameters) != 2:
-            logger.error(
-                f"Invalid Gaussian MF parameters: expected 2, got {len(parameters)}"
-            )
-            raise ConfigurationError(
-                message="Gaussian membership function requires exactly 2 parameters [μ, σ]",
-                error_code="MF-InvalidParameterCount",
-                details={"expected": 2, "actual": len(parameters)},
-            )
-
+    def _init_from_params(self, parameters: list[float]) -> None:
+        """Initialize Gaussian MF from validated parameters."""
         self.mu, self.sigma = parameters
-
-        # Validate sigma > 0
-        if self.sigma <= 0:
-            logger.error(f"Invalid Gaussian MF sigma: {self.sigma} (must be > 0)")
-            raise ConfigurationError(
-                message="Gaussian membership function sigma must be greater than 0",
-                error_code="MF-InvalidSigma",
-                details={"sigma": self.sigma},
-            )
 
         logger.debug(
             f"Initialized Gaussian MF with parameters: μ={self.mu}, σ={self.sigma}"

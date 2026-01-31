@@ -13,8 +13,22 @@
 - Full class name lowercase added as alias (triangularmf)
 - Skips abstract classes and test module classes
 
-**Next Task Notes (3.2):**
-- Add `Params` nested classes with `@field_validator` to each MF subclass
-- Validators should enforce parameter count and ordering constraints
-- Validation errors should raise `ConfigurationError` (already imported)
-- The existing `__init__` methods in each MF handle validation themselves — Task 3.2 will add Pydantic Params for registry-based instantiation, but won't need to change existing `__init__` logic since MFs are still created directly
+---
+
+## Task 3.2 Complete: Add Params to TriangularMF, TrapezoidalMF, GaussianMF
+
+**Implemented:**
+- Base class `__init__` that validates via Pydantic Params and calls `_init_from_params`
+- Abstract `_init_from_params` method on base class
+- `Params` nested classes with `@field_validator` for each MF subclass
+- All validation errors unified under error_code `MF-InvalidParameters`
+
+**Key gotchas:**
+- Pydantic stores parameters as floats, so `__repr__` shows `0.0` instead of `0`
+- Existing tests had to be updated to check `error_code` instead of error message text
+
+**Next Task Notes (3.3 - Update FuzzyEngine):**
+- Delete `_initialize_membership_functions` (v2 path)
+- Delete `is_v3_format` detection logic
+- Replace if/elif MF dispatch with `MEMBERSHIP_REGISTRY.get_or_raise()`
+- Add clear error for non-dict config
