@@ -129,3 +129,17 @@
 - These should be validated at startup
 
 ---
+
+## Task 3.6 Complete: Update Validation Module for M3 Settings
+
+### Implementation Notes
+
+Simple addition to `_init_settings_lists()` in validation.py. Added three imports and three `BACKEND_SETTINGS.append()` calls. No gotchas - straightforward update following the existing pattern.
+
+### Next Task Notes (3.7: Update Deprecation Module)
+
+- Add deprecated name mappings for IB and host service env vars to `DEPRECATED_NAMES` dict
+- Mappings like `IB_GATEWAY_HOST` → `KTRDR_IB_GATEWAY_HOST`
+- Add `USE_IB_HOST_SERVICE` → `KTRDR_IB_HOST_ENABLED`
+
+---
