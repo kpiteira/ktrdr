@@ -99,3 +99,58 @@ Same pattern as Task 2.1:
 Task 2.3 migrates trend indicators (7): ma_indicators (SMA, EMA, WMA), macd, adx, parabolic_sar, ichimoku.
 
 Note that `ma_indicators.py` has 3 classes (SMA, EMA, WMA) - each needs its own Params class.
+
+---
+
+## Task 2.3 Complete: Add Params to trend indicators (7)
+
+### Implementation Notes
+
+Migrated all 7 trend indicators to the Params pattern:
+- SMA, EMA, WMA (in ma_indicators.py), MACD, ADX, ParabolicSAR, Ichimoku
+
+Added WMA to the codebase (was missing). Added `_aliases` for common shorthand lookups: sma, ema, wma.
+
+### Pattern Applied
+
+Same pattern as previous tasks:
+1. Added `class Params(BaseIndicator.Params)` with Field definitions
+2. Removed explicit `__init__` method
+3. Removed `_validate_params` method and schema imports
+4. Set `display_as_overlay` as class attribute
+5. Updated `compute()` to read from `self.params["field"]` directly
+
+### Gotchas
+
+**Boolean coercion with Pydantic**: Pydantic's default bool handling coerces truthy strings ("yes", "true", "1") to True. If strict boolean validation is needed, use `strict=True` in Field definition. EMA's `adjust` parameter requires this.
+
+**MA indicators don't have "Indicator" suffix**: SMA, EMA, WMA class names don't end with "Indicator", so their canonical registry names are `simplemovingaverage`, `exponentialmovingaverage`, `weightedmovingaverage`. Added `_aliases` list for common shorthand names.
+
+**Match schema.py constraints**: Ensure Params constraints match original schema.py definitions:
+- Ichimoku: tenkan (1-50), kijun (1-100), senkou_b (1-200), displacement (1-100)
+- ParabolicSAR: initial_af (0.001-0.1), step_af (0.001-0.1), max_af (0.01-1.0)
+
+### Key Changes
+
+| Indicator | Params Fields | display_as_overlay | Notes |
+|-----------|--------------|-------------------|-------|
+| SMA | period (2-500), source | True | Alias: sma |
+| EMA | period (1-500), source, adjust | True | Alias: ema |
+| WMA | period (2-500), source | True | Alias: wma, NEW indicator |
+| MACD | fast_period (1-100), slow_period (1-200), signal_period (1-50), source | False | Multi-output |
+| ADX | period (2-200) | False | Multi-output |
+| ParabolicSAR | initial_af (0.001-0.1), step_af (0.001-0.1), max_af (0.01-1.0) | True | |
+| Ichimoku | tenkan_period (1-50), kijun_period (1-100), senkou_b_period (1-200), displacement (1-100) | True | Multi-output |
+
+### Tests Added/Updated
+
+- `tests/unit/indicators/test_trend_params_migration.py`: New test file with 68 tests
+- `tests/unit/indicators/test_ma_indicators.py`: Updated validation tests to use error_code
+- `tests/unit/indicators/test_ichimoku_indicator.py`: Updated validation tests
+- `tests/unit/indicators/test_parabolic_sar_indicator.py`: Updated validation tests
+
+### Next Task Notes
+
+Task 2.4 migrates volume indicators (5): obv, vwap, mfi, cmf, ad_line.
+
+Follow the same pattern. Watch for existing tests that check specific error messages.

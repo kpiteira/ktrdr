@@ -9,11 +9,11 @@ from typing import Union
 
 import numpy as np
 import pandas as pd
+from pydantic import Field
 
 from ktrdr import get_logger
 from ktrdr.errors import DataError
 from ktrdr.indicators.base_indicator import BaseIndicator
-from ktrdr.indicators.schemas import PARABOLIC_SAR_SCHEMA
 
 logger = get_logger(__name__)
 
@@ -69,46 +69,42 @@ class ParabolicSARIndicator(BaseIndicator):
     - Combine with momentum indicators (RSI, MACD)
     - Volume confirmation for signal validation
     - Support/resistance levels for entry timing
+
+    Default parameters:
+        - initial_af: 0.02 (initial acceleration factor)
+        - step_af: 0.02 (acceleration factor increment)
+        - max_af: 0.20 (maximum acceleration factor)
+
+    Attributes:
+        initial_af (float): Initial acceleration factor
+        step_af (float): Acceleration factor increment
+        max_af (float): Maximum acceleration factor
     """
 
-    def __init__(
-        self,
-        initial_af: float = 0.02,
-        step_af: float = 0.02,
-        max_af: float = 0.20,
-        **kwargs,
-    ):
-        """
-        Initialize Parabolic SAR indicator.
+    class Params(BaseIndicator.Params):
+        """Parabolic SAR parameter schema with validation."""
 
-        Args:
-            initial_af: Initial acceleration factor (default: 0.02)
-            step_af: Acceleration factor increment (default: 0.02)
-            max_af: Maximum acceleration factor (default: 0.20)
-            **kwargs: Additional keyword arguments for BaseIndicator
-        """
-        super().__init__(
-            name="ParabolicSAR",
-            initial_af=initial_af,
-            step_af=step_af,
-            max_af=max_af,
-            **kwargs,
+        initial_af: float = Field(
+            default=0.02,
+            ge=0.001,
+            le=0.1,
+            description="Initial acceleration factor",
+        )
+        step_af: float = Field(
+            default=0.02,
+            ge=0.001,
+            le=0.1,
+            description="Acceleration factor increment",
+        )
+        max_af: float = Field(
+            default=0.20,
+            ge=0.01,
+            le=1.0,
+            description="Maximum acceleration factor",
         )
 
-    def _validate_params(self, params: dict) -> dict:
-        """
-        Validate Parabolic SAR parameters using schema.
-
-        Args:
-            params: Dictionary of parameters to validate
-
-        Returns:
-            Validated parameters
-
-        Raises:
-            DataError: If parameters are invalid
-        """
-        return PARABOLIC_SAR_SCHEMA.validate(params)
+    # Parabolic SAR is displayed as overlay on price charts
+    display_as_overlay = True
 
     def compute(self, data: pd.DataFrame) -> Union[pd.Series, pd.DataFrame]:
         """
@@ -123,11 +119,10 @@ class ParabolicSARIndicator(BaseIndicator):
         Raises:
             DataError: If required columns are missing or insufficient data
         """
-        # Validate parameters
-        validated_params = self._validate_params(self.params)
-        initial_af = validated_params["initial_af"]
-        step_af = validated_params["step_af"]
-        max_af = validated_params["max_af"]
+        # Get parameters from self.params (validated by BaseIndicator)
+        initial_af: float = self.params["initial_af"]
+        step_af: float = self.params["step_af"]
+        max_af: float = self.params["max_af"]
 
         # Required columns for Parabolic SAR
         required_columns = ["high", "low", "close"]

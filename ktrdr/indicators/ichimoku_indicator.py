@@ -8,11 +8,11 @@ a comprehensive view of trend, momentum, and support/resistance levels.
 from typing import Union
 
 import pandas as pd
+from pydantic import Field
 
 from ktrdr import get_logger
 from ktrdr.errors import DataError
 from ktrdr.indicators.base_indicator import BaseIndicator
-from ktrdr.indicators.schemas import ICHIMOKU_SCHEMA
 
 logger = get_logger(__name__)
 
@@ -72,7 +72,54 @@ class IchimokuIndicator(BaseIndicator):
     - Volume analysis for breakout confirmation
     - Multiple timeframe analysis
     - Risk management rules for cloud breakouts
+
+    Default parameters:
+        - tenkan_period: 9 (period for Tenkan-sen calculation)
+        - kijun_period: 26 (period for Kijun-sen calculation)
+        - senkou_b_period: 52 (period for Senkou Span B calculation)
+        - displacement: 26 (displacement for Senkou spans and Chikou span)
+
+    Attributes:
+        tenkan_period (int): Period for Tenkan-sen calculation
+        kijun_period (int): Period for Kijun-sen calculation
+        senkou_b_period (int): Period for Senkou Span B calculation
+        displacement (int): Displacement for Senkou spans and Chikou span
     """
+
+    class Params(BaseIndicator.Params):
+        """Ichimoku parameter schema with validation."""
+
+        tenkan_period: int = Field(
+            default=9,
+            ge=1,
+            le=50,
+            strict=True,
+            description="Period for Tenkan-sen (Conversion Line) calculation",
+        )
+        kijun_period: int = Field(
+            default=26,
+            ge=1,
+            le=100,
+            strict=True,
+            description="Period for Kijun-sen (Base Line) calculation",
+        )
+        senkou_b_period: int = Field(
+            default=52,
+            ge=1,
+            le=200,
+            strict=True,
+            description="Period for Senkou Span B calculation",
+        )
+        displacement: int = Field(
+            default=26,
+            ge=1,
+            le=100,
+            strict=True,
+            description="Displacement for Senkou spans and Chikou span",
+        )
+
+    # Ichimoku is displayed as overlay on price charts
+    display_as_overlay = True
 
     @classmethod
     def is_multi_output(cls) -> bool:
@@ -83,48 +130,6 @@ class IchimokuIndicator(BaseIndicator):
     def get_output_names(cls) -> list[str]:
         """Return semantic output names for Ichimoku."""
         return ["tenkan", "kijun", "senkou_a", "senkou_b", "chikou"]
-
-    def __init__(
-        self,
-        tenkan_period: int = 9,
-        kijun_period: int = 26,
-        senkou_b_period: int = 52,
-        displacement: int = 26,
-        **kwargs,
-    ):
-        """
-        Initialize Ichimoku Cloud indicator.
-
-        Args:
-            tenkan_period: Period for Tenkan-sen calculation (default: 9)
-            kijun_period: Period for Kijun-sen calculation (default: 26)
-            senkou_b_period: Period for Senkou Span B calculation (default: 52)
-            displacement: Displacement for Senkou spans and Chikou span (default: 26)
-            **kwargs: Additional keyword arguments for BaseIndicator
-        """
-        super().__init__(
-            name="Ichimoku",
-            tenkan_period=tenkan_period,
-            kijun_period=kijun_period,
-            senkou_b_period=senkou_b_period,
-            displacement=displacement,
-            **kwargs,
-        )
-
-    def _validate_params(self, params: dict) -> dict:
-        """
-        Validate Ichimoku parameters using schema.
-
-        Args:
-            params: Dictionary of parameters to validate
-
-        Returns:
-            Validated parameters
-
-        Raises:
-            DataError: If parameters are invalid
-        """
-        return ICHIMOKU_SCHEMA.validate(params)
 
     def compute(self, data: pd.DataFrame) -> Union[pd.Series, pd.DataFrame]:
         """
@@ -139,12 +144,11 @@ class IchimokuIndicator(BaseIndicator):
         Raises:
             DataError: If required columns are missing or insufficient data
         """
-        # Validate parameters
-        validated_params = self._validate_params(self.params)
-        tenkan_period = validated_params["tenkan_period"]
-        kijun_period = validated_params["kijun_period"]
-        senkou_b_period = validated_params["senkou_b_period"]
-        displacement = validated_params["displacement"]
+        # Get parameters from self.params (validated by BaseIndicator)
+        tenkan_period: int = self.params["tenkan_period"]
+        kijun_period: int = self.params["kijun_period"]
+        senkou_b_period: int = self.params["senkou_b_period"]
+        displacement: int = self.params["displacement"]
 
         # Required columns for Ichimoku
         required_columns = ["high", "low", "close"]

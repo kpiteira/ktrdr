@@ -44,37 +44,37 @@ class TestParabolicSARIndicator:
         """Test parameter validation for initial_af too small."""
         with pytest.raises(DataError) as exc_info:
             ParabolicSARIndicator(initial_af=0.0005)
-        assert "initial_af" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_initial_af_too_large(self):
         """Test parameter validation for initial_af too large."""
         with pytest.raises(DataError) as exc_info:
             ParabolicSARIndicator(initial_af=0.15)
-        assert "initial_af" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_step_af_too_small(self):
         """Test parameter validation for step_af too small."""
         with pytest.raises(DataError) as exc_info:
             ParabolicSARIndicator(step_af=0.0005)
-        assert "step_af" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_step_af_too_large(self):
         """Test parameter validation for step_af too large."""
         with pytest.raises(DataError) as exc_info:
             ParabolicSARIndicator(step_af=0.15)
-        assert "step_af" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_max_af_too_small(self):
         """Test parameter validation for max_af too small."""
         with pytest.raises(DataError) as exc_info:
             ParabolicSARIndicator(max_af=0.005)
-        assert "max_af" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_max_af_too_large(self):
         """Test parameter validation for max_af too large."""
         with pytest.raises(DataError) as exc_info:
             ParabolicSARIndicator(max_af=1.5)
-        assert "max_af" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_basic_calculation(self):
         """Test basic Parabolic SAR calculation."""

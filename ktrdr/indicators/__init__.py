@@ -8,7 +8,11 @@ used for trading analysis and decision making.
 from ktrdr.indicators.base_indicator import INDICATOR_REGISTRY, BaseIndicator
 from ktrdr.indicators.indicator_engine import IndicatorEngine
 from ktrdr.indicators.indicator_factory import BUILT_IN_INDICATORS
-from ktrdr.indicators.ma_indicators import ExponentialMovingAverage, SimpleMovingAverage
+from ktrdr.indicators.ma_indicators import (
+    ExponentialMovingAverage,
+    SimpleMovingAverage,
+    WeightedMovingAverage,
+)
 from ktrdr.indicators.macd_indicator import MACDIndicator
 from ktrdr.indicators.rsi_indicator import RSIIndicator
 
@@ -18,6 +22,7 @@ __all__ = [
     "RSIIndicator",
     "SimpleMovingAverage",
     "ExponentialMovingAverage",
+    "WeightedMovingAverage",
     "MACDIndicator",
     "BUILT_IN_INDICATORS",
     "IndicatorEngine",

@@ -13,6 +13,7 @@ Author: KTRDR
 from typing import Any
 
 import pandas as pd
+from pydantic import Field
 
 from ktrdr import get_logger
 from ktrdr.errors import DataError
@@ -47,9 +48,26 @@ class ADXIndicator(BaseIndicator):
     - +DI above -DI suggests uptrend
     - -DI above +DI suggests downtrend
 
-    Typical Parameters:
-    - period: 14 (most common), 21, 28
+    Default parameters:
+        - period: 14 (lookback period for ADX calculation)
+
+    Attributes:
+        period (int): Lookback period for ADX calculation
     """
+
+    class Params(BaseIndicator.Params):
+        """ADX parameter schema with validation."""
+
+        period: int = Field(
+            default=14,
+            ge=2,
+            le=200,
+            strict=True,
+            description="Lookback period for ADX calculation",
+        )
+
+    # ADX is displayed in a separate panel (not overlay on price)
+    display_as_overlay = False
 
     @classmethod
     def is_multi_output(cls) -> bool:
@@ -60,31 +78,6 @@ class ADXIndicator(BaseIndicator):
     def get_output_names(cls) -> list[str]:
         """Return semantic output names for ADX."""
         return ["adx", "plus_di", "minus_di"]
-
-    def __init__(self, period: int = 14):
-        """
-        Initialize ADX indicator.
-
-        Args:
-            period: Period for ADX calculation (default: 14)
-        """
-        # Call parent constructor - ADX is typically displayed in separate panel
-        super().__init__(name="ADX", display_as_overlay=False, period=period)
-
-    def _validate_params(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Validate indicator parameters."""
-        period = params.get("period", 14)
-
-        if not isinstance(period, int) or period < 1:
-            raise ValueError("period must be a positive integer")
-
-        if period < 2:
-            raise ValueError("period must be at least 2")
-
-        if period > 200:
-            raise ValueError("period should not exceed 200 for practical purposes")
-
-        return {"period": period}
 
     def _wilder_smoothing(self, series: pd.Series, period: int) -> pd.Series:
         """
@@ -109,8 +102,8 @@ class ADXIndicator(BaseIndicator):
         Raises:
             DataError: If required columns are missing or insufficient data
         """
-        # Get parameters from self.params
-        period = self.params.get("period", 14)
+        # Get parameters from self.params (validated by BaseIndicator)
+        period: int = self.params["period"]
 
         # Check required columns
         required_columns = ["high", "low", "close"]
