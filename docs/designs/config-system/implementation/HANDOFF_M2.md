@@ -243,3 +243,33 @@ Both are needed: `deprecated_field()` makes the old name work, `DEPRECATED_NAMES
 - Unit tests for all M2 Settings classes already exist (created in 2.1-2.4)
 - This task may just be verification that coverage is complete
 - Check `tests/unit/config/test_*_settings.py` files exist
+
+---
+
+## Task 2.11 Complete: Write Unit Tests
+
+### Summary
+
+**No-op task** — Unit tests for all M2 Settings classes already exist. They were written as part of tasks 2.1-2.4.
+
+**Test files:**
+- `tests/unit/config/test_api_settings.py` (29 tests)
+- `tests/unit/config/test_auth_settings.py` (9 tests)
+- `tests/unit/config/test_logging_settings.py` (17 tests)
+- `tests/unit/config/test_observability_settings.py` (13 tests)
+
+**Total: 68 tests, all passing.**
+
+### Coverage
+
+Tests cover:
+- Default values
+- Env var overrides
+- Validation (error cases)
+- Deprecated name support
+- Cached getter behavior
+
+### Next Task Notes (2.12: Execute E2E Test)
+
+- This is a VALIDATION task — run the E2E scenarios from the milestone
+- Scenarios test: backend serving requests, logging, tracing, production mode rejection
