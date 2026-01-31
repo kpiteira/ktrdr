@@ -21,6 +21,21 @@ from prometheus_client import make_asgi_app
 logger = logging.getLogger(__name__)
 
 
+def _is_testing() -> bool:
+    """Check if running in test mode.
+
+    Uses PYTEST_CURRENT_TEST (set per-test) or checks if pytest is loaded.
+    This must be a function checked at runtime, not import time.
+    """
+    # PYTEST_CURRENT_TEST is set during test execution
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return True
+    # Also check if pytest module is loaded (covers collection phase)
+    import sys
+
+    return "pytest" in sys.modules
+
+
 def setup_monitoring(
     service_name: str,
     otlp_endpoint: str | None = None,
@@ -37,8 +52,14 @@ def setup_monitoring(
         use_simple_processor: If True, use SimpleSpanProcessor for immediate export (for CLI/short-lived processes)
 
     Returns:
-        TracerProvider instance
+        TracerProvider instance (no-op provider in test mode)
     """
+    # Skip telemetry setup in test mode to avoid Jaeger connection attempts
+    if _is_testing():
+        provider = TracerProvider()
+        trace.set_tracer_provider(provider)
+        return provider
+
     # Create resource with service identification
     resource = Resource.create(
         {
