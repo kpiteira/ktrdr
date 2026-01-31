@@ -84,6 +84,16 @@ if indicator_class is None:
     indicator_class = BUILT_IN_INDICATORS.get(definition.type.lower())
 ```
 
-### Next Task Notes (1.5)
+---
 
-Task 1.5 exports `INDICATOR_REGISTRY` from `ktrdr/indicators/__init__.py` so `from ktrdr.indicators import INDICATOR_REGISTRY` works.
+## Task 1.5 Complete: Update `__init__.py` exports
+
+### Implementation Notes
+
+- Added `INDICATOR_REGISTRY` to import from `base_indicator`
+- Added `INDICATOR_REGISTRY` to `__all__` list
+- Now `from ktrdr.indicators import INDICATOR_REGISTRY` works
+
+### Next Task Notes (1.6)
+
+Task 1.6 is the final M1 validation task — run the E2E test to confirm everything works end-to-end.
