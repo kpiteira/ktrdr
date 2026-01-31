@@ -224,3 +224,31 @@ Added 11 M4 deprecated name mappings to `DEPRECATED_NAMES` in `ktrdr/config/depr
 - Check `test_worker_settings.py`, `test_checkpoint_settings.py`, etc.
 
 ---
+
+## Task 4.9 Complete: Write Unit Tests
+
+### Implementation Notes
+
+Unit tests for all M4 Settings classes were already written during Tasks 4.1-4.4:
+- `test_worker_settings.py` — 27 tests (defaults, env vars, deprecated names, precedence, validation, getter)
+- `test_checkpoint_settings.py` — 27 tests (same categories)
+- `test_orphan_detector_settings.py` — 16 tests (same categories)
+- `test_operations_settings.py` — 18 tests (same categories)
+
+**Total: 88 tests** covering:
+1. Default values
+2. Environment variable configuration (new KTRDR_* names)
+3. Deprecated env var names still work
+4. New names take precedence over deprecated
+5. Validation constraints (gt=0, ge=0, port range)
+6. Cached getter returns same instance
+7. Cache clear returns new instance
+
+All 4676 unit tests pass.
+
+### Next Task Notes (4.10: Execute E2E Test)
+
+- This is a VALIDATION task — run E2E scenarios from the milestone
+- Scenarios: worker starts/registers, invalid config fails, port default consistent, deprecated names warn
+
+---
