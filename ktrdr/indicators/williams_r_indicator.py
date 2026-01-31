@@ -5,14 +5,12 @@ Williams %R is a momentum indicator that measures overbought and oversold levels
 It is similar to the Stochastic Oscillator but is plotted upside-down on a scale of -100 to 0.
 """
 
-from typing import Any
-
 import pandas as pd
+from pydantic import Field
 
 from ktrdr import get_logger
 from ktrdr.errors import DataError
 from ktrdr.indicators.base_indicator import BaseIndicator
-from ktrdr.indicators.schemas import WILLIAMS_R_SCHEMA
 
 # Create module-level logger
 logger = get_logger(__name__)
@@ -37,36 +35,19 @@ class WilliamsRIndicator(BaseIndicator):
         period (int): Lookback period for Williams %R calculation
     """
 
-    def __init__(self, period: int = 14):
-        """
-        Initialize the Williams %R indicator.
+    class Params(BaseIndicator.Params):
+        """Williams %R parameter schema with validation."""
 
-        Args:
-            period: Lookback period for Williams %R calculation
-        """
-        # Call parent constructor with display_as_overlay=False (separate panel)
-        super().__init__(
-            name="WilliamsR",
-            display_as_overlay=False,
-            period=period,
+        period: int = Field(
+            default=14,
+            ge=1,
+            le=100,
+            strict=True,
+            description="Lookback period for Williams %R calculation",
         )
 
-        logger.debug(f"Initialized Williams %R indicator with period={period}")
-
-    def _validate_params(self, params: dict[str, Any]) -> dict[str, Any]:
-        """
-        Validate parameters for Williams %R indicator using schema-based validation.
-
-        Args:
-            params: Parameters to validate
-
-        Returns:
-            Validated parameters with defaults applied
-
-        Raises:
-            DataError: If parameters are invalid
-        """
-        return WILLIAMS_R_SCHEMA.validate(params)
+    # Williams %R is displayed in a separate panel (oscillator)
+    display_as_overlay = False
 
     def compute(self, data: pd.DataFrame) -> pd.Series:
         """

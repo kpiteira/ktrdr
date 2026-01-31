@@ -12,6 +12,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from pydantic import Field
 
 from ktrdr import get_logger
 from ktrdr.errors import DataError
@@ -51,6 +52,27 @@ class FisherTransformIndicator(BaseIndicator):
     - smoothing: 3 (EMA smoothing period)
     """
 
+    class Params(BaseIndicator.Params):
+        """Fisher Transform parameter schema with validation."""
+
+        period: int = Field(
+            default=10,
+            ge=2,
+            le=100,
+            strict=True,
+            description="Lookback period for price normalization",
+        )
+        smoothing: int = Field(
+            default=3,
+            ge=1,
+            le=20,
+            strict=True,
+            description="EMA smoothing period for the Fisher Transform",
+        )
+
+    # Fisher Transform is displayed in a separate panel (oscillator)
+    display_as_overlay = False
+
     @classmethod
     def is_multi_output(cls) -> bool:
         """Fisher Transform produces multiple outputs (Fisher and Signal)."""
@@ -60,44 +82,6 @@ class FisherTransformIndicator(BaseIndicator):
     def get_output_names(cls) -> list[str]:
         """Return semantic output names for Fisher Transform."""
         return ["fisher", "signal"]
-
-    def __init__(self, period: int = 10, smoothing: int = 3):
-        """
-        Initialize Fisher Transform indicator.
-
-        Args:
-            period: Lookback period for price normalization (default: 10)
-            smoothing: EMA smoothing period for the Fisher Transform (default: 3)
-        """
-        # Call parent constructor - Fisher Transform is typically displayed in separate panel
-        super().__init__(
-            name="FisherTransform",
-            display_as_overlay=False,
-            period=period,
-            smoothing=smoothing,
-        )
-
-    def _validate_params(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Validate indicator parameters."""
-        period = params.get("period", 10)
-        smoothing = params.get("smoothing", 3)
-
-        if not isinstance(period, int) or period < 1:
-            raise ValueError("period must be a positive integer")
-
-        if period < 2:
-            raise ValueError("period must be at least 2")
-
-        if period > 100:
-            raise ValueError("period should not exceed 100 for practical purposes")
-
-        if not isinstance(smoothing, int) or smoothing < 1:
-            raise ValueError("smoothing must be a positive integer")
-
-        if smoothing > 20:
-            raise ValueError("smoothing should not exceed 20 for practical purposes")
-
-        return {"period": period, "smoothing": smoothing}
 
     def compute(self, data: pd.DataFrame) -> pd.DataFrame:
         """

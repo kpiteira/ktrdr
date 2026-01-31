@@ -20,10 +20,10 @@ Where:
 
 import numpy as np
 import pandas as pd
+from pydantic import Field
 
 from ktrdr.errors import DataError
 from ktrdr.indicators.base_indicator import BaseIndicator
-from ktrdr.indicators.schemas import CCI_SCHEMA
 
 
 class CCIIndicator(BaseIndicator):
@@ -48,19 +48,19 @@ class CCIIndicator(BaseIndicator):
     but can exceed these bounds during strong trends).
     """
 
-    def __init__(self, period: int = 20):
-        """
-        Initialize CCI indicator.
+    class Params(BaseIndicator.Params):
+        """CCI parameter schema with validation."""
 
-        Args:
-            period: Number of periods for CCI calculation (default: 20)
-        """
-        # Call parent constructor with display_as_overlay=False (separate panel)
-        super().__init__(name="CCI", display_as_overlay=False, period=period)
+        period: int = Field(
+            default=20,
+            ge=2,
+            le=100,
+            strict=True,
+            description="Number of periods for CCI calculation",
+        )
 
-    def _validate_params(self, params):
-        """Validate parameters using schema."""
-        return CCI_SCHEMA.validate(params)
+    # CCI is displayed in a separate panel (oscillator)
+    display_as_overlay = False
 
     def compute(self, data: pd.DataFrame) -> pd.Series:
         """
@@ -75,9 +75,8 @@ class CCIIndicator(BaseIndicator):
         Raises:
             DataError: If required columns are missing or insufficient data
         """
-        # Validate parameters
-        validated_params = self._validate_params(self.params)
-        period = validated_params["period"]
+        # Get parameters from self.params (validated by BaseIndicator)
+        period: int = self.params["period"]
 
         # Check required columns
         required_columns = ["high", "low", "close"]

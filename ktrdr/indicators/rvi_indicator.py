@@ -15,9 +15,8 @@ The RVI oscillates around zero, with values above zero indicating bullish moment
 and values below zero indicating bearish momentum.
 """
 
-from typing import Any
-
 import pandas as pd
+from pydantic import Field
 
 from ktrdr import get_logger
 from ktrdr.errors import DataError
@@ -38,6 +37,27 @@ class RVIIndicator(BaseIndicator):
         signal_period: Period for the signal line calculation (default: 4)
     """
 
+    class Params(BaseIndicator.Params):
+        """RVI parameter schema with validation."""
+
+        period: int = Field(
+            default=10,
+            ge=4,
+            le=100,
+            strict=True,
+            description="Period for the RVI calculation (must be >= 4)",
+        )
+        signal_period: int = Field(
+            default=4,
+            ge=1,
+            le=50,
+            strict=True,
+            description="Period for the signal line calculation",
+        )
+
+    # RVI is displayed in a separate panel (oscillator)
+    display_as_overlay = False
+
     @classmethod
     def is_multi_output(cls) -> bool:
         """RVI produces multiple outputs (RVI and Signal)."""
@@ -47,83 +67,6 @@ class RVIIndicator(BaseIndicator):
     def get_output_names(cls) -> list[str]:
         """Return semantic output names for RVI indicator."""
         return ["rvi", "signal"]
-
-    def __init__(self, period: int = 10, signal_period: int = 4):
-        """
-        Initialize the RVI indicator.
-
-        Args:
-            period: Period for the RVI calculation (must be >= 4)
-            signal_period: Period for the signal line calculation (must be >= 1)
-
-        Raises:
-            DataError: If parameters are invalid
-        """
-        # Initialize base class with parameters
-        super().__init__(name="RVI", period=period, signal_period=signal_period)
-
-        logger.debug(
-            f"Initialized RVI indicator with period={period}, signal_period={signal_period}"
-        )
-
-    def _validate_params(self, params: dict[str, Any]) -> dict[str, Any]:
-        """
-        Validate RVI parameters.
-
-        Args:
-            params: Dictionary of parameters to validate
-
-        Returns:
-            Dictionary of validated parameters
-
-        Raises:
-            DataError: If any parameter is invalid
-        """
-        validated_params = {}
-
-        # Validate period
-        period = params.get("period", 10)
-        if not isinstance(period, int) or period < 4:
-            raise DataError(
-                message="RVI period must be an integer >= 4",
-                error_code="INDICATOR-InvalidParameter",
-                details={"parameter": "period", "value": period, "minimum": 4},
-            )
-
-        if period > 100:
-            raise DataError(
-                message="RVI period must be <= 100",
-                error_code="INDICATOR-InvalidParameter",
-                details={"parameter": "period", "value": period, "maximum": 100},
-            )
-        validated_params["period"] = period
-
-        # Validate signal_period
-        signal_period = params.get("signal_period", 4)
-        if not isinstance(signal_period, int) or signal_period < 1:
-            raise DataError(
-                message="RVI signal_period must be an integer >= 1",
-                error_code="INDICATOR-InvalidParameter",
-                details={
-                    "parameter": "signal_period",
-                    "value": signal_period,
-                    "minimum": 1,
-                },
-            )
-
-        if signal_period > 50:
-            raise DataError(
-                message="RVI signal_period must be <= 50",
-                error_code="INDICATOR-InvalidParameter",
-                details={
-                    "parameter": "signal_period",
-                    "value": signal_period,
-                    "maximum": 50,
-                },
-            )
-        validated_params["signal_period"] = signal_period
-
-        return validated_params
 
     def _validate_data(self, data: pd.DataFrame):
         """
@@ -237,10 +180,14 @@ class RVIIndicator(BaseIndicator):
         # Calculate Signal line
         signal = rvi.rolling(window=signal_period, min_periods=signal_period).mean()
 
-        # Create result DataFrame
-        result = pd.DataFrame(index=data.index)
-        result[f"RVI_{period}_{signal_period}_RVI"] = rvi
-        result[f"RVI_{period}_{signal_period}_Signal"] = signal
+        # M3b: Return semantic column names only (engine handles prefixing)
+        result = pd.DataFrame(
+            {
+                "rvi": rvi,
+                "signal": signal,
+            },
+            index=data.index,
+        )
 
         logger.debug(
             f"RVI computation completed. Valid RVI values: {(~pd.isna(rvi)).sum()}"

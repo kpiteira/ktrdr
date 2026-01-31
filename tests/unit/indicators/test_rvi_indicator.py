@@ -42,37 +42,38 @@ class TestRVIIndicator:
         """Test parameter validation for period too small."""
         with pytest.raises(DataError) as exc_info:
             RVIIndicator(period=3)
-        assert "period must be" in str(exc_info.value).lower()
+        # New Params pattern raises DataError with INDICATOR-InvalidParameters code
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_period_too_large(self):
         """Test parameter validation for period too large."""
         with pytest.raises(DataError) as exc_info:
             RVIIndicator(period=101)
-        assert "period must be" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_signal_period_too_small(self):
         """Test parameter validation for signal_period too small."""
         with pytest.raises(DataError) as exc_info:
             RVIIndicator(signal_period=0)
-        assert "signal_period must be" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_signal_period_too_large(self):
         """Test parameter validation for signal_period too large."""
         with pytest.raises(DataError) as exc_info:
             RVIIndicator(signal_period=51)
-        assert "signal_period must be" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_period_non_integer(self):
         """Test parameter validation for non-integer period."""
         with pytest.raises(DataError) as exc_info:
             RVIIndicator(period=10.5)
-        assert "period must be" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_signal_period_non_integer(self):
         """Test parameter validation for non-integer signal_period."""
         with pytest.raises(DataError) as exc_info:
             RVIIndicator(signal_period=4.5)
-        assert "signal_period must be" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_basic_calculation(self):
         """Test basic RVI calculation with sufficient data."""
@@ -181,8 +182,8 @@ class TestRVIIndicator:
         assert len(result) == len(data)
 
         # Column names should be correctly formatted
-        assert "RVI_10_4_RVI" in result.columns
-        assert "RVI_10_4_Signal" in result.columns
+        assert "rvi" in result.columns
+        assert "signal" in result.columns
 
     def test_bullish_trend_momentum(self):
         """Test RVI behavior during bullish trend (close > open)."""
@@ -202,7 +203,7 @@ class TestRVIIndicator:
         result = indicator.compute(data)
 
         # In bullish trend, RVI should be positive
-        rvi_values = result["RVI_10_4_RVI"].dropna()
+        rvi_values = result["rvi"].dropna()
         assert len(rvi_values) > 0
 
         # Most values should be positive in strong bullish trend
@@ -227,7 +228,7 @@ class TestRVIIndicator:
         result = indicator.compute(data)
 
         # In bearish trend, RVI should be negative
-        rvi_values = result["RVI_10_4_RVI"].dropna()
+        rvi_values = result["rvi"].dropna()
         assert len(rvi_values) > 0
 
         # Most values should be negative in strong bearish trend
@@ -260,8 +261,8 @@ class TestRVIIndicator:
         result = indicator.compute(data)
 
         # Calculate volatility (standard deviation) of RVI and Signal
-        rvi_values = result["RVI_10_4_RVI"].dropna()
-        signal_values = result["RVI_10_4_Signal"].dropna()
+        rvi_values = result["rvi"].dropna()
+        signal_values = result["signal"].dropna()
 
         if len(rvi_values) > 5 and len(signal_values) > 5:
             rvi_volatility = rvi_values.std()
@@ -319,7 +320,7 @@ class TestRVIIndicator:
         assert len(result) == 13
 
         # Should have some valid values near the end
-        rvi_values = result["RVI_10_4_RVI"].dropna()
+        rvi_values = result["rvi"].dropna()
         assert len(rvi_values) > 0
 
     def test_custom_parameters(self):
@@ -341,8 +342,8 @@ class TestRVIIndicator:
         assert len(result) == 10
 
         # Column names should reflect custom parameters
-        assert "RVI_4_2_RVI" in result.columns
-        assert "RVI_4_2_Signal" in result.columns
+        assert "rvi" in result.columns
+        assert "signal" in result.columns
 
     def test_zero_high_low_range(self):
         """Test RVI with zero high-low range (doji candles)."""
@@ -427,7 +428,7 @@ class TestRVIIndicator:
         assert len(result) == 15
 
         # RVI should be either NaN or 0 when there's no range or price movement
-        rvi_values = result["RVI_10_4_RVI"].dropna()
+        rvi_values = result["rvi"].dropna()
         if len(rvi_values) > 0:
             assert all(abs(val) < 0.001 for val in rvi_values)  # Should be close to 0
 
@@ -461,8 +462,8 @@ class TestRVIIndicator:
         assert len(result) == 20
 
         # Values should be finite
-        rvi_values = result["RVI_10_4_RVI"].dropna()
-        signal_values = result["RVI_10_4_Signal"].dropna()
+        rvi_values = result["rvi"].dropna()
+        signal_values = result["signal"].dropna()
 
         assert all(np.isfinite(rvi_values))
         assert all(np.isfinite(signal_values))
@@ -587,7 +588,7 @@ class TestRVIIndicator:
         indicator = RVIIndicator()
         result = indicator.compute(df)
 
-        rvi_values = result["RVI_10_4_RVI"].dropna()
+        rvi_values = result["rvi"].dropna()
 
         if len(rvi_values) > 0:
             # Should have both positive and negative values
@@ -677,8 +678,8 @@ class TestRVIIndicator:
         result = indicator.compute(data)
 
         # All valid values should be finite numbers
-        rvi_values = result["RVI_10_4_RVI"].dropna()
-        signal_values = result["RVI_10_4_Signal"].dropna()
+        rvi_values = result["rvi"].dropna()
+        signal_values = result["signal"].dropna()
 
         assert all(np.isfinite(rvi_values))
         assert all(np.isfinite(signal_values))
@@ -758,7 +759,7 @@ class TestRVIIndicator:
         result = indicator.compute(data)
 
         # In this consistent bullish pattern, RVI should be positive
-        rvi_values = result["RVI_4_2_RVI"].dropna()
+        rvi_values = result["rvi"].dropna()
         if len(rvi_values) > 0:
             assert all(
                 val > 0 for val in rvi_values
@@ -790,8 +791,8 @@ class TestRVIIndicator:
 
         # Signal should be smoother and lag behind RVI during momentum changes
         # This is a qualitative test - in practice, signal should change more gradually
-        rvi_values = result["RVI_10_4_RVI"].dropna()
-        signal_values = result["RVI_10_4_Signal"].dropna()
+        rvi_values = result["rvi"].dropna()
+        signal_values = result["signal"].dropna()
 
         assert len(rvi_values) > 0
         assert len(signal_values) > 0

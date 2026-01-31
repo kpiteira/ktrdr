@@ -8,11 +8,11 @@ in price over a specified period to identify trends and momentum shifts.
 from typing import Union
 
 import pandas as pd
+from pydantic import Field
 
 from ktrdr import get_logger
 from ktrdr.errors import DataError
 from ktrdr.indicators.base_indicator import BaseIndicator
-from ktrdr.indicators.schemas import MOMENTUM_SCHEMA
 
 logger = get_logger(__name__)
 
@@ -49,25 +49,22 @@ class MomentumIndicator(BaseIndicator):
     Returns Series with momentum values (difference in price units)
     """
 
-    def __init__(self, period: int = 10, source: str = "close"):
-        """
-        Initialize Momentum indicator.
+    class Params(BaseIndicator.Params):
+        """Momentum parameter schema with validation."""
 
-        Args:
-            period: Lookback period for momentum calculation (default: 10)
-            source: Data source column (default: "close")
-        """
-        # Call parent constructor with display_as_overlay=False (separate panel)
-        super().__init__(
-            name="Momentum",
-            display_as_overlay=False,
-            period=period,
-            source=source,
+        period: int = Field(
+            default=10,
+            ge=1,
+            le=100,
+            strict=True,
+            description="Lookback period for momentum calculation",
+        )
+        source: str = Field(
+            default="close", strict=True, description="Price source column"
         )
 
-    def _validate_params(self, params):
-        """Validate parameters using schema."""
-        return MOMENTUM_SCHEMA.validate(params)
+    # Momentum is displayed in a separate panel (oscillator)
+    display_as_overlay = False
 
     def compute(self, data: pd.DataFrame) -> Union[pd.Series, pd.DataFrame]:
         """
@@ -82,10 +79,9 @@ class MomentumIndicator(BaseIndicator):
         Raises:
             DataError: If required columns are missing or insufficient data
         """
-        # Validate parameters
-        validated_params = self._validate_params(self.params)
-        period = validated_params["period"]
-        source = validated_params["source"]
+        # Get parameters from self.params (validated by BaseIndicator)
+        period: int = self.params["period"]
+        source: str = self.params["source"]
 
         # Check if source column exists
         if source not in data.columns:

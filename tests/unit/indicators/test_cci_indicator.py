@@ -12,7 +12,6 @@ import pytest
 
 from ktrdr.errors import DataError
 from ktrdr.indicators.cci_indicator import CCIIndicator
-from ktrdr.indicators.schemas import CCI_SCHEMA
 
 
 class TestCCIIndicator:
@@ -29,25 +28,21 @@ class TestCCIIndicator:
         assert cci.params["period"] == 14
 
     def test_parameter_validation_success(self):
-        """Test successful parameter validation."""
+        """Test successful parameter validation via construction."""
         cci = CCIIndicator(period=10)
-        params = {"period": 10}
-        validated = cci._validate_params(params)
-        assert validated["period"] == 10
+        assert cci.params["period"] == 10
 
     def test_parameter_validation_period_too_small(self):
         """Test parameter validation with period too small."""
-        cci = CCIIndicator()
-        params = {"period": 1}
-        with pytest.raises(DataError, match="period.*must be >= 2"):
-            cci._validate_params(params)
+        with pytest.raises(DataError) as exc_info:
+            CCIIndicator(period=1)
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_period_too_large(self):
         """Test parameter validation with period too large."""
-        cci = CCIIndicator()
-        params = {"period": 150}
-        with pytest.raises(DataError, match="period.*must be <= 100"):
-            cci._validate_params(params)
+        with pytest.raises(DataError) as exc_info:
+            CCIIndicator(period=150)
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_basic_calculation(self):
         """Test basic CCI calculation."""
@@ -278,14 +273,16 @@ class TestCCIIndicator:
         with pytest.raises(DataError, match="Insufficient data"):
             cci.compute(data)
 
-    def test_schema_integration(self):
-        """Test integration with parameter schema system."""
-        # Test that the schema is properly defined
-        assert CCI_SCHEMA.name == "CCI"
-        assert len(CCI_SCHEMA.parameters) == 1
+    def test_params_class_integration(self):
+        """Test integration with Params class validation."""
+        # Test that the Params class is properly defined
+        from ktrdr.indicators.base_indicator import BaseIndicator
 
-        # Test parameter names (parameters is a dict)
-        param_names = list(CCI_SCHEMA.parameters.keys())
+        assert hasattr(CCIIndicator, "Params")
+        assert CCIIndicator.Params is not BaseIndicator.Params
+
+        # Test parameter names from model_fields
+        param_names = list(CCIIndicator.Params.model_fields.keys())
         assert "period" in param_names
 
     def test_edge_case_identical_prices(self):

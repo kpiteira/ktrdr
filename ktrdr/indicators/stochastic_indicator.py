@@ -5,14 +5,12 @@ The Stochastic Oscillator is a momentum indicator that compares a security's clo
 to its price range over a given time period. It generates two lines: %K and %D.
 """
 
-from typing import Any
-
 import pandas as pd
+from pydantic import Field
 
 from ktrdr import get_logger
 from ktrdr.errors import DataError
 from ktrdr.indicators.base_indicator import BaseIndicator
-from ktrdr.indicators.schemas import STOCHASTIC_SCHEMA
 
 # Create module-level logger
 logger = get_logger(__name__)
@@ -41,6 +39,34 @@ class StochasticIndicator(BaseIndicator):
         smooth_k (int): Smoothing period for %K line
     """
 
+    class Params(BaseIndicator.Params):
+        """Stochastic parameter schema with validation."""
+
+        k_period: int = Field(
+            default=14,
+            ge=1,
+            le=100,
+            strict=True,
+            description="Lookback period for %K calculation",
+        )
+        d_period: int = Field(
+            default=3,
+            ge=1,
+            le=20,
+            strict=True,
+            description="Smoothing period for %D calculation",
+        )
+        smooth_k: int = Field(
+            default=3,
+            ge=1,
+            le=20,
+            strict=True,
+            description="Smoothing period for %K line",
+        )
+
+    # Stochastic is displayed in a separate panel (oscillator)
+    display_as_overlay = False
+
     @classmethod
     def is_multi_output(cls) -> bool:
         """Stochastic produces multiple outputs (%K and %D lines)."""
@@ -50,49 +76,6 @@ class StochasticIndicator(BaseIndicator):
     def get_output_names(cls) -> list[str]:
         """Return semantic output names for Stochastic."""
         return ["k", "d"]
-
-    def __init__(
-        self,
-        k_period: int = 14,
-        d_period: int = 3,
-        smooth_k: int = 3,
-    ):
-        """
-        Initialize the Stochastic Oscillator indicator.
-
-        Args:
-            k_period: Lookback period for %K calculation
-            d_period: Smoothing period for %D calculation
-            smooth_k: Smoothing period for %K line
-        """
-        # Call parent constructor with display_as_overlay=False (separate panel)
-        super().__init__(
-            name="Stochastic",
-            display_as_overlay=False,
-            k_period=k_period,
-            d_period=d_period,
-            smooth_k=smooth_k,
-        )
-
-        logger.debug(
-            f"Initialized Stochastic indicator with k_period={k_period}, "
-            f"d_period={d_period}, smooth_k={smooth_k}"
-        )
-
-    def _validate_params(self, params: dict[str, Any]) -> dict[str, Any]:
-        """
-        Validate parameters for Stochastic indicator using schema-based validation.
-
-        Args:
-            params: Parameters to validate
-
-        Returns:
-            Validated parameters with defaults applied
-
-        Raises:
-            DataError: If parameters are invalid
-        """
-        return STOCHASTIC_SCHEMA.validate(params)
 
     def compute(self, data: pd.DataFrame) -> pd.DataFrame:
         """
