@@ -165,3 +165,29 @@ validate_all("worker")
 - May also need to add some backend settings workers depend on (logging, observability)
 
 ---
+
+## Task 4.7 Complete: Update Validation Module for M4 Settings
+
+### Implementation Notes
+
+Added 6 new settings classes to `WORKER_SETTINGS` in `_init_settings_lists()`:
+- `LoggingSettings` — workers need logging configuration
+- `ObservabilitySettings` — workers need tracing/metrics configuration
+- `WorkerSettings` — core worker configuration
+- `CheckpointSettings` — checkpoint persistence configuration
+- `OrphanDetectorSettings` — orphan detection configuration
+- `OperationsSettings` — operations tracking configuration
+
+`WORKER_SETTINGS` now contains 7 classes total (including the existing `DatabaseSettings`).
+
+### Gotchas
+
+**Workers need shared infrastructure settings too**: Not just the M4 worker-specific classes, but also `LoggingSettings` and `ObservabilitySettings` since workers need proper logging and observability configuration to function correctly.
+
+### Next Task Notes (4.8: Update Deprecation Module for M4 Names)
+
+- Add deprecated name mappings for worker-related env vars in `ktrdr/config/deprecation.py`
+- Check what's already there from Tasks 4.1-4.6
+- M4 deprecated names: `WORKER_*`, `CHECKPOINT_*`, `ORPHAN_*`, `OPERATIONS_*`
+
+---
