@@ -45,21 +45,12 @@ class TestFuzzyEngineRegistry:
         assert isinstance(mf, registry_cls)
 
     def test_rejects_non_dict_config_with_clear_error(self) -> None:
-        """FuzzyEngine should reject non-dict (v2 FuzzyConfig) with ConfigurationError."""
-        # Import v2 config type to test rejection
-        from ktrdr.fuzzy.config import FuzzyConfig
-
-        v2_config_dict = {
-            "rsi": {
-                "low": {"type": "triangular", "parameters": [0.0, 30.0, 50.0]},
-                "medium": {"type": "triangular", "parameters": [30.0, 50.0, 70.0]},
-                "high": {"type": "triangular", "parameters": [50.0, 70.0, 100.0]},
-            }
-        }
-        v2_config = FuzzyConfig.model_validate(v2_config_dict)
+        """FuzzyEngine should reject non-dict config with ConfigurationError."""
+        # Use a non-dict object (e.g., a list or string)
+        non_dict_config = ["rsi", "macd"]
 
         with pytest.raises(ConfigurationError) as exc_info:
-            FuzzyEngine(v2_config)
+            FuzzyEngine(non_dict_config)  # type: ignore[arg-type]
 
         # Should have clear error message about v2 being unsupported
         assert (

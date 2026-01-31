@@ -66,7 +66,49 @@
 - Validate parameters by instantiating MF class (triggers Params validation)
 - Case-insensitive lookup via registry's built-in case handling
 
-**Next Task Notes (3.5 - Delete v2 fuzzy files):**
-- Delete `ktrdr/fuzzy/config.py` and `ktrdr/fuzzy/migration.py`
-- Many tests will need deletion (those using v2 format)
-- Files still using v2: `training_pipeline.py:353`, `decision/orchestrator.py:445`, `fuzzy_service.py` (multiple places)
+---
+
+## Task 3.5 Complete: Delete v2 fuzzy files
+
+**Deleted files:**
+- `ktrdr/fuzzy/config.py` (v2 FuzzyConfig, FuzzyConfigLoader, etc.)
+- `ktrdr/fuzzy/migration.py` (v2 migration utilities)
+
+**Updated production files:**
+- `ktrdr/fuzzy/__init__.py` — removed v2 exports, added MEMBERSHIP_REGISTRY
+- `ktrdr/training/training_pipeline.py` — converts legacy format to FuzzySetDefinition
+- `ktrdr/decision/orchestrator.py` — converts strategy fuzzy_sets to FuzzySetDefinition
+- `ktrdr/api/services/fuzzy_service.py` — updated to use v3 methods (partial refactoring)
+
+**Deleted tests (v2-specific):**
+- `tests/unit/fuzzy/test_fuzzy_config.py`
+- `tests/unit/fuzzy/test_fuzzy_config_loader.py`
+- `tests/unit/fuzzy/test_migration.py`
+- `tests/unit/fuzzy/test_input_transforms.py`
+- `tests/unit/fuzzy/test_engine_transforms.py`
+- `tests/unit/fuzzy/test_engine.py`
+- `tests/unit/fuzzy/test_batch_fuzzy_calculator.py`
+- `tests/unit/fuzzy/test_fuzzy_edge_cases.py`
+- `tests/unit/fuzzy/test_fuzzy_engine_feature_ids.py`
+- `tests/unit/fuzzy/test_fuzzy_engine_new_format.py`
+- `tests/unit/fuzzy/test_fuzzy_validation.py`
+- `tests/api/test_fuzzy_service.py`
+- `tests/api/test_fuzzy_service_enhanced.py`
+- `tests/integration/training/test_pipeline_new_format.py`
+- `tests/unit/training/test_training_pipeline_transforms.py`
+- `tests/unit/training/test_training_pipeline_v3.py`
+
+**Deleted examples/scripts:**
+- `examples/fuzzy_config_example.py`
+- `examples/fuzzy_config_strategy_example.py`
+- `scripts/fuzzy_validation.py`
+- `scripts/mf_verification.py`
+
+**Key decisions:**
+- FuzzyService partially refactored — uses v3 _fuzzy_sets API but may need further work
+- Training pipeline converts legacy indicator-keyed format to fuzzy_set_id-keyed format
+- input_transform support removed — callers should pre-transform data if needed
+
+**Next Task Notes (3.6 - Update __init__.py exports):**
+- Task 3.6 may already be complete (exports updated in this task)
+- Verify `from ktrdr.fuzzy import MEMBERSHIP_REGISTRY` works
