@@ -18,7 +18,6 @@ from .host_services import (
     ApiServiceSettings,
     get_api_service_settings,
 )
-from .ib_config import IbConfig, get_ib_config
 
 T = TypeVar("T")
 
@@ -836,9 +835,7 @@ __all__ = [
     # Utilities
     "clear_settings_cache",
     "deprecated_field",
-    # Compatibility aliases (to be removed after M3.4)
+    # Compatibility aliases (to be removed after M3.5)
     "CLISettings",
     "get_cli_settings",
-    "IbConfig",
-    "get_ib_config",
 ]

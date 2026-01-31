@@ -70,3 +70,35 @@
 - Check imports in `ktrdr/services/ib/*.py` and other IB-related files
 
 ---
+
+## Task 3.4 Complete: Migrate IB Consumers and Delete `ib_config.py`
+
+### Gotchas
+
+**`reset_ib_config()` → `clear_settings_cache()`**: The old `ib_config.py` had `reset_ib_config()` for resetting the cached config. This is replaced by `clear_settings_cache()` from settings.py, which clears all settings caches (not just IB). This is fine because the use case (picking up new env vars) typically affects all settings anyway.
+
+**API env var updates use new names**: The `update_config()` method in `ib_service.py` was setting `IB_PORT` and `IB_HOST` env vars. Updated to use the new canonical names `KTRDR_IB_PORT` and `KTRDR_IB_HOST`. The deprecated_field mapping ensures both old and new names work.
+
+**API models kept unchanged**: `IbConfigInfo`, `IbConfigUpdateRequest`, `IbConfigUpdateResponse` are API contracts (response/request models) - NOT the config class. They were kept unchanged.
+
+### Files Migrated
+
+- `ktrdr/api/services/ib_service.py` - uses `get_ib_settings()` and `clear_settings_cache()`
+- `ib-host-service/config.py` - uses `IBSettings` and `get_ib_settings()`
+- `ib-host-service/ib/pool_manager.py` - uses `get_ib_settings()`
+- `scripts/run_ib_tests.py` - uses `get_ib_settings()`
+- `ktrdr/config/settings.py` - removed `IbConfig`, `get_ib_config` compatibility aliases
+
+### Files Deleted
+
+- `ktrdr/config/ib_config.py` - the old IbConfig dataclass
+- `tests/unit/config/test_ib_config.py` - tests for the old class
+
+### Next Task Notes (3.5: Migrate Host Service Consumers)
+
+- Find all `HostServiceSettings` usages for IB → replace with `get_ib_host_service_settings()`
+- Find all `HostServiceSettings` usages for Training → replace with `get_training_host_service_settings()`
+- The `host_services.py` file still exports `IbHostServiceSettings` (old) - different from `IBHostServiceSettings` (new)
+- Delete `ktrdr/config/host_services.py` after migration
+
+---

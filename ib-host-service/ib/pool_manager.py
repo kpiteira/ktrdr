@@ -8,7 +8,7 @@ to ensure consistent timeouts and avoid connection conflicts.
 from typing import Optional
 
 from ib.pool import IbConnectionPool
-from ktrdr.config.ib_config import get_ib_config
+from ktrdr.config.settings import get_ib_settings
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
@@ -31,7 +31,7 @@ def get_shared_ib_pool() -> IbConnectionPool:
 
     if _shared_pool is None:
         logger.info("Creating shared IB connection pool")
-        config = get_ib_config()
+        config = get_ib_settings()
 
         # Use consistent settings for all IB operations
         _shared_pool = IbConnectionPool(
