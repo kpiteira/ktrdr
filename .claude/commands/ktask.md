@@ -196,14 +196,68 @@ If integration test fails, investigate and fix before proceeding. The issue is l
 
 ### E2E Test Execution (VALIDATION tasks)
 
-For tasks with type VALIDATION, this IS the implementation step. Run the E2E test scenario from the milestone's E2E Validation section.
+For tasks with type VALIDATION, this IS the implementation step.
 
-1. **Locate E2E test**: Find the test in the E2E Validation section of the milestone file
-   - May reference a catalog test (e.g., `training/smoke`)
-   - May have embedded spec (designed by e2e-test-architect)
-2. **Run the test**: Execute the full scenario step-by-step using **e2e-tester** agent
-3. **Report results**: Document pass/fail for each success criterion
-4. **Fix failures**: If E2E tests fail, investigate — the issue is in previously implemented tasks
+---
+
+**⚠️ CRITICAL: E2E Tests MUST Use the Agent System**
+
+**NEVER** write or run ad-hoc E2E tests. **ALWAYS** use the e2e agent workflow:
+
+```
+e2e-test-designer → (finds existing OR hands off to) → e2e-test-architect → e2e-tester
+```
+
+**Why this matters:**
+- Ad-hoc tests often test components in isolation, not the real integrated system
+- Ad-hoc tests frequently use shortcuts that don't validate actual platform behavior
+- The agent system ensures tests run against the real platform with proper setup/teardown
+- The agent system produces reproducible tests saved to the catalog for future use
+
+**What "real E2E" means:**
+- Running Docker containers (not mocked services)
+- Real API calls (not unit test fixtures)
+- Actual database state changes (not in-memory)
+- Observable outcomes (logs, API responses, DB queries)
+
+---
+
+**Mandatory Workflow:**
+
+1. **Find or design the test** — Use `e2e-test-designer` agent:
+   ```
+   Task(subagent_type="e2e-test-designer", prompt="Search for E2E tests covering [milestone capability]...")
+   ```
+   - Designer searches the catalog at `.claude/skills/e2e-testing/tests/`
+   - If match found: Returns test reference to execute
+   - If no match: Returns "Architect Handoff Required" with context
+
+2. **If new test needed** — Use `e2e-test-architect` agent:
+   ```
+   Task(subagent_type="e2e-test-architect", prompt="Design E2E test for [capability]. Context from designer: ...")
+   ```
+   - Architect designs full test specification
+   - Architect writes test to catalog (`.claude/skills/e2e-testing/tests/[category]/[name].md`)
+   - Returns test spec for execution
+
+3. **Execute the test** — Use `e2e-tester` agent:
+   ```
+   Task(subagent_type="e2e-tester", prompt="Execute E2E test: [category]/[name] ...")
+   ```
+   - Tester runs preflight checks
+   - Tester executes test steps against real platform
+   - Tester reports PASS/FAIL with evidence
+
+4. **Report results**: Document pass/fail for each success criterion
+
+5. **Fix failures**: If E2E tests fail, investigate — the issue is in previously implemented tasks
+
+**Anti-patterns (NEVER do these):**
+- ❌ Running bash commands from the milestone file directly
+- ❌ Writing Python scripts to "test" the feature
+- ❌ Using curl commands without the e2e-tester agent context
+- ❌ Calling integration tests "E2E" — they're different
+- ❌ Skipping the designer and going straight to running tests
 
 ### Acceptance Criteria Validation
 

@@ -6,21 +6,32 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from ktrdr.backtesting.worker_registration import WorkerRegistration
+from ktrdr.config.settings import clear_settings_cache
 
 
 class TestWorkerRegistration:
     """Tests for WorkerRegistration class."""
 
+    def setup_method(self):
+        """Clear settings cache before each test."""
+        clear_settings_cache()
+
+    def teardown_method(self):
+        """Clear settings cache after each test."""
+        clear_settings_cache()
+
     def test_init_from_environment(self):
         """Test initialization from environment variables."""
+        # Use new KTRDR_WORKER_* env var names
         with patch.dict(
             os.environ,
             {
-                "WORKER_ID": "backtest-1",
-                "WORKER_PORT": "5003",
+                "KTRDR_WORKER_ID": "backtest-1",
+                "KTRDR_WORKER_PORT": "5003",
                 "KTRDR_API_URL": "http://backend:8000",
             },
         ):
+            clear_settings_cache()  # Force re-read of env vars
             registration = WorkerRegistration()
 
             assert registration.worker_id == "backtest-1"
@@ -33,6 +44,7 @@ class TestWorkerRegistration:
         with patch.dict(
             os.environ, {"KTRDR_API_URL": "http://backend:8000"}, clear=True
         ):
+            clear_settings_cache()  # Force re-read of env vars
             with patch(
                 "ktrdr.backtesting.worker_registration.socket.gethostname",
                 return_value="container-abc123",
@@ -48,8 +60,9 @@ class TestWorkerRegistration:
         """Test endpoint URL construction using hostname as fallback."""
         with patch.dict(
             os.environ,
-            {"WORKER_ID": "backtest-1", "KTRDR_API_URL": "http://backend:8000"},
+            {"KTRDR_WORKER_ID": "backtest-1", "KTRDR_API_URL": "http://backend:8000"},
         ):
+            clear_settings_cache()
             with patch(
                 "ktrdr.backtesting.worker_registration.socket.gethostname",
                 return_value="worker-host",
@@ -67,8 +80,9 @@ class TestWorkerRegistration:
         """Test endpoint URL construction using auto-detected IP address."""
         with patch.dict(
             os.environ,
-            {"WORKER_ID": "backtest-1", "KTRDR_API_URL": "http://backend:8000"},
+            {"KTRDR_WORKER_ID": "backtest-1", "KTRDR_API_URL": "http://backend:8000"},
         ):
+            clear_settings_cache()
             registration = WorkerRegistration()
             # Mock _detect_ip_address to return a specific IP
             with patch.object(
@@ -79,15 +93,16 @@ class TestWorkerRegistration:
                 assert endpoint_url == "http://192.168.1.100:5003"
 
     def test_get_endpoint_url_with_explicit_env(self):
-        """Test endpoint URL from WORKER_ENDPOINT_URL env var takes precedence."""
+        """Test endpoint URL from KTRDR_WORKER_ENDPOINT_URL env var takes precedence."""
         with patch.dict(
             os.environ,
             {
-                "WORKER_ID": "backtest-1",
+                "KTRDR_WORKER_ID": "backtest-1",
                 "KTRDR_API_URL": "http://backend:8000",
-                "WORKER_ENDPOINT_URL": "http://explicit-url:5003",
+                "KTRDR_WORKER_ENDPOINT_URL": "http://explicit-url:5003",
             },
         ):
+            clear_settings_cache()
             registration = WorkerRegistration()
             endpoint_url = registration.get_endpoint_url()
 
@@ -99,6 +114,7 @@ class TestWorkerRegistration:
         with patch.dict(
             os.environ, {"KTRDR_API_URL": "http://backend:8000"}, clear=False
         ):
+            clear_settings_cache()
             registration = WorkerRegistration()
             capabilities = registration.get_capabilities()
 
@@ -113,8 +129,9 @@ class TestWorkerRegistration:
         """Test successful worker registration."""
         with patch.dict(
             os.environ,
-            {"WORKER_ID": "backtest-1", "KTRDR_API_URL": "http://backend:8000"},
+            {"KTRDR_WORKER_ID": "backtest-1", "KTRDR_API_URL": "http://backend:8000"},
         ):
+            clear_settings_cache()
             registration = WorkerRegistration()
 
             # Mock the HTTP client
@@ -136,8 +153,9 @@ class TestWorkerRegistration:
         """Test registration handles connection errors gracefully."""
         with patch.dict(
             os.environ,
-            {"WORKER_ID": "backtest-1", "KTRDR_API_URL": "http://backend:8000"},
+            {"KTRDR_WORKER_ID": "backtest-1", "KTRDR_API_URL": "http://backend:8000"},
         ):
+            clear_settings_cache()
             registration = WorkerRegistration()
 
             # Mock connection error
@@ -153,8 +171,9 @@ class TestWorkerRegistration:
         """Test registration retries on failure."""
         with patch.dict(
             os.environ,
-            {"WORKER_ID": "backtest-1", "KTRDR_API_URL": "http://backend:8000"},
+            {"KTRDR_WORKER_ID": "backtest-1", "KTRDR_API_URL": "http://backend:8000"},
         ):
+            clear_settings_cache()
             registration = WorkerRegistration(max_retries=3, retry_delay=0.1)
 
             call_count = 0
@@ -181,8 +200,9 @@ class TestWorkerRegistration:
         """Test registration gives up after max retries."""
         with patch.dict(
             os.environ,
-            {"WORKER_ID": "backtest-1", "KTRDR_API_URL": "http://backend:8000"},
+            {"KTRDR_WORKER_ID": "backtest-1", "KTRDR_API_URL": "http://backend:8000"},
         ):
+            clear_settings_cache()
             registration = WorkerRegistration(max_retries=2, retry_delay=0.1)
 
             # Always fail

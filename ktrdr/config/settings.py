@@ -266,25 +266,91 @@ class OrphanDetectorSettings(BaseSettings):
     Configures the background orphan detection service that identifies
     RUNNING operations with no worker and marks them as FAILED.
 
-    Environment variables:
-        ORPHAN_TIMEOUT_SECONDS: Time (seconds) before an unclaimed operation
+    Provides orphan detection configuration with support for both new
+    (KTRDR_ORPHAN_*) and deprecated (ORPHAN_*) environment variable names.
+
+    Environment variables (new names - preferred):
+        KTRDR_ORPHAN_TIMEOUT_SECONDS: Time (seconds) before an unclaimed operation
             is marked as orphaned. Default: 60
-        ORPHAN_CHECK_INTERVAL_SECONDS: How often (seconds) to check for
+        KTRDR_ORPHAN_CHECK_INTERVAL_SECONDS: How often (seconds) to check for
             orphaned operations. Default: 15
+
+    Deprecated names (still work, emit warnings at startup):
+        ORPHAN_TIMEOUT_SECONDS, ORPHAN_CHECK_INTERVAL_SECONDS
     """
 
-    timeout_seconds: int = Field(
-        default=60,
+    timeout_seconds: int = deprecated_field(
+        60,
+        "KTRDR_ORPHAN_TIMEOUT_SECONDS",
+        "ORPHAN_TIMEOUT_SECONDS",
         gt=0,
         description="Time in seconds before an unclaimed operation is marked FAILED",
     )
-    check_interval_seconds: int = Field(
-        default=15,
+    check_interval_seconds: int = deprecated_field(
+        15,
+        "KTRDR_ORPHAN_CHECK_INTERVAL_SECONDS",
+        "ORPHAN_CHECK_INTERVAL_SECONDS",
         gt=0,
         description="Interval in seconds between orphan detection checks",
     )
 
-    model_config = SettingsConfigDict(env_prefix="ORPHAN_")
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_ORPHAN_",
+        env_file=".env.local",
+        extra="ignore",
+    )
+
+
+class OperationsSettings(BaseSettings):
+    """Operations Service Settings.
+
+    Provides configuration for the operations tracking service with support
+    for both new (KTRDR_OPS_*) and deprecated (OPERATIONS_*) environment
+    variable names.
+
+    Environment variables (new names - preferred):
+        KTRDR_OPS_CACHE_TTL: Cache TTL in seconds for operation lookups. Default: 1.0
+        KTRDR_OPS_MAX_OPERATIONS: Maximum operations to track in memory. Default: 10000
+        KTRDR_OPS_CLEANUP_INTERVAL_SECONDS: Interval between cleanup runs. Default: 3600
+        KTRDR_OPS_RETENTION_DAYS: Days to retain completed operations. Default: 7
+
+    Deprecated names (still work, emit warnings at startup):
+        OPERATIONS_CACHE_TTL → KTRDR_OPS_CACHE_TTL
+    """
+
+    # Cache settings
+    cache_ttl: float = deprecated_field(
+        1.0,
+        "KTRDR_OPS_CACHE_TTL",
+        "OPERATIONS_CACHE_TTL",
+        ge=0,
+        description="Cache TTL in seconds for operation lookups (0 = no cache)",
+    )
+
+    # Capacity settings
+    max_operations: int = Field(
+        default=10000,
+        gt=0,
+        description="Maximum operations to track in memory",
+    )
+
+    # Cleanup settings
+    cleanup_interval_seconds: int = Field(
+        default=3600,
+        gt=0,
+        description="Interval in seconds between cleanup runs",
+    )
+    retention_days: int = Field(
+        default=7,
+        gt=0,
+        description="Days to retain completed operations",
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_OPS_",
+        env_file=".env.local",
+        extra="ignore",
+    )
 
 
 class CheckpointSettings(BaseSettings):
@@ -293,34 +359,53 @@ class CheckpointSettings(BaseSettings):
     Configures checkpoint saving for long-running operations like training.
     Settings control checkpoint frequency and storage location.
 
-    Environment variables:
-        CHECKPOINT_EPOCH_INTERVAL: Save checkpoint every N epochs. Default: 10
-        CHECKPOINT_TIME_INTERVAL_SECONDS: Save checkpoint every M seconds. Default: 300
-        CHECKPOINT_DIR: Directory for checkpoint artifacts. Default: /app/data/checkpoints
-        CHECKPOINT_MAX_AGE_DAYS: Auto-cleanup checkpoints older than N days. Default: 30
+    Provides checkpoint configuration with support for both new (KTRDR_CHECKPOINT_*)
+    and deprecated (CHECKPOINT_*) environment variable names.
+
+    Environment variables (new names - preferred):
+        KTRDR_CHECKPOINT_EPOCH_INTERVAL: Save checkpoint every N epochs. Default: 10
+        KTRDR_CHECKPOINT_TIME_INTERVAL_SECONDS: Save checkpoint every M seconds. Default: 300
+        KTRDR_CHECKPOINT_DIR: Directory for checkpoint artifacts. Default: /app/data/checkpoints
+        KTRDR_CHECKPOINT_MAX_AGE_DAYS: Auto-cleanup checkpoints older than N days. Default: 30
+
+    Deprecated names (still work, emit warnings at startup):
+        CHECKPOINT_EPOCH_INTERVAL, CHECKPOINT_TIME_INTERVAL_SECONDS,
+        CHECKPOINT_DIR, CHECKPOINT_MAX_AGE_DAYS
     """
 
-    epoch_interval: int = Field(
-        default=10,
+    epoch_interval: int = deprecated_field(
+        10,
+        "KTRDR_CHECKPOINT_EPOCH_INTERVAL",
+        "CHECKPOINT_EPOCH_INTERVAL",
         gt=0,
         description="Save checkpoint every N epochs/units",
     )
-    time_interval_seconds: int = Field(
-        default=300,
+    time_interval_seconds: int = deprecated_field(
+        300,
+        "KTRDR_CHECKPOINT_TIME_INTERVAL_SECONDS",
+        "CHECKPOINT_TIME_INTERVAL_SECONDS",
         gt=0,
         description="Save checkpoint every M seconds",
     )
-    dir: str = Field(
-        default="/app/data/checkpoints",
+    dir: str = deprecated_field(
+        "/app/data/checkpoints",
+        "KTRDR_CHECKPOINT_DIR",
+        "CHECKPOINT_DIR",
         description="Directory for checkpoint artifact storage",
     )
-    max_age_days: int = Field(
-        default=30,
+    max_age_days: int = deprecated_field(
+        30,
+        "KTRDR_CHECKPOINT_MAX_AGE_DAYS",
+        "CHECKPOINT_MAX_AGE_DAYS",
         gt=0,
         description="Auto-cleanup checkpoints older than N days",
     )
 
-    model_config = SettingsConfigDict(env_prefix="CHECKPOINT_")
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_CHECKPOINT_",
+        env_file=".env.local",
+        extra="ignore",
+    )
 
 
 class DatabaseSettings(BaseSettings):
@@ -716,6 +801,83 @@ class TrainingHostServiceSettings(BaseSettings):
         return f"{self.base_url}/health/detailed"
 
 
+class WorkerSettings(BaseSettings):
+    """Worker Process Settings.
+
+    Provides worker configuration with support for both new (KTRDR_WORKER_*)
+    and deprecated (WORKER_*) environment variable names.
+
+    The default port of 5003 fixes the WORKER_PORT bug (duplication #4 from
+    config audit): training_worker.py defaulted to 5002 while worker_registration.py
+    defaulted to 5004. Now there's a single authoritative default.
+
+    Note: This class does NOT have a backend_url field. Workers should use
+    get_api_client_settings().base_url (from M5's APIClientSettings) for the
+    backend connection URL. This ensures a single source of truth.
+
+    Environment variables (new names - preferred):
+        KTRDR_WORKER_ID: Worker identifier. Default: None (auto-generated at runtime)
+        KTRDR_WORKER_PORT: Worker port. Default: 5003 (canonical default)
+        KTRDR_WORKER_HEARTBEAT_INTERVAL: Heartbeat interval in seconds. Default: 30
+        KTRDR_WORKER_REGISTRATION_TIMEOUT: Registration timeout. Default: 10
+        KTRDR_WORKER_ENDPOINT_URL: Explicit endpoint URL. Default: None (auto-detected)
+        KTRDR_WORKER_PUBLIC_BASE_URL: Public URL for distributed deployments. Default: None
+
+    Deprecated names (still work, emit warnings at startup):
+        WORKER_ID, WORKER_PORT, WORKER_ENDPOINT_URL, WORKER_PUBLIC_BASE_URL
+    """
+
+    # Worker identification
+    worker_id: str | None = deprecated_field(
+        None,
+        "KTRDR_WORKER_ID",
+        "WORKER_ID",
+        description="Worker identifier (auto-generated if not set)",
+    )
+
+    # Network settings - port 5003 is the canonical default (fixes bug)
+    port: int = deprecated_field(
+        5003,
+        "KTRDR_WORKER_PORT",
+        "WORKER_PORT",
+        ge=1,
+        le=65535,
+        description="Worker service port (canonical default: 5003)",
+    )
+
+    # Heartbeat and registration settings
+    heartbeat_interval: int = Field(
+        default=30,
+        gt=0,
+        description="Interval in seconds between heartbeats to backend",
+    )
+    registration_timeout: int = Field(
+        default=10,
+        gt=0,
+        description="Timeout in seconds for worker registration",
+    )
+
+    # Endpoint configuration (for distributed deployments)
+    endpoint_url: str | None = deprecated_field(
+        None,
+        "KTRDR_WORKER_ENDPOINT_URL",
+        "WORKER_ENDPOINT_URL",
+        description="Explicit endpoint URL (if not set, auto-detected at runtime)",
+    )
+    public_base_url: str | None = deprecated_field(
+        None,
+        "KTRDR_WORKER_PUBLIC_BASE_URL",
+        "WORKER_PUBLIC_BASE_URL",
+        description="Public URL for distributed deployments (if not set, uses hostname)",
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_WORKER_",
+        env_file=".env.local",
+        extra="ignore",
+    )
+
+
 class ApiServiceSettings(BaseSettings):
     """API Server configuration for client connections.
 
@@ -794,6 +956,12 @@ def get_orphan_detector_settings() -> OrphanDetectorSettings:
 
 
 @lru_cache
+def get_operations_settings() -> OperationsSettings:
+    """Get operations settings with caching."""
+    return OperationsSettings()
+
+
+@lru_cache
 def get_checkpoint_settings() -> CheckpointSettings:
     """Get checkpoint settings with caching."""
     return CheckpointSettings()
@@ -821,6 +989,12 @@ def get_ib_host_service_settings() -> IBHostServiceSettings:
 def get_training_host_service_settings() -> TrainingHostServiceSettings:
     """Get training host service settings with caching."""
     return TrainingHostServiceSettings()
+
+
+@lru_cache
+def get_worker_settings() -> WorkerSettings:
+    """Get worker settings with caching."""
+    return WorkerSettings()
 
 
 @lru_cache
@@ -859,11 +1033,13 @@ def clear_settings_cache() -> None:
     get_observability_settings.cache_clear()
     get_api_service_settings.cache_clear()
     get_orphan_detector_settings.cache_clear()
+    get_operations_settings.cache_clear()
     get_checkpoint_settings.cache_clear()
     get_db_settings.cache_clear()
     get_ib_settings.cache_clear()
     get_ib_host_service_settings.cache_clear()
     get_training_host_service_settings.cache_clear()
+    get_worker_settings.cache_clear()
 
 
 # Export settings classes and getters
@@ -874,18 +1050,21 @@ __all__ = [
     "LoggingSettings",
     "ObservabilitySettings",
     "OrphanDetectorSettings",
+    "OperationsSettings",
     "CheckpointSettings",
     "DatabaseSettings",
     "ApiServiceSettings",
     "IBSettings",
     "IBHostServiceSettings",
     "TrainingHostServiceSettings",
+    "WorkerSettings",
     # Cached getters
     "get_api_settings",
     "get_auth_settings",
     "get_logging_settings",
     "get_observability_settings",
     "get_orphan_detector_settings",
+    "get_operations_settings",
     "get_checkpoint_settings",
     "get_db_settings",
     "get_api_service_settings",
@@ -893,6 +1072,7 @@ __all__ = [
     "get_ib_settings",
     "get_ib_host_service_settings",
     "get_training_host_service_settings",
+    "get_worker_settings",
     # Utilities
     "clear_settings_cache",
     "deprecated_field",

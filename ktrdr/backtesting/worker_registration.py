@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 import httpx
 
 from ktrdr import get_logger
+from ktrdr.config.settings import get_worker_settings
 
 logger = get_logger(__name__)
 
@@ -32,9 +33,10 @@ class WorkerRegistration:
         Raises:
             RuntimeError: If KTRDR_API_URL environment variable is not set
         """
-        self.worker_id = os.getenv("WORKER_ID") or self._generate_worker_id()
+        worker_settings = get_worker_settings()
+        self.worker_id = worker_settings.worker_id or self._generate_worker_id()
         self.worker_type = "backtesting"
-        self.port = int(os.getenv("WORKER_PORT", "5003"))
+        self.port = worker_settings.port
 
         # Backend URL is REQUIRED (no default)
         self.backend_url = os.getenv("KTRDR_API_URL")
@@ -62,16 +64,18 @@ class WorkerRegistration:
         Get endpoint URL - IP-based for cross-network compatibility.
 
         Priority:
-        1. WORKER_ENDPOINT_URL env var (explicit configuration)
+        1. endpoint_url from WorkerSettings (explicit configuration)
         2. Auto-detected IP address (for multi-host)
         3. Hostname (for Docker Compose fallback)
 
         Returns:
             str: HTTP URL for this worker
         """
+        worker_settings = get_worker_settings()
+
         # 1. Explicit configuration (Proxmox/cloud deployments)
-        if endpoint_url := os.getenv("WORKER_ENDPOINT_URL"):
-            return endpoint_url
+        if worker_settings.endpoint_url:
+            return worker_settings.endpoint_url
 
         # 2. Auto-detect IP address (for multi-host deployments)
         if ip_address := self._detect_ip_address():
@@ -82,7 +86,7 @@ class WorkerRegistration:
         logger.warning(
             f"Using hostname for endpoint URL: {hostname}. "
             f"This may not work in multi-host deployments. "
-            f"Set WORKER_ENDPOINT_URL=http://<IP>:{self.port} for production."
+            f"Set KTRDR_WORKER_ENDPOINT_URL=http://<IP>:{self.port} for production."
         )
         return f"http://{hostname}:{self.port}"
 

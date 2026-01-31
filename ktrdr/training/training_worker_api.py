@@ -13,14 +13,13 @@ Key Design:
 
 Usage:
     # Run directly for development
-    uvicorn ktrdr.training.training_worker_api:app --host 0.0.0.0 --port 5004
+    uvicorn ktrdr.training.training_worker_api:app --host 0.0.0.0 --port 5003
 
     # Or via Docker
-    docker run -p 5004:5004 ktrdr-backend uvicorn ktrdr.training.training_worker_api:app ...
+    docker run -p 5003:5003 ktrdr-backend uvicorn ktrdr.training.training_worker_api:app ...
 """
 
 import logging
-import os
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Optional
 
@@ -29,6 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from ktrdr.api.models.operations import OperationType
 from ktrdr.api.services.operations_service import get_operations_service
+from ktrdr.config.settings import get_worker_settings
 from ktrdr.training.training_manager import TrainingManager
 from ktrdr.training.worker_registration import WorkerRegistration
 
@@ -242,7 +242,8 @@ async def start_training(
 
     from ktrdr.api.models.operations import OperationMetadata
 
-    worker_id = os.getenv("WORKER_ID") or f"training-{socket.gethostname()}"
+    worker_settings = get_worker_settings()
+    worker_id = worker_settings.worker_id or f"training-{socket.gethostname()}"
 
     # Generate or use provided operation_id
     operation_id = task_id or f"worker_training_{uuid.uuid4().hex[:12]}"

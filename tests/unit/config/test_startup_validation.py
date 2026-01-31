@@ -127,6 +127,55 @@ class TestComponentSettingsLists:
         _init_settings_lists()
         assert TrainingHostServiceSettings in BACKEND_SETTINGS
 
+    # M4 Worker Settings tests
+    def test_worker_settings_contains_worker_settings(self):
+        """WORKER_SETTINGS should contain WorkerSettings after initialization."""
+        from ktrdr.config.settings import WorkerSettings
+        from ktrdr.config.validation import _init_settings_lists
+
+        _init_settings_lists()
+        assert WorkerSettings in WORKER_SETTINGS
+
+    def test_worker_settings_contains_checkpoint_settings(self):
+        """WORKER_SETTINGS should contain CheckpointSettings after initialization."""
+        from ktrdr.config.settings import CheckpointSettings
+        from ktrdr.config.validation import _init_settings_lists
+
+        _init_settings_lists()
+        assert CheckpointSettings in WORKER_SETTINGS
+
+    def test_worker_settings_contains_orphan_detector_settings(self):
+        """WORKER_SETTINGS should contain OrphanDetectorSettings after initialization."""
+        from ktrdr.config.settings import OrphanDetectorSettings
+        from ktrdr.config.validation import _init_settings_lists
+
+        _init_settings_lists()
+        assert OrphanDetectorSettings in WORKER_SETTINGS
+
+    def test_worker_settings_contains_operations_settings(self):
+        """WORKER_SETTINGS should contain OperationsSettings after initialization."""
+        from ktrdr.config.settings import OperationsSettings
+        from ktrdr.config.validation import _init_settings_lists
+
+        _init_settings_lists()
+        assert OperationsSettings in WORKER_SETTINGS
+
+    def test_worker_settings_contains_logging_settings(self):
+        """WORKER_SETTINGS should contain LoggingSettings after initialization."""
+        from ktrdr.config.settings import LoggingSettings
+        from ktrdr.config.validation import _init_settings_lists
+
+        _init_settings_lists()
+        assert LoggingSettings in WORKER_SETTINGS
+
+    def test_worker_settings_contains_observability_settings(self):
+        """WORKER_SETTINGS should contain ObservabilitySettings after initialization."""
+        from ktrdr.config.settings import ObservabilitySettings
+        from ktrdr.config.validation import _init_settings_lists
+
+        _init_settings_lists()
+        assert ObservabilitySettings in WORKER_SETTINGS
+
 
 class TestDetectInsecureDefaults:
     """Test the detect_insecure_defaults() function."""

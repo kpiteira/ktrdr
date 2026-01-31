@@ -37,6 +37,7 @@ from ktrdr.api.services.operations_service import (
     OperationsService,
     get_operations_service,
 )
+from ktrdr.config.settings import get_worker_settings
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
@@ -128,9 +129,11 @@ class WorkerAPIBase:
         self.worker_port = worker_port
         self.backend_url = backend_url
 
-        # Worker ID (from environment or generate)
-        self.worker_id = os.getenv(
-            "WORKER_ID", f"{worker_type.value}-worker-{os.urandom(4).hex()}"
+        # Worker ID (from settings or generate)
+        worker_settings = get_worker_settings()
+        self.worker_id = (
+            worker_settings.worker_id
+            or f"{worker_type.value}-worker-{os.urandom(4).hex()}"
         )
 
         # Get OperationsService singleton (CRITICAL!)
@@ -918,20 +921,18 @@ class WorkerAPIBase:
             except ImportError:
                 logger.debug("PyTorch not available - no GPU detection")
 
-        # Use WORKER_PUBLIC_BASE_URL if set (for distributed deployments),
+        # Use public_base_url from settings if set (for distributed deployments),
         # otherwise fall back to container hostname (for local Docker Compose)
-        public_url = os.getenv("WORKER_PUBLIC_BASE_URL")
-        if public_url:
-            endpoint_url = public_url
-            logger.debug(f"Using WORKER_PUBLIC_BASE_URL: {endpoint_url}")
+        worker_settings = get_worker_settings()
+        if worker_settings.public_base_url:
+            endpoint_url = worker_settings.public_base_url
+            logger.debug(f"Using public_base_url from settings: {endpoint_url}")
         else:
             import socket
 
             hostname = socket.gethostname()
             endpoint_url = f"http://{hostname}:{self.worker_port}"
-            logger.debug(
-                f"No WORKER_PUBLIC_BASE_URL set, using hostname: {endpoint_url}"
-            )
+            logger.debug(f"No public_base_url set, using hostname: {endpoint_url}")
 
         # Get current operation ID from OperationsService (Task 1.7)
         current_operation_id: Optional[str] = None

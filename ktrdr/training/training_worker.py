@@ -20,7 +20,12 @@ from pydantic import Field
 from ktrdr.api.models.operations import OperationMetadata, OperationType
 from ktrdr.api.models.workers import WorkerType
 from ktrdr.async_infrastructure.cancellation import CancellationError
-from ktrdr.config.settings import get_checkpoint_settings, get_observability_settings
+from ktrdr.config import validate_all, warn_deprecated_env_vars
+from ktrdr.config.settings import (
+    get_checkpoint_settings,
+    get_observability_settings,
+    get_worker_settings,
+)
 
 # Note: TrainingProgressBridge requires TrainingOperationContext which is complex
 # For now, we'll use direct progress callbacks instead
@@ -30,8 +35,18 @@ from ktrdr.workers.base import WorkerAPIBase, WorkerOperationMixin
 
 logger = get_logger(__name__)
 
-# Get worker ID for unique service identification
-worker_id = os.getenv("WORKER_ID", uuid.uuid4().hex[:8])
+# =============================================================================
+# Startup Validation (M4: Config System)
+# =============================================================================
+# These MUST run before any other initialization to fail fast on invalid config.
+# 1. warn_deprecated_env_vars() emits DeprecationWarning for old env var names
+# 2. validate_all("worker") raises ConfigurationError if config is invalid
+warn_deprecated_env_vars()
+validate_all("worker")
+
+# Get worker settings and ID for unique service identification
+_worker_settings = get_worker_settings()
+worker_id = _worker_settings.worker_id or uuid.uuid4().hex[:8]
 
 # Setup monitoring BEFORE creating worker
 otel_settings = get_observability_settings()
@@ -86,7 +101,7 @@ class TrainingWorker(WorkerAPIBase):
 
     def __init__(
         self,
-        worker_port: int = 5002,
+        worker_port: int = 5003,
         backend_url: str = "http://backend:8000",
     ):
         """Initialize training worker."""
@@ -897,9 +912,9 @@ class TrainingWorker(WorkerAPIBase):
         }
 
 
-# Create worker instance
+# Create worker instance (port from settings, backend URL still from env)
 worker = TrainingWorker(
-    worker_port=int(os.getenv("WORKER_PORT", "5002")),
+    worker_port=_worker_settings.port,
     backend_url=os.getenv("KTRDR_API_URL", "http://backend:8000"),
 )
 
