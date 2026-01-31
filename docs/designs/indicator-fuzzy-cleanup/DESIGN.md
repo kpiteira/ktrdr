@@ -30,6 +30,7 @@ Create one file:
 
 ```python
 # ktrdr/indicators/awesome_indicator.py
+from pydantic import Field
 from ktrdr.indicators.base_indicator import BaseIndicator
 
 class AwesomeIndicator(BaseIndicator):
@@ -39,11 +40,12 @@ class AwesomeIndicator(BaseIndicator):
         fast_period: int = Field(default=5, ge=1, description="Fast MA period")
         slow_period: int = Field(default=34, ge=1, description="Slow MA period")
 
-    def __init__(self, fast_period: int = 5, slow_period: int = 34):
-        self.fast_period = fast_period
-        self.slow_period = slow_period
+    # No __init__ needed — BaseIndicator.__init__(**kwargs) handles:
+    # 1. Validates kwargs against Params (raises DataError on invalid)
+    # 2. Sets validated values as instance attributes (self.fast_period, etc.)
 
     def compute(self, df: pd.DataFrame) -> pd.Series:
+        # Access params as self.fast_period, self.slow_period
         # ... implementation ...
 ```
 
@@ -60,21 +62,34 @@ Create one file:
 
 ```python
 # ktrdr/fuzzy/sigmoid_mf.py
+from pydantic import field_validator
 from ktrdr.fuzzy.membership import MembershipFunction
 
 class SigmoidMF(MembershipFunction):
     """S-shaped membership function."""
 
     class Params(MembershipFunction.Params):
-        center: float = Field(..., description="Inflection point")
-        slope: float = Field(default=1.0, gt=0, description="Steepness")
+        parameters: list[float]  # [center, slope]
 
-    def __init__(self, parameters: list[float]):
-        # parameters = [center, slope]
-        ...
+        @field_validator("parameters")
+        @classmethod
+        def validate_parameters(cls, v):
+            if len(v) != 2:
+                raise ValueError("Sigmoid requires exactly 2 parameters: [center, slope]")
+            if v[1] <= 0:
+                raise ValueError("Slope must be positive")
+            return v
 
-    def evaluate(self, x) -> float:
-        # ... implementation ...
+    # No __init__ needed — MembershipFunction.__init__(parameters) handles:
+    # 1. Validates parameters against Params (raises ConfigurationError on invalid)
+    # 2. Calls _init_from_params(parameters) for subclass initialization
+
+    def _init_from_params(self, parameters: list[float]) -> None:
+        self.center = parameters[0]
+        self.slope = parameters[1]
+
+    def evaluate(self, x: float) -> float:
+        # ... implementation using self.center, self.slope ...
 ```
 
 Automatically available as `sigmoid`, `sigmoidmf`, `SigmoidMF`, etc.
@@ -212,3 +227,49 @@ class BollingerBandsIndicator(BaseIndicator):
 4. **Base `Params` class fields**: Each indicator declares ALL its params explicitly. No shared base fields. This is more verbose but clearer — `source` appears in most indicators but some have multiple sources or none.
 
 5. **Multi-output indicator metadata**: Keep `get_output_names()` classmethod separate from `Params`. Params are constructor inputs; output names are computation outputs.
+
+## Phase 2: Cleanup (Post-Registry)
+
+Beyond the registry implementation, validation discovered accumulated technical debt that should be cleaned up while we're modifying these components.
+
+### Exception Standardization
+
+8 indicators incorrectly raise `ValueError` for parameter validation instead of `DataError`:
+- `adx_indicator.py`
+- `ad_line.py`
+- `cmf_indicator.py`
+- `donchian_channels.py`
+- `fisher_transform.py`
+- `keltner_channels.py`
+- `supertrend_indicator.py`
+- `zigzag_indicator.py`
+
+**Resolution**: With the new `Params` pattern, `BaseIndicator.__init__` wraps Pydantic `ValidationError` in `DataError`. These manual validation blocks become redundant and can be deleted.
+
+### Double Validation Removal
+
+Some indicators validate params twice — once in `__init__` and again in `compute()`:
+- `bollinger_bands_indicator.py:102-105`
+- Potentially others (audit during implementation)
+
+**Resolution**: Remove validation from `compute()`. Params are validated once at construction.
+
+### Assert Statements in FuzzyEngine
+
+`FuzzyEngine` uses `assert` for type checking (6 locations), which is disabled with `python -O`:
+
+```python
+assert isinstance(config, dict)  # Line 102 — silent in production!
+```
+
+**Resolution**: Replace with proper type checks raising `ConfigurationError`.
+
+### Dead Code Removal
+
+- `BollingerBandsIndicator.get_name()` — unused method
+- `[CRITICAL BUG]` workaround in `williams_r_indicator.py:114-142` — investigate root cause and fix properly
+- Various unused imports across indicator files
+
+### Files to Delete (Additional)
+
+- `ktrdr/indicators/schemas.py` — replaced by `Params` classes

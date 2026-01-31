@@ -214,6 +214,44 @@ Estimated deletion: ~400 lines of v2 code.
 
 All registration happens at import time. By the time application code runs, registries are fully populated.
 
+### Registration Logic Details
+
+The `__init_subclass__` hook uses these rules to determine whether to register a class:
+
+**Skip Registration If:**
+
+1. **Abstract class**: `inspect.isabstract(cls)` returns `True`
+   - Checks for unimplemented `@abstractmethod` decorators
+   - Allows intermediate abstract classes like `OscillatorIndicator(BaseIndicator, ABC)`
+
+2. **Test class**: Module path indicates test code
+   ```python
+   module = cls.__module__
+   if module.startswith("tests.") or ".tests." in module:
+       # Skip — don't pollute production registry with test mocks
+   ```
+
+**Name Derivation:**
+
+1. Strip known suffixes: `"Indicator"` for indicators, `"MF"` for membership functions
+2. Lowercase the result
+3. Examples: `RSIIndicator` → `rsi`, `BollingerBandsIndicator` → `bollingerbands`, `TriangularMF` → `triangular`
+
+**Alias Collection:**
+
+1. Full lowercase class name (e.g., `rsiindicator`)
+2. Any names in `cls._aliases` list (e.g., `["bbands", "bollinger"]`)
+
+**Collision Handling:**
+
+If canonical name or any alias is already registered, raise `ValueError` immediately:
+```python
+raise ValueError(
+    f"Cannot register {cls.__name__} as '{name}': "
+    f"already registered to {existing.__name__}"
+)
+```
+
 ### Lookup Flow (Runtime)
 
 ```
@@ -261,14 +299,46 @@ Any case variant (`ATR`, `atr`, `ATRIndicator`, `atrindicator`) resolves to the 
 
 Registries are effectively immutable after import completes. Thread-safe for reads.
 
+## Import Requirements
+
+For auto-registration to work, indicator/MF modules must be imported before the registry is queried. This is ensured by the package `__init__.py` files:
+
+```python
+# ktrdr/indicators/__init__.py
+from ktrdr.indicators.base_indicator import INDICATOR_REGISTRY
+
+# Import all indicator modules to trigger registration
+from ktrdr.indicators.rsi_indicator import RSIIndicator
+from ktrdr.indicators.atr_indicator import ATRIndicator
+from ktrdr.indicators.macd_indicator import MACDIndicator
+# ... all 39 indicators
+
+__all__ = ["INDICATOR_REGISTRY", "RSIIndicator", ...]
+```
+
+**Critical Rule**: Consumers must import from `ktrdr.indicators`, not directly from submodules:
+
+```python
+# ✅ Correct — triggers all registrations via __init__.py
+from ktrdr.indicators import INDICATOR_REGISTRY
+
+# ❌ Wrong — registry may be empty if other modules not yet imported
+from ktrdr.indicators.base_indicator import INDICATOR_REGISTRY
+```
+
+Same pattern applies to `ktrdr.fuzzy` and `MEMBERSHIP_REGISTRY`.
+
 ## Error Handling
 
 | Situation | Error | Message Quality |
 |-----------|-------|-----------------|
 | Unknown type name | `ValueError` | Lists all available types |
-| Invalid params | `ValidationError` | Pydantic's detailed field errors |
+| Invalid indicator params | `DataError` | Wraps Pydantic errors in `details["validation_errors"]` |
+| Invalid MF params | `ConfigurationError` | Wraps Pydantic errors in `details["validation_errors"]` |
 | V2 config passed to FuzzyEngine | `ConfigurationError` | Clear "v2 no longer supported" message |
-| Name collision at registration | `ValueError` | Names both classes involved |
+| Name collision at registration | `ValueError` | Names both classes involved, fails fast |
+
+**Note**: Pydantic `ValidationError` is wrapped at the base class level (`BaseIndicator`, `MembershipFunction`) to provide a consistent exception interface. Callers only need to catch `DataError` or `ConfigurationError`.
 
 ## Integration Points
 
@@ -287,6 +357,7 @@ Registries are effectively immutable after import completes. Thread-safe for rea
 | File | Lines | Reason |
 |------|-------|--------|
 | `ktrdr/indicators/indicator_factory.py` | ~170 | Registry replaced by auto-registration |
+| `ktrdr/indicators/schemas.py` | ~630 | Params classes replace parameter schemas |
 | `ktrdr/fuzzy/config.py` | ~680 | V2 config models |
 | `ktrdr/fuzzy/migration.py` | ~100 | V2→V3 migration utilities |
 | Sections of `ktrdr/fuzzy/engine.py` | ~400 | V2 code paths |
@@ -342,6 +413,7 @@ This section consolidates the architecture into structured requirements for impl
 | File | Lines | Blocked By |
 |------|-------|------------|
 | `ktrdr/indicators/indicator_factory.py` | ~170 | All consumers migrated to registry |
+| `ktrdr/indicators/schemas.py` | ~630 | All indicators have Params classes |
 | `ktrdr/fuzzy/config.py` | ~680 | All consumers migrated to v3 |
 | `ktrdr/fuzzy/migration.py` | ~100 | No v2 code remaining |
 
