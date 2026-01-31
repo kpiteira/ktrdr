@@ -98,42 +98,43 @@ class TestCheckpointSettingsValidation:
         with patch.dict(os.environ, {"CHECKPOINT_EPOCH_INTERVAL": "-1"}):
             with pytest.raises(ValidationError) as exc_info:
                 CheckpointSettings()
-            assert "epoch_interval" in str(exc_info.value)
+            # With deprecated_field, error shows env var name not field name
+            assert "greater than 0" in str(exc_info.value)
 
     def test_zero_epoch_interval_raises_error(self):
         """Zero epoch interval should raise validation error."""
         with patch.dict(os.environ, {"CHECKPOINT_EPOCH_INTERVAL": "0"}):
             with pytest.raises(ValidationError) as exc_info:
                 CheckpointSettings()
-            assert "epoch_interval" in str(exc_info.value)
+            assert "greater than 0" in str(exc_info.value)
 
     def test_negative_time_interval_raises_error(self):
         """Negative time interval should raise validation error."""
         with patch.dict(os.environ, {"CHECKPOINT_TIME_INTERVAL_SECONDS": "-100"}):
             with pytest.raises(ValidationError) as exc_info:
                 CheckpointSettings()
-            assert "time_interval_seconds" in str(exc_info.value)
+            assert "greater than 0" in str(exc_info.value)
 
     def test_zero_time_interval_raises_error(self):
         """Zero time interval should raise validation error."""
         with patch.dict(os.environ, {"CHECKPOINT_TIME_INTERVAL_SECONDS": "0"}):
             with pytest.raises(ValidationError) as exc_info:
                 CheckpointSettings()
-            assert "time_interval_seconds" in str(exc_info.value)
+            assert "greater than 0" in str(exc_info.value)
 
     def test_negative_max_age_raises_error(self):
         """Negative max age should raise validation error."""
         with patch.dict(os.environ, {"CHECKPOINT_MAX_AGE_DAYS": "-1"}):
             with pytest.raises(ValidationError) as exc_info:
                 CheckpointSettings()
-            assert "max_age_days" in str(exc_info.value)
+            assert "greater than 0" in str(exc_info.value)
 
     def test_zero_max_age_raises_error(self):
         """Zero max age should raise validation error."""
         with patch.dict(os.environ, {"CHECKPOINT_MAX_AGE_DAYS": "0"}):
             with pytest.raises(ValidationError) as exc_info:
                 CheckpointSettings()
-            assert "max_age_days" in str(exc_info.value)
+            assert "greater than 0" in str(exc_info.value)
 
     def test_empty_dir_is_allowed(self):
         """Empty directory string should be allowed (may be valid for some configs)."""
@@ -142,6 +143,101 @@ class TestCheckpointSettingsValidation:
         with patch.dict(os.environ, {"CHECKPOINT_DIR": ""}):
             settings = CheckpointSettings()
             assert settings.dir == ""
+
+
+class TestCheckpointSettingsNewEnvVars:
+    """Test new KTRDR_CHECKPOINT_* environment variable configuration.
+
+    These tests verify that the new canonical env var names work correctly.
+    """
+
+    def test_ktrdr_checkpoint_epoch_interval_overrides_default(self):
+        """KTRDR_CHECKPOINT_EPOCH_INTERVAL should override default."""
+        with patch.dict(
+            os.environ, {"KTRDR_CHECKPOINT_EPOCH_INTERVAL": "25"}, clear=False
+        ):
+            settings = CheckpointSettings()
+            assert settings.epoch_interval == 25
+
+    def test_ktrdr_checkpoint_time_interval_seconds_overrides_default(self):
+        """KTRDR_CHECKPOINT_TIME_INTERVAL_SECONDS should override default."""
+        with patch.dict(
+            os.environ, {"KTRDR_CHECKPOINT_TIME_INTERVAL_SECONDS": "900"}, clear=False
+        ):
+            settings = CheckpointSettings()
+            assert settings.time_interval_seconds == 900
+
+    def test_ktrdr_checkpoint_dir_overrides_default(self):
+        """KTRDR_CHECKPOINT_DIR should override default."""
+        with patch.dict(
+            os.environ, {"KTRDR_CHECKPOINT_DIR": "/new/checkpoint/path"}, clear=False
+        ):
+            settings = CheckpointSettings()
+            assert settings.dir == "/new/checkpoint/path"
+
+    def test_ktrdr_checkpoint_max_age_days_overrides_default(self):
+        """KTRDR_CHECKPOINT_MAX_AGE_DAYS should override default."""
+        with patch.dict(
+            os.environ, {"KTRDR_CHECKPOINT_MAX_AGE_DAYS": "90"}, clear=False
+        ):
+            settings = CheckpointSettings()
+            assert settings.max_age_days == 90
+
+
+class TestCheckpointSettingsEnvVarPrecedence:
+    """Test that new env var names take precedence over deprecated names."""
+
+    def test_new_epoch_interval_takes_precedence(self):
+        """KTRDR_CHECKPOINT_EPOCH_INTERVAL takes precedence over CHECKPOINT_EPOCH_INTERVAL."""
+        with patch.dict(
+            os.environ,
+            {
+                "KTRDR_CHECKPOINT_EPOCH_INTERVAL": "50",
+                "CHECKPOINT_EPOCH_INTERVAL": "5",
+            },
+            clear=False,
+        ):
+            settings = CheckpointSettings()
+            assert settings.epoch_interval == 50
+
+    def test_new_time_interval_takes_precedence(self):
+        """KTRDR_CHECKPOINT_TIME_INTERVAL_SECONDS takes precedence over CHECKPOINT_TIME_INTERVAL_SECONDS."""
+        with patch.dict(
+            os.environ,
+            {
+                "KTRDR_CHECKPOINT_TIME_INTERVAL_SECONDS": "1800",
+                "CHECKPOINT_TIME_INTERVAL_SECONDS": "60",
+            },
+            clear=False,
+        ):
+            settings = CheckpointSettings()
+            assert settings.time_interval_seconds == 1800
+
+    def test_new_dir_takes_precedence(self):
+        """KTRDR_CHECKPOINT_DIR takes precedence over CHECKPOINT_DIR."""
+        with patch.dict(
+            os.environ,
+            {
+                "KTRDR_CHECKPOINT_DIR": "/new/path",
+                "CHECKPOINT_DIR": "/old/path",
+            },
+            clear=False,
+        ):
+            settings = CheckpointSettings()
+            assert settings.dir == "/new/path"
+
+    def test_new_max_age_takes_precedence(self):
+        """KTRDR_CHECKPOINT_MAX_AGE_DAYS takes precedence over CHECKPOINT_MAX_AGE_DAYS."""
+        with patch.dict(
+            os.environ,
+            {
+                "KTRDR_CHECKPOINT_MAX_AGE_DAYS": "365",
+                "CHECKPOINT_MAX_AGE_DAYS": "7",
+            },
+            clear=False,
+        ):
+            settings = CheckpointSettings()
+            assert settings.max_age_days == 365
 
 
 class TestGetCheckpointSettings:

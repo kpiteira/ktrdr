@@ -293,34 +293,53 @@ class CheckpointSettings(BaseSettings):
     Configures checkpoint saving for long-running operations like training.
     Settings control checkpoint frequency and storage location.
 
-    Environment variables:
-        CHECKPOINT_EPOCH_INTERVAL: Save checkpoint every N epochs. Default: 10
-        CHECKPOINT_TIME_INTERVAL_SECONDS: Save checkpoint every M seconds. Default: 300
-        CHECKPOINT_DIR: Directory for checkpoint artifacts. Default: /app/data/checkpoints
-        CHECKPOINT_MAX_AGE_DAYS: Auto-cleanup checkpoints older than N days. Default: 30
+    Provides checkpoint configuration with support for both new (KTRDR_CHECKPOINT_*)
+    and deprecated (CHECKPOINT_*) environment variable names.
+
+    Environment variables (new names - preferred):
+        KTRDR_CHECKPOINT_EPOCH_INTERVAL: Save checkpoint every N epochs. Default: 10
+        KTRDR_CHECKPOINT_TIME_INTERVAL_SECONDS: Save checkpoint every M seconds. Default: 300
+        KTRDR_CHECKPOINT_DIR: Directory for checkpoint artifacts. Default: /app/data/checkpoints
+        KTRDR_CHECKPOINT_MAX_AGE_DAYS: Auto-cleanup checkpoints older than N days. Default: 30
+
+    Deprecated names (still work, emit warnings at startup):
+        CHECKPOINT_EPOCH_INTERVAL, CHECKPOINT_TIME_INTERVAL_SECONDS,
+        CHECKPOINT_DIR, CHECKPOINT_MAX_AGE_DAYS
     """
 
-    epoch_interval: int = Field(
-        default=10,
+    epoch_interval: int = deprecated_field(
+        10,
+        "KTRDR_CHECKPOINT_EPOCH_INTERVAL",
+        "CHECKPOINT_EPOCH_INTERVAL",
         gt=0,
         description="Save checkpoint every N epochs/units",
     )
-    time_interval_seconds: int = Field(
-        default=300,
+    time_interval_seconds: int = deprecated_field(
+        300,
+        "KTRDR_CHECKPOINT_TIME_INTERVAL_SECONDS",
+        "CHECKPOINT_TIME_INTERVAL_SECONDS",
         gt=0,
         description="Save checkpoint every M seconds",
     )
-    dir: str = Field(
-        default="/app/data/checkpoints",
+    dir: str = deprecated_field(
+        "/app/data/checkpoints",
+        "KTRDR_CHECKPOINT_DIR",
+        "CHECKPOINT_DIR",
         description="Directory for checkpoint artifact storage",
     )
-    max_age_days: int = Field(
-        default=30,
+    max_age_days: int = deprecated_field(
+        30,
+        "KTRDR_CHECKPOINT_MAX_AGE_DAYS",
+        "CHECKPOINT_MAX_AGE_DAYS",
         gt=0,
         description="Auto-cleanup checkpoints older than N days",
     )
 
-    model_config = SettingsConfigDict(env_prefix="CHECKPOINT_")
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_CHECKPOINT_",
+        env_file=".env.local",
+        extra="ignore",
+    )
 
 
 class DatabaseSettings(BaseSettings):

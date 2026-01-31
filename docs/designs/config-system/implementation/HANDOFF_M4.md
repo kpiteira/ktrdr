@@ -22,3 +22,24 @@
 - Keep all existing functionality
 
 ---
+
+## Task 4.2 Complete: Align `CheckpointSettings` with KTRDR Prefix
+
+### Gotchas
+
+**Validation error messages change**: When using `deprecated_field()`, Pydantic's validation error messages show the env var name (via `validation_alias`) instead of the field name. Tests that checked for `"epoch_interval" in str(exc_info.value)` needed to be updated to check for `"greater than 0"` instead. This is expected behavior — the alias overrides the field name in error messages.
+
+### Implementation Notes
+
+Straightforward update following the M3 pattern:
+- Changed `env_prefix` from `CHECKPOINT_` to `KTRDR_CHECKPOINT_`
+- Used `deprecated_field()` for all 4 fields
+- Added `env_file=".env.local"` and `extra="ignore"` for consistency
+
+### Next Task Notes (4.3: Align OrphanDetectorSettings)
+
+- `OrphanDetectorSettings` already exists with `ORPHAN_` prefix
+- Same pattern as 4.2: change to `KTRDR_ORPHAN_*`, add `deprecated_field()`
+- Fields: timeout_seconds, check_interval_seconds
+
+---
