@@ -40,20 +40,21 @@ def reset_tracer():
 def enable_tracing():
     """Temporarily disable test mode to enable actual tracing.
 
-    The telemetry module skips tracing when PYTEST_CURRENT_TEST is set.
-    This fixture temporarily disables that check to test tracing behavior.
+    The telemetry module skips tracing when _is_testing() returns True.
+    This fixture replaces the function with one that returns False.
     """
     import ktrdr.cli.telemetry as telemetry_module
 
-    # Store original value
+    # Store original function
     original_is_testing = telemetry_module._is_testing
 
-    # Disable test mode
-    telemetry_module._is_testing = False
+    # Replace with a function that returns False (not a bool value!)
+    # _is_testing is called as a function, so we must provide a callable
+    telemetry_module._is_testing = lambda: False
 
     yield
 
-    # Restore test mode
+    # Restore original function
     telemetry_module._is_testing = original_is_testing
 
 

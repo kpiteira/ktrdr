@@ -21,7 +21,7 @@ from ktrdr.api.models.ib import (
     IbHealthStatus,
     IbStatusResponse,
 )
-from ktrdr.config.ib_config import reset_ib_config
+from ktrdr.config.settings import clear_settings_cache, get_ib_settings
 from ktrdr.data.acquisition.ib_data_provider import IbDataProvider
 
 logger = get_logger(__name__)
@@ -308,10 +308,8 @@ class IbService:
             IbConfigInfo with current configuration
         """
         try:
-            # Get configuration from new architecture
-            from ktrdr.config.ib_config import get_ib_config
-
-            config = get_ib_config()
+            # Get configuration from unified settings system
+            config = get_ib_settings()
 
             return IbConfigInfo(
                 host=config.host,
@@ -393,16 +391,16 @@ class IbService:
             reconnect_required = True
             import os
 
-            os.environ["IB_PORT"] = str(request.port)
-            logger.info(f"Updated IB_PORT to {request.port}")
+            os.environ["KTRDR_IB_PORT"] = str(request.port)
+            logger.info(f"Updated KTRDR_IB_PORT to {request.port}")
 
         if request.host is not None:
             # Host change requires reconnection
             reconnect_required = True
             import os
 
-            os.environ["IB_HOST"] = request.host
-            logger.info(f"Updated IB_HOST to {request.host}")
+            os.environ["KTRDR_IB_HOST"] = request.host
+            logger.info(f"Updated KTRDR_IB_HOST to {request.host}")
 
         if request.client_id is not None:
             # Client ID changes are managed by the client ID registry
@@ -421,9 +419,9 @@ class IbService:
                 cleanup_result = await self.cleanup_connections()
                 logger.info(f"Connection cleanup result: {cleanup_result}")
 
-                # Reset IB configuration to pick up new environment variables
-                reset_ib_config()
-                logger.info("Reset IB configuration with new environment variables")
+                # Clear settings cache to pick up new environment variables
+                clear_settings_cache()
+                logger.info("Cleared settings cache for new environment variables")
 
             except Exception as e:
                 logger.error(f"Error during configuration update cleanup: {e}")

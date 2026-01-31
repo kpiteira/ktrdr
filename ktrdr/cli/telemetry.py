@@ -14,8 +14,15 @@ from typing import Any, Callable, TypeVar
 # Type variable for generic decorator
 F = TypeVar("F", bound=Callable[..., Any])
 
-# Skip tracing in test mode for faster test execution
-_is_testing = os.environ.get("PYTEST_CURRENT_TEST") is not None
+
+def _is_testing() -> bool:
+    """Check if running in test mode at runtime.
+
+    This must be a function, not a module-level constant, because
+    PYTEST_CURRENT_TEST is set per-test, not at import time.
+    If we check at import time (during test collection), it's not set yet.
+    """
+    return os.environ.get("PYTEST_CURRENT_TEST") is not None
 
 
 def trace_cli_command(command_name: str) -> Callable[[F], F]:
@@ -48,7 +55,7 @@ def trace_cli_command(command_name: str) -> Callable[[F], F]:
         def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
             """Wrapper for synchronous functions."""
             # Skip tracing in test mode
-            if _is_testing:
+            if _is_testing():
                 return func(*args, **kwargs)
 
             # Initialize telemetry infrastructure (OTLP exporter, httpx instrumentation)
@@ -101,7 +108,7 @@ def trace_cli_command(command_name: str) -> Callable[[F], F]:
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
             """Wrapper for asynchronous functions."""
             # Skip tracing in test mode
-            if _is_testing:
+            if _is_testing():
                 return await func(*args, **kwargs)
 
             # Initialize telemetry infrastructure (OTLP exporter, httpx instrumentation)

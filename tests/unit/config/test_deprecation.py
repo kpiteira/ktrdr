@@ -225,3 +225,155 @@ class TestM2DeprecatedNames:
         ):
             result = warn_deprecated_env_vars()
             assert result == []
+
+
+class TestM3DeprecatedNamesMapping:
+    """Test M3 (IB & Host Services) deprecated name mappings."""
+
+    # IB Settings deprecated names
+    def test_deprecated_names_contains_ib_host(self):
+        """DEPRECATED_NAMES should map IB_HOST to KTRDR_IB_HOST."""
+        assert "IB_HOST" in DEPRECATED_NAMES
+        assert DEPRECATED_NAMES["IB_HOST"] == "KTRDR_IB_HOST"
+
+    def test_deprecated_names_contains_ib_port(self):
+        """DEPRECATED_NAMES should map IB_PORT to KTRDR_IB_PORT."""
+        assert "IB_PORT" in DEPRECATED_NAMES
+        assert DEPRECATED_NAMES["IB_PORT"] == "KTRDR_IB_PORT"
+
+    def test_deprecated_names_contains_ib_client_id(self):
+        """DEPRECATED_NAMES should map IB_CLIENT_ID to KTRDR_IB_CLIENT_ID."""
+        assert "IB_CLIENT_ID" in DEPRECATED_NAMES
+        assert DEPRECATED_NAMES["IB_CLIENT_ID"] == "KTRDR_IB_CLIENT_ID"
+
+    def test_deprecated_names_contains_ib_timeout(self):
+        """DEPRECATED_NAMES should map IB_TIMEOUT to KTRDR_IB_TIMEOUT."""
+        assert "IB_TIMEOUT" in DEPRECATED_NAMES
+        assert DEPRECATED_NAMES["IB_TIMEOUT"] == "KTRDR_IB_TIMEOUT"
+
+    def test_deprecated_names_contains_ib_readonly(self):
+        """DEPRECATED_NAMES should map IB_READONLY to KTRDR_IB_READONLY."""
+        assert "IB_READONLY" in DEPRECATED_NAMES
+        assert DEPRECATED_NAMES["IB_READONLY"] == "KTRDR_IB_READONLY"
+
+    def test_deprecated_names_contains_ib_rate_limit(self):
+        """DEPRECATED_NAMES should map IB_RATE_LIMIT to KTRDR_IB_RATE_LIMIT."""
+        assert "IB_RATE_LIMIT" in DEPRECATED_NAMES
+        assert DEPRECATED_NAMES["IB_RATE_LIMIT"] == "KTRDR_IB_RATE_LIMIT"
+
+    def test_deprecated_names_contains_ib_rate_period(self):
+        """DEPRECATED_NAMES should map IB_RATE_PERIOD to KTRDR_IB_RATE_PERIOD."""
+        assert "IB_RATE_PERIOD" in DEPRECATED_NAMES
+        assert DEPRECATED_NAMES["IB_RATE_PERIOD"] == "KTRDR_IB_RATE_PERIOD"
+
+    def test_deprecated_names_contains_ib_max_retries(self):
+        """DEPRECATED_NAMES should map IB_MAX_RETRIES to KTRDR_IB_MAX_RETRIES."""
+        assert "IB_MAX_RETRIES" in DEPRECATED_NAMES
+        assert DEPRECATED_NAMES["IB_MAX_RETRIES"] == "KTRDR_IB_MAX_RETRIES"
+
+    def test_deprecated_names_contains_ib_retry_delay(self):
+        """DEPRECATED_NAMES should map IB_RETRY_DELAY to KTRDR_IB_RETRY_BASE_DELAY."""
+        assert "IB_RETRY_DELAY" in DEPRECATED_NAMES
+        assert DEPRECATED_NAMES["IB_RETRY_DELAY"] == "KTRDR_IB_RETRY_BASE_DELAY"
+
+    def test_deprecated_names_contains_ib_retry_max_delay(self):
+        """DEPRECATED_NAMES should map IB_RETRY_MAX_DELAY to KTRDR_IB_RETRY_MAX_DELAY."""
+        assert "IB_RETRY_MAX_DELAY" in DEPRECATED_NAMES
+        assert DEPRECATED_NAMES["IB_RETRY_MAX_DELAY"] == "KTRDR_IB_RETRY_MAX_DELAY"
+
+    def test_deprecated_names_contains_ib_pacing_delay(self):
+        """DEPRECATED_NAMES should map IB_PACING_DELAY to KTRDR_IB_PACING_DELAY."""
+        assert "IB_PACING_DELAY" in DEPRECATED_NAMES
+        assert DEPRECATED_NAMES["IB_PACING_DELAY"] == "KTRDR_IB_PACING_DELAY"
+
+    def test_deprecated_names_contains_ib_max_requests_10min(self):
+        """DEPRECATED_NAMES should map IB_MAX_REQUESTS_10MIN to KTRDR_IB_MAX_REQUESTS_PER_10MIN."""
+        assert "IB_MAX_REQUESTS_10MIN" in DEPRECATED_NAMES
+        assert (
+            DEPRECATED_NAMES["IB_MAX_REQUESTS_10MIN"]
+            == "KTRDR_IB_MAX_REQUESTS_PER_10MIN"
+        )
+
+    # IB Host Service deprecated names
+    def test_deprecated_names_contains_use_ib_host_service(self):
+        """DEPRECATED_NAMES should map USE_IB_HOST_SERVICE to KTRDR_IB_HOST_ENABLED."""
+        assert "USE_IB_HOST_SERVICE" in DEPRECATED_NAMES
+        assert DEPRECATED_NAMES["USE_IB_HOST_SERVICE"] == "KTRDR_IB_HOST_ENABLED"
+
+    # Training Host Service deprecated names
+    def test_deprecated_names_contains_use_training_host_service(self):
+        """DEPRECATED_NAMES should map USE_TRAINING_HOST_SERVICE to KTRDR_TRAINING_HOST_ENABLED."""
+        assert "USE_TRAINING_HOST_SERVICE" in DEPRECATED_NAMES
+        assert (
+            DEPRECATED_NAMES["USE_TRAINING_HOST_SERVICE"]
+            == "KTRDR_TRAINING_HOST_ENABLED"
+        )
+
+
+class TestM3DeprecatedNamesWarnings:
+    """Test M3 deprecated name warnings."""
+
+    def test_warns_for_ib_host(self):
+        """Should emit warning when IB_HOST is set."""
+        with patch.dict(os.environ, {"IB_HOST": "192.168.1.1"}, clear=True):
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                result = warn_deprecated_env_vars()
+                assert "IB_HOST" in result
+                dep_warnings = [
+                    x for x in w if issubclass(x.category, DeprecationWarning)
+                ]
+                assert len(dep_warnings) == 1
+                assert "IB_HOST" in str(dep_warnings[0].message)
+                assert "KTRDR_IB_HOST" in str(dep_warnings[0].message)
+
+    def test_warns_for_use_ib_host_service(self):
+        """Should emit warning when USE_IB_HOST_SERVICE is set."""
+        with patch.dict(os.environ, {"USE_IB_HOST_SERVICE": "true"}, clear=True):
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                result = warn_deprecated_env_vars()
+                assert "USE_IB_HOST_SERVICE" in result
+                dep_warnings = [
+                    x for x in w if issubclass(x.category, DeprecationWarning)
+                ]
+                assert len(dep_warnings) == 1
+                assert "USE_IB_HOST_SERVICE" in str(dep_warnings[0].message)
+                assert "KTRDR_IB_HOST_ENABLED" in str(dep_warnings[0].message)
+
+    def test_warns_for_use_training_host_service(self):
+        """Should emit warning when USE_TRAINING_HOST_SERVICE is set."""
+        with patch.dict(os.environ, {"USE_TRAINING_HOST_SERVICE": "true"}, clear=True):
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                result = warn_deprecated_env_vars()
+                assert "USE_TRAINING_HOST_SERVICE" in result
+                dep_warnings = [
+                    x for x in w if issubclass(x.category, DeprecationWarning)
+                ]
+                assert len(dep_warnings) == 1
+                assert "USE_TRAINING_HOST_SERVICE" in str(dep_warnings[0].message)
+                assert "KTRDR_TRAINING_HOST_ENABLED" in str(dep_warnings[0].message)
+
+    def test_does_not_warn_for_new_ib_names(self):
+        """Should not warn when new KTRDR_IB_* names are used."""
+        with patch.dict(
+            os.environ,
+            {"KTRDR_IB_HOST": "192.168.1.1", "KTRDR_IB_PORT": "4002"},
+            clear=True,
+        ):
+            result = warn_deprecated_env_vars()
+            assert result == []
+
+    def test_does_not_warn_for_new_host_service_names(self):
+        """Should not warn when new KTRDR_*_HOST_ENABLED names are used."""
+        with patch.dict(
+            os.environ,
+            {
+                "KTRDR_IB_HOST_ENABLED": "true",
+                "KTRDR_TRAINING_HOST_ENABLED": "true",
+            },
+            clear=True,
+        ):
+            result = warn_deprecated_env_vars()
+            assert result == []

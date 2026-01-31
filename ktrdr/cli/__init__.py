@@ -11,9 +11,15 @@ Heavy imports (command modules, telemetry) are deferred until first access.
 import os
 from typing import TYPE_CHECKING
 
-# Skip heavy telemetry initialization in test mode for faster test execution
-# PYTEST_CURRENT_TEST is set by pytest automatically
-_is_testing = os.environ.get("PYTEST_CURRENT_TEST") is not None
+
+def _is_testing() -> bool:
+    """Check if running in test mode at runtime.
+
+    This must be a function, not a module-level constant, because
+    PYTEST_CURRENT_TEST is set per-test, not at import time.
+    """
+    return os.environ.get("PYTEST_CURRENT_TEST") is not None
+
 
 # Track current OTLP endpoint for reconfiguration
 _current_otlp_endpoint: str | None = None
@@ -72,7 +78,7 @@ def reconfigure_telemetry_for_url(api_url: str) -> None:
     """
     global _current_otlp_endpoint
 
-    if _is_testing:
+    if _is_testing():
         return
 
     new_endpoint = _derive_otlp_endpoint_from_url(api_url)
@@ -98,7 +104,7 @@ def _setup_telemetry() -> None:
     """
     global _telemetry_initialized, _current_otlp_endpoint
 
-    if _telemetry_initialized or _is_testing:
+    if _telemetry_initialized or _is_testing():
         return
 
     _telemetry_initialized = True

@@ -21,7 +21,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 try:
-    from ktrdr.config.ib_config import get_ib_config
+    from ktrdr.config.settings import get_ib_settings
     from ktrdr.logging import get_logger
 except ImportError as e:
     print(f"Error importing ktrdr modules: {e}")
@@ -135,7 +135,7 @@ class IbTestRunner:
 
         try:
             # Try to get IB config
-            config = get_ib_config()
+            config = get_ib_settings()
             logger.info(f"IB config found: {config.host}:{config.port}")
 
             # Try to connect briefly to verify availability

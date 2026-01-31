@@ -10,10 +10,8 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from ktrdr.config.ib_config import IbConfig as KtrdrIbConfig
-
-# Import existing ktrdr config utilities
 from ktrdr.config.loader import ConfigLoader
+from ktrdr.config.settings import IBSettings
 
 
 # Define host service specific configuration model
@@ -67,8 +65,8 @@ def get_host_service_config() -> IbHostServiceConfig:
     return _service_config
 
 
-def get_ktrdr_ib_config() -> KtrdrIbConfig:
-    """Get IB configuration using existing ktrdr config system."""
-    from ktrdr.config.ib_config import get_ib_config
+def get_ktrdr_ib_config() -> IBSettings:
+    """Get IB configuration using KTRDR unified settings system."""
+    from ktrdr.config.settings import get_ib_settings
 
-    return get_ib_config()
+    return get_ib_settings()

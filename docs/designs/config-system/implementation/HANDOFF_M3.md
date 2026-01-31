@@ -1,0 +1,210 @@
+# M3 Handoff: IB & Host Services Settings
+
+## Task 3.1 Complete: Create `IBSettings` Class
+
+### Gotchas
+
+**Static `_chunk_days` dict vs env var**: The `chunk_days` dictionary from `IbConfig` is IB-specific knowledge (historical data request limits per bar size). It's defined as a class attribute `_chunk_days` (with underscore) rather than a Pydantic field. This keeps it static and avoids exposing it as an env var.
+
+**Port validation uses `ge`/`le` not validators**: Used `deprecated_field(..., ge=1, le=65535)` for port validation rather than a custom `@field_validator`. Pydantic's built-in constraints are cleaner and sufficient.
+
+**Old `IB_RETRY_DELAY` → new `KTRDR_IB_RETRY_BASE_DELAY`**: The old env var was `IB_RETRY_DELAY` (without `_BASE_`), but the new canonical name includes `_BASE_` for clarity. The deprecated_field mapping handles this.
+
+### Emergent Patterns
+
+**Keep helper methods on settings class**: Methods like `is_paper_trading()`, `is_live_trading()`, `get_chunk_size()`, `get_connection_config()`, and `to_dict()` are ported to `IBSettings`. This keeps the same API for consumers.
+
+**Use constraints not validators for simple bounds**: For fields with simple numeric bounds (gt=0, ge=1, le=65535), use Pydantic's `Field()` constraints passed through `deprecated_field()`. Only use `@field_validator` for complex validation logic.
+
+### Next Task Notes (3.2: Create IBHostServiceSettings)
+
+- Add `IBHostServiceSettings` class with `env_prefix="KTRDR_IB_HOST_"`
+- Check `ktrdr/config/host_services.py` for the existing `HostServiceSettings` fields
+- Key field: `enabled` with deprecated name `USE_IB_HOST_SERVICE`
+- Include: host, port, enabled, timeout
+
+---
+
+## Task 3.2 Complete: Create `IBHostServiceSettings` Class
+
+### Gotchas
+
+**Environment has `USE_IB_HOST_SERVICE=true`**: The development environment has this env var set. Tests for default values need to use `patch.dict(os.environ, {}, clear=True)` to ensure a clean slate. This is different from other settings tests that only need `clear=False`.
+
+**Split base_url into host/port**: The existing `IbHostServiceSettings` uses `base_url` as a single field. The new `IBHostServiceSettings` splits this into `host` and `port` (like `IBSettings`) with `base_url` as a computed property. This is more flexible and consistent.
+
+**Naming conflict with host_services.py**: Both `host_services.py` and `settings.py` now have `get_ib_host_service_settings()` functions. They return different classes (`IbHostServiceSettings` vs `IBHostServiceSettings`). The settings.py version is the new canonical one - Task 3.5 will migrate consumers and delete host_services.py.
+
+### Emergent Patterns
+
+**Computed properties for derived values**: Used `@computed_field` for `base_url` which is derived from `host` and `port`. This keeps the URL synchronized with configuration changes.
+
+**Port helper methods from parent class**: Kept `get_health_url()` and `get_detailed_health_url()` for API compatibility with the old class.
+
+### Next Task Notes (3.3: Create TrainingHostServiceSettings)
+
+- Add `TrainingHostServiceSettings` class with `env_prefix="KTRDR_TRAINING_HOST_"`
+- Similar structure to `IBHostServiceSettings` (host, port, enabled, timeout, etc.)
+- Check if there's a deprecated env var for training host service enabled flag
+- Default port is likely 5002 based on the pattern
+
+---
+
+## Task 3.3 Complete: Create `TrainingHostServiceSettings` Class
+
+### Gotchas
+
+**No existing TrainingHostServiceSettings class**: Unlike `IbHostServiceSettings` in `host_services.py`, there was no existing `TrainingHostServiceSettings` class to migrate from. The comment in `host_services.py` states "Training and backtesting now use distributed workers (WorkerRegistry). Workers register themselves on startup - no host service configuration needed." However, the milestone explicitly requires this class for consistency with the config system design.
+
+**Deprecated env var is `USE_TRAINING_HOST_SERVICE`**: Found in multiple places across the codebase (especially in `specification/current/gpu-acceleration-implementation-plan.md` and `docs/training-host-service-fix-plan.md`). The `TRAINING_HOST_SERVICE_URL` env var was also used historically but is now replaced by separate host/port fields.
+
+### Emergent Patterns
+
+**Consistent structure with IBHostServiceSettings**: Used identical structure - same fields (host, port, enabled, timeout, health_check_interval, max_retries, retry_delay), same computed `base_url` property, same helper methods (`get_health_url()`, `get_detailed_health_url()`). The only difference is default port (5002 vs 5001) and env prefix.
+
+### Next Task Notes (3.4: Migrate IB Consumers)
+
+- Find all `IbConfig()` instantiations and replace with `get_ib_settings()`
+- Find direct `os.getenv("IB_*")` calls and replace
+- Delete `ktrdr/config/ib_config.py` after migration
+- Check imports in `ktrdr/services/ib/*.py` and other IB-related files
+
+---
+
+## Task 3.4 Complete: Migrate IB Consumers and Delete `ib_config.py`
+
+### Gotchas
+
+**`reset_ib_config()` → `clear_settings_cache()`**: The old `ib_config.py` had `reset_ib_config()` for resetting the cached config. This is replaced by `clear_settings_cache()` from settings.py, which clears all settings caches (not just IB). This is fine because the use case (picking up new env vars) typically affects all settings anyway.
+
+**API env var updates use new names**: The `update_config()` method in `ib_service.py` was setting `IB_PORT` and `IB_HOST` env vars. Updated to use the new canonical names `KTRDR_IB_PORT` and `KTRDR_IB_HOST`. The deprecated_field mapping ensures both old and new names work.
+
+**API models kept unchanged**: `IbConfigInfo`, `IbConfigUpdateRequest`, `IbConfigUpdateResponse` are API contracts (response/request models) - NOT the config class. They were kept unchanged.
+
+### Files Migrated
+
+- `ktrdr/api/services/ib_service.py` - uses `get_ib_settings()` and `clear_settings_cache()`
+- `ib-host-service/config.py` - uses `IBSettings` and `get_ib_settings()`
+- `ib-host-service/ib/pool_manager.py` - uses `get_ib_settings()`
+- `scripts/run_ib_tests.py` - uses `get_ib_settings()`
+- `ktrdr/config/settings.py` - removed `IbConfig`, `get_ib_config` compatibility aliases
+
+### Files Deleted
+
+- `ktrdr/config/ib_config.py` - the old IbConfig dataclass
+- `tests/unit/config/test_ib_config.py` - tests for the old class
+
+### Next Task Notes (3.5: Migrate Host Service Consumers)
+
+- Find all `HostServiceSettings` usages for IB → replace with `get_ib_host_service_settings()`
+- Find all `HostServiceSettings` usages for Training → replace with `get_training_host_service_settings()`
+- The `host_services.py` file still exports `IbHostServiceSettings` (old) - different from `IBHostServiceSettings` (new)
+- Delete `ktrdr/config/host_services.py` after migration
+
+---
+
+## Task 3.5 Complete: Migrate Host Service Consumers and Delete `host_services.py`
+
+### Gotchas
+
+**ApiServiceSettings must be MOVED, not imported**: The settings.py file was previously importing `ApiServiceSettings` and `get_api_service_settings` from host_services.py. After deleting host_services.py, these need to be defined directly in settings.py.
+
+**CLI imports use `get_api_base_url`**: The CLI modules (`sandbox_detect.py`, `client/core.py`) import `get_api_base_url` from host_services.py. This convenience function needs to be added to settings.py.
+
+**test_host_services_cleanup.py is obsolete**: This test file was testing the OLD host_services.py module (with `IbHostServiceSettings` lowercase 'b'). Since that module is deleted, the tests are obsolete. Replaced with new `test_api_service_settings.py`.
+
+### Files Migrated
+
+- `ktrdr/cli/sandbox_detect.py` - changed import from host_services to settings
+- `ktrdr/cli/client/core.py` - changed import from host_services to settings
+
+### Files Deleted
+
+- `ktrdr/config/host_services.py` - the old host service config module
+- `tests/unit/config/test_host_services_cleanup.py` - obsolete tests
+
+### Next Task Notes (3.6: Update Validation Module)
+
+- Add `IBSettings`, `IBHostServiceSettings`, `TrainingHostServiceSettings` to BACKEND_SETTINGS in validation.py
+- These should be validated at startup
+
+---
+
+## Task 3.6 Complete: Update Validation Module for M3 Settings
+
+### Implementation Notes
+
+Simple addition to `_init_settings_lists()` in validation.py. Added three imports and three `BACKEND_SETTINGS.append()` calls. No gotchas - straightforward update following the existing pattern.
+
+---
+
+## Task 3.7 Complete: Update Deprecation Module for M3 Names
+
+### Implementation Notes
+
+Added 14 deprecated name mappings to `DEPRECATED_NAMES` dict in `deprecation.py`:
+- 12 IB settings (IB_HOST, IB_PORT, IB_CLIENT_ID, etc. → KTRDR_IB_* equivalents)
+- 1 IB host service (USE_IB_HOST_SERVICE → KTRDR_IB_HOST_ENABLED)
+- 1 Training host service (USE_TRAINING_HOST_SERVICE → KTRDR_TRAINING_HOST_ENABLED)
+
+The mappings match the `deprecated_field()` calls in settings.py exactly. Note: `IB_RETRY_DELAY` maps to `KTRDR_IB_RETRY_BASE_DELAY` (not `KTRDR_IB_RETRY_DELAY`) per Task 3.1 design decision.
+
+---
+
+## Task 3.8 Complete: Write Unit Tests
+
+### Implementation Notes
+
+This was a **verification task** - all unit tests were already written during Tasks 3.1-3.3 (following TDD). Verified:
+
+- `test_ib_settings.py` — 56 tests for IBSettings
+- `test_ib_host_service_settings.py` — 27 tests for IBHostServiceSettings
+- `test_training_host_service_settings.py` — 27 tests for TrainingHostServiceSettings
+- `test_deprecation.py` — 19 M3 tests for deprecated name mappings (added in Task 3.7)
+
+All 4538 unit tests pass with `make test-unit`.
+
+---
+
+## Task 3.9 Complete: Execute E2E Test
+
+### E2E Test Results
+
+All three scenarios passed (tested in ktrdr-prod with full Docker stack):
+
+| Scenario | Result | Evidence |
+|----------|--------|----------|
+| 1. Backend proxies to IB host service | ✅ PASS | `/api/v1/ib/status` returns graceful `{"connected": false, "ib_available": false}` |
+| 2. USE_IB_HOST_SERVICE deprecated warning | ✅ PASS | `DeprecationWarning: Environment variable 'USE_IB_HOST_SERVICE' is deprecated. Use 'KTRDR_IB_HOST_ENABLED' instead.` |
+| 3. Training host service settings work | ✅ PASS | `/api/v1/workers` shows training workers registered, GPU host service healthy at `host.docker.internal:5002` |
+
+### Notes
+
+- Deprecation warnings use Python's `warnings.warn()` - require `warnings.filterwarnings('always')` to see in console
+- Training status checked via `/api/v1/workers` endpoint (workers registered and healthy)
+
+---
+
+## M3 Milestone Complete
+
+All tasks completed:
+- [x] Task 3.1: Create `IBSettings` Class
+- [x] Task 3.2: Create `IBHostServiceSettings` Class
+- [x] Task 3.3: Create `TrainingHostServiceSettings` Class
+- [x] Task 3.4: Migrate IB Consumers and Delete `ib_config.py`
+- [x] Task 3.5: Migrate Host Service Consumers and Delete `host_services.py`
+- [x] Task 3.6: Update Validation Module for M3 Settings
+- [x] Task 3.7: Update Deprecation Module for M3 Names
+- [x] Task 3.8: Write Unit Tests
+- [x] Task 3.9: Execute E2E Test
+
+### Files Deleted (as planned)
+- `ktrdr/config/ib_config.py`
+- `ktrdr/config/host_services.py`
+
+### Quality Gates
+- All unit tests pass: `make test-unit` (4538 passed)
+- All quality checks pass: `make quality`
+- All E2E scenarios pass
+
+---

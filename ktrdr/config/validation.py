@@ -66,18 +66,24 @@ def _init_settings_lists() -> None:
     from ktrdr.config.settings import (
         APISettings,
         AuthSettings,
+        IBHostServiceSettings,
+        IBSettings,
         LoggingSettings,
         ObservabilitySettings,
+        TrainingHostServiceSettings,
     )
 
     DatabaseSettings = _get_database_settings_class()
 
-    # Backend needs all M1 + M2 settings
+    # Backend needs all M1 + M2 + M3 settings
     BACKEND_SETTINGS.append(DatabaseSettings)
     BACKEND_SETTINGS.append(APISettings)
     BACKEND_SETTINGS.append(AuthSettings)
     BACKEND_SETTINGS.append(LoggingSettings)
     BACKEND_SETTINGS.append(ObservabilitySettings)
+    BACKEND_SETTINGS.append(IBSettings)
+    BACKEND_SETTINGS.append(IBHostServiceSettings)
+    BACKEND_SETTINGS.append(TrainingHostServiceSettings)
 
     # Workers only need database settings (for now)
     WORKER_SETTINGS.append(DatabaseSettings)

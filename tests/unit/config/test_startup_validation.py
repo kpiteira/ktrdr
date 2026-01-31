@@ -103,6 +103,30 @@ class TestComponentSettingsLists:
         _init_settings_lists()
         assert ObservabilitySettings in BACKEND_SETTINGS
 
+    def test_backend_settings_contains_ib_settings(self):
+        """BACKEND_SETTINGS should contain IBSettings after initialization."""
+        from ktrdr.config.settings import IBSettings
+        from ktrdr.config.validation import _init_settings_lists
+
+        _init_settings_lists()
+        assert IBSettings in BACKEND_SETTINGS
+
+    def test_backend_settings_contains_ib_host_service_settings(self):
+        """BACKEND_SETTINGS should contain IBHostServiceSettings after initialization."""
+        from ktrdr.config.settings import IBHostServiceSettings
+        from ktrdr.config.validation import _init_settings_lists
+
+        _init_settings_lists()
+        assert IBHostServiceSettings in BACKEND_SETTINGS
+
+    def test_backend_settings_contains_training_host_service_settings(self):
+        """BACKEND_SETTINGS should contain TrainingHostServiceSettings after initialization."""
+        from ktrdr.config.settings import TrainingHostServiceSettings
+        from ktrdr.config.validation import _init_settings_lists
+
+        _init_settings_lists()
+        assert TrainingHostServiceSettings in BACKEND_SETTINGS
+
 
 class TestDetectInsecureDefaults:
     """Test the detect_insecure_defaults() function."""
