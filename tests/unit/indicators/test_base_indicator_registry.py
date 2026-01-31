@@ -206,3 +206,72 @@ class TestBackwardCompatibility:
         rsi = RSIIndicator(period=21, source="high")
         assert rsi.params["period"] == 21
         assert rsi.params["source"] == "high"
+
+
+class TestRSIParamsIntegration:
+    """Tests for RSI's Params-based validation (Task 1.3)."""
+
+    def test_rsi_has_params_class(self) -> None:
+        """Test that RSI has a proper Params nested class."""
+        from ktrdr.indicators import RSIIndicator
+        from ktrdr.indicators.base_indicator import BaseIndicator
+
+        assert hasattr(RSIIndicator, "Params")
+        # Should be a subclass of BaseIndicator.Params
+        assert issubclass(RSIIndicator.Params, BaseIndicator.Params)
+        # Should have period and source fields
+        assert "period" in RSIIndicator.Params.model_fields
+        assert "source" in RSIIndicator.Params.model_fields
+
+    def test_rsi_params_schema_via_registry(self) -> None:
+        """Test that RSI's Params schema is accessible via registry."""
+        from ktrdr.indicators.base_indicator import INDICATOR_REGISTRY
+
+        schema = INDICATOR_REGISTRY.get_params_schema("rsi")
+        assert schema is not None
+        assert "period" in schema.model_fields
+        assert "source" in schema.model_fields
+
+    def test_rsi_direct_attribute_access(self) -> None:
+        """Test that RSI params are accessible as direct attributes."""
+        from ktrdr.indicators import RSIIndicator
+
+        rsi = RSIIndicator(period=21, source="high")
+
+        # Direct attribute access
+        assert rsi.period == 21
+        assert rsi.source == "high"
+
+        # Backward compatible params dict
+        assert rsi.params["period"] == 21
+        assert rsi.params["source"] == "high"
+
+    def test_rsi_invalid_period_type_raises_data_error(self) -> None:
+        """Test that invalid period type raises DataError."""
+        from ktrdr.errors import DataError
+        from ktrdr.indicators import RSIIndicator
+
+        with pytest.raises(DataError) as exc_info:
+            RSIIndicator(period="14")  # String instead of int
+
+        error = exc_info.value
+        assert error.error_code == "INDICATOR-InvalidParameters"
+        assert "validation_errors" in error.details
+
+    def test_rsi_invalid_period_value_raises_data_error(self) -> None:
+        """Test that period < 2 raises DataError."""
+        from ktrdr.errors import DataError
+        from ktrdr.indicators import RSIIndicator
+
+        with pytest.raises(DataError) as exc_info:
+            RSIIndicator(period=1)  # Too small
+
+        error = exc_info.value
+        assert error.error_code == "INDICATOR-InvalidParameters"
+
+    def test_rsi_display_as_overlay_is_false(self) -> None:
+        """Test that RSI has display_as_overlay=False (not overlaid on price)."""
+        from ktrdr.indicators import RSIIndicator
+
+        rsi = RSIIndicator()
+        assert rsi.display_as_overlay is False

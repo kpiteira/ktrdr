@@ -41,9 +41,33 @@ for field in self.__class__.Params.model_fields:
 - Old style: `super().__init__(name="RSI", period=14)` — uses `_validate_params`
 - New style: `MyIndicator(period=14)` — uses `Params` validation, derives name from class
 
-### Next Task Notes (1.3)
+---
 
-Task 1.3 adds Params to RSIIndicator. Key changes:
-- Add `class Params(BaseIndicator.Params)` with `period` and `source` fields
-- Remove explicit `__init__` (inherited from BaseIndicator handles it)
-- Keep `compute()` unchanged — it can access `self.period` directly now
+## Task 1.3 Complete: Add Params to RSIIndicator
+
+### Implementation Notes
+
+- Added `Params(BaseIndicator.Params)` with `period` and `source` fields
+- Used `strict=True` on Fields to prevent Pydantic type coercion (e.g., "14" → 14)
+- Removed `__init__` and `_validate_params` methods (BaseIndicator handles validation)
+- Added `display_as_overlay = False` as class attribute
+
+### Gotchas
+
+**Mypy and pd.Series type inference**: Adding a `Params` class can confuse mypy about local variable types. Fix by adding explicit type annotations:
+```python
+gain: pd.Series = delta.copy()  # Explicit annotation fixes mypy
+```
+
+**display_as_overlay class attribute**: BaseIndicator.__init__ checks `"display_as_overlay" in self.__class__.__dict__` to respect subclass overrides. Define it as a class attribute in indicators that need non-default values.
+
+**Backward compatible access**: Both patterns work:
+- `self.period` (new style, direct attribute)
+- `self.params["period"]` (old style, dict access)
+
+### Next Task Notes (1.4)
+
+Task 1.4 updates IndicatorEngine with registry fallback. The engine should:
+1. Try `INDICATOR_REGISTRY.get(definition.type)` first
+2. Fall back to `BUILT_IN_INDICATORS` for non-migrated indicators
+3. Combine available types from both sources in error messages

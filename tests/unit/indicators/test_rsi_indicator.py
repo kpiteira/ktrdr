@@ -84,25 +84,28 @@ class TestRSIIndicator:
         assert rsi.params["source"] == "high"
 
     def test_parameter_validation(self):
-        """Test that parameter validation works."""
+        """Test that parameter validation works via Pydantic Params."""
         # Valid parameters
         rsi = RSIIndicator(period=2)
         assert rsi.params["period"] == 2
 
-        # Invalid period type
+        # Invalid period type - Pydantic rejects non-int with strict=True
         with pytest.raises(DataError) as excinfo:
             RSIIndicator(period="14")
-        assert "RSI period must be an integer" in str(excinfo.value)
+        assert excinfo.value.error_code == "INDICATOR-InvalidParameters"
+        assert "validation_errors" in excinfo.value.details
 
-        # Invalid period value
+        # Invalid period value - too small
         with pytest.raises(DataError) as excinfo:
             RSIIndicator(period=1)
-        assert "RSI period must be at least 2" in str(excinfo.value)
+        assert excinfo.value.error_code == "INDICATOR-InvalidParameters"
+        assert "validation_errors" in excinfo.value.details
 
-        # Invalid source type
+        # Invalid source type - Pydantic rejects non-string with strict=True
         with pytest.raises(DataError) as excinfo:
             RSIIndicator(source=123)
-        assert "Source must be a string" in str(excinfo.value)
+        assert excinfo.value.error_code == "INDICATOR-InvalidParameters"
+        assert "validation_errors" in excinfo.value.details
 
     def test_compute_basic(self):
         """Test basic RSI computation on simple dataset."""

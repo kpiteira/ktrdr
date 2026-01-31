@@ -55,6 +55,10 @@ class BaseIndicator(ABC):
     # Optional aliases for registry lookup (e.g., ["bbands", "bollinger"])
     _aliases: list[str] = []
 
+    # Whether this indicator should be displayed as overlay on price charts
+    # Subclasses can override (e.g., RSI sets to False)
+    display_as_overlay: bool = True
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """Auto-register concrete indicator subclasses."""
         super().__init_subclass__(**kwargs)
@@ -101,13 +105,17 @@ class BaseIndicator(ABC):
             display_as_overlay: Whether to display as overlay on price charts
             **params: Indicator parameters
         """
-        self.display_as_overlay = display_as_overlay
-
         # Determine if this is old-style or new-style initialization
         # New style: no name provided AND class has custom Params
         has_custom_params = self.__class__.Params is not BaseIndicator.Params
 
         if name is None and has_custom_params:
+            # New style: use class-level display_as_overlay if defined, else default
+            # Check if class has its own display_as_overlay (not inherited from BaseIndicator)
+            if "display_as_overlay" in self.__class__.__dict__:
+                self.display_as_overlay = self.__class__.display_as_overlay
+            else:
+                self.display_as_overlay = display_as_overlay
             # New style: validate via Params, derive name from class
             try:
                 validated = self.__class__.Params(**params)
@@ -137,6 +145,8 @@ class BaseIndicator(ABC):
 
         else:
             # Old style: explicit name, validate via _validate_params
+            self.display_as_overlay = display_as_overlay
+
             if name is None:
                 # No name and no custom Params - use class name
                 class_name = self.__class__.__name__
