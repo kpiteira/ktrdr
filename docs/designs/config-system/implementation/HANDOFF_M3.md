@@ -136,10 +136,23 @@
 
 Simple addition to `_init_settings_lists()` in validation.py. Added three imports and three `BACKEND_SETTINGS.append()` calls. No gotchas - straightforward update following the existing pattern.
 
-### Next Task Notes (3.7: Update Deprecation Module)
+---
 
-- Add deprecated name mappings for IB and host service env vars to `DEPRECATED_NAMES` dict
-- Mappings like `IB_GATEWAY_HOST` → `KTRDR_IB_GATEWAY_HOST`
-- Add `USE_IB_HOST_SERVICE` → `KTRDR_IB_HOST_ENABLED`
+## Task 3.7 Complete: Update Deprecation Module for M3 Names
+
+### Implementation Notes
+
+Added 14 deprecated name mappings to `DEPRECATED_NAMES` dict in `deprecation.py`:
+- 12 IB settings (IB_HOST, IB_PORT, IB_CLIENT_ID, etc. → KTRDR_IB_* equivalents)
+- 1 IB host service (USE_IB_HOST_SERVICE → KTRDR_IB_HOST_ENABLED)
+- 1 Training host service (USE_TRAINING_HOST_SERVICE → KTRDR_TRAINING_HOST_ENABLED)
+
+The mappings match the `deprecated_field()` calls in settings.py exactly. Note: `IB_RETRY_DELAY` maps to `KTRDR_IB_RETRY_BASE_DELAY` (not `KTRDR_IB_RETRY_DELAY`) per Task 3.1 design decision.
+
+### Next Task Notes (3.8: Write Unit Tests)
+
+- M3 settings classes already have unit tests from Tasks 3.1-3.3
+- This task may focus on consolidation or additional edge case tests
+- Check `tests/unit/config/test_ib_settings.py` and `tests/unit/config/test_host_service_settings.py`
 
 ---
