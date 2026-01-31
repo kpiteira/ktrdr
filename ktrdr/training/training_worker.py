@@ -101,7 +101,7 @@ class TrainingWorker(WorkerAPIBase):
 
     def __init__(
         self,
-        worker_port: int = 5002,
+        worker_port: int = 5003,
         backend_url: str = "http://backend:8000",
     ):
         """Initialize training worker."""

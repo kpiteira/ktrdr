@@ -13,10 +13,10 @@ Key Design:
 
 Usage:
     # Run directly for development
-    uvicorn ktrdr.training.training_worker_api:app --host 0.0.0.0 --port 5004
+    uvicorn ktrdr.training.training_worker_api:app --host 0.0.0.0 --port 5003
 
     # Or via Docker
-    docker run -p 5004:5004 ktrdr-backend uvicorn ktrdr.training.training_worker_api:app ...
+    docker run -p 5003:5003 ktrdr-backend uvicorn ktrdr.training.training_worker_api:app ...
 """
 
 import logging
