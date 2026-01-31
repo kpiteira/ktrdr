@@ -6,15 +6,15 @@ and a moving average, providing a normalized measure of how far price has
 deviated from its trend.
 """
 
-from typing import Union
+from typing import Literal, Union
 
 import numpy as np
 import pandas as pd
+from pydantic import Field
 
 from ktrdr.errors import DataError
 from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.indicators.ma_indicators import ExponentialMovingAverage, SimpleMovingAverage
-from ktrdr.indicators.schemas import DISTANCE_FROM_MA_SCHEMA
 
 
 class DistanceFromMAIndicator(BaseIndicator):
@@ -44,27 +44,28 @@ class DistanceFromMAIndicator(BaseIndicator):
     Returns Series with Distance from MA values as percentages
     """
 
-    def __init__(self, period: int = 20, ma_type: str = "SMA", source: str = "close"):
-        """
-        Initialize Distance from MA indicator.
+    class Params(BaseIndicator.Params):
+        """DistanceFromMA parameter schema with validation."""
 
-        Args:
-            period: Period for moving average calculation (default: 20)
-            ma_type: Type of moving average - "SMA" or "EMA" (default: "SMA")
-            source: Data source column (default: "close")
-        """
-        # Call parent constructor with display_as_overlay=False (separate panel)
-        super().__init__(
-            name="DistanceFromMA",
-            display_as_overlay=False,
-            period=period,
-            ma_type=ma_type,
-            source=source,
+        period: int = Field(
+            default=20,
+            ge=1,
+            le=200,
+            strict=True,
+            description="Period for moving average calculation",
+        )
+        ma_type: Literal["SMA", "EMA"] = Field(
+            default="SMA",
+            description="Type of moving average - 'SMA' or 'EMA'",
+        )
+        source: str = Field(
+            default="close",
+            strict=True,
+            description="Data source column",
         )
 
-    def _validate_params(self, params):
-        """Validate parameters using schema."""
-        return DISTANCE_FROM_MA_SCHEMA.validate(params)
+    # DistanceFromMA is displayed in separate panel
+    display_as_overlay = False
 
     def compute(self, data: pd.DataFrame) -> Union[pd.Series, pd.DataFrame]:
         """
@@ -79,11 +80,9 @@ class DistanceFromMAIndicator(BaseIndicator):
         Raises:
             DataError: If required columns are missing or insufficient data
         """
-        # Validate parameters
-        validated_params = self._validate_params(self.params)
-        period = validated_params["period"]
-        ma_type = validated_params["ma_type"]
-        source = validated_params["source"]
+        period: int = self.params["period"]
+        ma_type: str = self.params["ma_type"]
+        source: str = self.params["source"]
 
         # Check if source column exists
         if source not in data.columns:

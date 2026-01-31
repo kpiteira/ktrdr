@@ -10,12 +10,12 @@ from typing import Union
 
 import numpy as np
 import pandas as pd
+from pydantic import Field
 
 from ktrdr.errors import DataError
 from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.indicators.bollinger_bands_indicator import BollingerBandsIndicator
 from ktrdr.indicators.keltner_channels import KeltnerChannelsIndicator
-from ktrdr.indicators.schemas import SQUEEZE_INTENSITY_SCHEMA
 
 
 class SqueezeIntensityIndicator(BaseIndicator):
@@ -47,38 +47,45 @@ class SqueezeIntensityIndicator(BaseIndicator):
     Returns Series with Squeeze Intensity values (0.0 to 1.0)
     """
 
-    def __init__(
-        self,
-        bb_period: int = 20,
-        bb_multiplier: float = 2.0,
-        kc_period: int = 20,
-        kc_multiplier: float = 2.0,
-        source: str = "close",
-    ):
-        """
-        Initialize Squeeze Intensity indicator.
+    class Params(BaseIndicator.Params):
+        """SqueezeIntensity parameter schema with validation."""
 
-        Args:
-            bb_period: Period for Bollinger Bands (default: 20)
-            bb_multiplier: Standard deviation multiplier for BB (default: 2.0)
-            kc_period: Period for Keltner Channels (default: 20)
-            kc_multiplier: ATR multiplier for KC (default: 2.0)
-            source: Data source column (default: "close")
-        """
-        # Call parent constructor with display_as_overlay=False (separate panel)
-        super().__init__(
-            name="SqueezeIntensity",
-            display_as_overlay=False,
-            bb_period=bb_period,
-            bb_multiplier=bb_multiplier,
-            kc_period=kc_period,
-            kc_multiplier=kc_multiplier,
-            source=source,
+        bb_period: int = Field(
+            default=20,
+            ge=2,
+            le=100,
+            strict=True,
+            description="Period for Bollinger Bands calculation",
+        )
+        bb_multiplier: float = Field(
+            default=2.0,
+            gt=0,
+            le=5.0,
+            strict=True,
+            description="Standard deviation multiplier for Bollinger Bands",
+        )
+        kc_period: int = Field(
+            default=20,
+            ge=2,
+            le=100,
+            strict=True,
+            description="Period for Keltner Channels calculation",
+        )
+        kc_multiplier: float = Field(
+            default=2.0,
+            gt=0,
+            le=5.0,
+            strict=True,
+            description="ATR multiplier for Keltner Channels",
+        )
+        source: str = Field(
+            default="close",
+            strict=True,
+            description="Data source column",
         )
 
-    def _validate_params(self, params):
-        """Validate parameters using schema."""
-        return SQUEEZE_INTENSITY_SCHEMA.validate(params)
+    # SqueezeIntensity is displayed in separate panel
+    display_as_overlay = False
 
     def compute(self, data: pd.DataFrame) -> Union[pd.Series, pd.DataFrame]:
         """
@@ -93,13 +100,11 @@ class SqueezeIntensityIndicator(BaseIndicator):
         Raises:
             DataError: If required columns are missing or insufficient data
         """
-        # Validate parameters
-        validated_params = self._validate_params(self.params)
-        bb_period = validated_params["bb_period"]
-        bb_multiplier = validated_params["bb_multiplier"]
-        kc_period = validated_params["kc_period"]
-        kc_multiplier = validated_params["kc_multiplier"]
-        source = validated_params["source"]
+        bb_period: int = self.params["bb_period"]
+        bb_multiplier: float = self.params["bb_multiplier"]
+        kc_period: int = self.params["kc_period"]
+        kc_multiplier: float = self.params["kc_multiplier"]
+        source: str = self.params["source"]
 
         # Check if required columns exist
         required_columns = [source, "high", "low", "close"]

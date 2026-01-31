@@ -199,6 +199,54 @@ Same pattern as previous tasks:
 
 ### Next Task Notes
 
-Task 2.5 migrates remaining indicators (13): volume_ratio, distance_from_ma, squeeze_intensity, zigzag, plus others.
+Task 2.5 migrates remaining indicators: volume_ratio, distance_from_ma, squeeze_intensity, zigzag.
 
-Verify the full list by cross-referencing with indicator_factory.py to ensure all 39 are covered.
+---
+
+## Task 2.5 Complete: Add Params to remaining indicators (4)
+
+### Implementation Notes
+
+Migrated the final 4 indicators to the Params pattern:
+- VolumeRatio, DistanceFromMA, SqueezeIntensity, ZigZag
+
+**Total count clarification**: The milestone file mentioned 39 indicators, but the actual count is 31:
+- 30 unique classes in `indicator_factory.py`
+- Plus WMA added in Task 2.3
+
+All 31 indicators now have their own Params class.
+
+### Pattern Applied
+
+Same pattern as previous tasks:
+1. Added `class Params(BaseIndicator.Params)` with Field definitions
+2. Removed explicit `__init__` method (or custom `__init__` like ZigZag had)
+3. Removed `_validate_params` method and schema imports
+4. Set `display_as_overlay` as class attribute
+5. Updated `compute()` to read from `self.params["field"]` directly
+
+### Gotchas
+
+**Literal type + strict**: Pydantic doesn't allow `strict=True` on `Literal` type fields. The error: "Unable to apply constraint 'strict' to schema of type 'literal'". Remove `strict=True` from Literal fields (DistanceFromMA's `ma_type`).
+
+**ZigZag used instance attributes**: ZigZag stored `self.threshold` and `self.source` directly and used them in compute. Updated to use `self.params["threshold"]` and `self.params["source"]` consistently.
+
+**Old tests manipulate params directly**: Some tests (like `test_distance_from_ma_indicator.py`) set `indicator.params["ma_type"] = "INVALID"` to test runtime validation. With Params pattern, validation happens at construction time. Updated tests to test construction-time validation instead.
+
+### Key Changes
+
+| Indicator | Params Fields | display_as_overlay | Notes |
+|-----------|--------------|-------------------|-------|
+| VolumeRatio | period (2-100) | False | |
+| DistanceFromMA | period (1-200), ma_type (SMA/EMA), source | False | Literal type for ma_type |
+| SqueezeIntensity | bb_period (2-100), bb_multiplier (>0, ≤5), kc_period (2-100), kc_multiplier (>0, ≤5), source | False | Complex indicator using BB + KC |
+| ZigZag | threshold (0-1 exclusive), source | True | Price overlay |
+
+### Tests Added/Updated
+
+- `tests/unit/indicators/test_remaining_params_migration.py`: New test file with 40 tests
+- `tests/unit/indicators/test_distance_from_ma_indicator.py`: Updated `test_invalid_ma_type_error` to test construction-time validation
+
+### Next Task Notes
+
+Task 2.6 removes the fallback from IndicatorEngine. After this task, all indicators use INDICATOR_REGISTRY exclusively.

@@ -10,10 +10,10 @@ from typing import Union
 
 import numpy as np
 import pandas as pd
+from pydantic import Field
 
 from ktrdr.errors import DataError
 from ktrdr.indicators.base_indicator import BaseIndicator
-from ktrdr.indicators.schemas import VOLUME_RATIO_SCHEMA
 
 
 class VolumeRatioIndicator(BaseIndicator):
@@ -40,23 +40,19 @@ class VolumeRatioIndicator(BaseIndicator):
     Returns Series with Volume Ratio values (ratio of current/average volume)
     """
 
-    def __init__(self, period: int = 20):
-        """
-        Initialize Volume Ratio indicator.
+    class Params(BaseIndicator.Params):
+        """VolumeRatio parameter schema with validation."""
 
-        Args:
-            period: Period for volume SMA calculation (default: 20)
-        """
-        # Call parent constructor with display_as_overlay=False (separate panel)
-        super().__init__(
-            name="VolumeRatio",
-            display_as_overlay=False,
-            period=period,
+        period: int = Field(
+            default=20,
+            ge=2,
+            le=100,
+            strict=True,
+            description="Period for volume SMA calculation",
         )
 
-    def _validate_params(self, params):
-        """Validate parameters using schema."""
-        return VOLUME_RATIO_SCHEMA.validate(params)
+    # VolumeRatio is displayed in separate panel
+    display_as_overlay = False
 
     def compute(self, data: pd.DataFrame) -> Union[pd.Series, pd.DataFrame]:
         """
@@ -71,9 +67,7 @@ class VolumeRatioIndicator(BaseIndicator):
         Raises:
             DataError: If required columns are missing or insufficient data
         """
-        # Validate parameters
-        validated_params = self._validate_params(self.params)
-        period = validated_params["period"]
+        period: int = self.params["period"]
 
         # Check if volume column exists
         if "volume" not in data.columns:
