@@ -34,6 +34,7 @@ logger = get_logger(__name__)
 # If current value matches these, it's considered insecure
 INSECURE_DEFAULTS: dict[str, str] = {
     "KTRDR_DB_PASSWORD": "localdev",
+    "KTRDR_AUTH_JWT_SECRET": "insecure-dev-secret",
 }
 
 # Settings classes to validate for each component
@@ -62,9 +63,25 @@ def _init_settings_lists() -> None:
     if _settings_lists_initialized:
         return
 
+    from ktrdr.config.settings import (
+        APISettings,
+        AuthSettings,
+        LoggingSettings,
+        ObservabilitySettings,
+    )
+
     DatabaseSettings = _get_database_settings_class()
+
+    # Backend needs all M1 + M2 settings
     BACKEND_SETTINGS.append(DatabaseSettings)
+    BACKEND_SETTINGS.append(APISettings)
+    BACKEND_SETTINGS.append(AuthSettings)
+    BACKEND_SETTINGS.append(LoggingSettings)
+    BACKEND_SETTINGS.append(ObservabilitySettings)
+
+    # Workers only need database settings (for now)
     WORKER_SETTINGS.append(DatabaseSettings)
+
     _settings_lists_initialized = True
 
 
@@ -78,7 +95,11 @@ def detect_insecure_defaults() -> dict[str, str]:
         Dictionary mapping env var names to their insecure values.
         Empty dict if all secrets are secure.
     """
-    from ktrdr.config.settings import clear_settings_cache, get_db_settings
+    from ktrdr.config.settings import (
+        clear_settings_cache,
+        get_auth_settings,
+        get_db_settings,
+    )
 
     # Clear cache to ensure we get fresh values
     clear_settings_cache()
@@ -89,6 +110,11 @@ def detect_insecure_defaults() -> dict[str, str]:
     db_settings = get_db_settings()
     if db_settings.password == INSECURE_DEFAULTS.get("KTRDR_DB_PASSWORD"):
         insecure_found["KTRDR_DB_PASSWORD"] = db_settings.password
+
+    # Check JWT secret
+    auth_settings = get_auth_settings()
+    if auth_settings.jwt_secret == INSECURE_DEFAULTS.get("KTRDR_AUTH_JWT_SECRET"):
+        insecure_found["KTRDR_AUTH_JWT_SECRET"] = auth_settings.jwt_secret
 
     return insecure_found
 

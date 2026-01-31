@@ -193,3 +193,29 @@ Migrated 4 files from `os.getenv("OTLP_ENDPOINT")` to `get_observability_setting
 
 - Add `APISettings`, `AuthSettings`, `LoggingSettings`, `ObservabilitySettings` to `BACKEND_SETTINGS` in `validation.py`
 - Add `AuthSettings.jwt_secret` to `INSECURE_DEFAULTS` (detect insecure "insecure-dev-secret" in production)
+
+---
+
+## Task 2.9 Complete: Update Validation Module for M2 Settings
+
+### What Was Done
+
+1. Added M2 settings to `BACKEND_SETTINGS`:
+   - `APISettings`
+   - `AuthSettings`
+   - `LoggingSettings`
+   - `ObservabilitySettings`
+
+2. Added `KTRDR_AUTH_JWT_SECRET: "insecure-dev-secret"` to `INSECURE_DEFAULTS`
+
+3. Updated `detect_insecure_defaults()` to check JWT secret
+
+### Gotchas
+
+**Existing tests needed updating**: The test `test_validate_all_loads_settings_from_env` ran in production mode and only set DB password. After adding JWT secret to insecure defaults, it also needed `KTRDR_AUTH_JWT_SECRET` to be set.
+
+### Next Task Notes (2.10: Update Deprecation Module for M2 Names)
+
+- Add deprecated name mappings in `deprecation.py`
+- Already handled via `deprecated_field()` in settings (e.g., `OTLP_ENDPOINT` → `KTRDR_OTEL_OTLP_ENDPOINT`)
+- May need to check if there are other deprecated names to add

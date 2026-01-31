@@ -39,6 +39,14 @@ class TestInsecureDefaults:
         """KTRDR_DB_PASSWORD insecure default should be 'localdev'."""
         assert INSECURE_DEFAULTS["KTRDR_DB_PASSWORD"] == "localdev"
 
+    def test_insecure_defaults_contains_jwt_secret(self):
+        """INSECURE_DEFAULTS should contain KTRDR_AUTH_JWT_SECRET."""
+        assert "KTRDR_AUTH_JWT_SECRET" in INSECURE_DEFAULTS
+
+    def test_insecure_defaults_jwt_secret_is_insecure_dev_secret(self):
+        """KTRDR_AUTH_JWT_SECRET insecure default should be 'insecure-dev-secret'."""
+        assert INSECURE_DEFAULTS["KTRDR_AUTH_JWT_SECRET"] == "insecure-dev-secret"
+
 
 class TestComponentSettingsLists:
     """Test the component settings lists."""
@@ -62,6 +70,38 @@ class TestComponentSettingsLists:
         _init_settings_lists()
 
         assert DatabaseSettings in WORKER_SETTINGS
+
+    def test_backend_settings_contains_api_settings(self):
+        """BACKEND_SETTINGS should contain APISettings after initialization."""
+        from ktrdr.config.settings import APISettings
+        from ktrdr.config.validation import _init_settings_lists
+
+        _init_settings_lists()
+        assert APISettings in BACKEND_SETTINGS
+
+    def test_backend_settings_contains_auth_settings(self):
+        """BACKEND_SETTINGS should contain AuthSettings after initialization."""
+        from ktrdr.config.settings import AuthSettings
+        from ktrdr.config.validation import _init_settings_lists
+
+        _init_settings_lists()
+        assert AuthSettings in BACKEND_SETTINGS
+
+    def test_backend_settings_contains_logging_settings(self):
+        """BACKEND_SETTINGS should contain LoggingSettings after initialization."""
+        from ktrdr.config.settings import LoggingSettings
+        from ktrdr.config.validation import _init_settings_lists
+
+        _init_settings_lists()
+        assert LoggingSettings in BACKEND_SETTINGS
+
+    def test_backend_settings_contains_observability_settings(self):
+        """BACKEND_SETTINGS should contain ObservabilitySettings after initialization."""
+        from ktrdr.config.settings import ObservabilitySettings
+        from ktrdr.config.validation import _init_settings_lists
+
+        _init_settings_lists()
+        assert ObservabilitySettings in BACKEND_SETTINGS
 
 
 class TestDetectInsecureDefaults:
@@ -96,12 +136,40 @@ class TestDetectInsecureDefaults:
         """detect_insecure_defaults() should return empty dict when all secure."""
         with patch.dict(
             os.environ,
-            {"KTRDR_DB_PASSWORD": "super_secure_password_123"},
+            {
+                "KTRDR_DB_PASSWORD": "super_secure_password_123",
+                "KTRDR_AUTH_JWT_SECRET": "super_secure_jwt_secret_456",
+            },
             clear=False,
         ):
             result = detect_insecure_defaults()
-            # Should not contain KTRDR_DB_PASSWORD since it's not at insecure default
-            assert result == {} or "KTRDR_DB_PASSWORD" not in result
+            # Should not contain any insecure defaults
+            assert result == {}
+
+    def test_detects_insecure_jwt_secret(self):
+        """detect_insecure_defaults() should detect insecure JWT secret."""
+        with patch.dict(
+            os.environ,
+            {"KTRDR_DB_PASSWORD": "secure_password"},  # Only secure DB password
+            clear=False,
+        ):
+            result = detect_insecure_defaults()
+            # JWT secret is at default "insecure-dev-secret"
+            assert "KTRDR_AUTH_JWT_SECRET" in result
+            assert result["KTRDR_AUTH_JWT_SECRET"] == "insecure-dev-secret"
+
+    def test_returns_empty_when_jwt_secret_is_secure(self):
+        """detect_insecure_defaults() should not flag secure JWT secret."""
+        with patch.dict(
+            os.environ,
+            {
+                "KTRDR_DB_PASSWORD": "secure_password",
+                "KTRDR_AUTH_JWT_SECRET": "my-production-secret-key",
+            },
+            clear=False,
+        ):
+            result = detect_insecure_defaults()
+            assert "KTRDR_AUTH_JWT_SECRET" not in result
 
 
 class TestValidateAllBackend:
@@ -132,6 +200,7 @@ class TestValidateAllBackend:
             # Remove any existing secure password to ensure we use default
             env_copy = os.environ.copy()
             env_copy.pop("KTRDR_DB_PASSWORD", None)
+            env_copy.pop("KTRDR_AUTH_JWT_SECRET", None)
             with patch.dict(os.environ, env_copy, clear=True):
                 clear_settings_cache()
                 with pytest.raises(ConfigurationError) as exc_info:
@@ -139,6 +208,28 @@ class TestValidateAllBackend:
                 # Error details should mention the insecure env var
                 error = exc_info.value
                 assert "KTRDR_DB_PASSWORD" in error.details.get("insecure_settings", [])
+
+    def test_validate_all_production_with_insecure_jwt_secret_raises(self):
+        """validate_all('backend') with insecure JWT secret in production should raise."""
+        with patch.dict(
+            os.environ,
+            {
+                "KTRDR_ENV": "production",
+                "KTRDR_DB_PASSWORD": "secure_db_password",  # DB is secure
+                # JWT secret not set, so uses insecure default
+            },
+            clear=False,
+        ):
+            env_copy = os.environ.copy()
+            env_copy.pop("KTRDR_AUTH_JWT_SECRET", None)
+            with patch.dict(os.environ, env_copy, clear=True):
+                clear_settings_cache()
+                with pytest.raises(ConfigurationError) as exc_info:
+                    validate_all("backend")
+                error = exc_info.value
+                assert "KTRDR_AUTH_JWT_SECRET" in error.details.get(
+                    "insecure_settings", []
+                )
 
     def test_validate_all_development_with_insecure_defaults_warns_not_raises(self):
         """validate_all('backend') with KTRDR_ENV=development and insecure defaults warns."""
@@ -322,11 +413,15 @@ class TestValidationActuallyLoadsSettings:
 
     def test_validate_all_loads_settings_from_env(self):
         """validate_all() should actually load and validate settings from env."""
-        # Set a secure password and verify validation passes
+        # Set secure secrets and verify validation passes
         with patch.dict(
             os.environ,
-            {"KTRDR_ENV": "production", "KTRDR_DB_PASSWORD": "secure_password_123"},
+            {
+                "KTRDR_ENV": "production",
+                "KTRDR_DB_PASSWORD": "secure_password_123",
+                "KTRDR_AUTH_JWT_SECRET": "secure_jwt_secret_456",
+            },
             clear=False,
         ):
-            # Should not raise since we have secure password
+            # Should not raise since we have secure secrets
             validate_all("backend")
