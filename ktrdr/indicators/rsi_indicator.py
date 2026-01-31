@@ -7,6 +7,7 @@ indicator, a momentum oscillator that measures the speed and change of price mov
 
 import numpy as np
 import pandas as pd
+from pydantic import Field
 
 from ktrdr import get_logger
 from ktrdr.errors import DataError
@@ -23,73 +24,23 @@ class RSIIndicator(BaseIndicator):
     or oversold conditions in the price of a stock or other asset.
 
     Attributes:
-        name (str): The name of the indicator ('RSI')
-        params (dict): Parameters for RSI calculation including:
-            - period (int): The period for RSI calculation (default: 14)
-            - source (str): The price column to use (default: 'close')
+        period (int): The period for RSI calculation (default: 14)
+        source (str): The price column to use (default: 'close')
+        params (dict): Backward-compatible dict of parameters
     """
 
-    def __init__(self, period: int = 14, source: str = "close"):
-        """
-        Initialize the RSI indicator.
+    class Params(BaseIndicator.Params):
+        """RSI parameter schema with validation."""
 
-        Args:
-            period (int): The period for RSI calculation, typically 14
-            source (str): The column name from DataFrame to use for calculations
-        """
-        super().__init__(
-            name="RSI", display_as_overlay=False, period=period, source=source
+        period: int = Field(
+            default=14, ge=2, le=100, strict=True, description="RSI lookback period"
         )
-        logger.debug(
-            f"Initialized RSI indicator with period {period} using {source} prices"
+        source: str = Field(
+            default="close", strict=True, description="Price source column"
         )
 
-    def _validate_params(self, params):
-        """
-        Validate parameters for RSI indicator.
-
-        Args:
-            params (dict): Parameters to validate
-
-        Returns:
-            dict: Validated parameters
-
-        Raises:
-            DataError: If parameters are invalid
-        """
-        # Validate period
-        if "period" in params:
-            period = params["period"]
-            if not isinstance(period, int):
-                raise DataError(
-                    message="RSI period must be an integer",
-                    error_code="DATA-InvalidType",
-                    details={
-                        "parameter": "period",
-                        "expected": "int",
-                        "received": type(period).__name__,
-                    },
-                )
-            if period < 2:
-                raise DataError(
-                    message="RSI period must be at least 2",
-                    error_code="DATA-InvalidValue",
-                    details={"parameter": "period", "minimum": 2, "received": period},
-                )
-
-        # Validate source
-        if "source" in params and not isinstance(params["source"], str):
-            raise DataError(
-                message="Source must be a string",
-                error_code="DATA-InvalidType",
-                details={
-                    "parameter": "source",
-                    "expected": "str",
-                    "received": type(params["source"]).__name__,
-                },
-            )
-
-        return params
+    # RSI has different scale than price, don't overlay
+    display_as_overlay = False
 
     def compute(self, df: pd.DataFrame) -> pd.Series:
         """
@@ -105,8 +56,10 @@ class RSIIndicator(BaseIndicator):
             DataError: If input data is invalid or insufficient
         """
         # Validate input data
-        source = self.params["source"]
-        period = self.params["period"]
+        # Access params via self.params for mypy compatibility
+        # (self.period/self.source are set dynamically by BaseIndicator)
+        source: str = self.params["source"]
+        period: int = self.params["period"]
         self.validate_input_data(df, [source])
         self.validate_sufficient_data(
             df, period + 1
@@ -132,8 +85,8 @@ class RSIIndicator(BaseIndicator):
 
             # Normal case - prices have some changes
             # Separate gains and losses
-            gain = delta.copy()
-            loss = delta.copy()
+            gain: pd.Series = delta.copy()
+            loss: pd.Series = delta.copy()
             gain[gain < 0] = 0
             loss[loss > 0] = 0
             loss = abs(loss)  # Make losses positive
