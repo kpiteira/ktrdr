@@ -102,3 +102,30 @@
 - Delete `ktrdr/config/host_services.py` after migration
 
 ---
+
+## Task 3.5 Complete: Migrate Host Service Consumers and Delete `host_services.py`
+
+### Gotchas
+
+**ApiServiceSettings must be MOVED, not imported**: The settings.py file was previously importing `ApiServiceSettings` and `get_api_service_settings` from host_services.py. After deleting host_services.py, these need to be defined directly in settings.py.
+
+**CLI imports use `get_api_base_url`**: The CLI modules (`sandbox_detect.py`, `client/core.py`) import `get_api_base_url` from host_services.py. This convenience function needs to be added to settings.py.
+
+**test_host_services_cleanup.py is obsolete**: This test file was testing the OLD host_services.py module (with `IbHostServiceSettings` lowercase 'b'). Since that module is deleted, the tests are obsolete. Replaced with new `test_api_service_settings.py`.
+
+### Files Migrated
+
+- `ktrdr/cli/sandbox_detect.py` - changed import from host_services to settings
+- `ktrdr/cli/client/core.py` - changed import from host_services to settings
+
+### Files Deleted
+
+- `ktrdr/config/host_services.py` - the old host service config module
+- `tests/unit/config/test_host_services_cleanup.py` - obsolete tests
+
+### Next Task Notes (3.6: Update Validation Module)
+
+- Add `IBSettings`, `IBHostServiceSettings`, `TrainingHostServiceSettings` to BACKEND_SETTINGS in validation.py
+- These should be validated at startup
+
+---

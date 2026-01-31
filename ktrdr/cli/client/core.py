@@ -16,7 +16,7 @@ from ktrdr.cli.ib_diagnosis import (
     detect_ib_issue_from_api_response,
     should_show_ib_diagnosis,
 )
-from ktrdr.config.host_services import get_api_base_url
+from ktrdr.config.settings import get_api_base_url
 
 
 @dataclass(frozen=True)

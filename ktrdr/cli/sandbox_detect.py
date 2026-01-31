@@ -69,7 +69,7 @@ def get_effective_api_url() -> str:
         return f"{sandbox_url}/api/v1"
 
     # Priority 3: Config default
-    from ktrdr.config.host_services import get_api_base_url
+    from ktrdr.config.settings import get_api_base_url
 
     return get_api_base_url()
 

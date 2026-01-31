@@ -14,10 +14,6 @@ from pydantic import AliasChoices, Field, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .. import metadata
-from .host_services import (
-    ApiServiceSettings,
-    get_api_service_settings,
-)
 
 T = TypeVar("T")
 
@@ -720,6 +716,52 @@ class TrainingHostServiceSettings(BaseSettings):
         return f"{self.base_url}/health/detailed"
 
 
+class ApiServiceSettings(BaseSettings):
+    """API Server configuration for client connections.
+
+    Provides API client configuration for CLI and other clients connecting
+    to the KTRDR backend API server.
+
+    Environment variables:
+        api_base_url: Base URL for API client connections.
+            Default: http://localhost:8000/api/v1
+        KTRDR_API_CLIENT_TIMEOUT: Request timeout in seconds. Default: 30.0
+        KTRDR_API_CLIENT_MAX_RETRIES: Max retry attempts. Default: 3
+        KTRDR_API_CLIENT_RETRY_DELAY: Delay between retries. Default: 1.0
+    """
+
+    enabled: bool = Field(default=True)  # API is always "enabled" for clients
+
+    base_url: str = Field(
+        default=metadata.get("api.client_base_url", "http://localhost:8000/api/v1"),
+        description="Base URL for API client connections",
+        alias="api_base_url",
+    )
+
+    timeout: float = Field(default=metadata.get("api.client_timeout", 30.0))
+
+    max_retries: int = Field(default=metadata.get("api.client_max_retries", 3))
+
+    retry_delay: float = Field(default=metadata.get("api.client_retry_delay", 1.0))
+
+    # These fields are inherited from the old HostServiceSettings base class
+    health_check_interval: float = Field(
+        default=10.0, description="Seconds between health checks"
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_API_CLIENT_", extra="forbid", populate_by_name=True
+    )
+
+    def get_health_url(self) -> str:
+        """API health endpoint.
+
+        Returns:
+            Health endpoint URL (e.g., http://localhost:8000/api/v1/system/health)
+        """
+        return f"{self.base_url.rstrip('/')}/system/health"
+
+
 # Cache settings to avoid repeated disk/env access
 @lru_cache
 def get_api_settings() -> APISettings:
@@ -781,6 +823,24 @@ def get_training_host_service_settings() -> TrainingHostServiceSettings:
     return TrainingHostServiceSettings()
 
 
+@lru_cache
+def get_api_service_settings() -> ApiServiceSettings:
+    """Get API service settings for client connections with caching."""
+    return ApiServiceSettings()
+
+
+def get_api_base_url() -> str:
+    """Get API base URL for client connections.
+
+    This is a convenience function for quick access to the API base URL
+    without needing to work with the full settings object.
+
+    Returns:
+        API base URL string (e.g., http://localhost:8000/api/v1)
+    """
+    return get_api_service_settings().base_url
+
+
 # Compatibility aliases for existing code
 CLISettings = ApiServiceSettings  # CLI uses API service settings for client connections
 
@@ -829,6 +889,7 @@ __all__ = [
     "get_checkpoint_settings",
     "get_db_settings",
     "get_api_service_settings",
+    "get_api_base_url",
     "get_ib_settings",
     "get_ib_host_service_settings",
     "get_training_host_service_settings",
