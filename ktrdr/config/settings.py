@@ -529,6 +529,102 @@ class IBSettings(BaseSettings):
         }
 
 
+class IBHostServiceSettings(BaseSettings):
+    """IB Host Service Settings.
+
+    Provides IB Host Service connection configuration with support for both
+    new (KTRDR_IB_HOST_*) and deprecated (USE_IB_HOST_SERVICE) environment
+    variable names.
+
+    The IB Host Service is a native process that manages the connection to
+    IB Gateway/TWS. The backend proxies requests through this service.
+
+    Environment variables (new names - preferred):
+        KTRDR_IB_HOST_HOST: IB host service host. Default: localhost
+        KTRDR_IB_HOST_PORT: IB host service port. Default: 5001
+        KTRDR_IB_HOST_ENABLED: Enable IB host service. Default: false
+        KTRDR_IB_HOST_TIMEOUT: Request timeout in seconds. Default: 30.0
+        KTRDR_IB_HOST_HEALTH_CHECK_INTERVAL: Health check interval. Default: 10.0
+        KTRDR_IB_HOST_MAX_RETRIES: Max retry attempts. Default: 3
+        KTRDR_IB_HOST_RETRY_DELAY: Delay between retries. Default: 1.0
+
+    Deprecated names (still work, emit warnings at startup):
+        USE_IB_HOST_SERVICE → KTRDR_IB_HOST_ENABLED
+    """
+
+    # Connection settings
+    host: str = Field(
+        default="localhost",
+        description="IB host service hostname",
+    )
+    port: int = Field(
+        default=5001,
+        ge=1,
+        le=65535,
+        description="IB host service port",
+    )
+    enabled: bool = deprecated_field(
+        False,
+        "KTRDR_IB_HOST_ENABLED",
+        "USE_IB_HOST_SERVICE",
+        description="Whether IB host service is enabled",
+    )
+
+    # Request settings
+    timeout: float = Field(
+        default=30.0,
+        gt=0,
+        description="Default timeout for requests in seconds",
+    )
+    health_check_interval: float = Field(
+        default=10.0,
+        gt=0,
+        description="Seconds between health checks",
+    )
+    max_retries: int = Field(
+        default=3,
+        ge=0,
+        description="Maximum retry attempts for failed requests",
+    )
+    retry_delay: float = Field(
+        default=1.0,
+        ge=0,
+        description="Delay between retries in seconds",
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_IB_HOST_",
+        env_file=".env.local",
+        extra="ignore",
+    )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def base_url(self) -> str:
+        """Computed base URL from host and port.
+
+        Returns:
+            Base URL for the IB host service (e.g., http://localhost:5001)
+        """
+        return f"http://{self.host}:{self.port}"
+
+    def get_health_url(self) -> str:
+        """Get the health check endpoint URL.
+
+        Returns:
+            Health endpoint URL (e.g., http://localhost:5001/health)
+        """
+        return f"{self.base_url}/health"
+
+    def get_detailed_health_url(self) -> str:
+        """Get the detailed health check endpoint URL.
+
+        Returns:
+            Detailed health endpoint URL (e.g., http://localhost:5001/health/detailed)
+        """
+        return f"{self.base_url}/health/detailed"
+
+
 # Cache settings to avoid repeated disk/env access
 @lru_cache
 def get_api_settings() -> APISettings:
@@ -578,6 +674,12 @@ def get_ib_settings() -> IBSettings:
     return IBSettings()
 
 
+@lru_cache
+def get_ib_host_service_settings() -> IBHostServiceSettings:
+    """Get IB host service settings with caching."""
+    return IBHostServiceSettings()
+
+
 # Compatibility aliases for existing code
 CLISettings = ApiServiceSettings  # CLI uses API service settings for client connections
 
@@ -599,6 +701,7 @@ def clear_settings_cache() -> None:
     get_checkpoint_settings.cache_clear()
     get_db_settings.cache_clear()
     get_ib_settings.cache_clear()
+    get_ib_host_service_settings.cache_clear()
 
 
 # Export settings classes and getters
@@ -613,6 +716,7 @@ __all__ = [
     "DatabaseSettings",
     "ApiServiceSettings",
     "IBSettings",
+    "IBHostServiceSettings",
     # Cached getters
     "get_api_settings",
     "get_auth_settings",
@@ -623,6 +727,7 @@ __all__ = [
     "get_db_settings",
     "get_api_service_settings",
     "get_ib_settings",
+    "get_ib_host_service_settings",
     # Utilities
     "clear_settings_cache",
     "deprecated_field",

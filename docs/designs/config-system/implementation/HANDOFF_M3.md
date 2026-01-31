@@ -24,3 +24,28 @@
 - Include: host, port, enabled, timeout
 
 ---
+
+## Task 3.2 Complete: Create `IBHostServiceSettings` Class
+
+### Gotchas
+
+**Environment has `USE_IB_HOST_SERVICE=true`**: The development environment has this env var set. Tests for default values need to use `patch.dict(os.environ, {}, clear=True)` to ensure a clean slate. This is different from other settings tests that only need `clear=False`.
+
+**Split base_url into host/port**: The existing `IbHostServiceSettings` uses `base_url` as a single field. The new `IBHostServiceSettings` splits this into `host` and `port` (like `IBSettings`) with `base_url` as a computed property. This is more flexible and consistent.
+
+**Naming conflict with host_services.py**: Both `host_services.py` and `settings.py` now have `get_ib_host_service_settings()` functions. They return different classes (`IbHostServiceSettings` vs `IBHostServiceSettings`). The settings.py version is the new canonical one - Task 3.5 will migrate consumers and delete host_services.py.
+
+### Emergent Patterns
+
+**Computed properties for derived values**: Used `@computed_field` for `base_url` which is derived from `host` and `port`. This keeps the URL synchronized with configuration changes.
+
+**Port helper methods from parent class**: Kept `get_health_url()` and `get_detailed_health_url()` for API compatibility with the old class.
+
+### Next Task Notes (3.3: Create TrainingHostServiceSettings)
+
+- Add `TrainingHostServiceSettings` class with `env_prefix="KTRDR_TRAINING_HOST_"`
+- Similar structure to `IBHostServiceSettings` (host, port, enabled, timeout, etc.)
+- Check if there's a deprecated env var for training host service enabled flag
+- Default port is likely 5002 based on the pattern
+
+---
