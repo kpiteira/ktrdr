@@ -11,6 +11,7 @@ Author: KTRDR
 from typing import Any
 
 import pandas as pd
+from pydantic import Field
 
 from ktrdr import get_logger
 from ktrdr.errors import DataError
@@ -46,6 +47,33 @@ class KeltnerChannelsIndicator(BaseIndicator):
     - multiplier: 2.0 (ATR multiplier for band width)
     """
 
+    class Params(BaseIndicator.Params):
+        """KeltnerChannels parameter schema with validation."""
+
+        period: int = Field(
+            default=20,
+            ge=2,
+            le=500,
+            strict=True,
+            description="Period for the EMA middle line",
+        )
+        atr_period: int = Field(
+            default=10,
+            ge=2,
+            le=200,
+            strict=True,
+            description="Period for ATR calculation",
+        )
+        multiplier: float = Field(
+            default=2.0,
+            gt=0,
+            le=10.0,
+            description="Multiplier for ATR to determine band width",
+        )
+
+    # KeltnerChannels is displayed as overlay on price chart
+    display_as_overlay = True
+
     @classmethod
     def is_multi_output(cls) -> bool:
         """Keltner Channels produces multiple outputs (Middle, Upper, Lower)."""
@@ -55,56 +83,6 @@ class KeltnerChannelsIndicator(BaseIndicator):
     def get_output_names(cls) -> list[str]:
         """Return semantic output names for Keltner Channels."""
         return ["upper", "middle", "lower"]
-
-    def __init__(self, period: int = 20, atr_period: int = 10, multiplier: float = 2.0):
-        """
-        Initialize Keltner Channels indicator.
-
-        Args:
-            period: Period for the EMA middle line (default: 20)
-            atr_period: Period for ATR calculation (default: 10)
-            multiplier: Multiplier for ATR to determine band width (default: 2.0)
-        """
-        # Call parent constructor - Keltner Channels can be displayed as overlay
-        super().__init__(
-            name="KeltnerChannels",
-            display_as_overlay=True,
-            period=period,
-            atr_period=atr_period,
-            multiplier=multiplier,
-        )
-
-    def _validate_params(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Validate indicator parameters."""
-        period = params.get("period", 20)
-        atr_period = params.get("atr_period", 10)
-        multiplier = params.get("multiplier", 2.0)
-
-        if not isinstance(period, int) or period < 1:
-            raise ValueError("period must be a positive integer")
-
-        if period < 2:
-            raise ValueError("period must be at least 2")
-
-        if period > 500:
-            raise ValueError("period should not exceed 500 for practical purposes")
-
-        if not isinstance(atr_period, int) or atr_period < 1:
-            raise ValueError("atr_period must be a positive integer")
-
-        if atr_period < 2:
-            raise ValueError("atr_period must be at least 2")
-
-        if atr_period > 200:
-            raise ValueError("atr_period should not exceed 200 for practical purposes")
-
-        if not isinstance(multiplier, (int, float)) or multiplier <= 0:
-            raise ValueError("multiplier must be a positive number")
-
-        if multiplier > 10:
-            raise ValueError("multiplier should not exceed 10 for practical purposes")
-
-        return {"period": period, "atr_period": atr_period, "multiplier": multiplier}
 
     def compute(self, data: pd.DataFrame) -> pd.DataFrame:
         """
@@ -119,10 +97,10 @@ class KeltnerChannelsIndicator(BaseIndicator):
         Raises:
             DataError: If required columns are missing or insufficient data
         """
-        # Get parameters from self.params
-        period = self.params.get("period", 20)
-        atr_period = self.params.get("atr_period", 10)
-        multiplier = self.params.get("multiplier", 2.0)
+        # Get parameters from self.params (validated by BaseIndicator)
+        period: int = self.params["period"]
+        atr_period: int = self.params["atr_period"]
+        multiplier: float = self.params["multiplier"]
 
         # Check required columns
         required_columns = ["high", "low", "close"]

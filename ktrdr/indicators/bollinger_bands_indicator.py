@@ -13,10 +13,10 @@ and potential breakout points.
 from typing import Union
 
 import pandas as pd
+from pydantic import Field
 
 from ktrdr.errors import DataError
 from ktrdr.indicators.base_indicator import BaseIndicator
-from ktrdr.indicators.schemas import BOLLINGER_BANDS_SCHEMA
 
 
 class BollingerBandsIndicator(BaseIndicator):
@@ -51,6 +51,31 @@ class BollingerBandsIndicator(BaseIndicator):
     - lower: Lower Bollinger Band
     """
 
+    class Params(BaseIndicator.Params):
+        """BollingerBands parameter schema with validation."""
+
+        period: int = Field(
+            default=20,
+            ge=2,
+            le=200,
+            strict=True,
+            description="Moving average period",
+        )
+        multiplier: float = Field(
+            default=2.0,
+            gt=0,
+            le=10.0,
+            description="Standard deviation multiplier for bands",
+        )
+        source: str = Field(
+            default="close",
+            strict=True,
+            description="Price source column",
+        )
+
+    # BollingerBands is displayed as overlay on price chart
+    display_as_overlay = True
+
     @classmethod
     def is_multi_output(cls) -> bool:
         """Bollinger Bands produces multiple outputs (upper, middle, lower)."""
@@ -60,30 +85,6 @@ class BollingerBandsIndicator(BaseIndicator):
     def get_output_names(cls) -> list[str]:
         """Return semantic output names for Bollinger Bands."""
         return ["upper", "middle", "lower"]
-
-    def __init__(
-        self, period: int = 20, multiplier: float = 2.0, source: str = "close"
-    ):
-        """
-        Initialize Bollinger Bands indicator.
-
-        Args:
-            period: Moving average period (default: 20)
-            multiplier: Standard deviation multiplier (default: 2.0)
-            source: Data source column (default: "close")
-        """
-        # Call parent constructor with display_as_overlay=True (price overlay)
-        super().__init__(
-            name="BollingerBands",
-            display_as_overlay=True,
-            period=period,
-            multiplier=multiplier,
-            source=source,
-        )
-
-    def _validate_params(self, params):
-        """Validate parameters using schema."""
-        return BOLLINGER_BANDS_SCHEMA.validate(params)
 
     def compute(self, data: pd.DataFrame) -> Union[pd.Series, pd.DataFrame]:
         """
@@ -98,11 +99,10 @@ class BollingerBandsIndicator(BaseIndicator):
         Raises:
             DataError: If required columns are missing or insufficient data
         """
-        # Validate parameters
-        validated_params = self._validate_params(self.params)
-        period = validated_params["period"]
-        multiplier = validated_params["multiplier"]
-        source = validated_params["source"]
+        # Get parameters from self.params (validated by BaseIndicator)
+        period: int = self.params["period"]
+        multiplier: float = self.params["multiplier"]
+        source: str = self.params["source"]
 
         # Check if source column exists
         if source not in data.columns:

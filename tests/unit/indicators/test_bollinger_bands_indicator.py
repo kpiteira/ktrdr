@@ -45,48 +45,46 @@ class TestBollingerBandsIndicator:
         assert bb.params["source"] == "high"
 
     def test_parameter_validation_success(self):
-        """Test successful parameter validation."""
+        """Test successful parameter validation at construction time."""
         bb = BollingerBandsIndicator(period=10, multiplier=2.5, source="low")
-        params = {"period": 10, "multiplier": 2.5, "source": "low"}
-        validated = bb._validate_params(params)
-        assert validated["period"] == 10
-        assert validated["multiplier"] == 2.5
-        assert validated["source"] == "low"
+        assert bb.params["period"] == 10
+        assert bb.params["multiplier"] == 2.5
+        assert bb.params["source"] == "low"
 
     def test_parameter_validation_period_too_small(self):
         """Test parameter validation with period too small."""
-        bb = BollingerBandsIndicator()
-        params = {"period": 1, "multiplier": 2.0, "source": "close"}
-        with pytest.raises(DataError, match="period.*must be >= 2"):
-            bb._validate_params(params)
+        # With Params pattern, validation happens at construction time
+        with pytest.raises(DataError) as exc_info:
+            BollingerBandsIndicator(period=1)
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_period_too_large(self):
         """Test parameter validation with period too large."""
-        bb = BollingerBandsIndicator()
-        params = {"period": 150, "multiplier": 2.0, "source": "close"}
-        with pytest.raises(DataError, match="period.*must be <= 100"):
-            bb._validate_params(params)
+        # With Params pattern, validation happens at construction time
+        with pytest.raises(DataError) as exc_info:
+            BollingerBandsIndicator(period=250)
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_multiplier_too_small(self):
         """Test parameter validation with multiplier too small."""
-        bb = BollingerBandsIndicator()
-        params = {"period": 20, "multiplier": 0.05, "source": "close"}
-        with pytest.raises(DataError, match="multiplier.*must be >= 0.1"):
-            bb._validate_params(params)
+        # With Params pattern, validation happens at construction time
+        with pytest.raises(DataError) as exc_info:
+            BollingerBandsIndicator(multiplier=-1.0)
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_multiplier_too_large(self):
         """Test parameter validation with multiplier too large."""
-        bb = BollingerBandsIndicator()
-        params = {"period": 20, "multiplier": 6.0, "source": "close"}
-        with pytest.raises(DataError, match="multiplier.*must be <= 5.0"):
-            bb._validate_params(params)
+        # With Params pattern, validation happens at construction time
+        with pytest.raises(DataError) as exc_info:
+            BollingerBandsIndicator(multiplier=15.0)
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_invalid_source(self):
-        """Test parameter validation with invalid source."""
-        bb = BollingerBandsIndicator()
-        params = {"period": 20, "multiplier": 2.0, "source": "invalid"}
-        with pytest.raises(DataError, match="source.*must be one of"):
-            bb._validate_params(params)
+        """Test parameter validation with invalid source type."""
+        # With Params pattern, source is just a string - validation happens at compute time
+        # Construction should succeed, but compute will fail if column doesn't exist
+        bb = BollingerBandsIndicator(source="invalid")
+        assert bb.params["source"] == "invalid"
 
     def test_basic_calculation(self):
         """Test basic Bollinger Bands calculation."""

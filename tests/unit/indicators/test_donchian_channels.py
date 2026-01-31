@@ -52,27 +52,34 @@ class TestDonchianChannelsIndicator:
         assert indicator.params["include_middle"] is False
 
     def test_donchian_channels_parameter_validation(self):
-        """Test parameter validation."""
+        """Test parameter validation using Params pattern."""
         # Valid parameters
         DonchianChannelsIndicator(period=10)
         DonchianChannelsIndicator(period=50)
         DonchianChannelsIndicator(period=200)
 
-        # Invalid parameters
-        with pytest.raises(ValueError, match="period must be a positive integer"):
+        # Invalid parameters - with Params pattern, validation happens at construction
+        # and raises DataError with INDICATOR-InvalidParameters error code
+        with pytest.raises(DataError) as exc_info:
             DonchianChannelsIndicator(period=0)
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
-        with pytest.raises(ValueError, match="period must be a positive integer"):
+        with pytest.raises(DataError) as exc_info:
             DonchianChannelsIndicator(period=-5)
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
-        with pytest.raises(ValueError, match="period must be at least 2"):
+        with pytest.raises(DataError) as exc_info:
             DonchianChannelsIndicator(period=1)
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
-        with pytest.raises(ValueError, match="period should not exceed 500"):
+        with pytest.raises(DataError) as exc_info:
             DonchianChannelsIndicator(period=600)
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
-        with pytest.raises(ValueError, match="period must be a positive integer"):
+        # Strict type validation - floats not allowed for int fields
+        with pytest.raises(DataError) as exc_info:
             DonchianChannelsIndicator(period=10.5)
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_donchian_channels_calculation_basic(self):
         """Test basic Donchian Channels calculation."""

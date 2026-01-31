@@ -52,3 +52,50 @@ Follow the same pattern:
 2. Remove __init__ and _validate_params
 3. Set display_as_overlay if needed
 4. Update any old-style column naming to semantic names
+
+---
+
+## Task 2.2 Complete: Add Params to volatility indicators (6)
+
+### Implementation Notes
+
+Migrated all 6 volatility indicators to the Params pattern:
+- ATR, BollingerBands, BollingerBandWidth, KeltnerChannels, DonchianChannels, SuperTrend
+
+### Pattern Applied
+
+Same pattern as Task 2.1:
+1. Added `class Params(BaseIndicator.Params)` with Field definitions
+2. Removed explicit `__init__` method
+3. Removed `_validate_params` method and schema imports
+4. Set `display_as_overlay` as class attribute
+5. Updated `compute()` to read from `self.params["field"]` directly
+
+### Gotchas
+
+**Preserve `typing.Any` import**: When replacing imports, don't remove `from typing import Any` if it's used in `get_signals()` or `get_analysis()` return type annotations elsewhere in the file.
+
+**Old test patterns need updating**: Tests using `bb._validate_params(params)` pattern need to be updated to test construction-time validation instead. Tests expecting `ValueError` need to expect `DataError` with `error_code == "INDICATOR-InvalidParameters"`.
+
+### Key Changes
+
+| Indicator | Params Fields | display_as_overlay | Notes |
+|-----------|--------------|-------------------|-------|
+| ATR | period (1-100) | False | |
+| BollingerBands | period (2-200), multiplier (>0, ≤10), source | True | Multi-output |
+| BollingerBandWidth | period (2-200), multiplier (>0, ≤10), source | False | |
+| KeltnerChannels | period (2-500), atr_period (2-200), multiplier (>0, ≤10) | True | Multi-output |
+| DonchianChannels | period (2-500), include_middle | True | Multi-output |
+| SuperTrend | period (2-200), multiplier (>0, ≤10) | True | Multi-output |
+
+### Tests Updated
+
+- `tests/unit/indicators/test_volatility_params_migration.py`: New test file with 56 tests
+- `tests/unit/indicators/test_bollinger_bands_indicator.py`: Updated validation tests
+- `tests/unit/indicators/test_donchian_channels.py`: Updated validation tests
+
+### Next Task Notes
+
+Task 2.3 migrates trend indicators (7): ma_indicators (SMA, EMA, WMA), macd, adx, parabolic_sar, ichimoku.
+
+Note that `ma_indicators.py` has 3 classes (SMA, EMA, WMA) - each needs its own Params class.

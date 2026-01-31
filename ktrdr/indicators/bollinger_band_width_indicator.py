@@ -10,11 +10,11 @@ from typing import Union
 
 import numpy as np
 import pandas as pd
+from pydantic import Field
 
 from ktrdr.errors import DataError
 from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.indicators.bollinger_bands_indicator import BollingerBandsIndicator
-from ktrdr.indicators.schemas import BOLLINGER_BAND_WIDTH_SCHEMA
 
 
 class BollingerBandWidthIndicator(BaseIndicator):
@@ -42,29 +42,30 @@ class BollingerBandWidthIndicator(BaseIndicator):
     Returns Series with Bollinger Band Width values (normalized ratio)
     """
 
-    def __init__(
-        self, period: int = 20, multiplier: float = 2.0, source: str = "close"
-    ):
-        """
-        Initialize Bollinger Band Width indicator.
+    class Params(BaseIndicator.Params):
+        """BollingerBandWidth parameter schema with validation."""
 
-        Args:
-            period: Period for Bollinger Bands calculation (default: 20)
-            multiplier: Standard deviation multiplier for bands (default: 2.0)
-            source: Data source column (default: "close")
-        """
-        # Call parent constructor with display_as_overlay=False (separate panel)
-        super().__init__(
-            name="BollingerBandWidth",
-            display_as_overlay=False,
-            period=period,
-            multiplier=multiplier,
-            source=source,
+        period: int = Field(
+            default=20,
+            ge=2,
+            le=200,
+            strict=True,
+            description="Period for Bollinger Bands calculation",
+        )
+        multiplier: float = Field(
+            default=2.0,
+            gt=0,
+            le=10.0,
+            description="Standard deviation multiplier for bands",
+        )
+        source: str = Field(
+            default="close",
+            strict=True,
+            description="Price source column",
         )
 
-    def _validate_params(self, params):
-        """Validate parameters using schema."""
-        return BOLLINGER_BAND_WIDTH_SCHEMA.validate(params)
+    # BollingerBandWidth is displayed in separate panel (not overlay)
+    display_as_overlay = False
 
     def compute(self, data: pd.DataFrame) -> Union[pd.Series, pd.DataFrame]:
         """
@@ -79,11 +80,10 @@ class BollingerBandWidthIndicator(BaseIndicator):
         Raises:
             DataError: If required columns are missing or insufficient data
         """
-        # Validate parameters
-        validated_params = self._validate_params(self.params)
-        period = validated_params["period"]
-        multiplier = validated_params["multiplier"]
-        source = validated_params["source"]
+        # Get parameters from self.params (validated by BaseIndicator)
+        period: int = self.params["period"]
+        multiplier: float = self.params["multiplier"]
+        source: str = self.params["source"]
 
         # Check if source column exists
         if source not in data.columns:
