@@ -7,7 +7,6 @@ used for trading analysis and decision making.
 
 from ktrdr.indicators.base_indicator import INDICATOR_REGISTRY, BaseIndicator
 from ktrdr.indicators.indicator_engine import IndicatorEngine
-from ktrdr.indicators.indicator_factory import BUILT_IN_INDICATORS
 from ktrdr.indicators.ma_indicators import (
     ExponentialMovingAverage,
     SimpleMovingAverage,
@@ -24,6 +23,5 @@ __all__ = [
     "ExponentialMovingAverage",
     "WeightedMovingAverage",
     "MACDIndicator",
-    "BUILT_IN_INDICATORS",
     "IndicatorEngine",
 ]

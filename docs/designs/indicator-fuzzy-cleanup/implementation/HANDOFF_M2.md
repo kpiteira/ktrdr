@@ -250,3 +250,46 @@ Same pattern as previous tasks:
 ### Next Task Notes
 
 Task 2.6 removes the fallback from IndicatorEngine. After this task, all indicators use INDICATOR_REGISTRY exclusively.
+
+---
+
+## Task 2.6 Complete: Remove fallback from IndicatorEngine
+
+### Implementation Notes
+
+Removed BUILT_IN_INDICATORS fallback from IndicatorEngine. All indicator lookups now use INDICATOR_REGISTRY exclusively via `get_or_raise()`.
+
+### Changes Made
+
+1. **indicator_engine.py**: Removed BUILT_IN_INDICATORS import and fallback logic
+   - Now uses `INDICATOR_REGISTRY.get_or_raise(definition.type)` for cleaner error handling
+   - Error messages now list only registry types (no need to merge two sources)
+
+2. **__init__.py**: Removed BUILT_IN_INDICATORS export from public API
+
+3. **BollingerBandsIndicator**: Added `_aliases = ["bbands"]` for backward compatibility
+   - This alias existed in BUILT_IN_INDICATORS but wasn't registered in the class
+
+### Gotchas
+
+**Tests need explicit imports**: Tests that use indicator types like "bbands" must import the indicator module to trigger auto-registration. Without the import, only basic indicators (RSI, EMA, SMA, etc.) are available in test isolation.
+
+Example fix:
+```python
+# Import to register "bbands" alias
+from ktrdr.indicators.bollinger_bands_indicator import BollingerBandsIndicator  # noqa: F401
+```
+
+**Canonical names vs aliases**: The registry canonical name is the class name without "Indicator" suffix, lowercased:
+- `ATRIndicator` -> canonical: `atr`, alias: `atrindicator`
+- `BollingerBandsIndicator` -> canonical: `bollingerbands`, aliases: `bollingerbandsindicator`, `bbands`
+
+### Tests Added/Updated
+
+- `tests/unit/indicators/test_indicator_engine_no_fallback.py`: New tests verifying no BUILT_IN_INDICATORS usage
+- `tests/unit/indicators/test_indicator_engine_registry.py`: Updated to remove fallback references
+- `tests/unit/indicators/test_indicator_engine_adapter.py`: Added BollingerBandsIndicator import
+
+### Next Task Notes
+
+Task 2.7 updates StrategyValidator to use the registry. The validator still imports BUILT_IN_INDICATORS via lazy import workaround - this needs to be cleaned up.

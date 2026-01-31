@@ -75,6 +75,8 @@ class BollingerBandsIndicator(BaseIndicator):
 
     # BollingerBands is displayed as overlay on price chart
     display_as_overlay = True
+    # Common shorthand alias for strategy compatibility
+    _aliases = ["bbands"]
 
     @classmethod
     def is_multi_output(cls) -> bool:
