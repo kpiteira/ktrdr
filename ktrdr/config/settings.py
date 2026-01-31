@@ -266,25 +266,39 @@ class OrphanDetectorSettings(BaseSettings):
     Configures the background orphan detection service that identifies
     RUNNING operations with no worker and marks them as FAILED.
 
-    Environment variables:
-        ORPHAN_TIMEOUT_SECONDS: Time (seconds) before an unclaimed operation
+    Provides orphan detection configuration with support for both new
+    (KTRDR_ORPHAN_*) and deprecated (ORPHAN_*) environment variable names.
+
+    Environment variables (new names - preferred):
+        KTRDR_ORPHAN_TIMEOUT_SECONDS: Time (seconds) before an unclaimed operation
             is marked as orphaned. Default: 60
-        ORPHAN_CHECK_INTERVAL_SECONDS: How often (seconds) to check for
+        KTRDR_ORPHAN_CHECK_INTERVAL_SECONDS: How often (seconds) to check for
             orphaned operations. Default: 15
+
+    Deprecated names (still work, emit warnings at startup):
+        ORPHAN_TIMEOUT_SECONDS, ORPHAN_CHECK_INTERVAL_SECONDS
     """
 
-    timeout_seconds: int = Field(
-        default=60,
+    timeout_seconds: int = deprecated_field(
+        60,
+        "KTRDR_ORPHAN_TIMEOUT_SECONDS",
+        "ORPHAN_TIMEOUT_SECONDS",
         gt=0,
         description="Time in seconds before an unclaimed operation is marked FAILED",
     )
-    check_interval_seconds: int = Field(
-        default=15,
+    check_interval_seconds: int = deprecated_field(
+        15,
+        "KTRDR_ORPHAN_CHECK_INTERVAL_SECONDS",
+        "ORPHAN_CHECK_INTERVAL_SECONDS",
         gt=0,
         description="Interval in seconds between orphan detection checks",
     )
 
-    model_config = SettingsConfigDict(env_prefix="ORPHAN_")
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_ORPHAN_",
+        env_file=".env.local",
+        extra="ignore",
+    )
 
 
 class CheckpointSettings(BaseSettings):

@@ -72,28 +72,82 @@ class TestOrphanDetectorSettingsValidation:
         with patch.dict(os.environ, {"ORPHAN_TIMEOUT_SECONDS": "-1"}):
             with pytest.raises(ValidationError) as exc_info:
                 OrphanDetectorSettings()
-            assert "timeout_seconds" in str(exc_info.value)
+            # With deprecated_field, error shows env var name not field name
+            assert "greater than 0" in str(exc_info.value)
 
     def test_zero_timeout_raises_error(self):
         """Zero timeout value should raise validation error."""
         with patch.dict(os.environ, {"ORPHAN_TIMEOUT_SECONDS": "0"}):
             with pytest.raises(ValidationError) as exc_info:
                 OrphanDetectorSettings()
-            assert "timeout_seconds" in str(exc_info.value)
+            assert "greater than 0" in str(exc_info.value)
 
     def test_negative_check_interval_raises_error(self):
         """Negative check interval should raise validation error."""
         with patch.dict(os.environ, {"ORPHAN_CHECK_INTERVAL_SECONDS": "-5"}):
             with pytest.raises(ValidationError) as exc_info:
                 OrphanDetectorSettings()
-            assert "check_interval_seconds" in str(exc_info.value)
+            assert "greater than 0" in str(exc_info.value)
 
     def test_zero_check_interval_raises_error(self):
         """Zero check interval should raise validation error."""
         with patch.dict(os.environ, {"ORPHAN_CHECK_INTERVAL_SECONDS": "0"}):
             with pytest.raises(ValidationError) as exc_info:
                 OrphanDetectorSettings()
-            assert "check_interval_seconds" in str(exc_info.value)
+            assert "greater than 0" in str(exc_info.value)
+
+
+class TestOrphanDetectorSettingsNewEnvVars:
+    """Test new KTRDR_ORPHAN_* environment variable configuration.
+
+    These tests verify that the new canonical env var names work correctly.
+    """
+
+    def test_ktrdr_orphan_timeout_seconds_overrides_default(self):
+        """KTRDR_ORPHAN_TIMEOUT_SECONDS should override default."""
+        with patch.dict(
+            os.environ, {"KTRDR_ORPHAN_TIMEOUT_SECONDS": "180"}, clear=False
+        ):
+            settings = OrphanDetectorSettings()
+            assert settings.timeout_seconds == 180
+
+    def test_ktrdr_orphan_check_interval_seconds_overrides_default(self):
+        """KTRDR_ORPHAN_CHECK_INTERVAL_SECONDS should override default."""
+        with patch.dict(
+            os.environ, {"KTRDR_ORPHAN_CHECK_INTERVAL_SECONDS": "45"}, clear=False
+        ):
+            settings = OrphanDetectorSettings()
+            assert settings.check_interval_seconds == 45
+
+
+class TestOrphanDetectorSettingsEnvVarPrecedence:
+    """Test that new env var names take precedence over deprecated names."""
+
+    def test_new_timeout_takes_precedence(self):
+        """KTRDR_ORPHAN_TIMEOUT_SECONDS takes precedence over ORPHAN_TIMEOUT_SECONDS."""
+        with patch.dict(
+            os.environ,
+            {
+                "KTRDR_ORPHAN_TIMEOUT_SECONDS": "300",
+                "ORPHAN_TIMEOUT_SECONDS": "30",
+            },
+            clear=False,
+        ):
+            settings = OrphanDetectorSettings()
+            assert settings.timeout_seconds == 300
+
+    def test_new_check_interval_takes_precedence(self):
+        """KTRDR_ORPHAN_CHECK_INTERVAL_SECONDS takes precedence over ORPHAN_CHECK_INTERVAL_SECONDS."""
+        with patch.dict(
+            os.environ,
+            {
+                "KTRDR_ORPHAN_CHECK_INTERVAL_SECONDS": "60",
+                "ORPHAN_CHECK_INTERVAL_SECONDS": "5",
+            },
+            clear=False,
+        ):
+            settings = OrphanDetectorSettings()
+            assert settings.check_interval_seconds == 60
 
 
 class TestGetOrphanDetectorSettings:

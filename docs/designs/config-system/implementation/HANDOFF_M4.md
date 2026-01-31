@@ -43,3 +43,21 @@ Straightforward update following the M3 pattern:
 - Fields: timeout_seconds, check_interval_seconds
 
 ---
+
+## Task 4.3 Complete: Align `OrphanDetectorSettings` with KTRDR Prefix
+
+### Implementation Notes
+
+Identical pattern to Task 4.2:
+- Changed `env_prefix` from `ORPHAN_` to `KTRDR_ORPHAN_`
+- Used `deprecated_field()` for both fields
+- Updated validation test assertions to check for `"greater than 0"` instead of field names
+
+### Next Task Notes (4.4: Create OperationsSettings)
+
+- New class — no existing implementation to migrate
+- Prefix: `KTRDR_OPS_`
+- Fields: max_operations, cleanup_interval, retention_days, etc.
+- Check for any existing operation-related env vars in the codebase
+
+---
