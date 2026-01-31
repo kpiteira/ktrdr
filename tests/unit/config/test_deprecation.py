@@ -377,3 +377,185 @@ class TestM3DeprecatedNamesWarnings:
         ):
             result = warn_deprecated_env_vars()
             assert result == []
+
+
+class TestM4DeprecatedNamesMapping:
+    """Test M4 (Worker Settings) deprecated name mappings."""
+
+    # WorkerSettings deprecated names
+    def test_deprecated_names_contains_worker_id(self):
+        """DEPRECATED_NAMES should map WORKER_ID to KTRDR_WORKER_ID."""
+        assert "WORKER_ID" in DEPRECATED_NAMES
+        assert DEPRECATED_NAMES["WORKER_ID"] == "KTRDR_WORKER_ID"
+
+    def test_deprecated_names_contains_worker_port(self):
+        """DEPRECATED_NAMES should map WORKER_PORT to KTRDR_WORKER_PORT."""
+        assert "WORKER_PORT" in DEPRECATED_NAMES
+        assert DEPRECATED_NAMES["WORKER_PORT"] == "KTRDR_WORKER_PORT"
+
+    def test_deprecated_names_contains_worker_endpoint_url(self):
+        """DEPRECATED_NAMES should map WORKER_ENDPOINT_URL to KTRDR_WORKER_ENDPOINT_URL."""
+        assert "WORKER_ENDPOINT_URL" in DEPRECATED_NAMES
+        assert DEPRECATED_NAMES["WORKER_ENDPOINT_URL"] == "KTRDR_WORKER_ENDPOINT_URL"
+
+    def test_deprecated_names_contains_worker_public_base_url(self):
+        """DEPRECATED_NAMES should map WORKER_PUBLIC_BASE_URL to KTRDR_WORKER_PUBLIC_BASE_URL."""
+        assert "WORKER_PUBLIC_BASE_URL" in DEPRECATED_NAMES
+        assert (
+            DEPRECATED_NAMES["WORKER_PUBLIC_BASE_URL"] == "KTRDR_WORKER_PUBLIC_BASE_URL"
+        )
+
+    # CheckpointSettings deprecated names
+    def test_deprecated_names_contains_checkpoint_epoch_interval(self):
+        """DEPRECATED_NAMES should map CHECKPOINT_EPOCH_INTERVAL to KTRDR_CHECKPOINT_EPOCH_INTERVAL."""
+        assert "CHECKPOINT_EPOCH_INTERVAL" in DEPRECATED_NAMES
+        assert (
+            DEPRECATED_NAMES["CHECKPOINT_EPOCH_INTERVAL"]
+            == "KTRDR_CHECKPOINT_EPOCH_INTERVAL"
+        )
+
+    def test_deprecated_names_contains_checkpoint_time_interval_seconds(self):
+        """DEPRECATED_NAMES should map CHECKPOINT_TIME_INTERVAL_SECONDS to KTRDR_CHECKPOINT_TIME_INTERVAL_SECONDS."""
+        assert "CHECKPOINT_TIME_INTERVAL_SECONDS" in DEPRECATED_NAMES
+        assert (
+            DEPRECATED_NAMES["CHECKPOINT_TIME_INTERVAL_SECONDS"]
+            == "KTRDR_CHECKPOINT_TIME_INTERVAL_SECONDS"
+        )
+
+    def test_deprecated_names_contains_checkpoint_dir(self):
+        """DEPRECATED_NAMES should map CHECKPOINT_DIR to KTRDR_CHECKPOINT_DIR."""
+        assert "CHECKPOINT_DIR" in DEPRECATED_NAMES
+        assert DEPRECATED_NAMES["CHECKPOINT_DIR"] == "KTRDR_CHECKPOINT_DIR"
+
+    def test_deprecated_names_contains_checkpoint_max_age_days(self):
+        """DEPRECATED_NAMES should map CHECKPOINT_MAX_AGE_DAYS to KTRDR_CHECKPOINT_MAX_AGE_DAYS."""
+        assert "CHECKPOINT_MAX_AGE_DAYS" in DEPRECATED_NAMES
+        assert (
+            DEPRECATED_NAMES["CHECKPOINT_MAX_AGE_DAYS"]
+            == "KTRDR_CHECKPOINT_MAX_AGE_DAYS"
+        )
+
+    # OrphanDetectorSettings deprecated names
+    def test_deprecated_names_contains_orphan_timeout_seconds(self):
+        """DEPRECATED_NAMES should map ORPHAN_TIMEOUT_SECONDS to KTRDR_ORPHAN_TIMEOUT_SECONDS."""
+        assert "ORPHAN_TIMEOUT_SECONDS" in DEPRECATED_NAMES
+        assert (
+            DEPRECATED_NAMES["ORPHAN_TIMEOUT_SECONDS"] == "KTRDR_ORPHAN_TIMEOUT_SECONDS"
+        )
+
+    def test_deprecated_names_contains_orphan_check_interval_seconds(self):
+        """DEPRECATED_NAMES should map ORPHAN_CHECK_INTERVAL_SECONDS to KTRDR_ORPHAN_CHECK_INTERVAL_SECONDS."""
+        assert "ORPHAN_CHECK_INTERVAL_SECONDS" in DEPRECATED_NAMES
+        assert (
+            DEPRECATED_NAMES["ORPHAN_CHECK_INTERVAL_SECONDS"]
+            == "KTRDR_ORPHAN_CHECK_INTERVAL_SECONDS"
+        )
+
+    # OperationsSettings deprecated names
+    def test_deprecated_names_contains_operations_cache_ttl(self):
+        """DEPRECATED_NAMES should map OPERATIONS_CACHE_TTL to KTRDR_OPS_CACHE_TTL."""
+        assert "OPERATIONS_CACHE_TTL" in DEPRECATED_NAMES
+        assert DEPRECATED_NAMES["OPERATIONS_CACHE_TTL"] == "KTRDR_OPS_CACHE_TTL"
+
+
+class TestM4DeprecatedNamesWarnings:
+    """Test M4 deprecated name warnings."""
+
+    def test_warns_for_worker_port(self):
+        """Should emit warning when WORKER_PORT is set."""
+        with patch.dict(os.environ, {"WORKER_PORT": "5003"}, clear=True):
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                result = warn_deprecated_env_vars()
+                assert "WORKER_PORT" in result
+                dep_warnings = [
+                    x for x in w if issubclass(x.category, DeprecationWarning)
+                ]
+                assert len(dep_warnings) == 1
+                assert "WORKER_PORT" in str(dep_warnings[0].message)
+                assert "KTRDR_WORKER_PORT" in str(dep_warnings[0].message)
+
+    def test_warns_for_checkpoint_epoch_interval(self):
+        """Should emit warning when CHECKPOINT_EPOCH_INTERVAL is set."""
+        with patch.dict(os.environ, {"CHECKPOINT_EPOCH_INTERVAL": "5"}, clear=True):
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                result = warn_deprecated_env_vars()
+                assert "CHECKPOINT_EPOCH_INTERVAL" in result
+                dep_warnings = [
+                    x for x in w if issubclass(x.category, DeprecationWarning)
+                ]
+                assert len(dep_warnings) == 1
+                assert "CHECKPOINT_EPOCH_INTERVAL" in str(dep_warnings[0].message)
+                assert "KTRDR_CHECKPOINT_EPOCH_INTERVAL" in str(dep_warnings[0].message)
+
+    def test_warns_for_orphan_timeout_seconds(self):
+        """Should emit warning when ORPHAN_TIMEOUT_SECONDS is set."""
+        with patch.dict(os.environ, {"ORPHAN_TIMEOUT_SECONDS": "120"}, clear=True):
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                result = warn_deprecated_env_vars()
+                assert "ORPHAN_TIMEOUT_SECONDS" in result
+                dep_warnings = [
+                    x for x in w if issubclass(x.category, DeprecationWarning)
+                ]
+                assert len(dep_warnings) == 1
+                assert "ORPHAN_TIMEOUT_SECONDS" in str(dep_warnings[0].message)
+                assert "KTRDR_ORPHAN_TIMEOUT_SECONDS" in str(dep_warnings[0].message)
+
+    def test_warns_for_operations_cache_ttl(self):
+        """Should emit warning when OPERATIONS_CACHE_TTL is set."""
+        with patch.dict(os.environ, {"OPERATIONS_CACHE_TTL": "2.0"}, clear=True):
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                result = warn_deprecated_env_vars()
+                assert "OPERATIONS_CACHE_TTL" in result
+                dep_warnings = [
+                    x for x in w if issubclass(x.category, DeprecationWarning)
+                ]
+                assert len(dep_warnings) == 1
+                assert "OPERATIONS_CACHE_TTL" in str(dep_warnings[0].message)
+                assert "KTRDR_OPS_CACHE_TTL" in str(dep_warnings[0].message)
+
+    def test_does_not_warn_for_new_worker_names(self):
+        """Should not warn when new KTRDR_WORKER_* names are used."""
+        with patch.dict(
+            os.environ,
+            {"KTRDR_WORKER_PORT": "5003", "KTRDR_WORKER_ID": "test-worker"},
+            clear=True,
+        ):
+            result = warn_deprecated_env_vars()
+            assert result == []
+
+    def test_does_not_warn_for_new_checkpoint_names(self):
+        """Should not warn when new KTRDR_CHECKPOINT_* names are used."""
+        with patch.dict(
+            os.environ,
+            {
+                "KTRDR_CHECKPOINT_EPOCH_INTERVAL": "5",
+                "KTRDR_CHECKPOINT_DIR": "/data/checkpoints",
+            },
+            clear=True,
+        ):
+            result = warn_deprecated_env_vars()
+            assert result == []
+
+    def test_does_not_warn_for_new_orphan_names(self):
+        """Should not warn when new KTRDR_ORPHAN_* names are used."""
+        with patch.dict(
+            os.environ,
+            {"KTRDR_ORPHAN_TIMEOUT_SECONDS": "120"},
+            clear=True,
+        ):
+            result = warn_deprecated_env_vars()
+            assert result == []
+
+    def test_does_not_warn_for_new_ops_names(self):
+        """Should not warn when new KTRDR_OPS_* names are used."""
+        with patch.dict(
+            os.environ,
+            {"KTRDR_OPS_CACHE_TTL": "2.0"},
+            clear=True,
+        ):
+            result = warn_deprecated_env_vars()
+            assert result == []

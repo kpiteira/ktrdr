@@ -191,3 +191,36 @@ Added 6 new settings classes to `WORKER_SETTINGS` in `_init_settings_lists()`:
 - M4 deprecated names: `WORKER_*`, `CHECKPOINT_*`, `ORPHAN_*`, `OPERATIONS_*`
 
 ---
+
+## Task 4.8 Complete: Update Deprecation Module for M4 Names
+
+### Implementation Notes
+
+Added 11 M4 deprecated name mappings to `DEPRECATED_NAMES` in `ktrdr/config/deprecation.py`:
+
+**WorkerSettings (4):**
+- `WORKER_ID` → `KTRDR_WORKER_ID`
+- `WORKER_PORT` → `KTRDR_WORKER_PORT`
+- `WORKER_ENDPOINT_URL` → `KTRDR_WORKER_ENDPOINT_URL`
+- `WORKER_PUBLIC_BASE_URL` → `KTRDR_WORKER_PUBLIC_BASE_URL`
+
+**CheckpointSettings (4):**
+- `CHECKPOINT_EPOCH_INTERVAL` → `KTRDR_CHECKPOINT_EPOCH_INTERVAL`
+- `CHECKPOINT_TIME_INTERVAL_SECONDS` → `KTRDR_CHECKPOINT_TIME_INTERVAL_SECONDS`
+- `CHECKPOINT_DIR` → `KTRDR_CHECKPOINT_DIR`
+- `CHECKPOINT_MAX_AGE_DAYS` → `KTRDR_CHECKPOINT_MAX_AGE_DAYS`
+
+**OrphanDetectorSettings (2):**
+- `ORPHAN_TIMEOUT_SECONDS` → `KTRDR_ORPHAN_TIMEOUT_SECONDS`
+- `ORPHAN_CHECK_INTERVAL_SECONDS` → `KTRDR_ORPHAN_CHECK_INTERVAL_SECONDS`
+
+**OperationsSettings (1):**
+- `OPERATIONS_CACHE_TTL` → `KTRDR_OPS_CACHE_TTL`
+
+### Next Task Notes (4.9: Write Unit Tests)
+
+- Unit tests for M4 Settings classes may already exist from Tasks 4.1-4.4
+- Review existing tests in `tests/unit/config/` for coverage
+- Check `test_worker_settings.py`, `test_checkpoint_settings.py`, etc.
+
+---
