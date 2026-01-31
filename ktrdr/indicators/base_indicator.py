@@ -6,16 +6,22 @@ implementations must inherit from, ensuring a consistent interface across
 all technical indicators.
 """
 
+import inspect
 from abc import ABC, abstractmethod
 from typing import Any, Optional, Union
 
 import pandas as pd
+from pydantic import BaseModel, ValidationError
 
 from ktrdr import get_logger
 from ktrdr.config.validation import InputValidator
+from ktrdr.core.type_registry import TypeRegistry
 from ktrdr.errors import DataError
 
 logger = get_logger(__name__)
+
+# Global registry for all indicator types
+INDICATOR_REGISTRY: TypeRegistry["BaseIndicator"] = TypeRegistry("indicator")
 
 
 class BaseIndicator(ABC):
@@ -32,27 +38,119 @@ class BaseIndicator(ABC):
         display_as_overlay (bool): Whether this indicator can be displayed as an overlay
                                   on price charts by default. Indicators with different
                                   scale than price (like RSI) should set this to False.
+
+    New-style indicators can define a Params nested class for Pydantic validation:
+        class MyIndicator(BaseIndicator):
+            class Params(BaseIndicator.Params):
+                period: int = Field(default=14, ge=2, le=100)
+
+            def compute(self, df): ...
     """
 
-    def __init__(self, name: str, display_as_overlay: bool = True, **params):
+    class Params(BaseModel):
+        """Base parameter schema. Subclasses override with their own fields."""
+
+        pass
+
+    # Optional aliases for registry lookup (e.g., ["bbands", "bollinger"])
+    _aliases: list[str] = []
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Auto-register concrete indicator subclasses."""
+        super().__init_subclass__(**kwargs)
+
+        # Skip abstract classes
+        if inspect.isabstract(cls):
+            return
+
+        # Skip test classes (various module naming patterns from pytest)
+        module = cls.__module__
+        if (
+            module.startswith("tests.")
+            or ".tests." in module
+            or module.startswith("test_")
+            or "_test" in module
+        ):
+            return
+
+        # Derive canonical name from class name
+        name = cls.__name__
+        if name.endswith("Indicator"):
+            name = name[:-9]  # Strip "Indicator" suffix
+        canonical = name.lower()
+
+        # Build aliases list (always include full class name lowercase)
+        aliases = [cls.__name__.lower()]
+        if cls._aliases:
+            aliases.extend(cls._aliases)
+
+        INDICATOR_REGISTRY.register(cls, canonical, aliases)
+
+    def __init__(
+        self, name: str | None = None, display_as_overlay: bool = True, **params: Any
+    ) -> None:
         """
         Initialize a new indicator with its parameters.
 
+        Supports two styles:
+        - Old style: super().__init__(name="RSI", period=14) - explicit name
+        - New style: MyIndicator(period=14) - name derived from class, Params validation
+
         Args:
-            name (str): The name of the indicator
-            display_as_overlay (bool): Whether this indicator should be displayed as an overlay
-                                     on price charts by default. Set to False for indicators with
-                                     a different scale than price (like RSI, Stochastic).
-            **params: Variable keyword arguments for indicator parameters
+            name: The name of the indicator (old style) or None (new style)
+            display_as_overlay: Whether to display as overlay on price charts
+            **params: Indicator parameters
         """
-        self.name = InputValidator.validate_string(
-            name,
-            min_length=1,
-            max_length=50,
-            pattern=r"^[A-Za-z0-9_]+$",  # alphanumeric and underscore only
-        )
-        self.params = self._validate_params(params)
         self.display_as_overlay = display_as_overlay
+
+        # Determine if this is old-style or new-style initialization
+        # New style: no name provided AND class has custom Params
+        has_custom_params = self.__class__.Params is not BaseIndicator.Params
+
+        if name is None and has_custom_params:
+            # New style: validate via Params, derive name from class
+            try:
+                validated = self.__class__.Params(**params)
+            except ValidationError as e:
+                raise DataError(
+                    f"Invalid parameters for {self.__class__.__name__}",
+                    error_code="INDICATOR-InvalidParameters",
+                    details={"validation_errors": e.errors()},
+                ) from e
+
+            # Set validated params as instance attributes
+            params_class = self.__class__.Params
+            for field_name in params_class.model_fields:
+                setattr(self, field_name, getattr(validated, field_name))
+
+            # Store params dict for backward compatibility
+            self.params = {
+                field_name: getattr(validated, field_name)
+                for field_name in params_class.model_fields
+            }
+
+            # Derive name from class name
+            class_name = self.__class__.__name__
+            if class_name.endswith("Indicator"):
+                class_name = class_name[:-9]
+            self.name = class_name
+
+        else:
+            # Old style: explicit name, validate via _validate_params
+            if name is None:
+                # No name and no custom Params - use class name
+                class_name = self.__class__.__name__
+                if class_name.endswith("Indicator"):
+                    class_name = class_name[:-9]
+                name = class_name
+
+            self.name = InputValidator.validate_string(
+                name,
+                min_length=1,
+                max_length=50,
+                pattern=r"^[A-Za-z0-9_]+$",  # alphanumeric and underscore only
+            )
+            self.params = self._validate_params(params)
 
         logger.info(f"Initialized {self.name} indicator with parameters: {self.params}")
 
