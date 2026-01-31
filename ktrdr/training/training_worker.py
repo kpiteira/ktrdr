@@ -20,6 +20,7 @@ from pydantic import Field
 from ktrdr.api.models.operations import OperationMetadata, OperationType
 from ktrdr.api.models.workers import WorkerType
 from ktrdr.async_infrastructure.cancellation import CancellationError
+from ktrdr.config import validate_all, warn_deprecated_env_vars
 from ktrdr.config.settings import (
     get_checkpoint_settings,
     get_observability_settings,
@@ -33,6 +34,15 @@ from ktrdr.monitoring.setup import instrument_app, setup_monitoring
 from ktrdr.workers.base import WorkerAPIBase, WorkerOperationMixin
 
 logger = get_logger(__name__)
+
+# =============================================================================
+# Startup Validation (M4: Config System)
+# =============================================================================
+# These MUST run before any other initialization to fail fast on invalid config.
+# 1. warn_deprecated_env_vars() emits DeprecationWarning for old env var names
+# 2. validate_all("worker") raises ConfigurationError if config is invalid
+warn_deprecated_env_vars()
+validate_all("worker")
 
 # Get worker settings and ID for unique service identification
 _worker_settings = get_worker_settings()

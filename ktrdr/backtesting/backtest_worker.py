@@ -19,6 +19,7 @@ from ktrdr.api.models.workers import WorkerType
 from ktrdr.async_infrastructure.cancellation import CancellationError
 from ktrdr.backtesting.engine import BacktestConfig, BacktestingEngine
 from ktrdr.backtesting.progress_bridge import BacktestProgressBridge
+from ktrdr.config import validate_all, warn_deprecated_env_vars
 from ktrdr.config.settings import get_observability_settings, get_worker_settings
 from ktrdr.logging import get_logger
 from ktrdr.monitoring.setup import instrument_app, setup_monitoring
@@ -28,6 +29,15 @@ if TYPE_CHECKING:
     from ktrdr.backtesting.checkpoint_restore import BacktestResumeContext
 
 logger = get_logger(__name__)
+
+# =============================================================================
+# Startup Validation (M4: Config System)
+# =============================================================================
+# These MUST run before any other initialization to fail fast on invalid config.
+# 1. warn_deprecated_env_vars() emits DeprecationWarning for old env var names
+# 2. validate_all("worker") raises ConfigurationError if config is invalid
+warn_deprecated_env_vars()
+validate_all("worker")
 
 
 def _translate_model_path(model_path: str | None) -> str | None:

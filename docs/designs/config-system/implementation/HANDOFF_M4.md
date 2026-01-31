@@ -128,3 +128,40 @@ New class created with prefix `KTRDR_OPS_`:
 - Workers should fail fast on invalid config
 
 ---
+
+## Task 4.6 Complete: Add Worker Startup Validation
+
+### Implementation Notes
+
+Added startup validation calls at module level in both worker files, following the exact pattern from `ktrdr/api/main.py`:
+
+```python
+# =============================================================================
+# Startup Validation (M4: Config System)
+# =============================================================================
+# These MUST run before any other initialization to fail fast on invalid config.
+# 1. warn_deprecated_env_vars() emits DeprecationWarning for old env var names
+# 2. validate_all("worker") raises ConfigurationError if config is invalid
+warn_deprecated_env_vars()
+validate_all("worker")
+```
+
+**Files modified:**
+- `ktrdr/backtesting/backtest_worker.py` — validation added before `get_worker_settings()` call
+- `ktrdr/training/training_worker.py` — validation added before `get_worker_settings()` call
+
+**Not modified:**
+- `ktrdr/workers/base.py` — validation is NOT added here because `WorkerAPIBase` is a class that gets instantiated, not a module entrypoint. The validation must happen at module level in the actual worker entry scripts.
+
+### Gotchas
+
+**Validation happens at module level, not in classes**: The validation calls must be at module level (before any class definitions or settings access) so they run on import. Adding them to `WorkerAPIBase.__init__` would be too late — the module-level `get_worker_settings()` calls happen first.
+
+**WORKER_SETTINGS list is minimal**: Currently `WORKER_SETTINGS` only contains `DatabaseSettings`. Task 4.7 will add the M4 settings classes to this list.
+
+### Next Task Notes (4.7: Update Validation Module for M4 Settings)
+
+- Add `WorkerSettings`, `CheckpointSettings`, `OrphanDetectorSettings`, `OperationsSettings` to `WORKER_SETTINGS` in `ktrdr/config/validation.py`
+- May also need to add some backend settings workers depend on (logging, observability)
+
+---
