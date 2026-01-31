@@ -280,26 +280,37 @@ Tests cover:
 
 ### Summary
 
-**Docker E2E tests blocked** by port conflicts with running instances (`ktrdr-prod`, `ktrdr--stream-b`). This is a pre-existing infrastructure limitation (hardcoded Docker Compose ports), not an M2 code defect.
-
-**Alternative validation performed:**
-1. ✅ All 68 M2 unit tests pass
-2. ✅ Code inspection confirms `APISettings` and `ObservabilitySettings` are used in `ktrdr/api/main.py`
-3. ✅ Code inspection confirms `LoggingSettings` is used in `ktrdr/__init__.py`
-4. ✅ Code inspection confirms production mode validation rejects insecure `jwt_secret`
+All E2E scenarios **passed**. Initial attempt was blocked by using wrong compose file (`docker-compose.yml` instead of `docker-compose.sandbox.yml`). After using correct sandbox commands, all tests passed.
 
 ### Scenario Results
 
 | Scenario | Result | Evidence |
 |----------|--------|----------|
-| Backend serves requests | ⚠️ BLOCKED | Docker port 4317 conflict |
-| Logs appear with format | ⚠️ BLOCKED | Docker port 4317 conflict |
-| Traces appear in Jaeger | ⚠️ BLOCKED | Docker port 4317 conflict |
-| Invalid JWT in production fails | ✅ VALIDATED | `validation.py` lines 115-117, 292-301 |
+| Backend serves requests | ✅ PASSED | HTTP 200, valid JSON response |
+| Logs appear with format | ✅ PASSED | Structured logs with timestamp, level, module |
+| Traces appear in Jaeger | ✅ PASSED | 5 traces found with HTTP spans |
+| Invalid JWT in production fails | ✅ PASSED | `ConfigurationError` raised at startup |
 
-### Recommendations
+### Key Evidence
 
-M2 is **functionally complete**. Full Docker E2E tests can be run after resolving port conflicts (out of scope for M2).
+**Scenario 3 (Traces):** Jaeger API returned traces with proper structure:
+- TraceID, spans, operation names
+- HTTP attributes (`http.method`, `http.url`, `http.status_code`)
+
+**Scenario 4 (Production validation):** Running with `KTRDR_ENV=production` and default secrets:
+```
+ConfigurationError: [CONFIG-InsecureDefaults] Insecure defaults not allowed in production
+```
+
+### Gotcha: Use Correct Compose File
+
+In sandboxes, always use:
+```bash
+uv run ktrdr sandbox up   # or
+docker compose -f docker-compose.sandbox.yml up
+```
+
+NOT `docker compose up` (uses hardcoded ports from `docker-compose.yml`).
 
 ---
 
@@ -309,7 +320,7 @@ M2 is **functionally complete**. Full Docker E2E tests can be run after resolvin
 
 - [x] All tasks complete and committed (2.1-2.12)
 - [x] Unit tests pass: `make test-unit` (4471 passed, 68 M2-specific)
-- [x] E2E tests: validated via code inspection (Docker blocked by infra)
+- [x] E2E tests pass: all 4 scenarios validated
 - [x] Quality gates pass: `make quality`
 - [x] No regressions introduced
 - [x] `ktrdr/api/config.py` deleted (resolves duplication #1)
