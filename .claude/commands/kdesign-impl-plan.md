@@ -338,7 +338,39 @@ Smoke test:
 
 ### Step 4.6: E2E Test Design
 
-**For each milestone**, Claude determines what E2E tests should validate the milestone is complete. This uses the two-agent test design system.
+**For each milestone**, Claude determines what E2E tests should validate the milestone is complete. This uses the three-agent test system.
+
+---
+
+**⚠️ CRITICAL: The Agent System is MANDATORY for E2E Tests**
+
+**The Problem with Ad-Hoc E2E Tests:**
+- Ad-hoc tests (bash commands in milestone files, direct curl calls) often validate components in isolation
+- They frequently use shortcuts that don't test the real integrated platform
+- They're not saved to the catalog, so identical tests get reinvented
+- They produce false positives (test passes but feature doesn't actually work)
+
+**The Three-Agent E2E System:**
+
+| Agent | Purpose | When Used |
+|-------|---------|-----------|
+| `e2e-test-designer` | Searches catalog, finds existing tests or hands off | PLANNING: Every milestone |
+| `e2e-test-architect` | Designs new test specs, writes to catalog | PLANNING: When no existing test matches |
+| `e2e-tester` | Executes tests against real platform | EXECUTION: Final task of every milestone |
+
+**What "Real E2E" Means:**
+- Running Docker containers (not mocked services)
+- Real API calls (not test fixtures)
+- Actual database state changes (not in-memory)
+- Observable outcomes (logs, API responses, DB queries)
+
+**Connection to Execution:**
+- During planning (this command): designer + architect create/find tests
+- During execution (`/ktask`): tester agent runs the tests
+- The tester MUST be invoked via `Task(subagent_type="e2e-tester", ...)`
+- NEVER run the bash commands from milestone files directly
+
+---
 
 #### 4.6.1 Invoke e2e-test-designer
 
@@ -807,17 +839,31 @@ The last task in every milestone is an **Execute E2E Test** task with type VALID
 ## Task N.X: Execute E2E Test
 
 **Type:** VALIDATION
-**Estimated time:** 5 min
+**Estimated time:** 5-15 min
 
 **Description:**
-Run the E2E test(s) using the e2e-tester agent to validate the milestone is complete.
+Validate the milestone is complete using the E2E agent workflow.
+
+**⚠️ MANDATORY: Use the E2E Agent System**
+
+This task MUST be executed using the e2e agent workflow:
+1. First invoke `e2e-test-designer` to find/confirm the test
+2. If new test needed, invoke `e2e-test-architect` to design it
+3. Then invoke `e2e-tester` to execute the test
+
+NEVER run bash commands from this file directly. The agents ensure:
+- Tests run against the real platform (Docker containers running)
+- Proper preflight checks validate system state
+- Results include evidence (logs, API responses, screenshots)
+- Reusable tests are saved to the catalog
 
 **Acceptance Criteria:**
 - [ ] E2E test passes (all success criteria met)
 - [ ] No regressions in existing functionality
+- [ ] Test executed via e2e-tester agent (not ad-hoc commands)
 ```
 
-**Note:** The architect either wrote the test to the catalog (reusable) or embedded the spec above (one-off). Either way, the final task is execution, not file creation.
+**Note:** The architect either wrote the test to the catalog (reusable) or embedded the spec above (one-off). Either way, the final task is execution via the agent, not running commands directly.
 ````
 
 ---
@@ -834,9 +880,12 @@ Run the E2E test(s) using the e2e-tester agent to validate the milestone is comp
 
 The validation output (scenarios, decisions, milestone structure) feeds directly into implementation planning. If validation was done, reference it to maintain consistency.
 
-**Agent integration:**
-- `e2e-test-designer` (haiku, fast): Searches test catalog, returns matches or handoffs to architect
-- `e2e-test-architect` (opus, thorough): Designs new tests with steps, criteria, sanity checks
+**Agent integration (E2E Test System):**
+- `e2e-test-designer` (haiku, fast): Searches test catalog, returns matches or handoffs to architect — used during PLANNING
+- `e2e-test-architect` (opus, thorough): Designs new tests with steps, criteria, sanity checks — used during PLANNING
+- `e2e-tester` (opus): Executes tests against real platform with preflight checks — used during EXECUTION (`/ktask` VALIDATION tasks)
+
+**CRITICAL:** The tester agent MUST be invoked for VALIDATION tasks. Running bash commands directly is an anti-pattern that produces false positives.
 
 ---
 
