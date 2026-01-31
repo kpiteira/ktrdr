@@ -378,6 +378,157 @@ class DatabaseSettings(BaseSettings):
         return f"postgresql+psycopg2://{user}:{password}@{self.host}:{self.port}/{self.name}"
 
 
+class IBSettings(BaseSettings):
+    """Interactive Brokers Settings.
+
+    Provides IB Gateway connection configuration with support for both
+    new (KTRDR_IB_*) and deprecated (IB_*) environment variable names.
+
+    Environment variables (new names - preferred):
+        KTRDR_IB_HOST: IB Gateway host. Default: 127.0.0.1
+        KTRDR_IB_PORT: IB Gateway port. Default: 4002 (paper trading)
+        KTRDR_IB_CLIENT_ID: Client ID for connection. Default: 1
+        KTRDR_IB_TIMEOUT: Connection timeout in seconds. Default: 30
+        KTRDR_IB_READONLY: Read-only mode. Default: false
+        KTRDR_IB_RATE_LIMIT: Rate limit (requests). Default: 50
+        KTRDR_IB_RATE_PERIOD: Rate period in seconds. Default: 60
+        KTRDR_IB_MAX_RETRIES: Maximum retry attempts. Default: 3
+        KTRDR_IB_RETRY_BASE_DELAY: Base retry delay in seconds. Default: 2.0
+        KTRDR_IB_RETRY_MAX_DELAY: Max retry delay in seconds. Default: 60.0
+        KTRDR_IB_PACING_DELAY: Pacing delay between requests. Default: 0.6
+        KTRDR_IB_MAX_REQUESTS_PER_10MIN: Max requests per 10 minutes. Default: 60
+
+    Deprecated names (still work, emit warnings at startup):
+        IB_HOST, IB_PORT, IB_CLIENT_ID, IB_TIMEOUT, IB_READONLY,
+        IB_RATE_LIMIT, IB_RATE_PERIOD, IB_MAX_RETRIES, IB_RETRY_DELAY,
+        IB_RETRY_MAX_DELAY, IB_PACING_DELAY, IB_MAX_REQUESTS_10MIN
+    """
+
+    # Connection settings
+    host: str = deprecated_field("127.0.0.1", "KTRDR_IB_HOST", "IB_HOST")
+    port: int = deprecated_field(4002, "KTRDR_IB_PORT", "IB_PORT", ge=1, le=65535)
+    client_id: int = deprecated_field(1, "KTRDR_IB_CLIENT_ID", "IB_CLIENT_ID")
+    timeout: int = deprecated_field(30, "KTRDR_IB_TIMEOUT", "IB_TIMEOUT", gt=0)
+    readonly: bool = deprecated_field(False, "KTRDR_IB_READONLY", "IB_READONLY")
+
+    # Rate limiting settings
+    rate_limit: int = deprecated_field(50, "KTRDR_IB_RATE_LIMIT", "IB_RATE_LIMIT", gt=0)
+    rate_period: int = deprecated_field(
+        60, "KTRDR_IB_RATE_PERIOD", "IB_RATE_PERIOD", gt=0
+    )
+
+    # Retry settings
+    max_retries: int = deprecated_field(
+        3, "KTRDR_IB_MAX_RETRIES", "IB_MAX_RETRIES", ge=0
+    )
+    retry_base_delay: float = deprecated_field(
+        2.0, "KTRDR_IB_RETRY_BASE_DELAY", "IB_RETRY_DELAY", gt=0
+    )
+    retry_max_delay: float = deprecated_field(
+        60.0, "KTRDR_IB_RETRY_MAX_DELAY", "IB_RETRY_MAX_DELAY", gt=0
+    )
+
+    # Pacing settings (based on IB documentation)
+    pacing_delay: float = deprecated_field(
+        0.6, "KTRDR_IB_PACING_DELAY", "IB_PACING_DELAY", ge=0
+    )
+    max_requests_per_10min: int = deprecated_field(
+        60, "KTRDR_IB_MAX_REQUESTS_PER_10MIN", "IB_MAX_REQUESTS_10MIN", gt=0
+    )
+
+    # Static data fetching chunk sizes (not configurable via env vars)
+    # These are IB-specific limits based on bar size
+    _chunk_days: dict[str, float] = {
+        "1 secs": 0.02,  # 30 minutes
+        "5 secs": 0.08,  # 2 hours
+        "15 secs": 0.17,  # 4 hours
+        "30 secs": 0.33,  # 8 hours
+        "1 min": 1,  # 1 day
+        "2 mins": 2,  # 2 days (conservative)
+        "3 mins": 3,  # 3 days (conservative)
+        "5 mins": 7,  # 1 week
+        "10 mins": 14,  # 2 weeks (conservative)
+        "15 mins": 14,  # 2 weeks
+        "20 mins": 20,  # 20 days (conservative)
+        "30 mins": 30,  # 1 month
+        "1 hour": 1,  # 1 day (IB limit for hourly data)
+        "2 hours": 60,  # 2 months (conservative)
+        "3 hours": 90,  # 3 months (conservative)
+        "4 hours": 120,  # 4 months (conservative)
+        "1 day": 365,  # 1 year
+        "1 week": 730,  # 2 years
+        "1 month": 365,  # 1 year
+    }
+
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_IB_",
+        env_file=".env.local",
+        extra="ignore",
+    )
+
+    def get_connection_config(self) -> dict[str, Any]:
+        """Get connection configuration for IbConnectionManager.
+
+        Returns:
+            Dictionary with host, port, client_id, timeout, readonly settings.
+        """
+        return {
+            "host": self.host,
+            "port": self.port,
+            "client_id": self.client_id,
+            "timeout": self.timeout,
+            "readonly": self.readonly,
+        }
+
+    def get_chunk_size(self, bar_size: str) -> float:
+        """Get maximum chunk size in days for a given bar size.
+
+        Args:
+            bar_size: IB bar size string (e.g., "1 min", "1 day")
+
+        Returns:
+            Maximum days to request in a single chunk. Returns 1 for unknown bar sizes.
+        """
+        return self._chunk_days.get(bar_size, 1)
+
+    def is_paper_trading(self) -> bool:
+        """Check if configured for paper trading.
+
+        Paper trading ports: TWS=7497, IB Gateway=4002
+        """
+        return self.port in [7497, 4002]
+
+    def is_live_trading(self) -> bool:
+        """Check if configured for live trading.
+
+        Live trading ports: TWS=7496, IB Gateway=4001
+        """
+        return self.port in [7496, 4001]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert settings to dictionary.
+
+        Returns:
+            Dictionary with all IB settings including derived values.
+        """
+        return {
+            "host": self.host,
+            "port": self.port,
+            "client_id": self.client_id,
+            "timeout": self.timeout,
+            "readonly": self.readonly,
+            "rate_limit": self.rate_limit,
+            "rate_period": self.rate_period,
+            "max_retries": self.max_retries,
+            "retry_base_delay": self.retry_base_delay,
+            "retry_max_delay": self.retry_max_delay,
+            "pacing_delay": self.pacing_delay,
+            "max_requests_per_10min": self.max_requests_per_10min,
+            "is_paper": self.is_paper_trading(),
+            "is_live": self.is_live_trading(),
+        }
+
+
 # Cache settings to avoid repeated disk/env access
 @lru_cache
 def get_api_settings() -> APISettings:
@@ -421,6 +572,12 @@ def get_db_settings() -> DatabaseSettings:
     return DatabaseSettings()
 
 
+@lru_cache
+def get_ib_settings() -> IBSettings:
+    """Get IB settings with caching."""
+    return IBSettings()
+
+
 # Compatibility aliases for existing code
 CLISettings = ApiServiceSettings  # CLI uses API service settings for client connections
 
@@ -441,9 +598,10 @@ def clear_settings_cache() -> None:
     get_orphan_detector_settings.cache_clear()
     get_checkpoint_settings.cache_clear()
     get_db_settings.cache_clear()
+    get_ib_settings.cache_clear()
 
 
-# Export IB config for convenience
+# Export settings classes and getters
 __all__ = [
     # Settings classes
     "APISettings",
@@ -454,6 +612,7 @@ __all__ = [
     "CheckpointSettings",
     "DatabaseSettings",
     "ApiServiceSettings",
+    "IBSettings",
     # Cached getters
     "get_api_settings",
     "get_auth_settings",
@@ -463,10 +622,11 @@ __all__ = [
     "get_checkpoint_settings",
     "get_db_settings",
     "get_api_service_settings",
+    "get_ib_settings",
     # Utilities
     "clear_settings_cache",
     "deprecated_field",
-    # Compatibility aliases
+    # Compatibility aliases (to be removed after M3.4)
     "CLISettings",
     "get_cli_settings",
     "IbConfig",
