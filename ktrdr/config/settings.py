@@ -716,6 +716,83 @@ class TrainingHostServiceSettings(BaseSettings):
         return f"{self.base_url}/health/detailed"
 
 
+class WorkerSettings(BaseSettings):
+    """Worker Process Settings.
+
+    Provides worker configuration with support for both new (KTRDR_WORKER_*)
+    and deprecated (WORKER_*) environment variable names.
+
+    The default port of 5003 fixes the WORKER_PORT bug (duplication #4 from
+    config audit): training_worker.py defaulted to 5002 while worker_registration.py
+    defaulted to 5004. Now there's a single authoritative default.
+
+    Note: This class does NOT have a backend_url field. Workers should use
+    get_api_client_settings().base_url (from M5's APIClientSettings) for the
+    backend connection URL. This ensures a single source of truth.
+
+    Environment variables (new names - preferred):
+        KTRDR_WORKER_ID: Worker identifier. Default: None (auto-generated at runtime)
+        KTRDR_WORKER_PORT: Worker port. Default: 5003 (canonical default)
+        KTRDR_WORKER_HEARTBEAT_INTERVAL: Heartbeat interval in seconds. Default: 30
+        KTRDR_WORKER_REGISTRATION_TIMEOUT: Registration timeout. Default: 10
+        KTRDR_WORKER_ENDPOINT_URL: Explicit endpoint URL. Default: None (auto-detected)
+        KTRDR_WORKER_PUBLIC_BASE_URL: Public URL for distributed deployments. Default: None
+
+    Deprecated names (still work, emit warnings at startup):
+        WORKER_ID, WORKER_PORT, WORKER_ENDPOINT_URL, WORKER_PUBLIC_BASE_URL
+    """
+
+    # Worker identification
+    worker_id: str | None = deprecated_field(
+        None,
+        "KTRDR_WORKER_ID",
+        "WORKER_ID",
+        description="Worker identifier (auto-generated if not set)",
+    )
+
+    # Network settings - port 5003 is the canonical default (fixes bug)
+    port: int = deprecated_field(
+        5003,
+        "KTRDR_WORKER_PORT",
+        "WORKER_PORT",
+        ge=1,
+        le=65535,
+        description="Worker service port (canonical default: 5003)",
+    )
+
+    # Heartbeat and registration settings
+    heartbeat_interval: int = Field(
+        default=30,
+        gt=0,
+        description="Interval in seconds between heartbeats to backend",
+    )
+    registration_timeout: int = Field(
+        default=10,
+        gt=0,
+        description="Timeout in seconds for worker registration",
+    )
+
+    # Endpoint configuration (for distributed deployments)
+    endpoint_url: str | None = deprecated_field(
+        None,
+        "KTRDR_WORKER_ENDPOINT_URL",
+        "WORKER_ENDPOINT_URL",
+        description="Explicit endpoint URL (if not set, auto-detected at runtime)",
+    )
+    public_base_url: str | None = deprecated_field(
+        None,
+        "KTRDR_WORKER_PUBLIC_BASE_URL",
+        "WORKER_PUBLIC_BASE_URL",
+        description="Public URL for distributed deployments (if not set, uses hostname)",
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_WORKER_",
+        env_file=".env.local",
+        extra="ignore",
+    )
+
+
 class ApiServiceSettings(BaseSettings):
     """API Server configuration for client connections.
 
@@ -824,6 +901,12 @@ def get_training_host_service_settings() -> TrainingHostServiceSettings:
 
 
 @lru_cache
+def get_worker_settings() -> WorkerSettings:
+    """Get worker settings with caching."""
+    return WorkerSettings()
+
+
+@lru_cache
 def get_api_service_settings() -> ApiServiceSettings:
     """Get API service settings for client connections with caching."""
     return ApiServiceSettings()
@@ -864,6 +947,7 @@ def clear_settings_cache() -> None:
     get_ib_settings.cache_clear()
     get_ib_host_service_settings.cache_clear()
     get_training_host_service_settings.cache_clear()
+    get_worker_settings.cache_clear()
 
 
 # Export settings classes and getters
@@ -880,6 +964,7 @@ __all__ = [
     "IBSettings",
     "IBHostServiceSettings",
     "TrainingHostServiceSettings",
+    "WorkerSettings",
     # Cached getters
     "get_api_settings",
     "get_auth_settings",
@@ -893,6 +978,7 @@ __all__ = [
     "get_ib_settings",
     "get_ib_host_service_settings",
     "get_training_host_service_settings",
+    "get_worker_settings",
     # Utilities
     "clear_settings_cache",
     "deprecated_field",
