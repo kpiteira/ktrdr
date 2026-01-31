@@ -164,11 +164,47 @@ This was a **verification task** - all unit tests were already written during Ta
 
 All 4538 unit tests pass with `make test-unit`.
 
-### Next Task Notes (3.9: Execute E2E Test)
+---
 
-- Task 3.9 is a VALIDATION task - run the E2E scenarios from the milestone
-- Requires Docker stack: `docker compose up -d`
-- Test deprecated env var warnings: `USE_IB_HOST_SERVICE=true docker compose up -d backend`
-- Verify IB and Training host service settings work end-to-end
+## Task 3.9 Complete: Execute E2E Test
+
+### E2E Test Results
+
+All three scenarios passed (tested in ktrdr-prod with full Docker stack):
+
+| Scenario | Result | Evidence |
+|----------|--------|----------|
+| 1. Backend proxies to IB host service | ✅ PASS | `/api/v1/ib/status` returns graceful `{"connected": false, "ib_available": false}` |
+| 2. USE_IB_HOST_SERVICE deprecated warning | ✅ PASS | `DeprecationWarning: Environment variable 'USE_IB_HOST_SERVICE' is deprecated. Use 'KTRDR_IB_HOST_ENABLED' instead.` |
+| 3. Training host service settings work | ✅ PASS | `/api/v1/workers` shows training workers registered, GPU host service healthy at `host.docker.internal:5002` |
+
+### Notes
+
+- Deprecation warnings use Python's `warnings.warn()` - require `warnings.filterwarnings('always')` to see in console
+- Training status checked via `/api/v1/workers` endpoint (workers registered and healthy)
+
+---
+
+## M3 Milestone Complete
+
+All tasks completed:
+- [x] Task 3.1: Create `IBSettings` Class
+- [x] Task 3.2: Create `IBHostServiceSettings` Class
+- [x] Task 3.3: Create `TrainingHostServiceSettings` Class
+- [x] Task 3.4: Migrate IB Consumers and Delete `ib_config.py`
+- [x] Task 3.5: Migrate Host Service Consumers and Delete `host_services.py`
+- [x] Task 3.6: Update Validation Module for M3 Settings
+- [x] Task 3.7: Update Deprecation Module for M3 Names
+- [x] Task 3.8: Write Unit Tests
+- [x] Task 3.9: Execute E2E Test
+
+### Files Deleted (as planned)
+- `ktrdr/config/ib_config.py`
+- `ktrdr/config/host_services.py`
+
+### Quality Gates
+- All unit tests pass: `make test-unit` (4538 passed)
+- All quality checks pass: `make quality`
+- All E2E scenarios pass
 
 ---
