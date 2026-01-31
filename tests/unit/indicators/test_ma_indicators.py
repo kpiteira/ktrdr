@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 from ktrdr.errors import DataError
-from ktrdr.indicators import ExponentialMovingAverage, SimpleMovingAverage
+from ktrdr.indicators.ma_indicators import ExponentialMovingAverage, SimpleMovingAverage
 
 
 # Create test data for moving averages

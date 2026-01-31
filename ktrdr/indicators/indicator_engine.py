@@ -12,8 +12,6 @@ import pandas as pd
 from ktrdr import get_logger
 from ktrdr.errors import ConfigurationError, ProcessingError
 from ktrdr.indicators.base_indicator import INDICATOR_REGISTRY, BaseIndicator
-from ktrdr.indicators.ma_indicators import ExponentialMovingAverage, SimpleMovingAverage
-from ktrdr.indicators.rsi_indicator import RSIIndicator
 
 # Create module-level logger
 logger = get_logger(__name__)
@@ -550,6 +548,8 @@ class IndicatorEngine:
         Returns:
             DataFrame with RSI column added.
         """
+        from ktrdr.indicators.rsi_indicator import RSIIndicator
+
         indicator = RSIIndicator(period=period, source=source)
         result_df = data.copy()
         result_df[f"RSI_{period}"] = indicator.compute(data)
@@ -569,6 +569,8 @@ class IndicatorEngine:
         Returns:
             DataFrame with SMA column added.
         """
+        from ktrdr.indicators.ma_indicators import SimpleMovingAverage
+
         indicator = SimpleMovingAverage(period=period, source=source)
         result_df = data.copy()
         result_df[f"SMA_{period}"] = indicator.compute(data)
@@ -588,6 +590,8 @@ class IndicatorEngine:
         Returns:
             DataFrame with EMA column added.
         """
+        from ktrdr.indicators.ma_indicators import ExponentialMovingAverage
+
         indicator = ExponentialMovingAverage(period=period, source=source)
         result_df = data.copy()
         result_df[f"EMA_{period}"] = indicator.compute(data)

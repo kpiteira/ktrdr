@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 from ktrdr.errors import DataError
-from ktrdr.indicators import RSIIndicator
+from ktrdr.indicators.rsi_indicator import RSIIndicator
 
 
 # Create test data with known RSI values

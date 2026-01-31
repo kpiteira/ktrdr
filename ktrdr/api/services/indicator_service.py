@@ -21,7 +21,7 @@ from ktrdr.api.models.indicators import (
 from ktrdr.api.services.base import BaseService
 from ktrdr.data.repository import DataRepository
 from ktrdr.errors import ConfigurationError, DataError, ProcessingError
-from ktrdr.indicators.base_indicator import INDICATOR_REGISTRY
+from ktrdr.indicators import INDICATOR_REGISTRY, ensure_all_registered
 from ktrdr.indicators.categories import get_indicator_category
 from ktrdr.indicators.indicator_engine import IndicatorEngine
 from ktrdr.monitoring.service_telemetry import trace_service_method
@@ -58,6 +58,9 @@ class IndicatorService(BaseService):
         """
         try:
             indicators: list[IndicatorMetadata] = []
+
+            # Ensure all indicators are loaded before listing
+            ensure_all_registered()
 
             # Process registered indicators (list_types returns canonical names only)
             for indicator_name in INDICATOR_REGISTRY.list_types():
@@ -354,7 +357,8 @@ class IndicatorService(BaseService):
             Dict[str, Any]: Health check information
         """
         try:
-            # Check available indicators
+            # Ensure all indicators are loaded and check available indicators
+            ensure_all_registered()
             indicator_names = INDICATOR_REGISTRY.list_types()
             indicator_count = len(indicator_names)
 

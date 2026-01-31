@@ -26,9 +26,17 @@ from ktrdr.config.models import (
     StrategyConfigurationV3,
 )
 from ktrdr.config.strategy_loader import strategy_loader
-from ktrdr.indicators.base_indicator import INDICATOR_REGISTRY
 
 logger = get_logger(__name__)
+
+
+def _get_indicator_registry():
+    """Lazy import to avoid circular dependencies."""
+    from ktrdr.indicators import INDICATOR_REGISTRY, ensure_all_registered
+
+    ensure_all_registered()
+    return INDICATOR_REGISTRY
+
 
 # Valid fuzzy membership types and their required parameter counts
 FUZZY_TYPE_PARAM_COUNTS: dict[str, int] = {
@@ -171,7 +179,8 @@ class StrategyValidator:
         Returns:
             set[str]: Lowercase indicator names for case-insensitive matching
         """
-        return set(INDICATOR_REGISTRY.list_types())
+        registry = _get_indicator_registry()
+        return set(registry.list_types())
 
     def _format_pydantic_error(
         self, error: PydanticValidationError
@@ -1083,7 +1092,8 @@ def validate_v3_strategy(
 
             # Get indicator class to check output names
             try:
-                indicator_class = INDICATOR_REGISTRY.get(indicator_type)
+                registry = _get_indicator_registry()
+                indicator_class = registry.get(indicator_type)
                 if indicator_class is None:
                     # Unknown indicator type - skip validation
                     logger.warning(

@@ -368,3 +368,85 @@ Deleted the legacy indicator factory and schemas files. Updated all remaining re
 ### Next Task Notes
 
 Task 2.9 executes the M2 E2E test to verify all 31 indicators are registered and the factory/schemas files are deleted.
+
+---
+
+## Task 2.9 Complete: Execute M2 E2E Test
+
+### Implementation Notes
+
+E2E validation revealed that indicators were not being auto-registered due to missing imports in `__init__.py`. Fixed by implementing lazy loading pattern to maintain import performance while ensuring all indicators can be loaded on-demand.
+
+### Issue Discovered
+
+**Initial E2E failure**: Only 5 indicators registered (SMA, EMA, WMA, MACD, RSI) instead of 31. The `__init__.py` was only importing a few indicators.
+
+**Import performance regression**: Adding all indicator imports to `__init__.py` increased CLI import time from ~150ms to ~850ms (target: <200ms). This failed the `test_app_import_fast` test.
+
+### Solution: Lazy Loading
+
+Implemented lazy loading pattern in `ktrdr/indicators/__init__.py`:
+
+1. **`ensure_all_registered()`** function: Lazily imports all 31 indicator modules on first call
+2. **Circular import fix**: `strategy_validator.py` now uses lazy import helper `_get_indicator_registry()`
+3. **Direct module imports for tests**: Tests import from specific modules (e.g., `from ktrdr.indicators.rsi_indicator import RSIIndicator`)
+
+### Key Changes
+
+| File | Change |
+|------|--------|
+| `ktrdr/indicators/__init__.py` | Added `ensure_all_registered()`, removed eager indicator imports |
+| `ktrdr/indicators/indicator_engine.py` | Made convenience methods (`compute_sma`, etc.) use lazy imports |
+| `ktrdr/config/strategy_validator.py` | Added `_get_indicator_registry()` helper for lazy import |
+| `ktrdr/api/services/indicator_service.py` | Call `ensure_all_registered()` before listing indicators |
+| `ktrdr/api/endpoints/strategies.py` | Call `ensure_all_registered()` before listing indicators |
+| `tests/unit/indicators/*.py` | Updated imports from `ktrdr.indicators` to specific modules |
+| `tests/indicators/indicator_registry.py` | Updated imports to specific modules |
+
+### Gotchas
+
+**Import from specific modules**: Code importing indicator classes should use specific module imports:
+```python
+# ✅ Correct - imports from specific module
+from ktrdr.indicators.rsi_indicator import RSIIndicator
+
+# ❌ Wrong - no longer exported from package
+from ktrdr.indicators import RSIIndicator  # ImportError!
+```
+
+**Registry access pattern**: Code needing the full registry should call `ensure_all_registered()` first:
+```python
+from ktrdr.indicators import INDICATOR_REGISTRY, ensure_all_registered
+
+ensure_all_registered()  # Load all 31 indicators
+for name in INDICATOR_REGISTRY.list_types():
+    ...
+```
+
+**Circular import in strategy_validator**: Use the lazy import helper `_get_indicator_registry()` instead of direct import.
+
+### E2E Results
+
+```
+✅ 31 canonical indicator types registered
+✅ All indicators have Params class
+✅ Case-insensitive lookup works (ATR, atr, MACD, BollingerBands, etc.)
+✅ indicator_factory.py deleted
+✅ schemas.py deleted
+✅ make test-unit passes (4784 tests)
+✅ make quality passes
+✅ CLI import time: ~170ms in test mode (under 200ms target)
+```
+
+### M2 Milestone Complete
+
+All success criteria from the milestone file have been validated:
+- [x] indicator_factory.py does not exist
+- [x] schemas.py does not exist
+- [x] INDICATOR_REGISTRY.list_types() returns 31 types (not 39 - see note below)
+- [x] All 31 have Params class inheriting from BaseModel
+- [x] Case-insensitive lookup works for all
+- [x] IndicatorEngine has no BUILT_IN_INDICATORS references
+- [x] All indicators instantiate with defaults
+
+**Note on count**: The milestone file stated 39, but the actual count is 31 unique indicator classes. The 39 figure was the number of lookup keys in the old factory (including aliases like "bbands" and "stoch"). The registry has 31 canonical names and 63 total lookup names (including aliases).

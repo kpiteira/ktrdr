@@ -56,7 +56,7 @@ from pydantic import BaseModel
 
 from ktrdr import get_logger
 from ktrdr.errors import ConfigurationError
-from ktrdr.indicators.base_indicator import INDICATOR_REGISTRY
+from ktrdr.indicators import INDICATOR_REGISTRY, ensure_all_registered
 from ktrdr.training.model_storage import ModelStorage
 
 logger = get_logger(__name__)
@@ -425,7 +425,8 @@ async def validate_strategy(strategy_name: str) -> StrategyValidationResponse:
         # Validate the configuration
         issues = _validate_strategy_config(config, strategy_name)
 
-        # Get available indicators for reference
+        # Get available indicators for reference (ensure all are loaded)
+        ensure_all_registered()
         available_indicators = sorted(INDICATOR_REGISTRY.list_types())
 
         # Determine if validation passed
