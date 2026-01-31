@@ -13,7 +13,6 @@ import pytest
 
 from ktrdr.errors import DataError
 from ktrdr.indicators.obv_indicator import OBVIndicator
-from ktrdr.indicators.schemas import OBV_SCHEMA
 
 
 class TestOBVIndicator:
@@ -27,15 +26,11 @@ class TestOBVIndicator:
         assert not obv.display_as_overlay  # Should be in separate panel
 
     def test_obv_parameter_validation(self):
-        """Test parameter validation using schema system."""
-        # OBV should accept empty parameters
-        params = {}
-        validated = OBV_SCHEMA.validate(params)
-        assert validated == {}
-
-        # Test that unknown parameters are rejected
-        with pytest.raises(DataError):
-            OBV_SCHEMA.validate({"unknown_param": 123})
+        """Test parameter validation at construction time."""
+        # OBV has no parameters, construction should succeed
+        obv = OBVIndicator()
+        assert obv.name == "OBV"
+        # OBV has empty Params, so any extra kwargs are ignored by BaseIndicator
 
     def test_obv_basic_computation(self):
         """Test basic OBV computation with simple data."""
@@ -375,24 +370,13 @@ class TestOBVIndicator:
             assert result.iloc[i] == expected
 
 
-class TestOBVSchemaValidation:
-    """Test schema-based parameter validation for OBV."""
+class TestOBVParamsValidation:
+    """Test Params-based parameter validation for OBV."""
 
-    def test_schema_comprehensive_validation(self):
-        """Test comprehensive schema validation."""
-        # Test empty parameters (OBV has no parameters)
-        validated = OBV_SCHEMA.validate({})
-        assert validated == {}
-
-        # Test that unknown parameters are rejected
-        with pytest.raises(DataError):
-            OBV_SCHEMA.validate({"unknown_param": 123})
-
-    def test_schema_error_details(self):
-        """Test detailed error information from schema validation."""
-        try:
-            OBV_SCHEMA.validate({"invalid_param": "value"})
-            raise AssertionError("Should have raised DataError")
-        except DataError as e:
-            assert e.error_code == "PARAM-Unknown"
-            assert "invalid_param" in str(e.message)
+    def test_params_comprehensive_validation(self):
+        """Test comprehensive Params validation."""
+        # OBV has no configurable parameters
+        obv = OBVIndicator()
+        assert obv.name == "OBV"
+        # Params class exists but has no fields
+        assert hasattr(OBVIndicator, "Params")

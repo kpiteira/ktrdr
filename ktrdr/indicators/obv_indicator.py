@@ -5,14 +5,11 @@ On-Balance Volume is a momentum indicator that uses volume flow to predict chang
 The theory behind OBV is that volume precedes price movement.
 """
 
-from typing import Any
-
 import pandas as pd
 
 from ktrdr import get_logger
 from ktrdr.errors import DataError
 from ktrdr.indicators.base_indicator import BaseIndicator
-from ktrdr.indicators.schemas import OBV_SCHEMA
 
 # Create module-level logger
 logger = get_logger(__name__)
@@ -37,34 +34,13 @@ class OBVIndicator(BaseIndicator):
         No configurable parameters for OBV calculation
     """
 
-    def __init__(self):
-        """
-        Initialize the OBV indicator.
+    class Params(BaseIndicator.Params):
+        """OBV parameter schema - no configurable parameters."""
 
-        OBV doesn't have configurable parameters, but we maintain consistency with the base class.
-        """
-        # Call parent constructor with display_as_overlay=False (separate panel)
-        super().__init__(
-            name="OBV",
-            display_as_overlay=False,
-        )
+        pass
 
-        logger.debug("Initialized OBV indicator")
-
-    def _validate_params(self, params: dict[str, Any]) -> dict[str, Any]:
-        """
-        Validate parameters for OBV indicator using schema-based validation.
-
-        Args:
-            params: Parameters to validate (OBV has no parameters, but we validate for consistency)
-
-        Returns:
-            Validated parameters (empty dict for OBV)
-
-        Raises:
-            DataError: If invalid parameters are provided
-        """
-        return OBV_SCHEMA.validate(params)
+    # OBV is displayed in a separate panel (not overlay on price)
+    display_as_overlay = False
 
     def compute(self, data: pd.DataFrame) -> pd.Series:
         """

@@ -11,6 +11,11 @@ import pytest
 from ktrdr.indicators import IndicatorEngine
 from ktrdr.indicators.base_indicator import BaseIndicator
 
+# Import to register "bbands" alias for tests using that shorthand
+from ktrdr.indicators.bollinger_bands_indicator import (
+    BollingerBandsIndicator,  # noqa: F401
+)
+
 
 class MockSingleOutputIndicator(BaseIndicator):
     """Mock indicator returning single output (Series)."""

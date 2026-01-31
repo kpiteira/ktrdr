@@ -83,22 +83,22 @@ def register_builtin_indicators():
     Register all built-in indicators with their validation parameters.
     This function should be updated whenever a new indicator is added to the system.
     """
-    from ktrdr.indicators import (
-        ExponentialMovingAverage,
-        RSIIndicator,
-        SimpleMovingAverage,
-    )
     from ktrdr.indicators.aroon_indicator import AroonIndicator
     from ktrdr.indicators.atr_indicator import ATRIndicator
     from ktrdr.indicators.bollinger_bands_indicator import BollingerBandsIndicator
     from ktrdr.indicators.cci_indicator import CCIIndicator
     from ktrdr.indicators.ichimoku_indicator import IchimokuIndicator
+    from ktrdr.indicators.ma_indicators import (
+        ExponentialMovingAverage,
+        SimpleMovingAverage,
+    )
     from ktrdr.indicators.macd_indicator import MACDIndicator
     from ktrdr.indicators.mfi_indicator import MFIIndicator
     from ktrdr.indicators.momentum_indicator import MomentumIndicator
     from ktrdr.indicators.obv_indicator import OBVIndicator
     from ktrdr.indicators.parabolic_sar_indicator import ParabolicSARIndicator
     from ktrdr.indicators.roc_indicator import ROCIndicator
+    from ktrdr.indicators.rsi_indicator import RSIIndicator
     from ktrdr.indicators.rvi_indicator import RVIIndicator
     from ktrdr.indicators.stochastic_indicator import StochasticIndicator
     from ktrdr.indicators.vwap_indicator import VWAPIndicator

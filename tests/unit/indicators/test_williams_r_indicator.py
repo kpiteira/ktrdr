@@ -13,7 +13,6 @@ import pandas as pd
 import pytest
 
 from ktrdr.errors import DataError
-from ktrdr.indicators.schemas import WILLIAMS_R_SCHEMA
 from ktrdr.indicators.williams_r_indicator import WilliamsRIndicator
 from tests.indicators.validation_utils import create_standard_test_data
 
@@ -34,23 +33,24 @@ class TestWilliamsRIndicator:
         assert wr.params["period"] == 21
 
     def test_williams_r_parameter_validation(self):
-        """Test parameter validation using schema system."""
+        """Test parameter validation at construction time."""
         # Valid parameters
-        params = {"period": 14}
-        validated = WILLIAMS_R_SCHEMA.validate(params)
-        assert validated == params
+        wr = WilliamsRIndicator(period=14)
+        assert wr.params["period"] == 14
 
         # Test defaults
-        defaults = WILLIAMS_R_SCHEMA.validate({})
-        assert defaults["period"] == 14
+        wr_default = WilliamsRIndicator()
+        assert wr_default.params["period"] == 14
 
         # Invalid parameters - below minimum
-        with pytest.raises(DataError):
-            WILLIAMS_R_SCHEMA.validate({"period": 0})
+        with pytest.raises(DataError) as exc_info:
+            WilliamsRIndicator(period=0)
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
         # Invalid parameters - above maximum
-        with pytest.raises(DataError):
-            WILLIAMS_R_SCHEMA.validate({"period": 101})
+        with pytest.raises(DataError) as exc_info:
+            WilliamsRIndicator(period=101)
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_williams_r_basic_computation(self):
         """Test basic Williams %R computation with simple data."""
@@ -478,52 +478,31 @@ class TestWilliamsRIndicator:
         # Only the last point has 5 full periods for calculation
 
 
-class TestWilliamsRSchemaValidation:
-    """Test schema-based parameter validation for Williams %R."""
+class TestWilliamsRParamsValidation:
+    """Test Params-based parameter validation for Williams %R."""
 
-    def test_schema_comprehensive_validation(self):
-        """Test comprehensive schema validation."""
+    def test_params_comprehensive_validation(self):
+        """Test comprehensive Params validation at construction time."""
         # Test valid parameters
-        valid_params = {"period": 21}
-        validated = WILLIAMS_R_SCHEMA.validate(valid_params)
-        assert validated == valid_params
+        wr = WilliamsRIndicator(period=21)
+        assert wr.params["period"] == 21
 
         # Test defaults
-        defaults = WILLIAMS_R_SCHEMA.validate({})
-        assert defaults["period"] == 14
+        wr_default = WilliamsRIndicator()
+        assert wr_default.params["period"] == 14
 
-        # Test string to int conversion
-        string_params = {"period": "20"}
-        validated = WILLIAMS_R_SCHEMA.validate(string_params)
-        assert validated["period"] == 20
+        # Test validation errors at construction time
+        with pytest.raises(DataError) as exc_info:
+            WilliamsRIndicator(period=0)
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
-        # Test validation errors
-        with pytest.raises(DataError):
-            WILLIAMS_R_SCHEMA.validate({"period": "invalid"})
+        with pytest.raises(DataError) as exc_info:
+            WilliamsRIndicator(period=101)
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
-        with pytest.raises(DataError):
-            WILLIAMS_R_SCHEMA.validate({"period": 0})
-
-        with pytest.raises(DataError):
-            WILLIAMS_R_SCHEMA.validate({"period": 101})
-
-        with pytest.raises(DataError):
-            WILLIAMS_R_SCHEMA.validate({"unknown_param": 123})
-
-    def test_schema_error_details(self):
-        """Test detailed error information from schema validation."""
-        try:
-            WILLIAMS_R_SCHEMA.validate({"period": -1})
-            raise AssertionError("Should have raised DataError")
-        except DataError as e:
-            assert e.error_code == "PARAM-BelowMinimum"
-            assert "period" in str(e.message)
-            assert "minimum" in e.details
-            assert "received" in e.details
-
-        try:
-            WILLIAMS_R_SCHEMA.validate({"period": "not_a_number"})
-            raise AssertionError("Should have raised DataError")
-        except DataError as e:
-            assert e.error_code == "PARAM-InvalidType"
-            assert "period" in e.details["parameter"]
+    def test_params_error_details(self):
+        """Test error information from Params validation."""
+        with pytest.raises(DataError) as exc_info:
+            WilliamsRIndicator(period=-1)
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
+        assert "invalid" in str(exc_info.value.message).lower()

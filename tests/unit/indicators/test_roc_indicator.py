@@ -12,7 +12,6 @@ import pytest
 
 from ktrdr.errors import DataError
 from ktrdr.indicators.roc_indicator import ROCIndicator
-from ktrdr.indicators.schemas import ROC_SCHEMA
 
 
 class TestROCIndicator:
@@ -31,33 +30,29 @@ class TestROCIndicator:
         assert roc.params["source"] == "high"
 
     def test_parameter_validation_success(self):
-        """Test successful parameter validation."""
-        roc = ROCIndicator(period=20)
-        params = {"period": 20, "source": "close"}
-        validated = roc._validate_params(params)
-        assert validated["period"] == 20
-        assert validated["source"] == "close"
+        """Test successful parameter validation via construction."""
+        roc = ROCIndicator(period=20, source="close")
+        assert roc.params["period"] == 20
+        assert roc.params["source"] == "close"
 
     def test_parameter_validation_period_too_small(self):
         """Test parameter validation with period too small."""
-        roc = ROCIndicator()
-        params = {"period": 0, "source": "close"}
-        with pytest.raises(DataError, match="period.*must be >= 1"):
-            roc._validate_params(params)
+        with pytest.raises(DataError) as exc_info:
+            ROCIndicator(period=0)
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_period_too_large(self):
         """Test parameter validation with period too large."""
-        roc = ROCIndicator()
-        params = {"period": 150, "source": "close"}
-        with pytest.raises(DataError, match="period.*must be <= 100"):
-            roc._validate_params(params)
+        with pytest.raises(DataError) as exc_info:
+            ROCIndicator(period=150)
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_invalid_source(self):
-        """Test parameter validation with invalid source."""
-        roc = ROCIndicator()
-        params = {"period": 10, "source": "invalid"}
-        with pytest.raises(DataError, match="source.*must be one of"):
-            roc._validate_params(params)
+        """Test that invalid source is accepted (no enum validation on source)."""
+        # Note: The new Params class doesn't restrict source to specific values
+        # Source validation happens at compute time if column doesn't exist
+        roc = ROCIndicator(period=10, source="invalid")
+        assert roc.params["source"] == "invalid"
 
     def test_basic_calculation(self):
         """Test basic ROC calculation."""
@@ -293,14 +288,16 @@ class TestROCIndicator:
         with pytest.raises(DataError, match="Insufficient data"):
             roc.compute(data)
 
-    def test_schema_integration(self):
-        """Test integration with parameter schema system."""
-        # Test that the schema is properly defined
-        assert ROC_SCHEMA.name == "ROC"
-        assert len(ROC_SCHEMA.parameters) == 2
+    def test_params_class_integration(self):
+        """Test integration with Params class validation."""
+        # Test that the Params class is properly defined
+        from ktrdr.indicators.base_indicator import BaseIndicator
 
-        # Test parameter names (parameters is a dict)
-        param_names = list(ROC_SCHEMA.parameters.keys())
+        assert hasattr(ROCIndicator, "Params")
+        assert ROCIndicator.Params is not BaseIndicator.Params
+
+        # Test parameter names from model_fields
+        param_names = list(ROCIndicator.Params.model_fields.keys())
         assert "period" in param_names
         assert "source" in param_names
 

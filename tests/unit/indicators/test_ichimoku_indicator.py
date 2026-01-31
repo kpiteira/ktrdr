@@ -54,49 +54,49 @@ class TestIchimokuIndicator:
         """Test parameter validation for tenkan_period too small."""
         with pytest.raises(DataError) as exc_info:
             IchimokuIndicator(tenkan_period=0)
-        assert "tenkan_period" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_tenkan_period_too_large(self):
         """Test parameter validation for tenkan_period too large."""
         with pytest.raises(DataError) as exc_info:
             IchimokuIndicator(tenkan_period=51)
-        assert "tenkan_period" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_kijun_period_too_small(self):
         """Test parameter validation for kijun_period too small."""
         with pytest.raises(DataError) as exc_info:
             IchimokuIndicator(kijun_period=0)
-        assert "kijun_period" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_kijun_period_too_large(self):
         """Test parameter validation for kijun_period too large."""
         with pytest.raises(DataError) as exc_info:
             IchimokuIndicator(kijun_period=101)
-        assert "kijun_period" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_senkou_b_period_too_small(self):
         """Test parameter validation for senkou_b_period too small."""
         with pytest.raises(DataError) as exc_info:
             IchimokuIndicator(senkou_b_period=0)
-        assert "senkou_b_period" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_senkou_b_period_too_large(self):
         """Test parameter validation for senkou_b_period too large."""
         with pytest.raises(DataError) as exc_info:
             IchimokuIndicator(senkou_b_period=201)
-        assert "senkou_b_period" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_displacement_too_small(self):
         """Test parameter validation for displacement too small."""
         with pytest.raises(DataError) as exc_info:
             IchimokuIndicator(displacement=0)
-        assert "displacement" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_displacement_too_large(self):
         """Test parameter validation for displacement too large."""
         with pytest.raises(DataError) as exc_info:
             IchimokuIndicator(displacement=101)
-        assert "displacement" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_basic_calculation(self):
         """Test basic Ichimoku calculation with sufficient data."""

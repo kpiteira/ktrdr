@@ -12,7 +12,6 @@ import pytest
 
 from ktrdr.errors import DataError
 from ktrdr.indicators.momentum_indicator import MomentumIndicator
-from ktrdr.indicators.schemas import MOMENTUM_SCHEMA
 
 
 class TestMomentumIndicator:
@@ -31,33 +30,29 @@ class TestMomentumIndicator:
         assert momentum.params["source"] == "high"
 
     def test_parameter_validation_success(self):
-        """Test successful parameter validation."""
-        momentum = MomentumIndicator(period=20)
-        params = {"period": 20, "source": "close"}
-        validated = momentum._validate_params(params)
-        assert validated["period"] == 20
-        assert validated["source"] == "close"
+        """Test successful parameter validation via construction."""
+        momentum = MomentumIndicator(period=20, source="close")
+        assert momentum.params["period"] == 20
+        assert momentum.params["source"] == "close"
 
     def test_parameter_validation_period_too_small(self):
         """Test parameter validation with period too small."""
-        momentum = MomentumIndicator()
-        params = {"period": 0, "source": "close"}
-        with pytest.raises(DataError, match="period.*must be >= 1"):
-            momentum._validate_params(params)
+        with pytest.raises(DataError) as exc_info:
+            MomentumIndicator(period=0)
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_period_too_large(self):
         """Test parameter validation with period too large."""
-        momentum = MomentumIndicator()
-        params = {"period": 150, "source": "close"}
-        with pytest.raises(DataError, match="period.*must be <= 100"):
-            momentum._validate_params(params)
+        with pytest.raises(DataError) as exc_info:
+            MomentumIndicator(period=150)
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_invalid_source(self):
-        """Test parameter validation with invalid source."""
-        momentum = MomentumIndicator()
-        params = {"period": 10, "source": "invalid"}
-        with pytest.raises(DataError, match="source.*must be one of"):
-            momentum._validate_params(params)
+        """Test that invalid source is accepted (no enum validation on source)."""
+        # Note: The new Params class doesn't restrict source to specific values
+        # Source validation happens at compute time if column doesn't exist
+        momentum = MomentumIndicator(period=10, source="invalid")
+        assert momentum.params["source"] == "invalid"
 
     def test_basic_calculation(self):
         """Test basic Momentum calculation."""
@@ -275,14 +270,16 @@ class TestMomentumIndicator:
         with pytest.raises(DataError, match="Insufficient data"):
             momentum.compute(data)
 
-    def test_schema_integration(self):
-        """Test integration with parameter schema system."""
-        # Test that the schema is properly defined
-        assert MOMENTUM_SCHEMA.name == "Momentum"
-        assert len(MOMENTUM_SCHEMA.parameters) == 2
+    def test_params_class_integration(self):
+        """Test integration with Params class validation."""
+        # Test that the Params class is properly defined
+        from ktrdr.indicators.base_indicator import BaseIndicator
 
-        # Test parameter names (parameters is a dict)
-        param_names = list(MOMENTUM_SCHEMA.parameters.keys())
+        assert hasattr(MomentumIndicator, "Params")
+        assert MomentumIndicator.Params is not BaseIndicator.Params
+
+        # Test parameter names from model_fields
+        param_names = list(MomentumIndicator.Params.model_fields.keys())
         assert "period" in param_names
         assert "source" in param_names
 

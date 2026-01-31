@@ -12,9 +12,6 @@ import pandas as pd
 from ktrdr import get_logger
 from ktrdr.errors import ConfigurationError, ProcessingError
 from ktrdr.indicators.base_indicator import INDICATOR_REGISTRY, BaseIndicator
-from ktrdr.indicators.indicator_factory import BUILT_IN_INDICATORS
-from ktrdr.indicators.ma_indicators import ExponentialMovingAverage, SimpleMovingAverage
-from ktrdr.indicators.rsi_indicator import RSIIndicator
 
 # Create module-level logger
 logger = get_logger(__name__)
@@ -90,21 +87,8 @@ class IndicatorEngine:
         if not isinstance(definition, IndicatorDefinition):
             definition = IndicatorDefinition(**definition)
 
-        # Look up indicator class - try registry first, then fallback
-        indicator_class = INDICATOR_REGISTRY.get(definition.type)
-        if indicator_class is None:
-            # Fallback to BUILT_IN_INDICATORS during migration
-            indicator_class = BUILT_IN_INDICATORS.get(definition.type.lower())
-
-        if indicator_class is None:
-            # Combine available types from both sources
-            available = sorted(
-                set(INDICATOR_REGISTRY.list_types()) | set(BUILT_IN_INDICATORS.keys())
-            )
-            raise ValueError(
-                f"Unknown indicator type: '{definition.type}'. "
-                f"Available types: {available}"
-            )
+        # Look up indicator class from registry (raises if not found)
+        indicator_class = INDICATOR_REGISTRY.get_or_raise(definition.type)
 
         # Get extra params from model_extra (all fields except 'type')
         params = definition.model_extra or {}
@@ -564,6 +548,8 @@ class IndicatorEngine:
         Returns:
             DataFrame with RSI column added.
         """
+        from ktrdr.indicators.rsi_indicator import RSIIndicator
+
         indicator = RSIIndicator(period=period, source=source)
         result_df = data.copy()
         result_df[f"RSI_{period}"] = indicator.compute(data)
@@ -583,6 +569,8 @@ class IndicatorEngine:
         Returns:
             DataFrame with SMA column added.
         """
+        from ktrdr.indicators.ma_indicators import SimpleMovingAverage
+
         indicator = SimpleMovingAverage(period=period, source=source)
         result_df = data.copy()
         result_df[f"SMA_{period}"] = indicator.compute(data)
@@ -602,6 +590,8 @@ class IndicatorEngine:
         Returns:
             DataFrame with EMA column added.
         """
+        from ktrdr.indicators.ma_indicators import ExponentialMovingAverage
+
         indicator = ExponentialMovingAverage(period=period, source=source)
         result_df = data.copy()
         result_df[f"EMA_{period}"] = indicator.compute(data)

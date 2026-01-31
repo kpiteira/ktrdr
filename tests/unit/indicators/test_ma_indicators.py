@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 from ktrdr.errors import DataError
-from ktrdr.indicators import ExponentialMovingAverage, SimpleMovingAverage
+from ktrdr.indicators.ma_indicators import ExponentialMovingAverage, SimpleMovingAverage
 
 
 # Create test data for moving averages
@@ -114,20 +114,20 @@ class TestSimpleMovingAverage:
         sma = SimpleMovingAverage(period=2)
         assert sma.params["period"] == 2
 
-        # Invalid period type
+        # Invalid period type - Pydantic validation via Params class
         with pytest.raises(DataError) as excinfo:
             SimpleMovingAverage(period="14")
-        assert "SMA period must be an integer" in str(excinfo.value)
+        assert excinfo.value.error_code == "INDICATOR-InvalidParameters"
 
-        # Invalid period value
+        # Invalid period value (below minimum)
         with pytest.raises(DataError) as excinfo:
             SimpleMovingAverage(period=1)
-        assert "SMA period must be at least 2" in str(excinfo.value)
+        assert excinfo.value.error_code == "INDICATOR-InvalidParameters"
 
         # Invalid source type
         with pytest.raises(DataError) as excinfo:
             SimpleMovingAverage(source=123)
-        assert "Source must be a string" in str(excinfo.value)
+        assert excinfo.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_compute_basic(self):
         """Test basic SMA computation on simple dataset."""
@@ -209,25 +209,25 @@ class TestExponentialMovingAverage:
         ema = ExponentialMovingAverage(period=2)
         assert ema.params["period"] == 2
 
-        # Invalid period type
+        # Invalid period type - Pydantic validation via Params class
         with pytest.raises(DataError) as excinfo:
             ExponentialMovingAverage(period="14")
-        assert "EMA period must be an integer" in str(excinfo.value)
+        assert excinfo.value.error_code == "INDICATOR-InvalidParameters"
 
-        # Invalid period value
+        # Invalid period value (below minimum - EMA allows period=1)
         with pytest.raises(DataError) as excinfo:
-            ExponentialMovingAverage(period=1)
-        assert "EMA period must be at least 2" in str(excinfo.value)
+            ExponentialMovingAverage(period=0)
+        assert excinfo.value.error_code == "INDICATOR-InvalidParameters"
 
         # Invalid source type
         with pytest.raises(DataError) as excinfo:
             ExponentialMovingAverage(source=123)
-        assert "Source must be a string" in str(excinfo.value)
+        assert excinfo.value.error_code == "INDICATOR-InvalidParameters"
 
         # Invalid adjust type
         with pytest.raises(DataError) as excinfo:
             ExponentialMovingAverage(adjust="yes")
-        assert "Adjust parameter must be a boolean" in str(excinfo.value)
+        assert excinfo.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_compute_basic(self):
         """Test basic EMA computation on simple dataset."""

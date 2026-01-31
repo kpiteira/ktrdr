@@ -11,7 +11,8 @@ import pandas as pd
 import pytest
 
 from ktrdr.errors import DataError
-from ktrdr.indicators import ExponentialMovingAverage, RSIIndicator, SimpleMovingAverage
+from ktrdr.indicators.ma_indicators import ExponentialMovingAverage, SimpleMovingAverage
+from ktrdr.indicators.rsi_indicator import RSIIndicator
 from tests.indicators.reference_datasets import (
     REFERENCE_VALUES,
     TOLERANCES,

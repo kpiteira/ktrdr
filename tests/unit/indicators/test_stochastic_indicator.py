@@ -13,7 +13,6 @@ import pandas as pd
 import pytest
 
 from ktrdr.errors import DataError
-from ktrdr.indicators.schemas import STOCHASTIC_SCHEMA
 from ktrdr.indicators.stochastic_indicator import StochasticIndicator
 from tests.indicators.validation_utils import create_standard_test_data
 
@@ -38,25 +37,28 @@ class TestStochasticIndicator:
         assert stoch.params["smooth_k"] == 1
 
     def test_stochastic_parameter_validation(self):
-        """Test parameter validation using schema system."""
+        """Test parameter validation at construction time."""
         # Valid parameters
-        params = {"k_period": 14, "d_period": 3, "smooth_k": 3}
-        validated = STOCHASTIC_SCHEMA.validate(params)
-        assert validated == params
+        stoch = StochasticIndicator(k_period=14, d_period=3, smooth_k=3)
+        assert stoch.params["k_period"] == 14
+        assert stoch.params["d_period"] == 3
+        assert stoch.params["smooth_k"] == 3
 
         # Test defaults
-        defaults = STOCHASTIC_SCHEMA.validate({})
-        assert defaults["k_period"] == 14
-        assert defaults["d_period"] == 3
-        assert defaults["smooth_k"] == 3
+        stoch_default = StochasticIndicator()
+        assert stoch_default.params["k_period"] == 14
+        assert stoch_default.params["d_period"] == 3
+        assert stoch_default.params["smooth_k"] == 3
 
         # Invalid parameters - below minimum
-        with pytest.raises(DataError):
-            STOCHASTIC_SCHEMA.validate({"k_period": 0})
+        with pytest.raises(DataError) as exc_info:
+            StochasticIndicator(k_period=0)
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
         # Invalid parameters - above maximum
-        with pytest.raises(DataError):
-            STOCHASTIC_SCHEMA.validate({"k_period": 101})
+        with pytest.raises(DataError) as exc_info:
+            StochasticIndicator(k_period=101)
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_stochastic_basic_computation(self):
         """Test basic Stochastic computation with simple data."""
@@ -322,57 +324,35 @@ class TestStochasticIndicator:
         assert len(result) == 50
 
 
-class TestStochasticSchemaValidation:
-    """Test schema-based parameter validation for Stochastic."""
+class TestStochasticParamsValidation:
+    """Test Params-based parameter validation for Stochastic."""
 
-    def test_schema_comprehensive_validation(self):
-        """Test comprehensive schema validation."""
+    def test_params_comprehensive_validation(self):
+        """Test comprehensive Params validation at construction time."""
         # Test all valid parameters
-        valid_params = {"k_period": 21, "d_period": 5, "smooth_k": 7}
-        validated = STOCHASTIC_SCHEMA.validate(valid_params)
-        assert validated == valid_params
+        stoch = StochasticIndicator(k_period=21, d_period=5, smooth_k=7)
+        assert stoch.params["k_period"] == 21
+        assert stoch.params["d_period"] == 5
+        assert stoch.params["smooth_k"] == 7
 
         # Test partial parameters with defaults
-        partial_params = {"k_period": 10}
-        validated = STOCHASTIC_SCHEMA.validate(partial_params)
-        assert validated["k_period"] == 10
-        assert validated["d_period"] == 3  # default
-        assert validated["smooth_k"] == 3  # default
+        stoch_partial = StochasticIndicator(k_period=10)
+        assert stoch_partial.params["k_period"] == 10
+        assert stoch_partial.params["d_period"] == 3  # default
+        assert stoch_partial.params["smooth_k"] == 3  # default
 
-        # Test string to int conversion
-        string_params = {"k_period": "15", "d_period": "4", "smooth_k": "2"}
-        validated = STOCHASTIC_SCHEMA.validate(string_params)
-        assert validated["k_period"] == 15
-        assert validated["d_period"] == 4
-        assert validated["smooth_k"] == 2
+        # Test validation errors at construction time
+        with pytest.raises(DataError) as exc_info:
+            StochasticIndicator(k_period=0)
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
-        # Test validation errors
-        with pytest.raises(DataError):
-            STOCHASTIC_SCHEMA.validate({"k_period": "invalid"})
+        with pytest.raises(DataError) as exc_info:
+            StochasticIndicator(d_period=21)  # Above maximum
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
-        with pytest.raises(DataError):
-            STOCHASTIC_SCHEMA.validate({"k_period": 0})
-
-        with pytest.raises(DataError):
-            STOCHASTIC_SCHEMA.validate({"d_period": 21})  # Above maximum
-
-        with pytest.raises(DataError):
-            STOCHASTIC_SCHEMA.validate({"unknown_param": 123})
-
-    def test_schema_error_details(self):
-        """Test detailed error information from schema validation."""
-        try:
-            STOCHASTIC_SCHEMA.validate({"k_period": -1})
-            raise AssertionError("Should have raised DataError")
-        except DataError as e:
-            assert e.error_code == "PARAM-BelowMinimum"
-            assert "k_period" in str(e.message)
-            assert "minimum" in e.details
-            assert "received" in e.details
-
-        try:
-            STOCHASTIC_SCHEMA.validate({"d_period": "not_a_number"})
-            raise AssertionError("Should have raised DataError")
-        except DataError as e:
-            assert e.error_code == "PARAM-InvalidType"
-            assert "d_period" in e.details["parameter"]
+    def test_params_error_details(self):
+        """Test error information from Params validation."""
+        with pytest.raises(DataError) as exc_info:
+            StochasticIndicator(k_period=-1)
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
+        assert "invalid" in str(exc_info.value.message).lower()

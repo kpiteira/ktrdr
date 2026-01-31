@@ -18,9 +18,8 @@ The Aroon lines oscillate between 0 and 100:
 - Crossovers between the lines signal potential trend changes
 """
 
-from typing import Any
-
 import pandas as pd
+from pydantic import Field
 
 from ktrdr import get_logger
 from ktrdr.errors import DataError
@@ -41,6 +40,25 @@ class AroonIndicator(BaseIndicator):
         include_oscillator: Whether to include Aroon Oscillator (default: False)
     """
 
+    class Params(BaseIndicator.Params):
+        """Aroon parameter schema with validation."""
+
+        period: int = Field(
+            default=14,
+            ge=1,
+            le=200,
+            strict=True,
+            description="Period for Aroon calculation",
+        )
+        include_oscillator: bool = Field(
+            default=False,
+            strict=True,
+            description="Whether to include Aroon Oscillator line",
+        )
+
+    # Aroon is displayed in a separate panel (oscillator)
+    display_as_overlay = False
+
     @classmethod
     def is_multi_output(cls) -> bool:
         """Aroon produces multiple outputs (Up, Down, and optionally Oscillator)."""
@@ -50,74 +68,6 @@ class AroonIndicator(BaseIndicator):
     def get_output_names(cls) -> list[str]:
         """Return semantic output names for Aroon."""
         return ["up", "down", "oscillator"]
-
-    def __init__(self, period: int = 14, include_oscillator: bool = False):
-        """
-        Initialize the Aroon indicator.
-
-        Args:
-            period: Period for the Aroon calculation (must be >= 1)
-            include_oscillator: Whether to include Aroon Oscillator line
-
-        Raises:
-            DataError: If parameters are invalid
-        """
-        # Initialize base class with parameters
-        super().__init__(
-            name="Aroon", period=period, include_oscillator=include_oscillator
-        )
-
-        logger.debug(
-            f"Initialized Aroon indicator with period={period}, include_oscillator={include_oscillator}"
-        )
-
-    def _validate_params(self, params: dict[str, Any]) -> dict[str, Any]:
-        """
-        Validate Aroon parameters.
-
-        Args:
-            params: Dictionary of parameters to validate
-
-        Returns:
-            Dictionary of validated parameters
-
-        Raises:
-            DataError: If any parameter is invalid
-        """
-        validated_params = {}
-
-        # Validate period
-        period = params.get("period", 14)
-        if not isinstance(period, int) or period < 1:
-            raise DataError(
-                message="Aroon period must be an integer >= 1",
-                error_code="INDICATOR-InvalidParameter",
-                details={"parameter": "period", "value": period, "minimum": 1},
-            )
-
-        if period > 200:
-            raise DataError(
-                message="Aroon period must be <= 200",
-                error_code="INDICATOR-InvalidParameter",
-                details={"parameter": "period", "value": period, "maximum": 200},
-            )
-        validated_params["period"] = period
-
-        # Validate include_oscillator
-        include_oscillator = params.get("include_oscillator", False)
-        if not isinstance(include_oscillator, bool):
-            raise DataError(
-                message="Aroon include_oscillator must be a boolean",
-                error_code="INDICATOR-InvalidParameter",
-                details={
-                    "parameter": "include_oscillator",
-                    "value": include_oscillator,
-                    "expected_type": "bool",
-                },
-            )
-        validated_params["include_oscillator"] = include_oscillator
-
-        return validated_params
 
     def _validate_data(self, data: pd.DataFrame):
         """

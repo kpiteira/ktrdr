@@ -42,25 +42,26 @@ class TestAroonIndicator:
         """Test parameter validation for period too small."""
         with pytest.raises(DataError) as exc_info:
             AroonIndicator(period=0)
-        assert "period must be" in str(exc_info.value).lower()
+        # New Params pattern raises DataError with INDICATOR-InvalidParameters code
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_period_too_large(self):
         """Test parameter validation for period too large."""
         with pytest.raises(DataError) as exc_info:
             AroonIndicator(period=201)
-        assert "period must be" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_period_non_integer(self):
         """Test parameter validation for non-integer period."""
         with pytest.raises(DataError) as exc_info:
             AroonIndicator(period=14.5)
-        assert "period must be" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_include_oscillator_non_boolean(self):
         """Test parameter validation for non-boolean include_oscillator."""
         with pytest.raises(DataError) as exc_info:
             AroonIndicator(include_oscillator="true")
-        assert "include_oscillator must be" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_basic_calculation(self):
         """Test basic Aroon calculation with sufficient data."""

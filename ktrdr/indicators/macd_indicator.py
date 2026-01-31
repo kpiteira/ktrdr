@@ -6,11 +6,11 @@ Divergence (MACD) indicator.
 """
 
 import pandas as pd
+from pydantic import Field
 
 from ktrdr import get_logger
 from ktrdr.errors import DataError
 from ktrdr.indicators.base_indicator import BaseIndicator
-from ktrdr.indicators.schemas import MACD_SCHEMA
 
 # Create module-level logger
 logger = get_logger(__name__)
@@ -41,6 +41,38 @@ class MACDIndicator(BaseIndicator):
         source (str): The data column to use for calculations
     """
 
+    class Params(BaseIndicator.Params):
+        """MACD parameter schema with validation."""
+
+        fast_period: int = Field(
+            default=12,
+            ge=1,
+            le=100,
+            strict=True,
+            description="Period for the shorter EMA",
+        )
+        slow_period: int = Field(
+            default=26,
+            ge=1,
+            le=200,
+            strict=True,
+            description="Period for the longer EMA",
+        )
+        signal_period: int = Field(
+            default=9,
+            ge=1,
+            le=50,
+            strict=True,
+            description="Period for the signal line EMA",
+        )
+        source: str = Field(
+            default="close",
+            description="Price column to use for calculations",
+        )
+
+    # MACD is displayed in a separate panel (not overlay on price)
+    display_as_overlay = False
+
     @classmethod
     def is_multi_output(cls) -> bool:
         """MACD produces multiple outputs (MACD line, signal, histogram)."""
@@ -50,53 +82,6 @@ class MACDIndicator(BaseIndicator):
     def get_output_names(cls) -> list[str]:
         """Return semantic output names for MACD."""
         return ["line", "signal", "histogram"]
-
-    def __init__(
-        self,
-        fast_period: int = 12,
-        slow_period: int = 26,
-        signal_period: int = 9,
-        source: str = "close",
-    ):
-        """
-        Initialize the MACD indicator.
-
-        Args:
-            fast_period: Period for the shorter EMA
-            slow_period: Period for the longer EMA
-            signal_period: Period for the signal line EMA
-            source: Column name to use for calculations
-        """
-        # Call parent constructor with display_as_overlay=False
-        # Parent constructor will call _validate_params()
-        super().__init__(
-            name="MACD",  # Use simple name, will be enhanced later with parameters
-            display_as_overlay=False,
-            fast_period=fast_period,
-            slow_period=slow_period,
-            signal_period=signal_period,
-            source=source,
-        )
-
-        logger.debug(
-            f"Initialized MACD indicator with fast_period={fast_period}, "
-            f"slow_period={slow_period}, signal_period={signal_period}, source={source}"
-        )
-
-    def _validate_params(self, params):
-        """
-        Validate parameters for MACD indicator using schema-based validation.
-
-        Args:
-            params (dict): Parameters to validate
-
-        Returns:
-            dict: Validated parameters with defaults applied
-
-        Raises:
-            DataError: If parameters are invalid
-        """
-        return MACD_SCHEMA.validate(params)
 
     def compute(self, data: pd.DataFrame) -> pd.DataFrame:
         """
@@ -112,10 +97,10 @@ class MACDIndicator(BaseIndicator):
             DataError: If the source column is not in the data
         """
         # Get parameters from self.params (validated by BaseIndicator)
-        fast_period = self.params.get("fast_period", 12)
-        slow_period = self.params.get("slow_period", 26)
-        signal_period = self.params.get("signal_period", 9)
-        source = self.params.get("source", "close")
+        fast_period: int = self.params["fast_period"]
+        slow_period: int = self.params["slow_period"]
+        signal_period: int = self.params["signal_period"]
+        source: str = self.params["source"]
 
         # Check if source column exists
         if source not in data.columns:

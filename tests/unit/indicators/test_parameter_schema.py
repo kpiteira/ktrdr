@@ -3,6 +3,10 @@ Tests for the parameter schema validation system.
 
 This module tests the comprehensive parameter validation framework
 including type validation, range validation, and constraint validation.
+
+Note: The ParameterSchema class and indicator-specific schemas (RSI_SCHEMA, etc.)
+have been replaced by the Params pattern with Pydantic validation. These tests
+cover the underlying ParameterDefinition and ParameterConstraint utilities.
 """
 
 import pytest
@@ -15,7 +19,6 @@ from ktrdr.indicators.parameter_schema import (
     greater_than,
     less_than,
 )
-from ktrdr.indicators.schemas import MACD_SCHEMA, RSI_SCHEMA, SMA_SCHEMA
 
 
 class TestParameterDefinition:
@@ -178,167 +181,3 @@ class TestParameterConstraint:
 
         with pytest.raises(DataError, match="requires parameter"):
             constraint.validate({"param1": 5})  # Missing param2
-
-
-class TestParameterSchema:
-    """Test ParameterSchema validation logic."""
-
-    def test_schema_validation_success(self):
-        """Test successful schema validation."""
-        result = MACD_SCHEMA.validate(
-            {
-                "fast_period": 12,
-                "slow_period": 26,
-                "signal_period": 9,
-                "source": "close",
-            }
-        )
-
-        expected = {
-            "fast_period": 12,
-            "slow_period": 26,
-            "signal_period": 9,
-            "source": "close",
-        }
-        assert result == expected
-
-    def test_schema_with_defaults(self):
-        """Test schema validation with default values."""
-        result = MACD_SCHEMA.validate({})
-
-        expected = {
-            "fast_period": 12,
-            "slow_period": 26,
-            "signal_period": 9,
-            "source": "close",
-        }
-        assert result == expected
-
-    def test_schema_constraint_validation(self):
-        """Test schema constraint validation."""
-        # Valid constraint
-        MACD_SCHEMA.validate({"fast_period": 5, "slow_period": 10})
-
-        # Invalid constraint
-        with pytest.raises(
-            DataError, match="Fast period must be less than slow period"
-        ):
-            MACD_SCHEMA.validate({"fast_period": 26, "slow_period": 12})
-
-    def test_unknown_parameters(self):
-        """Test unknown parameter detection."""
-        with pytest.raises(DataError, match="Unknown parameters"):
-            MACD_SCHEMA.validate({"invalid_param": 123})
-
-    def test_schema_to_dict(self):
-        """Test schema serialization to dictionary."""
-        schema_dict = RSI_SCHEMA.to_dict()
-
-        assert schema_dict["name"] == "RSI"
-        assert (
-            schema_dict["description"] == "Relative Strength Index momentum oscillator"
-        )
-        assert "period" in schema_dict["parameters"]
-        assert "source" in schema_dict["parameters"]
-
-        period_param = schema_dict["parameters"]["period"]
-        assert period_param["type"] == "int"
-        assert period_param["default"] == 14
-        assert period_param["min_value"] == 2
-        assert period_param["max_value"] == 100
-
-    def test_schema_get_defaults(self):
-        """Test getting default values from schema."""
-        defaults = MACD_SCHEMA.get_defaults()
-
-        expected = {
-            "fast_period": 12,
-            "slow_period": 26,
-            "signal_period": 9,
-            "source": "close",
-        }
-        assert defaults == expected
-
-
-class TestBuiltInSchemas:
-    """Test built-in indicator schemas."""
-
-    def test_rsi_schema(self):
-        """Test RSI parameter schema."""
-        # Valid parameters
-        result = RSI_SCHEMA.validate({"period": 14, "source": "close"})
-        assert result["period"] == 14
-        assert result["source"] == "close"
-
-        # Test defaults
-        result = RSI_SCHEMA.validate({})
-        assert result["period"] == 14
-        assert result["source"] == "close"
-
-        # Test validation
-        with pytest.raises(DataError):
-            RSI_SCHEMA.validate({"period": 1})  # Below minimum
-
-    def test_sma_schema(self):
-        """Test SMA parameter schema."""
-        # Valid parameters
-        result = SMA_SCHEMA.validate({"period": 20, "source": "high"})
-        assert result["period"] == 20
-        assert result["source"] == "high"
-
-        # Test invalid source
-        with pytest.raises(DataError):
-            SMA_SCHEMA.validate({"source": "invalid"})
-
-    def test_macd_schema_comprehensive(self):
-        """Test MACD schema comprehensively."""
-        # Test all parameter types
-        result = MACD_SCHEMA.validate(
-            {"fast_period": 5, "slow_period": 15, "signal_period": 7, "source": "high"}
-        )
-
-        assert result["fast_period"] == 5
-        assert result["slow_period"] == 15
-        assert result["signal_period"] == 7
-        assert result["source"] == "high"
-
-        # Test constraint
-        with pytest.raises(
-            DataError, match="Fast period must be less than slow period"
-        ):
-            MACD_SCHEMA.validate({"fast_period": 20, "slow_period": 10})
-
-
-class TestErrorMessages:
-    """Test detailed error message generation."""
-
-    def test_parameter_error_details(self):
-        """Test parameter validation error details."""
-        try:
-            MACD_SCHEMA.validate({"fast_period": "invalid"})
-            raise AssertionError("Should have raised DataError")
-        except DataError as e:
-            assert e.error_code == "PARAM-InvalidType"
-            assert "fast_period" in e.details["parameter"]
-            assert "expected" in e.details
-            assert "received" in e.details
-
-    def test_constraint_error_details(self):
-        """Test constraint validation error details."""
-        try:
-            MACD_SCHEMA.validate({"fast_period": 30, "slow_period": 20})
-            raise AssertionError("Should have raised DataError")
-        except DataError as e:
-            assert e.error_code == "PARAM-ConstraintViolation"
-            assert "constraint" in e.details
-            assert "parameters" in e.details
-
-    def test_range_error_details(self):
-        """Test range validation error details."""
-        try:
-            RSI_SCHEMA.validate({"period": 0})
-            raise AssertionError("Should have raised DataError")
-        except DataError as e:
-            assert e.error_code == "PARAM-BelowMinimum"
-            assert "minimum" in e.details
-            assert "received" in e.details

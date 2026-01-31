@@ -12,6 +12,7 @@ Author: KTRDR
 from typing import Any
 
 import pandas as pd
+from pydantic import Field
 
 from ktrdr import get_logger
 from ktrdr.errors import DataError
@@ -46,6 +47,25 @@ class ADLineIndicator(BaseIndicator):
     - More effective when combined with price action analysis
     """
 
+    class Params(BaseIndicator.Params):
+        """ADLine parameter schema with validation."""
+
+        use_sma_smoothing: bool = Field(
+            default=False,
+            strict=True,
+            description="Whether to apply SMA smoothing to the A/D Line",
+        )
+        smoothing_period: int = Field(
+            default=21,
+            ge=2,
+            le=200,
+            strict=True,
+            description="Period for SMA smoothing if enabled",
+        )
+
+    # A/D Line is displayed in a separate panel
+    display_as_overlay = False
+
     @classmethod
     def is_multi_output(cls) -> bool:
         """ADLine produces multiple output columns."""
@@ -62,46 +82,6 @@ class ADLineIndicator(BaseIndicator):
             "momentum_21",
             "relative_strength",
         ]
-
-    def __init__(self, use_sma_smoothing: bool = False, smoothing_period: int = 21):
-        """
-        Initialize A/D Line indicator.
-
-        Args:
-            use_sma_smoothing: Whether to apply SMA smoothing to the A/D Line (default: False)
-            smoothing_period: Period for SMA smoothing if enabled (default: 21)
-        """
-        # Call parent constructor - A/D Line is typically displayed in separate panel
-        super().__init__(
-            name="ADLine",
-            display_as_overlay=False,
-            use_sma_smoothing=use_sma_smoothing,
-            smoothing_period=smoothing_period,
-        )
-
-    def _validate_params(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Validate indicator parameters."""
-        use_sma_smoothing = params.get("use_sma_smoothing", False)
-        smoothing_period = params.get("smoothing_period", 21)
-
-        if not isinstance(use_sma_smoothing, bool):
-            raise ValueError("use_sma_smoothing must be a boolean")
-
-        if not isinstance(smoothing_period, int) or smoothing_period < 1:
-            raise ValueError("smoothing_period must be a positive integer")
-
-        if smoothing_period < 2:
-            raise ValueError("smoothing_period must be at least 2")
-
-        if smoothing_period > 200:
-            raise ValueError(
-                "smoothing_period should not exceed 200 for practical purposes"
-            )
-
-        return {
-            "use_sma_smoothing": use_sma_smoothing,
-            "smoothing_period": smoothing_period,
-        }
 
     def compute(self, data: pd.DataFrame) -> pd.DataFrame:
         """

@@ -40,19 +40,19 @@ class TestMFIIndicator:
         """Test parameter validation for period too small."""
         with pytest.raises(DataError) as exc_info:
             MFIIndicator(period=0)
-        assert "period must be" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_period_too_large(self):
         """Test parameter validation for period too large."""
         with pytest.raises(DataError) as exc_info:
             MFIIndicator(period=101)
-        assert "period must be" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_parameter_validation_period_non_integer(self):
         """Test parameter validation for non-integer period."""
         with pytest.raises(DataError) as exc_info:
             MFIIndicator(period=14.5)
-        assert "period must be" in str(exc_info.value).lower()
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_basic_calculation(self):
         """Test basic MFI calculation with sufficient data."""

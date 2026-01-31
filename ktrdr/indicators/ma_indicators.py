@@ -4,10 +4,12 @@ Moving Average indicator implementations.
 This module provides classes for different types of moving averages:
 - SimpleMovingAverage (SMA): A simple arithmetic mean over a period
 - ExponentialMovingAverage (EMA): A weighted average that gives more importance to recent data
+- WeightedMovingAverage (WMA): A weighted average giving more weight to recent prices
 """
 
 import numpy as np
 import pandas as pd
+from pydantic import Field
 
 from ktrdr import get_logger
 from ktrdr.errors import DataError
@@ -23,72 +25,35 @@ class SimpleMovingAverage(BaseIndicator):
     SMA calculates the arithmetic mean of a given set of prices over a specified
     number of periods.
 
+    Default parameters:
+        - period: 20 (lookback period for SMA calculation)
+        - source: 'close' (price column to use)
+
     Attributes:
-        name (str): The name of the indicator ('SMA')
-        params (dict): Parameters for SMA calculation including:
-            - period (int): The period for SMA calculation (default: 20)
-            - source (str): The price column to use (default: 'close')
+        period (int): The period for SMA calculation
+        source (str): The price column to use
     """
 
-    def __init__(self, period: int = 20, source: str = "close"):
-        """
-        Initialize the Simple Moving Average indicator.
+    class Params(BaseIndicator.Params):
+        """SMA parameter schema with validation."""
 
-        Args:
-            period (int): The period for SMA calculation, typically 20
-            source (str): The column name from DataFrame to use for calculations
-        """
-        super().__init__(name="SMA", period=period, source=source)
-        logger.debug(
-            f"Initialized SMA indicator with period {period} using {source} prices"
+        period: int = Field(
+            default=20,
+            ge=2,
+            le=500,
+            strict=True,
+            description="Lookback period for SMA calculation",
+        )
+        source: str = Field(
+            default="close",
+            description="Price column to use for calculations",
         )
 
-    def _validate_params(self, params):
-        """
-        Validate parameters for SMA indicator.
+    # SMA is displayed as overlay on price charts
+    display_as_overlay = True
 
-        Args:
-            params (dict): Parameters to validate
-
-        Returns:
-            dict: Validated parameters
-
-        Raises:
-            DataError: If parameters are invalid
-        """
-        # Validate period
-        if "period" in params:
-            period = params["period"]
-            if not isinstance(period, int):
-                raise DataError(
-                    message="SMA period must be an integer",
-                    error_code="DATA-InvalidType",
-                    details={
-                        "parameter": "period",
-                        "expected": "int",
-                        "received": type(period).__name__,
-                    },
-                )
-            if period < 2:
-                raise DataError(
-                    message="SMA period must be at least 2",
-                    error_code="DATA-InvalidValue",
-                    details={"parameter": "period", "minimum": 2, "received": period},
-                )
-
-        # Validate source
-        if "source" in params and not isinstance(params["source"], str):
-            raise DataError(
-                message="Source must be a string",
-                error_code="DATA-InvalidType",
-                details={
-                    "parameter": "source",
-                    "expected": "str",
-                    "received": type(params["source"]).__name__,
-                },
-            )
-
-        return params
+    # Aliases for common usage
+    _aliases = ["sma"]
 
     def compute(self, df: pd.DataFrame) -> pd.Series:
         """
@@ -103,9 +68,9 @@ class SimpleMovingAverage(BaseIndicator):
         Raises:
             DataError: If input data is invalid or insufficient
         """
-        # Validate input data
-        source = self.params["source"]
-        period = self.params["period"]
+        # Get parameters from self.params (validated by BaseIndicator)
+        source: str = self.params["source"]
+        period: int = self.params["period"]
         self.validate_input_data(df, [source])
         self.validate_sufficient_data(df, period)
 
@@ -143,95 +108,42 @@ class ExponentialMovingAverage(BaseIndicator):
     EMA gives more weight to recent prices, making it more responsive to new information
     than a simple moving average.
 
+    Default parameters:
+        - period: 20 (lookback period for EMA calculation)
+        - source: 'close' (price column to use)
+        - adjust: True (use adjusted EMA calculation)
+
     Attributes:
-        name (str): The name of the indicator ('EMA')
-        params (dict): Parameters for EMA calculation including:
-            - period (int): The period for EMA calculation (default: 20)
-            - source (str): The price column to use (default: 'close')
-            - adjust (bool): Whether to use adjusted EMA calculation (default: True)
+        period (int): The period for EMA calculation
+        source (str): The price column to use
+        adjust (bool): Whether to use adjusted EMA calculation
     """
 
-    def __init__(self, period: int = 20, source: str = "close", adjust: bool = True):
-        """
-        Initialize the Exponential Moving Average indicator.
+    class Params(BaseIndicator.Params):
+        """EMA parameter schema with validation."""
 
-        Args:
-            period (int): The period for EMA calculation, typically 20
-            source (str): The column name from DataFrame to use for calculations
-            adjust (bool): Whether to use adjusted calculation (handles NaN values better)
-
-        Raises:
-            DataError: If any parameters are invalid
-        """
-        # Validate adjust parameter before passing to super
-        if not isinstance(adjust, bool):
-            raise DataError(
-                message="Adjust parameter must be a boolean",
-                error_code="DATA-InvalidType",
-                details={
-                    "parameter": "adjust",
-                    "expected": "bool",
-                    "received": type(adjust).__name__,
-                },
-            )
-
-        # Store adjust as an internal parameter instead of passing it to BaseIndicator
-        self._adjust = adjust
-        super().__init__(name="EMA", period=period, source=source)
-        # Add adjust to params after super() call
-        self.params["adjust"] = adjust
-        logger.debug(
-            f"Initialized EMA indicator with period {period} using {source} prices (adjust={adjust})"
+        period: int = Field(
+            default=20,
+            ge=1,
+            le=500,
+            strict=True,
+            description="Lookback period for EMA calculation",
+        )
+        source: str = Field(
+            default="close",
+            description="Price column to use for calculations",
+        )
+        adjust: bool = Field(
+            default=True,
+            strict=True,
+            description="Use adjusted EMA calculation (handles NaN values better)",
         )
 
-    def _validate_params(self, params):
-        """
-        Validate parameters for EMA indicator.
+    # EMA is displayed as overlay on price charts
+    display_as_overlay = True
 
-        Args:
-            params (dict): Parameters to validate
-
-        Returns:
-            dict: Validated parameters
-
-        Raises:
-            DataError: If parameters are invalid
-        """
-        # Validate period
-        if "period" in params:
-            period = params["period"]
-            if not isinstance(period, int):
-                raise DataError(
-                    message="EMA period must be an integer",
-                    error_code="DATA-InvalidType",
-                    details={
-                        "parameter": "period",
-                        "expected": "int",
-                        "received": type(period).__name__,
-                    },
-                )
-            if period < 2:
-                raise DataError(
-                    message="EMA period must be at least 2",
-                    error_code="DATA-InvalidValue",
-                    details={"parameter": "period", "minimum": 2, "received": period},
-                )
-
-        # Validate source
-        if "source" in params and not isinstance(params["source"], str):
-            raise DataError(
-                message="Source must be a string",
-                error_code="DATA-InvalidType",
-                details={
-                    "parameter": "source",
-                    "expected": "str",
-                    "received": type(params["source"]).__name__,
-                },
-            )
-
-        # Note: adjust is already validated in __init__ so we don't need to check it again here
-
-        return params
+    # Aliases for common usage
+    _aliases = ["ema"]
 
     def compute(self, df: pd.DataFrame) -> pd.Series:
         """
@@ -246,12 +158,10 @@ class ExponentialMovingAverage(BaseIndicator):
         Raises:
             DataError: If input data is invalid or insufficient
         """
-        import pandas as pd
-
-        # Validate input data
-        source = self.params["source"]
-        period = self.params["period"]
-        adjust = self.params.get("adjust", True)
+        # Get parameters from self.params (validated by BaseIndicator)
+        source: str = self.params["source"]
+        period: int = self.params["period"]
+        adjust: bool = self.params["adjust"]
 
         self.validate_input_data(df, [source])
         self.validate_sufficient_data(df, period)
@@ -324,4 +234,97 @@ class ExponentialMovingAverage(BaseIndicator):
                 message=error_msg,
                 error_code="DATA-CalculationError",
                 details={"indicator": "EMA", "error": str(e)},
+            ) from e
+
+
+class WeightedMovingAverage(BaseIndicator):
+    """
+    Weighted Moving Average (WMA) technical indicator.
+
+    WMA gives more weight to recent prices by applying linearly decreasing weights
+    to older prices.
+
+    Default parameters:
+        - period: 20 (lookback period for WMA calculation)
+        - source: 'close' (price column to use)
+
+    Attributes:
+        period (int): The period for WMA calculation
+        source (str): The price column to use
+    """
+
+    class Params(BaseIndicator.Params):
+        """WMA parameter schema with validation."""
+
+        period: int = Field(
+            default=20,
+            ge=2,
+            le=500,
+            strict=True,
+            description="Lookback period for WMA calculation",
+        )
+        source: str = Field(
+            default="close",
+            description="Price column to use for calculations",
+        )
+
+    # WMA is displayed as overlay on price charts
+    display_as_overlay = True
+
+    # Aliases for common usage
+    _aliases = ["wma"]
+
+    def compute(self, df: pd.DataFrame) -> pd.Series:
+        """
+        Compute the Weighted Moving Average (WMA) for the given data.
+
+        Args:
+            df (pd.DataFrame): DataFrame containing price data
+
+        Returns:
+            pd.Series: Series containing WMA values
+
+        Raises:
+            DataError: If input data is invalid or insufficient
+        """
+        # Get parameters from self.params (validated by BaseIndicator)
+        source: str = self.params["source"]
+        period: int = self.params["period"]
+
+        self.validate_input_data(df, [source])
+        self.validate_sufficient_data(df, period)
+
+        logger.debug(
+            f"Computing WMA with period={period} on DataFrame with {len(df)} rows"
+        )
+
+        try:
+            # Calculate WMA using linearly decreasing weights
+            # Weights: [1, 2, 3, ..., period] / sum(1..period)
+            weights = np.arange(1, period + 1)
+            weights_sum = weights.sum()
+
+            source_data = df[source]
+
+            # Use rolling apply with weighted average
+            def weighted_mean(x: np.ndarray) -> float:
+                return np.sum(weights * x) / weights_sum
+
+            wma = source_data.rolling(window=period).apply(weighted_mean, raw=True)
+
+            # M3a: Return unnamed Series (engine handles naming)
+            result_series = pd.Series(wma.values, index=df.index)
+
+            logger.debug(
+                f"WMA calculation completed, non-NaN values: {result_series.count()}"
+            )
+            return result_series
+
+        except Exception as e:
+            error_msg = f"Error calculating WMA: {str(e)}"
+            logger.error(error_msg)
+            raise DataError(
+                message=error_msg,
+                error_code="DATA-CalculationError",
+                details={"indicator": "WMA", "error": str(e)},
             ) from e

@@ -11,6 +11,7 @@ Author: KTRDR
 from typing import Any
 
 import pandas as pd
+from pydantic import Field
 
 from ktrdr import get_logger
 from ktrdr.errors import DataError
@@ -51,6 +52,26 @@ class SuperTrendIndicator(BaseIndicator):
     - multiplier: 3.0 (ATR multiplier for band calculation)
     """
 
+    class Params(BaseIndicator.Params):
+        """SuperTrend parameter schema with validation."""
+
+        period: int = Field(
+            default=10,
+            ge=2,
+            le=200,
+            strict=True,
+            description="Period for ATR calculation",
+        )
+        multiplier: float = Field(
+            default=3.0,
+            gt=0,
+            le=10.0,
+            description="Multiplier for ATR to determine band width",
+        )
+
+    # SuperTrend is displayed as overlay on price chart
+    display_as_overlay = True
+
     @classmethod
     def is_multi_output(cls) -> bool:
         """SuperTrend produces multiple outputs (SuperTrend and ST_Direction)."""
@@ -60,44 +81,6 @@ class SuperTrendIndicator(BaseIndicator):
     def get_output_names(cls) -> list[str]:
         """Return semantic output names for SuperTrend."""
         return ["trend", "direction"]
-
-    def __init__(self, period: int = 10, multiplier: float = 3.0):
-        """
-        Initialize SuperTrend indicator.
-
-        Args:
-            period: Period for ATR calculation (default: 10)
-            multiplier: Multiplier for ATR to determine band width (default: 3.0)
-        """
-        # Call parent constructor - SuperTrend can be displayed as overlay
-        super().__init__(
-            name="SuperTrend",
-            display_as_overlay=True,
-            period=period,
-            multiplier=multiplier,
-        )
-
-    def _validate_params(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Validate indicator parameters."""
-        period = params.get("period", 10)
-        multiplier = params.get("multiplier", 3.0)
-
-        if not isinstance(period, int) or period < 1:
-            raise ValueError("period must be a positive integer")
-
-        if period < 2:
-            raise ValueError("period must be at least 2")
-
-        if period > 200:
-            raise ValueError("period should not exceed 200 for practical purposes")
-
-        if not isinstance(multiplier, (int, float)) or multiplier <= 0:
-            raise ValueError("multiplier must be a positive number")
-
-        if multiplier > 10:
-            raise ValueError("multiplier should not exceed 10 for practical purposes")
-
-        return {"period": period, "multiplier": multiplier}
 
     def compute(self, data: pd.DataFrame) -> pd.DataFrame:
         """
@@ -112,9 +95,9 @@ class SuperTrendIndicator(BaseIndicator):
         Raises:
             DataError: If required columns are missing or insufficient data
         """
-        # Get parameters from self.params
-        period = self.params.get("period", 10)
-        multiplier = self.params.get("multiplier", 3.0)
+        # Get parameters from self.params (validated by BaseIndicator)
+        period: int = self.params["period"]
+        multiplier: float = self.params["multiplier"]
 
         # Check required columns
         required_columns = ["high", "low", "close"]

@@ -7,6 +7,7 @@ filtering out minor fluctuations based on a percentage threshold.
 
 import numpy as np
 import pandas as pd
+from pydantic import Field
 
 from ..errors import DataError
 from .base_indicator import BaseIndicator
@@ -24,28 +25,24 @@ class ZigZagIndicator(BaseIndicator):
     - Visualizing market structure
     """
 
-    def __init__(self, threshold: float = 0.05, source: str = "close", **kwargs):
-        """
-        Initialize ZigZag indicator.
+    class Params(BaseIndicator.Params):
+        """ZigZag parameter schema with validation."""
 
-        Args:
-            threshold: Minimum percentage move to constitute a reversal (default: 0.05 = 5%)
-            source: Source column for calculation (default: "close")
-            **kwargs: Additional parameters
-        """
-        # Validate parameters first
-        if threshold <= 0 or threshold >= 1:
-            raise ValueError(f"Threshold must be between 0 and 1, got {threshold}")
+        threshold: float = Field(
+            default=0.05,
+            gt=0,
+            lt=1,
+            strict=True,
+            description="Minimum percentage move to constitute a reversal (0-1 exclusive)",
+        )
+        source: str = Field(
+            default="close",
+            strict=True,
+            description="Source column for calculation",
+        )
 
-        # Generate name based on threshold
-        name = f"ZigZag_{int(threshold * 100)}"
-
-        # Call parent constructor with required name parameter
-        super().__init__(name=name, display_as_overlay=True, **kwargs)
-
-        # Store our specific parameters
-        self.threshold = threshold
-        self.source = source
+    # ZigZag is displayed as price overlay
+    display_as_overlay = True
 
     def compute(self, data: pd.DataFrame) -> pd.Series:
         """
@@ -57,14 +54,17 @@ class ZigZagIndicator(BaseIndicator):
         Returns:
             Series with ZigZag values (NaN where no ZigZag point exists)
         """
-        if self.source not in data.columns:
+        threshold: float = self.params["threshold"]
+        source: str = self.params["source"]
+
+        if source not in data.columns:
             raise DataError(
-                f"Source column '{self.source}' not found in data",
+                f"Source column '{source}' not found in data",
                 "DATA-ColumnMissing",
-                {"column": self.source, "available": list(data.columns)},
+                {"column": source, "available": list(data.columns)},
             )
 
-        prices = data[self.source].values
+        prices = data[source].values
         if len(prices) < 3:
             raise DataError(
                 f"Insufficient data: {len(prices)} points available, 3 required",
@@ -91,7 +91,7 @@ class ZigZagIndicator(BaseIndicator):
 
             if direction is None:
                 # Determine initial direction
-                if abs(pct_change) >= self.threshold:
+                if abs(pct_change) >= threshold:
                     if pct_change > 0:
                         direction = 1  # Uptrend
                     else:
@@ -110,7 +110,7 @@ class ZigZagIndicator(BaseIndicator):
                     last_extreme_idx = i
                     last_extreme_price = current_price
 
-                elif pct_change <= -self.threshold:
+                elif pct_change <= -threshold:
                     # Significant decline - trend reversal
                     direction = -1
                     zigzag[i] = current_price
@@ -125,7 +125,7 @@ class ZigZagIndicator(BaseIndicator):
                     last_extreme_idx = i
                     last_extreme_price = current_price
 
-                elif pct_change >= self.threshold:
+                elif pct_change >= threshold:
                     # Significant advance - trend reversal
                     direction = 1
                     zigzag[i] = current_price

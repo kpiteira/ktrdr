@@ -11,6 +11,7 @@ Author: KTRDR
 from typing import Any
 
 import pandas as pd
+from pydantic import Field
 
 from ktrdr import get_logger
 from ktrdr.errors import DataError
@@ -45,6 +46,24 @@ class DonchianChannelsIndicator(BaseIndicator):
     - Use longer periods for smoother, more reliable signals
     """
 
+    class Params(BaseIndicator.Params):
+        """DonchianChannels parameter schema with validation."""
+
+        period: int = Field(
+            default=20,
+            ge=2,
+            le=500,
+            strict=True,
+            description="Number of periods for channel calculation",
+        )
+        include_middle: bool = Field(
+            default=True,
+            description="Whether to include middle line calculation",
+        )
+
+    # DonchianChannels is displayed as overlay on price chart
+    display_as_overlay = True
+
     @classmethod
     def is_multi_output(cls) -> bool:
         """Donchian Channels produces multiple outputs (Upper, Lower, and optionally Middle)."""
@@ -54,38 +73,6 @@ class DonchianChannelsIndicator(BaseIndicator):
     def get_output_names(cls) -> list[str]:
         """Return semantic output names for Donchian Channels."""
         return ["upper", "middle", "lower"]
-
-    def __init__(self, period: int = 20, include_middle: bool = True):
-        """
-        Initialize Donchian Channels indicator.
-
-        Args:
-            period: Number of periods for channel calculation (default: 20)
-            include_middle: Whether to include middle line calculation (default: True)
-        """
-        # Call parent constructor - Donchian Channels can be displayed as overlay
-        super().__init__(
-            name="DonchianChannels",
-            display_as_overlay=True,
-            period=period,
-            include_middle=include_middle,
-        )
-
-    def _validate_params(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Validate indicator parameters."""
-        period = params.get("period", 20)
-        include_middle = params.get("include_middle", True)
-
-        if not isinstance(period, int) or period < 1:
-            raise ValueError("period must be a positive integer")
-
-        if period < 2:
-            raise ValueError("period must be at least 2")
-
-        if period > 500:
-            raise ValueError("period should not exceed 500 for practical purposes")
-
-        return {"period": period, "include_middle": include_middle}
 
     def compute(self, data: pd.DataFrame) -> pd.DataFrame:
         """
@@ -100,8 +87,8 @@ class DonchianChannelsIndicator(BaseIndicator):
         Raises:
             DataError: If required columns are missing or insufficient data
         """
-        # Get parameters from self.params
-        period = self.params.get("period", 20)
+        # Get parameters from self.params (validated by BaseIndicator)
+        period: int = self.params["period"]
         # M3b: include_middle ignored, always include middle in core outputs
 
         # Check required columns

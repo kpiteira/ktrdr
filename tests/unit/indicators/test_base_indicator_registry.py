@@ -200,7 +200,7 @@ class TestBackwardCompatibility:
 
     def test_existing_rsi_still_works(self) -> None:
         """Test that existing RSIIndicator still works correctly."""
-        from ktrdr.indicators import RSIIndicator
+        from ktrdr.indicators.rsi_indicator import RSIIndicator
 
         # Create RSI with custom params
         rsi = RSIIndicator(period=21, source="high")
@@ -213,8 +213,8 @@ class TestRSIParamsIntegration:
 
     def test_rsi_has_params_class(self) -> None:
         """Test that RSI has a proper Params nested class."""
-        from ktrdr.indicators import RSIIndicator
         from ktrdr.indicators.base_indicator import BaseIndicator
+        from ktrdr.indicators.rsi_indicator import RSIIndicator
 
         assert hasattr(RSIIndicator, "Params")
         # Should be a subclass of BaseIndicator.Params
@@ -234,7 +234,7 @@ class TestRSIParamsIntegration:
 
     def test_rsi_direct_attribute_access(self) -> None:
         """Test that RSI params are accessible as direct attributes."""
-        from ktrdr.indicators import RSIIndicator
+        from ktrdr.indicators.rsi_indicator import RSIIndicator
 
         rsi = RSIIndicator(period=21, source="high")
 
@@ -249,7 +249,7 @@ class TestRSIParamsIntegration:
     def test_rsi_invalid_period_type_raises_data_error(self) -> None:
         """Test that invalid period type raises DataError."""
         from ktrdr.errors import DataError
-        from ktrdr.indicators import RSIIndicator
+        from ktrdr.indicators.rsi_indicator import RSIIndicator
 
         with pytest.raises(DataError) as exc_info:
             RSIIndicator(period="14")  # String instead of int
@@ -261,7 +261,7 @@ class TestRSIParamsIntegration:
     def test_rsi_invalid_period_value_raises_data_error(self) -> None:
         """Test that period < 2 raises DataError."""
         from ktrdr.errors import DataError
-        from ktrdr.indicators import RSIIndicator
+        from ktrdr.indicators.rsi_indicator import RSIIndicator
 
         with pytest.raises(DataError) as exc_info:
             RSIIndicator(period=1)  # Too small
@@ -271,7 +271,7 @@ class TestRSIParamsIntegration:
 
     def test_rsi_display_as_overlay_is_false(self) -> None:
         """Test that RSI has display_as_overlay=False (not overlaid on price)."""
-        from ktrdr.indicators import RSIIndicator
+        from ktrdr.indicators.rsi_indicator import RSIIndicator
 
         rsi = RSIIndicator()
         assert rsi.display_as_overlay is False

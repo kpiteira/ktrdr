@@ -130,18 +130,16 @@ class TestDistanceFromMAIndicator:
         assert exc_info.value.error_code == "DATA-MissingColumn"
 
     def test_invalid_ma_type_error(self):
-        """Test error handling for invalid moving average type."""
-        data = create_test_data()
-        # Create indicator with invalid MA type by directly setting params
-        indicator = DistanceFromMAIndicator()
-        indicator.params["ma_type"] = "INVALID"
+        """Test error handling for invalid moving average type.
 
+        With the Params pattern, invalid ma_type is rejected at construction time.
+        This test verifies construction-time validation.
+        """
         with pytest.raises(DataError) as exc_info:
-            indicator.compute(data)
+            DistanceFromMAIndicator(ma_type="INVALID")
 
-        # The error message comes from schema validation
-        assert "Parameter 'ma_type' must be one of" in str(exc_info.value)
-        assert exc_info.value.error_code == "PARAM-InvalidOption"
+        # The error comes from Pydantic validation via BaseIndicator
+        assert exc_info.value.error_code == "INDICATOR-InvalidParameters"
 
     def test_zero_ma_values_handling(self):
         """Test handling of zero or near-zero moving average values."""

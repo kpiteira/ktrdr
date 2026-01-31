@@ -1,9 +1,8 @@
 """Unit tests for IndicatorEngine registry integration.
 
-Tests the registry-first lookup pattern introduced in Task 1.4:
-- INDICATOR_REGISTRY is tried first for indicator lookup
-- BUILT_IN_INDICATORS is used as fallback for non-migrated indicators
-- Error messages combine available types from both sources
+Tests the registry-only lookup pattern (M2 complete):
+- All indicator lookups use INDICATOR_REGISTRY
+- Error messages list available types from registry
 """
 
 import pandas as pd
@@ -16,12 +15,10 @@ from ktrdr.indicators.rsi_indicator import RSIIndicator
 
 
 class TestIndicatorEngineRegistryLookup:
-    """Tests for registry-first indicator lookup."""
+    """Tests for registry-based indicator lookup."""
 
     def test_rsi_created_via_registry(self) -> None:
-        """RSI should be created via INDICATOR_REGISTRY, not BUILT_IN_INDICATORS."""
-        # RSI is in both registry and BUILT_IN_INDICATORS
-        # The registry lookup should be used first
+        """RSI should be created via INDICATOR_REGISTRY."""
         assert "rsi" in INDICATOR_REGISTRY
 
         indicators = {"rsi_14": IndicatorDefinition(type="rsi", period=14)}
@@ -33,7 +30,6 @@ class TestIndicatorEngineRegistryLookup:
 
     def test_registry_case_variants_work(self) -> None:
         """All case variants should work via registry lookup."""
-        # These variants should all resolve via INDICATOR_REGISTRY
         case_variants = ["rsi", "RSI", "rsiindicator", "RSIIndicator"]
 
         for variant in case_variants:
@@ -45,12 +41,11 @@ class TestIndicatorEngineRegistryLookup:
                 engine._indicators["test_ind"], RSIIndicator
             ), f"Case variant '{variant}' should resolve to RSIIndicator"
 
-    def test_non_migrated_indicator_uses_fallback(self) -> None:
-        """Indicators not in registry should still work via BUILT_IN_INDICATORS fallback."""
-        # Find an indicator that's in BUILT_IN_INDICATORS but NOT in registry
-        # During M1, only RSI is migrated, so others should use fallback
-        # EMA is a good test case
+    def test_ema_created_via_registry(self) -> None:
+        """EMA should be created via INDICATOR_REGISTRY."""
         from ktrdr.indicators.ma_indicators import ExponentialMovingAverage
+
+        assert "ema" in INDICATOR_REGISTRY
 
         indicators = {"ema_20": IndicatorDefinition(type="ema", period=20)}
         engine = IndicatorEngine(indicators)
@@ -84,10 +79,10 @@ class TestIndicatorEngineRegistryLookup:
 
 
 class TestIndicatorEngineErrorMessages:
-    """Tests for error messages combining registry and fallback types."""
+    """Tests for error messages from registry-only lookup."""
 
     def test_unknown_type_lists_available_types(self) -> None:
-        """Error for unknown type should list types from both registry and fallback."""
+        """Error for unknown type should list available types from registry."""
         indicators = {"bad_ind": IndicatorDefinition(type="nonexistent_type")}
 
         with pytest.raises(ValueError, match="Unknown indicator type"):
@@ -104,13 +99,12 @@ class TestIndicatorEngineErrorMessages:
         # 'rsi' should be listed (from registry)
         assert "rsi" in error_msg.lower()
 
-    def test_error_message_includes_fallback_types(self) -> None:
-        """Error message should include types from BUILT_IN_INDICATORS fallback."""
+    def test_error_message_includes_available_keyword(self) -> None:
+        """Error message should include 'Available' with type list."""
         indicators = {"bad_ind": IndicatorDefinition(type="nonexistent_type")}
 
         with pytest.raises(ValueError) as exc_info:
             IndicatorEngine(indicators)
 
         error_msg = str(exc_info.value)
-        # Should include some fallback types
         assert "Available" in error_msg

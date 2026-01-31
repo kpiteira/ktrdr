@@ -5,14 +5,12 @@ Average True Range is a volatility indicator that measures the average of true r
 over a specified period. It helps traders assess the volatility of a security.
 """
 
-from typing import Any
-
 import pandas as pd
+from pydantic import Field
 
 from ktrdr import get_logger
 from ktrdr.errors import DataError
 from ktrdr.indicators.base_indicator import BaseIndicator
-from ktrdr.indicators.schemas import ATR_SCHEMA
 
 # Create module-level logger
 logger = get_logger(__name__)
@@ -39,36 +37,19 @@ class ATRIndicator(BaseIndicator):
         period (int): Lookback period for ATR calculation
     """
 
-    def __init__(self, period: int = 14):
-        """
-        Initialize the ATR indicator.
+    class Params(BaseIndicator.Params):
+        """ATR parameter schema with validation."""
 
-        Args:
-            period: Lookback period for ATR calculation
-        """
-        # Call parent constructor with display_as_overlay=False (separate panel)
-        super().__init__(
-            name="ATR",
-            display_as_overlay=False,
-            period=period,
+        period: int = Field(
+            default=14,
+            ge=1,
+            le=100,
+            strict=True,
+            description="Lookback period for ATR calculation",
         )
 
-        logger.debug(f"Initialized ATR indicator with period={period}")
-
-    def _validate_params(self, params: dict[str, Any]) -> dict[str, Any]:
-        """
-        Validate parameters for ATR indicator using schema-based validation.
-
-        Args:
-            params: Parameters to validate
-
-        Returns:
-            Validated parameters with defaults applied
-
-        Raises:
-            DataError: If parameters are invalid
-        """
-        return ATR_SCHEMA.validate(params)
+    # ATR is displayed in a separate panel (not overlay on price)
+    display_as_overlay = False
 
     def compute(self, data: pd.DataFrame) -> pd.Series:
         """
@@ -84,7 +65,7 @@ class ATRIndicator(BaseIndicator):
             DataError: If required columns are missing or insufficient data
         """
         # Get parameters from self.params (validated by BaseIndicator)
-        period = self.params.get("period", 14)
+        period: int = self.params["period"]
 
         # Check required columns
         required_columns = ["high", "low", "close"]
