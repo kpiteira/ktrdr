@@ -199,8 +199,8 @@ class TestTrainingEndpoints:
             "/api/v1/trainings/start", json=payload
         )
 
-        # Should return 500 error when service fails
-        assert response.status_code == 500
+        # DataError returns 503 (data unavailability)
+        assert response.status_code == 503
         assert "Insufficient training data" in response.json()["detail"]
 
     @pytest.mark.api
@@ -239,8 +239,8 @@ class TestTrainingEndpoints:
             "/api/v1/trainings/running_training/performance"
         )
 
-        # DataError returns 400 (Bad Request), not 500
-        assert response.status_code == 400
+        # DataError returns 503 (data unavailability)
+        assert response.status_code == 503
         assert "Training not completed" in response.json()["detail"]
 
     @pytest.mark.api

@@ -33,22 +33,22 @@ services:
     volumes:
       - /mnt/ktrdr_data:/mnt/ktrdr_data:rw
     environment:
-      KTRDR_API_URL: http://backend.ktrdr.home.mynerd.place:8000
-      WORKER_TYPE: training
-      WORKER_PORT: 5005
-      WORKER_PUBLIC_BASE_URL: http://ktrdr-gpuworker.ktrdr.home.mynerd.place:5005
-      WORKER_HAS_GPU: "true"
-      SHARED_MOUNT_PATH: /mnt/ktrdr_data
-      DATA_DIR: /mnt/ktrdr_data/data
-      MODELS_DIR: /mnt/ktrdr_data/models
-      STRATEGIES_DIR: /mnt/ktrdr_data/strategies
-      OTLP_ENDPOINT: http://backend.ktrdr.home.mynerd.place:4317
+      KTRDR_API_CLIENT_BASE_URL: http://backend.ktrdr.home.mynerd.place:8000
+      KTRDR_WORKER_TYPE: training
+      KTRDR_WORKER_PORT: 5005
+      KTRDR_WORKER_PUBLIC_BASE_URL: http://ktrdr-gpuworker.ktrdr.home.mynerd.place:5005
+      KTRDR_WORKER_HAS_GPU: "true"
+      KTRDR_DATA_SHARED_MOUNT_PATH: /mnt/ktrdr_data
+      KTRDR_DATA_DIR: /mnt/ktrdr_data/data
+      KTRDR_DATA_MODELS_DIR: /mnt/ktrdr_data/models
+      KTRDR_DATA_STRATEGIES_DIR: /mnt/ktrdr_data/strategies
+      KTRDR_OTEL_OTLP_ENDPOINT: http://backend.ktrdr.home.mynerd.place:4317
       # Database access for checkpointing
-      DB_HOST: backend.ktrdr.home.mynerd.place
-      DB_PORT: 5432
-      DB_NAME: ktrdr
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
+      KTRDR_DB_HOST: backend.ktrdr.home.mynerd.place
+      KTRDR_DB_PORT: 5432
+      KTRDR_DB_NAME: ktrdr
+      KTRDR_DB_USER: ${DB_USER}
+      KTRDR_DB_PASSWORD: ${DB_PASSWORD}
       # GPU-specific settings
       NVIDIA_VISIBLE_DEVICES: all
       CUDA_VISIBLE_DEVICES: "0"

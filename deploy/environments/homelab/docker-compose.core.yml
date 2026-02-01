@@ -6,11 +6,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     environment:
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${KTRDR_DB_NAME}
+      POSTGRES_USER: ${KTRDR_DB_USER}
+      POSTGRES_PASSWORD: ${KTRDR_DB_PASSWORD}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U ${KTRDR_DB_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -31,23 +31,22 @@ services:
       - /mnt/ktrdr_data/models:/app/models:ro
       - /mnt/ktrdr_data/data:/app/data:rw  # RW for budget tracking
     environment:
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_NAME: ${DB_NAME}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      JWT_SECRET: ${JWT_SECRET}
+      KTRDR_DB_HOST: db
+      KTRDR_DB_PORT: 5432
+      KTRDR_DB_NAME: ${KTRDR_DB_NAME}
+      KTRDR_DB_USER: ${KTRDR_DB_USER}
+      KTRDR_DB_PASSWORD: ${KTRDR_DB_PASSWORD}
+      KTRDR_AUTH_JWT_SECRET: ${KTRDR_AUTH_JWT_SECRET}
       KTRDR_API_HOST: 0.0.0.0
       KTRDR_API_PORT: 8000
-      ENVIRONMENT: homelab
-      LOG_LEVEL: INFO
-      OTLP_ENDPOINT: http://jaeger:4317
+      KTRDR_API_ENVIRONMENT: homelab
+      KTRDR_LOG_LEVEL: INFO
+      KTRDR_OTEL_OTLP_ENDPOINT: http://jaeger:4317
       # Shared NFS mount paths for data, models, and strategies
-      SHARED_MOUNT_PATH: /mnt/ktrdr_data
-      DATA_DIR: /mnt/ktrdr_data/data
-      MODELS_DIR: /mnt/ktrdr_data/models
-      STRATEGIES_DIR: /mnt/ktrdr_data/strategies
-      CHECKPOINT_DIR: /mnt/ktrdr_data/checkpoints
+      KTRDR_DATA_DIR: /mnt/ktrdr_data/data
+      KTRDR_DATA_MODELS_DIR: /mnt/ktrdr_data/models
+      KTRDR_DATA_STRATEGIES_DIR: /mnt/ktrdr_data/strategies
+      KTRDR_CHECKPOINT_DIR: /mnt/ktrdr_data/checkpoints
     depends_on:
       db:
         condition: service_healthy
@@ -115,11 +114,11 @@ services:
     volumes:
       - /mnt/ktrdr_data:/mnt/ktrdr_data:ro
     environment:
-      ENVIRONMENT: homelab
-      LOG_LEVEL: INFO
+      KTRDR_API_ENVIRONMENT: homelab
+      KTRDR_LOG_LEVEL: INFO
       PYTHONPATH: /app/.venv/lib/python3.13/site-packages:/app:/app/mcp
-      KTRDR_API_URL: http://backend:8000/api/v1
-      OTLP_ENDPOINT: http://jaeger:4317
+      KTRDR_API_CLIENT_BASE_URL: http://backend:8000/api/v1
+      KTRDR_OTEL_OTLP_ENDPOINT: http://jaeger:4317
     working_dir: /app/mcp
     stdin_open: true
     networks:

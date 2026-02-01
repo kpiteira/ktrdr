@@ -102,15 +102,17 @@ class TestDecisionOrchestrator:
         self.strategies_dir = Path(self.temp_dir) / "strategies"
         self.strategies_dir.mkdir(parents=True)
 
-        # Create test strategy config
+        # Create test strategy config (v3 format)
         self.strategy_config = {
             "name": "test_strategy",
-            "indicators": [
-                {"name": "rsi", "period": 14, "source": "close"},
-                {"name": "sma", "period": 20, "source": "close"},
-            ],
+            "version": "3.0",
+            "indicators": {
+                "rsi_14": {"type": "rsi", "period": 14, "source": "close"},
+                "sma_20": {"type": "sma", "period": 20, "source": "close"},
+            },
             "fuzzy_sets": {
-                "rsi": {
+                "rsi_fuzzy": {
+                    "indicator": "rsi_14",
                     "oversold": {"type": "triangular", "parameters": [0, 10, 30]},
                     "neutral": {"type": "triangular", "parameters": [25, 50, 75]},
                     "overbought": {"type": "triangular", "parameters": [70, 90, 100]},

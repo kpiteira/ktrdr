@@ -39,22 +39,22 @@ services:
     volumes:
       - /mnt/ktrdr_data:/mnt/ktrdr_data:rw  # RW for checkpoint artifacts
     environment:
-      KTRDR_API_URL: http://backend.ktrdr.home.mynerd.place:8000
-      WORKER_TYPE: backtesting
-      WORKER_PORT: 5003
-      WORKER_PUBLIC_BASE_URL: http://${WORKER_HOSTNAME:-workers-b.ktrdr.home.mynerd.place}:5003
-      SHARED_MOUNT_PATH: /mnt/ktrdr_data
-      DATA_DIR: /mnt/ktrdr_data/data
-      MODELS_DIR: /mnt/ktrdr_data/models
-      STRATEGIES_DIR: /mnt/ktrdr_data/strategies
-      CHECKPOINT_DIR: /mnt/ktrdr_data/checkpoints
-      OTLP_ENDPOINT: http://backend.ktrdr.home.mynerd.place:4317
+      KTRDR_API_CLIENT_BASE_URL: http://backend.ktrdr.home.mynerd.place:8000
+      KTRDR_WORKER_TYPE: backtesting
+      KTRDR_WORKER_PORT: 5003
+      KTRDR_WORKER_PUBLIC_BASE_URL: http://${WORKER_HOSTNAME:-workers-b.ktrdr.home.mynerd.place}:5003
+      KTRDR_DATA_SHARED_MOUNT_PATH: /mnt/ktrdr_data
+      KTRDR_DATA_DIR: /mnt/ktrdr_data/data
+      KTRDR_DATA_MODELS_DIR: /mnt/ktrdr_data/models
+      KTRDR_DATA_STRATEGIES_DIR: /mnt/ktrdr_data/strategies
+      KTRDR_CHECKPOINT_DIR: /mnt/ktrdr_data/checkpoints
+      KTRDR_OTEL_OTLP_ENDPOINT: http://backend.ktrdr.home.mynerd.place:4317
       # Database access for checkpointing
-      DB_HOST: backend.ktrdr.home.mynerd.place
-      DB_PORT: 5432
-      DB_NAME: ktrdr
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
+      KTRDR_DB_HOST: backend.ktrdr.home.mynerd.place
+      KTRDR_DB_PORT: 5432
+      KTRDR_DB_NAME: ktrdr
+      KTRDR_DB_USER: ${DB_USER}
+      KTRDR_DB_PASSWORD: ${DB_PASSWORD}
     command: ["python", "-m", "uvicorn", "ktrdr.backtesting.backtest_worker:app", "--host", "0.0.0.0", "--port", "5003"]
     networks:
       - ktrdr-workers
@@ -79,21 +79,21 @@ services:
     volumes:
       - /mnt/ktrdr_data:/mnt/ktrdr_data:rw  # RW for checkpoint artifacts
     environment:
-      KTRDR_API_URL: http://backend.ktrdr.home.mynerd.place:8000
-      WORKER_TYPE: backtesting
-      WORKER_PORT: 5004
-      WORKER_PUBLIC_BASE_URL: http://${WORKER_HOSTNAME:-workers-b.ktrdr.home.mynerd.place}:5004
-      SHARED_MOUNT_PATH: /mnt/ktrdr_data
-      DATA_DIR: /mnt/ktrdr_data/data
-      MODELS_DIR: /mnt/ktrdr_data/models
-      STRATEGIES_DIR: /mnt/ktrdr_data/strategies
-      CHECKPOINT_DIR: /mnt/ktrdr_data/checkpoints
-      OTLP_ENDPOINT: http://backend.ktrdr.home.mynerd.place:4317
-      DB_HOST: backend.ktrdr.home.mynerd.place
-      DB_PORT: 5432
-      DB_NAME: ktrdr
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
+      KTRDR_API_CLIENT_BASE_URL: http://backend.ktrdr.home.mynerd.place:8000
+      KTRDR_WORKER_TYPE: backtesting
+      KTRDR_WORKER_PORT: 5004
+      KTRDR_WORKER_PUBLIC_BASE_URL: http://${WORKER_HOSTNAME:-workers-b.ktrdr.home.mynerd.place}:5004
+      KTRDR_DATA_SHARED_MOUNT_PATH: /mnt/ktrdr_data
+      KTRDR_DATA_DIR: /mnt/ktrdr_data/data
+      KTRDR_DATA_MODELS_DIR: /mnt/ktrdr_data/models
+      KTRDR_DATA_STRATEGIES_DIR: /mnt/ktrdr_data/strategies
+      KTRDR_CHECKPOINT_DIR: /mnt/ktrdr_data/checkpoints
+      KTRDR_OTEL_OTLP_ENDPOINT: http://backend.ktrdr.home.mynerd.place:4317
+      KTRDR_DB_HOST: backend.ktrdr.home.mynerd.place
+      KTRDR_DB_PORT: 5432
+      KTRDR_DB_NAME: ktrdr
+      KTRDR_DB_USER: ${DB_USER}
+      KTRDR_DB_PASSWORD: ${DB_PASSWORD}
     command: ["python", "-m", "uvicorn", "ktrdr.backtesting.backtest_worker:app", "--host", "0.0.0.0", "--port", "5004"]
     networks:
       - ktrdr-workers
@@ -120,21 +120,21 @@ services:
     volumes:
       - /mnt/ktrdr_data:/mnt/ktrdr_data:rw  # RW for checkpoint artifacts
     environment:
-      KTRDR_API_URL: http://backend.ktrdr.home.mynerd.place:8000
-      WORKER_TYPE: backtesting
-      WORKER_PORT: 5007
-      WORKER_PUBLIC_BASE_URL: http://${WORKER_HOSTNAME:-workers-b.ktrdr.home.mynerd.place}:5007
-      SHARED_MOUNT_PATH: /mnt/ktrdr_data
-      DATA_DIR: /mnt/ktrdr_data/data
-      MODELS_DIR: /mnt/ktrdr_data/models
-      STRATEGIES_DIR: /mnt/ktrdr_data/strategies
-      CHECKPOINT_DIR: /mnt/ktrdr_data/checkpoints
-      OTLP_ENDPOINT: http://backend.ktrdr.home.mynerd.place:4317
-      DB_HOST: backend.ktrdr.home.mynerd.place
-      DB_PORT: 5432
-      DB_NAME: ktrdr
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
+      KTRDR_API_CLIENT_BASE_URL: http://backend.ktrdr.home.mynerd.place:8000
+      KTRDR_WORKER_TYPE: backtesting
+      KTRDR_WORKER_PORT: 5007
+      KTRDR_WORKER_PUBLIC_BASE_URL: http://${WORKER_HOSTNAME:-workers-b.ktrdr.home.mynerd.place}:5007
+      KTRDR_DATA_SHARED_MOUNT_PATH: /mnt/ktrdr_data
+      KTRDR_DATA_DIR: /mnt/ktrdr_data/data
+      KTRDR_DATA_MODELS_DIR: /mnt/ktrdr_data/models
+      KTRDR_DATA_STRATEGIES_DIR: /mnt/ktrdr_data/strategies
+      KTRDR_CHECKPOINT_DIR: /mnt/ktrdr_data/checkpoints
+      KTRDR_OTEL_OTLP_ENDPOINT: http://backend.ktrdr.home.mynerd.place:4317
+      KTRDR_DB_HOST: backend.ktrdr.home.mynerd.place
+      KTRDR_DB_PORT: 5432
+      KTRDR_DB_NAME: ktrdr
+      KTRDR_DB_USER: ${DB_USER}
+      KTRDR_DB_PASSWORD: ${DB_PASSWORD}
     command: ["python", "-m", "uvicorn", "ktrdr.backtesting.backtest_worker:app", "--host", "0.0.0.0", "--port", "5007"]
     networks:
       - ktrdr-workers
@@ -164,21 +164,21 @@ services:
     volumes:
       - /mnt/ktrdr_data:/mnt/ktrdr_data:rw
     environment:
-      KTRDR_API_URL: http://backend.ktrdr.home.mynerd.place:8000
-      WORKER_TYPE: training
-      WORKER_PORT: 5005
-      WORKER_PUBLIC_BASE_URL: http://${WORKER_HOSTNAME:-workers-b.ktrdr.home.mynerd.place}:5005
-      SHARED_MOUNT_PATH: /mnt/ktrdr_data
-      DATA_DIR: /mnt/ktrdr_data/data
-      MODELS_DIR: /mnt/ktrdr_data/models
-      STRATEGIES_DIR: /mnt/ktrdr_data/strategies
-      CHECKPOINT_DIR: /mnt/ktrdr_data/checkpoints
-      OTLP_ENDPOINT: http://backend.ktrdr.home.mynerd.place:4317
-      DB_HOST: backend.ktrdr.home.mynerd.place
-      DB_PORT: 5432
-      DB_NAME: ktrdr
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
+      KTRDR_API_CLIENT_BASE_URL: http://backend.ktrdr.home.mynerd.place:8000
+      KTRDR_WORKER_TYPE: training
+      KTRDR_WORKER_PORT: 5005
+      KTRDR_WORKER_PUBLIC_BASE_URL: http://${WORKER_HOSTNAME:-workers-b.ktrdr.home.mynerd.place}:5005
+      KTRDR_DATA_SHARED_MOUNT_PATH: /mnt/ktrdr_data
+      KTRDR_DATA_DIR: /mnt/ktrdr_data/data
+      KTRDR_DATA_MODELS_DIR: /mnt/ktrdr_data/models
+      KTRDR_DATA_STRATEGIES_DIR: /mnt/ktrdr_data/strategies
+      KTRDR_CHECKPOINT_DIR: /mnt/ktrdr_data/checkpoints
+      KTRDR_OTEL_OTLP_ENDPOINT: http://backend.ktrdr.home.mynerd.place:4317
+      KTRDR_DB_HOST: backend.ktrdr.home.mynerd.place
+      KTRDR_DB_PORT: 5432
+      KTRDR_DB_NAME: ktrdr
+      KTRDR_DB_USER: ${DB_USER}
+      KTRDR_DB_PASSWORD: ${DB_PASSWORD}
     command: ["python", "-m", "uvicorn", "ktrdr.training.training_worker:app", "--host", "0.0.0.0", "--port", "5005"]
     networks:
       - ktrdr-workers
@@ -203,21 +203,21 @@ services:
     volumes:
       - /mnt/ktrdr_data:/mnt/ktrdr_data:rw
     environment:
-      KTRDR_API_URL: http://backend.ktrdr.home.mynerd.place:8000
-      WORKER_TYPE: training
-      WORKER_PORT: 5006
-      WORKER_PUBLIC_BASE_URL: http://${WORKER_HOSTNAME:-workers-b.ktrdr.home.mynerd.place}:5006
-      SHARED_MOUNT_PATH: /mnt/ktrdr_data
-      DATA_DIR: /mnt/ktrdr_data/data
-      MODELS_DIR: /mnt/ktrdr_data/models
-      STRATEGIES_DIR: /mnt/ktrdr_data/strategies
-      CHECKPOINT_DIR: /mnt/ktrdr_data/checkpoints
-      OTLP_ENDPOINT: http://backend.ktrdr.home.mynerd.place:4317
-      DB_HOST: backend.ktrdr.home.mynerd.place
-      DB_PORT: 5432
-      DB_NAME: ktrdr
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
+      KTRDR_API_CLIENT_BASE_URL: http://backend.ktrdr.home.mynerd.place:8000
+      KTRDR_WORKER_TYPE: training
+      KTRDR_WORKER_PORT: 5006
+      KTRDR_WORKER_PUBLIC_BASE_URL: http://${WORKER_HOSTNAME:-workers-b.ktrdr.home.mynerd.place}:5006
+      KTRDR_DATA_SHARED_MOUNT_PATH: /mnt/ktrdr_data
+      KTRDR_DATA_DIR: /mnt/ktrdr_data/data
+      KTRDR_DATA_MODELS_DIR: /mnt/ktrdr_data/models
+      KTRDR_DATA_STRATEGIES_DIR: /mnt/ktrdr_data/strategies
+      KTRDR_CHECKPOINT_DIR: /mnt/ktrdr_data/checkpoints
+      KTRDR_OTEL_OTLP_ENDPOINT: http://backend.ktrdr.home.mynerd.place:4317
+      KTRDR_DB_HOST: backend.ktrdr.home.mynerd.place
+      KTRDR_DB_PORT: 5432
+      KTRDR_DB_NAME: ktrdr
+      KTRDR_DB_USER: ${DB_USER}
+      KTRDR_DB_PASSWORD: ${DB_PASSWORD}
     command: ["python", "-m", "uvicorn", "ktrdr.training.training_worker:app", "--host", "0.0.0.0", "--port", "5006"]
     networks:
       - ktrdr-workers
@@ -244,21 +244,21 @@ services:
     volumes:
       - /mnt/ktrdr_data:/mnt/ktrdr_data:rw
     environment:
-      KTRDR_API_URL: http://backend.ktrdr.home.mynerd.place:8000
-      WORKER_TYPE: training
-      WORKER_PORT: 5008
-      WORKER_PUBLIC_BASE_URL: http://${WORKER_HOSTNAME:-workers-b.ktrdr.home.mynerd.place}:5008
-      SHARED_MOUNT_PATH: /mnt/ktrdr_data
-      DATA_DIR: /mnt/ktrdr_data/data
-      MODELS_DIR: /mnt/ktrdr_data/models
-      STRATEGIES_DIR: /mnt/ktrdr_data/strategies
-      CHECKPOINT_DIR: /mnt/ktrdr_data/checkpoints
-      OTLP_ENDPOINT: http://backend.ktrdr.home.mynerd.place:4317
-      DB_HOST: backend.ktrdr.home.mynerd.place
-      DB_PORT: 5432
-      DB_NAME: ktrdr
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
+      KTRDR_API_CLIENT_BASE_URL: http://backend.ktrdr.home.mynerd.place:8000
+      KTRDR_WORKER_TYPE: training
+      KTRDR_WORKER_PORT: 5008
+      KTRDR_WORKER_PUBLIC_BASE_URL: http://${WORKER_HOSTNAME:-workers-b.ktrdr.home.mynerd.place}:5008
+      KTRDR_DATA_SHARED_MOUNT_PATH: /mnt/ktrdr_data
+      KTRDR_DATA_DIR: /mnt/ktrdr_data/data
+      KTRDR_DATA_MODELS_DIR: /mnt/ktrdr_data/models
+      KTRDR_DATA_STRATEGIES_DIR: /mnt/ktrdr_data/strategies
+      KTRDR_CHECKPOINT_DIR: /mnt/ktrdr_data/checkpoints
+      KTRDR_OTEL_OTLP_ENDPOINT: http://backend.ktrdr.home.mynerd.place:4317
+      KTRDR_DB_HOST: backend.ktrdr.home.mynerd.place
+      KTRDR_DB_PORT: 5432
+      KTRDR_DB_NAME: ktrdr
+      KTRDR_DB_USER: ${DB_USER}
+      KTRDR_DB_PASSWORD: ${DB_PASSWORD}
     command: ["python", "-m", "uvicorn", "ktrdr.training.training_worker:app", "--host", "0.0.0.0", "--port", "5008"]
     networks:
       - ktrdr-workers

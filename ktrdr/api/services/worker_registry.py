@@ -20,6 +20,7 @@ from ktrdr.api.models.workers import (
     WorkerStatus,
     WorkerType,
 )
+from ktrdr.config.settings import get_worker_settings
 from ktrdr.monitoring.metrics import update_worker_metrics
 from ktrdr.monitoring.service_telemetry import trace_service_method
 
@@ -61,12 +62,17 @@ class WorkerRegistry:
         """Initialize an empty worker registry."""
         self._workers: dict[str, WorkerEndpoint] = {}
         self._health_check_task: asyncio.Task | None = None
-        self._health_check_interval: int = 10  # seconds
-        self._removal_threshold_seconds: int = 300  # 5 minutes
         self._operations_service: OperationsService | None = None
         # Shutdown mode flag (M7.5 Task 7.5.3)
         # When True, registration requests are rejected with 503
         self._shutting_down: bool = False
+
+        # Load health settings from configuration
+        settings = get_worker_settings()
+        self._health_check_interval: int = settings.health_check_interval
+        self._health_check_timeout: int = settings.health_check_timeout
+        self._health_check_failures_threshold: int = settings.health_check_failures
+        self._removal_threshold_seconds: int = settings.removal_threshold
 
     def set_operations_service(self, operations_service: OperationsService) -> None:
         """
@@ -549,7 +555,7 @@ class WorkerRegistry:
         worker = self._workers[worker_id]
 
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=self._health_check_timeout) as client:
                 response = await client.get(f"{worker.endpoint_url}/health")
 
                 if response.status_code == 200:
@@ -587,7 +593,7 @@ class WorkerRegistry:
         worker.last_health_check = datetime.now(UTC)
 
         # Mark as unavailable if threshold exceeded
-        if worker.health_check_failures >= 3:
+        if worker.health_check_failures >= self._health_check_failures_threshold:
             worker.status = WorkerStatus.TEMPORARILY_UNAVAILABLE
             logger.warning(
                 f"Worker {worker_id} marked TEMPORARILY_UNAVAILABLE "
