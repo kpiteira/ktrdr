@@ -109,3 +109,47 @@ Created `AgentGateSettings` class with prefix `KTRDR_GATE_` in `ktrdr/config/set
 
 ---
 
+## Task 5.3 Complete: Create `DataSettings` Class
+
+### Implementation Notes
+
+Created `DataSettings` class with prefix `KTRDR_DATA_` in `ktrdr/config/settings.py`:
+
+**Fields:**
+- `data_dir` (str, default "data") — Base data directory for OHLCV data
+- `models_dir` (str, default "models") — Directory for trained model storage
+- `cache_dir` (str, default "data/cache") — Directory for cached data
+- `max_segment_size` (int, default 5000) — Maximum data segment size for acquisition
+- `periodic_save_interval` (float, default 0.5) — Periodic save interval in minutes
+
+**Deprecated name support:**
+- `DATA_DIR` → `KTRDR_DATA_DIR`
+- `MODELS_DIR` → `KTRDR_DATA_MODELS_DIR`
+- `DATA_MAX_SEGMENT_SIZE` → `KTRDR_DATA_MAX_SEGMENT_SIZE`
+- `DATA_PERIODIC_SAVE_MIN` → `KTRDR_DATA_PERIODIC_SAVE_INTERVAL`
+
+### Gotchas
+
+**cache_dir has no deprecated name**: This is a new field with no existing env var to deprecate.
+
+**Default for data_dir is "data" not "./data"**: The existing code uses `os.getenv("DATA_DIR", "./data")` but we use "data" without the "./" prefix for cleaner path handling.
+
+### Tests
+
+19 unit tests in `tests/unit/config/test_data_settings.py`:
+- Default values (5 tests)
+- New env var names (5 tests)
+- Deprecated env var names (4 tests)
+- Precedence (1 test)
+- Validation (2 tests)
+- Getter caching (2 tests)
+
+### Next Task Notes (5.4: Create APIClientSettings)
+
+- Prefix: `KTRDR_API_CLIENT_`
+- Fields: base_url, timeout, retry_count
+- Note: `ApiServiceSettings` already exists — may need to update or extend it
+- Check for existing `KTRDR_API_URL` or similar env vars
+
+---
+

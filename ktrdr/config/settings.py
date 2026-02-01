@@ -1092,6 +1092,67 @@ class AgentGateSettings(BaseSettings):
         return self.is_live_mode() and not self.dry_run
 
 
+class DataSettings(BaseSettings):
+    """Data Storage Settings.
+
+    Provides data path configuration with support for both new (KTRDR_DATA_*)
+    and deprecated environment variable names.
+
+    Environment variables (new names - preferred):
+        KTRDR_DATA_DIR: Base data directory. Default: data
+        KTRDR_DATA_MODELS_DIR: Models directory. Default: models
+        KTRDR_DATA_CACHE_DIR: Cache directory. Default: data/cache
+        KTRDR_DATA_MAX_SEGMENT_SIZE: Max data segment size. Default: 5000
+        KTRDR_DATA_PERIODIC_SAVE_INTERVAL: Periodic save interval (minutes). Default: 0.5
+
+    Deprecated names (still work, emit warnings at startup):
+        DATA_DIR → KTRDR_DATA_DIR
+        MODELS_DIR → KTRDR_DATA_MODELS_DIR
+        DATA_MAX_SEGMENT_SIZE → KTRDR_DATA_MAX_SEGMENT_SIZE
+        DATA_PERIODIC_SAVE_MIN → KTRDR_DATA_PERIODIC_SAVE_INTERVAL
+    """
+
+    # Directory paths
+    data_dir: str = deprecated_field(
+        "data",
+        "KTRDR_DATA_DIR",
+        "DATA_DIR",
+        description="Base data directory for OHLCV data",
+    )
+    models_dir: str = deprecated_field(
+        "models",
+        "KTRDR_DATA_MODELS_DIR",
+        "MODELS_DIR",
+        description="Directory for trained model storage",
+    )
+    cache_dir: str = Field(
+        default="data/cache",
+        description="Directory for cached data",
+    )
+
+    # Acquisition settings
+    max_segment_size: int = deprecated_field(
+        5000,
+        "KTRDR_DATA_MAX_SEGMENT_SIZE",
+        "DATA_MAX_SEGMENT_SIZE",
+        gt=0,
+        description="Maximum data segment size for acquisition",
+    )
+    periodic_save_interval: float = deprecated_field(
+        0.5,
+        "KTRDR_DATA_PERIODIC_SAVE_INTERVAL",
+        "DATA_PERIODIC_SAVE_MIN",
+        gt=0,
+        description="Periodic save interval in minutes",
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_DATA_",
+        env_file=".env.local",
+        extra="ignore",
+    )
+
+
 class ApiServiceSettings(BaseSettings):
     """API Server configuration for client connections.
 
@@ -1224,6 +1285,12 @@ def get_agent_gate_settings() -> AgentGateSettings:
 
 
 @lru_cache
+def get_data_settings() -> DataSettings:
+    """Get data settings with caching."""
+    return DataSettings()
+
+
+@lru_cache
 def get_api_service_settings() -> ApiServiceSettings:
     """Get API service settings for client connections with caching."""
     return ApiServiceSettings()
@@ -1268,6 +1335,7 @@ def clear_settings_cache() -> None:
     get_worker_settings.cache_clear()
     get_agent_settings.cache_clear()
     get_agent_gate_settings.cache_clear()
+    get_data_settings.cache_clear()
 
 
 # Export settings classes and getters
@@ -1288,6 +1356,7 @@ __all__ = [
     "WorkerSettings",
     "AgentSettings",
     "AgentGateSettings",
+    "DataSettings",
     # Cached getters
     "get_api_settings",
     "get_auth_settings",
@@ -1305,6 +1374,7 @@ __all__ = [
     "get_worker_settings",
     "get_agent_settings",
     "get_agent_gate_settings",
+    "get_data_settings",
     # Utilities
     "clear_settings_cache",
     "deprecated_field",
