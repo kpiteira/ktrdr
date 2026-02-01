@@ -144,9 +144,3 @@ class BollingerBandsIndicator(BaseIndicator):
         )
 
         return result
-
-    def get_name(self) -> str:
-        """Get indicator name."""
-        period = self.params.get("period", 20)
-        multiplier = self.params.get("multiplier", 2.0)
-        return f"BollingerBands_{period}_{multiplier}"
