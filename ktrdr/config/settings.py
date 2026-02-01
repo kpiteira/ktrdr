@@ -878,6 +878,145 @@ class WorkerSettings(BaseSettings):
     )
 
 
+class AgentSettings(BaseSettings):
+    """Agent Process Settings.
+
+    Provides agent configuration with support for both new (KTRDR_AGENT_*)
+    and deprecated (AGENT_*) environment variable names.
+
+    Environment variables (new names - preferred):
+        KTRDR_AGENT_POLL_INTERVAL: Poll interval in seconds. Default: 5
+        KTRDR_AGENT_MODEL: LLM model to use. Default: claude-sonnet-4-20250514
+        KTRDR_AGENT_MAX_TOKENS: Max output tokens. Default: 4096
+        KTRDR_AGENT_TIMEOUT_SECONDS: Request timeout in seconds. Default: 300
+        KTRDR_AGENT_MAX_ITERATIONS: Max agentic iterations. Default: 10
+        KTRDR_AGENT_MAX_INPUT_TOKENS: Max input context tokens. Default: 50000
+        KTRDR_AGENT_DAILY_BUDGET: Daily cost budget in USD. Default: 5.0
+        KTRDR_AGENT_BUDGET_DIR: Budget data directory. Default: data/budget
+        KTRDR_AGENT_MAX_CONCURRENT_RESEARCHES: Max concurrent (0=unlimited). Default: 0
+        KTRDR_AGENT_CONCURRENCY_BUFFER: Concurrency buffer. Default: 1
+        KTRDR_AGENT_TRAINING_START_DATE: Default training start date
+        KTRDR_AGENT_TRAINING_END_DATE: Default training end date
+        KTRDR_AGENT_BACKTEST_START_DATE: Default backtest start date
+        KTRDR_AGENT_BACKTEST_END_DATE: Default backtest end date
+
+    Deprecated names (still work, emit warnings at startup):
+        AGENT_POLL_INTERVAL, AGENT_MODEL, AGENT_MAX_TOKENS, AGENT_TIMEOUT_SECONDS,
+        AGENT_MAX_ITERATIONS, AGENT_MAX_INPUT_TOKENS, AGENT_DAILY_BUDGET,
+        AGENT_BUDGET_DIR, AGENT_MAX_CONCURRENT_RESEARCHES, AGENT_CONCURRENCY_BUFFER,
+        AGENT_TRAINING_START_DATE, AGENT_TRAINING_END_DATE,
+        AGENT_BACKTEST_START_DATE, AGENT_BACKTEST_END_DATE
+    """
+
+    # Polling and timing
+    poll_interval: float = deprecated_field(
+        5.0,
+        "KTRDR_AGENT_POLL_INTERVAL",
+        "AGENT_POLL_INTERVAL",
+        gt=0,
+        description="Poll interval in seconds for agent loops",
+    )
+
+    # LLM configuration
+    model: str = deprecated_field(
+        "claude-sonnet-4-20250514",
+        "KTRDR_AGENT_MODEL",
+        "AGENT_MODEL",
+        description="LLM model identifier to use for agent",
+    )
+    max_tokens: int = deprecated_field(
+        4096,
+        "KTRDR_AGENT_MAX_TOKENS",
+        "AGENT_MAX_TOKENS",
+        gt=0,
+        description="Maximum output tokens per request",
+    )
+    timeout_seconds: int = deprecated_field(
+        300,
+        "KTRDR_AGENT_TIMEOUT_SECONDS",
+        "AGENT_TIMEOUT_SECONDS",
+        gt=0,
+        description="Request timeout in seconds",
+    )
+    max_iterations: int = deprecated_field(
+        10,
+        "KTRDR_AGENT_MAX_ITERATIONS",
+        "AGENT_MAX_ITERATIONS",
+        gt=0,
+        description="Maximum agentic iterations per task",
+    )
+    max_input_tokens: int = deprecated_field(
+        50000,
+        "KTRDR_AGENT_MAX_INPUT_TOKENS",
+        "AGENT_MAX_INPUT_TOKENS",
+        gt=0,
+        description="Maximum input context tokens",
+    )
+
+    # Budget settings
+    daily_budget: float = deprecated_field(
+        5.0,
+        "KTRDR_AGENT_DAILY_BUDGET",
+        "AGENT_DAILY_BUDGET",
+        ge=0,
+        description="Daily cost budget in USD (0 = disabled)",
+    )
+    budget_dir: str = deprecated_field(
+        "data/budget",
+        "KTRDR_AGENT_BUDGET_DIR",
+        "AGENT_BUDGET_DIR",
+        description="Directory for budget tracking data",
+    )
+
+    # Concurrency settings
+    max_concurrent_researches: int = deprecated_field(
+        0,
+        "KTRDR_AGENT_MAX_CONCURRENT_RESEARCHES",
+        "AGENT_MAX_CONCURRENT_RESEARCHES",
+        ge=0,
+        description="Max concurrent research agents (0 = unlimited)",
+    )
+    concurrency_buffer: int = deprecated_field(
+        1,
+        "KTRDR_AGENT_CONCURRENCY_BUFFER",
+        "AGENT_CONCURRENCY_BUFFER",
+        ge=0,
+        description="Buffer for concurrency limits",
+    )
+
+    # Date defaults (optional)
+    training_start_date: str | None = deprecated_field(
+        None,
+        "KTRDR_AGENT_TRAINING_START_DATE",
+        "AGENT_TRAINING_START_DATE",
+        description="Default training start date (YYYY-MM-DD)",
+    )
+    training_end_date: str | None = deprecated_field(
+        None,
+        "KTRDR_AGENT_TRAINING_END_DATE",
+        "AGENT_TRAINING_END_DATE",
+        description="Default training end date (YYYY-MM-DD)",
+    )
+    backtest_start_date: str | None = deprecated_field(
+        None,
+        "KTRDR_AGENT_BACKTEST_START_DATE",
+        "AGENT_BACKTEST_START_DATE",
+        description="Default backtest start date (YYYY-MM-DD)",
+    )
+    backtest_end_date: str | None = deprecated_field(
+        None,
+        "KTRDR_AGENT_BACKTEST_END_DATE",
+        "AGENT_BACKTEST_END_DATE",
+        description="Default backtest end date (YYYY-MM-DD)",
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_AGENT_",
+        env_file=".env.local",
+        extra="ignore",
+    )
+
+
 class ApiServiceSettings(BaseSettings):
     """API Server configuration for client connections.
 
@@ -998,6 +1137,12 @@ def get_worker_settings() -> WorkerSettings:
 
 
 @lru_cache
+def get_agent_settings() -> AgentSettings:
+    """Get agent settings with caching."""
+    return AgentSettings()
+
+
+@lru_cache
 def get_api_service_settings() -> ApiServiceSettings:
     """Get API service settings for client connections with caching."""
     return ApiServiceSettings()
@@ -1040,6 +1185,7 @@ def clear_settings_cache() -> None:
     get_ib_host_service_settings.cache_clear()
     get_training_host_service_settings.cache_clear()
     get_worker_settings.cache_clear()
+    get_agent_settings.cache_clear()
 
 
 # Export settings classes and getters
@@ -1058,6 +1204,7 @@ __all__ = [
     "IBHostServiceSettings",
     "TrainingHostServiceSettings",
     "WorkerSettings",
+    "AgentSettings",
     # Cached getters
     "get_api_settings",
     "get_auth_settings",
@@ -1073,6 +1220,7 @@ __all__ = [
     "get_ib_host_service_settings",
     "get_training_host_service_settings",
     "get_worker_settings",
+    "get_agent_settings",
     # Utilities
     "clear_settings_cache",
     "deprecated_field",
