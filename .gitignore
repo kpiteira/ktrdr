@@ -74,6 +74,7 @@ frontend/.turbo
 
 # Project specific
 data/**
+docker-compose.yml
 config/*.secret.yaml
 logs/
 **/.DS_Store
