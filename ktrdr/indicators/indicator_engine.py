@@ -44,6 +44,9 @@ class IndicatorEngine:
         self._indicators: dict[str, BaseIndicator] = {}
 
         if indicators:
+            # Ensure all indicators are registered before we try to look them up
+            # This is needed because indicators use lazy loading via __init_subclass__
+            self._ensure_all_registered()
             if not isinstance(indicators, dict):
                 raise ConfigurationError(
                     "IndicatorEngine requires v3 dict format. "
@@ -66,6 +69,46 @@ class IndicatorEngine:
         logger.info(
             f"Initialized IndicatorEngine with {len(self._indicators)} indicators"
         )
+
+    def _ensure_all_registered(self) -> None:
+        """Ensure all indicator modules are imported so they register with INDICATOR_REGISTRY."""
+        # Import here to avoid circular import at module level
+        import importlib
+
+        # List of all indicator modules (same as in __init__.py)
+        indicator_modules = [
+            "ktrdr.indicators.rsi_indicator",
+            "ktrdr.indicators.roc_indicator",
+            "ktrdr.indicators.momentum_indicator",
+            "ktrdr.indicators.cci_indicator",
+            "ktrdr.indicators.williams_r_indicator",
+            "ktrdr.indicators.stochastic_indicator",
+            "ktrdr.indicators.rvi_indicator",
+            "ktrdr.indicators.fisher_transform",
+            "ktrdr.indicators.aroon_indicator",
+            "ktrdr.indicators.atr_indicator",
+            "ktrdr.indicators.bollinger_bands_indicator",
+            "ktrdr.indicators.bollinger_band_width_indicator",
+            "ktrdr.indicators.keltner_channels",
+            "ktrdr.indicators.donchian_channels",
+            "ktrdr.indicators.supertrend_indicator",
+            "ktrdr.indicators.ma_indicators",
+            "ktrdr.indicators.macd_indicator",
+            "ktrdr.indicators.adx_indicator",
+            "ktrdr.indicators.parabolic_sar_indicator",
+            "ktrdr.indicators.ichimoku_indicator",
+            "ktrdr.indicators.obv_indicator",
+            "ktrdr.indicators.vwap_indicator",
+            "ktrdr.indicators.mfi_indicator",
+            "ktrdr.indicators.cmf_indicator",
+            "ktrdr.indicators.ad_line",
+            "ktrdr.indicators.volume_ratio_indicator",
+            "ktrdr.indicators.distance_from_ma_indicator",
+            "ktrdr.indicators.squeeze_intensity_indicator",
+            "ktrdr.indicators.zigzag_indicator",
+        ]
+        for module_name in indicator_modules:
+            importlib.import_module(module_name)
 
     def _create_indicator(self, indicator_id: str, definition: Any) -> BaseIndicator:
         """

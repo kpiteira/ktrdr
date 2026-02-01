@@ -445,19 +445,4 @@ class TestFuzzyEngineV3GetMembershipNames:
         with pytest.raises(ValueError, match="Unknown fuzzy set"):
             engine.get_membership_names("nonexistent_fuzzy_set")
 
-    def test_v2_mode_raises_valueerror(self):
-        """get_membership_names() raises ValueError in v2 mode."""
-        from ktrdr.fuzzy.config import FuzzyConfigLoader
-
-        # Create v2 FuzzyConfig
-        v2_config_dict = {
-            "rsi": {
-                "low": {"type": "triangular", "parameters": [0, 30, 50]},
-                "high": {"type": "triangular", "parameters": [50, 70, 100]},
-            }
-        }
-        v2_config = FuzzyConfigLoader.load_from_dict(v2_config_dict)
-        engine = FuzzyEngine(v2_config)
-
-        with pytest.raises(ValueError, match="only available in v3 mode"):
-            engine.get_membership_names("rsi")
+    # Note: test_v2_mode_raises_valueerror removed - v2 mode no longer supported (Task 3.3)

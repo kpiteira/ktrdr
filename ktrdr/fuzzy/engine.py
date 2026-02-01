@@ -3,6 +3,9 @@ Fuzzy engine implementation for KTRDR.
 
 This module provides the FuzzyEngine class that transforms indicator values
 into fuzzy membership degrees according to configured membership functions.
+
+V3-only: This engine requires v3 format configuration (dict[str, FuzzySetDefinition]).
+V2 FuzzyConfig format is no longer supported.
 """
 
 from typing import Optional, Union
@@ -13,189 +16,89 @@ import pandas as pd
 from ktrdr import get_logger
 from ktrdr.config.models import FuzzySetDefinition
 from ktrdr.errors import ConfigurationError, ProcessingError
-from ktrdr.fuzzy.config import FuzzyConfig
 from ktrdr.fuzzy.membership import (
+    MEMBERSHIP_REGISTRY,
     MembershipFunction,
-    MembershipFunctionFactory,
 )
 
 # Set up module-level logger
 logger = get_logger(__name__)
 
 
-def is_v3_fuzzy_config(config: dict) -> bool:
-    """Check if a fuzzy config dict is in v3 format.
-
-    V3 format characteristics:
-    - Values are dicts containing an 'indicator' key, and/or
-    - Values are FuzzySetDefinition instances
-
-    V2 format characteristics:
-    - Values are dicts without an 'indicator' key (membership function defs)
-
-    Args:
-        config: Dictionary of fuzzy set configurations
-
-    Returns:
-        True if config appears to be v3 format, False otherwise
-    """
-    if not config:
-        return False
-
-    values = list(config.values())
-    has_v3_indicator = any(isinstance(v, dict) and "indicator" in v for v in values)
-    has_fuzzy_def = any(isinstance(v, FuzzySetDefinition) for v in values)
-
-    return has_v3_indicator or has_fuzzy_def
-
-
 class FuzzyEngine:
     """
     FuzzyEngine for transforming indicator values into fuzzy membership degrees.
 
-    The FuzzyEngine takes a FuzzyConfig configuration with membership functions
-    for different indicators and transforms indicator values into fuzzy membership
-    degrees according to these functions.
+    The FuzzyEngine takes a v3 format configuration (dict[str, FuzzySetDefinition])
+    with membership functions for different indicators and transforms indicator
+    values into fuzzy membership degrees according to these functions.
+
+    V3-only: V2 FuzzyConfig format is no longer supported.
 
     Example:
         ```python
-        # Create a FuzzyEngine with configuration
-        fuzzy_engine = FuzzyEngine(config)
+        from ktrdr.config.models import FuzzySetDefinition
 
-        # Fuzzify indicator values
+        # Create v3 configuration
+        config = {
+            "rsi_momentum": FuzzySetDefinition(
+                indicator="rsi_14",
+                low={"type": "triangular", "parameters": [0.0, 30.0, 50.0]},
+                medium={"type": "triangular", "parameters": [30.0, 50.0, 70.0]},
+                high={"type": "triangular", "parameters": [50.0, 70.0, 100.0]},
+            )
+        }
+
+        # Create engine and fuzzify
+        engine = FuzzyEngine(config)
         rsi_values = pd.Series([30.0, 45.0, 70.0])
-        membership_degrees = fuzzy_engine.fuzzify("rsi", rsi_values)
-
-        # Access membership degrees for specific fuzzy sets
-        low_membership = membership_degrees["rsi_low"]
-        medium_membership = membership_degrees["rsi_medium"]
-        high_membership = membership_degrees["rsi_high"]
+        membership_degrees = engine.fuzzify("rsi_momentum", rsi_values)
         ```
     """
 
-    def __init__(self, config: Union[FuzzyConfig, dict[str, FuzzySetDefinition]]):
+    def __init__(self, config: dict[str, FuzzySetDefinition]):
         """
-        Initialize the FuzzyEngine with a configuration.
-
-        Supports both v2 and v3 formats:
-        - v2: FuzzyConfig object (legacy)
-        - v3: dict[str, FuzzySetDefinition] mapping fuzzy_set_id to definition
+        Initialize the FuzzyEngine with a v3 configuration.
 
         Args:
-            config: Either FuzzyConfig (v2) or dict mapping fuzzy_set_id to
-                   FuzzySetDefinition (v3)
+            config: Dict mapping fuzzy_set_id to FuzzySetDefinition
 
         Raises:
-            ConfigurationError: If the configuration is invalid
+            ConfigurationError: If the configuration is invalid or not v3 format
         """
         logger.debug("Initializing FuzzyEngine")
 
-        # Detect format: v3 uses dict[str, FuzzySetDefinition], v2 uses FuzzyConfig
-        # Check both that it's a dict AND that values are FuzzySetDefinition (if non-empty)
-        is_v3_format = isinstance(config, dict) and (
-            not config or isinstance(next(iter(config.values())), FuzzySetDefinition)
-        )
+        # V3-only: reject non-dict configs
+        if not isinstance(config, dict):
+            raise ConfigurationError(
+                message="FuzzyEngine requires v3 format (dict[str, FuzzySetDefinition]). "
+                "V2 FuzzyConfig is no longer supported.",
+                error_code="ENGINE-V2ConfigNotSupported",
+                details={"received_type": type(config).__name__},
+            )
 
-        if is_v3_format:
-            # V3 format: dict[str, FuzzySetDefinition]
-            # Type assertion for mypy (we verified this in is_v3_format check)
-            assert isinstance(config, dict)
-            logger.debug("Initializing FuzzyEngine with v3 format")
-            self._is_v3_mode = True
-            self._config = None
-            self._fuzzy_sets: dict[str, dict[str, MembershipFunction]] = {}
-            self._indicator_map: dict[str, str] = {}  # fuzzy_set_id -> indicator_id
-            self._initialize_v3(config)
-            logger.info(
-                f"FuzzyEngine initialized with {len(self._fuzzy_sets)} fuzzy sets"
-            )
-        else:
-            # V2 format: FuzzyConfig
-            # Type assertion for mypy (if not v3, must be FuzzyConfig)
-            assert not isinstance(config, dict)
-            logger.debug("Initializing FuzzyEngine with v2 format")
-            self._is_v3_mode = False
-            self._config = config
-            self._membership_functions: dict[str, dict[str, MembershipFunction]] = {}
-            # Initialize v3 attributes to empty (defensive, prevents AttributeError)
-            self._fuzzy_sets = {}
-            self._indicator_map = {}
-            self._validate_config()
-            self._initialize_membership_functions()
-            logger.info(
-                f"FuzzyEngine initialized with {len(self._membership_functions)} indicators"
-            )
+        # Validate dict values are FuzzySetDefinition (if non-empty)
+        if config:
+            first_value = next(iter(config.values()))
+            if not isinstance(first_value, FuzzySetDefinition):
+                raise ConfigurationError(
+                    message="FuzzyEngine requires v3 format (dict[str, FuzzySetDefinition]). "
+                    "V2 FuzzyConfig is no longer supported.",
+                    error_code="ENGINE-V2ConfigNotSupported",
+                    details={"received_value_type": type(first_value).__name__},
+                )
+
+        logger.debug("Initializing FuzzyEngine with v3 format")
+        self._is_v3_mode = True
+        self._fuzzy_sets: dict[str, dict[str, MembershipFunction]] = {}
+        self._indicator_map: dict[str, str] = {}  # fuzzy_set_id -> indicator_id
+        self._initialize_v3(config)
+        logger.info(f"FuzzyEngine initialized with {len(self._fuzzy_sets)} fuzzy sets")
 
     @property
     def is_v3_mode(self) -> bool:
         """Check if this engine was initialized with v3 format configuration."""
         return getattr(self, "_is_v3_mode", False)
-
-    def _validate_config(self) -> None:
-        """
-        Validate the fuzzy configuration (v2 only).
-
-        Raises:
-            ConfigurationError: If the configuration is invalid
-        """
-        assert self._config is not None, "v2 mode: _config must be set"
-        if not self._config or not self._config.root:
-            logger.error("Empty fuzzy configuration")
-            raise ConfigurationError(
-                message="Fuzzy configuration cannot be empty",
-                error_code="ENGINE-EmptyConfig",
-                details={},
-            )
-
-        # The FuzzyConfig model already validates that each indicator has at least one fuzzy set,
-        # and each fuzzy set has a valid membership function configuration.
-        # We just need to check if there are any indicators defined.
-        indicators = list(self._config.root.keys())
-        if not indicators:
-            logger.error("No indicators defined in fuzzy configuration")
-            raise ConfigurationError(
-                message="Fuzzy configuration must define at least one indicator",
-                error_code="ENGINE-NoIndicators",
-                details={},
-            )
-
-        logger.debug(f"Validated fuzzy configuration with indicators: {indicators}")
-
-    def _initialize_membership_functions(self) -> None:
-        """
-        Initialize membership function instances from the configuration (v2 only).
-
-        Raises:
-            ConfigurationError: If any membership function configuration is invalid
-        """
-        assert self._config is not None, "v2 mode: _config must be set"
-        for indicator, fuzzy_sets in self._config.root.items():
-            logger.debug(
-                f"Initializing membership functions for indicator: {indicator}"
-            )
-            self._membership_functions[indicator] = {}
-
-            for set_name, mf_config in fuzzy_sets.root.items():
-                try:
-                    # Use the membership function factory for all types
-                    self._membership_functions[indicator][set_name] = (
-                        MembershipFunctionFactory.create(
-                            mf_config.type, mf_config.parameters
-                        )
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"Failed to initialize membership function for {indicator}.{set_name}: {e}"
-                    )
-                    raise ConfigurationError(
-                        message=f"Failed to initialize membership function for {indicator}.{set_name}",
-                        error_code="ENGINE-MFInitializationError",
-                        details={
-                            "indicator": indicator,
-                            "set_name": set_name,
-                            "original_error": str(e),
-                        },
-                    ) from e
 
     def _initialize_v3(self, fuzzy_sets: dict[str, FuzzySetDefinition]) -> None:
         """
@@ -280,17 +183,23 @@ class FuzzyEngine:
 
     def _create_membership_function(self, membership_def: dict) -> MembershipFunction:
         """
-        Create a MembershipFunction from a dict specification.
+        Create a MembershipFunction from a dict specification using the registry.
 
         Args:
             membership_def: Dict with 'type' and 'parameters' keys
 
         Returns:
             MembershipFunction instance
+
+        Raises:
+            ConfigurationError: If MF type is unknown or parameters are invalid
         """
-        return MembershipFunctionFactory.create(
-            membership_def["type"], membership_def["parameters"]
-        )
+        mf_type = membership_def["type"]
+        parameters = membership_def["parameters"]
+
+        # Use registry for type lookup (case-insensitive)
+        mf_cls = MEMBERSHIP_REGISTRY.get_or_raise(mf_type)
+        return mf_cls(parameters)
 
     def get_indicator_for_fuzzy_set(self, fuzzy_set_id: str) -> str:
         """
@@ -339,379 +248,50 @@ class FuzzyEngine:
 
     def fuzzify(
         self,
-        indicator: str,
+        fuzzy_set_id: str,
         values: Union[float, pd.Series, np.ndarray],
         context_data: Optional[pd.DataFrame] = None,
-    ) -> Union[dict[str, Union[float, pd.Series, np.ndarray]], pd.DataFrame]:
+    ) -> pd.DataFrame:
         """
         Fuzzify indicator values using the configured membership functions.
 
-        Supports both v2 and v3 modes:
-        - v3 mode: First parameter is fuzzy_set_id, second is indicator_values (Series only)
-        - v2 mode: First parameter is indicator name, second is values (scalar/Series/array)
-
-        For v3 mode, returns a DataFrame with {fuzzy_set_id}_{membership} columns.
-        For v2 mode with scalar input, returns a dict mapping fuzzy set names to membership degrees.
-        For v2 mode with Series/array input, returns a DataFrame with columns for each fuzzy set.
-
         Args:
-            indicator: Name of the indicator (v2) or fuzzy_set_id (v3)
+            fuzzy_set_id: The fuzzy set ID to use for fuzzification
             values: Indicator values to fuzzify (scalar, pandas Series, or numpy array)
-            context_data: Optional DataFrame containing price data (open, high, low, close)
-                         required for price_ratio transforms (v2 only)
+            context_data: Unused, kept for API compatibility
 
         Returns:
-            For v3 mode: DataFrame with {fuzzy_set_id}_{membership} columns
-            For v2 scalar input: A dictionary mapping fuzzy set names to membership degrees
-            For v2 Series/array input: A DataFrame with columns for each fuzzy set
+            DataFrame with {fuzzy_set_id}_{membership} columns
 
         Raises:
-            ValueError: If fuzzy_set_id is unknown (v3 mode)
-            ProcessingError: If the indicator is not in the configuration (v2 mode) or if
-                           required context_data is missing
-            TypeError: If the input type is not supported
+            ValueError: If fuzzy_set_id is unknown
         """
-        # V3 mode detection: use explicit flag for clarity
-        if getattr(self, "_is_v3_mode", False):
-            # V3 mode: First parameter is fuzzy_set_id, second is indicator_values
-            fuzzy_set_id = indicator  # In v3, first param is fuzzy_set_id
-            indicator_values = values  # In v3, second param is indicator_values
+        logger.debug(f"Fuzzifying values for fuzzy_set_id: {fuzzy_set_id}")
 
-            logger.debug(f"V3: Fuzzifying values for fuzzy_set_id: {fuzzy_set_id}")
+        # Validate fuzzy_set_id exists
+        if fuzzy_set_id not in self._fuzzy_sets:
+            raise ValueError(f"Unknown fuzzy set: {fuzzy_set_id}")
 
-            # Validate fuzzy_set_id exists
-            if fuzzy_set_id not in self._fuzzy_sets:
-                raise ValueError(f"Unknown fuzzy set: {fuzzy_set_id}")
+        # Get the fuzzy set (dict of membership functions)
+        fuzzy_set = self._fuzzy_sets[fuzzy_set_id]
 
-            # Get the fuzzy set (dict of membership functions)
-            fuzzy_set = self._fuzzy_sets[fuzzy_set_id]
+        # Build result dict with {fuzzy_set_id}_{membership} column names
+        result = {}
+        for membership_name, mf in fuzzy_set.items():
+            col_name = f"{fuzzy_set_id}_{membership_name}"
+            result[col_name] = mf.evaluate(values)
 
-            # Build result dict with {fuzzy_set_id}_{membership} column names
-            result = {}
-            for membership_name, mf in fuzzy_set.items():
-                col_name = f"{fuzzy_set_id}_{membership_name}"
-                result[col_name] = mf.evaluate(indicator_values)
-
-            # Return DataFrame with original index
-            if isinstance(indicator_values, pd.Series):
-                return pd.DataFrame(result, index=indicator_values.index)
-            else:
-                # If values is not a Series, create DataFrame without explicit index
-                return pd.DataFrame(result)
-
-        # V2 mode: existing logic
-        logger.debug(f"V2: Fuzzifying values for indicator: {indicator}")
-
-        # Check if the indicator exists in the configuration
-        if indicator not in self._membership_functions:
-            logger.error(f"Unknown indicator: {indicator}")
-
-            # Get list of available indicators
-            available_indicators = list(self._membership_functions.keys())
-
-            # Try to find a close match (typo detection)
-            suggestion = self._find_close_match(indicator, available_indicators)
-
-            # Build error message with suggestion
-            error_msg = f"Feature ID '{indicator}' not found in fuzzy configuration"
-
-            # Build suggestion text
-            suggestion_text = (
-                f"Available feature IDs: {', '.join(available_indicators[:10])}"
-            )
-            if len(available_indicators) > 10:
-                suggestion_text += f" (and {len(available_indicators) - 10} more)"
-
-            if suggestion:
-                suggestion_text += f"\n\nDid you mean '{suggestion}'?"
-
-            # Build details dict with suggestion
-            error_details = {
-                "indicator": indicator,
-                "available_indicators": available_indicators,
-            }
-            if suggestion:
-                error_details["suggestion"] = suggestion
-
-            raise ProcessingError(
-                message=error_msg,
-                error_code="ENGINE-UnknownIndicator",
-                details=error_details,
-                suggestion=suggestion_text,
-            )
-
-        # Get the membership functions for this indicator
-        membership_functions = self._membership_functions[indicator]
-
-        # Apply input transform if configured
-        transformed_values = self._apply_transform(indicator, values, context_data)
-
-        # Handle scalar input
-        if isinstance(transformed_values, (int, float)):
-            logger.debug(
-                f"Fuzzifying scalar value {transformed_values} for indicator {indicator}"
-            )
-            return self._fuzzify_scalar(indicator, transformed_values, membership_functions)  # type: ignore[return-value]
-
-        # Handle pandas Series input
-        elif isinstance(transformed_values, pd.Series):
-            logger.debug(
-                f"Fuzzifying pandas Series of length {len(transformed_values)} for indicator {indicator}"
-            )
-            return self._fuzzify_series(
-                indicator, transformed_values, membership_functions
-            )
-
-        # Handle numpy array input
-        elif isinstance(transformed_values, np.ndarray):
-            logger.debug(
-                f"Fuzzifying numpy array of shape {transformed_values.shape} for indicator {indicator}"
-            )
-            # Convert numpy array to pandas Series for consistent handling
-            series = pd.Series(transformed_values)
-            return self._fuzzify_series(indicator, series, membership_functions)
-
-        # Handle unsupported input types
+        # Return DataFrame with original index
+        if isinstance(values, pd.Series):
+            return pd.DataFrame(result, index=values.index)
         else:
-            logger.error(
-                f"Unsupported input type for fuzzification: {type(transformed_values)}"
-            )
-            raise TypeError(
-                f"Unsupported input type: {type(transformed_values)}. Expected float, pd.Series, or np.ndarray."
-            )
-
-    def _apply_transform(
-        self,
-        indicator: str,
-        values: Union[float, pd.Series, np.ndarray],
-        context_data: Optional[pd.DataFrame] = None,
-    ) -> Union[float, pd.Series, np.ndarray]:
-        """
-        Apply input transform to indicator values before fuzzification (v2 only).
-
-        Args:
-            indicator: Name of the indicator
-            values: Indicator values to transform
-            context_data: Optional DataFrame containing price data for transforms
-
-        Returns:
-            Transformed values (same type as input)
-
-        Raises:
-            ProcessingError: If required context_data is missing or invalid
-        """
-        # v2 mode only - _config must be set
-        assert self._config is not None, "v2 mode: _config must be set"
-
-        # Get the fuzzy set config for this indicator
-        fuzzy_set_config = self._config.root[indicator]
-
-        # Get the input transform (may be None)
-        input_transform = fuzzy_set_config.input_transform
-
-        # If no transform or identity transform, return values unchanged
-        if input_transform is None or input_transform.type == "identity":
-            logger.debug(f"No transform or identity transform for {indicator}")
-            return values
-
-        # Handle price_ratio transform
-        if input_transform.type == "price_ratio":
-            # Type narrowing for mypy - at this point we know it's PriceRatioTransformConfig
-            assert hasattr(
-                input_transform, "reference"
-            ), "price_ratio transform must have reference attribute"
-            logger.debug(
-                f"Applying price_ratio transform for {indicator} with reference '{input_transform.reference}'"
-            )
-
-            # Validate context_data is provided
-            if context_data is None:
-                logger.error(
-                    f"context_data is required for price_ratio transform for {indicator}"
-                )
-                raise ProcessingError(
-                    message=f"context_data is required for price_ratio transform for indicator '{indicator}'. Pass context_data DataFrame with price columns (open, high, low, close)",
-                    error_code="ENGINE-MissingContextData",
-                    details={
-                        "indicator": indicator,
-                        "transform_type": "price_ratio",
-                        "reference": input_transform.reference,
-                    },
-                )
-
-            # Validate reference column exists in context_data
-            if input_transform.reference not in context_data.columns:
-                logger.error(
-                    f"Reference column '{input_transform.reference}' not found in context_data"
-                )
-                raise ProcessingError(
-                    message=f"Reference column '{input_transform.reference}' not found in context_data. Ensure context_data contains '{input_transform.reference}' column",
-                    error_code="ENGINE-MissingReferenceColumn",
-                    details={
-                        "indicator": indicator,
-                        "reference": input_transform.reference,
-                        "available_columns": list(context_data.columns),
-                    },
-                )
-
-            # Get reference values
-            reference_values = context_data[input_transform.reference]
-
-            # Apply price ratio transformation: reference / indicator
-            if isinstance(values, (int, float)):
-                # Scalar case
-                transformed_scalar = float(reference_values.iloc[0]) / float(values)
-                logger.debug(
-                    f"Transformed scalar {values} -> {transformed_scalar} (ratio with {input_transform.reference})"
-                )
-                return transformed_scalar
-            elif isinstance(values, pd.Series):
-                # Series case
-                transformed_series = reference_values / values
-                logger.debug(
-                    f"Transformed series (length {len(values)}) with price_ratio transform"
-                )
-                return transformed_series
-            else:  # numpy array
-                # Convert to series, transform, convert back
-                series = pd.Series(values)
-                transformed_series_arr = reference_values / series
-                logger.debug(
-                    f"Transformed numpy array (shape {values.shape}) with price_ratio transform"
-                )
-                return np.array(transformed_series_arr.values)
-
-        # Unknown transform type (should never happen due to discriminator)
-        logger.error(f"Unknown transform type: {input_transform.type}")
-        raise ProcessingError(
-            message=f"Unknown transform type: {input_transform.type}",
-            error_code="ENGINE-UnknownTransformType",
-            details={"indicator": indicator, "transform_type": input_transform.type},
-        )
-
-    def _fuzzify_scalar(
-        self,
-        indicator: str,
-        value: float,
-        membership_functions: dict[str, MembershipFunction],
-    ) -> dict[str, float]:
-        """
-        Fuzzify a single indicator value.
-
-        Args:
-            indicator: Name of the indicator
-            value: Indicator value to fuzzify
-            membership_functions: Dictionary of membership functions for this indicator
-
-        Returns:
-            Dictionary mapping fuzzy set names to membership degrees
-        """
-        result: dict[str, float] = {}
-
-        for set_name, mf in membership_functions.items():
-            # Generate standardized output column name
-            output_name = self._get_output_name(indicator, set_name)
-            result[output_name] = float(mf.evaluate(value))
-
-        return result
-
-    def _fuzzify_series(
-        self,
-        indicator: str,
-        values: pd.Series,
-        membership_functions: dict[str, MembershipFunction],
-    ) -> pd.DataFrame:
-        """
-        Fuzzify a series of indicator values.
-
-        Args:
-            indicator: Name of the indicator
-            values: Series of indicator values to fuzzify
-            membership_functions: Dictionary of membership functions for this indicator
-
-        Returns:
-            DataFrame with columns for each fuzzy set's membership degrees
-        """
-        result_dict = {}
-
-        for set_name, mf in membership_functions.items():
-            # Generate standardized output column name
-            output_name = self._get_output_name(indicator, set_name)
-            result_dict[output_name] = mf.evaluate(values)
-
-        return pd.DataFrame(result_dict, index=values.index)
-
-    def _get_output_name(self, indicator: str, set_name: str) -> str:
-        """
-        Generate a standardized output name for fuzzy set membership degrees.
-
-        The standard format is: {indicator}_{set_name}
-        For example: "rsi_low", "macd_positive"
-
-        Args:
-            indicator: Name of the indicator
-            set_name: Name of the fuzzy set
-
-        Returns:
-            Standardized output name
-        """
-        return f"{indicator}_{set_name}"
-
-    def get_available_indicators(self) -> list[str]:
-        """
-        Get a list of available indicators in the configuration.
-
-        Returns:
-            List of indicator names
-        """
-        return list(self._membership_functions.keys())
-
-    def get_fuzzy_sets(self, indicator: str) -> list[str]:
-        """
-        Get a list of fuzzy sets defined for an indicator.
-
-        Args:
-            indicator: Name of the indicator
-
-        Returns:
-            List of fuzzy set names
-
-        Raises:
-            ProcessingError: If the indicator is not in the configuration
-        """
-        if indicator not in self._membership_functions:
-            logger.error(f"Unknown indicator: {indicator}")
-            raise ProcessingError(
-                message=f"Unknown indicator: {indicator}",
-                error_code="ENGINE-UnknownIndicator",
-                details={
-                    "indicator": indicator,
-                    "available_indicators": list(self._membership_functions.keys()),
-                },
-            )
-
-        return list(self._membership_functions[indicator].keys())
-
-    def get_output_names(self, indicator: str) -> list[str]:
-        """
-        Get a list of output column names for an indicator.
-
-        Args:
-            indicator: Name of the indicator
-
-        Returns:
-            List of output column names
-
-        Raises:
-            ProcessingError: If the indicator is not in the configuration
-        """
-        fuzzy_sets = self.get_fuzzy_sets(indicator)
-        return [self._get_output_name(indicator, set_name) for set_name in fuzzy_sets]
+            # If values is not a Series, create DataFrame without explicit index
+            return pd.DataFrame(result)
 
     def generate_multi_timeframe_memberships(
         self,
         multi_timeframe_indicators: dict[str, pd.DataFrame],
-        fuzzy_sets_config: Optional[dict[str, dict]] = None,
+        fuzzy_sets_config: Optional[dict[str, FuzzySetDefinition]] = None,
     ) -> dict[str, pd.DataFrame]:
         """
         Generate fuzzy membership values for indicators across multiple timeframes.
@@ -724,7 +304,7 @@ class FuzzyEngine:
         Args:
             multi_timeframe_indicators: Dictionary mapping timeframes to indicator DataFrames
                                       Format: {timeframe: indicators_dataframe}
-            fuzzy_sets_config: Optional fuzzy set configuration. If None, uses the
+            fuzzy_sets_config: Optional v3 fuzzy set configuration. If None, uses the
                              current engine's configuration for all timeframes.
 
         Returns:
@@ -754,102 +334,72 @@ class FuzzyEngine:
 
         # Use provided fuzzy config or current engine configuration
         if fuzzy_sets_config is not None:
-            # Create temporary engine with the provided configuration
+            # Create temporary engine with the provided v3 configuration
+            try:
+                # Validate that we have the necessary indicators
+                available_indicators: set[str] = set()
+                for tf_data in multi_timeframe_indicators.values():
+                    available_indicators.update(tf_data.columns)
 
-            # Convert config dict to FuzzyConfig objects if needed
-            if isinstance(fuzzy_sets_config, dict):
-                try:
-                    # Validate that we have the necessary indicators
-                    available_indicators: set[str] = set()
-                    for tf_data in multi_timeframe_indicators.values():
-                        available_indicators.update(tf_data.columns)
+                logger.debug(
+                    f"Available indicators in multi-timeframe data: {available_indicators}"
+                )
+                logger.debug(
+                    f"Fuzzy sets config keys: {list(fuzzy_sets_config.keys())}"
+                )
 
-                    logger.debug(
-                        f"Available indicators in multi-timeframe data: {available_indicators}"
-                    )
-                    logger.debug(
-                        f"Fuzzy sets config keys: {list(fuzzy_sets_config.keys())}"
-                    )
+                # Filter fuzzy config to only include indicators that are available
+                filtered_fuzzy_config: dict[str, FuzzySetDefinition] = {}
+                for fuzzy_set_id, definition in fuzzy_sets_config.items():
+                    indicator = definition.indicator
 
-                    # Filter fuzzy config to only include indicators that are available
-                    filtered_fuzzy_config = {}
-                    for fuzzy_set_id, sets_config in fuzzy_sets_config.items():
-                        # V3 format: sets_config has 'indicator' key specifying the indicator
-                        # V2 format: fuzzy_set_id IS the indicator name
-                        if isinstance(sets_config, dict) and "indicator" in sets_config:
-                            # V3 format
-                            indicator = sets_config["indicator"]
-                        else:
-                            # V2 format (backward compatibility)
-                            indicator = fuzzy_set_id
+                    # Check if the base indicator name is in available indicators
+                    # or if any column starts with the indicator name
+                    matching_indicators = [
+                        col
+                        for col in available_indicators
+                        if col == indicator or col.lower().startswith(indicator.lower())
+                    ]
 
-                        # Check if the base indicator name is in available indicators
-                        # or if any column starts with the indicator name
-                        matching_indicators = [
-                            col
-                            for col in available_indicators
-                            if col == indicator
-                            or col.lower().startswith(indicator.lower())
-                        ]
-
-                        if matching_indicators:
-                            logger.debug(
-                                f"Found matches for {fuzzy_set_id} (indicator: {indicator}): {matching_indicators}"
-                            )
-                            filtered_fuzzy_config[fuzzy_set_id] = sets_config
-                        else:
-                            logger.warning(
-                                f"No matching indicators found for fuzzy set '{fuzzy_set_id}' "
-                                f"(looking for indicator: {indicator})"
-                            )
-
-                    # Only proceed if we have at least one matched fuzzy set
-                    if not filtered_fuzzy_config:
-                        raise ConfigurationError(
-                            f"No fuzzy sets match available indicators. "
-                            f"Available: {list(available_indicators)}, "
-                            f"Requested: {list(fuzzy_sets_config.keys())}",
-                            error_code="MTFUZZ-NoMatches",
-                            details={
-                                "available_indicators": list(available_indicators),
-                                "fuzzy_sets_requested": list(fuzzy_sets_config.keys()),
-                            },
+                    if matching_indicators:
+                        logger.debug(
+                            f"Found matches for {fuzzy_set_id} (indicator: {indicator}): {matching_indicators}"
                         )
-
-                    # Use shared utility to detect v3 format
-                    if is_v3_fuzzy_config(filtered_fuzzy_config):
-                        # V3 format: convert to FuzzySetDefinition objects and pass directly
-                        v3_config = {}
-                        for fuzzy_set_id, sets_config in filtered_fuzzy_config.items():
-                            if isinstance(sets_config, FuzzySetDefinition):
-                                v3_config[fuzzy_set_id] = sets_config
-                            else:
-                                v3_config[fuzzy_set_id] = FuzzySetDefinition(
-                                    **sets_config
-                                )
-                        processing_engine = FuzzyEngine(v3_config)
+                        filtered_fuzzy_config[fuzzy_set_id] = definition
                     else:
-                        # V2 format: use FuzzyConfigLoader
-                        from ktrdr.fuzzy.config import FuzzyConfigLoader
-
-                        temp_config = FuzzyConfigLoader.load_from_dict(
-                            filtered_fuzzy_config
+                        logger.warning(
+                            f"No matching indicators found for fuzzy set '{fuzzy_set_id}' "
+                            f"(looking for indicator: {indicator})"
                         )
-                        processing_engine = FuzzyEngine(temp_config)
-                except Exception as e:
+
+                # Only proceed if we have at least one matched fuzzy set
+                if not filtered_fuzzy_config:
                     raise ConfigurationError(
-                        f"Failed to create FuzzyEngine from provided configuration: {str(e)}",
-                        error_code="MTFUZZ-ConfigError",
-                        details={"config": fuzzy_sets_config, "error": str(e)},
-                    ) from e
-            else:
-                processing_engine = FuzzyEngine(fuzzy_sets_config)
+                        f"No fuzzy sets match available indicators. "
+                        f"Available: {list(available_indicators)}, "
+                        f"Requested: {list(fuzzy_sets_config.keys())}",
+                        error_code="MTFUZZ-NoMatches",
+                        details={
+                            "available_indicators": list(available_indicators),
+                            "fuzzy_sets_requested": list(fuzzy_sets_config.keys()),
+                        },
+                    )
+
+                processing_engine = FuzzyEngine(filtered_fuzzy_config)
+            except ConfigurationError:
+                raise
+            except Exception as e:
+                raise ConfigurationError(
+                    f"Failed to create FuzzyEngine from provided configuration: {str(e)}",
+                    error_code="MTFUZZ-ConfigError",
+                    details={"error": str(e)},
+                ) from e
         else:
-            if not self._membership_functions:
+            if not self._fuzzy_sets:
                 raise ConfigurationError(
                     "No fuzzy configuration in engine and no config provided",
                     error_code="MTFUZZ-NoConfig",
-                    details={"engine_indicators": len(self._membership_functions)},
+                    details={"engine_fuzzy_sets": len(self._fuzzy_sets)},
                 )
             # Use current engine
             processing_engine = self
@@ -859,8 +409,8 @@ class FuzzyEngine:
             f"{list(multi_timeframe_indicators.keys())}"
         )
 
-        results = {}
-        processing_errors = {}
+        results: dict[str, pd.DataFrame] = {}
+        processing_errors: dict[str, str] = {}
 
         # Process each timeframe
         for timeframe, indicators_data in multi_timeframe_indicators.items():
@@ -876,19 +426,13 @@ class FuzzyEngine:
                     continue
 
                 # Process each indicator column and generate fuzzy memberships
-                timeframe_fuzzy_data = {}
+                timeframe_fuzzy_data: dict[str, pd.Series] = {}
 
                 logger.info(
                     f"Available columns for {timeframe}: {list(indicators_data.columns)}"
                 )
-                # Get fuzzy keys based on engine mode (v3 uses _fuzzy_sets, v2 uses _membership_functions)
-                fuzzy_keys = (
-                    processing_engine._fuzzy_sets.keys()
-                    if hasattr(processing_engine, "_is_v3_mode")
-                    and processing_engine._is_v3_mode
-                    else getattr(processing_engine, "_membership_functions", {}).keys()
-                )
-                logger.info(f"Fuzzy membership functions keys: {list(fuzzy_keys)}")
+                fuzzy_keys = list(processing_engine._fuzzy_sets.keys())
+                logger.info(f"Fuzzy membership functions keys: {fuzzy_keys}")
 
                 for indicator_col in indicators_data.columns:
                     # Skip non-indicator columns (OHLCV data)
@@ -909,22 +453,17 @@ class FuzzyEngine:
                             # Get indicator values
                             indicator_values = indicators_data[indicator_col]
 
-                            # Generate fuzzy memberships using existing fuzzify method
-                            # ROOT CAUSE FIX: Pass context_data for price_ratio transforms!
+                            # Generate fuzzy memberships using fuzzify method
                             fuzzy_result = processing_engine.fuzzify(
                                 fuzzy_key,
                                 indicator_values,
-                                context_data=indicators_data,
                             )
 
                             # Add timeframe prefix to column names and store results
-                            if isinstance(fuzzy_result, pd.DataFrame):
-                                for col in fuzzy_result.columns:
-                                    # Add timeframe prefix: "rsi_low" -> "15m_rsi_low"
-                                    prefixed_col = f"{timeframe}_{col}"
-                                    timeframe_fuzzy_data[prefixed_col] = fuzzy_result[
-                                        col
-                                    ]
+                            for col in fuzzy_result.columns:
+                                # Add timeframe prefix: "rsi_low" -> "15m_rsi_low"
+                                prefixed_col = f"{timeframe}_{col}"
+                                timeframe_fuzzy_data[prefixed_col] = fuzzy_result[col]
 
                             logger.debug(
                                 f"Generated fuzzy memberships for {fuzzy_key} ({indicator_col}) in {timeframe}"
@@ -995,8 +534,9 @@ class FuzzyEngine:
 
         This method implements systematic feature_id lookup:
         1. Direct match: column_name exactly matches a fuzzy key (e.g., "rsi_14")
-        2. Prefix match with dot notation: column_name starts with fuzzy key + "." (e.g., "bbands_20_2.upper" matches "bbands_20_2")
-        3. Legacy prefix match with underscore: column_name starts with fuzzy key + "_" (backward compatibility)
+        2. Indicator match: column_name matches an indicator in _indicator_map
+        3. Prefix match with dot notation: column_name starts with indicator + "."
+        4. Legacy prefix match with underscore: backward compatibility
 
         Args:
             column_name: The column name to find a fuzzy key for
@@ -1006,40 +546,28 @@ class FuzzyEngine:
 
         Examples:
             >>> engine._find_fuzzy_key("rsi_14")
-            "rsi_14"  # Direct match
+            "rsi_momentum"  # Matches via indicator_map
             >>> engine._find_fuzzy_key("bbands_20_2.upper")
-            "bbands_20_2"  # M4: Dot notation prefix match (multi-output indicator)
-            >>> engine._find_fuzzy_key("bbands_20_2_upper")
-            "bbands_20_2"  # Legacy: Underscore prefix match (backward compatibility)
+            "bbands_width"  # Prefix match (multi-output indicator)
             >>> engine._find_fuzzy_key("unknown_indicator")
             None  # No match
         """
-        # Cache v3 mode check to avoid repeated attribute access
-        v3_mode = self.is_v3_mode
-
-        # Determine which attribute to check based on mode
-        # v3 uses _fuzzy_sets, v2 uses _membership_functions
-        fuzzy_keys = (
-            self._fuzzy_sets.keys()
-            if v3_mode
-            else getattr(self, "_membership_functions", {}).keys()
-        )
+        fuzzy_keys = self._fuzzy_sets.keys()
 
         # Direct match first (most common case)
         if column_name in fuzzy_keys:
             return column_name
 
-        # V3: Check if column matches an indicator in _indicator_map
+        # Check if column matches an indicator in _indicator_map
         # E.g., column "rsi_14" matches fuzzy_set "rsi_momentum" which has indicator "rsi_14"
-        if hasattr(self, "_indicator_map") and self._indicator_map:
-            for fuzzy_set_id, indicator in self._indicator_map.items():
-                if column_name == indicator:
-                    return fuzzy_set_id
-                # Also check prefix match for multi-output indicators
-                if column_name.startswith(f"{indicator}."):
-                    return fuzzy_set_id
+        for fuzzy_set_id, indicator in self._indicator_map.items():
+            if column_name == indicator:
+                return fuzzy_set_id
+            # Also check prefix match for multi-output indicators
+            if column_name.startswith(f"{indicator}."):
+                return fuzzy_set_id
 
-        # M4: For multi-output indicators with dot notation (new format from M3b)
+        # For multi-output indicators with dot notation
         # E.g., "bbands_20_2.upper" should match fuzzy key "bbands_20_2"
         for fuzzy_key in fuzzy_keys:
             if column_name.startswith(f"{fuzzy_key}."):
@@ -1052,98 +580,3 @@ class FuzzyEngine:
                 return fuzzy_key
 
         return None
-
-    def _find_close_match(
-        self, target: str, candidates: list[str], max_distance: int = 3
-    ) -> Optional[str]:
-        """
-        Find a close match for typo detection using Levenshtein distance.
-
-        This method helps users identify typos by suggesting feature_ids that
-        are similar to what they typed. Uses Levenshtein distance to measure
-        similarity.
-
-        Args:
-            target: The feature_id that wasn't found (potential typo)
-            candidates: List of valid feature_ids to compare against
-            max_distance: Maximum edit distance to consider (default: 3)
-
-        Returns:
-            The closest matching feature_id, or None if no close match found
-
-        Examples:
-            >>> engine._find_close_match("rsi_1", ["rsi_14", "rsi_21", "macd"])
-            "rsi_14"  # Close match (distance: 1)
-            >>> engine._find_close_match("xyz", ["rsi_14", "macd"])
-            None  # Too different
-        """
-        if not candidates:
-            return None
-
-        # Calculate Levenshtein distance for each candidate
-        distances = []
-        for candidate in candidates:
-            distance = self._levenshtein_distance(target.lower(), candidate.lower())
-            distances.append((distance, candidate))
-
-        # Sort by distance (closest first)
-        distances.sort(key=lambda x: x[0])
-
-        # Return closest match if within threshold
-        closest_distance, closest_match = distances[0]
-        if closest_distance <= max_distance:
-            return closest_match
-
-        return None
-
-    def _levenshtein_distance(self, s1: str, s2: str) -> int:
-        """
-        Calculate Levenshtein distance between two strings.
-
-        The Levenshtein distance is the minimum number of single-character edits
-        (insertions, deletions, or substitutions) required to change one string
-        into another.
-
-        Args:
-            s1: First string
-            s2: Second string
-
-        Returns:
-            Edit distance between the strings
-
-        Examples:
-            >>> engine._levenshtein_distance("rsi_1", "rsi_14")
-            1  # One character difference
-            >>> engine._levenshtein_distance("rsi", "macd")
-            4  # Four edits required
-        """
-        # Handle edge cases
-        if len(s1) == 0:
-            return len(s2)
-        if len(s2) == 0:
-            return len(s1)
-
-        # Create distance matrix
-        matrix = [[0] * (len(s2) + 1) for _ in range(len(s1) + 1)]
-
-        # Initialize first column and row
-        for i in range(len(s1) + 1):
-            matrix[i][0] = i
-        for j in range(len(s2) + 1):
-            matrix[0][j] = j
-
-        # Fill matrix
-        for i in range(1, len(s1) + 1):
-            for j in range(1, len(s2) + 1):
-                if s1[i - 1] == s2[j - 1]:
-                    cost = 0
-                else:
-                    cost = 1
-
-                matrix[i][j] = min(
-                    matrix[i - 1][j] + 1,  # deletion
-                    matrix[i][j - 1] + 1,  # insertion
-                    matrix[i - 1][j - 1] + cost,  # substitution
-                )
-
-        return matrix[len(s1)][len(s2)]

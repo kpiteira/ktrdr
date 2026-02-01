@@ -139,6 +139,13 @@ See [e2e-tester agent](../../agents/e2e-tester.md) for full details.
 | [cli/research-strategy-validation](tests/cli/research-strategy-validation.md) | CLI (Research) | ~30s | Strategy validation after research |
 | [cli/url-resolution](tests/cli/url-resolution.md) | CLI (Utility) | ~5s | URL resolution for CLI commands |
 
+### Architecture Migration Tests
+
+| Test | Category | Duration | Use When |
+|------|----------|----------|----------|
+| [indicators/registry-migration-complete](tests/indicators/registry-migration-complete.md) | Indicators (Migration) | ~30s | M2 indicator registry migration validation |
+| [fuzzy/migration-complete](tests/fuzzy/migration-complete.md) | Fuzzy (Migration) | ~30s | M3 fuzzy MEMBERSHIP_REGISTRY migration validation |
+
 ## Pre-Flight Modules
 
 | Module | Checks | Used By |

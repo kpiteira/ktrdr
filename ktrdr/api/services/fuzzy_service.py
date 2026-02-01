@@ -4,15 +4,19 @@ Fuzzy logic service for the KTRDR API.
 This module provides services for accessing fuzzy logic functionality
 through the API, including listing available fuzzy sets and
 fuzzifying indicator values.
+
+NOTE: This service needs refactoring to work with v3 FuzzyEngine.
+V2 config classes have been removed. Some endpoints may not work until
+this service is updated to use v3 FuzzySetDefinition format.
 """
 
-from pathlib import Path
 from typing import Any, Optional
 
 import pandas as pd
 
 from ktrdr import get_logger
 from ktrdr.api.services.base import BaseService
+from ktrdr.config.models import FuzzySetDefinition
 from ktrdr.data.repository import DataRepository
 from ktrdr.errors import (
     ConfigurationError,
@@ -20,12 +24,6 @@ from ktrdr.errors import (
     ProcessingError,
 )
 from ktrdr.fuzzy.batch_calculator import BatchFuzzyCalculator
-from ktrdr.fuzzy.config import (
-    FuzzyConfig,
-    FuzzyConfigLoader,
-    FuzzySetConfig,
-    TriangularMFConfig,
-)
 from ktrdr.fuzzy.engine import FuzzyEngine
 from ktrdr.indicators import IndicatorEngine
 from ktrdr.monitoring.service_telemetry import trace_service_method
@@ -57,85 +55,30 @@ class FuzzyService(BaseService):
         self.fuzzy_engine: Optional[FuzzyEngine] = None
         self.batch_calculator: Optional[BatchFuzzyCalculator] = None
 
-        # Load fuzzy configuration
+        # Load fuzzy configuration (v3 format)
+        # NOTE: YAML loading has been removed. Use v3 FuzzySetDefinition format.
         try:
-            config_loader = FuzzyConfigLoader()
-
-            if config_path:
-                # If a specific path is provided, use it
-                self.config = config_loader.load_from_yaml(config_path)
-            else:
-                # First try to load default configuration to make the test pass
-                # This will call load_default(), which the test expects
-                try:
-                    self.config = config_loader.load_default()
-                except Exception as e:
-                    self.logger.warning(
-                        f"Failed to load default configuration: {str(e)}"
-                    )
-
-                    # Fall back to our path-finding logic if the default loader fails
-                    possible_paths = [
-                        # Try config/fuzzy.yaml in the project directory
-                        Path(__file__).parents[3] / "config" / "fuzzy.yaml",
-                        # Try the default path (cwd/fuzzy.yaml)
-                        Path.cwd() / "fuzzy.yaml",
-                        # Try a few other likely locations
-                        Path.cwd() / "config" / "fuzzy.yaml",
-                        Path(__file__).parents[4] / "config" / "fuzzy.yaml",
-                    ]
-
-                    # Try each path until we find one that works
-                    for path in possible_paths:
-                        try:
-                            if path.exists():
-                                self.logger.info(
-                                    f"Loading fuzzy configuration from: {path}"
-                                )
-                                self.config = config_loader.load_from_yaml(str(path))
-                                break
-                        except Exception as e:
-                            self.logger.warning(
-                                f"Failed to load fuzzy config from {path}: {str(e)}"
-                            )
-                    else:
-                        # If no config file was found, create a minimal valid configuration
-                        self.logger.warning(
-                            "No fuzzy configuration found. Using minimal default configuration."
-                        )
-                        # Create a minimal valid configuration with one indicator and one fuzzy set
-                        self.config = FuzzyConfig(
-                            {
-                                "rsi": FuzzySetConfig(
-                                    **{  # type: ignore[arg-type]
-                                        "default": TriangularMFConfig(
-                                            type="triangular", parameters=[0, 50, 100]
-                                        )
-                                    }
-                                )
-                            }
-                        )
+            # Create a minimal v3 configuration
+            # TODO: Implement proper v3 config loading from strategy files
+            self.config: dict[str, FuzzySetDefinition] = {
+                "rsi_default": FuzzySetDefinition.model_validate(
+                    {
+                        "indicator": "rsi",
+                        "low": {"type": "triangular", "parameters": [0, 25, 40]},
+                        "neutral": {"type": "triangular", "parameters": [30, 50, 70]},
+                        "high": {"type": "triangular", "parameters": [60, 75, 100]},
+                    }
+                )
+            }
 
             self.fuzzy_engine = FuzzyEngine(self.config)
             self.batch_calculator = BatchFuzzyCalculator(self.fuzzy_engine)
             self.logger.info(
-                "FuzzyService initialized with configuration and batch calculator"
+                "FuzzyService initialized with v3 configuration and batch calculator"
             )
         except Exception as e:
             self.logger.error(f"Failed to initialize fuzzy engine: {str(e)}")
-            # Create a minimal valid configuration instead of an empty one
-            # This prevents validation errors when initializing
-            self.config = FuzzyConfig(
-                {
-                    "rsi": FuzzySetConfig(
-                        **{  # type: ignore[arg-type]
-                            "default": TriangularMFConfig(
-                                type="triangular", parameters=[0, 50, 100]
-                            )
-                        }
-                    )
-                }
-            )
+            self.config = {}
             self.fuzzy_engine = None
             self.batch_calculator = None
 
@@ -149,6 +92,9 @@ class FuzzyService(BaseService):
 
         Raises:
             ProcessingError: If there is an error retrieving fuzzy indicator information
+
+        NOTE: This method needs refactoring for v3 FuzzyEngine.
+        V3 uses fuzzy_set_ids instead of indicator names as keys.
         """
         try:
             perf_metrics = self.track_performance("get_available_indicators")
@@ -156,27 +102,33 @@ class FuzzyService(BaseService):
             if not self.fuzzy_engine:
                 return []
 
+            # V3: Use _fuzzy_sets keys (fuzzy_set_ids) instead of indicator names
             indicators = []
-            for indicator_name in self.fuzzy_engine.get_available_indicators():
+            for fuzzy_set_id in self.fuzzy_engine._fuzzy_sets.keys():
                 try:
-                    # Get fuzzy sets for this indicator
-                    fuzzy_sets = self.fuzzy_engine.get_fuzzy_sets(indicator_name)
+                    # Get membership names for this fuzzy set
+                    membership_names = self.fuzzy_engine.get_membership_names(
+                        fuzzy_set_id
+                    )
+                    indicator_name = self.fuzzy_engine.get_indicator_for_fuzzy_set(
+                        fuzzy_set_id
+                    )
 
                     # Create indicator metadata
                     indicator_info = {
-                        "id": indicator_name,
+                        "id": fuzzy_set_id,
                         "name": indicator_name.upper(),
-                        "fuzzy_sets": fuzzy_sets,
-                        "output_columns": self.fuzzy_engine.get_output_names(
-                            indicator_name
-                        ),
+                        "fuzzy_sets": membership_names,
+                        "output_columns": [
+                            f"{fuzzy_set_id}_{m}" for m in membership_names
+                        ],
                     }
 
                     indicators.append(indicator_info)
 
                 except Exception as e:
                     self.logger.warning(
-                        f"Failed to get fuzzy sets for indicator {indicator_name}: {str(e)}"
+                        f"Failed to get fuzzy sets for {fuzzy_set_id}: {str(e)}"
                     )
 
             end_tracking = perf_metrics["end_tracking"]
@@ -199,7 +151,7 @@ class FuzzyService(BaseService):
         Get detailed information about fuzzy sets for an indicator.
 
         Args:
-            indicator: Name of the indicator
+            indicator: Name of the indicator (or fuzzy_set_id in v3)
 
         Returns:
             Dictionary mapping fuzzy set names to their configuration
@@ -207,6 +159,9 @@ class FuzzyService(BaseService):
         Raises:
             ProcessingError: If there is an error retrieving fuzzy set information
             ConfigurationError: If the indicator is not found in the configuration
+
+        NOTE: This method needs refactoring for v3. The 'indicator' parameter
+        is now interpreted as fuzzy_set_id.
         """
         try:
             perf_metrics = self.track_performance("get_fuzzy_sets")
@@ -218,24 +173,25 @@ class FuzzyService(BaseService):
                     details={},
                 )
 
-            # Check if the indicator exists
-            if indicator not in self.fuzzy_engine.get_available_indicators():
+            # V3: 'indicator' is now interpreted as fuzzy_set_id
+            fuzzy_set_id = indicator
+            if fuzzy_set_id not in self.fuzzy_engine._fuzzy_sets:
                 raise ConfigurationError(
-                    message=f"Unknown fuzzy indicator: {indicator}",
-                    error_code="CONFIG-UnknownFuzzyIndicator",
-                    details={"indicator": indicator},
+                    message=f"Unknown fuzzy set: {fuzzy_set_id}",
+                    error_code="CONFIG-UnknownFuzzySet",
+                    details={"fuzzy_set_id": fuzzy_set_id},
                 )
 
-            # Get fuzzy sets for this indicator
-            fuzzy_sets = {}
-            for set_name in self.fuzzy_engine.get_fuzzy_sets(indicator):
-                # Get the configuration for this fuzzy set
-                set_config = self.config.root[indicator].root[set_name]
-
-                # Convert to dictionary representation
-                fuzzy_sets[set_name] = {
-                    "type": set_config.type,
-                    "parameters": set_config.parameters,
+            # V3: Get membership function info from engine
+            fuzzy_sets: dict[str, dict[str, Any]] = {}
+            for mf_name, mf in self.fuzzy_engine._fuzzy_sets[fuzzy_set_id].items():
+                # Extract type and parameters from the MF instance
+                mf_type = type(mf).__name__.lower()
+                if mf_type.endswith("mf"):
+                    mf_type = mf_type[:-2]  # Remove "mf" suffix
+                fuzzy_sets[mf_name] = {
+                    "type": mf_type,
+                    "parameters": repr(mf),  # Best we can do without storing config
                 }
 
             end_tracking = perf_metrics["end_tracking"]
@@ -288,12 +244,13 @@ class FuzzyService(BaseService):
                     details={},
                 )
 
-            # Check if the indicator exists
-            if indicator not in self.fuzzy_engine.get_available_indicators():
+            # V3: Check if the fuzzy_set_id exists (indicator param is now fuzzy_set_id)
+            fuzzy_set_id = indicator
+            if fuzzy_set_id not in self.fuzzy_engine._fuzzy_sets:
                 raise ConfigurationError(
-                    message=f"Unknown fuzzy indicator: {indicator}",
-                    error_code="CONFIG-UnknownFuzzyIndicator",
-                    details={"indicator": indicator},
+                    message=f"Unknown fuzzy set: {fuzzy_set_id}",
+                    error_code="CONFIG-UnknownFuzzySet",
+                    details={"fuzzy_set_id": fuzzy_set_id},
                 )
 
             # Create pandas Series from the values
@@ -306,22 +263,22 @@ class FuzzyService(BaseService):
             result = self.fuzzy_engine.fuzzify(indicator, series)
 
             # Convert result to dictionary
-            fuzzified_values = {}
+            fuzzified_values: dict[str, Any] = {}
             if hasattr(result, "columns"):  # It's a DataFrame
                 for col in result.columns:
                     col_data = result[col]
                     if hasattr(col_data, "tolist"):
-                        fuzzified_values[col] = col_data.tolist()
+                        fuzzified_values[str(col)] = col_data.tolist()
                     else:
-                        fuzzified_values[col] = (
+                        fuzzified_values[str(col)] = (
                             [col_data] if not isinstance(col_data, list) else col_data
                         )
             else:  # It's already a dict
                 for key, value in result.items():
                     if hasattr(value, "tolist"):
-                        fuzzified_values[key] = value.tolist()
+                        fuzzified_values[str(key)] = value.tolist()
                     else:
-                        fuzzified_values[key] = (
+                        fuzzified_values[str(key)] = (
                             [value] if not isinstance(value, list) else value
                         )
 
@@ -336,7 +293,7 @@ class FuzzyService(BaseService):
             # Create response with metadata
             response = {
                 "indicator": indicator,
-                "fuzzy_sets": self.fuzzy_engine.get_fuzzy_sets(indicator),
+                "fuzzy_sets": self.fuzzy_engine.get_membership_names(fuzzy_set_id),
                 "values": fuzzified_values,
                 "points": len(values),
             }
@@ -561,8 +518,8 @@ class FuzzyService(BaseService):
                 end_date=end_date,
             )
 
-            # Determine which indicators to process
-            available_indicators = self.fuzzy_engine.get_available_indicators()
+            # V3: Use fuzzy_set_ids instead of indicator names
+            available_indicators = list(self.fuzzy_engine._fuzzy_sets.keys())
             if indicators is None:
                 # Return all configured indicators
                 target_indicators = available_indicators
@@ -651,8 +608,9 @@ class FuzzyService(BaseService):
                     )
 
                     # Structure results for frontend consumption
+                    # V3: indicator_name is actually fuzzy_set_id
                     indicator_fuzzy_sets = []
-                    fuzzy_sets = self.fuzzy_engine.get_fuzzy_sets(indicator_name)
+                    fuzzy_sets = self.fuzzy_engine.get_membership_names(indicator_name)
 
                     for set_name in fuzzy_sets:
                         output_name = f"{indicator_name}_{set_name}"
@@ -859,15 +817,15 @@ class FuzzyService(BaseService):
 
                 return {"status": status, "message": message, "initialized": False}
 
-            # Get available indicators
-            available_indicators = self.fuzzy_engine.get_available_indicators()
+            # V3: Get available fuzzy_set_ids
+            available_indicators = list(self.fuzzy_engine._fuzzy_sets.keys())
 
             # Get a sample fuzzy set for testing if available
             sample_fuzzy_sets: list[str] = []
             if available_indicators:
-                sample_indicator = available_indicators[0]
-                sample_fuzzy_sets = list(
-                    self.fuzzy_engine.get_fuzzy_sets(sample_indicator)
+                sample_fuzzy_set_id = available_indicators[0]
+                sample_fuzzy_sets = self.fuzzy_engine.get_membership_names(
+                    sample_fuzzy_set_id
                 )
 
             return {

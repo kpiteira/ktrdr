@@ -29,9 +29,9 @@ from sklearn.metrics import (
 
 from ktrdr import get_logger
 from ktrdr.async_infrastructure.cancellation import CancellationToken
+from ktrdr.config.models import FuzzySetDefinition
 from ktrdr.data.multi_timeframe_coordinator import MultiTimeframeCoordinator
 from ktrdr.data.repository import DataRepository
-from ktrdr.fuzzy.config import FuzzyConfigLoader
 from ktrdr.fuzzy.engine import FuzzyEngine
 from ktrdr.indicators.indicator_engine import IndicatorEngine
 
@@ -348,14 +348,26 @@ class TrainingPipeline:
                 f"with {len(fuzzy_configs)} fuzzy indicator(s)"
             )
 
-            # Initialize fuzzy engine
-            fuzzy_config = FuzzyConfigLoader.load_from_dict(fuzzy_configs)
-            fuzzy_engine = FuzzyEngine(fuzzy_config)
+            # Convert legacy format to v3 FuzzySetDefinition format
+            # Legacy: {indicator_name: {membership_name: {...}}}
+            # V3: {fuzzy_set_id: FuzzySetDefinition(indicator=..., membership=...)}
+            v3_config: dict[str, FuzzySetDefinition] = {}
+            for indicator_name, memberships in fuzzy_configs.items():
+                # Filter out non-membership fields like "input_transform"
+                mf_data: dict[str, Any] = {
+                    k: v
+                    for k, v in memberships.items()
+                    if k != "input_transform" and isinstance(v, dict)
+                }
+                mf_data["indicator"] = indicator_name
+                v3_config[indicator_name] = FuzzySetDefinition(**mf_data)
+
+            # Initialize fuzzy engine with v3 config
+            fuzzy_engine = FuzzyEngine(v3_config)
 
             # Always use multi-timeframe method (single-timeframe is just a 1-item dict)
-            # The fuzzy engine now passes context_data in multi-timeframe path!
             return fuzzy_engine.generate_multi_timeframe_memberships(
-                indicators, fuzzy_configs
+                indicators, v3_config
             )
 
     @staticmethod

@@ -432,17 +432,18 @@ class DecisionOrchestrator:
         Returns:
             FuzzyEngine instance configured with strategy fuzzy sets
         """
-        # Use the same approach as training system - load directly from dict
-        from ..fuzzy.config import FuzzyConfigLoader
+        from ktrdr.config.models import FuzzySetDefinition
 
         strategy_fuzzy_sets = self.strategy_config.get("fuzzy_sets", {})
         if not strategy_fuzzy_sets:
             raise ValueError("No fuzzy_sets found in strategy configuration")
 
-        # Load fuzzy config directly from the strategy fuzzy_sets
-        fuzzy_config = FuzzyConfigLoader.load_from_dict(strategy_fuzzy_sets)
+        # Convert to v3 FuzzySetDefinition format
+        v3_config: dict[str, FuzzySetDefinition] = {}
+        for fuzzy_set_id, definition in strategy_fuzzy_sets.items():
+            v3_config[fuzzy_set_id] = FuzzySetDefinition(**definition)
 
-        return FuzzyEngine(fuzzy_config)
+        return FuzzyEngine(v3_config)
 
     def _load_strategy_config(self, config_path: str) -> dict[str, Any]:
         """Load strategy configuration from YAML file.
