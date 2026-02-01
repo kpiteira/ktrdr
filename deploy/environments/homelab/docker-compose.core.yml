@@ -45,7 +45,7 @@ services:
       # Shared NFS mount paths for data, models, and strategies
       KTRDR_DATA_DIR: /mnt/ktrdr_data/data
       KTRDR_DATA_MODELS_DIR: /mnt/ktrdr_data/models
-      KTRDR_DATA_STRATEGIES_DIR: /mnt/ktrdr_data/strategies
+      STRATEGIES_DIR: /mnt/ktrdr_data/strategies
       KTRDR_CHECKPOINT_DIR: /mnt/ktrdr_data/checkpoints
     depends_on:
       db:

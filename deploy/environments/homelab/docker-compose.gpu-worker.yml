@@ -41,7 +41,7 @@ services:
       KTRDR_DATA_SHARED_MOUNT_PATH: /mnt/ktrdr_data
       KTRDR_DATA_DIR: /mnt/ktrdr_data/data
       KTRDR_DATA_MODELS_DIR: /mnt/ktrdr_data/models
-      KTRDR_DATA_STRATEGIES_DIR: /mnt/ktrdr_data/strategies
+      STRATEGIES_DIR: /mnt/ktrdr_data/strategies
       KTRDR_OTEL_OTLP_ENDPOINT: http://backend.ktrdr.home.mynerd.place:4317
       # Database access for checkpointing
       KTRDR_DB_HOST: backend.ktrdr.home.mynerd.place
