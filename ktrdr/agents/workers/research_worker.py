@@ -14,7 +14,6 @@ Environment Variables:
 """
 
 import asyncio
-import os
 import time
 from typing import Any, Protocol
 
@@ -110,15 +109,14 @@ GateFailedError = GateError
 
 
 def _get_poll_interval() -> float:
-    """Get the poll interval from environment.
+    """Get the poll interval from settings.
 
     Returns:
         Poll interval in seconds. Default 5.0 for stub workers.
     """
-    try:
-        return float(os.getenv("AGENT_POLL_INTERVAL", "5"))
-    except ValueError:
-        return 5.0
+    from ktrdr.config.settings import get_agent_settings
+
+    return get_agent_settings().poll_interval
 
 
 class AgentResearchWorker:
@@ -514,10 +512,13 @@ class AgentResearchWorker:
         )
         strategy_name = config.get("name", "unknown")
 
-        # Get date range from config or environment
+        # Get date range from config or settings
+        from ktrdr.config.settings import get_agent_settings
+
+        agent_settings = get_agent_settings()
         date_range = config.get("training_data", {}).get("date_range", {})
-        start_date = date_range.get("start") or os.getenv("AGENT_TRAINING_START_DATE")
-        end_date = date_range.get("end") or os.getenv("AGENT_TRAINING_END_DATE")
+        start_date = date_range.get("start") or agent_settings.training_start_date
+        end_date = date_range.get("end") or agent_settings.training_end_date
 
         # Call service directly - returns immediately with operation_id
         result = await self.training_service.start_training(
@@ -660,16 +661,19 @@ class AgentResearchWorker:
             config.get("training_data", {}).get("timeframes", {}).get("list", ["1h"])
         )[0]
 
-        # Get date range from config or environment or defaults
+        # Get date range from config or settings or defaults
+        from ktrdr.config.settings import get_agent_settings
+
+        agent_settings = get_agent_settings()
         backtest_config = config.get("backtest", {}).get("date_range", {})
         start_date_str = (
             backtest_config.get("start")
-            or os.getenv("AGENT_BACKTEST_START_DATE")
+            or agent_settings.backtest_start_date
             or "2024-01-01"
         )
         end_date_str = (
             backtest_config.get("end")
-            or os.getenv("AGENT_BACKTEST_END_DATE")
+            or agent_settings.backtest_end_date
             or "2024-06-30"
         )
 
@@ -1024,7 +1028,9 @@ class AgentResearchWorker:
         Returns:
             Estimated cost in dollars.
         """
-        model = os.getenv("AGENT_MODEL", DEFAULT_PRICING_MODEL)
+        from ktrdr.config.settings import get_agent_settings
+
+        model = get_agent_settings().model
         pricing = MODEL_PRICING.get(model, MODEL_PRICING[DEFAULT_PRICING_MODEL])
 
         input_cost = (input_tokens / 1_000_000) * pricing["input"]

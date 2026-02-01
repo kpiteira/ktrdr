@@ -5,7 +5,6 @@ Budget is stored in a JSON file per day to survive restarts.
 """
 
 import json
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -41,15 +40,16 @@ class BudgetTracker:
         """Initialize the budget tracker.
 
         Args:
-            daily_limit: Daily budget limit in dollars. Defaults to AGENT_DAILY_BUDGET
-                env var or $5.00.
-            data_dir: Directory for budget files. Defaults to AGENT_BUDGET_DIR env var
-                or "data/budget".
+            daily_limit: Daily budget limit in dollars. Defaults to
+                KTRDR_AGENT_DAILY_BUDGET env var or $5.00.
+            data_dir: Directory for budget files. Defaults to KTRDR_AGENT_BUDGET_DIR
+                env var or "data/budget".
         """
-        self.daily_limit = daily_limit or float(os.getenv("AGENT_DAILY_BUDGET", "5.0"))
-        resolved_dir = (
-            data_dir if data_dir else os.getenv("AGENT_BUDGET_DIR") or "data/budget"
-        )
+        from ktrdr.config.settings import get_agent_settings
+
+        settings = get_agent_settings()
+        self.daily_limit = daily_limit or settings.daily_budget
+        resolved_dir = data_dir if data_dir else settings.budget_dir
         self.data_dir = Path(resolved_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
 

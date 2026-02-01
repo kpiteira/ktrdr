@@ -14,7 +14,6 @@ This replaces the Phase 0 ClaudeCodeInvoker that used subprocess.
 from __future__ import annotations
 
 import asyncio
-import os
 from collections.abc import Coroutine
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable
@@ -66,7 +65,9 @@ def resolve_model(model: str | None) -> str:
         ValueError: If model is not a valid ID or alias.
     """
     if model is None:
-        return os.getenv("AGENT_MODEL", DEFAULT_MODEL)
+        from ktrdr.config.settings import get_agent_settings
+
+        return get_agent_settings().model
 
     # Check if it's a short alias
     if model.lower() in MODEL_ALIASES:
@@ -149,27 +150,21 @@ class AnthropicInvokerConfig:
     def from_env(cls) -> AnthropicInvokerConfig:
         """Load configuration from environment variables.
 
-        Environment variables:
-            AGENT_MODEL: Claude model to use (default: claude-opus-4-5-20251101)
-            AGENT_MAX_TOKENS: Maximum tokens for response (default: 4096)
-            AGENT_TIMEOUT_SECONDS: Timeout for API calls (default: 300)
-            AGENT_MAX_ITERATIONS: Max tool call loops (default: 10) (Task 8.5)
-            AGENT_MAX_INPUT_TOKENS: Input token circuit breaker (default: 50000) (Task 8.5)
+        Uses AgentSettings from the config system for all values.
+        Supports both new (KTRDR_AGENT_*) and deprecated (AGENT_*) env vars.
 
         Returns:
-            AnthropicInvokerConfig instance with values from environment.
+            AnthropicInvokerConfig instance with values from settings.
         """
-        model = os.getenv("AGENT_MODEL", DEFAULT_MODEL)
-        max_tokens = int(os.getenv("AGENT_MAX_TOKENS", "4096"))
-        timeout_seconds = int(os.getenv("AGENT_TIMEOUT_SECONDS", "300"))
-        max_iterations = int(os.getenv("AGENT_MAX_ITERATIONS", "10"))
-        max_input_tokens = int(os.getenv("AGENT_MAX_INPUT_TOKENS", "50000"))
+        from ktrdr.config.settings import get_agent_settings
+
+        settings = get_agent_settings()
         return cls(
-            model=model,
-            max_tokens=max_tokens,
-            timeout_seconds=timeout_seconds,
-            max_iterations=max_iterations,
-            max_input_tokens=max_input_tokens,
+            model=settings.model,
+            max_tokens=settings.max_tokens,
+            timeout_seconds=settings.timeout_seconds,
+            max_iterations=settings.max_iterations,
+            max_input_tokens=settings.max_input_tokens,
         )
 
 

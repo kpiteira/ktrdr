@@ -45,7 +45,9 @@ class TestApiServiceSettings:
     def test_env_var_override_base_url(self):
         """KTRDR_API_CLIENT_BASE_URL overrides default."""
         custom_url = "http://custom-api:9000/api/v1"
-        with patch.dict(os.environ, {"api_base_url": custom_url}, clear=True):
+        with patch.dict(
+            os.environ, {"KTRDR_API_CLIENT_BASE_URL": custom_url}, clear=True
+        ):
             from ktrdr.config.settings import ApiServiceSettings, clear_settings_cache
 
             clear_settings_cache()

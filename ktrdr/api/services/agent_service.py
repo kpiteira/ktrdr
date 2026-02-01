@@ -738,20 +738,19 @@ class AgentService:
         """
         from ktrdr.api.endpoints.workers import get_worker_registry
         from ktrdr.api.models.workers import WorkerType
+        from ktrdr.config.settings import get_agent_settings
 
-        # Check manual override
-        override = os.getenv("AGENT_MAX_CONCURRENT_RESEARCHES", "0")
-        if override != "0":
-            try:
-                return int(override)
-            except ValueError:
-                pass  # Fall through to calculation
+        settings = get_agent_settings()
+
+        # Check manual override (0 means unlimited/auto-calculate)
+        if settings.max_concurrent_researches > 0:
+            return settings.max_concurrent_researches
 
         # Calculate from workers
         registry = get_worker_registry()
         training = len(registry.list_workers(worker_type=WorkerType.TRAINING))
         backtest = len(registry.list_workers(worker_type=WorkerType.BACKTESTING))
-        buffer = int(os.getenv("AGENT_CONCURRENCY_BUFFER", "1"))
+        buffer = settings.concurrency_buffer
 
         # Minimum of 1 to allow at least one research
         return max(1, training + backtest + buffer)

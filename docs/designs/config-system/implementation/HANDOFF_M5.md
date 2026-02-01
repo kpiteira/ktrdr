@@ -189,3 +189,35 @@ Updated existing `ApiServiceSettings` class in `ktrdr/config/settings.py` to:
 
 ---
 
+## Task 5.5 Complete: Migrate Agent Consumers
+
+### Implementation Notes
+
+Replaced all `os.getenv("AGENT_*")` calls with `get_agent_settings().field`:
+
+**Files modified:**
+- `ktrdr/agents/invoker.py` — `resolve_model()` and `AnthropicInvokerConfig.from_env()`
+- `ktrdr/agents/budget.py` — `BudgetTracker.__init__()`
+- `ktrdr/agents/workers/research_worker.py` — `_get_poll_interval()`, training dates, backtest dates, pricing model
+- `ktrdr/api/services/agent_service.py` — `_get_max_concurrent_researches()`
+
+**Test fix:**
+- `tests/unit/config/test_api_service_settings.py` — Fixed env var name in test (was using old alias `api_base_url`, now uses `KTRDR_API_CLIENT_BASE_URL`)
+
+### Gotchas
+
+**Import inside function**: To avoid circular imports, the settings import is done inside the function body rather than at module level.
+
+**Removed unused `os` imports**: After migration, the `os` module was no longer needed in some files.
+
+### Tests
+
+All 708 config tests pass.
+
+### Next Task Notes (5.6: Migrate Data/Path Consumers)
+
+- Replace `os.getenv("DATA_DIR")`, `os.getenv("MODELS_DIR")` etc.
+- Files: `ktrdr/training/model_storage.py`, `ktrdr/data/repository/data_repository.py`, `ktrdr/data/acquisition/acquisition_service.py`
+
+---
+
