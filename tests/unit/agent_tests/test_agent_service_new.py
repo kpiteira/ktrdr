@@ -1128,12 +1128,14 @@ class TestAgentServiceBudget:
         from unittest.mock import patch
 
         from ktrdr.agents.workers.research_worker import AgentResearchWorker
+        from ktrdr.config import clear_settings_cache
 
         worker = AgentResearchWorker.__new__(AgentResearchWorker)
 
         # After M8 optimization: ~12k input tokens, ~2k output tokens
         # With Opus: (12000 * 5 + 2000 * 25) / 1_000_000 = $0.11
         with patch.dict(os.environ, {"AGENT_MODEL": "claude-opus-4-5-20251101"}):
+            clear_settings_cache()  # Must clear after env change
             cost = worker._estimate_cost(input_tokens=12000, output_tokens=2000)
             assert (
                 0.05 < cost < 0.15
@@ -1141,6 +1143,7 @@ class TestAgentServiceBudget:
 
         # With Haiku: (12000 * 1 + 2000 * 5) / 1_000_000 = $0.022
         with patch.dict(os.environ, {"AGENT_MODEL": "claude-haiku-4-5-20251001"}):
+            clear_settings_cache()  # Must clear after env change
             cost = worker._estimate_cost(input_tokens=12000, output_tokens=2000)
             assert (
                 0.01 < cost < 0.05

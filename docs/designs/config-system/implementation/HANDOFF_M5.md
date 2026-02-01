@@ -309,3 +309,91 @@ Updated `ktrdr/config/deprecation.py` with M5 deprecated name mappings:
 
 ---
 
+## Task 5.9 Complete: Write Unit Tests
+
+### Implementation Notes
+
+All unit tests pass (4983 passed, 5 skipped). Key fixes made:
+
+**Created autouse fixtures** for clearing settings cache in test directories:
+- `tests/unit/workers/conftest.py` — clears cache before/after each test
+- `tests/unit/agents/conftest.py` — clears cache before/after each test
+- `tests/unit/agent_tests/conftest.py` — already existed (updated)
+
+**Updated test behaviors:**
+- `test_default_poll_interval` — Now uses `monkeypatch.delenv("AGENT_POLL_INTERVAL")` since conftest sets it to 0.01
+- `test_invalid_override_raises_validation_error` — Renamed and updated to expect ValidationError instead of silent fallback (Pydantic validates on instantiation)
+- `test_cost_estimation_typical_design_phase` — Added `clear_settings_cache()` inside `patch.dict` blocks
+
+**Removed unused imports:**
+- `tests/unit/workers/test_network_config.py` — Removed unused `pytest` import
+
+### Gotchas
+
+**`conftest.py` sets environment variables globally**: The `tests/unit/agent_tests/conftest.py` sets `AGENT_POLL_INTERVAL=0.01` and `AGENT_MODEL=haiku`. Tests verifying defaults must explicitly unset these.
+
+**Pydantic validation is stricter than `os.getenv`**: Invalid env var values (like "invalid" for an int field) now cause ValidationError at settings instantiation, rather than silently falling back. This is better behavior (fail-fast).
+
+**`patch.dict(os.environ)` doesn't clear settings cache**: When using `patch.dict` to change env vars, you must also call `clear_settings_cache()` inside the `with` block for changes to take effect.
+
+### Tests
+
+All 4983 unit tests pass in 62 seconds. Quality checks pass.
+
+### Next Task Notes (5.10: Execute E2E Test)
+
+- Start Docker environment and run E2E tests
+- Verify workers can register with backend using new settings
+- Check deprecation warnings are emitted for old env vars
+
+---
+
+## Task 5.10 Complete: Execute E2E Test
+
+### Implementation Notes
+
+All E2E scenarios pass in sandbox environment (`ktrdr--indicator-std`):
+
+**Scenario 1: Agent reads config** ✅
+```bash
+KTRDR_GATE_DRY_RUN=true → Mode: simulation, Dry run: True, Can execute: False
+```
+
+**Scenario 2: Data paths work** ✅
+```bash
+KTRDR_DATA_DIR=/tmp/ktrdr-test → Data dir: /tmp/ktrdr-test
+```
+
+**Scenario 3: CLI uses correct API URL** ✅
+```bash
+ktrdr ops → Connected to http://localhost:8001 (sandbox backend)
+```
+
+**Scenario 4: Deprecated KTRDR_API_URL works** ✅
+```bash
+KTRDR_API_URL=http://localhost:8001 → Emits deprecation warning, value is used
+```
+
+**Additional fix:**
+- Exported new M5 settings classes and getters from `ktrdr/config/__init__.py`
+
+### All Tests Pass
+
+- Unit tests: 4983 passed
+- Quality checks: All pass
+- E2E scenarios: All 4 pass
+
+---
+
+## M5 Milestone Complete
+
+All 10 tasks completed:
+- ✅ Tasks 5.1-5.4: Created AgentSettings, AgentGateSettings, DataSettings, updated ApiServiceSettings
+- ✅ Tasks 5.5-5.7: Migrated all consumers from `os.getenv()` to settings
+- ✅ Task 5.8: Updated deprecation module with M5 mappings
+- ✅ Task 5.9: All unit tests pass (4983 tests)
+- ✅ Task 5.10: All E2E scenarios pass
+
+**Duplication #5 resolved**: Multiple backend URL env vars consolidated through `ApiServiceSettings` as single source of truth.
+
+---

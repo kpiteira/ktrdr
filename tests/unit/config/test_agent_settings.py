@@ -16,8 +16,14 @@ def clear_cache():
 class TestAgentSettingsDefaults:
     """Test AgentSettings default values."""
 
-    def test_default_poll_interval(self):
-        """Poll interval should default to 5 seconds."""
+    def test_default_poll_interval(self, monkeypatch):
+        """Poll interval should default to 5 seconds.
+
+        Note: conftest.py sets AGENT_POLL_INTERVAL=0.01 globally, so we need to
+        explicitly remove it to test the true default.
+        """
+        monkeypatch.delenv("AGENT_POLL_INTERVAL", raising=False)
+
         from ktrdr.config.settings import get_agent_settings
 
         settings = get_agent_settings()

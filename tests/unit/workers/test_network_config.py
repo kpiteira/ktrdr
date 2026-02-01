@@ -3,8 +3,6 @@
 import socket
 from unittest.mock import Mock, patch
 
-import pytest
-
 from ktrdr.backtesting.worker_registration import (
     WorkerRegistration as BacktestWorkerRegistration,
 )
@@ -117,7 +115,12 @@ class TestWorkerEndpointURLDiscovery:
 
 
 class TestBackendURLValidation:
-    """Test backend URL validation - must be explicitly configured."""
+    """Test backend URL configuration from settings.
+
+    Note: After M5 migration, workers use settings with defaults instead of
+    requiring explicit KTRDR_API_URL. The backend URL now comes from
+    ApiServiceSettings.base_url (minus /api/v1 suffix).
+    """
 
     def setup_method(self):
         """Clear settings cache before each test."""
@@ -127,44 +130,46 @@ class TestBackendURLValidation:
         """Clear settings cache after each test."""
         clear_settings_cache()
 
-    def test_backend_url_required_for_backtesting(self, monkeypatch):
-        """KTRDR_API_URL must be set - no defaults allowed."""
+    def test_backend_url_uses_default_when_not_set(self, monkeypatch):
+        """Should use default from settings when KTRDR_API_URL not set."""
         monkeypatch.delenv("KTRDR_API_URL", raising=False)
+        monkeypatch.delenv("KTRDR_API_CLIENT_BASE_URL", raising=False)
+        clear_settings_cache()
 
-        with pytest.raises(
-            RuntimeError,
-            match="KTRDR_API_URL environment variable is required",
-        ):
-            BacktestWorkerRegistration()
+        # Should not raise - uses settings default
+        registration = BacktestWorkerRegistration()
+        # Default is http://localhost:8000 (stripped from http://localhost:8000/api/v1)
+        assert registration.backend_url == "http://localhost:8000"
 
-    def test_backend_url_required_for_training(self, monkeypatch):
-        """KTRDR_API_URL must be set for training workers too."""
-        monkeypatch.delenv("KTRDR_API_URL", raising=False)
-
-        with pytest.raises(
-            RuntimeError,
-            match="KTRDR_API_URL environment variable is required",
-        ):
-            TrainingWorkerRegistration()
-
-    def test_backend_url_explicit_value_accepted(self, monkeypatch):
-        """Should accept explicit KTRDR_API_URL value."""
+    def test_backend_url_from_deprecated_env_var(self, monkeypatch):
+        """Should accept deprecated KTRDR_API_URL env var."""
         backend_url = "http://192.168.1.100:8000"
         monkeypatch.setenv("KTRDR_API_URL", backend_url)
+        clear_settings_cache()
 
         registration = BacktestWorkerRegistration()
         assert registration.backend_url == backend_url
 
-    def test_error_message_provides_example(self, monkeypatch):
-        """Error message should provide helpful example."""
+    def test_backend_url_from_new_env_var(self, monkeypatch):
+        """Should accept new KTRDR_API_CLIENT_BASE_URL env var."""
+        # Set the new env var with /api/v1 suffix (as settings expects)
+        monkeypatch.setenv(
+            "KTRDR_API_CLIENT_BASE_URL", "http://192.168.1.100:9000/api/v1"
+        )
+        clear_settings_cache()
+
+        registration = BacktestWorkerRegistration()
+        # Backend URL should have /api/v1 suffix stripped
+        assert registration.backend_url == "http://192.168.1.100:9000"
+
+    def test_training_worker_uses_same_backend_url_logic(self, monkeypatch):
+        """Training workers should use same settings-based backend URL."""
         monkeypatch.delenv("KTRDR_API_URL", raising=False)
+        monkeypatch.delenv("KTRDR_API_CLIENT_BASE_URL", raising=False)
+        clear_settings_cache()
 
-        with pytest.raises(RuntimeError) as exc_info:
-            BacktestWorkerRegistration()
-
-        error_msg = str(exc_info.value)
-        assert "KTRDR_API_URL" in error_msg
-        assert "Example:" in error_msg or "example" in error_msg.lower()
+        registration = TrainingWorkerRegistration()
+        assert registration.backend_url == "http://localhost:8000"
 
 
 class TestIPDetectionEdgeCases:
