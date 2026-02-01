@@ -53,11 +53,13 @@ SHARED_SUBDIRS = ["data", "models", "strategies"]
 SANDBOX_SECRETS_ITEM = "ktrdr-sandbox-dev"
 
 # Mapping from 1Password field labels to environment variable names
+# Note: These use KTRDR_* names for KTRDR settings (M6 migration)
+# Third-party settings (GF_*, ANTHROPIC_*) keep their original names
 SANDBOX_SECRETS_MAPPING = {
-    "db_password": "DB_PASSWORD",
-    "jwt_secret": "JWT_SECRET",
-    "anthropic_api_key": "ANTHROPIC_API_KEY",
-    "grafana_password": "GF_ADMIN_PASSWORD",
+    "db_password": "KTRDR_DB_PASSWORD",
+    "jwt_secret": "KTRDR_AUTH_JWT_SECRET",
+    "anthropic_api_key": "ANTHROPIC_API_KEY",  # Third-party, keep original name
+    "grafana_password": "GF_ADMIN_PASSWORD",  # Third-party, keep original name
 }
 
 
@@ -662,12 +664,17 @@ def up(
         cmd.append("--build")
 
     # Set environment for compose
-    # Order matters: os.environ < .env.sandbox < 1Password secrets
+    # Order matters: os.environ < .env.sandbox < 1Password secrets < CLI overrides
     compose_env = os.environ.copy()
     compose_env.update(env)
     compose_env.update(secrets_env)  # Secrets override defaults
 
+    # Set KTRDR_ENV for development mode (sandbox always uses development)
+    # This controls validation strictness - development mode warns on insecure defaults
+    compose_env["KTRDR_ENV"] = "development"
+
     console.print(f"Running: docker compose -f {compose_file.name} up -d")
+    console.print("  [dim]KTRDR_ENV=development[/dim]")
 
     try:
         subprocess.run(cmd, check=True, env=compose_env)

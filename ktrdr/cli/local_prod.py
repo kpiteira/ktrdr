@@ -221,6 +221,7 @@ def up(
         no_secrets=no_secrets,
         profile="local-prod",
         secrets_item=LOCAL_PROD_SECRETS_ITEM,
+        ktrdr_env="production",  # Production mode requires secure credentials
     )
 
     if exit_code != 0:
@@ -366,9 +367,10 @@ def logs(
 # They need secrets from 1Password to connect to the database.
 
 # Mapping from 1Password field labels to environment variable names
+# Note: Uses KTRDR_* names for KTRDR settings (M6 migration)
 HOST_SERVICE_SECRETS_MAP = {
-    "db_password": "DB_PASSWORD",
-    "anthropic_api_key": "ANTHROPIC_API_KEY",
+    "db_password": "KTRDR_DB_PASSWORD",
+    "anthropic_api_key": "ANTHROPIC_API_KEY",  # Third-party, keep original name
 }
 
 # Host service configurations
@@ -429,7 +431,7 @@ def _get_host_service_env(cwd: Path) -> dict[str, str]:
     # Validate required secrets are present
     required_secrets = [
         "db_password"
-    ]  # DB_PASSWORD is required for database connection
+    ]  # KTRDR_DB_PASSWORD is required for database connection
     missing = [s for s in required_secrets if s not in secrets]
     if missing:
         error_console.print("[red]Error:[/red] Missing required secrets in 1Password:")
@@ -442,31 +444,32 @@ def _get_host_service_env(cwd: Path) -> dict[str, str]:
         raise typer.Exit(1)
 
     # Add database connection settings for local-prod (slot 0)
-    env["DB_HOST"] = "localhost"
-    env["DB_PORT"] = "5432"
-    env["DB_NAME"] = "ktrdr"
-    env["DB_USER"] = "ktrdr"
+    # Uses KTRDR_* naming convention (M6 migration)
+    env["KTRDR_DB_HOST"] = "localhost"
+    env["KTRDR_DB_PORT"] = "5432"
+    env["KTRDR_DB_NAME"] = "ktrdr"
+    env["KTRDR_DB_USER"] = "ktrdr"
 
     # Read shared directory paths from .env.sandbox
     # (These are set by instance_core.py to point to ~/.ktrdr/shared/)
     sandbox_env = load_env_file(cwd)
     if sandbox_env:
         shared_fallback = Path.home() / ".ktrdr" / "shared"
-        env["DATA_DIR"] = sandbox_env.get(
+        env["KTRDR_DATA_DIR"] = sandbox_env.get(
             "KTRDR_DATA_DIR", str(shared_fallback / "data")
         )
-        env["MODELS_DIR"] = sandbox_env.get(
+        env["KTRDR_MODELS_DIR"] = sandbox_env.get(
             "KTRDR_MODELS_DIR", str(shared_fallback / "models")
         )
-        env["STRATEGIES_DIR"] = sandbox_env.get(
+        env["KTRDR_STRATEGIES_DIR"] = sandbox_env.get(
             "KTRDR_STRATEGIES_DIR", str(shared_fallback / "strategies")
         )
     else:
         # Fallback to canonical shared directory if .env.sandbox missing
         shared_dir = Path.home() / ".ktrdr" / "shared"
-        env["DATA_DIR"] = str(shared_dir / "data")
-        env["MODELS_DIR"] = str(shared_dir / "models")
-        env["STRATEGIES_DIR"] = str(shared_dir / "strategies")
+        env["KTRDR_DATA_DIR"] = str(shared_dir / "data")
+        env["KTRDR_MODELS_DIR"] = str(shared_dir / "models")
+        env["KTRDR_STRATEGIES_DIR"] = str(shared_dir / "strategies")
 
     return env
 
