@@ -67,3 +67,45 @@ Created `AgentSettings` class with prefix `KTRDR_AGENT_` in `ktrdr/config/settin
 
 ---
 
+## Task 5.2 Complete: Create `AgentGateSettings` Class
+
+### Implementation Notes
+
+Created `AgentGateSettings` class with prefix `KTRDR_GATE_` in `ktrdr/config/settings.py`:
+
+**Fields:**
+- `mode` (str, default "simulation") — Execution mode: simulation or live
+- `dry_run` (bool, default True) — If True, log trades but don't execute
+- `confirmation_required` (bool, default True) — Require confirmation before trades
+- `max_position_size` (int, default 0) — Maximum position size in dollars (0 = no limit)
+- `max_daily_trades` (int, default 0) — Maximum trades per day (0 = no limit)
+
+**Helper methods:**
+- `is_live_mode()` — Returns True if mode is "live"
+- `can_execute_trade()` — Returns True only if mode is "live" AND dry_run is False
+
+### Gotchas
+
+**Safe defaults**: All defaults are set to the safest option (simulation, dry_run=True, confirmation_required=True). This ensures accidental production runs cannot execute real trades.
+
+**No deprecated names**: This is a new settings class with no existing env vars to deprecate.
+
+**Zero means no limit**: For `max_position_size` and `max_daily_trades`, a value of 0 means no limit, following the pattern from `AgentSettings.max_concurrent_researches`.
+
+### Tests
+
+20 unit tests in `tests/unit/config/test_agent_gate_settings.py`:
+- Default values (5 tests)
+- New env var names (6 tests)
+- Validation (3 tests)
+- Helper methods (4 tests)
+- Getter caching (2 tests)
+
+### Next Task Notes (5.3: Create DataSettings)
+
+- Prefix: `KTRDR_DATA_`
+- Fields: data_dir, cache_dir, models_dir, etc.
+- Check for existing `DATA_*` or `CACHE_*` env vars in the codebase
+
+---
+

@@ -1017,6 +1017,81 @@ class AgentSettings(BaseSettings):
     )
 
 
+class AgentGateSettings(BaseSettings):
+    """Agent Gate Settings.
+
+    Controls whether the agent can execute real trades. This is a safety gate
+    that prevents accidental execution in production.
+
+    Safe defaults: simulation mode, dry_run=True, confirmation_required=True.
+
+    Environment variables (prefix KTRDR_GATE_):
+        KTRDR_GATE_MODE: Execution mode (simulation or live). Default: simulation
+        KTRDR_GATE_DRY_RUN: If True, log trades but don't execute. Default: true
+        KTRDR_GATE_CONFIRMATION_REQUIRED: Require confirmation before trades. Default: true
+        KTRDR_GATE_MAX_POSITION_SIZE: Maximum position size in dollars. Default: 0 (no limit)
+        KTRDR_GATE_MAX_DAILY_TRADES: Maximum trades per day. Default: 0 (no limit)
+    """
+
+    mode: str = Field(
+        default="simulation",
+        description="Execution mode: simulation (paper) or live",
+    )
+    dry_run: bool = Field(
+        default=True,
+        description="If True, log trades but don't execute (safe default)",
+    )
+    confirmation_required: bool = Field(
+        default=True,
+        description="Require confirmation before executing trades",
+    )
+    max_position_size: int = Field(
+        default=0,
+        ge=0,
+        description="Maximum position size in dollars (0 = no limit)",
+    )
+    max_daily_trades: int = Field(
+        default=0,
+        ge=0,
+        description="Maximum trades per day (0 = no limit)",
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_GATE_",
+        env_file=".env.local",
+        extra="ignore",
+    )
+
+    @field_validator("mode")
+    @classmethod
+    def validate_mode(cls, v: str) -> str:
+        """Validate that mode is simulation or live."""
+        allowed = ["simulation", "live"]
+        if v.lower() not in allowed:
+            raise ValueError(f"Mode must be one of {allowed}, got '{v}'")
+        return v.lower()
+
+    def is_live_mode(self) -> bool:
+        """Check if running in live trading mode.
+
+        Returns:
+            True if mode is 'live', False otherwise.
+        """
+        return self.mode == "live"
+
+    def can_execute_trade(self) -> bool:
+        """Check if trades can actually be executed.
+
+        Returns True only if:
+        1. Mode is 'live'
+        2. dry_run is False
+
+        Returns:
+            True if real trades can be executed.
+        """
+        return self.is_live_mode() and not self.dry_run
+
+
 class ApiServiceSettings(BaseSettings):
     """API Server configuration for client connections.
 
@@ -1143,6 +1218,12 @@ def get_agent_settings() -> AgentSettings:
 
 
 @lru_cache
+def get_agent_gate_settings() -> AgentGateSettings:
+    """Get agent gate settings with caching."""
+    return AgentGateSettings()
+
+
+@lru_cache
 def get_api_service_settings() -> ApiServiceSettings:
     """Get API service settings for client connections with caching."""
     return ApiServiceSettings()
@@ -1186,6 +1267,7 @@ def clear_settings_cache() -> None:
     get_training_host_service_settings.cache_clear()
     get_worker_settings.cache_clear()
     get_agent_settings.cache_clear()
+    get_agent_gate_settings.cache_clear()
 
 
 # Export settings classes and getters
@@ -1205,6 +1287,7 @@ __all__ = [
     "TrainingHostServiceSettings",
     "WorkerSettings",
     "AgentSettings",
+    "AgentGateSettings",
     # Cached getters
     "get_api_settings",
     "get_auth_settings",
@@ -1221,6 +1304,7 @@ __all__ = [
     "get_training_host_service_settings",
     "get_worker_settings",
     "get_agent_settings",
+    "get_agent_gate_settings",
     # Utilities
     "clear_settings_cache",
     "deprecated_field",
