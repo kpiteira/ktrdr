@@ -33,7 +33,7 @@ M6 updates all Docker Compose files and CLI commands to use the new `KTRDR_*` en
 | `JWT_SECRET` | `KTRDR_AUTH_JWT_SECRET` | AuthSettings |
 | `USE_IB_HOST_SERVICE` | `KTRDR_IB_HOST_ENABLED` | IBHostServiceSettings |
 | `IB_HOST_SERVICE_URL` | Computed from KTRDR_IB_HOST_HOST/PORT | IBHostServiceSettings |
-| `WORKER_TYPE` | `KTRDR_WORKER_TYPE` | (not in settings, passthrough) |
+| `WORKER_TYPE` | `WORKER_TYPE` (unchanged) | Not a Settings field, passthrough to worker |
 | `WORKER_PORT` | `KTRDR_WORKER_PORT` | WorkerSettings |
 | `WORKER_PUBLIC_BASE_URL` | `KTRDR_WORKER_PUBLIC_BASE_URL` | WorkerSettings |
 | `AGENT_*` | `KTRDR_AGENT_*` | AgentSettings |

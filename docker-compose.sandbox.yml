@@ -114,6 +114,8 @@ services:
       # JWT for API auth (INSECURE default - use 1Password via 'ktrdr sandbox up')
       - KTRDR_AUTH_JWT_SECRET=${KTRDR_AUTH_JWT_SECRET:-local-dev-secret-minimum-32-characters-long}
       # Agent configuration
+      # NOTE: KTRDR_AGENT_ENABLED and KTRDR_AGENT_TRIGGER_INTERVAL are placeholders
+      # for future agent auto-trigger functionality (not yet consumed by backend)
       - KTRDR_AGENT_ENABLED=${KTRDR_AGENT_ENABLED:-false}
       - KTRDR_AGENT_TRIGGER_INTERVAL=${KTRDR_AGENT_TRIGGER_INTERVAL:-300}
       # From 1Password - empty default disables agents
