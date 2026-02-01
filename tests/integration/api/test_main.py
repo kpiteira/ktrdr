@@ -10,9 +10,9 @@ This module tests the main FastAPI application functionality.
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
-from ktrdr import metadata  # Import the metadata module
 from ktrdr.api.main import create_application
 from ktrdr.errors import ConfigurationError, ConnectionError, DataError, ProcessingError
+from ktrdr.version import __version__
 
 
 class TestMainApplication:
@@ -38,7 +38,7 @@ class TestMainApplication:
 
         # Verify required fields
         assert data["status"] == "ok"
-        assert data["version"] == metadata.VERSION
+        assert data["version"] == __version__
 
         # Orphan detector is included (M2: Orphan Detection)
         # May be None if not initialized during test
@@ -108,4 +108,4 @@ class TestMainApplication:
         # the basic structure of the OpenAPI spec.
         assert "info" in openapi_spec
         assert openapi_spec["info"]["title"] == "KTRDR API"
-        assert openapi_spec["info"]["version"] == metadata.VERSION
+        assert openapi_spec["info"]["version"] == __version__

@@ -13,7 +13,7 @@ from urllib.parse import quote_plus
 from pydantic import AliasChoices, Field, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from .. import metadata
+from ..version import __version__
 
 T = TypeVar("T")
 
@@ -66,9 +66,9 @@ class APISettings(BaseSettings):
     """
 
     # API metadata
-    title: str = Field(default=metadata.API_TITLE)
-    description: str = Field(default=metadata.API_DESCRIPTION)
-    version: str = Field(default=metadata.VERSION)
+    title: str = Field(default="KTRDR API")
+    description: str = Field(default="REST API for KTRDR trading system")
+    version: str = Field(default=__version__)
 
     # Server configuration
     host: str = Field(default="127.0.0.1", description="Host to bind the API server")
@@ -85,7 +85,7 @@ class APISettings(BaseSettings):
     )
 
     # API routing
-    api_prefix: str = Field(default=metadata.API_PREFIX)
+    api_prefix: str = Field(default="/api/v1")
 
     # CORS configuration
     cors_origins: list[str] = Field(
@@ -1174,26 +1174,26 @@ class ApiServiceSettings(BaseSettings):
     enabled: bool = Field(default=True)  # API is always "enabled" for clients
 
     base_url: str = deprecated_field(
-        metadata.get("api.client_base_url", "http://localhost:8000/api/v1"),
+        "http://localhost:8000/api/v1",
         "KTRDR_API_CLIENT_BASE_URL",
         "KTRDR_API_URL",
         description="Base URL for API client connections",
     )
 
     timeout: float = Field(
-        default=metadata.get("api.client_timeout", 30.0),
+        default=30.0,
         gt=0,
         description="Request timeout in seconds",
     )
 
     max_retries: int = Field(
-        default=metadata.get("api.client_max_retries", 3),
+        default=3,
         ge=0,
         description="Maximum retry attempts",
     )
 
     retry_delay: float = Field(
-        default=metadata.get("api.client_retry_delay", 1.0),
+        default=1.0,
         ge=0,
         description="Delay between retries in seconds",
     )

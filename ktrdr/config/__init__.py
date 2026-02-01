@@ -1,11 +1,10 @@
 """
 KTRDR Configuration Package - Configuration management for the KTRDR package.
 
-This package provides access to configuration settings and metadata with
-environment-specific overrides and environment variable support.
+This package provides access to configuration settings with environment-specific
+overrides and environment variable support.
 """
 
-from .. import metadata
 from .deprecation import DEPRECATED_NAMES, warn_deprecated_env_vars
 from .loader import ConfigLoader
 from .settings import (
@@ -49,7 +48,6 @@ from .validation import (
 )
 
 __all__ = [
-    "metadata",
     "ConfigLoader",
     "InputValidator",
     "sanitize_parameter",

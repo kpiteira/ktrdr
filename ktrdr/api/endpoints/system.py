@@ -11,10 +11,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ktrdr import metadata
 from ktrdr.api.models.base import ApiResponse
 from ktrdr.api.services.ib_service import IbService
 from ktrdr.logging import get_logger
+from ktrdr.version import __version__
 
 logger = get_logger(__name__)
 
@@ -137,7 +137,7 @@ async def get_system_status_standardized(
         return ApiResponse(
             success=True,
             data={
-                "version": metadata.VERSION,
+                "version": __version__,
                 "environment": "development",  # Could be made configurable
                 "uptime_seconds": uptime_seconds,
                 "health": "healthy" if ib_available else "degraded",
@@ -180,7 +180,7 @@ async def get_system_config() -> ApiResponse:
         return ApiResponse(
             success=True,
             data={
-                "version": metadata.VERSION,
+                "version": __version__,
                 "environment": api_config.environment,
                 "api_version": "v1",
                 "api_prefix": api_config.api_prefix,
