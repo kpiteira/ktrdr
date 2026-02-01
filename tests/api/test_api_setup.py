@@ -51,4 +51,4 @@ def test_api_openapi_spec(client):
     assert "paths" in openapi_spec
     assert "info" in openapi_spec
     assert openapi_spec["info"]["title"] == "KTRDR API"
-    assert openapi_spec["info"]["version"] == __version__  # Use VERSION from metadata
+    assert openapi_spec["info"]["version"] == __version__  # Version from ktrdr.version
