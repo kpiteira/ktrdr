@@ -16,6 +16,7 @@ import pytest
 from ktrdr.api.models.workers import WorkerStatus, WorkerType
 from ktrdr.api.services.worker_registry import WorkerRegistry
 from ktrdr.backtesting.worker_registration import WorkerRegistration
+from ktrdr.config.settings import clear_settings_cache
 
 
 def create_mock_httpx_client_class(registry: WorkerRegistry, mock_response):
@@ -62,9 +63,9 @@ class TestWorkerEndToEnd:
         with patch.dict(
             os.environ,
             {
-                "WORKER_ID": "backtest-worker-1",
-                "WORKER_PORT": "5003",
-                "KTRDR_API_URL": "http://backend:8000",
+                "KTRDR_WORKER_ID": "backtest-worker-1",
+                "KTRDR_WORKER_PORT": "5003",
+                "KTRDR_API_CLIENT_BASE_URL": "http://backend:8000/api/v1",
             },
         ):
             # 3. Worker: Initialize worker registration
@@ -173,11 +174,12 @@ class TestWorkerEndToEnd:
         with patch.dict(
             os.environ,
             {
-                "WORKER_ID": "backtest-1",
-                "WORKER_PORT": "5003",
-                "KTRDR_API_URL": "http://backend:8000",
+                "KTRDR_WORKER_ID": "backtest-1",
+                "KTRDR_WORKER_PORT": "5003",
+                "KTRDR_API_CLIENT_BASE_URL": "http://backend:8000/api/v1",
             },
         ):
+            clear_settings_cache()  # Ensure fresh settings with patched env vars
             worker_reg = WorkerRegistration()
 
             # Mock first registration
@@ -207,11 +209,12 @@ class TestWorkerEndToEnd:
         with patch.dict(
             os.environ,
             {
-                "WORKER_ID": "backtest-1",
-                "WORKER_PORT": "5003",
-                "KTRDR_API_URL": "http://backend:8000",
+                "KTRDR_WORKER_ID": "backtest-1",
+                "KTRDR_WORKER_PORT": "5003",
+                "KTRDR_API_CLIENT_BASE_URL": "http://backend:8000/api/v1",
             },
         ):
+            clear_settings_cache()  # Ensure fresh settings with patched env vars
             worker_reg2 = WorkerRegistration()
 
             MockAsyncClient2 = create_mock_httpx_client_class(registry, mock_response)
@@ -237,9 +240,9 @@ class TestWorkerEndToEnd:
         with patch.dict(
             os.environ,
             {
-                "WORKER_ID": "backtest-1",
-                "WORKER_PORT": "5003",
-                "KTRDR_API_URL": "http://backend:8000",
+                "KTRDR_WORKER_ID": "backtest-1",
+                "KTRDR_WORKER_PORT": "5003",
+                "KTRDR_API_CLIENT_BASE_URL": "http://backend:8000/api/v1",
             },
         ):
             # Configure worker with shorter retry parameters for faster test
@@ -300,9 +303,9 @@ class TestWorkerEndToEnd:
         with patch.dict(
             os.environ,
             {
-                "WORKER_ID": "backtest-1",
-                "WORKER_PORT": "5003",
-                "KTRDR_API_URL": "http://backend:8000",
+                "KTRDR_WORKER_ID": "backtest-1",
+                "KTRDR_WORKER_PORT": "5003",
+                "KTRDR_API_CLIENT_BASE_URL": "http://backend:8000/api/v1",
             },
         ):
             worker_reg = WorkerRegistration()
