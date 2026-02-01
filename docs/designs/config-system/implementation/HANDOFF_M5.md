@@ -273,3 +273,39 @@ Replaced all `os.getenv("KTRDR_API_URL")` calls with `get_api_service_settings()
 
 ---
 
+## Task 5.8 Complete: Update Validation and Deprecation Modules
+
+### Implementation Notes
+
+Updated `ktrdr/config/deprecation.py` with M5 deprecated name mappings:
+
+**Agent settings (AGENT_* → KTRDR_AGENT_*):**
+- AGENT_POLL_INTERVAL
+- AGENT_MODEL, AGENT_MAX_TOKENS, AGENT_TIMEOUT_SECONDS
+- AGENT_MAX_ITERATIONS, AGENT_MAX_INPUT_TOKENS
+- AGENT_DAILY_BUDGET, AGENT_BUDGET_DIR
+- AGENT_MAX_CONCURRENT_RESEARCHES, AGENT_CONCURRENCY_BUFFER
+- AGENT_TRAINING_START_DATE, AGENT_TRAINING_END_DATE
+- AGENT_BACKTEST_START_DATE, AGENT_BACKTEST_END_DATE
+
+**Data settings:**
+- DATA_DIR → KTRDR_DATA_DIR
+- MODELS_DIR → KTRDR_DATA_MODELS_DIR
+- DATA_MAX_SEGMENT_SIZE → KTRDR_DATA_MAX_SEGMENT_SIZE
+- DATA_PERIODIC_SAVE_MIN → KTRDR_DATA_PERIODIC_SAVE_INTERVAL
+
+**API client settings:**
+- KTRDR_API_URL → KTRDR_API_CLIENT_BASE_URL
+
+### Gotchas
+
+**The deprecation module uses `warn_deprecated_env_vars()`**: This function is already called at startup and will emit DeprecationWarning for any deprecated env vars found in the environment.
+
+### Next Task Notes (5.9: Write Unit Tests)
+
+- Tests already written for each settings class
+- Need to run full test suite to verify everything works together
+- May need to add tests for the deprecation module updates
+
+---
+
