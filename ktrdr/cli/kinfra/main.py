@@ -6,6 +6,7 @@ sandbox management, deployment, and worktree operations.
 
 import typer
 
+from ktrdr.cli.kinfra.local_prod import local_prod_app
 from ktrdr.cli.kinfra.sandbox import sandbox_app
 
 app = typer.Typer(
@@ -24,6 +25,11 @@ def callback() -> None:
 # Register subcommand groups
 app.add_typer(
     sandbox_app, name="sandbox", help="Manage isolated development sandbox instances"
+)
+app.add_typer(
+    local_prod_app,
+    name="local-prod",
+    help="Manage local-prod production-like environment",
 )
 
 
