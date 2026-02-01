@@ -221,3 +221,27 @@ All 708 config tests pass.
 
 ---
 
+## Task 5.6 Complete: Migrate Data/Path Consumers
+
+### Implementation Notes
+
+Replaced all `os.getenv("DATA_*")` and `os.getenv("MODELS_*")` calls with `get_data_settings()`:
+
+**Files modified:**
+- `ktrdr/training/model_storage.py` — `_get_default_models_dir()`
+- `ktrdr/data/repository/data_repository.py` — `DataRepository.__init__()`
+- `ktrdr/data/acquisition/acquisition_service.py` — `MAX_SEGMENT_SIZE` and `PERIODIC_SAVE_INTERVAL` as properties
+
+### Gotchas
+
+**Class-level constants changed to properties**: `MAX_SEGMENT_SIZE` and `PERIODIC_SAVE_INTERVAL` were class-level constants computed at import time. Changed them to properties so they read from settings dynamically.
+
+**IB_HOST_SERVICE_URL not migrated**: This env var in `acquisition_service.py` is IB-related (not DATA-related) and should be handled in M3 (IB Host Services migration), not M5.
+
+### Next Task Notes (5.7: Migrate CLI/API Client Consumers)
+
+- Replace `os.getenv("KTRDR_API_URL")` with `get_api_service_settings().base_url`
+- Files: `ktrdr/cli/*.py`, worker registration files
+
+---
+

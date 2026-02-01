@@ -11,7 +11,6 @@ Key characteristics:
 - Fast file I/O with validation
 """
 
-import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional, Union
@@ -41,12 +40,14 @@ class DataRepository:
         Initialize DataRepository.
 
         Args:
-            data_dir: Directory for cache files. If None, uses environment
-                     variable DATA_DIR or default './data'
+            data_dir: Directory for cache files. If None, uses
+                     KTRDR_DATA_DIR setting or default 'data'.
         """
         # Determine data directory
         if data_dir is None:
-            data_dir = os.getenv("DATA_DIR", "./data")
+            from ktrdr.config.settings import get_data_settings
+
+            data_dir = get_data_settings().data_dir
 
         logger.info(f"Initializing DataRepository with data_dir={data_dir}")
 

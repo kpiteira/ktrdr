@@ -9,7 +9,6 @@ for external data fetching via HTTP.
 """
 
 import logging
-import os
 from datetime import datetime, timedelta
 from typing import Any, Callable, Optional, Union
 
@@ -49,9 +48,19 @@ class DataAcquisitionService(ServiceOrchestrator[IbDataProvider]):
     - Uses IbDataProvider for external data fetching
     """
 
-    # Configuration constants with environment variable overrides (Task 4.4)
-    MAX_SEGMENT_SIZE = int(os.getenv("DATA_MAX_SEGMENT_SIZE", "5000"))
-    PERIODIC_SAVE_INTERVAL = float(os.getenv("DATA_PERIODIC_SAVE_MIN", "0.5"))
+    @property
+    def MAX_SEGMENT_SIZE(self) -> int:
+        """Maximum segment size from settings."""
+        from ktrdr.config.settings import get_data_settings
+
+        return get_data_settings().max_segment_size
+
+    @property
+    def PERIODIC_SAVE_INTERVAL(self) -> float:
+        """Periodic save interval from settings (in minutes)."""
+        from ktrdr.config.settings import get_data_settings
+
+        return get_data_settings().periodic_save_interval
 
     def __init__(
         self,

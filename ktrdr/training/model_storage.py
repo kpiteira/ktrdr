@@ -1,7 +1,6 @@
 """Model storage and versioning system."""
 
 import json
-import os
 import pickle
 import shutil
 from datetime import datetime
@@ -12,8 +11,10 @@ import torch
 
 
 def _get_default_models_dir() -> str:
-    """Get models directory from MODELS_DIR env var or default to 'models'."""
-    return os.getenv("MODELS_DIR", "models")
+    """Get models directory from settings."""
+    from ktrdr.config.settings import get_data_settings
+
+    return get_data_settings().models_dir
 
 
 class ModelStorage:
