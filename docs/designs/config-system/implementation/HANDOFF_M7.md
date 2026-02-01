@@ -163,5 +163,34 @@ db container expected `${DB_PASSWORD}`, causing password mismatch.
   variables named `metadata`. This is NOT the old module function - it's just
   dictionary access patterns. Zero imports of `ktrdr.metadata` module confirms success.
 
-**Next Task Notes:**
-- Task 7.8 is VALIDATION - Full distributed system integration test
+---
+
+## Task 7.8 Complete: Full Distributed System Integration Test
+
+**All Tests Passed (7/7):**
+
+Scenario 1 - Full Stack Startup:
+- ✅ Backend health check: 200 OK
+- ✅ Workers registered: 4 workers (2 training, 2 backtesting)
+- ✅ CLI data fetch: AAPL data retrieved via API
+- ✅ CLI ops list: Connected successfully
+
+Scenario 2 - New Config Usage:
+- ✅ Zero deprecation warnings in all logs
+- ✅ Zero configuration errors in backend
+- ✅ Zero configuration errors in workers
+
+**Evidence:** Workers explicitly using KTRDR_* variables confirmed in logs.
+
+---
+
+## M7 Complete - Definition of Done
+
+The config system redesign is complete:
+1. ✅ All Settings classes exist with KTRDR_* prefixes
+2. ✅ Zero `ktrdr.metadata` imports
+3. ✅ Zero scattered `os.getenv()` for config (only in ktrdr/config/)
+4. ✅ Deprecated names work with fallback
+5. ✅ Docker compose files use KTRDR_* names
+6. ✅ Configuration documentation complete
+7. ✅ All tests pass (unit, integration, E2E)
