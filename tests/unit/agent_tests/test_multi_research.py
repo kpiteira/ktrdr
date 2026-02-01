@@ -535,29 +535,26 @@ class TestGetConcurrencyLimit:
         # Should calculate: 1 + 1 + 1 (default buffer) = 3
         assert result == 3
 
-    def test_invalid_override_falls_back_to_calculation(
+    def test_invalid_override_raises_validation_error(
         self, mock_operations_service, mock_worker_registry, monkeypatch
     ):
-        """Invalid override value (non-integer) falls back to calculation."""
-        from unittest.mock import patch
+        """Invalid override value (non-integer) raises validation error.
 
-        from ktrdr.api.models.workers import WorkerType
-        from ktrdr.api.services.agent_service import AgentService
+        After config system M5 migration, settings use Pydantic validation
+        which fails fast on invalid values rather than silently falling back.
+        """
+        from pydantic import ValidationError
+
+        from ktrdr.config import clear_settings_cache
 
         monkeypatch.setenv("AGENT_MAX_CONCURRENT_RESEARCHES", "invalid")
+        clear_settings_cache()
 
-        # Add workers
-        mock_worker_registry._add_worker(WorkerType.TRAINING, "training-1")
+        # Pydantic should reject invalid integer value
+        with pytest.raises(ValidationError):
+            from ktrdr.config.settings import get_agent_settings
 
-        with patch(
-            "ktrdr.api.endpoints.workers.get_worker_registry",
-            return_value=mock_worker_registry,
-        ):
-            service = AgentService(operations_service=mock_operations_service)
-            result = service._get_concurrency_limit()
-
-        # Should calculate: 1 training + 0 backtest + 1 buffer = 2
-        assert result == 2
+            get_agent_settings()
 
     def test_default_buffer_is_1(
         self, mock_operations_service, mock_worker_registry, monkeypatch

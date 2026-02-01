@@ -91,6 +91,7 @@ class TestAnthropicInvokerConfig:
     def test_config_from_env(self):
         """Test loading configuration from environment variables."""
         from ktrdr.agents.invoker import AnthropicInvokerConfig
+        from ktrdr.config import clear_settings_cache
 
         with patch.dict(
             "os.environ",
@@ -99,6 +100,7 @@ class TestAnthropicInvokerConfig:
                 "AGENT_MAX_TOKENS": "8192",
             },
         ):
+            clear_settings_cache()  # Clear cache inside context manager to pick up new env
             config = AnthropicInvokerConfig.from_env()
             assert config.model == "claude-opus-4-5-20251101"
             assert config.max_tokens == 8192

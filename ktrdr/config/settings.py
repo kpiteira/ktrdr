@@ -878,33 +878,325 @@ class WorkerSettings(BaseSettings):
     )
 
 
+class AgentSettings(BaseSettings):
+    """Agent Process Settings.
+
+    Provides agent configuration with support for both new (KTRDR_AGENT_*)
+    and deprecated (AGENT_*) environment variable names.
+
+    Environment variables (new names - preferred):
+        KTRDR_AGENT_POLL_INTERVAL: Poll interval in seconds. Default: 5
+        KTRDR_AGENT_MODEL: LLM model to use. Default: claude-sonnet-4-20250514
+        KTRDR_AGENT_MAX_TOKENS: Max output tokens. Default: 4096
+        KTRDR_AGENT_TIMEOUT_SECONDS: Request timeout in seconds. Default: 300
+        KTRDR_AGENT_MAX_ITERATIONS: Max agentic iterations. Default: 10
+        KTRDR_AGENT_MAX_INPUT_TOKENS: Max input context tokens. Default: 50000
+        KTRDR_AGENT_DAILY_BUDGET: Daily cost budget in USD. Default: 5.0
+        KTRDR_AGENT_BUDGET_DIR: Budget data directory. Default: data/budget
+        KTRDR_AGENT_MAX_CONCURRENT_RESEARCHES: Max concurrent (0=unlimited). Default: 0
+        KTRDR_AGENT_CONCURRENCY_BUFFER: Concurrency buffer. Default: 1
+        KTRDR_AGENT_TRAINING_START_DATE: Default training start date
+        KTRDR_AGENT_TRAINING_END_DATE: Default training end date
+        KTRDR_AGENT_BACKTEST_START_DATE: Default backtest start date
+        KTRDR_AGENT_BACKTEST_END_DATE: Default backtest end date
+
+    Deprecated names (still work, emit warnings at startup):
+        AGENT_POLL_INTERVAL, AGENT_MODEL, AGENT_MAX_TOKENS, AGENT_TIMEOUT_SECONDS,
+        AGENT_MAX_ITERATIONS, AGENT_MAX_INPUT_TOKENS, AGENT_DAILY_BUDGET,
+        AGENT_BUDGET_DIR, AGENT_MAX_CONCURRENT_RESEARCHES, AGENT_CONCURRENCY_BUFFER,
+        AGENT_TRAINING_START_DATE, AGENT_TRAINING_END_DATE,
+        AGENT_BACKTEST_START_DATE, AGENT_BACKTEST_END_DATE
+    """
+
+    # Polling and timing
+    poll_interval: float = deprecated_field(
+        5.0,
+        "KTRDR_AGENT_POLL_INTERVAL",
+        "AGENT_POLL_INTERVAL",
+        gt=0,
+        description="Poll interval in seconds for agent loops",
+    )
+
+    # LLM configuration
+    model: str = deprecated_field(
+        "claude-sonnet-4-20250514",
+        "KTRDR_AGENT_MODEL",
+        "AGENT_MODEL",
+        description="LLM model identifier to use for agent",
+    )
+    max_tokens: int = deprecated_field(
+        4096,
+        "KTRDR_AGENT_MAX_TOKENS",
+        "AGENT_MAX_TOKENS",
+        gt=0,
+        description="Maximum output tokens per request",
+    )
+    timeout_seconds: int = deprecated_field(
+        300,
+        "KTRDR_AGENT_TIMEOUT_SECONDS",
+        "AGENT_TIMEOUT_SECONDS",
+        gt=0,
+        description="Request timeout in seconds",
+    )
+    max_iterations: int = deprecated_field(
+        10,
+        "KTRDR_AGENT_MAX_ITERATIONS",
+        "AGENT_MAX_ITERATIONS",
+        gt=0,
+        description="Maximum agentic iterations per task",
+    )
+    max_input_tokens: int = deprecated_field(
+        50000,
+        "KTRDR_AGENT_MAX_INPUT_TOKENS",
+        "AGENT_MAX_INPUT_TOKENS",
+        gt=0,
+        description="Maximum input context tokens",
+    )
+
+    # Budget settings
+    daily_budget: float = deprecated_field(
+        5.0,
+        "KTRDR_AGENT_DAILY_BUDGET",
+        "AGENT_DAILY_BUDGET",
+        ge=0,
+        description="Daily cost budget in USD (0 = disabled)",
+    )
+    budget_dir: str = deprecated_field(
+        "data/budget",
+        "KTRDR_AGENT_BUDGET_DIR",
+        "AGENT_BUDGET_DIR",
+        description="Directory for budget tracking data",
+    )
+
+    # Concurrency settings
+    max_concurrent_researches: int = deprecated_field(
+        0,
+        "KTRDR_AGENT_MAX_CONCURRENT_RESEARCHES",
+        "AGENT_MAX_CONCURRENT_RESEARCHES",
+        ge=0,
+        description="Max concurrent research agents (0 = unlimited)",
+    )
+    concurrency_buffer: int = deprecated_field(
+        1,
+        "KTRDR_AGENT_CONCURRENCY_BUFFER",
+        "AGENT_CONCURRENCY_BUFFER",
+        ge=0,
+        description="Buffer for concurrency limits",
+    )
+
+    # Date defaults (optional)
+    training_start_date: str | None = deprecated_field(
+        None,
+        "KTRDR_AGENT_TRAINING_START_DATE",
+        "AGENT_TRAINING_START_DATE",
+        description="Default training start date (YYYY-MM-DD)",
+    )
+    training_end_date: str | None = deprecated_field(
+        None,
+        "KTRDR_AGENT_TRAINING_END_DATE",
+        "AGENT_TRAINING_END_DATE",
+        description="Default training end date (YYYY-MM-DD)",
+    )
+    backtest_start_date: str | None = deprecated_field(
+        None,
+        "KTRDR_AGENT_BACKTEST_START_DATE",
+        "AGENT_BACKTEST_START_DATE",
+        description="Default backtest start date (YYYY-MM-DD)",
+    )
+    backtest_end_date: str | None = deprecated_field(
+        None,
+        "KTRDR_AGENT_BACKTEST_END_DATE",
+        "AGENT_BACKTEST_END_DATE",
+        description="Default backtest end date (YYYY-MM-DD)",
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_AGENT_",
+        env_file=".env.local",
+        extra="ignore",
+    )
+
+
+class AgentGateSettings(BaseSettings):
+    """Agent Gate Settings.
+
+    Controls whether the agent can execute real trades. This is a safety gate
+    that prevents accidental execution in production.
+
+    Safe defaults: simulation mode, dry_run=True, confirmation_required=True.
+
+    Environment variables (prefix KTRDR_GATE_):
+        KTRDR_GATE_MODE: Execution mode (simulation or live). Default: simulation
+        KTRDR_GATE_DRY_RUN: If True, log trades but don't execute. Default: true
+        KTRDR_GATE_CONFIRMATION_REQUIRED: Require confirmation before trades. Default: true
+        KTRDR_GATE_MAX_POSITION_SIZE: Maximum position size in dollars. Default: 0 (no limit)
+        KTRDR_GATE_MAX_DAILY_TRADES: Maximum trades per day. Default: 0 (no limit)
+    """
+
+    mode: str = Field(
+        default="simulation",
+        description="Execution mode: simulation (paper) or live",
+    )
+    dry_run: bool = Field(
+        default=True,
+        description="If True, log trades but don't execute (safe default)",
+    )
+    confirmation_required: bool = Field(
+        default=True,
+        description="Require confirmation before executing trades",
+    )
+    max_position_size: int = Field(
+        default=0,
+        ge=0,
+        description="Maximum position size in dollars (0 = no limit)",
+    )
+    max_daily_trades: int = Field(
+        default=0,
+        ge=0,
+        description="Maximum trades per day (0 = no limit)",
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_GATE_",
+        env_file=".env.local",
+        extra="ignore",
+    )
+
+    @field_validator("mode")
+    @classmethod
+    def validate_mode(cls, v: str) -> str:
+        """Validate that mode is simulation or live."""
+        allowed = ["simulation", "live"]
+        if v.lower() not in allowed:
+            raise ValueError(f"Mode must be one of {allowed}, got '{v}'")
+        return v.lower()
+
+    def is_live_mode(self) -> bool:
+        """Check if running in live trading mode.
+
+        Returns:
+            True if mode is 'live', False otherwise.
+        """
+        return self.mode == "live"
+
+    def can_execute_trade(self) -> bool:
+        """Check if trades can actually be executed.
+
+        Returns True only if:
+        1. Mode is 'live'
+        2. dry_run is False
+
+        Returns:
+            True if real trades can be executed.
+        """
+        return self.is_live_mode() and not self.dry_run
+
+
+class DataSettings(BaseSettings):
+    """Data Storage Settings.
+
+    Provides data path configuration with support for both new (KTRDR_DATA_*)
+    and deprecated environment variable names.
+
+    Environment variables (new names - preferred):
+        KTRDR_DATA_DIR: Base data directory. Default: data
+        KTRDR_DATA_MODELS_DIR: Models directory. Default: models
+        KTRDR_DATA_CACHE_DIR: Cache directory. Default: data/cache
+        KTRDR_DATA_MAX_SEGMENT_SIZE: Max data segment size. Default: 5000
+        KTRDR_DATA_PERIODIC_SAVE_INTERVAL: Periodic save interval (minutes). Default: 0.5
+
+    Deprecated names (still work, emit warnings at startup):
+        DATA_DIR → KTRDR_DATA_DIR
+        MODELS_DIR → KTRDR_DATA_MODELS_DIR
+        DATA_MAX_SEGMENT_SIZE → KTRDR_DATA_MAX_SEGMENT_SIZE
+        DATA_PERIODIC_SAVE_MIN → KTRDR_DATA_PERIODIC_SAVE_INTERVAL
+    """
+
+    # Directory paths
+    data_dir: str = deprecated_field(
+        "data",
+        "KTRDR_DATA_DIR",
+        "DATA_DIR",
+        description="Base data directory for OHLCV data",
+    )
+    models_dir: str = deprecated_field(
+        "models",
+        "KTRDR_DATA_MODELS_DIR",
+        "MODELS_DIR",
+        description="Directory for trained model storage",
+    )
+    cache_dir: str = Field(
+        default="data/cache",
+        description="Directory for cached data",
+    )
+
+    # Acquisition settings
+    max_segment_size: int = deprecated_field(
+        5000,
+        "KTRDR_DATA_MAX_SEGMENT_SIZE",
+        "DATA_MAX_SEGMENT_SIZE",
+        gt=0,
+        description="Maximum data segment size for acquisition",
+    )
+    periodic_save_interval: float = deprecated_field(
+        0.5,
+        "KTRDR_DATA_PERIODIC_SAVE_INTERVAL",
+        "DATA_PERIODIC_SAVE_MIN",
+        gt=0,
+        description="Periodic save interval in minutes",
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_DATA_",
+        env_file=".env.local",
+        extra="ignore",
+    )
+
+
 class ApiServiceSettings(BaseSettings):
     """API Server configuration for client connections.
 
     Provides API client configuration for CLI and other clients connecting
-    to the KTRDR backend API server.
+    to the KTRDR backend API server. This is the single source of truth for
+    "how to connect to backend" (resolves duplication #5 from config audit).
 
-    Environment variables:
-        api_base_url: Base URL for API client connections.
+    Environment variables (new names - preferred):
+        KTRDR_API_CLIENT_BASE_URL: Base URL for API client connections.
             Default: http://localhost:8000/api/v1
         KTRDR_API_CLIENT_TIMEOUT: Request timeout in seconds. Default: 30.0
         KTRDR_API_CLIENT_MAX_RETRIES: Max retry attempts. Default: 3
         KTRDR_API_CLIENT_RETRY_DELAY: Delay between retries. Default: 1.0
+
+    Deprecated names (still work, emit warnings at startup):
+        KTRDR_API_URL → KTRDR_API_CLIENT_BASE_URL
     """
 
     enabled: bool = Field(default=True)  # API is always "enabled" for clients
 
-    base_url: str = Field(
-        default=metadata.get("api.client_base_url", "http://localhost:8000/api/v1"),
+    base_url: str = deprecated_field(
+        metadata.get("api.client_base_url", "http://localhost:8000/api/v1"),
+        "KTRDR_API_CLIENT_BASE_URL",
+        "KTRDR_API_URL",
         description="Base URL for API client connections",
-        alias="api_base_url",
     )
 
-    timeout: float = Field(default=metadata.get("api.client_timeout", 30.0))
+    timeout: float = Field(
+        default=metadata.get("api.client_timeout", 30.0),
+        gt=0,
+        description="Request timeout in seconds",
+    )
 
-    max_retries: int = Field(default=metadata.get("api.client_max_retries", 3))
+    max_retries: int = Field(
+        default=metadata.get("api.client_max_retries", 3),
+        ge=0,
+        description="Maximum retry attempts",
+    )
 
-    retry_delay: float = Field(default=metadata.get("api.client_retry_delay", 1.0))
+    retry_delay: float = Field(
+        default=metadata.get("api.client_retry_delay", 1.0),
+        ge=0,
+        description="Delay between retries in seconds",
+    )
 
     # These fields are inherited from the old HostServiceSettings base class
     health_check_interval: float = Field(
@@ -912,7 +1204,7 @@ class ApiServiceSettings(BaseSettings):
     )
 
     model_config = SettingsConfigDict(
-        env_prefix="KTRDR_API_CLIENT_", extra="forbid", populate_by_name=True
+        env_prefix="KTRDR_API_CLIENT_", extra="ignore", populate_by_name=True
     )
 
     def get_health_url(self) -> str:
@@ -998,6 +1290,24 @@ def get_worker_settings() -> WorkerSettings:
 
 
 @lru_cache
+def get_agent_settings() -> AgentSettings:
+    """Get agent settings with caching."""
+    return AgentSettings()
+
+
+@lru_cache
+def get_agent_gate_settings() -> AgentGateSettings:
+    """Get agent gate settings with caching."""
+    return AgentGateSettings()
+
+
+@lru_cache
+def get_data_settings() -> DataSettings:
+    """Get data settings with caching."""
+    return DataSettings()
+
+
+@lru_cache
 def get_api_service_settings() -> ApiServiceSettings:
     """Get API service settings for client connections with caching."""
     return ApiServiceSettings()
@@ -1040,6 +1350,9 @@ def clear_settings_cache() -> None:
     get_ib_host_service_settings.cache_clear()
     get_training_host_service_settings.cache_clear()
     get_worker_settings.cache_clear()
+    get_agent_settings.cache_clear()
+    get_agent_gate_settings.cache_clear()
+    get_data_settings.cache_clear()
 
 
 # Export settings classes and getters
@@ -1058,6 +1371,9 @@ __all__ = [
     "IBHostServiceSettings",
     "TrainingHostServiceSettings",
     "WorkerSettings",
+    "AgentSettings",
+    "AgentGateSettings",
+    "DataSettings",
     # Cached getters
     "get_api_settings",
     "get_auth_settings",
@@ -1073,6 +1389,9 @@ __all__ = [
     "get_ib_host_service_settings",
     "get_training_host_service_settings",
     "get_worker_settings",
+    "get_agent_settings",
+    "get_agent_gate_settings",
+    "get_data_settings",
     # Utilities
     "clear_settings_cache",
     "deprecated_field",

@@ -115,13 +115,15 @@ def _setup_telemetry() -> None:
         from opentelemetry import trace
         from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 
+        from ktrdr.config.settings import get_api_service_settings
         from ktrdr.monitoring.setup import setup_monitoring
 
         # Setup monitoring for CLI with initial endpoint
         # Will be reconfigured if --url flag points to remote server
-        _current_otlp_endpoint = _derive_otlp_endpoint_from_url(
-            os.getenv("KTRDR_API_URL")
-        )
+        api_base = get_api_service_settings().base_url
+        if api_base.endswith("/api/v1"):
+            api_base = api_base[:-7]
+        _current_otlp_endpoint = _derive_otlp_endpoint_from_url(api_base)
         setup_monitoring(
             service_name="ktrdr-cli",
             otlp_endpoint=_current_otlp_endpoint,
