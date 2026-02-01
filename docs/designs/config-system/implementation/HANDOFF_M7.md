@@ -137,3 +137,31 @@ DB_HOST). These work via deprecation warnings and can be migrated incrementally.
 **Next Task Notes:**
 - Task 7.7 is VALIDATION - E2E test of config system
 - Task 7.8 is VALIDATION - Full distributed system integration test
+
+---
+
+## Task 7.7 Complete: Execute Final E2E Test
+
+**Bug Fixed:**
+- `docker-compose.sandbox.yml` line 45: Changed `${DB_PASSWORD:-localdev}` to `${KTRDR_DB_PASSWORD:-localdev}`
+- `docker-compose.sandbox.yml` lines 42-43: Changed DB_NAME/DB_USER to KTRDR_DB_NAME/KTRDR_DB_USER
+- `docker-compose.yml` lines 19-21: Same fixes for main docker-compose
+- `alembic/env.py`: Added KTRDR_DB_* fallback support
+
+**Root Cause:** The `sandbox.py` mapped 1Password secrets to `KTRDR_DB_PASSWORD` but the
+db container expected `${DB_PASSWORD}`, causing password mismatch.
+
+**E2E Results:**
+- ✅ Scenario 1: Fresh start - no deprecation warnings in logs
+- ✅ Scenario 2: Zero `ktrdr.metadata` imports (verified via grep)
+- ✅ Scenario 3: Version from importlib.metadata matches pyproject.toml (1.0.7.2)
+- ✅ Scenario 4: ConfigLoader works for domain config
+- ✅ Unit tests: 4984 passed
+
+**Gotcha:**
+- The grep for "metadata.get" returns dictionary `.get()` method calls on local
+  variables named `metadata`. This is NOT the old module function - it's just
+  dictionary access patterns. Zero imports of `ktrdr.metadata` module confirms success.
+
+**Next Task Notes:**
+- Task 7.8 is VALIDATION - Full distributed system integration test

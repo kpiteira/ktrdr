@@ -34,21 +34,21 @@ target_metadata = Base.metadata
 def get_database_url() -> str:
     """Construct database URL from environment variables.
 
-    Uses the same environment variables as the Docker Compose setup:
-    - DB_HOST (default: localhost)
-    - DB_PORT (default: 5432)
-    - DB_NAME (default: ktrdr)
-    - DB_USER (default: ktrdr)
-    - DB_PASSWORD (default: localdev)
+    Uses KTRDR_DB_* environment variables with fallback to legacy DB_* names:
+    - KTRDR_DB_HOST / DB_HOST (default: localhost)
+    - KTRDR_DB_PORT / DB_PORT (default: 5432)
+    - KTRDR_DB_NAME / DB_NAME (default: ktrdr)
+    - KTRDR_DB_USER / DB_USER (default: ktrdr)
+    - KTRDR_DB_PASSWORD / DB_PASSWORD (default: localdev)
 
     Returns:
         PostgreSQL async connection URL.
     """
-    host = os.getenv("DB_HOST", "localhost")
-    port = os.getenv("DB_PORT", "5432")
-    name = os.getenv("DB_NAME", "ktrdr")
-    user = os.getenv("DB_USER", "ktrdr")
-    password = os.getenv("DB_PASSWORD", "localdev")
+    host = os.getenv("KTRDR_DB_HOST") or os.getenv("DB_HOST", "localhost")
+    port = os.getenv("KTRDR_DB_PORT") or os.getenv("DB_PORT", "5432")
+    name = os.getenv("KTRDR_DB_NAME") or os.getenv("DB_NAME", "ktrdr")
+    user = os.getenv("KTRDR_DB_USER") or os.getenv("DB_USER", "ktrdr")
+    password = os.getenv("KTRDR_DB_PASSWORD") or os.getenv("DB_PASSWORD", "localdev")
 
     # Use asyncpg driver for async support
     return f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{name}"

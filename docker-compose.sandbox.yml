@@ -10,8 +10,8 @@
 # =============================================================================
 # SECRETS MANAGEMENT
 # =============================================================================
-# Secrets (DB_PASSWORD, JWT_SECRET, ANTHROPIC_API_KEY, GF_ADMIN_PASSWORD) are
-# fetched from 1Password at startup by 'ktrdr sandbox up'.
+# Secrets (KTRDR_DB_PASSWORD, KTRDR_AUTH_JWT_SECRET, ANTHROPIC_API_KEY, GF_ADMIN_PASSWORD)
+# are fetched from 1Password at startup by 'ktrdr sandbox up'.
 #
 # 1Password item: ktrdr-sandbox-dev
 # Required fields: db_password, jwt_secret, anthropic_api_key, grafana_password
@@ -39,16 +39,16 @@ services:
     image: timescale/timescaledb:latest-pg16
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${DB_NAME:-ktrdr}
-      POSTGRES_USER: ${DB_USER:-ktrdr}
+      POSTGRES_DB: ${KTRDR_DB_NAME:-ktrdr}
+      POSTGRES_USER: ${KTRDR_DB_USER:-ktrdr}
       # INSECURE default - use 1Password via 'ktrdr sandbox up'
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-localdev}
+      POSTGRES_PASSWORD: ${KTRDR_DB_PASSWORD:-localdev}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "${KTRDR_DB_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-ktrdr}"]
+      test: ["CMD-SHELL", "pg_isready -U ${KTRDR_DB_USER:-ktrdr}"]
       interval: 10s
       timeout: 5s
       retries: 5
