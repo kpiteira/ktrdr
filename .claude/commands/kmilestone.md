@@ -110,22 +110,26 @@ After each CODING task completes, run a quality check on new/modified tests:
 
 ```
 Task(
-    subagent_type="general-purpose",
-    model="haiku",
-    prompt="Review the unit tests created/modified in task <id>. Check for:
+    subagent_type="unit-test-quality-checker",
+    prompt="""
+    ## Unit Test Quality Check Request
 
-    1. No docker/compose references in test code
-    2. No real database connections (should use mocks or test fixtures)
-    3. No time.sleep > 1 second
-    4. External dependencies are properly mocked
-    5. Assertions are meaningful (not just 'no exception')
-    6. Tests don't require running services to pass
+    **Task:** <task_id> - <task_name>
+    **Test files to check:**
+    - <list new/modified test files from this task>
 
-    Files to check: <list new/modified test files>
-
-    Return: PASS if all checks pass, or list specific concerns with file:line references."
+    **Context:** <brief description of what was implemented>
+    """
 )
 ```
+
+The agent checks for:
+- No docker/compose dependencies
+- No real database connections
+- No slow sleeps (>1s)
+- External dependencies properly mocked
+- Meaningful assertions
+- No running services required
 
 **If issues found:** Fix them and re-run quality check (up to 2 retries). If still failing, AskUserQuestion.
 
