@@ -46,13 +46,12 @@ FuzzyNeuralProcessor.prepare_input() → ordered tensor for neural network
 | File | Purpose |
 |------|---------|
 | `ktrdr/fuzzy/engine.py` | FuzzyEngine — main fuzzification entry point |
-| `ktrdr/fuzzy/membership.py` | Membership functions (Triangular, Trapezoidal, Gaussian) |
-| `ktrdr/fuzzy/config.py` | V2 configuration models and YAML loading |
+| `ktrdr/fuzzy/membership.py` | MembershipFunction base class + MEMBERSHIP_REGISTRY |
+| `ktrdr/fuzzy/__init__.py` | Exports MEMBERSHIP_REGISTRY and all MF types |
 | `ktrdr/fuzzy/batch_calculator.py` | BatchFuzzyCalculator for time series |
 | `ktrdr/fuzzy/multi_timeframe_engine.py` | Multi-timeframe fuzzy processing |
-| `ktrdr/fuzzy/migration.py` | V2-to-V3 migration utilities |
 | `ktrdr/training/fuzzy_neural_processor.py` | FuzzyNeuralProcessor (fuzzy → neural) |
-| `ktrdr/config/models.py` | V3 models: FuzzySetDefinition, NNInputSpec |
+| `ktrdr/config/models.py` | FuzzySetDefinition, NNInputSpec |
 | `config/fuzzy.yaml` | Default fuzzy set definitions |
 
 ---
@@ -61,21 +60,16 @@ FuzzyNeuralProcessor.prepare_input() → ordered tensor for neural network
 
 **Location:** `ktrdr/fuzzy/engine.py`
 
-Supports both V2 (legacy `FuzzyConfig`) and V3 (dict of `FuzzySetDefinition`) formats. Auto-detects mode at initialization.
+FuzzyEngine only accepts dict of `FuzzySetDefinition` format.
 
 ### Initialization
 
 ```python
-# V3 mode (preferred)
 FuzzyEngine(config: dict[str, FuzzySetDefinition])
-
-# V2 mode (legacy)
-FuzzyEngine(config: FuzzyConfig)
+# Raises ConfigurationError if legacy format is passed
 ```
 
 ### Key Methods
-
-**V3 mode:**
 
 ```python
 fuzzify(fuzzy_set_id: str, indicator_values: pd.Series, context_data=None)
@@ -143,16 +137,49 @@ Smooth bell curve, never exactly 0.
 
 All `evaluate()` methods accept scalar, `pd.Series`, or `np.ndarray`. Returns same type as input. Vectorized numpy implementations for speed.
 
-### Factory
+### Registry API
 
 ```python
-MembershipFunctionFactory.create(type: str, parameters: list) -> MembershipFunction
-# type: "triangular", "trapezoidal", "gaussian"
+from ktrdr.fuzzy import MEMBERSHIP_REGISTRY
+
+MEMBERSHIP_REGISTRY.list_types()  # ['gaussian', 'trapezoidal', 'triangular']
+MEMBERSHIP_REGISTRY.get('triangular')  # TriangularMF class
+MEMBERSHIP_REGISTRY.get_params_schema('gaussian')  # GaussianMF.Params model
 ```
 
 ---
 
-## V3 Fuzzy Set Configuration
+## Adding a New Membership Function
+
+Create one file:
+
+```python
+# ktrdr/fuzzy/sigmoid_mf.py
+from pydantic import field_validator
+from ktrdr.fuzzy.membership import MembershipFunction
+
+class SigmoidMF(MembershipFunction):
+    class Params(MembershipFunction.Params):
+        @field_validator("parameters")
+        @classmethod
+        def validate_parameters(cls, v):
+            if len(v) != 2:
+                raise ValueError("Sigmoid requires [center, slope]")
+            return v
+
+    def _init_from_params(self, parameters):
+        self.center, self.slope = parameters
+
+    def evaluate(self, x):
+        # Return membership degree in [0, 1]
+        ...
+```
+
+Auto-registers as 'sigmoid', 'sigmoidmf', etc.
+
+---
+
+## Fuzzy Set Configuration
 
 ### FuzzySetDefinition
 
@@ -316,9 +343,9 @@ The `FeatureCache` and `FuzzyNeuralProcessor` validate that features match `mode
 
 When computing indicators for fuzzy processing, use `prefix_columns=False` on `IndicatorEngine`. The `FuzzyNeuralProcessor` handles all prefixing. Double-prefixing breaks feature matching.
 
-### V3 mode auto-detected from config type
+### FuzzyEngine only accepts dict format
 
-`FuzzyEngine` checks if config is `dict[str, FuzzySetDefinition]` (V3) or `FuzzyConfig` (V2). Don't mix formats.
+`FuzzyEngine` requires `dict[str, FuzzySetDefinition]` format. Legacy FuzzyConfig is no longer supported.
 
 ### context_data enables price ratios
 

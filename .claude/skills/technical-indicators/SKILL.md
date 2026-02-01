@@ -32,7 +32,7 @@ V3 Strategy YAML
     ▼
 IndicatorEngine(indicators_dict)
     │
-    ├── IndicatorFactory → instantiate BaseIndicator subclasses
+    ├── INDICATOR_REGISTRY.get(type) → instantiate BaseIndicator subclasses
     │
     ▼ compute(data, indicator_ids)
     │
@@ -47,11 +47,9 @@ IndicatorEngine(indicators_dict)
 | File | Purpose |
 |------|---------|
 | `ktrdr/indicators/indicator_engine.py` | IndicatorEngine orchestrator |
-| `ktrdr/indicators/base_indicator.py` | BaseIndicator abstract class |
-| `ktrdr/indicators/indicator_factory.py` | BUILT_IN_INDICATORS registry |
+| `ktrdr/indicators/base_indicator.py` | BaseIndicator abstract class + INDICATOR_REGISTRY |
+| `ktrdr/indicators/__init__.py` | Exports, lazy loading, ensure_all_registered() |
 | `ktrdr/indicators/categories.py` | IndicatorCategory enum |
-| `ktrdr/indicators/schemas.py` | Parameter validation schemas |
-| `ktrdr/indicators/parameter_schema.py` | Schema framework |
 | `ktrdr/config/models.py` | IndicatorDefinition Pydantic model |
 
 ### Individual Indicator Files
@@ -99,7 +97,7 @@ IndicatorEngine(indicators_dict)
 ```python
 IndicatorEngine(indicators: dict[str, Any])
 # V3 format ONLY: {"indicator_id": {"type": "...", ...params}}
-# Converts dicts to IndicatorDefinition, instantiates BaseIndicator subclasses
+# Converts dicts to IndicatorDefinition, instantiates via INDICATOR_REGISTRY
 # Raises ConfigurationError if non-dict format passed
 ```
 
@@ -296,34 +294,60 @@ All indicators use **custom implementations** with pandas and numpy. No external
 
 ## Adding a New Indicator
 
-1. Create `ktrdr/indicators/{name}_indicator.py`
-2. Extend `BaseIndicator`:
-   ```python
-   class MyIndicator(BaseIndicator):
-       def __init__(self, period: int = 14, source: str = "close"):
-           self.period = period
-           self.source = source
+Create one file:
 
-       def compute(self, df: pd.DataFrame) -> pd.Series:
-           self.validate_input_data(df, [self.source])
-           # ... compute indicator ...
-           return result_series
+```python
+# ktrdr/indicators/awesome_indicator.py
+from pydantic import Field
+from ktrdr.indicators.base_indicator import BaseIndicator
 
-       @classmethod
-       def is_multi_output(cls) -> bool:
-           return False  # or True for multi-output
-   ```
-3. Register in `indicator_factory.py`:
-   ```python
-   BUILT_IN_INDICATORS = {
-       # ... existing entries ...
-       "MyIndicator": MyIndicator,
-       "MYINDICATOR": MyIndicator,
-       "myindicator": MyIndicator,
-   }
-   ```
-4. Add parameter schema in `schemas.py`
-5. Add tests
+class AwesomeIndicator(BaseIndicator):
+    class Params(BaseIndicator.Params):
+        fast_period: int = Field(default=5, ge=1)
+        slow_period: int = Field(default=34, ge=1)
+
+    # No __init__ needed - BaseIndicator handles validation
+
+    def compute(self, df):
+        # Use self.fast_period, self.slow_period (set from Params)
+        self.validate_input_data(df, ["close"])
+        # ... compute indicator ...
+        return result_series
+```
+
+That's it. The indicator auto-registers as 'awesome', 'awesomeindicator', etc.
+
+For multi-output indicators, also override:
+```python
+    @classmethod
+    def is_multi_output(cls) -> bool:
+        return True
+
+    @classmethod
+    def get_output_names(cls) -> list[str]:
+        return ["line", "signal", "histogram"]  # First is primary
+```
+
+---
+
+## Registry API
+
+```python
+from ktrdr.indicators import INDICATOR_REGISTRY
+
+INDICATOR_REGISTRY.list_types()           # ['adx', 'atr', 'bollingerbands', ...]
+INDICATOR_REGISTRY.get('rsi')             # RSIIndicator class
+INDICATOR_REGISTRY.get_params_schema('rsi')  # RSIIndicator.Params model
+```
+
+Use `ensure_all_registered()` before listing/validating to ensure lazy-loaded indicators are available:
+
+```python
+from ktrdr.indicators import INDICATOR_REGISTRY, ensure_all_registered
+
+ensure_all_registered()  # Loads all indicator modules
+print(INDICATOR_REGISTRY.list_types())  # Full list
+```
 
 ---
 
