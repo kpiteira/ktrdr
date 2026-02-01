@@ -1,6 +1,23 @@
+---
+title: "Research System Evolution: Selection Pressure & Forcing Functions"
+date: 2026-01
+stage: brainstorm
+superseded_by: 03_synthesis_researcher_genome_evolution.md
+contributors: Karl + Claude
+summary: |
+  Explores what forces drive evolution in the research system. Identifies the
+  "Baby forever" problem (accumulation without evolution) and proposes selection
+  mechanisms: resource scarcity, environmental pressure (Research Director), and
+  internal drive. Introduces behavioral signals for detecting stage transitions.
+key_insights:
+  - Evolution requires selection pressure, not just accumulation
+  - Research Director as observer/guide, not promoter
+  - Stages should be recognized, not promoted to
+---
+
 # Research System Evolution: Brainstorm
 
-## Status: Exploratory
+## Status: Superseded (see synthesis doc) — preserved for reasoning history
 
 This document captures thinking about how the KTRDR research system evolves from simple to sophisticated — not just in performance metrics, but in capabilities, behavior, and research style.
 
