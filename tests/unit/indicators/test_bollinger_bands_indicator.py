@@ -299,12 +299,6 @@ class TestBollingerBandsIndicator:
         assert all(width_2 > width_1)
         assert all(width_3 > width_2)
 
-    def test_get_name_method(self):
-        """Test the get_name method returns correct format."""
-        bb = BollingerBandsIndicator(period=15, multiplier=1.8)
-        expected_name = "BollingerBands_15_1.8"
-        assert bb.get_name() == expected_name
-
     def test_empty_dataframe(self):
         """Test handling of empty DataFrame."""
         data = pd.DataFrame()

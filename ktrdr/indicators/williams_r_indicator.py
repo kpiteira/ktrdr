@@ -91,36 +91,24 @@ class WilliamsRIndicator(BaseIndicator):
                 },
             )
 
-        # Check for duplicate columns and extract as Series
+        # Check for duplicate columns - this indicates a bug in the caller
         duplicate_cols = [
             col for col in ["high", "low", "close"] if list(data.columns).count(col) > 1
         ]
         if duplicate_cols:
-            logger.error(
-                f"[CRITICAL BUG] WilliamsR found duplicate columns: {duplicate_cols}"
+            raise DataError(
+                message=f"Williams %R received DataFrame with duplicate columns: {duplicate_cols}",
+                error_code="DATA-DuplicateColumns",
+                details={
+                    "duplicate_columns": duplicate_cols,
+                    "all_columns": list(data.columns),
+                },
             )
 
-        # Extract high/low/close, ensuring they are Series not DataFrames
+        # Extract high/low/close as Series
         high_data = data["high"]
-        if isinstance(high_data, pd.DataFrame):
-            logger.error(
-                f"[CRITICAL BUG] data['high'] returned DataFrame with {len(high_data.columns)} columns!"
-            )
-            high_data = high_data.iloc[:, 0]
-
         low_data = data["low"]
-        if isinstance(low_data, pd.DataFrame):
-            logger.error(
-                f"[CRITICAL BUG] data['low'] returned DataFrame with {len(low_data.columns)} columns!"
-            )
-            low_data = low_data.iloc[:, 0]
-
         close_data = data["close"]
-        if isinstance(close_data, pd.DataFrame):
-            logger.error(
-                f"[CRITICAL BUG] data['close'] returned DataFrame with {len(close_data.columns)} columns!"
-            )
-            close_data = close_data.iloc[:, 0]
 
         # Calculate rolling highest high and lowest low over period
         highest_high = high_data.rolling(window=period, min_periods=period).max()

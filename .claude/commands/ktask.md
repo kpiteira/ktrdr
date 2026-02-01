@@ -127,6 +127,24 @@ Before writing any code:
 
 Do not write implementation code during this phase.
 
+### Guardrail: Unexpected Findings
+
+If you discover something that contradicts the task's assumptions, **stop and verify before proceeding**.
+
+Examples:
+- Files mentioned in the task don't exist
+- Patterns the task says to remove aren't found
+- Code appears to already be fixed
+- Search returns unexpected results
+- Anything that seems odd or doesn't match expectations
+
+**When this happens:**
+
+1. **Double-check with alternative methods** — Try different glob patterns, grep variations, or broader searches
+2. **If still unexpected, escalate**: Report to user/orchestrator before proceeding. Example: "Task says to fix ValueError in 8 indicator files, but I only found 4 files and none have ValueError. Should I proceed or investigate further?"
+
+**Why this matters:** Research errors are silent and dangerous. A wrong conclusion like "files don't exist" leads to skipped work. Always verify unexpected findings.
+
 ---
 
 ## 3. Implementation (Coding Tasks Only)

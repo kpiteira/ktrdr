@@ -1,8 +1,6 @@
 # Milestone Execution Command
 
-Executes an entire milestone by running each task through the ktask workflow, with intelligent context compaction between tasks.
-
-This command embodies our partnership values from CLAUDE.md — automation of low-value repetition while preserving human checkpoints where they matter.
+Executes an entire milestone by invoking `/ktask` for each task, with context compaction between tasks.
 
 ---
 
@@ -13,33 +11,18 @@ This command embodies our partnership values from CLAUDE.md — automation of lo
 ```
 
 **Required:**
-- `@milestone_file.md` — The milestone implementation plan (e.g., `@M4_workers.md`)
+- `@milestone_file.md` — The milestone implementation plan (e.g., `@M4_cleanup.md`)
 
 **Optional:**
 - `--from <task_id>` — Start from specific task (default: auto-detect from handoff)
 
 ---
 
-## How It Works
+## The One Rule
 
-kmilestone is a thin orchestration layer. The heavy lifting stays in ktask:
+**kmilestone invokes ktask. ktask does the work.**
 
-```
-kmilestone (orchestration)
-    │
-    ├── Parse milestone → task list
-    ├── Parse handoff → completed tasks
-    │
-    └── For each remaining task:
-            │
-            ├── Prepare minimal context
-            ├── Execute via ktask workflow (TDD, handoff, gates)
-            ├── Run unit test quality check
-            ├── Compact context
-            └── Continue
-```
-
-**ktask is unchanged.** All safeguards (TDD, handoffs, quality gates) remain.
+You are an orchestrator. Your job is to invoke `/ktask` for each task, verify completion, and manage context. You do NOT implement tasks directly.
 
 ---
 
@@ -47,135 +30,142 @@ kmilestone (orchestration)
 
 ### 1. Initialize
 
-1. **Parse milestone file** — Extract ordered task list from `## Task X.Y` headings
-2. **Locate handoff file** — Same directory, pattern `HANDOFF_<milestone>.md`
-3. **Parse handoff** — Find "Task X.Y Complete" sections → determine completed tasks
-4. **Identify next task** — First task not marked complete
+Parse the milestone and determine starting point.
 
-**Output to user:**
+**Actions:**
+1. Extract task list from `## Task X.Y` headings in milestone file
+2. Locate handoff file: `HANDOFF_<milestone>.md` in same directory
+3. Parse handoff for "Task X.Y Complete" sections
+4. Identify first incomplete task
+
+**Output:**
 ```
-Milestone: M4 - Worker Settings (10 tasks)
-Completed: 4.1, 4.2, 4.3 (from handoff)
-Resuming from: 4.4
+Milestone: M4 - Cleanup (6 tasks)
+Completed: 4.1, 4.2 (from handoff)
+Starting from: 4.3
 ```
-
-If `--from` specified, override the auto-detected start point.
-
-### 2. Task Execution Loop
-
-For each remaining task:
-
-#### 2a. Prepare Context
-
-Set up minimal context for the task:
-
-```markdown
-## Current Execution State
-
-**Milestone:** <path to milestone file>
-**Handoff:** <path to handoff file>
-**Completed tasks:** <list>
-**Current task:** <task_id>
 
 ---
 
-## Handoff Content
+### 2. Execute Each Task (MANDATORY: Use ktask)
 
-<include full handoff file content here>
+For each remaining task, follow this loop:
 
----
+#### Step 2a: Invoke ktask (MANDATORY)
 
-## Current Task
+**You MUST invoke ktask. NEVER implement tasks directly.**
 
-<include current task content from milestone file>
+**For CODING/RESEARCH/MIXED tasks:**
+```
+/ktask impl: <milestone_file> task: <task_id>
 ```
 
-#### 2b. Execute Task
+**For VALIDATION tasks — include E2E reminder:**
+```
+/ktask impl: <milestone_file> task: <task_id>
 
-Follow the **complete ktask workflow** for this task:
+REMINDER: This is a VALIDATION task. You MUST use the E2E agent workflow:
+e2e-test-designer → e2e-test-architect → e2e-tester
+Do NOT run bash commands directly from the milestone file.
+```
 
-1. **Setup** — Retrieve task, verify branch, classify type (CODING/VALIDATION/RESEARCH)
-2. **Research** — Read context docs, check handoffs, find patterns
-3. **Implement** — TDD cycle for CODING tasks, E2E agents for VALIDATION tasks
-4. **Verify** — Acceptance criteria, quality gates (`make test-unit`, `make quality`)
-5. **Complete** — Update handoff (MANDATORY), commit changes
+Example:
+```
+/ktask impl: docs/designs/indicator-fuzzy-cleanup/implementation/M4_cleanup.md task: 4.3
+```
 
-**On questions:** Use AskUserQuestion — this pauses execution for human input, just like in kdesign commands.
+Wait for ktask to complete fully before proceeding.
 
-**On failure:** ktask handles fix-and-retry internally. If truly blocked, stop and report.
+#### Step 2b: Verify Completion
 
-#### 2c. Unit Test Quality Check (CODING tasks only)
+After ktask finishes, verify:
 
-After each CODING task completes, run a quality check on new/modified tests:
+- [ ] Handoff file has new "Task X.Y Complete" section?
+- [ ] `make test-unit` passes?
+- [ ] `make quality` passes?
+- [ ] Changes committed?
+
+If any check fails, ktask did not complete properly. Investigate before continuing.
+
+#### Step 2c: Run Unit Test Quality Check (CODING tasks only)
+
+For CODING tasks, invoke the quality checker:
 
 ```
 Task(
     subagent_type="unit-test-quality-checker",
-    prompt="""
-    ## Unit Test Quality Check Request
-
-    **Task:** <task_id> - <task_name>
-    **Test files to check:**
-    - <list new/modified test files from this task>
-
-    **Context:** <brief description of what was implemented>
-    """
+    prompt="Check tests modified in task <task_id>: <list test files>"
 )
 ```
 
-The agent checks for:
-- No docker/compose dependencies
-- No real database connections
-- No slow sleeps (>1s)
-- External dependencies properly mocked
-- Meaningful assertions
-- No running services required
+If issues found: fix and re-check (up to 2 retries).
 
-**If issues found:** Fix them and re-run quality check (up to 2 retries). If still failing, AskUserQuestion.
+#### Step 2d: Continue to Next Task
 
-#### 2d. Compact and Continue
+Proceed directly to the next task. Do NOT pause to ask for `/compact` between tasks.
 
-After task completion:
+If context becomes too large during execution, you may ask the user to run `/compact` at that point.
 
-1. **Verify handoff updated** — The task MUST have added a "Task X.Y Complete" section
-2. **Compact context** — Clear working memory, preserve only:
-   ```
-   Milestone: <path>
-   Handoff: <path>
-   Completed: <updated list including just-finished task>
-   Next task: <next task_id>
-   ```
-3. **Loop** — Continue to next task
+---
 
-### 3. Completion
+### 3. Complete Milestone
 
 After all tasks complete:
 
 ```
-## Milestone Complete: M4 - Worker Settings
+## Milestone Complete: M4 - Cleanup
 
-**Tasks completed:** 4.1 through 4.10
+**Tasks completed:** 4.1 through 4.6
 **Quality gates:** All passed
-**E2E validation:** Passed (task 4.10)
+**E2E validation:** Passed (final VALIDATION task)
 
-**Handoff:** docs/designs/config-system/implementation/HANDOFF_M4.md
+**Handoff:** docs/designs/.../HANDOFF_M4.md
 
-Ready for PR creation. Run: gh pr create ...
+Ready for PR creation.
 ```
+
+---
+
+## Anti-Patterns (NEVER Do These)
+
+| Anti-Pattern | Why It's Wrong | Do This Instead |
+|--------------|----------------|-----------------|
+| ❌ Implementing tasks directly | Bypasses TDD, handoffs, quality gates | Invoke `/ktask` |
+| ❌ Running E2E bash commands manually | Skips e2e-tester agent validation | Include E2E reminder when invoking ktask for VALIDATION tasks |
+| ❌ Skipping handoff verification | Next task loses context | Always verify handoff updated |
+| ❌ Batching multiple tasks | Loses per-task verification | One ktask invocation per task |
+| ❌ Accepting "files don't exist" without verification | Research errors get hidden | See Guardrail section below |
+
+---
+
+## Guardrail: Unexpected Findings
+
+If ktask reports something that contradicts task assumptions, **do not proceed blindly**.
+
+Examples of unexpected findings:
+- "Files mentioned in task don't exist"
+- "Pattern not found in codebase"
+- "Code is already fixed / task already complete"
+- Anything else that seems odd during research or implementation
+
+**When this happens:**
+
+1. **Ask ktask to double-check** with alternative search methods
+2. **If still unexpected, escalate to user**: "Task 4.1 references 8 files but I only found 4. Should I proceed with what exists, or is something wrong?"
+
+Research errors are dangerous because they're silent. A wrong conclusion ("files don't exist") leads to skipped work or wrong implementations. Always verify unexpected findings before proceeding.
 
 ---
 
 ## Resume Behavior
 
-kmilestone is **idempotent**. Running it again on the same milestone:
+kmilestone is idempotent. Running it again:
 
 1. Parses handoff file
-2. Finds "Task X.Y Complete" sections
+2. Finds completed tasks
 3. Resumes from first incomplete task
 
-No special handling needed — just run `/kmilestone @M4_workers.md` again.
-
-**Force restart:** Use `--from 4.1` to ignore handoff and start fresh.
+**Force restart:** `--from 4.1` ignores handoff and starts fresh.
 
 ---
 
@@ -183,77 +173,80 @@ No special handling needed — just run `/kmilestone @M4_workers.md` again.
 
 | Situation | Action |
 |-----------|--------|
-| Task fails quality gates | ktask fixes and retries internally |
-| Unit test quality issues | Fix and re-check (up to 2 retries) |
-| Question arises | AskUserQuestion → pauses for human input |
-| Unrecoverable blocker | Stop, report status, await guidance |
-| Handoff not updated | Error — task did not complete properly |
+| ktask fails quality gates | ktask handles retry internally |
+| ktask reports blocker | Stop, report to user, await guidance |
+| Handoff not updated after ktask | Error — ktask did not complete. Investigate. |
+| ktask reports unexpected finding | Double-check, then escalate to user if still odd |
+| Context becomes too large | Ask user to run `/compact`, then continue |
 
 ---
 
-## What kmilestone Does NOT Change
+## Quick Reference
 
-- **ktask workflow** — Unchanged, all safeguards preserved
-- **TDD requirement** — Still mandatory for CODING tasks
-- **Handoff creation** — Still mandatory after every task
-- **E2E agent usage** — VALIDATION tasks still use e2e-test-designer/architect/tester
-- **Quality gates** — `make test-unit` and `make quality` still required
-
-kmilestone automates the low-value "clear context, invoke next task" loop. The high-value parts (TDD, handoffs, human checkpoints via questions) remain.
+| Phase | Action | Output |
+|-------|--------|--------|
+| **Initialize** | Parse milestone + handoff | "Starting from: X.Y" |
+| **Per-task** | `/ktask impl: <file> task: <id>` | ktask completes task |
+| **VALIDATION task** | Include E2E reminder in ktask invocation | ktask uses e2e agents |
+| **Verify** | Check handoff, tests, quality | All checks pass |
+| **Quality check** | unit-test-quality-checker (CODING) | No issues found |
+| **Complete** | Report summary | Ready for PR |
 
 ---
 
 ## Example Execution
 
 ```
-User: /kmilestone @docs/designs/config-system/implementation/M5_api_client.md
+User: /kmilestone @docs/designs/feature/implementation/M3_core.md
 
 Claude:
-Milestone: M5 - API Client Settings (6 tasks)
-Completed: (none - fresh start)
-Starting from: 5.1
+Milestone: M3 - Core Implementation (5 tasks)
+Completed: 3.1 (from handoff)
+Starting from: 3.2
 
 ---
 
-## Task 5.1: Create APIClientSettings Class
+Invoking ktask for Task 3.2...
 
-[Executes full ktask workflow...]
-[Updates handoff...]
-[Runs unit test quality check: PASS]
+/ktask impl: docs/designs/feature/implementation/M3_core.md task: 3.2
 
-Task 5.1 complete. Compacting context...
+[ktask runs full workflow: Setup → Research → TDD → Verify → Handoff]
 
 ---
 
-## Task 5.2: Add Timeout Configuration
-
-[Executes full ktask workflow...]
-[Updates handoff...]
-[Runs unit test quality check: PASS]
-
-Task 5.2 complete. Compacting context...
-
-[... continues through all tasks ...]
+Task 3.2 complete.
+✅ Handoff updated
+✅ Tests pass
+✅ Quality checks pass
+✅ Changes committed
 
 ---
 
-## Milestone Complete: M5 - API Client Settings
+Invoking ktask for Task 3.3...
 
-Tasks completed: 5.1 through 5.6
+/ktask impl: docs/designs/feature/implementation/M3_core.md task: 3.3
+
+[... continues through 3.4 ...]
+
+---
+
+Invoking ktask for Task 3.5 (VALIDATION)...
+
+/ktask impl: docs/designs/feature/implementation/M3_core.md task: 3.5
+
+REMINDER: This is a VALIDATION task. You MUST use the E2E agent workflow:
+e2e-test-designer → e2e-test-architect → e2e-tester
+Do NOT run bash commands directly from the milestone file.
+
+[ktask uses e2e agents, reports PASS/FAIL]
+
+---
+
+## Milestone Complete: M3 - Core Implementation
+
+Tasks completed: 3.1 through 3.5
 Quality gates: All passed
 E2E validation: Passed
 
 Ready for PR creation.
 ```
-
----
-
-## Quick Reference
-
-| Phase | What Happens |
-|-------|--------------|
-| Initialize | Parse milestone + handoff, find resume point |
-| Per-task | ktask workflow (TDD, implement, handoff, gates) |
-| Quality check | Validate unit tests aren't integration tests |
-| Compact | Clear context, preserve paths + completion state |
-| Complete | Report summary, ready for PR |

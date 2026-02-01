@@ -174,14 +174,18 @@ class ExponentialMovingAverage(BaseIndicator):
             # Use pandas ewm function to calculate EMA
             # The span parameter is equivalent to period in technical analysis terminology
 
-            # CRITICAL FIX: Ensure we have a Series, not a DataFrame
+            # Extract source column - must be a Series, not DataFrame
             source_data = df[source]
             if isinstance(source_data, pd.DataFrame):
-                logger.error(
-                    f"[CRITICAL BUG] df[{source!r}] returned a DataFrame with columns: {list(source_data.columns)}"
+                raise DataError(
+                    message=f"EMA received DataFrame with duplicate '{source}' columns",
+                    error_code="DATA-DuplicateColumns",
+                    details={
+                        "column": source,
+                        "duplicate_columns": list(source_data.columns),
+                        "all_columns": list(df.columns),
+                    },
                 )
-                # Extract the first column as a Series
-                source_data = source_data.iloc[:, 0]
 
             ema = source_data.ewm(span=period, adjust=adjust).mean()
 
@@ -223,6 +227,10 @@ class ExponentialMovingAverage(BaseIndicator):
                 f"EMA calculation completed, non-NaN values: {result_series.count()}"
             )
             return result_series
+
+        except DataError:
+            # Re-raise DataError unchanged (preserve error_code like DATA-DuplicateColumns)
+            raise
 
         except Exception as e:
             error_msg = f"Error calculating EMA: {str(e)}"
