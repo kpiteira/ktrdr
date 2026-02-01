@@ -82,5 +82,39 @@ a mix of domain config (data.directory) and some legacy system-ish config (ib_ho
 Full migration would require updating all callers to use Settings classes, which is a
 larger scope change.
 
+---
+
+## Task 7.4 Complete: Move Version to `importlib.metadata`
+
+**Changed:**
+- `ktrdr/version.py` - Now uses `importlib.metadata.version("ktrdr")` instead of
+  parsing pyproject.toml with tomli. Removes ~50 lines of path-finding code.
+- `ktrdr/monitoring/setup.py` - Replaced `os.getenv("APP_VERSION", "dev")` with
+  `__version__` from ktrdr.version (2 occurrences)
+
+**Note:** APP_VERSION was not in docker-compose files, so no compose changes needed.
+
+**Gotcha:** The import order matters - `ktrdr.version` import must come after
+third-party imports (opentelemetry, prometheus_client) to satisfy ruff.
+
+---
+
+## Task 7.5 Complete: Verify Zero Scattered Config Reads
+
+**Results:**
+- ✅ Zero `metadata.get()` calls - Complete success
+- ⚠️ Some `os.getenv()` calls remain but categorized as legitimate or future-migrate
+
+**Documented Legitimate Exceptions:**
+1. OpenTelemetry metadata (`ENVIRONMENT`) - deployment info for traces
+2. Agent quality gates (`TRAINING_GATE_*`, `BACKTEST_GATE_*`) - agent thresholds
+3. Testing stubs (`STUB_WORKER_*`, `USE_STUB_WORKERS`) - debug/test flags
+4. Dynamic host service detection (service_orchestrator.py) - runtime pattern
+5. Docs config path (`KTRDR_DOCS_CONFIG_PATH`) - override for config file
+
+**Future Migration (not blocking):**
+Some code still uses deprecated env var names (USE_TRAINING_HOST_SERVICE, USE_IB_HOST_SERVICE,
+DB_HOST). These work via deprecation warnings and can be migrated incrementally.
+
 **Next Task Notes:**
-- Task 7.4 will move version to importlib.metadata
+- Task 7.6 is DOCUMENTATION - generate configuration reference
