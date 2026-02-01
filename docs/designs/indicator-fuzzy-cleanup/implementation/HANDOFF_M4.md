@@ -23,7 +23,7 @@ grep -rn "raise ValueError" ktrdr/indicators/*.py | grep -v indicator_engine
 # Returns: No matches (criteria met)
 ```
 
-**Tests:** 4900 passed, 5 skipped
+**Tests:** 4899 passed, 5 skipped
 
 ---
 

@@ -228,6 +228,10 @@ class ExponentialMovingAverage(BaseIndicator):
             )
             return result_series
 
+        except DataError:
+            # Re-raise DataError unchanged (preserve error_code like DATA-DuplicateColumns)
+            raise
+
         except Exception as e:
             error_msg = f"Error calculating EMA: {str(e)}"
             logger.error(error_msg)
