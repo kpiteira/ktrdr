@@ -45,11 +45,13 @@ error_console = Console(stderr=True)
 SANDBOX_SECRETS_ITEM = "ktrdr-sandbox-dev"
 
 # Mapping from 1Password field labels to environment variable names
+# Note: These use KTRDR_* names for KTRDR settings (M6 migration)
+# Third-party settings (GF_*, ANTHROPIC_*) keep their original names
 SANDBOX_SECRETS_MAPPING = {
-    "db_password": "DB_PASSWORD",
-    "jwt_secret": "JWT_SECRET",
-    "anthropic_api_key": "ANTHROPIC_API_KEY",
-    "grafana_password": "GF_ADMIN_PASSWORD",
+    "db_password": "KTRDR_DB_PASSWORD",
+    "jwt_secret": "KTRDR_AUTH_JWT_SECRET",
+    "anthropic_api_key": "ANTHROPIC_API_KEY",  # Third-party, keep original name
+    "grafana_password": "GF_ADMIN_PASSWORD",  # Third-party, keep original name
 }
 
 
@@ -247,6 +249,7 @@ def start_instance(
     no_secrets: bool = False,
     profile: Optional[str] = None,
     secrets_item: Optional[str] = None,
+    ktrdr_env: str = "development",
 ) -> int:
     """Start the instance Docker Compose stack.
 
@@ -258,6 +261,8 @@ def start_instance(
         no_secrets: Skip 1Password secrets.
         profile: Docker Compose profile to use (e.g., "local-prod" for extra workers).
         secrets_item: 1Password item name for secrets. Defaults to sandbox item.
+        ktrdr_env: Environment mode for KTRDR_ENV ("development" or "production").
+                   This controls validation strictness (production mode fails on insecure defaults).
 
     Returns:
         Exit code (0 for success, 1 for general error, 2 for gate failure, 3 for port conflict).
@@ -328,12 +333,17 @@ def start_instance(
         cmd.append("--build")
 
     # Set environment for compose
-    # Order matters: os.environ < .env.sandbox < 1Password secrets
+    # Order matters: os.environ < .env.sandbox < 1Password secrets < CLI overrides
     compose_env = os.environ.copy()
     compose_env.update(env)
     compose_env.update(secrets_env)  # Secrets override defaults
 
+    # Set KTRDR_ENV to control validation strictness
+    # This is set by CLI commands: sandbox→development, local-prod→production
+    compose_env["KTRDR_ENV"] = ktrdr_env
+
     console.print(f"Running: docker compose -f {compose_file.name} up -d")
+    console.print(f"  [dim]KTRDR_ENV={ktrdr_env}[/dim]")
 
     try:
         subprocess.run(cmd, check=True, env=compose_env)
