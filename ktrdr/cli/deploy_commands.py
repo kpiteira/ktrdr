@@ -21,6 +21,19 @@ from ktrdr.cli.helpers import (
 # Create the deploy app
 deploy_app = typer.Typer(help="Deploy KTRDR services to pre-production environment")
 
+
+@deploy_app.callback(invoke_without_command=True)
+def _deploy_deprecation_callback(ctx: typer.Context) -> None:
+    """Show deprecation warning for ktrdr deploy commands."""
+    cmd = ctx.invoked_subcommand or ""
+    # Use typer.secho for colored output that gets captured in tests
+    typer.secho(
+        f"Warning: 'ktrdr deploy {cmd}' is deprecated. "
+        f"Use 'kinfra deploy {cmd}' instead.",
+        fg=typer.colors.YELLOW,
+    )
+
+
 # Constants
 ONEPASSWORD_ITEM = "ktrdr-homelab-core"
 GITHUB_USERNAME = "kpiteira"

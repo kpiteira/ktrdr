@@ -67,6 +67,19 @@ local_prod_app = typer.Typer(
     no_args_is_help=True,
 )
 
+
+@local_prod_app.callback(invoke_without_command=True)
+def _local_prod_deprecation_callback(ctx: typer.Context) -> None:
+    """Show deprecation warning for ktrdr local-prod commands."""
+    cmd = ctx.invoked_subcommand or ""
+    # Use typer.secho for colored output that gets captured in tests
+    typer.secho(
+        f"Warning: 'ktrdr local-prod {cmd}' is deprecated. "
+        f"Use 'kinfra local-prod {cmd}' instead.",
+        fg=typer.colors.YELLOW,
+    )
+
+
 console = Console()
 error_console = Console(stderr=True)
 
