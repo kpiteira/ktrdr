@@ -6,6 +6,7 @@ sandbox management, deployment, and worktree operations.
 
 import typer
 
+from ktrdr.cli.kinfra.deploy import deploy_app
 from ktrdr.cli.kinfra.local_prod import local_prod_app
 from ktrdr.cli.kinfra.sandbox import sandbox_app
 
@@ -30,6 +31,11 @@ app.add_typer(
     local_prod_app,
     name="local-prod",
     help="Manage local-prod production-like environment",
+)
+app.add_typer(
+    deploy_app,
+    name="deploy",
+    help="Deploy KTRDR services to pre-production environment",
 )
 
 
