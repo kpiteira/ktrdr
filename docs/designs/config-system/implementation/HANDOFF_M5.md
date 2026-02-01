@@ -245,3 +245,31 @@ Replaced all `os.getenv("DATA_*")` and `os.getenv("MODELS_*")` calls with `get_d
 
 ---
 
+## Task 5.7 Complete: Migrate CLI/API Client Consumers
+
+### Implementation Notes
+
+Replaced all `os.getenv("KTRDR_API_URL")` calls with `get_api_service_settings().base_url`:
+
+**Files modified:**
+- `ktrdr/agents/executor.py` — Added `_get_api_base_url()` helper
+- `ktrdr/training/worker_registration.py` — `WorkerRegistration.__init__()`
+- `ktrdr/backtesting/worker_registration.py` — `WorkerRegistration.__init__()`
+- `ktrdr/training/training_worker.py` — Worker instance creation
+- `ktrdr/backtesting/backtest_worker.py` — Worker instance creation
+- `ktrdr/cli/__init__.py` — Telemetry setup
+
+### Gotchas
+
+**base_url includes /api/v1 suffix**: The `get_api_service_settings().base_url` includes `/api/v1` suffix, but many call sites just need the base host:port. Created helper functions that strip this suffix.
+
+**Worker registration no longer throws RuntimeError**: Previously, workers would fail if `KTRDR_API_URL` wasn't set. Now they use settings with the default value, which is `http://localhost:8000/api/v1`.
+
+### Next Task Notes (5.8: Update Validation and Deprecation Modules)
+
+- The `deprecated_field()` helper already exists and was used throughout
+- May need to update the deprecation warning system if not already in place
+- Check if we need to add startup warnings for deprecated env vars
+
+---
+

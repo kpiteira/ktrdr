@@ -912,10 +912,20 @@ class TrainingWorker(WorkerAPIBase):
         }
 
 
-# Create worker instance (port from settings, backend URL still from env)
+# Create worker instance (port and backend URL from settings)
+def _get_backend_url() -> str:
+    """Get backend URL from settings, stripping /api/v1 suffix."""
+    from ktrdr.config.settings import get_api_service_settings
+
+    base_url = get_api_service_settings().base_url
+    if base_url.endswith("/api/v1"):
+        return base_url[:-7]
+    return base_url
+
+
 worker = TrainingWorker(
     worker_port=_worker_settings.port,
-    backend_url=os.getenv("KTRDR_API_URL", "http://backend:8000"),
+    backend_url=_get_backend_url(),
 )
 
 # Auto-instrument with OpenTelemetry

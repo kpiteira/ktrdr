@@ -41,6 +41,21 @@ HandlerResult = dict[str, Any] | list[dict[str, Any]]
 HandlerFunc = Callable[..., Coroutine[Any, Any, HandlerResult]]
 
 
+def _get_api_base_url() -> str:
+    """Get the API base URL from settings.
+
+    Returns the base URL without the /api/v1 suffix for use with endpoints.
+    """
+    from ktrdr.config.settings import get_api_service_settings
+
+    # Settings base_url includes /api/v1, we just need the host:port part
+    base_url = get_api_service_settings().base_url
+    # Remove /api/v1 suffix if present
+    if base_url.endswith("/api/v1"):
+        return base_url[:-7]  # Remove '/api/v1'
+    return base_url
+
+
 async def get_indicators_from_api() -> list[dict[str, Any]]:
     """Fetch available indicators from the KTRDR API.
 
@@ -49,8 +64,8 @@ async def get_indicators_from_api() -> list[dict[str, Any]]:
     """
     import httpx
 
-    # Get API URL from environment
-    base_url = os.getenv("KTRDR_API_URL", "http://localhost:8000")
+    # Get API URL from settings
+    base_url = _get_api_base_url()
     api_url = f"{base_url}/api/v1/indicators/"
 
     try:
@@ -73,8 +88,8 @@ async def get_symbols_from_api() -> list[dict[str, Any]]:
     """
     import httpx
 
-    # Get API URL from environment
-    base_url = os.getenv("KTRDR_API_URL", "http://localhost:8000")
+    # Get API URL from settings
+    base_url = _get_api_base_url()
     api_url = f"{base_url}/api/v1/symbols"
 
     try:
@@ -110,8 +125,8 @@ async def start_training_via_api(
     """
     import httpx
 
-    # Get API URL from environment
-    base_url = os.getenv("KTRDR_API_URL", "http://localhost:8000")
+    # Get API URL from settings
+    base_url = _get_api_base_url()
     api_url = f"{base_url}/api/v1/trainings/start"  # Note: /trainings (plural)
 
     # Build request payload - only include non-None values
@@ -183,8 +198,8 @@ async def start_backtest_via_api(
     """
     import httpx
 
-    # Get API URL from environment
-    base_url = os.getenv("KTRDR_API_URL", "http://localhost:8000")
+    # Get API URL from settings
+    base_url = _get_api_base_url()
     api_url = f"{base_url}/api/v1/backtests/start"
 
     # Build request payload - only include non-None values

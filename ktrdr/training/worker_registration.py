@@ -38,13 +38,15 @@ class WorkerRegistration:
         self.worker_type = "training"
         self.port = worker_settings.port
 
-        # Backend URL is REQUIRED (no default)
-        self.backend_url = os.getenv("KTRDR_API_URL")
-        if not self.backend_url:
-            raise RuntimeError(
-                "KTRDR_API_URL environment variable is required for worker registration. "
-                "Example: KTRDR_API_URL=http://192.168.1.100:8000"
-            )
+        # Backend URL from settings (required for workers)
+        from ktrdr.config.settings import get_api_service_settings
+
+        api_settings = get_api_service_settings()
+        # Use base_url but strip /api/v1 suffix for worker registration
+        base_url = api_settings.base_url
+        if base_url.endswith("/api/v1"):
+            base_url = base_url[:-7]
+        self.backend_url = base_url
 
         self.max_retries = max_retries
         self.retry_delay = retry_delay
