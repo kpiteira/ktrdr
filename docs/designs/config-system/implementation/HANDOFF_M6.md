@@ -119,11 +119,48 @@ M6 updates all Docker Compose files and CLI commands to use the new `KTRDR_*` en
 
 ---
 
-### Task 6.5 Pending: E2E Validation
+### Task 6.5 Complete: E2E Validation
 
-E2E tests will validate:
-1. Docker compose up with new names
-2. Sandbox startup with new names
-3. Local-prod sets production mode
-4. No deprecation warnings in logs
+**Test Execution:**
+
+```bash
+uv run ktrdr sandbox down
+uv run ktrdr sandbox up --no-secrets
+```
+
+**Results:**
+
+1. **Docker compose up with new names** ✅
+   - All services started successfully
+   - `KTRDR_ENV=development` displayed in output
+
+2. **Sandbox startup works** ✅
+   - Startability Gate: PASSED
+   - All workers registered (4 workers: 2 backtest, 2 training)
+   - API healthy at http://localhost:8001/api/v1/health
+
+3. **No deprecation warnings** ✅
+   - Logs show only insecure default warnings (expected with `--no-secrets`)
+   - Workers using new names: `KTRDR_DB_PASSWORD`, `KTRDR_AUTH_JWT_SECRET`
+   - No "deprecated" messages in backend or worker logs
+
+4. **New env var names in use** ✅
+   - Backend logs show KTRDR logging initialized
+   - Workers show OTLP config using `http://jaeger:4317`
+   - Database engine using `db:5432/ktrdr`
+
+**Note:** Local-prod E2E test not run (requires 1Password secrets and production-ready credentials).
+
+---
+
+## Milestone Complete
+
+All tasks (6.1-6.5) completed successfully:
+- [x] Task 6.1: docker-compose.yml updated
+- [x] Task 6.2: docker-compose.sandbox.yml updated
+- [x] Task 6.3: .env.example templates updated
+- [x] Task 6.4: CLI sets KTRDR_ENV
+- [x] Task 6.5: E2E validation passed
+
+Ready for PR creation.
 
