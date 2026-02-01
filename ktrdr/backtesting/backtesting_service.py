@@ -588,7 +588,9 @@ class BacktestingService(ServiceOrchestrator[None]):
 
         if len(timeframes) == 1:
             timeframe_config = TimeframeConfiguration(
-                mode=TimeframeMode.SINGLE, timeframe=timeframes[0]
+                mode=TimeframeMode.SINGLE,
+                timeframe=timeframes[0],
+                base_timeframe=timeframes[0],  # Must set for FeatureCache
             )
         else:
             timeframe_config = TimeframeConfiguration(

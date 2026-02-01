@@ -4,6 +4,8 @@
 **Duration:** <10 seconds
 **Category:** Backtest
 
+**Dependency:** Should run after `training/smoke` which creates the model
+
 ---
 
 ## Pre-Flight Checks
@@ -13,8 +15,8 @@
 - [backtest](../../preflight/backtest.md) — Model, strategy, data, workers
 
 **Test-specific checks:**
-- [ ] Model exists: `models/neuro_mean_reversion/1d_v21/model.pt`
-- [ ] Strategy exists: `neuro_mean_reversion.yaml`
+- [ ] Model exists: `models/test_e2e_local_pull/1d_latest`
+- [ ] Strategy exists: `test_e2e_local_pull.yaml`
 - [ ] Data available: EURUSD 1d
 
 ---
@@ -23,8 +25,8 @@
 
 ```json
 {
-  "model_path": "models/neuro_mean_reversion/1d_v21/model.pt",
-  "strategy_name": "neuro_mean_reversion",
+  "model_path": "models/test_e2e_local_pull/1d_latest",
+  "strategy_name": "test_e2e_local_pull",
   "symbol": "EURUSD",
   "timeframe": "1d",
   "start_date": "2024-01-01",
@@ -34,7 +36,8 @@
 
 **Why this data:**
 - Short date range (~21 bars) for quick execution
-- Known-good model and strategy
+- Uses model created by training/smoke test
+- `1d_latest` symlink points to most recent training result
 - Tests basic workflow without long wait
 
 ---
@@ -48,8 +51,8 @@
 RESPONSE=$(curl -s -X POST http://localhost:${KTRDR_API_PORT:-8000}/api/v1/backtests/start \
   -H "Content-Type: application/json" \
   -d '{
-    "model_path": "models/neuro_mean_reversion/1d_v21/model.pt",
-    "strategy_name": "neuro_mean_reversion",
+    "model_path": "models/test_e2e_local_pull/1d_latest",
+    "strategy_name": "test_e2e_local_pull",
     "symbol": "EURUSD",
     "timeframe": "1d",
     "start_date": "2024-01-01",
@@ -119,7 +122,11 @@ curl -s "http://localhost:${KTRDR_API_PORT:-8000}/api/v1/operations/$OPERATION_I
 
 **If strategy not found:**
 - **Cause:** Strategy not in expected location
-- **Cure:** Copy to shared: `cp strategies/neuro_mean_reversion.yaml ~/.ktrdr/shared/strategies/`
+- **Cure:** Copy to shared: `cp strategies/test_e2e_local_pull.yaml ~/.ktrdr/shared/strategies/`
+
+**If model not found but training/smoke passed:**
+- **Cause:** `1d_latest` symlink not created
+- **Cure:** Run training/smoke first, or manually symlink: `ln -sf 1d_v19 ~/.ktrdr/shared/models/test_e2e_local_pull/1d_latest`
 
 **If backtest times out:**
 - **Cause:** Worker busy or crashed
