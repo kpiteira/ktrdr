@@ -1157,29 +1157,46 @@ class ApiServiceSettings(BaseSettings):
     """API Server configuration for client connections.
 
     Provides API client configuration for CLI and other clients connecting
-    to the KTRDR backend API server.
+    to the KTRDR backend API server. This is the single source of truth for
+    "how to connect to backend" (resolves duplication #5 from config audit).
 
-    Environment variables:
-        api_base_url: Base URL for API client connections.
+    Environment variables (new names - preferred):
+        KTRDR_API_CLIENT_BASE_URL: Base URL for API client connections.
             Default: http://localhost:8000/api/v1
         KTRDR_API_CLIENT_TIMEOUT: Request timeout in seconds. Default: 30.0
         KTRDR_API_CLIENT_MAX_RETRIES: Max retry attempts. Default: 3
         KTRDR_API_CLIENT_RETRY_DELAY: Delay between retries. Default: 1.0
+
+    Deprecated names (still work, emit warnings at startup):
+        KTRDR_API_URL → KTRDR_API_CLIENT_BASE_URL
     """
 
     enabled: bool = Field(default=True)  # API is always "enabled" for clients
 
-    base_url: str = Field(
-        default=metadata.get("api.client_base_url", "http://localhost:8000/api/v1"),
+    base_url: str = deprecated_field(
+        metadata.get("api.client_base_url", "http://localhost:8000/api/v1"),
+        "KTRDR_API_CLIENT_BASE_URL",
+        "KTRDR_API_URL",
         description="Base URL for API client connections",
-        alias="api_base_url",
     )
 
-    timeout: float = Field(default=metadata.get("api.client_timeout", 30.0))
+    timeout: float = Field(
+        default=metadata.get("api.client_timeout", 30.0),
+        gt=0,
+        description="Request timeout in seconds",
+    )
 
-    max_retries: int = Field(default=metadata.get("api.client_max_retries", 3))
+    max_retries: int = Field(
+        default=metadata.get("api.client_max_retries", 3),
+        ge=0,
+        description="Maximum retry attempts",
+    )
 
-    retry_delay: float = Field(default=metadata.get("api.client_retry_delay", 1.0))
+    retry_delay: float = Field(
+        default=metadata.get("api.client_retry_delay", 1.0),
+        ge=0,
+        description="Delay between retries in seconds",
+    )
 
     # These fields are inherited from the old HostServiceSettings base class
     health_check_interval: float = Field(
@@ -1187,7 +1204,7 @@ class ApiServiceSettings(BaseSettings):
     )
 
     model_config = SettingsConfigDict(
-        env_prefix="KTRDR_API_CLIENT_", extra="forbid", populate_by_name=True
+        env_prefix="KTRDR_API_CLIENT_", extra="ignore", populate_by_name=True
     )
 
     def get_health_url(self) -> str:

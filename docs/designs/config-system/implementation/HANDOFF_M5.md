@@ -153,3 +153,39 @@ Created `DataSettings` class with prefix `KTRDR_DATA_` in `ktrdr/config/settings
 
 ---
 
+## Task 5.4 Complete: Add APIClientSettings (Update to ApiServiceSettings)
+
+### Implementation Notes
+
+Updated existing `ApiServiceSettings` class in `ktrdr/config/settings.py` to:
+1. Add deprecated name support for `KTRDR_API_URL` → `KTRDR_API_CLIENT_BASE_URL`
+2. Add validation constraints (timeout gt=0, max_retries ge=0, retry_delay ge=0)
+3. Changed `extra="forbid"` to `extra="ignore"` for consistency with other settings classes
+
+**This resolves duplication #5 from the config audit**: Multiple env vars for backend URL now consolidated through `ApiServiceSettings` as the single source of truth.
+
+### Gotchas
+
+**`ApiServiceSettings` already existed**: Rather than creating a new class, we enhanced the existing one with deprecated name support.
+
+**extra="forbid" changed to extra="ignore"**: The original class used `extra="forbid"` which would reject unknown env vars. Changed to `extra="ignore"` for consistency and to avoid issues with the deprecated name alias.
+
+### Tests
+
+18 unit tests in `tests/unit/config/test_api_client_settings.py`:
+- Default values (4 tests)
+- New env var names (4 tests)
+- Deprecated env var names (1 test)
+- Precedence (1 test)
+- Validation (3 tests)
+- Getter caching (3 tests)
+- Helper methods (2 tests)
+
+### Next Task Notes (5.5: Migrate Agent Consumers)
+
+- Replace all `os.getenv("AGENT_*")` calls with `get_agent_settings().field`
+- Files: `ktrdr/agents/*.py`
+- Watch for the conftest.py AGENT_MODEL=haiku override in tests
+
+---
+
