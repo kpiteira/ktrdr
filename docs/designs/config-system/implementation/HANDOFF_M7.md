@@ -61,5 +61,26 @@ M7 is the final cleanup phase for the config system redesign. It removes the leg
 - `config/training_host_service.yaml` - Used by training-host-service
 - `config/workers.dev.yaml` / `config/workers.prod.yaml` - Used by deployment config tests
 
+---
+
+## Task 7.3 Complete: Simplify `loader.py`
+
+**Removed (dead code):**
+- `load_fuzzy_defaults()` - never called from anywhere
+- `load_multi_timeframe_indicators()` - never called
+- `validate_multi_timeframe_config()` - never called
+- `create_sample_multi_timeframe_config()` - never called
+
+These methods were created for multi-timeframe indicator features but were never integrated.
+
+**Kept (still used):**
+- `load()` - Used by `local_data_loader.py`, `ib_service.py`, `data.py` endpoints
+- `load_from_env()` - Used by `ib_service.py`, `data.py` endpoints
+
+**Note:** The remaining methods load `KtrdrConfig` from `settings.yaml` which contains
+a mix of domain config (data.directory) and some legacy system-ish config (ib_host_service).
+Full migration would require updating all callers to use Settings classes, which is a
+larger scope change.
+
 **Next Task Notes:**
-- Task 7.3 will simplify loader.py to remove system config loading
+- Task 7.4 will move version to importlib.metadata
