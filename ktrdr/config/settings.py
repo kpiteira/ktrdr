@@ -822,9 +822,15 @@ class WorkerSettings(BaseSettings):
         KTRDR_WORKER_REGISTRATION_TIMEOUT: Registration timeout. Default: 10
         KTRDR_WORKER_ENDPOINT_URL: Explicit endpoint URL. Default: None (auto-detected)
         KTRDR_WORKER_PUBLIC_BASE_URL: Public URL for distributed deployments. Default: None
+        KTRDR_WORKER_HEALTH_CHECK_INTERVAL: Health check interval in seconds. Default: 10
+        KTRDR_WORKER_HEALTH_CHECK_TIMEOUT: Health check timeout in seconds. Default: 5
+        KTRDR_WORKER_HEALTH_CHECK_FAILURES: Failures before unavailable. Default: 3
+        KTRDR_WORKER_REMOVAL_THRESHOLD: Seconds before removing dead workers. Default: 300
 
     Deprecated names (still work, emit warnings at startup):
-        WORKER_ID, WORKER_PORT, WORKER_ENDPOINT_URL, WORKER_PUBLIC_BASE_URL
+        WORKER_ID, WORKER_PORT, WORKER_ENDPOINT_URL, WORKER_PUBLIC_BASE_URL,
+        WORKER_HEALTH_CHECK_INTERVAL, WORKER_HEALTH_CHECK_TIMEOUT,
+        WORKER_HEALTH_CHECK_FAILURES, WORKER_REMOVAL_THRESHOLD
     """
 
     # Worker identification
@@ -869,6 +875,36 @@ class WorkerSettings(BaseSettings):
         "KTRDR_WORKER_PUBLIC_BASE_URL",
         "WORKER_PUBLIC_BASE_URL",
         description="Public URL for distributed deployments (if not set, uses hostname)",
+    )
+
+    # Health monitoring settings (used by WorkerRegistry)
+    health_check_interval: int = deprecated_field(
+        10,
+        "KTRDR_WORKER_HEALTH_CHECK_INTERVAL",
+        "WORKER_HEALTH_CHECK_INTERVAL",
+        gt=0,
+        description="Interval in seconds between health checks",
+    )
+    health_check_timeout: int = deprecated_field(
+        5,
+        "KTRDR_WORKER_HEALTH_CHECK_TIMEOUT",
+        "WORKER_HEALTH_CHECK_TIMEOUT",
+        gt=0,
+        description="Timeout in seconds for health check requests",
+    )
+    health_check_failures: int = deprecated_field(
+        3,
+        "KTRDR_WORKER_HEALTH_CHECK_FAILURES",
+        "WORKER_HEALTH_CHECK_FAILURES",
+        gt=0,
+        description="Number of consecutive failures before marking unavailable",
+    )
+    removal_threshold: int = deprecated_field(
+        300,
+        "KTRDR_WORKER_REMOVAL_THRESHOLD",
+        "WORKER_REMOVAL_THRESHOLD",
+        gt=0,
+        description="Seconds before removing unresponsive workers (default: 5 minutes)",
     )
 
     model_config = SettingsConfigDict(
@@ -1008,6 +1044,44 @@ class AgentSettings(BaseSettings):
         "KTRDR_AGENT_BACKTEST_END_DATE",
         "AGENT_BACKTEST_END_DATE",
         description="Default backtest end date (YYYY-MM-DD)",
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="KTRDR_AGENT_",
+        env_file=".env.local",
+        extra="ignore",
+    )
+
+
+class AgentTriggerSettings(BaseSettings):
+    """Agent Auto-Trigger Settings.
+
+    Controls automatic agent triggering functionality. When enabled, the
+    agent system can automatically trigger research/analysis operations
+    at regular intervals.
+
+    Safe defaults: disabled.
+
+    Environment variables (prefix KTRDR_AGENT_):
+        KTRDR_AGENT_ENABLED: Enable automatic agent triggering. Default: false
+        KTRDR_AGENT_TRIGGER_INTERVAL: Interval between triggers in seconds. Default: 300
+
+    Deprecated names (still work, emit warnings at startup):
+        AGENT_TRIGGER_INTERVAL_SECONDS → KTRDR_AGENT_TRIGGER_INTERVAL
+    """
+
+    enabled: bool = deprecated_field(
+        False,
+        "KTRDR_AGENT_ENABLED",
+        "AGENT_ENABLED",
+        description="Enable automatic agent triggering",
+    )
+    trigger_interval: int = deprecated_field(
+        300,
+        "KTRDR_AGENT_TRIGGER_INTERVAL",
+        "AGENT_TRIGGER_INTERVAL_SECONDS",
+        gt=0,
+        description="Interval between automatic triggers in seconds",
     )
 
     model_config = SettingsConfigDict(
@@ -1296,6 +1370,12 @@ def get_agent_settings() -> AgentSettings:
 
 
 @lru_cache
+def get_agent_trigger_settings() -> AgentTriggerSettings:
+    """Get agent trigger settings with caching."""
+    return AgentTriggerSettings()
+
+
+@lru_cache
 def get_agent_gate_settings() -> AgentGateSettings:
     """Get agent gate settings with caching."""
     return AgentGateSettings()
@@ -1351,6 +1431,7 @@ def clear_settings_cache() -> None:
     get_training_host_service_settings.cache_clear()
     get_worker_settings.cache_clear()
     get_agent_settings.cache_clear()
+    get_agent_trigger_settings.cache_clear()
     get_agent_gate_settings.cache_clear()
     get_data_settings.cache_clear()
 
@@ -1372,6 +1453,7 @@ __all__ = [
     "TrainingHostServiceSettings",
     "WorkerSettings",
     "AgentSettings",
+    "AgentTriggerSettings",
     "AgentGateSettings",
     "DataSettings",
     # Cached getters
@@ -1390,6 +1472,7 @@ __all__ = [
     "get_training_host_service_settings",
     "get_worker_settings",
     "get_agent_settings",
+    "get_agent_trigger_settings",
     "get_agent_gate_settings",
     "get_data_settings",
     # Utilities
