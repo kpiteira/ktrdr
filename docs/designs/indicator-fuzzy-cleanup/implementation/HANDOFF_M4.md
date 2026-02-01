@@ -78,15 +78,29 @@ if duplicate_cols:
 
 ## Task 4.5 Complete: Execute M4 E2E Test
 
-**All checks passed:**
-- [x] No ValueError in indicator param validation
-- [x] No _validate_params calls in compute() methods
-- [x] No assert isinstance in FuzzyEngine
-- [x] No [CRITICAL BUG] in codebase
-- [x] No dead get_name() method
-- [x] Invalid params raise DataError (tested: adx, cmf, keltnerchannels)
+**E2E Test:** `codebase/m4-cleanup-complete` (new test added to catalog)
+
+**Workflow followed:**
+1. `e2e-test-designer` — searched catalog, found no existing test
+2. `e2e-test-architect` — designed new test specification
+3. `e2e-tester` — executed all 7 phases
+
+**All 9 success criteria passed:**
+- [x] No `raise ValueError` in indicator files
+- [x] No `_validate_params` calls in compute() methods
+- [x] No `assert isinstance` in FuzzyEngine
+- [x] No `CRITICAL BUG` markers in codebase
+- [x] No dead `get_name()` in BollingerBands
+- [x] ADX raises DataError for invalid params
+- [x] CMF raises DataError for invalid params
+- [x] KeltnerChannels raises DataError for invalid params
+- [x] All 23 indicators with period param raise DataError (100% compliance)
+
+**Quality gates:**
 - [x] `make test-unit` passes (4899 passed, 5 skipped)
 - [x] `make quality` passes
+
+**E2E test catalog:** `.claude/skills/e2e-testing/tests/codebase/m4-cleanup-complete.md`
 
 **M4 Milestone Complete.**
 

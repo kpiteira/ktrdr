@@ -145,6 +145,7 @@ See [e2e-tester agent](../../agents/e2e-tester.md) for full details.
 |------|----------|----------|----------|
 | [indicators/registry-migration-complete](tests/indicators/registry-migration-complete.md) | Indicators (Migration) | ~30s | M2 indicator registry migration validation |
 | [fuzzy/migration-complete](tests/fuzzy/migration-complete.md) | Fuzzy (Migration) | ~30s | M3 fuzzy MEMBERSHIP_REGISTRY migration validation |
+| [codebase/m4-cleanup-complete](tests/codebase/m4-cleanup-complete.md) | Codebase (Cleanup) | ~30s | M4 cleanup validation: no ValueError, no dead code, DataError for invalid params |
 
 ## Pre-Flight Modules
 
