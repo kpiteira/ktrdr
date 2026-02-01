@@ -18,6 +18,8 @@ from opentelemetry.sdk.trace.export import (
 )
 from prometheus_client import make_asgi_app
 
+from ktrdr.version import __version__
+
 logger = logging.getLogger(__name__)
 
 
@@ -63,7 +65,7 @@ def setup_monitoring(
     resource = Resource.create(
         {
             "service.name": service_name,
-            "service.version": os.getenv("APP_VERSION", "dev"),
+            "service.version": __version__,
             "deployment.environment": os.getenv("ENVIRONMENT", "development"),
         }
     )
@@ -140,7 +142,7 @@ def setup_metrics(service_name: str) -> MeterProvider:
     resource = Resource.create(
         {
             "service.name": service_name,
-            "service.version": os.getenv("APP_VERSION", "dev"),
+            "service.version": __version__,
             "deployment.environment": os.getenv("ENVIRONMENT", "development"),
         }
     )

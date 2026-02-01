@@ -69,11 +69,7 @@ class TestDeprecationExports:
 class TestBackwardCompatibilityExports:
     """Test that existing exports still work (backward compatibility)."""
 
-    def test_can_import_metadata(self):
-        """metadata should still be importable from ktrdr.config."""
-        from ktrdr.config import metadata
-
-        assert metadata is not None
+    # Note: metadata was removed in M7 cleanup - it's no longer exported
 
     def test_can_import_config_loader(self):
         """ConfigLoader should still be importable from ktrdr.config."""
