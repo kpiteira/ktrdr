@@ -55,8 +55,18 @@ For each remaining task, follow this loop:
 
 **You MUST invoke ktask. NEVER implement tasks directly.**
 
+**For CODING/RESEARCH/MIXED tasks:**
 ```
 /ktask impl: <milestone_file> task: <task_id>
+```
+
+**For VALIDATION tasks — include E2E reminder:**
+```
+/ktask impl: <milestone_file> task: <task_id>
+
+REMINDER: This is a VALIDATION task. You MUST use the E2E agent workflow:
+e2e-test-designer → e2e-test-architect → e2e-tester
+Do NOT run bash commands directly from the milestone file.
 ```
 
 Example:
@@ -90,16 +100,11 @@ Task(
 
 If issues found: fix and re-check (up to 2 retries).
 
-#### Step 2d: Compact Context
+#### Step 2d: Continue to Next Task
 
-**Before starting the next task, compact context:**
+Proceed directly to the next task. Do NOT pause to ask for `/compact` between tasks.
 
-Tell the user:
-```
-Task X.Y complete. Before continuing to X.Z, please run /compact to free up context.
-```
-
-Wait for user to confirm, then continue to next task.
+If context becomes too large during execution, you may ask the user to run `/compact` at that point.
 
 ---
 
@@ -126,10 +131,29 @@ Ready for PR creation.
 | Anti-Pattern | Why It's Wrong | Do This Instead |
 |--------------|----------------|-----------------|
 | ❌ Implementing tasks directly | Bypasses TDD, handoffs, quality gates | Invoke `/ktask` |
-| ❌ Running E2E bash commands manually | Skips e2e-tester agent validation | Let ktask use e2e agents |
+| ❌ Running E2E bash commands manually | Skips e2e-tester agent validation | Include E2E reminder when invoking ktask for VALIDATION tasks |
 | ❌ Skipping handoff verification | Next task loses context | Always verify handoff updated |
-| ❌ Continuing without `/compact` | Context bloats, quality degrades | Ask user to `/compact` between tasks |
 | ❌ Batching multiple tasks | Loses per-task verification | One ktask invocation per task |
+| ❌ Accepting "files don't exist" without verification | Research errors get hidden | See Guardrail section below |
+
+---
+
+## Guardrail: Unexpected Findings
+
+If ktask reports something that contradicts task assumptions, **do not proceed blindly**.
+
+Examples of unexpected findings:
+- "Files mentioned in task don't exist"
+- "Pattern not found in codebase"
+- "Code is already fixed / task already complete"
+- Anything else that seems odd during research or implementation
+
+**When this happens:**
+
+1. **Ask ktask to double-check** with alternative search methods
+2. **If still unexpected, escalate to user**: "Task 4.1 references 8 files but I only found 4. Should I proceed with what exists, or is something wrong?"
+
+Research errors are dangerous because they're silent. A wrong conclusion ("files don't exist") leads to skipped work or wrong implementations. Always verify unexpected findings before proceeding.
 
 ---
 
@@ -152,7 +176,8 @@ kmilestone is idempotent. Running it again:
 | ktask fails quality gates | ktask handles retry internally |
 | ktask reports blocker | Stop, report to user, await guidance |
 | Handoff not updated after ktask | Error — ktask did not complete. Investigate. |
-| User declines `/compact` | Continue, but warn about context limits |
+| ktask reports unexpected finding | Double-check, then escalate to user if still odd |
+| Context becomes too large | Ask user to run `/compact`, then continue |
 
 ---
 
@@ -162,9 +187,9 @@ kmilestone is idempotent. Running it again:
 |-------|--------|--------|
 | **Initialize** | Parse milestone + handoff | "Starting from: X.Y" |
 | **Per-task** | `/ktask impl: <file> task: <id>` | ktask completes task |
+| **VALIDATION task** | Include E2E reminder in ktask invocation | ktask uses e2e agents |
 | **Verify** | Check handoff, tests, quality | All checks pass |
 | **Quality check** | unit-test-quality-checker (CODING) | No issues found |
-| **Compact** | Ask user to run `/compact` | User confirms |
 | **Complete** | Report summary | Ready for PR |
 
 ---
@@ -195,17 +220,25 @@ Task 3.2 complete.
 ✅ Quality checks pass
 ✅ Changes committed
 
-Before continuing to Task 3.3, please run /compact to free up context.
-
-[User runs /compact]
-
 ---
 
 Invoking ktask for Task 3.3...
 
 /ktask impl: docs/designs/feature/implementation/M3_core.md task: 3.3
 
-[... continues ...]
+[... continues through 3.4 ...]
+
+---
+
+Invoking ktask for Task 3.5 (VALIDATION)...
+
+/ktask impl: docs/designs/feature/implementation/M3_core.md task: 3.5
+
+REMINDER: This is a VALIDATION task. You MUST use the E2E agent workflow:
+e2e-test-designer → e2e-test-architect → e2e-tester
+Do NOT run bash commands directly from the milestone file.
+
+[ktask uses e2e agents, reports PASS/FAIL]
 
 ---
 
