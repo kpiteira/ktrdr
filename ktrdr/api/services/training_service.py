@@ -22,10 +22,8 @@ from ktrdr.api.services.training.training_progress_renderer import (
 )
 from ktrdr.api.uptime import get_uptime_seconds
 from ktrdr.async_infrastructure.service_orchestrator import ServiceOrchestrator
-from ktrdr.backtesting.model_loader import ModelLoader
 from ktrdr.errors import ValidationError, WorkerUnavailableError
 from ktrdr.monitoring.service_telemetry import trace_service_method
-from ktrdr.training.model_storage import ModelStorage
 
 if TYPE_CHECKING:
     from ktrdr.api.models.workers import WorkerEndpoint
@@ -55,8 +53,6 @@ class TrainingService(ServiceOrchestrator[None]):
         super().__init__()
         # Override progress renderer with training-specific renderer
         self._progress_renderer = TrainingProgressRenderer()
-        self.model_storage = ModelStorage()
-        self.model_loader = ModelLoader()
         self.operations_service = get_operations_service()
         self.worker_registry = worker_registry
 
@@ -162,8 +158,6 @@ class TrainingService(ServiceOrchestrator[None]):
             "service": "TrainingService",
             "status": "ok",
             "active_trainings": len(active_operations),
-            "model_storage_ready": self.model_storage is not None,
-            "model_loader_ready": self.model_loader is not None,
         }
 
     @trace_service_method("training.start")
@@ -605,8 +599,12 @@ class TrainingService(ServiceOrchestrator[None]):
     @trace_service_method("training.load_model")
     async def load_trained_model(self, model_name: str) -> dict[str, Any]:
         """Load a previously saved neural network model."""
+        # Lazy import to avoid torch at module load time
+        from ktrdr.training.model_storage import ModelStorage
+
         # Check if model exists in storage
-        all_models = self.model_storage.list_models()
+        model_storage = ModelStorage()
+        all_models = model_storage.list_models()
         model_info = None
 
         for model in all_models:
@@ -683,8 +681,12 @@ class TrainingService(ServiceOrchestrator[None]):
     @trace_service_method("training.list_models")
     async def list_trained_models(self) -> dict[str, Any]:
         """List all available trained neural network models."""
+        # Lazy import to avoid torch at module load time
+        from ktrdr.training.model_storage import ModelStorage
+
         # Get all models from storage
-        all_models = self.model_storage.list_models()
+        model_storage = ModelStorage()
+        all_models = model_storage.list_models()
 
         # Convert to response format
         model_summaries = []

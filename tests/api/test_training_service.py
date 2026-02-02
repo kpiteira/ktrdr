@@ -49,30 +49,20 @@ def mock_operations_service():
 
 @pytest.fixture
 def training_service(mock_operations_service):
-    """Instantiate TrainingService with patched dependencies."""
-    adapter_mock = MagicMock()
-    adapter_mock.use_host_service = False
+    """Instantiate TrainingService with patched dependencies.
 
-    training_manager_mock = MagicMock()
-    training_manager_mock.training_adapter = adapter_mock
-    training_manager_mock.is_using_host_service.return_value = False
+    Updated for M2 lazy imports: ModelStorage and ModelLoader are no longer
+    imported at module level, so we don't patch them here.
+    """
+    mock_worker_registry = MagicMock()
+    mock_worker_registry.list_workers.return_value = []
 
-    with (
-        patch("ktrdr.api.services.training_service.ModelStorage"),
-        patch("ktrdr.api.services.training_service.ModelLoader"),
-        patch(
-            "ktrdr.api.services.training_service.TrainingManager",
-            return_value=training_manager_mock,
-        ),
-        patch(
-            "ktrdr.api.services.training_service.get_operations_service",
-            return_value=mock_operations_service,
-        ),
+    with patch(
+        "ktrdr.api.services.training_service.get_operations_service",
+        return_value=mock_operations_service,
     ):
-        service = TrainingService()
+        service = TrainingService(worker_registry=mock_worker_registry)
 
-    # Inject mock manager for downstream calls (cancel, etc.)
-    service.training_manager = training_manager_mock
     return service
 
 
