@@ -45,6 +45,10 @@ Completed: 4.1, 4.2 (from handoff)
 Starting from: 4.3
 ```
 
+**Initialize tracking:**
+- `e2e_tests`: List to capture E2E test results from VALIDATION tasks
+- `challenges`: List to capture challenges/solutions from each task
+
 ---
 
 ### 2. Execute Each Task (MANDATORY: Use ktask)
@@ -87,7 +91,27 @@ After ktask finishes, verify:
 
 If any check fails, ktask did not complete properly. Investigate before continuing.
 
-#### Step 2c: Run Unit Test Quality Check (CODING tasks only)
+#### Step 2c: Capture Task Learnings
+
+After each task completes, extract and record:
+
+**For VALIDATION tasks — capture E2E test results:**
+- Test name (e.g., `cli/kinfra-spec-workflow`)
+- Number of steps executed
+- Result (PASSED/FAILED)
+
+**For ALL tasks — capture challenges encountered:**
+- Read the new handoff section for this task
+- Extract any challenges/gotchas mentioned and their solutions
+- Record as: `{task_id, challenge, solution}`
+
+Example challenges to look for:
+- "X didn't work because Y, so we did Z instead"
+- "Gotcha: [problem] — solution: [fix]"
+- "Task was already complete because..."
+- Any workaround or non-obvious decision
+
+#### Step 2d: Run Unit Test Quality Check (CODING tasks only)
 
 For CODING tasks, invoke the quality checker:
 
@@ -100,7 +124,7 @@ Task(
 
 If issues found: fix and re-check (up to 2 retries).
 
-#### Step 2d: Continue to Next Task
+#### Step 2e: Continue to Next Task
 
 Proceed directly to the next task. Do NOT pause to ask for `/compact` between tasks.
 
@@ -110,19 +134,41 @@ If context becomes too large during execution, you may ask the user to run `/com
 
 ### 3. Complete Milestone
 
-After all tasks complete:
+After all tasks complete, produce an enhanced summary with tracked data:
 
 ```
 ## Milestone Complete: M4 - Cleanup
 
 **Tasks completed:** 4.1 through 4.6
 **Quality gates:** All passed
-**E2E validation:** Passed (final VALIDATION task)
 
 **Handoff:** docs/designs/.../HANDOFF_M4.md
 
+### E2E Tests Performed
+
+| Test | Steps | Result |
+|------|-------|--------|
+| cli/kinfra-spec-workflow | 8 | ✅ PASSED |
+| infra/sandbox-init | 5 | ✅ PASSED |
+
+### Challenges & Solutions
+
+| Task | Challenge | Solution |
+|------|-----------|----------|
+| 4.1 | stderr not captured in test output | Used typer.secho() to stdout instead |
+| 4.3 | Task already complete from earlier task | Added unit tests to validate existing code |
+| 4.5 | No existing E2E test in catalog | Designed new test via e2e-test-architect |
+
 Ready for PR creation.
 ```
+
+**Notes on the summary tables:**
+
+- **E2E Tests Performed**: Include ALL tests run during VALIDATION tasks. If multiple tests were run, list each one.
+- **Challenges & Solutions**: Aggregate from all tasks. Only include actual challenges (not routine work). This helps with:
+  - PR descriptions (copy directly)
+  - Future debugging (what went wrong before)
+  - Process improvement (recurring issues)
 
 ---
 
@@ -189,8 +235,9 @@ kmilestone is idempotent. Running it again:
 | **Per-task** | `/ktask impl: <file> task: <id>` | ktask completes task |
 | **VALIDATION task** | Include E2E reminder in ktask invocation | ktask uses e2e agents |
 | **Verify** | Check handoff, tests, quality | All checks pass |
+| **Capture** | Record E2E results + challenges | Update tracking lists |
 | **Quality check** | unit-test-quality-checker (CODING) | No issues found |
-| **Complete** | Report summary | Ready for PR |
+| **Complete** | Report summary with tables | E2E tests + Challenges tables |
 
 ---
 
@@ -244,9 +291,23 @@ Do NOT run bash commands directly from the milestone file.
 
 ## Milestone Complete: M3 - Core Implementation
 
-Tasks completed: 3.1 through 3.5
-Quality gates: All passed
-E2E validation: Passed
+**Tasks completed:** 3.1 through 3.5
+**Quality gates:** All passed
+
+**Handoff:** docs/designs/feature/implementation/HANDOFF_M3.md
+
+### E2E Tests Performed
+
+| Test | Steps | Result |
+|------|-------|--------|
+| feature/core-workflow | 6 | ✅ PASSED |
+
+### Challenges & Solutions
+
+| Task | Challenge | Solution |
+|------|-----------|----------|
+| 3.2 | Import cycle between modules | Moved shared types to separate file |
+| 3.4 | Flaky test due to timing | Added retry logic with backoff |
 
 Ready for PR creation.
 ```
