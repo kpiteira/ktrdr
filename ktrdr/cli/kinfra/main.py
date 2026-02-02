@@ -9,6 +9,7 @@ import typer
 from ktrdr.cli.kinfra.deploy import deploy_app
 from ktrdr.cli.kinfra.local_prod import local_prod_app
 from ktrdr.cli.kinfra.sandbox import sandbox_app
+from ktrdr.cli.kinfra.spec import spec_app
 
 app = typer.Typer(
     name="kinfra",
@@ -36,6 +37,11 @@ app.add_typer(
     deploy_app,
     name="deploy",
     help="Deploy KTRDR services to pre-production environment",
+)
+app.add_typer(
+    spec_app,
+    name="spec",
+    help="Create spec worktree for design work",
 )
 
 
