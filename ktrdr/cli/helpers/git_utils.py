@@ -5,12 +5,37 @@ deployment operations like getting the current commit SHA.
 """
 
 import subprocess
+from pathlib import Path
 
 
 class GitError(Exception):
     """Raised when git operations fail."""
 
     pass
+
+
+def is_ktrdr_repo(path: Path) -> bool:
+    """Check if path is a KTRDR repository by checking git remote.
+
+    Args:
+        path: The path to check.
+
+    Returns:
+        True if the git remote contains 'ktrdr', False otherwise.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            capture_output=True,
+            text=True,
+            cwd=path,
+        )
+        if result.returncode != 0:
+            return False
+        # Check if remote contains "ktrdr" (case-insensitive)
+        return "ktrdr" in result.stdout.lower()
+    except Exception:
+        return False
 
 
 def get_latest_sha_tag() -> str:

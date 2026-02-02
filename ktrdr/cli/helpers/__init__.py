@@ -1,7 +1,7 @@
 """CLI helper modules for deployment and operations."""
 
 from ktrdr.cli.helpers.docker_utils import DockerError, docker_login_ghcr
-from ktrdr.cli.helpers.git_utils import GitError, get_latest_sha_tag
+from ktrdr.cli.helpers.git_utils import GitError, get_latest_sha_tag, is_ktrdr_repo
 from ktrdr.cli.helpers.secrets import (
     OnePasswordError,
     check_1password_authenticated,
@@ -19,6 +19,7 @@ __all__ = [
     "docker_login_ghcr",
     "fetch_secrets_from_1password",
     "get_latest_sha_tag",
+    "is_ktrdr_repo",
     "scp_file",
     "ssh_exec_with_env",
     "validate_deployment_prerequisites",

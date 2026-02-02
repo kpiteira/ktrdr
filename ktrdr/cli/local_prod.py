@@ -31,6 +31,7 @@ from ktrdr.cli.helpers import (
     OnePasswordError,
     check_1password_authenticated,
     fetch_secrets_from_1password,
+    is_ktrdr_repo,
 )
 from ktrdr.cli.instance_core import (
     generate_env_file,
@@ -39,7 +40,6 @@ from ktrdr.cli.instance_core import (
     start_instance,
     stop_instance,
 )
-from ktrdr.cli.sandbox import is_ktrdr_repo
 from ktrdr.cli.sandbox_ports import get_ports
 from ktrdr.cli.sandbox_registry import (
     InstanceInfo,
