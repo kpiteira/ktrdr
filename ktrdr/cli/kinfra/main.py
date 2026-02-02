@@ -62,6 +62,20 @@ app.add_typer(
     help="Complete worktree, release sandbox slot, remove worktree",
 )
 
+# Aliases for done command (hidden from main help to reduce clutter)
+app.add_typer(
+    done_app,
+    name="finish",
+    help="Complete worktree, release sandbox slot, remove worktree",
+    hidden=True,
+)
+app.add_typer(
+    done_app,
+    name="complete",
+    help="Complete worktree, release sandbox slot, remove worktree",
+    hidden=True,
+)
+
 
 def main() -> None:
     """Entry point for the kinfra CLI."""
