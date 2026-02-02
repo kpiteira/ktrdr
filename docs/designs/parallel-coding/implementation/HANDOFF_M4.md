@@ -76,3 +76,20 @@
 **Next Task Notes:**
 - Task 4.4 updates worktrees command to show slot info for impl worktrees
 - Need to add `get_slot_for_worktree()` method to registry or query slots by path
+
+## Task 4.4 Complete: Update worktrees command for impl slots
+
+**Implementation Notes:**
+- Added `get_slot_for_worktree(worktree_path)` method to Registry class
+- Updated worktrees.py to load registry and query slot for each impl worktree
+- Display format: `slot N (status, :port)` e.g., `slot 2 (running, :8002)`
+- Shows "no slot" for impl worktrees without claimed slot
+
+**Testing Notes:**
+- Mock `load_registry` at `ktrdr.cli.kinfra.worktrees.load_registry`
+- Mock registry's `get_slot_for_worktree` to return MagicMock with slot attributes
+- Tests verify slot number, port, and status all appear in output
+
+**Next Task Notes:**
+- Task 4.5 is E2E validation - run full `kinfra impl` workflow
+- Need provisioned slots and test milestone file

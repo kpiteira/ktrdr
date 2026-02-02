@@ -243,3 +243,213 @@ branch refs/heads/main
 
         # Should succeed but show empty table or message
         assert result.exit_code == 0
+
+
+class TestWorktreesShowsSlotForImpl:
+    """Tests that impl worktrees show slot information."""
+
+    @patch("ktrdr.cli.kinfra.worktrees.load_registry")
+    @patch("ktrdr.cli.kinfra.worktrees.subprocess.run")
+    def test_shows_slot_number_for_claimed_impl(
+        self, mock_run: MagicMock, mock_load_registry: MagicMock, runner
+    ) -> None:
+        """Impl worktrees should show claimed slot number."""
+        from pathlib import Path
+
+        from ktrdr.cli.kinfra.main import app
+        from ktrdr.cli.sandbox_registry import SlotInfo
+
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="""worktree /path/to/ktrdr-impl-feature-M1
+branch refs/heads/impl/feature-M1
+""",
+            stderr="",
+        )
+
+        # Mock slot claimed by this worktree
+        mock_slot = MagicMock(spec=SlotInfo)
+        mock_slot.slot_id = 2
+        mock_slot.status = "running"
+        mock_slot.ports = {"api": 8002}
+        mock_slot.claimed_by = Path("/path/to/ktrdr-impl-feature-M1")
+
+        mock_registry = MagicMock()
+        mock_registry.get_slot_for_worktree.return_value = mock_slot
+        mock_load_registry.return_value = mock_registry
+
+        result = runner.invoke(app, ["worktrees"])
+
+        assert result.exit_code == 0
+        assert "slot 2" in result.output.lower()
+
+    @patch("ktrdr.cli.kinfra.worktrees.load_registry")
+    @patch("ktrdr.cli.kinfra.worktrees.subprocess.run")
+    def test_shows_port_for_claimed_impl(
+        self, mock_run: MagicMock, mock_load_registry: MagicMock, runner
+    ) -> None:
+        """Impl worktrees should show API port."""
+        from pathlib import Path
+
+        from ktrdr.cli.kinfra.main import app
+        from ktrdr.cli.sandbox_registry import SlotInfo
+
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="""worktree /path/to/ktrdr-impl-feature-M1
+branch refs/heads/impl/feature-M1
+""",
+            stderr="",
+        )
+
+        mock_slot = MagicMock(spec=SlotInfo)
+        mock_slot.slot_id = 3
+        mock_slot.status = "running"
+        mock_slot.ports = {"api": 8003}
+        mock_slot.claimed_by = Path("/path/to/ktrdr-impl-feature-M1")
+
+        mock_registry = MagicMock()
+        mock_registry.get_slot_for_worktree.return_value = mock_slot
+        mock_load_registry.return_value = mock_registry
+
+        result = runner.invoke(app, ["worktrees"])
+
+        assert result.exit_code == 0
+        assert "8003" in result.output
+
+    @patch("ktrdr.cli.kinfra.worktrees.load_registry")
+    @patch("ktrdr.cli.kinfra.worktrees.subprocess.run")
+    def test_shows_status_for_claimed_impl(
+        self, mock_run: MagicMock, mock_load_registry: MagicMock, runner
+    ) -> None:
+        """Impl worktrees should show running/stopped status."""
+        from pathlib import Path
+
+        from ktrdr.cli.kinfra.main import app
+        from ktrdr.cli.sandbox_registry import SlotInfo
+
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="""worktree /path/to/ktrdr-impl-feature-M1
+branch refs/heads/impl/feature-M1
+""",
+            stderr="",
+        )
+
+        mock_slot = MagicMock(spec=SlotInfo)
+        mock_slot.slot_id = 1
+        mock_slot.status = "running"
+        mock_slot.ports = {"api": 8001}
+        mock_slot.claimed_by = Path("/path/to/ktrdr-impl-feature-M1")
+
+        mock_registry = MagicMock()
+        mock_registry.get_slot_for_worktree.return_value = mock_slot
+        mock_load_registry.return_value = mock_registry
+
+        result = runner.invoke(app, ["worktrees"])
+
+        assert result.exit_code == 0
+        assert "running" in result.output.lower()
+
+    @patch("ktrdr.cli.kinfra.worktrees.load_registry")
+    @patch("ktrdr.cli.kinfra.worktrees.subprocess.run")
+    def test_shows_no_slot_for_unclaimed_impl(
+        self, mock_run: MagicMock, mock_load_registry: MagicMock, runner
+    ) -> None:
+        """Impl worktrees without slot should show 'no slot'."""
+        from ktrdr.cli.kinfra.main import app
+
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="""worktree /path/to/ktrdr-impl-feature-M1
+branch refs/heads/impl/feature-M1
+""",
+            stderr="",
+        )
+
+        mock_registry = MagicMock()
+        mock_registry.get_slot_for_worktree.return_value = None
+        mock_load_registry.return_value = mock_registry
+
+        result = runner.invoke(app, ["worktrees"])
+
+        assert result.exit_code == 0
+        assert "no slot" in result.output.lower()
+
+
+class TestGetSlotForWorktree:
+    """Tests for Registry.get_slot_for_worktree method."""
+
+    def test_returns_slot_when_claimed_by_path(self) -> None:
+        """Should return slot when worktree path matches claimed_by."""
+        from pathlib import Path
+
+        from ktrdr.cli.sandbox_registry import Registry, SlotInfo
+
+        worktree_path = Path("/path/to/ktrdr-impl-feature-M1")
+
+        slot = SlotInfo(
+            slot_id=1,
+            infrastructure_path=Path("/home/user/.ktrdr/sandboxes/slot-1"),
+            profile="light",
+            workers={"backtest": 1},
+            ports={"api": 8001},
+            claimed_by=worktree_path,
+            status="running",
+        )
+
+        registry = Registry(slots={"1": slot})
+
+        result = registry.get_slot_for_worktree(worktree_path)
+
+        assert result is not None
+        assert result.slot_id == 1
+
+    def test_returns_none_when_not_claimed(self) -> None:
+        """Should return None when no slot is claimed by worktree."""
+        from pathlib import Path
+
+        from ktrdr.cli.sandbox_registry import Registry, SlotInfo
+
+        worktree_path = Path("/path/to/ktrdr-impl-feature-M1")
+
+        slot = SlotInfo(
+            slot_id=1,
+            infrastructure_path=Path("/home/user/.ktrdr/sandboxes/slot-1"),
+            profile="light",
+            workers={"backtest": 1},
+            ports={"api": 8001},
+            claimed_by=None,  # Not claimed
+            status="stopped",
+        )
+
+        registry = Registry(slots={"1": slot})
+
+        result = registry.get_slot_for_worktree(worktree_path)
+
+        assert result is None
+
+    def test_returns_none_when_claimed_by_different_worktree(self) -> None:
+        """Should return None when slot is claimed by different worktree."""
+        from pathlib import Path
+
+        from ktrdr.cli.sandbox_registry import Registry, SlotInfo
+
+        worktree_path = Path("/path/to/ktrdr-impl-feature-M1")
+        other_path = Path("/path/to/ktrdr-impl-other-M2")
+
+        slot = SlotInfo(
+            slot_id=1,
+            infrastructure_path=Path("/home/user/.ktrdr/sandboxes/slot-1"),
+            profile="light",
+            workers={"backtest": 1},
+            ports={"api": 8001},
+            claimed_by=other_path,  # Different worktree
+            status="running",
+        )
+
+        registry = Registry(slots={"1": slot})
+
+        result = registry.get_slot_for_worktree(worktree_path)
+
+        assert result is None
