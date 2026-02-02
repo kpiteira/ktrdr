@@ -169,9 +169,9 @@ def done(
 
     # Remove worktree
     typer.echo(f"Removing worktree {worktree_name}...")
-    subprocess.run(
-        ["git", "worktree", "remove", str(worktree_path)],
-        check=True,
-    )
+    remove_cmd = ["git", "worktree", "remove", str(worktree_path)]
+    if force:
+        remove_cmd.append("--force")
+    subprocess.run(remove_cmd, check=True)
 
     typer.echo(f"Done! Completed {worktree_name}")

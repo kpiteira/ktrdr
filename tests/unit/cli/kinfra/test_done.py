@@ -407,6 +407,55 @@ class TestDoneRemovesWorktree:
         ]
         assert len(worktree_remove_calls) >= 1
         assert "remove" in worktree_remove_calls[0][0][0]
+        # Without --force, git worktree remove should NOT have --force
+        assert "--force" not in worktree_remove_calls[0][0][0]
+
+    @patch("ktrdr.cli.kinfra.done.subprocess.run")
+    @patch("ktrdr.cli.kinfra.slots.stop_slot_containers")
+    @patch("ktrdr.cli.kinfra.override.remove_override")
+    @patch("ktrdr.cli.kinfra.done.load_registry")
+    @patch("ktrdr.cli.kinfra.done._find_worktree")
+    @patch("ktrdr.cli.kinfra.done._has_uncommitted_changes")
+    @patch("ktrdr.cli.kinfra.done._has_unpushed_commits")
+    def test_done_force_passes_to_git_worktree_remove(
+        self,
+        mock_unpushed: MagicMock,
+        mock_uncommitted: MagicMock,
+        mock_find: MagicMock,
+        mock_load_registry: MagicMock,
+        mock_remove_override: MagicMock,
+        mock_stop: MagicMock,
+        mock_run: MagicMock,
+        runner,
+    ) -> None:
+        """done --force should pass --force to git worktree remove."""
+        from ktrdr.cli.kinfra.main import app
+        from ktrdr.cli.sandbox_registry import SlotInfo
+
+        worktree_path = Path("/tmp/ktrdr-impl-test-M1")
+        mock_find.return_value = worktree_path
+        mock_uncommitted.return_value = True  # Dirty state
+        mock_unpushed.return_value = False
+
+        mock_slot = MagicMock(spec=SlotInfo)
+        mock_slot.slot_id = 1
+        mock_registry = MagicMock()
+        mock_registry.get_slot_for_worktree.return_value = mock_slot
+        mock_load_registry.return_value = mock_registry
+
+        mock_run.return_value = MagicMock(returncode=0)
+
+        # Note: options must come before arguments with invoke_without_command
+        result = runner.invoke(app, ["done", "--force", "test-M1"])
+
+        assert result.exit_code == 0
+        # Find the git worktree remove call
+        worktree_remove_calls = [
+            c for c in mock_run.call_args_list if "worktree" in c[0][0]
+        ]
+        assert len(worktree_remove_calls) >= 1
+        # With --force, git worktree remove SHOULD have --force
+        assert "--force" in worktree_remove_calls[0][0][0]
 
 
 class TestDoneFailsOnSpec:
