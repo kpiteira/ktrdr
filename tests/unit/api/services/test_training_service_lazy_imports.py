@@ -1,7 +1,7 @@
 """
-Unit tests for TrainingService lazy imports (M2 Task 2.1).
+Unit tests for lazy imports (M2 Tasks 2.1, 2.2).
 
-Verifies that TrainingService does not import torch at module level,
+Verifies that torch-dependent modules are not imported at module level,
 enabling the backend to start without torch installed.
 """
 
@@ -58,3 +58,22 @@ class TestTrainingServiceLazyImports:
         assert (
             "model_loader_ready" not in source
         ), "health_check should not reference model_loader after removal"
+
+
+class TestStrategiesEndpointLazyImports:
+    """Verify strategies.py doesn't have module-level torch imports (Task 2.2)."""
+
+    def test_no_module_level_model_storage_import(self) -> None:
+        """ModelStorage should not be imported at module level in strategies.py."""
+        source = Path("ktrdr/api/endpoints/strategies.py").read_text()
+        tree = ast.parse(source)
+
+        # Check that there's no module-level import of ModelStorage
+        for node in tree.body:
+            if isinstance(node, ast.ImportFrom):
+                if node.module and "model_storage" in node.module:
+                    names = [alias.name for alias in node.names]
+                    assert "ModelStorage" not in names, (
+                        "ModelStorage should not be imported at module level in "
+                        "strategies.py - use lazy import inside list_strategies()"
+                    )
