@@ -1362,6 +1362,8 @@ def _get_slot_ports(slot_id: int) -> dict[str, int]:
     - Grafana: 3000 + slot_id
     - Jaeger UI: 16686 + slot_id
     - Prometheus: 9090 + slot_id
+    - OTLP gRPC: 4316 + slot_id (e.g., slot 1 = 4317)
+    - OTLP HTTP: 4317 + slot_id (e.g., slot 1 = 4318)
 
     Args:
         slot_id: The slot number (1-6)
@@ -1375,6 +1377,8 @@ def _get_slot_ports(slot_id: int) -> dict[str, int]:
         "grafana": 3000 + slot_id,
         "jaeger_ui": 16686 + slot_id,
         "prometheus": 9090 + slot_id,
+        "otlp_grpc": 4316 + slot_id,
+        "otlp_http": 4317 + slot_id,
     }
 
 
@@ -1394,6 +1398,8 @@ def _create_slot_env_file(slot_path: Path, slot_id: int, ports: dict[str, int]) 
         "KTRDR_GRAFANA_PORT": str(ports["grafana"]),
         "KTRDR_JAEGER_UI_PORT": str(ports["jaeger_ui"]),
         "KTRDR_PROMETHEUS_PORT": str(ports["prometheus"]),
+        "KTRDR_OTLP_GRPC_PORT": str(ports["otlp_grpc"]),
+        "KTRDR_OTLP_HTTP_PORT": str(ports["otlp_http"]),
     }
     with open(env_file, "w") as f:
         for key, value in sorted(env_vars.items()):

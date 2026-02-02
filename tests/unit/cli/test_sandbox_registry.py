@@ -602,8 +602,6 @@ class TestRegistryV2Schema:
         save_registry(registry)
 
         # Check file has v2 structure
-        import json
-
         data = json.loads(mock_registry_path.read_text())
         assert data["version"] == 2
         assert "slots" in data
@@ -624,8 +622,6 @@ class TestMigrationV1ToV2:
 
     def test_migration_v1_to_v2(self, mock_registry_path):
         """v1 registries migrate to v2 cleanly."""
-        import json
-
         from ktrdr.cli.sandbox_registry import load_registry
 
         # Write a v1 registry file
@@ -657,8 +653,6 @@ class TestMigrationV1ToV2:
 
     def test_migration_preserves_local_prod(self, mock_registry_path):
         """Migration preserves local_prod singleton."""
-        import json
-
         from ktrdr.cli.sandbox_registry import load_registry
 
         v1_data = {

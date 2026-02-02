@@ -50,7 +50,7 @@ slots:
     workers: { backtest: 4, training: 4 }
     ports: { api: 8006, db: 5438, grafana: 3006, jaeger_ui: 16692, prometheus: 9096 }
 
-registry_path: ~/.ktrdr/sandboxes/registry.json
+registry_path: ~/.ktrdr/sandbox/instances.json
 sandboxes_path: ~/.ktrdr/sandboxes/
 ```
 
@@ -331,10 +331,10 @@ fi
 
 **Command:**
 ```bash
-REGISTRY_FILE="$HOME/.ktrdr/sandboxes/registry.json"
+REGISTRY_FILE="$HOME/.ktrdr/sandbox/instances.json"
 
 if [ ! -f "$REGISTRY_FILE" ]; then
-  echo "FAIL: registry.json does not exist"
+  echo "FAIL: instances.json does not exist"
   exit 1
 fi
 
@@ -386,7 +386,7 @@ echo "PASS: Registry schema verified"
 ```
 
 **Expected:**
-- registry.json exists at ~/.ktrdr/sandboxes/registry.json
+- instances.json exists at ~/.ktrdr/sandbox/instances.json
 - version field = 2
 - slots dict contains 6 entries
 - Profiles: 4 light, 1 standard, 1 heavy
@@ -659,10 +659,10 @@ Slot 6: API=8006, DB=5438, Grafana=3006, Jaeger=16692, Prometheus=9096
 - Slot 6: heavy (4 of each)
 
 **Registry Location:**
-- Old (v1): ~/.ktrdr/sandbox/instances.json
-- New (v2): ~/.ktrdr/sandboxes/registry.json (note: sandboxes with 's')
+- Registry file: ~/.ktrdr/sandbox/instances.json (same location for v1 and v2)
+- Sandbox infrastructure: ~/.ktrdr/sandboxes/slot-{1..6}/
 
-The registry may be in either location. The provision command creates infrastructure at ~/.ktrdr/sandboxes/ but registry loading checks ~/.ktrdr/sandbox/. Verify which path is actually used.
+Note: The registry uses the existing location (~/.ktrdr/sandbox/instances.json) for backward compatibility with the instances dict. The slot infrastructure directories are created at ~/.ktrdr/sandboxes/.
 
 **Alternative Approaches:**
 - If cleanup fails due to permissions, skip and document as prerequisite

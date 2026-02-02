@@ -8,7 +8,7 @@ V2 adds slot pool infrastructure with pre-defined slots, profiles, and claim/rel
 
 import json
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -149,7 +149,7 @@ class Registry:
         """
         slot = self.slots[str(slot_id)]
         slot.claimed_by = worktree_path
-        slot.claimed_at = datetime.now()
+        slot.claimed_at = datetime.now(timezone.utc)
         slot.status = "running"
         self._save()
 

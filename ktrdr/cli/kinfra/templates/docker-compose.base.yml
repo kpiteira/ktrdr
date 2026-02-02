@@ -88,8 +88,8 @@ services:
     restart: unless-stopped
     ports:
       - "${KTRDR_JAEGER_UI_PORT:-16686}:16686"
-      - "4317:4317"    # OTLP gRPC (internal only)
-      - "4318:4318"    # OTLP HTTP (internal only)
+      - "${KTRDR_OTLP_GRPC_PORT:-4317}:4317"    # OTLP gRPC
+      - "${KTRDR_OTLP_HTTP_PORT:-4318}:4318"    # OTLP HTTP
     environment:
       - COLLECTOR_OTLP_ENABLED=true
       - LOG_LEVEL=info
