@@ -1,8 +1,7 @@
 """Decision engine for trading signal generation."""
 
+# Base classes load immediately (no torch dependency)
 from .base import Position, Signal, TradingDecision
-from .engine import DecisionEngine
-from .orchestrator import DecisionContext, DecisionOrchestrator, PositionState
 
 # Temporarily disabled while updating multi-timeframe for pure fuzzy
 # from .multi_timeframe_orchestrator import (
@@ -29,3 +28,24 @@ __all__ = [
     # "MultiTimeframeConsensus",  # Temporarily disabled
     # "create_multi_timeframe_decision_orchestrator",  # Temporarily disabled
 ]
+
+
+def __getattr__(name: str):
+    """Lazy loading for torch-dependent modules."""
+    if name == "DecisionEngine":
+        from .engine import DecisionEngine
+
+        return DecisionEngine
+    if name == "DecisionOrchestrator":
+        from .orchestrator import DecisionOrchestrator
+
+        return DecisionOrchestrator
+    if name == "DecisionContext":
+        from .orchestrator import DecisionContext
+
+        return DecisionContext
+    if name == "PositionState":
+        from .orchestrator import PositionState
+
+        return PositionState
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -12,11 +12,10 @@ from ktrdr import get_logger
 from ktrdr.api.services.training.context import TrainingOperationContext
 from ktrdr.api.services.training.progress_bridge import TrainingProgressBridge
 from ktrdr.async_infrastructure.cancellation import CancellationError, CancellationToken
-from ktrdr.training.model_storage import ModelStorage
-from ktrdr.training.training_pipeline import TrainingPipeline
 
 if TYPE_CHECKING:
     from ktrdr.training.checkpoint_restore import TrainingResumeContext
+    from ktrdr.training.model_storage import ModelStorage
 
 logger = get_logger(__name__)
 
@@ -164,7 +163,10 @@ class LocalTrainingOrchestrator:
         from ktrdr.config.feature_resolver import FeatureResolver
         from ktrdr.config.strategy_loader import StrategyConfigurationLoader
         from ktrdr.data.repository import DataRepository
-        from ktrdr.training.training_pipeline import TrainingPipelineV3
+        from ktrdr.training.training_pipeline import (
+            TrainingPipeline,
+            TrainingPipelineV3,
+        )
 
         self._bridge.on_phase("training", message="Starting v3 training pipeline")
         self._check_cancellation()

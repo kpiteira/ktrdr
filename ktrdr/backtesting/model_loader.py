@@ -6,9 +6,6 @@ from typing import TYPE_CHECKING, Any, Optional
 if TYPE_CHECKING:
     import torch
 
-from ..neural.models.mlp import MLPTradingModel
-from ..training.model_storage import ModelStorage
-
 
 class ModelLoader:
     """Load trained models for inference in backtesting and decision making."""
@@ -20,6 +17,9 @@ class ModelLoader:
             models_dir: Base directory containing trained models. If None, uses
                        MODELS_DIR environment variable or defaults to 'models'.
         """
+        # Lazy import to avoid torch at module load time
+        from ..training.model_storage import ModelStorage
+
         self.model_storage = ModelStorage(models_dir)
 
     def load_model(
@@ -55,6 +55,9 @@ class ModelLoader:
 
         # If we have a state dict, rebuild the model
         if isinstance(model, dict):  # State dict
+            # Lazy import to avoid torch at module load time
+            from ..neural.models.mlp import MLPTradingModel
+
             model_type = config["model"]["type"].lower()
 
             if model_type == "mlp":
