@@ -33,11 +33,11 @@ class TestLoadRegistry:
 
     def test_load_empty_registry(self, mock_registry_path):
         """Returns empty registry when file doesn't exist."""
-        from ktrdr.cli.sandbox_registry import load_registry
+        from ktrdr.cli.sandbox_registry import REGISTRY_VERSION, load_registry
 
         registry = load_registry()
 
-        assert registry.version == 1
+        assert registry.version == REGISTRY_VERSION  # v2 by default
         assert registry.instances == {}
 
     def test_load_existing_registry(self, mock_registry_path):
@@ -67,13 +67,13 @@ class TestLoadRegistry:
 
     def test_load_corrupted_registry_returns_empty(self, mock_registry_path):
         """Returns empty registry when file is corrupted."""
-        from ktrdr.cli.sandbox_registry import load_registry
+        from ktrdr.cli.sandbox_registry import REGISTRY_VERSION, load_registry
 
         mock_registry_path.write_text("not valid json {{{")
 
         registry = load_registry()
 
-        assert registry.version == 1
+        assert registry.version == REGISTRY_VERSION  # v2 by default
         assert registry.instances == {}
 
 
@@ -527,6 +527,408 @@ class TestLocalProdRegistry:
         assert retrieved is not None
         assert retrieved.is_worktree is False
         assert retrieved.parent_repo is None
+
+
+# =============================================================================
+# V2 Schema Tests (Slot Pool Infrastructure)
+# =============================================================================
+
+
+class TestSlotInfo:
+    """Tests for SlotInfo dataclass."""
+
+    def test_slot_info_creation(self):
+        """SlotInfo can be created with required fields."""
+        from pathlib import Path
+
+        from ktrdr.cli.sandbox_registry import SlotInfo
+
+        slot = SlotInfo(
+            slot_id=1,
+            infrastructure_path=Path("/home/user/.ktrdr/sandboxes/slot-1"),
+            profile="light",
+            workers={"backtest": 1, "training": 1},
+            ports={"api": 8001, "db": 5433},
+        )
+
+        assert slot.slot_id == 1
+        assert slot.profile == "light"
+        assert slot.workers == {"backtest": 1, "training": 1}
+        assert slot.ports["api"] == 8001
+        assert slot.claimed_by is None
+        assert slot.claimed_at is None
+        assert slot.status == "stopped"
+
+    def test_slot_info_to_dict(self):
+        """SlotInfo.to_dict() serializes correctly."""
+        from datetime import datetime
+        from pathlib import Path
+
+        from ktrdr.cli.sandbox_registry import SlotInfo
+
+        slot = SlotInfo(
+            slot_id=1,
+            infrastructure_path=Path("/home/user/.ktrdr/sandboxes/slot-1"),
+            profile="standard",
+            workers={"backtest": 2, "training": 2},
+            ports={"api": 8001, "db": 5433},
+            claimed_by=Path("/home/user/worktrees/feature-x"),
+            claimed_at=datetime(2024, 1, 15, 10, 30, 0),
+            status="running",
+        )
+
+        data = slot.to_dict()
+
+        assert data["infrastructure_path"] == "/home/user/.ktrdr/sandboxes/slot-1"
+        assert data["profile"] == "standard"
+        assert data["workers"] == {"backtest": 2, "training": 2}
+        assert data["ports"] == {"api": 8001, "db": 5433}
+        assert data["claimed_by"] == "/home/user/worktrees/feature-x"
+        assert data["claimed_at"] == "2024-01-15T10:30:00"
+        assert data["status"] == "running"
+
+
+class TestRegistryV2Schema:
+    """Tests for v2 registry schema."""
+
+    def test_registry_v2_schema_structure(self, mock_registry_path):
+        """New registry has v2 schema with slots."""
+        from ktrdr.cli.sandbox_registry import load_registry, save_registry
+
+        # Load empty registry (creates v2 by default)
+        registry = load_registry()
+
+        # Save and reload
+        save_registry(registry)
+
+        # Check file has v2 structure
+        data = json.loads(mock_registry_path.read_text())
+        assert data["version"] == 2
+        assert "slots" in data
+
+    def test_registry_has_slots_dict(self, mock_registry_path):
+        """Registry has slots dict for slot management."""
+        from ktrdr.cli.sandbox_registry import load_registry
+
+        registry = load_registry()
+
+        # Registry should have a slots attribute (empty by default)
+        assert hasattr(registry, "slots")
+        assert isinstance(registry.slots, dict)
+
+
+class TestMigrationV1ToV2:
+    """Tests for v1 to v2 migration."""
+
+    def test_migration_v1_to_v2(self, mock_registry_path):
+        """v1 registries migrate to v2 cleanly."""
+        from ktrdr.cli.sandbox_registry import load_registry
+
+        # Write a v1 registry file
+        v1_data = {
+            "version": 1,
+            "local_prod": None,
+            "instances": {
+                "ktrdr--test": {
+                    "instance_id": "ktrdr--test",
+                    "slot": 1,
+                    "path": "/tmp/ktrdr--test",
+                    "created_at": "2024-01-15T10:30:00Z",
+                    "is_worktree": True,
+                    "parent_repo": "/tmp/ktrdr",
+                }
+            },
+        }
+        mock_registry_path.write_text(json.dumps(v1_data))
+
+        # Load should migrate
+        registry = load_registry()
+
+        # Should be v2 now
+        assert registry.version == 2
+        # Should preserve instances
+        assert "ktrdr--test" in registry.instances
+        # Should have slots dict
+        assert hasattr(registry, "slots")
+
+    def test_migration_preserves_local_prod(self, mock_registry_path):
+        """Migration preserves local_prod singleton."""
+        from ktrdr.cli.sandbox_registry import load_registry
+
+        v1_data = {
+            "version": 1,
+            "local_prod": {
+                "instance_id": "ktrdr-prod",
+                "slot": 0,
+                "path": "/tmp/ktrdr-prod",
+                "created_at": "2024-01-01T00:00:00Z",
+                "is_worktree": False,
+                "parent_repo": None,
+            },
+            "instances": {},
+        }
+        mock_registry_path.write_text(json.dumps(v1_data))
+
+        registry = load_registry()
+
+        assert registry.version == 2
+        assert registry.local_prod is not None
+        assert registry.local_prod.instance_id == "ktrdr-prod"
+
+
+class TestSlotClaiming:
+    """Tests for slot claim/release operations."""
+
+    def test_get_available_slot_finds_unclaimed(self, mock_registry_path):
+        """get_available_slot finds unclaimed slots."""
+        from pathlib import Path
+
+        from ktrdr.cli.sandbox_registry import SlotInfo, load_registry, save_registry
+
+        registry = load_registry()
+
+        # Add a slot
+        slot = SlotInfo(
+            slot_id=1,
+            infrastructure_path=Path("/tmp/slot-1"),
+            profile="light",
+            workers={"backtest": 1, "training": 1},
+            ports={"api": 8001, "db": 5433},
+        )
+        registry.slots["1"] = slot
+        save_registry(registry)
+
+        # Reload and find available
+        registry = load_registry()
+        available = registry.get_available_slot()
+
+        assert available is not None
+        assert available.slot_id == 1
+
+    def test_get_available_slot_with_profile(self, mock_registry_path):
+        """get_available_slot respects profile requirement."""
+        from pathlib import Path
+
+        from ktrdr.cli.sandbox_registry import SlotInfo, load_registry, save_registry
+
+        registry = load_registry()
+
+        # Add light and standard slots
+        registry.slots["1"] = SlotInfo(
+            slot_id=1,
+            infrastructure_path=Path("/tmp/slot-1"),
+            profile="light",
+            workers={"backtest": 1, "training": 1},
+            ports={"api": 8001, "db": 5433},
+        )
+        registry.slots["5"] = SlotInfo(
+            slot_id=5,
+            infrastructure_path=Path("/tmp/slot-5"),
+            profile="standard",
+            workers={"backtest": 2, "training": 2},
+            ports={"api": 8005, "db": 5437},
+        )
+        save_registry(registry)
+
+        # Request standard profile
+        registry = load_registry()
+        available = registry.get_available_slot(min_profile="standard")
+
+        assert available is not None
+        assert available.profile == "standard"
+
+    def test_get_available_slot_prefers_lower_profile(self, mock_registry_path):
+        """get_available_slot prefers light over standard when both available."""
+        from pathlib import Path
+
+        from ktrdr.cli.sandbox_registry import SlotInfo, load_registry, save_registry
+
+        registry = load_registry()
+
+        # Add standard slot first (slot 5)
+        registry.slots["5"] = SlotInfo(
+            slot_id=5,
+            infrastructure_path=Path("/tmp/slot-5"),
+            profile="standard",
+            workers={"backtest": 2, "training": 2},
+            ports={"api": 8005, "db": 5437},
+        )
+        # Add light slot second (slot 1)
+        registry.slots["1"] = SlotInfo(
+            slot_id=1,
+            infrastructure_path=Path("/tmp/slot-1"),
+            profile="light",
+            workers={"backtest": 1, "training": 1},
+            ports={"api": 8001, "db": 5433},
+        )
+        save_registry(registry)
+
+        # Request light profile (default)
+        registry = load_registry()
+        available = registry.get_available_slot(min_profile="light")
+
+        # Should get the light slot, not standard
+        assert available is not None
+        assert available.profile == "light"
+        assert available.slot_id == 1
+
+    def test_claim_slot(self, mock_registry_path):
+        """claim_slot updates claimed_by, claimed_at, status."""
+        from pathlib import Path
+
+        from ktrdr.cli.sandbox_registry import SlotInfo, load_registry, save_registry
+
+        registry = load_registry()
+        registry.slots["1"] = SlotInfo(
+            slot_id=1,
+            infrastructure_path=Path("/tmp/slot-1"),
+            profile="light",
+            workers={"backtest": 1, "training": 1},
+            ports={"api": 8001, "db": 5433},
+        )
+        save_registry(registry)
+
+        # Claim the slot
+        registry = load_registry()
+        worktree_path = Path("/home/user/worktrees/feature-x")
+        registry.claim_slot(1, worktree_path)
+
+        # Reload and verify
+        registry = load_registry()
+        slot = registry.slots["1"]
+
+        assert slot.claimed_by == worktree_path
+        assert slot.claimed_at is not None
+        assert slot.status == "running"
+
+    def test_release_slot(self, mock_registry_path):
+        """release_slot clears claim fields, sets status=stopped."""
+        from pathlib import Path
+
+        from ktrdr.cli.sandbox_registry import SlotInfo, load_registry, save_registry
+
+        registry = load_registry()
+        registry.slots["1"] = SlotInfo(
+            slot_id=1,
+            infrastructure_path=Path("/tmp/slot-1"),
+            profile="light",
+            workers={"backtest": 1, "training": 1},
+            ports={"api": 8001, "db": 5433},
+        )
+        save_registry(registry)
+
+        # Claim then release
+        registry = load_registry()
+        registry.claim_slot(1, Path("/home/user/worktrees/feature-x"))
+        registry.release_slot(1)
+
+        # Reload and verify
+        registry = load_registry()
+        slot = registry.slots["1"]
+
+        assert slot.claimed_by is None
+        assert slot.claimed_at is None
+        assert slot.status == "stopped"
+
+    def test_get_available_slot_skips_claimed(self, mock_registry_path):
+        """get_available_slot skips claimed slots."""
+        from pathlib import Path
+
+        from ktrdr.cli.sandbox_registry import SlotInfo, load_registry, save_registry
+
+        registry = load_registry()
+
+        # Add two light slots
+        registry.slots["1"] = SlotInfo(
+            slot_id=1,
+            infrastructure_path=Path("/tmp/slot-1"),
+            profile="light",
+            workers={"backtest": 1, "training": 1},
+            ports={"api": 8001, "db": 5433},
+        )
+        registry.slots["2"] = SlotInfo(
+            slot_id=2,
+            infrastructure_path=Path("/tmp/slot-2"),
+            profile="light",
+            workers={"backtest": 1, "training": 1},
+            ports={"api": 8002, "db": 5434},
+        )
+        save_registry(registry)
+
+        # Claim slot 1
+        registry = load_registry()
+        registry.claim_slot(1, Path("/home/user/worktrees/feature-x"))
+
+        # Get available should return slot 2
+        registry = load_registry()
+        available = registry.get_available_slot()
+
+        assert available is not None
+        assert available.slot_id == 2
+
+    def test_get_available_slot_returns_none_when_all_claimed(self, mock_registry_path):
+        """get_available_slot returns None when all matching slots claimed."""
+        from pathlib import Path
+
+        from ktrdr.cli.sandbox_registry import SlotInfo, load_registry, save_registry
+
+        registry = load_registry()
+
+        # Add one slot and claim it
+        registry.slots["1"] = SlotInfo(
+            slot_id=1,
+            infrastructure_path=Path("/tmp/slot-1"),
+            profile="light",
+            workers={"backtest": 1, "training": 1},
+            ports={"api": 8001, "db": 5433},
+        )
+        save_registry(registry)
+
+        registry = load_registry()
+        registry.claim_slot(1, Path("/home/user/worktrees/feature-x"))
+
+        # Get available should return None
+        registry = load_registry()
+        available = registry.get_available_slot()
+
+        assert available is None
+
+
+class TestGetAllSlots:
+    """Tests for get_all_slots method."""
+
+    def test_get_all_slots(self, mock_registry_path):
+        """get_all_slots returns all slots."""
+        from pathlib import Path
+
+        from ktrdr.cli.sandbox_registry import SlotInfo, load_registry, save_registry
+
+        registry = load_registry()
+
+        # Add multiple slots
+        registry.slots["1"] = SlotInfo(
+            slot_id=1,
+            infrastructure_path=Path("/tmp/slot-1"),
+            profile="light",
+            workers={"backtest": 1, "training": 1},
+            ports={"api": 8001, "db": 5433},
+        )
+        registry.slots["5"] = SlotInfo(
+            slot_id=5,
+            infrastructure_path=Path("/tmp/slot-5"),
+            profile="standard",
+            workers={"backtest": 2, "training": 2},
+            ports={"api": 8005, "db": 5437},
+        )
+        save_registry(registry)
+
+        # Reload and get all
+        registry = load_registry()
+        all_slots = registry.get_all_slots()
+
+        assert len(all_slots) == 2
+        assert "1" in all_slots
+        assert "5" in all_slots
 
     def test_local_prod_singleton_overwrite(self, mock_registry_path):
         """Setting local-prod twice overwrites the previous one."""

@@ -27,6 +27,7 @@ from ktrdr.cli.sandbox_gate import CheckStatus, run_gate
 from ktrdr.cli.sandbox_ports import check_ports_available, get_ports
 from ktrdr.cli.sandbox_registry import (
     InstanceInfo,
+    SlotInfo,
     add_instance,
     allocate_next_slot,
     clean_stale_entries,
@@ -34,6 +35,7 @@ from ktrdr.cli.sandbox_registry import (
     get_instance,
     load_registry,
     remove_instance,
+    save_registry,
 )
 
 sandbox_app = typer.Typer(
@@ -48,6 +50,20 @@ error_console = Console(stderr=True)
 # Shared data directory configuration
 SHARED_DIR = Path.home() / ".ktrdr" / "shared"
 SHARED_SUBDIRS = ["data", "models", "strategies"]
+
+# Sandboxes slot pool directory
+SANDBOXES_DIR = Path.home() / ".ktrdr" / "sandboxes"
+
+# Slot profile configuration
+# Slots 1-4: light (1 worker each), Slot 5: standard (2 workers), Slot 6: heavy (4 workers)
+SLOT_PROFILES: dict[int, tuple[str, dict[str, int]]] = {
+    1: ("light", {"backtest": 1, "training": 1}),
+    2: ("light", {"backtest": 1, "training": 1}),
+    3: ("light", {"backtest": 1, "training": 1}),
+    4: ("light", {"backtest": 1, "training": 1}),
+    5: ("standard", {"backtest": 2, "training": 2}),
+    6: ("heavy", {"backtest": 4, "training": 4}),
+}
 
 # 1Password item for sandbox secrets
 SANDBOX_SECRETS_ITEM = "ktrdr-sandbox-dev"
@@ -1330,3 +1346,220 @@ def init_shared(
         console.print(f"  {SHARED_DIR / subdir}/")
     console.print("\nPopulate with:")
     console.print("  ktrdr sandbox init-shared --from /path/to/existing/ktrdr")
+
+
+# =============================================================================
+# Slot Pool Infrastructure (V2)
+# =============================================================================
+
+
+def _get_slot_ports(slot_id: int) -> dict[str, int]:
+    """Get port allocation for a slot.
+
+    Port allocation scheme:
+    - API: 8000 + slot_id (e.g., slot 1 = 8001)
+    - DB: 5432 + slot_id (e.g., slot 1 = 5433)
+    - Grafana: 3000 + slot_id
+    - Jaeger UI: 16686 + slot_id
+    - Prometheus: 9090 + slot_id
+    - OTLP gRPC: 4316 + slot_id (e.g., slot 1 = 4317)
+    - OTLP HTTP: 4317 + slot_id (e.g., slot 1 = 4318)
+
+    Args:
+        slot_id: The slot number (1-6)
+
+    Returns:
+        Dictionary of service name to port number
+    """
+    return {
+        "api": 8000 + slot_id,
+        "db": 5432 + slot_id,
+        "grafana": 3000 + slot_id,
+        "jaeger_ui": 16686 + slot_id,
+        "prometheus": 9090 + slot_id,
+        "otlp_grpc": 4316 + slot_id,
+        "otlp_http": 4317 + slot_id,
+    }
+
+
+def _create_slot_env_file(slot_path: Path, slot_id: int, ports: dict[str, int]) -> None:
+    """Create .env.sandbox file for a slot.
+
+    Args:
+        slot_path: Path to the slot directory
+        slot_id: The slot number
+        ports: Port allocations for the slot
+    """
+    env_file = slot_path / ".env.sandbox"
+    env_vars = {
+        "SLOT_ID": str(slot_id),
+        "KTRDR_API_PORT": str(ports["api"]),
+        "KTRDR_DB_PORT": str(ports["db"]),
+        "KTRDR_GRAFANA_PORT": str(ports["grafana"]),
+        "KTRDR_JAEGER_UI_PORT": str(ports["jaeger_ui"]),
+        "KTRDR_PROMETHEUS_PORT": str(ports["prometheus"]),
+        "KTRDR_OTLP_GRPC_PORT": str(ports["otlp_grpc"]),
+        "KTRDR_OTLP_HTTP_PORT": str(ports["otlp_http"]),
+    }
+    with open(env_file, "w") as f:
+        for key, value in sorted(env_vars.items()):
+            f.write(f"{key}={value}\n")
+
+
+def _create_slot_compose_file(slot_path: Path) -> None:
+    """Create docker-compose.yml for a slot from template.
+
+    Copies the base compose template to the slot directory.
+    The .env.sandbox file provides slot-specific port values.
+
+    Args:
+        slot_path: Path to the slot directory
+    """
+    from ktrdr.cli.kinfra.templates import get_compose_template
+
+    compose_file = slot_path / "docker-compose.yml"
+    compose_file.write_text(get_compose_template())
+
+
+def _create_slot(slot_path: Path, slot_id: int, ports: dict[str, int]) -> None:
+    """Create a slot directory with configuration files.
+
+    Args:
+        slot_path: Path to create the slot at
+        slot_id: The slot number
+        ports: Port allocations for the slot
+    """
+    slot_path.mkdir(parents=True, exist_ok=True)
+    _create_slot_env_file(slot_path, slot_id, ports)
+    _create_slot_compose_file(slot_path)
+
+
+def _update_registry_with_slots(base_path: Path) -> None:
+    """Update the registry with slot information.
+
+    Args:
+        base_path: Base path where slots are located
+    """
+    registry = load_registry()
+
+    for slot_id in range(1, 7):
+        slot_key = str(slot_id)
+        if slot_key in registry.slots:
+            # Slot already registered
+            continue
+
+        profile, workers = SLOT_PROFILES[slot_id]
+        ports = _get_slot_ports(slot_id)
+        slot_path = base_path / f"slot-{slot_id}"
+
+        registry.slots[slot_key] = SlotInfo(
+            slot_id=slot_id,
+            infrastructure_path=slot_path,
+            profile=profile,
+            workers=workers,
+            ports=ports,
+        )
+
+    save_registry(registry)
+
+
+@sandbox_app.command()
+def provision(
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show what would be created without creating files"
+    ),
+) -> None:
+    """Create sandbox slot infrastructure.
+
+    Creates 6 pre-defined slot directories at ~/.ktrdr/sandboxes/slot-{1..6}/.
+    Each slot has a profile determining worker counts:
+
+    - Slots 1-4: light (1 backtest, 1 training worker)
+    - Slot 5: standard (2 of each)
+    - Slot 6: heavy (4 of each)
+
+    Each slot gets a docker-compose.yml and .env.sandbox with port allocations.
+    This command is idempotent - existing slots are skipped.
+    """
+    base_path = SANDBOXES_DIR
+
+    if dry_run:
+        console.print("Dry run - showing what would be created:\n")
+    else:
+        base_path.mkdir(parents=True, exist_ok=True)
+
+    created_count = 0
+    skipped_count = 0
+
+    for slot_id in range(1, 7):
+        slot_path = base_path / f"slot-{slot_id}"
+        profile, workers = SLOT_PROFILES[slot_id]
+        ports = _get_slot_ports(slot_id)
+
+        if slot_path.exists():
+            console.print(f"Slot {slot_id}: [dim]already exists, skipping[/dim]")
+            skipped_count += 1
+            continue
+
+        if dry_run:
+            console.print(f"Would create slot {slot_id} ({profile}) at {slot_path}")
+            console.print(f"  Ports: API={ports['api']}, DB={ports['db']}")
+            console.print(f"  Workers: {workers}")
+            continue
+
+        _create_slot(slot_path, slot_id, ports)
+        console.print(f"Created slot {slot_id} ({profile})")
+        created_count += 1
+
+    if not dry_run:
+        _update_registry_with_slots(base_path)
+
+        console.print()
+        if created_count > 0:
+            console.print(f"[green]Created {created_count} slot(s)[/green]")
+        if skipped_count > 0:
+            console.print(f"[dim]Skipped {skipped_count} existing slot(s)[/dim]")
+        console.print(f"\nSlots registered in {SANDBOXES_DIR}")
+        console.print("Use 'kinfra sandbox slots' to view slot status")
+
+
+@sandbox_app.command()
+def slots() -> None:
+    """List all sandbox slots with status.
+
+    Shows a table of all provisioned slots with their profile, API port,
+    claim status, and running/stopped status.
+    """
+    registry = load_registry()
+
+    if not registry.slots:
+        console.print("[yellow]No slots provisioned.[/yellow]")
+        console.print("Run 'kinfra sandbox provision' to create slot infrastructure.")
+        return
+
+    table = Table(title="Sandbox Slots")
+    table.add_column("Slot", justify="center", style="bold")
+    table.add_column("Profile")
+    table.add_column("API Port", justify="right")
+    table.add_column("Claimed By")
+    table.add_column("Status")
+
+    for _slot_id, slot in sorted(registry.slots.items(), key=lambda x: int(x[0])):
+        # Get claimed worktree name or "-"
+        claimed = slot.claimed_by.name if slot.claimed_by else "-"
+
+        # Color-code status
+        if slot.status == "running":
+            status_display = "[green]running[/green]"
+        else:
+            status_display = "[dim]stopped[/dim]"
+
+        table.add_row(
+            str(slot.slot_id),
+            slot.profile,
+            str(slot.ports["api"]),
+            claimed,
+            status_display,
+        )
+
+    console.print(table)

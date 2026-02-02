@@ -2,15 +2,77 @@
 
 This module tracks sandbox instances in a JSON file at ~/.ktrdr/sandbox/instances.json.
 It provides CRUD operations for instances and slot allocation logic.
+
+V2 adds slot pool infrastructure with pre-defined slots, profiles, and claim/release.
 """
 
 import json
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 REGISTRY_DIR = Path.home() / ".ktrdr" / "sandbox"
 REGISTRY_FILE = REGISTRY_DIR / "instances.json"
+
+# Current registry version
+REGISTRY_VERSION = 2
+
+# Profile ordering for slot selection (prefer lower profiles)
+PROFILE_ORDER = ["light", "standard", "heavy"]
+
+
+@dataclass
+class SlotInfo:
+    """Information about a sandbox slot in the slot pool.
+
+    Slots are pre-defined infrastructure directories that worktrees can
+    claim temporarily. Each slot has a profile determining worker counts.
+    """
+
+    slot_id: int
+    infrastructure_path: Path
+    profile: str  # "light", "standard", "heavy"
+    workers: dict[str, int]  # {"backtest": 1, "training": 1}
+    ports: dict[str, int]  # {"api": 8001, "db": 5433, ...}
+    claimed_by: Optional[Path] = None
+    claimed_at: Optional[datetime] = None
+    status: str = "stopped"  # "stopped", "running"
+
+    def to_dict(self) -> dict:
+        """Serialize to dictionary for JSON storage."""
+        return {
+            "slot_id": self.slot_id,
+            "infrastructure_path": str(self.infrastructure_path),
+            "profile": self.profile,
+            "workers": self.workers,
+            "ports": self.ports,
+            "claimed_by": str(self.claimed_by) if self.claimed_by else None,
+            "claimed_at": self.claimed_at.isoformat() if self.claimed_at else None,
+            "status": self.status,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "SlotInfo":
+        """Deserialize from dictionary."""
+        claimed_at = None
+        if data.get("claimed_at"):
+            claimed_at = datetime.fromisoformat(data["claimed_at"])
+
+        claimed_by = None
+        if data.get("claimed_by"):
+            claimed_by = Path(data["claimed_by"])
+
+        return cls(
+            slot_id=data["slot_id"],
+            infrastructure_path=Path(data["infrastructure_path"]),
+            profile=data["profile"],
+            workers=data["workers"],
+            ports=data["ports"],
+            claimed_by=claimed_by,
+            claimed_at=claimed_at,
+            status=data.get("status", "stopped"),
+        )
 
 
 @dataclass
@@ -36,15 +98,84 @@ class Registry:
     Contains version info, optional local_prod singleton, and a mapping of
     sandbox instance IDs to their metadata.
 
+    V2 adds:
+    - slots: Pre-defined slot pool with profiles and claim tracking
+
     The local_prod field is separate from instances because:
     - It's a singleton (only one allowed)
     - It uses slot 0 (reserved for standard ports)
     - It has different lifecycle (no slot allocation needed)
     """
 
-    version: int = 1
+    version: int = REGISTRY_VERSION
     local_prod: Optional[InstanceInfo] = None  # Singleton local-prod instance
     instances: dict[str, InstanceInfo] = field(default_factory=dict)  # Sandboxes only
+    slots: dict[str, SlotInfo] = field(default_factory=dict)  # V2: Slot pool
+
+    def get_available_slot(self, min_profile: str = "light") -> Optional[SlotInfo]:
+        """Find an available slot with at least the requested profile.
+
+        Prefers lower profiles when multiple slots match (light > standard > heavy).
+
+        Args:
+            min_profile: Minimum required profile ("light", "standard", "heavy")
+
+        Returns:
+            SlotInfo if available slot found, None otherwise
+        """
+        min_idx = PROFILE_ORDER.index(min_profile)
+
+        # Sort slots by profile level (prefer lower) then by slot_id
+        sorted_slots = sorted(
+            self.slots.values(),
+            key=lambda s: (PROFILE_ORDER.index(s.profile), s.slot_id),
+        )
+
+        for slot in sorted_slots:
+            if slot.claimed_by is not None:
+                continue
+            profile_idx = PROFILE_ORDER.index(slot.profile)
+            if profile_idx >= min_idx:
+                return slot
+
+        return None
+
+    def claim_slot(self, slot_id: int, worktree_path: Path) -> None:
+        """Claim a slot for a worktree.
+
+        Args:
+            slot_id: The slot ID to claim
+            worktree_path: Path to the worktree claiming this slot
+        """
+        slot = self.slots[str(slot_id)]
+        slot.claimed_by = worktree_path
+        slot.claimed_at = datetime.now(timezone.utc)
+        slot.status = "running"
+        self._save()
+
+    def release_slot(self, slot_id: int) -> None:
+        """Release a slot.
+
+        Args:
+            slot_id: The slot ID to release
+        """
+        slot = self.slots[str(slot_id)]
+        slot.claimed_by = None
+        slot.claimed_at = None
+        slot.status = "stopped"
+        self._save()
+
+    def get_all_slots(self) -> dict[str, SlotInfo]:
+        """Get all slots in the registry.
+
+        Returns:
+            Dictionary mapping slot ID strings to SlotInfo objects
+        """
+        return self.slots
+
+    def _save(self) -> None:
+        """Save this registry to disk."""
+        save_registry(self)
 
 
 def _ensure_registry_dir() -> None:
@@ -57,6 +188,8 @@ def load_registry() -> Registry:
 
     Returns an empty registry if the file doesn't exist or is corrupted.
     This ensures the system degrades gracefully.
+
+    Automatically migrates v1 registries to v2.
     """
     _ensure_registry_dir()
     if not REGISTRY_FILE.exists():
@@ -71,14 +204,48 @@ def load_registry() -> Registry:
         local_prod_data = data.get("local_prod")
         local_prod = InstanceInfo(**local_prod_data) if local_prod_data else None
 
-        return Registry(
+        # Load slots (v2 feature)
+        slots: dict[str, SlotInfo] = {}
+        for slot_id, slot_data in data.get("slots", {}).items():
+            slots[slot_id] = SlotInfo.from_dict(slot_data)
+
+        registry = Registry(
             version=data.get("version", 1),
             local_prod=local_prod,
             instances=instances,
+            slots=slots,
         )
+
+        # Migrate v1 to v2 if needed
+        if registry.version < REGISTRY_VERSION:
+            registry = _migrate_to_v2(registry)
+            save_registry(registry)
+
+        return registry
     except (json.JSONDecodeError, TypeError, KeyError):
         # Corrupted file, start fresh
         return Registry()
+
+
+def _migrate_to_v2(registry: Registry) -> Registry:
+    """Migrate a v1 registry to v2 schema.
+
+    Preserves all existing data (instances, local_prod) and adds
+    empty slots dict. Actual slot provisioning is done by
+    `kinfra sandbox provision`.
+
+    Args:
+        registry: The v1 registry to migrate
+
+    Returns:
+        Registry with v2 schema
+    """
+    return Registry(
+        version=REGISTRY_VERSION,
+        local_prod=registry.local_prod,
+        instances=registry.instances,
+        slots={},  # Slots will be provisioned separately
+    )
 
 
 def save_registry(registry: Registry) -> None:
@@ -92,6 +259,7 @@ def save_registry(registry: Registry) -> None:
         "version": registry.version,
         "local_prod": asdict(registry.local_prod) if registry.local_prod else None,
         "instances": {k: asdict(v) for k, v in registry.instances.items()},
+        "slots": {k: v.to_dict() for k, v in registry.slots.items()},
     }
     with open(REGISTRY_FILE, "w") as f:
         json.dump(data, f, indent=2)

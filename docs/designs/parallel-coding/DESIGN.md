@@ -324,3 +324,13 @@ kinfra deploy canary
 | 5.1 | Document new workflow | User guide |
 | 5.2 | Add `finish`/`complete` aliases | User preference |
 | 5.3 | Consider post-merge hook | Auto-cleanup (optional) |
+
+### Phase 6: Cleanup (Future)
+
+| Step | What | Why |
+|------|------|-----|
+| 6.1 | Remove `instances` from Registry | Dual tracking (instances + slots) is transitional debt |
+| 6.2 | Deprecate `sandbox create/init` | Replace with `kinfra impl` workflow |
+| 6.3 | Simplify `sandbox list` | Only show slot-based worktrees |
+
+**Note:** Phase 6 should be executed after Phase 4 is complete and the slot-claiming workflow is proven stable. The `instances` dict exists for backward compatibility during the transition.
