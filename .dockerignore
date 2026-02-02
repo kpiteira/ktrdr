@@ -41,6 +41,7 @@ tests/
 exploration/
 docs/
 scripts/
+archive/
 *.md
 !README.md
 examples/
