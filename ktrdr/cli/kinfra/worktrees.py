@@ -49,12 +49,25 @@ def _parse_worktree_list(output: str) -> list[dict]:
 @worktrees_app.callback(invoke_without_command=True)
 def worktrees() -> None:
     """List active worktrees with sandbox status."""
-    result = subprocess.run(
-        ["git", "worktree", "list", "--porcelain"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    try:
+        result = subprocess.run(
+            ["git", "worktree", "list", "--porcelain"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except FileNotFoundError:
+        console.print(
+            "[red]Error:[/red] 'git' command not found. "
+            "Please ensure Git is installed and available on your PATH."
+        )
+        raise typer.Exit(code=1) from None
+    except subprocess.CalledProcessError:
+        console.print(
+            "[red]Error:[/red] Failed to list git worktrees. "
+            "Make sure you are in a git repository."
+        )
+        raise typer.Exit(code=1) from None
 
     wt_list = _parse_worktree_list(result.stdout)
 
@@ -67,10 +80,10 @@ def worktrees() -> None:
     for wt in wt_list:
         name = Path(wt["path"]).name
 
-        if "ktrdr-spec-" in name:
+        if name.startswith("ktrdr-spec-"):
             wt_type = "spec"
             sandbox = "-"
-        elif "ktrdr-impl-" in name:
+        elif name.startswith("ktrdr-impl-"):
             wt_type = "impl"
             sandbox = "slot ?"  # Will be filled in M4
         else:

@@ -45,11 +45,12 @@ class TestSpecCreatesWorktree:
         assert result.exit_code == 0
 
         # Should have called git worktree add with -b (new branch)
+        # Calls: [0] git rev-parse (repo check), [1] git branch --list, [2] git worktree add
         calls = mock_run.call_args_list
-        assert len(calls) >= 2, f"Expected at least 2 git calls, got {len(calls)}"
+        assert len(calls) >= 3, f"Expected at least 3 git calls, got {len(calls)}"
 
-        # Second call should be worktree add
-        worktree_call = calls[1]
+        # Third call should be worktree add
+        worktree_call = calls[2]
         args = worktree_call[0][0]  # First positional arg is the command list
         assert "worktree" in args
         assert "add" in args
@@ -78,9 +79,10 @@ class TestSpecCreatesWorktree:
 
         assert result.exit_code == 0
 
-        # Second call should be worktree add without -b
+        # Third call should be worktree add without -b
+        # Calls: [0] git rev-parse (repo check), [1] git branch --list, [2] git worktree add
         calls = mock_run.call_args_list
-        worktree_call = calls[1]
+        worktree_call = calls[2]
         args = worktree_call[0][0]
         assert "worktree" in args
         assert "add" in args
@@ -117,7 +119,10 @@ class TestSpecCreatesDesignFolder:
 class TestSpecFailsIfWorktreeExists:
     """Tests for error handling when worktree exists."""
 
-    def test_spec_fails_if_worktree_directory_exists(self, runner) -> None:
+    @patch("ktrdr.cli.kinfra.spec._is_git_repo", return_value=True)
+    def test_spec_fails_if_worktree_directory_exists(
+        self, mock_is_git_repo: MagicMock, runner
+    ) -> None:
         """spec should fail gracefully if worktree directory exists."""
         from ktrdr.cli.kinfra.main import app
 
@@ -126,6 +131,60 @@ class TestSpecFailsIfWorktreeExists:
 
         assert result.exit_code != 0
         assert "exists" in result.output.lower()
+
+
+class TestSpecValidation:
+    """Tests for input validation."""
+
+    def test_spec_fails_if_not_git_repo(self, runner) -> None:
+        """spec should fail if not in a git repository."""
+        from ktrdr.cli.kinfra.main import app
+
+        with patch("ktrdr.cli.kinfra.spec._is_git_repo", return_value=False):
+            result = runner.invoke(app, ["spec", "my-feature"])
+
+        assert result.exit_code != 0
+        assert "git repository" in result.output.lower()
+
+    @patch("ktrdr.cli.kinfra.spec._is_git_repo", return_value=True)
+    def test_spec_fails_with_invalid_feature_name(
+        self, mock_is_git_repo: MagicMock, runner
+    ) -> None:
+        """spec should reject feature names with invalid characters."""
+        from ktrdr.cli.kinfra.main import app
+
+        result = runner.invoke(app, ["spec", "../path-traversal"])
+
+        assert result.exit_code != 0
+        assert "invalid" in result.output.lower()
+
+    @patch("ktrdr.cli.kinfra.spec._is_git_repo", return_value=True)
+    def test_spec_fails_with_spaces_in_name(
+        self, mock_is_git_repo: MagicMock, runner
+    ) -> None:
+        """spec should reject feature names with spaces."""
+        from ktrdr.cli.kinfra.main import app
+
+        result = runner.invoke(app, ["spec", "my feature"])
+
+        assert result.exit_code != 0
+        assert "invalid" in result.output.lower()
+
+    @patch("ktrdr.cli.kinfra.spec._is_git_repo", return_value=True)
+    @patch("ktrdr.cli.kinfra.spec.subprocess.run")
+    def test_spec_accepts_valid_feature_names(
+        self, mock_run: MagicMock, mock_is_git_repo: MagicMock, runner
+    ) -> None:
+        """spec should accept valid feature names with hyphens and underscores."""
+        from ktrdr.cli.kinfra.main import app
+
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch("ktrdr.cli.kinfra.spec.Path.exists", return_value=False):
+            with patch("ktrdr.cli.kinfra.spec.Path.mkdir"):
+                result = runner.invoke(app, ["spec", "my-feature_v2"])
+
+        assert result.exit_code == 0
 
 
 class TestSpecBranchDetection:
@@ -146,8 +205,9 @@ class TestSpecBranchDetection:
         assert result.exit_code == 0
 
         # Verify branch creation flag was used
+        # Calls: [0] git rev-parse (repo check), [1] git branch --list, [2] git worktree add
         calls = mock_run.call_args_list
-        worktree_call = calls[1]
+        worktree_call = calls[2]
         args = worktree_call[0][0]
         assert "-b" in args
         assert "spec/new-feature" in args
