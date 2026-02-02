@@ -77,3 +77,37 @@ class TestStrategiesEndpointLazyImports:
                         "ModelStorage should not be imported at module level in "
                         "strategies.py - use lazy import inside list_strategies()"
                     )
+
+
+class TestModelLoaderLazyImports:
+    """Verify model_loader.py doesn't have module-level torch import (Task 2.3)."""
+
+    def test_no_module_level_torch_import(self) -> None:
+        """torch should not be imported at module level in model_loader.py."""
+        source = Path("ktrdr/backtesting/model_loader.py").read_text()
+        tree = ast.parse(source)
+
+        for node in tree.body:
+            if isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+                assert "torch" not in names, (
+                    "torch should not be imported at module level in model_loader.py - "
+                    "use lazy import inside functions or TYPE_CHECKING block"
+                )
+
+
+class TestModelStorageLazyImports:
+    """Verify model_storage.py doesn't have module-level torch import (Task 2.3)."""
+
+    def test_no_module_level_torch_import(self) -> None:
+        """torch should not be imported at module level in model_storage.py."""
+        source = Path("ktrdr/training/model_storage.py").read_text()
+        tree = ast.parse(source)
+
+        for node in tree.body:
+            if isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+                assert "torch" not in names, (
+                    "torch should not be imported at module level in model_storage.py - "
+                    "use lazy import inside functions or TYPE_CHECKING block"
+                )
