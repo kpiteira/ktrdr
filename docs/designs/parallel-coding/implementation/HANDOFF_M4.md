@@ -59,3 +59,20 @@
 **Next Task Notes:**
 - Task 4.3 tests slots.py container management
 - Similar pattern - implementation exists, add tests
+
+## Task 4.3 Complete: Create slot container management
+
+**Implementation Notes:**
+- Implementation was already complete from Task 4.1
+- Added 11 unit tests covering all acceptance criteria
+- `start_slot_containers()` includes `--env-file .env.sandbox` and both compose files
+- `_wait_for_health()` polls `/api/v1/health` with 2s interval
+
+**Testing Notes:**
+- Mock `httpx.get` directly (not `ktrdr.cli.kinfra.slots.httpx`) since httpx is imported inside function
+- Mock `time.time` for timeout tests - return sequence simulating time progression
+- Health check tests verify retry behavior on connection errors and non-200 status
+
+**Next Task Notes:**
+- Task 4.4 updates worktrees command to show slot info for impl worktrees
+- Need to add `get_slot_for_worktree()` method to registry or query slots by path
