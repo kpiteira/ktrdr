@@ -185,3 +185,117 @@ class TestProvisionCommand:
         # Slot 6: API=8006, DB=5438
         assert registry.slots["6"].ports["api"] == 8006
         assert registry.slots["6"].ports["db"] == 5438
+
+
+# =============================================================================
+# Slots Command Tests
+# =============================================================================
+
+
+class TestSlotsCommand:
+    """Tests for kinfra sandbox slots command."""
+
+    def test_slots_command_exists(self, runner) -> None:
+        """kinfra sandbox slots --help should work."""
+        from ktrdr.cli.kinfra.main import app
+
+        result = runner.invoke(app, ["sandbox", "slots", "--help"])
+        assert result.exit_code == 0
+
+    def test_slots_shows_all_slots(self, runner, tmp_path, monkeypatch) -> None:
+        """slots command displays all 6 slots."""
+        from ktrdr.cli.kinfra.main import app
+
+        # Provision slots first
+        sandboxes_path = tmp_path / "sandboxes"
+        monkeypatch.setattr("ktrdr.cli.kinfra.sandbox.SANDBOXES_DIR", sandboxes_path)
+        registry_path = tmp_path / "registry.json"
+        monkeypatch.setattr("ktrdr.cli.sandbox_registry.REGISTRY_FILE", registry_path)
+        registry_dir = tmp_path
+        monkeypatch.setattr("ktrdr.cli.sandbox_registry.REGISTRY_DIR", registry_dir)
+
+        # Provision slots
+        runner.invoke(app, ["sandbox", "provision"])
+
+        # Now run slots command
+        result = runner.invoke(app, ["sandbox", "slots"])
+        assert result.exit_code == 0
+
+        # Should show all 6 slots
+        for slot_id in range(1, 7):
+            assert str(slot_id) in result.output
+
+    def test_slots_shows_profiles(self, runner, tmp_path, monkeypatch) -> None:
+        """slots command shows profile for each slot."""
+        from ktrdr.cli.kinfra.main import app
+
+        sandboxes_path = tmp_path / "sandboxes"
+        monkeypatch.setattr("ktrdr.cli.kinfra.sandbox.SANDBOXES_DIR", sandboxes_path)
+        registry_path = tmp_path / "registry.json"
+        monkeypatch.setattr("ktrdr.cli.sandbox_registry.REGISTRY_FILE", registry_path)
+        registry_dir = tmp_path
+        monkeypatch.setattr("ktrdr.cli.sandbox_registry.REGISTRY_DIR", registry_dir)
+
+        runner.invoke(app, ["sandbox", "provision"])
+        result = runner.invoke(app, ["sandbox", "slots"])
+
+        assert result.exit_code == 0
+        # Should show profile names
+        assert "light" in result.output.lower()
+        assert "standard" in result.output.lower()
+        assert "heavy" in result.output.lower()
+
+    def test_slots_shows_ports(self, runner, tmp_path, monkeypatch) -> None:
+        """slots command shows API port for each slot."""
+        from ktrdr.cli.kinfra.main import app
+
+        sandboxes_path = tmp_path / "sandboxes"
+        monkeypatch.setattr("ktrdr.cli.kinfra.sandbox.SANDBOXES_DIR", sandboxes_path)
+        registry_path = tmp_path / "registry.json"
+        monkeypatch.setattr("ktrdr.cli.sandbox_registry.REGISTRY_FILE", registry_path)
+        registry_dir = tmp_path
+        monkeypatch.setattr("ktrdr.cli.sandbox_registry.REGISTRY_DIR", registry_dir)
+
+        runner.invoke(app, ["sandbox", "provision"])
+        result = runner.invoke(app, ["sandbox", "slots"])
+
+        assert result.exit_code == 0
+        # Should show API ports
+        assert "8001" in result.output
+        assert "8006" in result.output
+
+    def test_slots_shows_status(self, runner, tmp_path, monkeypatch) -> None:
+        """slots command shows running/stopped status."""
+        from ktrdr.cli.kinfra.main import app
+
+        sandboxes_path = tmp_path / "sandboxes"
+        monkeypatch.setattr("ktrdr.cli.kinfra.sandbox.SANDBOXES_DIR", sandboxes_path)
+        registry_path = tmp_path / "registry.json"
+        monkeypatch.setattr("ktrdr.cli.sandbox_registry.REGISTRY_FILE", registry_path)
+        registry_dir = tmp_path
+        monkeypatch.setattr("ktrdr.cli.sandbox_registry.REGISTRY_DIR", registry_dir)
+
+        runner.invoke(app, ["sandbox", "provision"])
+        result = runner.invoke(app, ["sandbox", "slots"])
+
+        assert result.exit_code == 0
+        # All slots should be stopped initially
+        assert "stopped" in result.output.lower()
+
+    def test_slots_empty_registry(self, runner, tmp_path, monkeypatch) -> None:
+        """slots command handles empty registry gracefully."""
+        from ktrdr.cli.kinfra.main import app
+
+        # Use empty temp registry
+        registry_path = tmp_path / "registry.json"
+        monkeypatch.setattr("ktrdr.cli.sandbox_registry.REGISTRY_FILE", registry_path)
+        registry_dir = tmp_path
+        monkeypatch.setattr("ktrdr.cli.sandbox_registry.REGISTRY_DIR", registry_dir)
+
+        result = runner.invoke(app, ["sandbox", "slots"])
+
+        assert result.exit_code == 0
+        # Should indicate no slots
+        assert (
+            "no slots" in result.output.lower() or "provision" in result.output.lower()
+        )

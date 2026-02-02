@@ -1515,3 +1515,45 @@ def provision(
             console.print(f"[dim]Skipped {skipped_count} existing slot(s)[/dim]")
         console.print(f"\nSlots registered in {SANDBOXES_DIR}")
         console.print("Use 'kinfra sandbox slots' to view slot status")
+
+
+@sandbox_app.command()
+def slots() -> None:
+    """List all sandbox slots with status.
+
+    Shows a table of all provisioned slots with their profile, API port,
+    claim status, and running/stopped status.
+    """
+    registry = load_registry()
+
+    if not registry.slots:
+        console.print("[yellow]No slots provisioned.[/yellow]")
+        console.print("Run 'kinfra sandbox provision' to create slot infrastructure.")
+        return
+
+    table = Table(title="Sandbox Slots")
+    table.add_column("Slot", justify="center", style="bold")
+    table.add_column("Profile")
+    table.add_column("API Port", justify="right")
+    table.add_column("Claimed By")
+    table.add_column("Status")
+
+    for _slot_id, slot in sorted(registry.slots.items(), key=lambda x: int(x[0])):
+        # Get claimed worktree name or "-"
+        claimed = slot.claimed_by.name if slot.claimed_by else "-"
+
+        # Color-code status
+        if slot.status == "running":
+            status_display = "[green]running[/green]"
+        else:
+            status_display = "[dim]stopped[/dim]"
+
+        table.add_row(
+            str(slot.slot_id),
+            slot.profile,
+            str(slot.ports["api"]),
+            claimed,
+            status_display,
+        )
+
+    console.print(table)

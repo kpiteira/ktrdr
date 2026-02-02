@@ -35,3 +35,21 @@
 - Task 3.3 creates compose templates in `ktrdr/cli/kinfra/templates/`
 - Replace placeholder compose file with proper template
 - Template uses `${VARIABLE}` placeholders for ports, worker counts
+
+## Task 3.3 Complete: Create compose templates
+
+**Implementation Notes:**
+- Created `ktrdr/cli/kinfra/templates/` package with `__init__.py` and `docker-compose.base.yml`
+- `get_compose_template()` returns template content as string
+- Template uses `${KTRDR_*_PORT:-default}` syntax for port substitution
+- Simplified from full sandbox compose - workers are single service (can scale with `--scale`)
+- Updated provision command to use template instead of placeholder
+
+**Testing Notes:**
+- Tests import template module and validate YAML structure
+- Use `yaml.safe_load()` to parse and validate template
+
+**Next Task Notes:**
+- Task 3.4 creates `kinfra sandbox slots` command to list all slots with status
+- Use registry's `get_all_slots()` method for data
+- Display in Rich table with profile, ports, claimed status
