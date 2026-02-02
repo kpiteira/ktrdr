@@ -181,7 +181,7 @@ def impl(
         registry.claim_slot(slot.slot_id, worktree_path)
         typer.echo(f"Claimed slot {slot.slot_id} ({slot.profile})")
 
-        generate_override(slot, worktree_path)
+        generate_override(slot, worktree_path, repo_root)
         typer.echo("Generated docker-compose.override.yml")
 
         start_slot_containers(slot)

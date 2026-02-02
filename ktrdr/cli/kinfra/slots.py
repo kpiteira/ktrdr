@@ -72,6 +72,7 @@ def _wait_for_health(slot: SlotInfo, timeout: int) -> None:
             if resp.status_code == 200:
                 return
         except httpx.RequestError:
+            # Backend may not be reachable yet; ignore and retry until timeout.
             pass
         time.sleep(2)
 
