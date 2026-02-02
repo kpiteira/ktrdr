@@ -53,3 +53,16 @@
 - Task 3.4 creates `kinfra sandbox slots` command to list all slots with status
 - Use registry's `get_all_slots()` method for data
 - Display in Rich table with profile, ports, claimed status
+
+## Task 3.4 Complete: Create slots listing command
+
+**Implementation Notes:**
+- `slots()` command added to sandbox.py
+- Uses `registry.slots` dict sorted by slot ID
+- Rich Table displays: Slot, Profile, API Port, Claimed By, Status
+- Empty registry shows guidance to run `provision`
+- Status color-coded: `[green]running[/green]` or `[dim]stopped[/dim]`
+
+**Next Task Notes:**
+- Task 3.5 is a VALIDATION task - run E2E test to verify all M3 functionality
+- Use E2E agent workflow: e2e-test-designer → e2e-test-architect → e2e-tester
