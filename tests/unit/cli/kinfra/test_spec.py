@@ -44,16 +44,16 @@ class TestSpecCreatesWorktree:
 
         assert result.exit_code == 0
 
-        # Should have called git worktree add with -b (new branch)
-        # Calls: [0] git rev-parse (repo check), [1] git branch --list, [2] git worktree add
+        # Find the worktree add call (index varies due to fetch step)
         calls = mock_run.call_args_list
-        assert len(calls) >= 3, f"Expected at least 3 git calls, got {len(calls)}"
+        worktree_calls = [
+            c for c in calls if "worktree" in c[0][0] and "add" in c[0][0]
+        ]
+        assert (
+            len(worktree_calls) >= 1
+        ), f"Expected worktree add call, got calls: {calls}"
 
-        # Third call should be worktree add
-        worktree_call = calls[2]
-        args = worktree_call[0][0]  # First positional arg is the command list
-        assert "worktree" in args
-        assert "add" in args
+        args = worktree_calls[0][0][0]  # First positional arg is the command list
         assert "-b" in args  # New branch flag
         assert "spec/my-feature" in args
 
@@ -79,14 +79,17 @@ class TestSpecCreatesWorktree:
 
         assert result.exit_code == 0
 
-        # Third call should be worktree add without -b
-        # Calls: [0] git rev-parse (repo check), [1] git branch --list, [2] git worktree add
+        # Find the worktree add call (index varies due to fetch step)
         calls = mock_run.call_args_list
-        worktree_call = calls[2]
-        args = worktree_call[0][0]
-        assert "worktree" in args
-        assert "add" in args
-        assert "-b" not in args  # No new branch flag
+        worktree_calls = [
+            c for c in calls if "worktree" in c[0][0] and "add" in c[0][0]
+        ]
+        assert (
+            len(worktree_calls) >= 1
+        ), f"Expected worktree add call, got calls: {calls}"
+
+        args = worktree_calls[0][0][0]
+        assert "-b" not in args  # No new branch flag (using existing branch)
 
 
 class TestSpecCreatesDesignFolder:
@@ -204,11 +207,16 @@ class TestSpecBranchDetection:
 
         assert result.exit_code == 0
 
-        # Verify branch creation flag was used
-        # Calls: [0] git rev-parse (repo check), [1] git branch --list, [2] git worktree add
+        # Find the worktree add call (index varies due to fetch step)
         calls = mock_run.call_args_list
-        worktree_call = calls[2]
-        args = worktree_call[0][0]
+        worktree_calls = [
+            c for c in calls if "worktree" in c[0][0] and "add" in c[0][0]
+        ]
+        assert (
+            len(worktree_calls) >= 1
+        ), f"Expected worktree add call, got calls: {calls}"
+
+        args = worktree_calls[0][0][0]
         assert "-b" in args
         assert "spec/new-feature" in args
 

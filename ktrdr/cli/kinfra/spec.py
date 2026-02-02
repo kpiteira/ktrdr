@@ -85,6 +85,23 @@ def spec(
     )
     branch_exists = bool(result.stdout.strip())
 
+    # Fetch latest from origin (so worktree starts from latest remote)
+    typer.echo("Fetching latest from origin...")
+    fetch_result = subprocess.run(
+        ["git", "fetch", "origin", "main"],
+        capture_output=True,
+        text=True,
+        cwd=repo_root,
+    )
+    if fetch_result.returncode != 0:
+        typer.secho(
+            "Warning: Could not fetch from origin. Worktree will start from local HEAD.",
+            fg=typer.colors.YELLOW,
+        )
+        start_point = None
+    else:
+        start_point = "origin/main"
+
     # Create worktree
     try:
         if branch_exists:
@@ -94,8 +111,12 @@ def spec(
                 cwd=repo_root,
             )
         else:
+            # Create new branch from origin/main (or local HEAD if fetch failed)
+            cmd = ["git", "worktree", "add", "-b", branch_name, str(worktree_path)]
+            if start_point:
+                cmd.append(start_point)
             subprocess.run(
-                ["git", "worktree", "add", "-b", branch_name, str(worktree_path)],
+                cmd,
                 check=True,
                 cwd=repo_root,
             )
