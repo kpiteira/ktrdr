@@ -73,6 +73,23 @@ e2e-test-designer → e2e-test-architect → e2e-tester
 Do NOT run bash commands directly from the milestone file.
 ```
 
+**CRITICAL: What makes a valid VALIDATION task:**
+
+VALIDATION must test **real operational flows**, not just "does it start?":
+
+| ❌ Insufficient | ✅ Valid |
+|-----------------|----------|
+| "API imports without error" | "Training completes and produces a model file" |
+| "System starts" | "Backtest executes and produces trades > 0" |
+| "No exceptions on startup" | "Full workflow completes with verifiable output" |
+
+A validation that only checks "the code runs without crashing" will miss:
+- Save/load bugs that only appear when data flows end-to-end
+- Config mismatches between components
+- Missing dependencies only needed at runtime
+
+**If a milestone changes how components interact, the validation MUST exercise that interaction with real data.**
+
 Example:
 ```
 /ktask impl: docs/designs/indicator-fuzzy-cleanup/implementation/M4_cleanup.md task: 4.3
