@@ -73,6 +73,7 @@ dev = [
 
 [project.scripts]
 ktrdr = "ktrdr.cli:main"
+kinfra = "ktrdr.cli.kinfra.main:main"
 orchestrator = "orchestrator.cli:main"
 
 [dependency-groups]

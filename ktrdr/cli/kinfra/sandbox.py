@@ -42,19 +42,6 @@ sandbox_app = typer.Typer(
     no_args_is_help=True,
 )
 
-
-@sandbox_app.callback(invoke_without_command=True)
-def _sandbox_deprecation_callback(ctx: typer.Context) -> None:
-    """Show deprecation warning for ktrdr sandbox commands."""
-    cmd = ctx.invoked_subcommand or ""
-    # Use typer.secho for colored output that gets captured in tests
-    typer.secho(
-        f"Warning: 'ktrdr sandbox {cmd}' is deprecated. "
-        f"Use 'kinfra sandbox {cmd}' instead.",
-        fg=typer.colors.YELLOW,
-    )
-
-
 console = Console()
 error_console = Console(stderr=True)
 
