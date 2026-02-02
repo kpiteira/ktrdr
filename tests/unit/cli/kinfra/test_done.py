@@ -74,6 +74,19 @@ class TestFindWorktree:
         with pytest.raises(typer.BadParameter, match="No worktree found"):
             _find_worktree("nonexistent", parent_path=tmp_path)
 
+    def test_find_worktree_ambiguous(self, tmp_path: Path) -> None:
+        """Should raise error when multiple worktrees match partial name."""
+        import typer
+
+        from ktrdr.cli.kinfra.done import _find_worktree
+
+        # Create multiple matching worktrees
+        (tmp_path / "ktrdr-impl-genome-M1").mkdir()
+        (tmp_path / "ktrdr-impl-genome-M2").mkdir()
+
+        with pytest.raises(typer.BadParameter, match="Multiple worktrees match"):
+            _find_worktree("genome", parent_path=tmp_path)
+
 
 class TestHasUncommittedChanges:
     """Tests for checking uncommitted changes."""
@@ -273,6 +286,53 @@ class TestDoneStopsContainers:
         assert result.exit_code == 0
         mock_stop.assert_called_once_with(mock_slot)
 
+    @patch("ktrdr.cli.kinfra.done.subprocess.run")
+    @patch("ktrdr.cli.kinfra.slots.stop_slot_containers")
+    @patch("ktrdr.cli.kinfra.override.remove_override")
+    @patch("ktrdr.cli.kinfra.done.load_registry")
+    @patch("ktrdr.cli.kinfra.done._find_worktree")
+    @patch("ktrdr.cli.kinfra.done._has_uncommitted_changes")
+    @patch("ktrdr.cli.kinfra.done._has_unpushed_commits")
+    def test_done_continues_on_stop_containers_failure(
+        self,
+        mock_unpushed: MagicMock,
+        mock_uncommitted: MagicMock,
+        mock_find: MagicMock,
+        mock_load_registry: MagicMock,
+        mock_remove_override: MagicMock,
+        mock_stop: MagicMock,
+        mock_run: MagicMock,
+        runner,
+    ) -> None:
+        """done should continue cleanup if stopping containers fails."""
+        import subprocess
+
+        from ktrdr.cli.kinfra.main import app
+        from ktrdr.cli.sandbox_registry import SlotInfo
+
+        mock_find.return_value = Path("/tmp/ktrdr-impl-test-M1")
+        mock_uncommitted.return_value = False
+        mock_unpushed.return_value = False
+
+        mock_slot = MagicMock(spec=SlotInfo)
+        mock_slot.slot_id = 1
+        mock_registry = MagicMock()
+        mock_registry.get_slot_for_worktree.return_value = mock_slot
+        mock_load_registry.return_value = mock_registry
+
+        # stop_slot_containers fails
+        mock_stop.side_effect = subprocess.CalledProcessError(1, "docker compose")
+        mock_run.return_value = MagicMock(returncode=0)
+
+        result = runner.invoke(app, ["done", "test-M1"])
+
+        # Should succeed despite stop failure
+        assert result.exit_code == 0
+        assert "warning" in result.output.lower()
+        # Should still release slot and remove worktree
+        mock_registry.release_slot.assert_called_once()
+        mock_remove_override.assert_called_once()
+
 
 class TestDoneReleasesSlot:
     """Tests that done releases the slot in registry."""
@@ -456,6 +516,51 @@ class TestDoneRemovesWorktree:
         assert len(worktree_remove_calls) >= 1
         # With --force, git worktree remove SHOULD have --force
         assert "--force" in worktree_remove_calls[0][0][0]
+
+    @patch("ktrdr.cli.kinfra.done.subprocess.run")
+    @patch("ktrdr.cli.kinfra.slots.stop_slot_containers")
+    @patch("ktrdr.cli.kinfra.override.remove_override")
+    @patch("ktrdr.cli.kinfra.done.load_registry")
+    @patch("ktrdr.cli.kinfra.done._find_worktree")
+    @patch("ktrdr.cli.kinfra.done._has_uncommitted_changes")
+    @patch("ktrdr.cli.kinfra.done._has_unpushed_commits")
+    def test_done_fails_gracefully_on_git_worktree_remove_failure(
+        self,
+        mock_unpushed: MagicMock,
+        mock_uncommitted: MagicMock,
+        mock_find: MagicMock,
+        mock_load_registry: MagicMock,
+        mock_remove_override: MagicMock,
+        mock_stop: MagicMock,
+        mock_run: MagicMock,
+        runner,
+    ) -> None:
+        """done should show user-friendly error when git worktree remove fails."""
+        import subprocess
+
+        from ktrdr.cli.kinfra.main import app
+        from ktrdr.cli.sandbox_registry import SlotInfo
+
+        worktree_path = Path("/tmp/ktrdr-impl-test-M1")
+        mock_find.return_value = worktree_path
+        mock_uncommitted.return_value = False
+        mock_unpushed.return_value = False
+
+        mock_slot = MagicMock(spec=SlotInfo)
+        mock_slot.slot_id = 1
+        mock_registry = MagicMock()
+        mock_registry.get_slot_for_worktree.return_value = mock_slot
+        mock_load_registry.return_value = mock_registry
+
+        # git worktree remove fails
+        mock_run.side_effect = subprocess.CalledProcessError(
+            1, "git worktree remove", stderr="fatal: worktree locked"
+        )
+
+        result = runner.invoke(app, ["done", "test-M1"])
+
+        assert result.exit_code != 0
+        assert "failed to remove" in result.output.lower()
 
 
 class TestDoneFailsOnSpec:

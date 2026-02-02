@@ -39,13 +39,23 @@ def _find_worktree(name: str, parent_path: Path | None = None) -> Path:
         if path.exists():
             return path
 
-    # Try partial match
+    # Try partial match - collect all matches to detect ambiguity
+    matches = []
     for path in parent_path.iterdir():
         if path.is_dir() and name in path.name:
             if path.name.startswith("ktrdr-impl-") or path.name.startswith(
                 "ktrdr-spec-"
             ):
-                return path
+                matches.append(path)
+
+    if len(matches) == 1:
+        return matches[0]
+    elif len(matches) > 1:
+        match_names = ", ".join(p.name for p in sorted(matches))
+        raise typer.BadParameter(
+            f"Multiple worktrees match '{name}': {match_names}. "
+            "Please be more specific."
+        )
 
     raise typer.BadParameter(f"No worktree found matching: {name}")
 
@@ -155,7 +165,14 @@ def done(
     if slot:
         # Stop containers
         typer.echo(f"Stopping containers for slot {slot.slot_id}...")
-        stop_slot_containers(slot)
+        try:
+            stop_slot_containers(slot)
+        except subprocess.CalledProcessError as exc:
+            typer.secho(
+                f"Warning: Failed to stop containers for slot {slot.slot_id} "
+                f"(exit code {exc.returncode}). Continuing cleanup.",
+                fg=typer.colors.YELLOW,
+            )
 
         # Remove override
         typer.echo("Removing override file...")
@@ -172,6 +189,17 @@ def done(
     remove_cmd = ["git", "worktree", "remove", str(worktree_path)]
     if force:
         remove_cmd.append("--force")
-    subprocess.run(remove_cmd, check=True)
+    try:
+        subprocess.run(remove_cmd, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as exc:
+        typer.secho(
+            "Failed to remove git worktree. "
+            "Please resolve any git issues (e.g., lock files, active processes) "
+            "and try again.",
+            fg=typer.colors.RED,
+        )
+        if exc.stderr:
+            typer.secho(exc.stderr.strip(), fg=typer.colors.RED)
+        raise typer.Exit(code=1) from None
 
     typer.echo(f"Done! Completed {worktree_name}")
