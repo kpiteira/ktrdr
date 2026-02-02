@@ -106,3 +106,53 @@ Now when `backtesting/engine.py` imports `from ..decision.base import Signal`:
 - Task 2.4: Validation passed ✅
 
 **Tests:** 5135 passed, quality checks pass
+
+---
+
+## Additional Bugs Found During Full E2E Validation
+
+After the basic import chain test passed, running actual training/backtest E2E tests
+revealed additional bugs that needed fixing:
+
+### Bug 1: Model Loading - input_size Null
+
+**Symptom:** "Model not built" error on every bar during backtest
+**Cause:** `metadata.json` had `"input_size": null` after training
+**Fix:** Updated `base_model.py` to infer input_size from:
+1. `features.json` (has `feature_count`)
+2. Model weights (first layer shape)
+
+### Bug 2: Model Loading - Config Structure Mismatch
+
+**Symptom:** `KeyError: 'architecture'` during model load
+**Cause:** `model_storage.py` saves FULL strategy config to `config.json`, but
+`MLPTradingModel.build_model()` expects just the model section
+**Fix:** Updated `base_model.py` to extract "model" section if present:
+```python
+if "model" in loaded_config and "architecture" not in loaded_config:
+    self.config = loaded_config["model"]
+else:
+    self.config = loaded_config
+```
+
+### Bug 3: Missing jinja2 Dependency
+
+**Symptom:** Backend unhealthy - "jinja2 must be installed to use Jinja2Templates"
+**Fix:** Added `jinja2>=3.1.0` to pyproject.toml
+
+### Bug 4: Dockerfile.dev Missing ML Extras
+
+**Symptom:** Training workers fail - "No module named 'torch'"
+**Cause:** `uv sync --frozen --no-install-project` doesn't include optional extras
+**Fix:** Changed to `uv sync --frozen --no-install-project --extra ml`
+
+### E2E Test Updates
+
+Updated test recipes for meaningful validation:
+- **training/smoke**: 1h timeframe, 1 year range → ~5,600 samples
+- **backtest/smoke**: 1h timeframe, 6 months → ~2,800 bars, 58 trades
+
+**Final Validation Results:**
+- 0 torch modules on API import (lazy loading works)
+- Training E2E: PASS (5,661 samples, model created)
+- Backtest E2E: PASS (58 trades executed, completed in 4.1s)
