@@ -25,6 +25,7 @@ dependencies = [
     "rich>=14.0.0",
     "click>=8.0.0",
     "fastapi>=0.115.12",
+    "jinja2>=3.1.0",  # Required for FastAPI's Jinja2Templates
     "uvicorn>=0.34.3",
     "watchfiles>=1.0.0",  # For efficient uvicorn --reload (avoids CPU-heavy polling)
     "httpx>=0.28.1",

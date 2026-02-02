@@ -1,7 +1,7 @@
 # Test: training/smoke
 
 **Purpose:** Quick validation that training starts, completes, and produces valid output
-**Duration:** <30 seconds
+**Duration:** <60 seconds
 **Category:** Training
 
 ---
@@ -13,7 +13,7 @@
 
 **Test-specific checks:**
 - [ ] Strategy file exists: `~/.ktrdr/shared/strategies/test_e2e_local_pull.yaml`
-- [ ] Data available: EURUSD 1d has data in cache
+- [ ] Data available: EURUSD 1h has data in cache
 
 ---
 
@@ -22,17 +22,18 @@
 ```json
 {
   "symbols": ["EURUSD"],
-  "timeframes": ["1d"],
+  "timeframes": ["1h"],
   "strategy_name": "test_e2e_local_pull",
-  "start_date": "2020-01-01",
+  "start_date": "2024-01-01",
   "end_date": "2024-12-31"
 }
 ```
 
 **Why this data:**
-- EURUSD 1d: ~1300 samples over 5 years, trains in ~3s (fast feedback)
-- 5 year range: Large enough validation set to avoid false 100% accuracy
+- EURUSD 1h: ~6,500 samples over 1 year, trains in ~30s
+- 1 year range: Large enough validation set to avoid false 100% accuracy
 - test_e2e_local_pull: Known-good strategy for testing
+- 1h timeframe: Provides enough bars for backtest warm-up + meaningful trading
 
 ---
 
@@ -44,7 +45,7 @@
 ```bash
 RESPONSE=$(curl -s -X POST http://localhost:${KTRDR_API_PORT:-8000}/api/v1/trainings/start \
   -H "Content-Type: application/json" \
-  -d '{"symbols":["EURUSD"],"timeframes":["1d"],"strategy_name":"test_e2e_local_pull","start_date":"2020-01-01","end_date":"2024-12-31"}')
+  -d '{"symbols":["EURUSD"],"timeframes":["1h"],"strategy_name":"test_e2e_local_pull","start_date":"2024-01-01","end_date":"2024-12-31"}')
 
 TASK_ID=$(echo "$RESPONSE" | jq -r '.task_id')
 echo "Task ID: $TASK_ID"
@@ -60,14 +61,14 @@ echo "Task ID: $TASK_ID"
 
 **Command:**
 ```bash
-sleep 10
+sleep 45
 curl -s "http://localhost:${KTRDR_API_PORT:-8000}/api/v1/operations/$TASK_ID" | \
   jq '{status:.data.status, samples:.data.result_summary.data_summary.total_samples}'
 ```
 
 **Expected:**
 - `status: "completed"`
-- `samples: ~1300` (5 years of daily data)
+- `samples: ~6500` (1 year of hourly data)
 
 ### 3. Verify No Errors
 
@@ -85,7 +86,7 @@ docker compose logs backend --since 2m | grep -i "error\|exception" | grep -v "N
 
 - [ ] Training starts successfully (HTTP 200, task_id returned)
 - [ ] Training completes (status = "completed")
-- [ ] Correct sample count (~1300 samples)
+- [ ] Correct sample count (~6500 samples for 1 year of 1h data)
 - [ ] No errors in logs
 
 ---
