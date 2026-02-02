@@ -173,6 +173,20 @@ class Registry:
         """
         return self.slots
 
+    def get_slot_for_worktree(self, worktree_path: Path) -> Optional[SlotInfo]:
+        """Find the slot claimed by a specific worktree.
+
+        Args:
+            worktree_path: Path to the worktree
+
+        Returns:
+            SlotInfo if a slot is claimed by this worktree, None otherwise
+        """
+        for slot in self.slots.values():
+            if slot.claimed_by == worktree_path:
+                return slot
+        return None
+
     def _save(self) -> None:
         """Save this registry to disk."""
         save_registry(self)

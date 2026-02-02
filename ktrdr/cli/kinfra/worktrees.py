@@ -10,6 +10,8 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from ktrdr.cli.sandbox_registry import load_registry
+
 worktrees_app = typer.Typer(
     name="worktrees",
     help="List active worktrees with sandbox status",
@@ -71,6 +73,9 @@ def worktrees() -> None:
 
     wt_list = _parse_worktree_list(result.stdout)
 
+    # Load registry to look up slot info for impl worktrees
+    registry = load_registry()
+
     table = Table(title="Active Worktrees")
     table.add_column("Name")
     table.add_column("Type")
@@ -78,14 +83,20 @@ def worktrees() -> None:
     table.add_column("Sandbox")
 
     for wt in wt_list:
-        name = Path(wt["path"]).name
+        wt_path = Path(wt["path"])
+        name = wt_path.name
 
         if name.startswith("ktrdr-spec-"):
             wt_type = "spec"
             sandbox = "-"
         elif name.startswith("ktrdr-impl-"):
             wt_type = "impl"
-            sandbox = "slot ?"  # Will be filled in M4
+            # Look up slot for this worktree
+            slot = registry.get_slot_for_worktree(wt_path)
+            if slot:
+                sandbox = f"slot {slot.slot_id} ({slot.status}, :{slot.ports['api']})"
+            else:
+                sandbox = "no slot"
         else:
             continue  # Skip main worktree
 
