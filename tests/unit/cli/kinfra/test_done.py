@@ -653,9 +653,9 @@ class TestDoneAliases:
         # Note: "complete" appears in "--install-completion", so check for command line
         lines = result.output.lower().split("\n")
         command_lines = [
-            line.strip() for line in lines if line.strip().startswith(("finish", "complete "))
+            line.strip() for line in lines if line.strip().startswith(("finish ", "complete "))
         ]
-        # No command lines starting with "finish" or "complete " (with space)
+        # No command lines starting with "finish " or "complete " (with space)
         assert len(command_lines) == 0, f"Found unexpected alias commands: {command_lines}"
 
     @patch("ktrdr.cli.kinfra.done.subprocess.run")

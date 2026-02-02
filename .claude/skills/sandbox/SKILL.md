@@ -32,10 +32,10 @@ Sandboxes are NOT ephemeral. You create one, work in it for days/weeks with hot 
 
 The recommended workflow uses **kinfra** commands with pre-provisioned sandbox slots:
 
-1. **`kinfra spec <feature>`** — Create spec worktree for design (no sandbox)
-2. **`kinfra impl <feature/milestone>`** — Create impl worktree with sandbox slot
+1. **`uv run kinfra spec <feature>`** — Create spec worktree for design (no sandbox)
+2. **`uv run kinfra impl <feature/milestone>`** — Create impl worktree with sandbox slot
 3. Work on implementation with full E2E testing capability
-4. **`kinfra done <name>`** — Clean up after PR merge (releases sandbox slot)
+4. **`uv run kinfra done <name>`** — Clean up after PR merge (releases sandbox slot)
 
 This workflow uses a **slot pool** — pre-provisioned sandbox configurations (slots 1 and 2) that are claimed on-demand by impl worktrees. No manual slot allocation needed.
 

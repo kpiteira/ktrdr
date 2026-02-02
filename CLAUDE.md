@@ -229,10 +229,10 @@ Running `docker compose up` directly can cause port conflicts between sandboxes.
 
 For parallel development work:
 
-1. **`kinfra spec <feature>`** — Create lightweight worktree for design (no Docker)
-2. **`kinfra impl <feature/milestone>`** — Create worktree with sandbox slot
+1. **`uv run kinfra spec <feature>`** — Create lightweight worktree for design (no Docker)
+2. **`uv run kinfra impl <feature/milestone>`** — Create worktree with sandbox slot
 3. Work on implementation with full E2E testing capability
-4. **`kinfra done <name>`** — Clean up after PR merge (releases sandbox slot)
+4. **`uv run kinfra done <name>`** — Clean up after PR merge (releases sandbox slot)
 
 ---
 
