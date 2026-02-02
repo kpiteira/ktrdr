@@ -1,5 +1,5 @@
 """
-Unit tests for lazy imports (M2 Tasks 2.1, 2.2).
+Unit tests for lazy imports (M2 Tasks 2.1, 2.2, 2.3).
 
 Verifies that torch-dependent modules are not imported at module level,
 enabling the backend to start without torch installed.
@@ -30,11 +30,19 @@ class TestTrainingServiceLazyImports:
     def test_no_self_model_loader_attribute(self) -> None:
         """self.model_loader should not exist in TrainingService."""
         source = Path("ktrdr/api/services/training_service.py").read_text()
+        tree = ast.parse(source)
 
-        # Check that self.model_loader is not assigned
-        assert (
-            "self.model_loader" not in source
-        ), "self.model_loader should not exist - ModelLoader was removed as unused"
+        # Check that there is no attribute access self.model_loader
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute):
+                if (
+                    isinstance(node.value, ast.Name)
+                    and node.value.id == "self"
+                    and node.attr == "model_loader"
+                ):
+                    raise AssertionError(
+                        "self.model_loader should not exist - ModelLoader was removed as unused"
+                    )
 
     def test_model_storage_import_is_lazy(self) -> None:
         """ModelStorage should be imported inside methods, not at module level."""

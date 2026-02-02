@@ -339,23 +339,24 @@ class BaseNeuralModel(ABC):
                 self.input_size = features.get("feature_count")
 
         # Last resort: infer from model weights
+        # Load weights once and reuse for both inference and model loading
+        model_state = torch.load(load_dir / "model.pt", weights_only=True)
+
         if self.input_size is None:
-            model_state = torch.load(load_dir / "model.pt", weights_only=True)
             first_layer_key = next(
                 (k for k in model_state.keys() if k.endswith(".weight")), None
             )
-            if first_layer_key:
-                self.input_size = model_state[first_layer_key].shape[1]
+            if first_layer_key is None:
+                raise ValueError(
+                    f"Cannot infer input_size from model weights at {path}: "
+                    f"no parameters ending in '.weight' found. "
+                    f"Available keys: {list(model_state.keys())}"
+                )
+            self.input_size = model_state[first_layer_key].shape[1]
 
-        if self.input_size is None:
-            raise ValueError(
-                f"Cannot determine input_size from model at {path}. "
-                "Check metadata.json, features.json, or model weights."
-            )
-
-        # Build and load model
+        # Build and load model (reuse already-loaded state)
         self.model = self.build_model(self.input_size)
-        self.model.load_state_dict(torch.load(load_dir / "model.pt", weights_only=True))
+        self.model.load_state_dict(model_state)
         self.model.eval()
 
     def _get_device(self) -> torch.device:
