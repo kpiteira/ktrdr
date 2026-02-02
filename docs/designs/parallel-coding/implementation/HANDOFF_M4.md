@@ -93,3 +93,27 @@
 **Next Task Notes:**
 - Task 4.5 is E2E validation - run full `kinfra impl` workflow
 - Need provisioned slots and test milestone file
+
+## Task 4.5 Complete: E2E Validation
+
+**E2E Test Results:** PASSED ✅
+
+**Bug Found and Fixed:**
+- Override template used `${KTRDR_DATA_DIR}` env vars that weren't defined in slot's `.env.sandbox`
+- Docker expanded undefined vars to empty strings, causing invalid mount specs like `:/app/data`
+- Fix: Changed override template to use absolute paths with `main_repo_path` parameter
+
+**Follow-up Issue Identified:**
+- Slot provisioning uses port ranges that conflict with existing sandbox infrastructure
+- Temporary manual fix applied to slot-1 ports during testing
+- Port allocation strategy should be revised in separate task
+
+**All E2E Steps Passed:**
+1. ✅ Worktree creation at `../ktrdr-impl-<feature>-<milestone>/`
+2. ✅ Branch creation `impl/<feature>-<milestone>`
+3. ✅ Slot claiming with registry update
+4. ✅ Override file generation with correct mounts
+5. ✅ Container startup with health check
+6. ✅ `kinfra worktrees` shows slot info (slot N, status, :port)
+7. ✅ Idempotency - duplicate impl fails with "already exists"
+8. ✅ Cleanup - containers stopped, slot released, worktree removed

@@ -180,7 +180,7 @@ class TestOverrideSharedDirs:
     """Tests that override includes shared data directory mounts."""
 
     def test_override_includes_data_dir(self, tmp_path: Path) -> None:
-        """Override should mount shared data directory."""
+        """Override should mount shared data directory from main repo."""
         from ktrdr.cli.kinfra.override import generate_override
         from ktrdr.cli.sandbox_registry import SlotInfo
 
@@ -188,16 +188,17 @@ class TestOverrideSharedDirs:
         slot.infrastructure_path = tmp_path
 
         worktree_path = Path("/path/to/worktree")
+        main_repo_path = Path("/path/to/main-repo")
 
-        generate_override(slot, worktree_path)
+        generate_override(slot, worktree_path, main_repo_path)
 
         override_file = tmp_path / "docker-compose.override.yml"
         content = override_file.read_text()
 
-        assert "KTRDR_DATA_DIR" in content or "data" in content.lower()
+        assert "/path/to/main-repo/data:/app/data" in content
 
     def test_override_includes_models_dir(self, tmp_path: Path) -> None:
-        """Override should mount shared models directory."""
+        """Override should mount shared models directory from main repo."""
         from ktrdr.cli.kinfra.override import generate_override
         from ktrdr.cli.sandbox_registry import SlotInfo
 
@@ -205,16 +206,37 @@ class TestOverrideSharedDirs:
         slot.infrastructure_path = tmp_path
 
         worktree_path = Path("/path/to/worktree")
+        main_repo_path = Path("/path/to/main-repo")
 
-        generate_override(slot, worktree_path)
+        generate_override(slot, worktree_path, main_repo_path)
 
         override_file = tmp_path / "docker-compose.override.yml"
         content = override_file.read_text()
 
-        assert "KTRDR_MODELS_DIR" in content or "models" in content.lower()
+        assert "/path/to/main-repo/models:/app/models" in content
 
     def test_override_includes_strategies_dir(self, tmp_path: Path) -> None:
-        """Override should mount shared strategies directory."""
+        """Override should mount shared strategies directory from main repo."""
+        from ktrdr.cli.kinfra.override import generate_override
+        from ktrdr.cli.sandbox_registry import SlotInfo
+
+        slot = MagicMock(spec=SlotInfo)
+        slot.infrastructure_path = tmp_path
+
+        worktree_path = Path("/path/to/worktree")
+        main_repo_path = Path("/path/to/main-repo")
+
+        generate_override(slot, worktree_path, main_repo_path)
+
+        override_file = tmp_path / "docker-compose.override.yml"
+        content = override_file.read_text()
+
+        assert "/path/to/main-repo/strategies:/app/strategies" in content
+
+    def test_override_defaults_main_repo_to_cwd(self, tmp_path: Path) -> None:
+        """Override should default main_repo_path to cwd if not provided."""
+        import os
+
         from ktrdr.cli.kinfra.override import generate_override
         from ktrdr.cli.sandbox_registry import SlotInfo
 
@@ -228,4 +250,6 @@ class TestOverrideSharedDirs:
         override_file = tmp_path / "docker-compose.override.yml"
         content = override_file.read_text()
 
-        assert "KTRDR_STRATEGIES_DIR" in content or "strategies" in content.lower()
+        # Should contain cwd/data, cwd/models, cwd/strategies
+        cwd = os.getcwd()
+        assert f"{cwd}/data:/app/data" in content

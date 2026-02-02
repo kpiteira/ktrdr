@@ -21,37 +21,44 @@ services:
       - {worktree_path}/research_agents:/app/research_agents
       - {worktree_path}/tests:/app/tests
       - {worktree_path}/config:/app/config:ro
-      - ${{KTRDR_DATA_DIR}}:/app/data
-      - ${{KTRDR_MODELS_DIR}}:/app/models
-      - ${{KTRDR_STRATEGIES_DIR}}:/app/strategies
+      - {main_repo_path}/data:/app/data
+      - {main_repo_path}/models:/app/models
+      - {main_repo_path}/strategies:/app/strategies
 
   backtest-worker:
     volumes:
       - {worktree_path}/ktrdr:/app/ktrdr
       - {worktree_path}/research_agents:/app/research_agents
-      - ${{KTRDR_DATA_DIR}}:/app/data
-      - ${{KTRDR_MODELS_DIR}}:/app/models
-      - ${{KTRDR_STRATEGIES_DIR}}:/app/strategies
+      - {main_repo_path}/data:/app/data
+      - {main_repo_path}/models:/app/models
+      - {main_repo_path}/strategies:/app/strategies
 
   training-worker:
     volumes:
       - {worktree_path}/ktrdr:/app/ktrdr
       - {worktree_path}/research_agents:/app/research_agents
-      - ${{KTRDR_DATA_DIR}}:/app/data
-      - ${{KTRDR_MODELS_DIR}}:/app/models
-      - ${{KTRDR_STRATEGIES_DIR}}:/app/strategies
+      - {main_repo_path}/data:/app/data
+      - {main_repo_path}/models:/app/models
+      - {main_repo_path}/strategies:/app/strategies
 """
 
 
-def generate_override(slot: SlotInfo, worktree_path: Path) -> None:
+def generate_override(
+    slot: SlotInfo, worktree_path: Path, main_repo_path: Path | None = None
+) -> None:
     """Generate docker-compose.override.yml for a claimed slot.
 
     Args:
         slot: The slot info with infrastructure_path
         worktree_path: Path to the worktree to mount
+        main_repo_path: Path to main repo for shared data dirs (defaults to cwd)
     """
+    if main_repo_path is None:
+        main_repo_path = Path.cwd()
+
     content = OVERRIDE_TEMPLATE.format(
         worktree_path=worktree_path,
+        main_repo_path=main_repo_path,
         timestamp=datetime.now().isoformat(),
     )
 
