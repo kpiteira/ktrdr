@@ -33,5 +33,22 @@ The `get_slot_for_worktree()` method and its tests already exist:
 
 No additional work needed.
 
-**Next Task Notes:**
-- Task 5.3 is E2E validation using the e2e agent workflow
+## Task 5.3 Complete: E2E Validation
+
+**E2E Test:** cli/kinfra-done-workflow
+
+**Result:** ✅ PASSED (after bug fix)
+
+**Bug Found and Fixed:**
+- Initial E2E run failed: `git worktree remove` didn't receive `--force` flag
+- Symptom: `kinfra done --force` crashed when worktree had uncommitted changes
+- Fix: Pass `--force` to git worktree remove when force=True
+- Added unit test to verify fix
+
+**All Validation Steps Passed:**
+1. ✅ Dirty check works (aborts without --force)
+2. ✅ Force flag works (--force bypasses dirty check)
+3. ✅ Slot released (claimed_by = null, status = stopped)
+4. ✅ Containers stopped (health check fails)
+5. ✅ Override file removed
+6. ✅ Worktree removed (directory gone)
