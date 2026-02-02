@@ -66,3 +66,19 @@
 **Next Task Notes:**
 - Task 3.5 is a VALIDATION task - run E2E test to verify all M3 functionality
 - Use E2E agent workflow: e2e-test-designer → e2e-test-architect → e2e-tester
+
+## Task 3.5 Complete: Execute E2E Test (VALIDATION)
+
+**E2E Test Results:** All 10 steps PASSED
+- Dry-run mode shows all 6 slots without creating files ✅
+- Provision creates 6 slot directories ✅
+- Each slot has .env.sandbox and docker-compose.yml ✅
+- Port allocations correct (API=8000+slot, DB=5432+slot) ✅
+- Profiles correct (1-4 light, 5 standard, 6 heavy) ✅
+- Registry v2 schema with version=2 and slots dict ✅
+- `kinfra sandbox slots` displays table with all 6 slots ✅
+- Idempotency works (second provision skips existing) ✅
+
+**Test Spec:** `.claude/skills/e2e-testing/tests/cli/kinfra-slot-provisioning.md`
+
+**Note:** Registry is stored at `~/.ktrdr/sandbox/instances.json` (without 's'), not `~/.ktrdr/sandboxes/registry.json`. This is correct - the implementation uses the existing registry location for backward compatibility.
