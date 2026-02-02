@@ -10,7 +10,7 @@ description: Use when working with sandbox environments, port mappings, docker c
 
 Load this skill when working on:
 
-- Sandbox or local-prod CLI commands
+- Sandbox or local-prod CLI commands (via `kinfra`)
 - Port allocation or conflict resolution
 - Docker compose in multi-instance contexts
 - `.env.sandbox` files or auto-detection
@@ -18,6 +18,7 @@ Load this skill when working on:
 - 1Password secrets integration
 - Host services (IB Gateway, GPU training) in sandbox context
 - Startability gate health checks
+- Worktree-based parallel development workflow
 
 ---
 
@@ -27,32 +28,63 @@ Sandboxes are **persistent, isolated development environments** running the full
 
 Sandboxes are NOT ephemeral. You create one, work in it for days/weeks with hot reload, switch branches, run tests — all within the same sandbox.
 
-### How Sandboxes Are Actually Used
+### Worktree Workflow (Recommended)
 
-While the CLI supports creating lightweight git worktrees (`ktrdr sandbox create`), **in practice sandboxes are long-lived clones of the repo**, not worktrees. The typical workflow is:
+The recommended workflow uses **kinfra** commands with pre-provisioned sandbox slots:
 
-1. Clone the repo to a new directory: `git clone ... ../ktrdr--feature-name`
-2. Register it as a sandbox: `cd ../ktrdr--feature-name && ktrdr sandbox init`
-3. Work in it for days/weeks, switching branches as needed
-4. Keep it around indefinitely
+1. **`uv run kinfra spec <feature>`** — Create spec worktree for design (no sandbox)
+2. **`uv run kinfra impl <feature/milestone>`** — Create impl worktree with sandbox slot
+3. Work on implementation with full E2E testing capability
+4. **`uv run kinfra done <name>`** — Clean up after PR merge (releases sandbox slot)
 
-The `ktrdr sandbox init` command is the primary path — it registers an existing directory (clone or worktree) as a sandbox instance, allocates a port slot, and generates `.env.sandbox`.
+This workflow uses a **slot pool** — pre-provisioned sandbox configurations (slots 1 and 2) that are claimed on-demand by impl worktrees. No manual slot allocation needed.
 
-The `ktrdr sandbox create` command (which creates worktrees) exists but is not the common workflow. Clones are preferred because they're fully independent — no shared git state, no risk of worktree locking conflicts, and they survive the parent repo being moved or deleted.
+**Naming conventions:**
+- Spec worktrees: `ktrdr-spec-<feature>` (no Docker containers)
+- Impl worktrees: `ktrdr-impl-<feature>` (has sandbox slot)
+- Long-lived clones: `ktrdr--<purpose>` (e.g., `ktrdr--stream-b`)
 
-**Naming convention:** Sandbox directories are named `ktrdr--<purpose>` (e.g., `ktrdr--stream-b`, `ktrdr--indicator-std`).
+### Legacy Workflow (Still Supported)
+
+For long-lived development environments, clones are still supported:
+
+1. Clone the repo: `git clone ... ../ktrdr--feature-name`
+2. Register as sandbox: `cd ../ktrdr--feature-name && uv run kinfra sandbox init`
+3. Work in it for days/weeks
+4. Clean up: `uv run kinfra sandbox destroy`
 
 ### Two Flavors
 
 | | Sandbox | Local-Prod |
 |---|---------|------------|
 | Purpose | Feature development, E2E testing | Real execution with host services |
-| Git setup | Clone (typical) or worktree | Clone (required) |
-| Slot | 1-10 | 0 (standard ports) |
+| Git setup | Worktree (via kinfra impl) or clone | Clone (required) |
+| Slot | 1-2 (slot pool) or 3-10 (manual) | 0 (standard ports) |
 | Count | Up to 10 | Singleton |
 | Host services | No (IB/GPU skipped) | Yes (IB Gateway, GPU training) |
 | 1Password item | `ktrdr-sandbox-dev` | `ktrdr-local-prod` |
-| Create command | `ktrdr sandbox init` (register existing clone) | `ktrdr local-prod init` |
+| Create command | `kinfra impl` (auto slot) or `kinfra sandbox init` | `kinfra local-prod init` |
+
+---
+
+## Slot Pool
+
+The slot pool provides pre-provisioned sandbox configurations for impl worktrees:
+
+- **Slots 1-2** are in the pool, available for `kinfra impl` to claim automatically
+- **Slot 0** is reserved for local-prod
+- **Slots 3-10** available for manual allocation via `kinfra sandbox init --slot N`
+
+When you run `kinfra impl`, it:
+1. Finds the first available slot in the pool
+2. Creates the worktree and `.env.sandbox`
+3. Starts containers on that slot's ports
+4. Records the claim in `~/.ktrdr/sandbox/slots.json`
+
+When you run `kinfra done`, it:
+1. Stops containers
+2. Releases the slot back to the pool
+3. Removes the worktree
 
 ---
 
@@ -207,48 +239,57 @@ from ktrdr.cli.sandbox_registry import (
 
 ## CLI Commands
 
-### Sandbox Commands
+### kinfra Worktree Commands (Recommended)
 
 ```bash
-ktrdr sandbox init [--slot <n>] [--name <name>]
-    # Register existing clone/worktree as sandbox (primary path)
+uv run kinfra spec <feature>
+    # Create spec worktree for design work (no sandbox)
+    # Creates ../ktrdr-spec-<feature> with branch spec/<feature>
 
-ktrdr sandbox create <name> [--branch <branch>] [--slot <n>]
-    # Creates worktree ../ktrdr--<name> (less commonly used)
+uv run kinfra impl <feature/milestone>
+    # Create impl worktree with sandbox slot
+    # Claims slot from pool, starts containers automatically
+    # Creates ../ktrdr-impl-<feature> with branch impl/<feature>
 
-ktrdr sandbox up [--no-wait] [--build] [--timeout <s>] [--no-secrets]
-    # Start stack + run startability gate
+uv run kinfra done <name> [--force]
+    # Complete worktree, release sandbox slot, remove worktree
+    # Checks for uncommitted/unpushed changes (use --force to bypass)
+    # Aliases: kinfra finish, kinfra complete
 
-ktrdr sandbox down [--volumes]
-    # Stop containers
-
-ktrdr sandbox destroy [--keep-worktree] [--force]
-    # Stop, remove volumes, unregister, optionally delete directory
-
-ktrdr sandbox list
-    # List all instances with status
-
-ktrdr sandbox status
-    # Current instance details
-
-ktrdr sandbox logs [service] [--follow] [--tail <n>]
-ktrdr sandbox shell [service]
-
-ktrdr sandbox init-shared [--from <path>] [--minimal]
-    # Initialize ~/.ktrdr/shared/ directories
+uv run kinfra worktrees
+    # List active worktrees with sandbox status
 ```
 
-### Local-Prod Commands
+### kinfra Sandbox Commands
 
 ```bash
-ktrdr local-prod init
+uv run kinfra sandbox slots
+    # List sandbox slot pool with claimed/available status
+
+uv run kinfra sandbox up [--no-wait] [--build] [--timeout <s>] [--no-secrets]
+    # Start stack + run startability gate
+
+uv run kinfra sandbox down [--volumes]
+    # Stop containers
+
+uv run kinfra sandbox init [--slot <n>] [--name <name>]
+    # Register existing clone/worktree as sandbox (legacy)
+
+uv run kinfra sandbox status
+    # Current instance details
+
+uv run kinfra sandbox logs [service] [--follow] [--tail <n>]
+```
+
+### kinfra Local-Prod Commands
+
+```bash
+uv run kinfra local-prod init
     # Must be a clone (not worktree), enforces singleton, uses slot 0
 
-ktrdr local-prod up [--no-wait] [--build] [--timeout <s>] [--no-secrets]
-ktrdr local-prod down [--volumes]
-ktrdr local-prod destroy [--force]
-ktrdr local-prod status
-ktrdr local-prod logs [service] [--follow] [--tail <n>]
+uv run kinfra local-prod up [--no-wait] [--build] [--timeout <s>] [--no-secrets]
+uv run kinfra local-prod down [--volumes]
+uv run kinfra local-prod status
 ```
 
 ### Key Files
@@ -413,10 +454,13 @@ ls .env.sandbox 2>/dev/null && echo "SANDBOX" || echo "NOT A SANDBOX"
 cat .env.sandbox
 
 # Full status
-ktrdr sandbox status
+uv run kinfra sandbox status
 
-# All instances
-ktrdr sandbox list
+# List all worktrees
+uv run kinfra worktrees
+
+# List sandbox slots
+uv run kinfra sandbox slots
 ```
 
 ---

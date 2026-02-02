@@ -618,3 +618,122 @@ class TestDoneNoSlotClaimed:
             "no sandbox slot" in result.output.lower()
             or "already released" in result.output.lower()
         )
+
+
+class TestDoneAliases:
+    """Tests for finish and complete command aliases."""
+
+    def test_finish_alias_works(self, runner) -> None:
+        """kinfra finish --help should show done command help."""
+        from ktrdr.cli.kinfra.main import app
+
+        result = runner.invoke(app, ["finish", "--help"])
+        assert result.exit_code == 0
+        assert "worktree" in result.output.lower()
+        assert "force" in result.output.lower()
+
+    def test_complete_alias_works(self, runner) -> None:
+        """kinfra complete --help should show done command help."""
+        from ktrdr.cli.kinfra.main import app
+
+        result = runner.invoke(app, ["complete", "--help"])
+        assert result.exit_code == 0
+        assert "worktree" in result.output.lower()
+        assert "force" in result.output.lower()
+
+    def test_aliases_hidden_from_main_help(self, runner) -> None:
+        """finish and complete should not appear in main help as commands."""
+        from ktrdr.cli.kinfra.main import app
+
+        result = runner.invoke(app, ["--help"])
+        assert result.exit_code == 0
+        # done should appear in commands section
+        assert "done" in result.output.lower()
+        # aliases should NOT appear as separate commands in help
+        # Note: "complete" appears in "--install-completion", so check for command line
+        lines = result.output.lower().split("\n")
+        command_lines = [
+            line.strip() for line in lines if line.strip().startswith(("finish ", "complete "))
+        ]
+        # No command lines starting with "finish " or "complete " (with space)
+        assert len(command_lines) == 0, f"Found unexpected alias commands: {command_lines}"
+
+    @patch("ktrdr.cli.kinfra.done.subprocess.run")
+    @patch("ktrdr.cli.kinfra.slots.stop_slot_containers")
+    @patch("ktrdr.cli.kinfra.override.remove_override")
+    @patch("ktrdr.cli.kinfra.done.load_registry")
+    @patch("ktrdr.cli.kinfra.done._find_worktree")
+    @patch("ktrdr.cli.kinfra.done._has_uncommitted_changes")
+    @patch("ktrdr.cli.kinfra.done._has_unpushed_commits")
+    def test_finish_executes_done_command(
+        self,
+        mock_unpushed: MagicMock,
+        mock_uncommitted: MagicMock,
+        mock_find: MagicMock,
+        mock_load_registry: MagicMock,
+        mock_remove_override: MagicMock,
+        mock_stop: MagicMock,
+        mock_run: MagicMock,
+        runner,
+    ) -> None:
+        """kinfra finish should execute done command logic."""
+        from ktrdr.cli.kinfra.main import app
+        from ktrdr.cli.sandbox_registry import SlotInfo
+
+        mock_find.return_value = Path("/tmp/ktrdr-impl-test-M1")
+        mock_uncommitted.return_value = False
+        mock_unpushed.return_value = False
+
+        mock_slot = MagicMock(spec=SlotInfo)
+        mock_slot.slot_id = 1
+        mock_registry = MagicMock()
+        mock_registry.get_slot_for_worktree.return_value = mock_slot
+        mock_load_registry.return_value = mock_registry
+
+        mock_run.return_value = MagicMock(returncode=0)
+
+        result = runner.invoke(app, ["finish", "test-M1"])
+
+        assert result.exit_code == 0
+        mock_stop.assert_called_once()
+        mock_registry.release_slot.assert_called_once()
+
+    @patch("ktrdr.cli.kinfra.done.subprocess.run")
+    @patch("ktrdr.cli.kinfra.slots.stop_slot_containers")
+    @patch("ktrdr.cli.kinfra.override.remove_override")
+    @patch("ktrdr.cli.kinfra.done.load_registry")
+    @patch("ktrdr.cli.kinfra.done._find_worktree")
+    @patch("ktrdr.cli.kinfra.done._has_uncommitted_changes")
+    @patch("ktrdr.cli.kinfra.done._has_unpushed_commits")
+    def test_complete_executes_done_command(
+        self,
+        mock_unpushed: MagicMock,
+        mock_uncommitted: MagicMock,
+        mock_find: MagicMock,
+        mock_load_registry: MagicMock,
+        mock_remove_override: MagicMock,
+        mock_stop: MagicMock,
+        mock_run: MagicMock,
+        runner,
+    ) -> None:
+        """kinfra complete should execute done command logic."""
+        from ktrdr.cli.kinfra.main import app
+        from ktrdr.cli.sandbox_registry import SlotInfo
+
+        mock_find.return_value = Path("/tmp/ktrdr-impl-test-M1")
+        mock_uncommitted.return_value = False
+        mock_unpushed.return_value = False
+
+        mock_slot = MagicMock(spec=SlotInfo)
+        mock_slot.slot_id = 1
+        mock_registry = MagicMock()
+        mock_registry.get_slot_for_worktree.return_value = mock_slot
+        mock_load_registry.return_value = mock_registry
+
+        mock_run.return_value = MagicMock(returncode=0)
+
+        result = runner.invoke(app, ["complete", "test-M1"])
+
+        assert result.exit_code == 0
+        mock_stop.assert_called_once()
+        mock_registry.release_slot.assert_called_once()
