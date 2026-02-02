@@ -7,6 +7,7 @@ sandbox management, deployment, and worktree operations.
 import typer
 
 from ktrdr.cli.kinfra.deploy import deploy_app
+from ktrdr.cli.kinfra.done import done_app
 from ktrdr.cli.kinfra.impl import impl_app
 from ktrdr.cli.kinfra.local_prod import local_prod_app
 from ktrdr.cli.kinfra.sandbox import sandbox_app
@@ -54,6 +55,11 @@ app.add_typer(
     worktrees_app,
     name="worktrees",
     help="List active worktrees with sandbox status",
+)
+app.add_typer(
+    done_app,
+    name="done",
+    help="Complete worktree, release sandbox slot, remove worktree",
 )
 
 
