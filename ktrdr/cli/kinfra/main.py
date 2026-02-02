@@ -7,6 +7,7 @@ sandbox management, deployment, and worktree operations.
 import typer
 
 from ktrdr.cli.kinfra.deploy import deploy_app
+from ktrdr.cli.kinfra.impl import impl_app
 from ktrdr.cli.kinfra.local_prod import local_prod_app
 from ktrdr.cli.kinfra.sandbox import sandbox_app
 from ktrdr.cli.kinfra.spec import spec_app
@@ -43,6 +44,11 @@ app.add_typer(
     spec_app,
     name="spec",
     help="Create spec worktree for design work",
+)
+app.add_typer(
+    impl_app,
+    name="impl",
+    help="Create impl worktree with sandbox slot",
 )
 app.add_typer(
     worktrees_app,

@@ -21,3 +21,26 @@
 - Use `docker compose --env-file .env.sandbox -f ... -f ... up -d` pattern
 - Health check endpoint: `/api/v1/health` (not `/health`)
 - Consider checking port availability before claiming slot
+
+## Task 4.1 Complete: Create impl command (core)
+
+**Implementation Notes:**
+- `impl_app` is a Typer subcommand group registered in main.py
+- `_parse_feature_milestone(value)` splits on "/" and returns (feature, milestone) tuple
+- `_find_milestone_file(feature, milestone, base_path)` searches docs/designs/<feature>/implementation/ for M<N>_*.md
+- Checks slot availability BEFORE creating worktree (GAP-6)
+- On Docker failure: releases slot but keeps worktree (GAP-7)
+
+**Import Pattern:**
+- `from ktrdr.cli.kinfra.impl import impl_app` - the Typer app
+- `from ktrdr.cli.kinfra.override import generate_override` - override generation
+- `from ktrdr.cli.kinfra.slots import start_slot_containers` - container start
+
+**Testing Notes:**
+- Mock `ktrdr.cli.kinfra.slots.start_slot_containers` not `ktrdr.cli.kinfra.impl.start_slot_containers`
+- Same for override module - mock at source not import point
+
+**Next Task Notes:**
+- Task 4.2 completes override.py with full template
+- Task 4.3 completes slots.py with container management
+- Both modules have basic implementations that work
