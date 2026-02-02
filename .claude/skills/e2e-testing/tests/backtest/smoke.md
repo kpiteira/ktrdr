@@ -1,7 +1,7 @@
 # Test: backtest/smoke
 
 **Purpose:** Quick validation that backtest starts, completes, and returns results
-**Duration:** <10 seconds
+**Duration:** <90 seconds
 **Category:** Backtest
 
 **Dependency:** Should run after `training/smoke` which creates the model
@@ -15,9 +15,9 @@
 - [backtest](../../preflight/backtest.md) — Model, strategy, data, workers
 
 **Test-specific checks:**
-- [ ] Model exists: `models/test_e2e_local_pull/1d_latest`
+- [ ] Model exists: `models/test_e2e_local_pull/1h_latest`
 - [ ] Strategy exists: `test_e2e_local_pull.yaml`
-- [ ] Data available: EURUSD 1d
+- [ ] Data available: EURUSD 1h
 
 ---
 
@@ -25,20 +25,22 @@
 
 ```json
 {
-  "model_path": "models/test_e2e_local_pull/1d_latest",
+  "model_path": "models/test_e2e_local_pull/1h_latest",
   "strategy_name": "test_e2e_local_pull",
   "symbol": "EURUSD",
-  "timeframe": "1d",
+  "timeframe": "1h",
   "start_date": "2024-01-01",
-  "end_date": "2024-01-31"
+  "end_date": "2024-06-30"
 }
 ```
 
 **Why this data:**
-- Short date range (~21 bars) for quick execution
-- Uses model created by training/smoke test
-- `1d_latest` symlink points to most recent training result
-- Tests basic workflow without long wait
+- 6-month date range with 1h timeframe (~4300 bars) provides:
+  - 50 bars warm-up (indicator lookback)
+  - ~4250 bars for actual trading - enough for meaningful trades
+- Uses model created by training/smoke test (1h variant)
+- `1h_latest` symlink points to most recent training result
+- Executes in <60s despite more bars (feature caching optimizes)
 
 ---
 
@@ -51,12 +53,12 @@
 RESPONSE=$(curl -s -X POST http://localhost:${KTRDR_API_PORT:-8000}/api/v1/backtests/start \
   -H "Content-Type: application/json" \
   -d '{
-    "model_path": "models/test_e2e_local_pull/1d_latest",
+    "model_path": "models/test_e2e_local_pull/1h_latest",
     "strategy_name": "test_e2e_local_pull",
     "symbol": "EURUSD",
-    "timeframe": "1d",
+    "timeframe": "1h",
     "start_date": "2024-01-01",
-    "end_date": "2024-01-31"
+    "end_date": "2024-06-30"
   }')
 
 OPERATION_ID=$(echo "$RESPONSE" | jq -r '.operation_id')
@@ -71,14 +73,14 @@ echo "Operation ID: $OPERATION_ID"
 
 **Command:**
 ```bash
-sleep 10
+sleep 60
 curl -s "http://localhost:${KTRDR_API_PORT:-8000}/api/v1/operations/$OPERATION_ID" | \
   jq '{status:.data.status, bars:.data.result_summary.total_bars}'
 ```
 
 **Expected:**
 - `status: "completed"`
-- `bars: ~21`
+- `bars: ~4250` (6 months of 1h data minus 50 warm-up)
 
 ### 3. Verify Results Present
 
@@ -98,8 +100,9 @@ curl -s "http://localhost:${KTRDR_API_PORT:-8000}/api/v1/operations/$OPERATION_I
 
 - [ ] Backtest starts successfully (operation_id returned)
 - [ ] Backtest completes (status = "completed")
-- [ ] Correct bar count (~21 bars)
+- [ ] Bars processed > 1000 (~4250 expected for 6mo 1h data)
 - [ ] Results present (total_return, total_trades)
+- [ ] Trades executed > 0 (meaningful trading activity)
 - [ ] No errors in logs
 
 ---

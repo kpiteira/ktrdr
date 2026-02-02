@@ -59,7 +59,7 @@ services:
   backend:
     build:
       context: .
-      dockerfile: docker/backend/Dockerfile.dev
+      dockerfile: deploy/docker/Dockerfile.dev
       cache_from:
         - ktrdr-backend:dev
     image: ktrdr-backend:dev
@@ -218,7 +218,7 @@ services:
   backtest-worker-1:
     build:
       context: .
-      dockerfile: docker/backend/Dockerfile.dev
+      dockerfile: deploy/docker/Dockerfile.dev
       cache_from:
         - ktrdr-backend:dev
     image: ktrdr-backend:dev
@@ -272,7 +272,7 @@ services:
   backtest-worker-2:
     build:
       context: .
-      dockerfile: docker/backend/Dockerfile.dev
+      dockerfile: deploy/docker/Dockerfile.dev
       cache_from:
         - ktrdr-backend:dev
     image: ktrdr-backend:dev
@@ -325,7 +325,7 @@ services:
   training-worker-1:
     build:
       context: .
-      dockerfile: docker/backend/Dockerfile.dev
+      dockerfile: deploy/docker/Dockerfile.dev
       cache_from:
         - ktrdr-backend:dev
     image: ktrdr-backend:dev
@@ -378,7 +378,7 @@ services:
   training-worker-2:
     build:
       context: .
-      dockerfile: docker/backend/Dockerfile.dev
+      dockerfile: deploy/docker/Dockerfile.dev
       cache_from:
         - ktrdr-backend:dev
     image: ktrdr-backend:dev
@@ -433,7 +433,7 @@ services:
   mcp-local:
     build:
       context: .
-      dockerfile: docker/backend/Dockerfile.dev
+      dockerfile: deploy/docker/Dockerfile.dev
       cache_from:
         - ktrdr-backend:dev
     image: ktrdr-backend:dev
@@ -480,7 +480,7 @@ services:
   #   profiles: [local-prod]
   #   build:
   #     context: .
-  #     dockerfile: docker/backend/Dockerfile.dev
+  #     dockerfile: deploy/docker/Dockerfile.dev
   #     cache_from:
   #       - ktrdr-backend:dev
   #   image: ktrdr-backend:dev
@@ -534,7 +534,7 @@ services:
   #   profiles: [local-prod]
   #   build:
   #     context: .
-  #     dockerfile: docker/backend/Dockerfile.dev
+  #     dockerfile: deploy/docker/Dockerfile.dev
   #     cache_from:
   #       - ktrdr-backend:dev
   #   image: ktrdr-backend:dev
@@ -588,7 +588,7 @@ services:
   #   profiles: [local-prod]
   #   build:
   #     context: .
-  #     dockerfile: docker/backend/Dockerfile.dev
+  #     dockerfile: deploy/docker/Dockerfile.dev
   #     cache_from:
   #       - ktrdr-backend:dev
   #   image: ktrdr-backend:dev
@@ -642,7 +642,7 @@ services:
   #   profiles: [local-prod]
   #   build:
   #     context: .
-  #     dockerfile: docker/backend/Dockerfile.dev
+  #     dockerfile: deploy/docker/Dockerfile.dev
   #     cache_from:
   #       - ktrdr-backend:dev
   #   image: ktrdr-backend:dev

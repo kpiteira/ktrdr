@@ -1,12 +1,10 @@
 """Model loader for loading trained neural network models."""
 
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
-import torch
-
-from ..neural.models.mlp import MLPTradingModel
-from ..training.model_storage import ModelStorage
+if TYPE_CHECKING:
+    import torch
 
 
 class ModelLoader:
@@ -19,6 +17,9 @@ class ModelLoader:
             models_dir: Base directory containing trained models. If None, uses
                        MODELS_DIR environment variable or defaults to 'models'.
         """
+        # Lazy import to avoid torch at module load time
+        from ..training.model_storage import ModelStorage
+
         self.model_storage = ModelStorage(models_dir)
 
     def load_model(
@@ -27,7 +28,7 @@ class ModelLoader:
         symbol: str,
         timeframe: str,
         version: Optional[str] = None,
-    ) -> tuple[torch.nn.Module, dict[str, Any]]:
+    ) -> tuple["torch.nn.Module", dict[str, Any]]:
         """Load a trained model with its configuration.
 
         Args:
@@ -54,6 +55,9 @@ class ModelLoader:
 
         # If we have a state dict, rebuild the model
         if isinstance(model, dict):  # State dict
+            # Lazy import to avoid torch at module load time
+            from ..neural.models.mlp import MLPTradingModel
+
             model_type = config["model"]["type"].lower()
 
             if model_type == "mlp":
@@ -103,7 +107,7 @@ class ModelLoader:
 
     def load_latest_model(
         self, strategy_name: str
-    ) -> tuple[torch.nn.Module, dict[str, Any]]:
+    ) -> tuple["torch.nn.Module", dict[str, Any]]:
         """Load the most recent model for a strategy.
 
         Args:

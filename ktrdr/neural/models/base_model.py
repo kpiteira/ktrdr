@@ -311,7 +311,15 @@ class BaseNeuralModel(ABC):
 
         # Load configuration
         with open(load_dir / "config.json") as f:
-            self.config = json.load(f)
+            loaded_config = json.load(f)
+
+        # Handle both config formats:
+        # - Old/direct format: {"architecture": {...}, ...} - model config directly
+        # - Full strategy format: {"model": {"architecture": {...}}, ...} - full strategy config
+        if "model" in loaded_config and "architecture" not in loaded_config:
+            self.config = loaded_config["model"]
+        else:
+            self.config = loaded_config
 
         # Load metadata
         with open(load_dir / "metadata.json") as f:
@@ -320,13 +328,36 @@ class BaseNeuralModel(ABC):
         # Default to True for backwards compatibility with old models
         # that don't have is_trained field in metadata
         self.is_trained = metadata.get("is_trained", True)
-        self.input_size = metadata["input_size"]
+        self.input_size = metadata.get("input_size")
 
-        # Build and load model
-        if self.input_size:
-            self.model = self.build_model(self.input_size)
-            self.model.load_state_dict(torch.load(load_dir / "model.pt"))
-            self.model.eval()
+        # If input_size is None, try to get from features.json
+        if self.input_size is None:
+            features_path = load_dir / "features.json"
+            if features_path.exists():
+                with open(features_path) as f:
+                    features = json.load(f)
+                self.input_size = features.get("feature_count")
+
+        # Last resort: infer from model weights
+        # Load weights once and reuse for both inference and model loading
+        model_state = torch.load(load_dir / "model.pt", weights_only=True)
+
+        if self.input_size is None:
+            first_layer_key = next(
+                (k for k in model_state.keys() if k.endswith(".weight")), None
+            )
+            if first_layer_key is None:
+                raise ValueError(
+                    f"Cannot infer input_size from model weights at {path}: "
+                    f"no parameters ending in '.weight' found. "
+                    f"Available keys: {list(model_state.keys())}"
+                )
+            self.input_size = model_state[first_layer_key].shape[1]
+
+        # Build and load model (reuse already-loaded state)
+        self.model = self.build_model(self.input_size)
+        self.model.load_state_dict(model_state)
+        self.model.eval()
 
     def _get_device(self) -> torch.device:
         """Get the appropriate device for computation.

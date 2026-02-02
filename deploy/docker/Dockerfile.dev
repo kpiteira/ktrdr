@@ -34,7 +34,8 @@ COPY pyproject.toml uv.lock ./
 
 # Install Python dependencies with UV sync
 # This layer will be cached as long as dependency files don't change
-RUN uv sync --frozen --no-install-project
+# Include ML extras for training/backtest workers (dev mode installs everything)
+RUN uv sync --frozen --no-install-project --extra ml
 
 # Create non-root user for better security even in development
 RUN useradd -m ktrdr && \

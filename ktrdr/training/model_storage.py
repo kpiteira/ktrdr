@@ -5,9 +5,10 @@ import pickle
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
-import torch
+if TYPE_CHECKING:
+    import torch
 
 
 def _get_default_models_dir() -> str:
@@ -34,7 +35,7 @@ class ModelStorage:
 
     def save_model(
         self,
-        model: torch.nn.Module,
+        model: "torch.nn.Module",
         strategy_name: str,
         symbol: str,
         timeframe: str,
@@ -64,6 +65,9 @@ class ModelStorage:
         Returns:
             Path to saved model directory (format: models/{strategy}/{timeframe}_v{N}/)
         """
+        # Lazy import to avoid torch at module load time
+        import torch
+
         # Create version directory
         model_dir = self._create_version_directory(strategy_name, symbol, timeframe)
 
@@ -224,6 +228,9 @@ class ModelStorage:
 
         if not model_dir.exists():
             raise FileNotFoundError(f"Model not found: {model_dir}")
+
+        # Lazy import to avoid torch at module load time
+        import torch
 
         # Load model
         try:

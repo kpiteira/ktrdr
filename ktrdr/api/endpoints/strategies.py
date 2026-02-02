@@ -57,7 +57,6 @@ from pydantic import BaseModel
 from ktrdr import get_logger
 from ktrdr.errors import ConfigurationError
 from ktrdr.indicators import INDICATOR_REGISTRY, ensure_all_registered
-from ktrdr.training.model_storage import ModelStorage
 
 logger = get_logger(__name__)
 
@@ -192,7 +191,9 @@ async def list_strategies() -> StrategiesResponse:
     if not strategy_dir.exists():
         return StrategiesResponse(strategies=[])
 
-    # Initialize existing systems
+    # Lazy import to avoid torch at module load time
+    from ktrdr.training.model_storage import ModelStorage
+
     model_storage = ModelStorage()
 
     for yaml_file in strategy_dir.glob("*.yaml"):
