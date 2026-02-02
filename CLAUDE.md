@@ -156,7 +156,7 @@ ls .env.sandbox 2>/dev/null && echo "SANDBOX" || echo "MAIN ENV"
 
 ### What is a Sandbox?
 
-Sandboxes are isolated KTRDR development environments that run in parallel. Each has its own Docker containers on different ports. The directory name tells you which one: `ktrdr--<name>` (e.g., `ktrdr--indicator-work`).
+Sandboxes are isolated KTRDR development environments that run in parallel. Each has its own Docker containers on different ports. The directory name tells you which one: `ktrdr-impl-<name>` (e.g., `ktrdr-impl-genome-M1`).
 
 ### Port Differences
 
@@ -169,42 +169,70 @@ Sandboxes are isolated KTRDR development environments that run in parallel. Each
 ### Sandbox Commands
 
 ```bash
-uv run ktrdr sandbox status    # Current instance details
-uv run ktrdr sandbox list      # All instances
-uv run ktrdr sandbox up        # Start this sandbox
-uv run ktrdr sandbox down      # Stop this sandbox
+uv run kinfra sandbox status   # Current instance details
+uv run kinfra sandbox slots    # List all sandbox slots
+uv run kinfra sandbox up       # Start this sandbox
+uv run kinfra sandbox down     # Stop this sandbox
 ```
 
 ### Why This Matters
 
 - **curl/API calls** must use the correct port (read from `.env.sandbox`)
-- **Docker commands** target project-specific containers (e.g., `ktrdr--indicator-work-backend-1`)
+- **Docker commands** target project-specific containers (e.g., `ktrdr-impl-genome-M1-backend-1`)
 - **The CLI auto-detects** the correct backend from `.env.sandbox`
 
-If you're in a sandbox, run `uv run ktrdr sandbox status` to see the full configuration.
+If you're in a sandbox, run `uv run kinfra sandbox status` to see the full configuration.
 
 ---
 
 ## Essential Commands
 
 ```bash
-# Start development environment
-docker compose up
+# Infrastructure management (kinfra)
+uv run kinfra spec <feature>           # Create spec worktree for design
+uv run kinfra impl <feature/milestone> # Create impl worktree with sandbox
+uv run kinfra done <name>              # Complete worktree, release sandbox
+uv run kinfra worktrees                # List active worktrees
+uv run kinfra sandbox slots            # List sandbox slots
+uv run kinfra sandbox up/down          # Manual sandbox control
 
 # Run tests (fast feedback loop)
 make test-unit        # <2s, run frequently
 make quality          # Lint + format + typecheck
 
 # CLI
-ktrdr --help
-ktrdr data show AAPL 1d --start-date 2024-01-01
-ktrdr ops
+uv run ktrdr --help
+uv run ktrdr data show AAPL 1d --start-date 2024-01-01
+uv run ktrdr ops
 
 # Check workers
 curl http://localhost:8000/api/v1/workers | jq
 ```
 
 For more commands, the `deployment` skill has comprehensive reference
+
+---
+
+## Docker Compose Warning
+
+**NEVER run `docker compose up` directly in impl worktrees.**
+
+Each impl worktree uses a sandbox slot with pre-configured ports. Always use kinfra commands:
+- `uv run kinfra sandbox up/down` for sandbox control
+- `uv run kinfra impl` / `uv run kinfra done` for worktree lifecycle
+
+Running `docker compose up` directly can cause port conflicts between sandboxes.
+
+---
+
+## Worktree Workflow
+
+For parallel development work:
+
+1. **`kinfra spec <feature>`** — Create lightweight worktree for design (no Docker)
+2. **`kinfra impl <feature/milestone>`** — Create worktree with sandbox slot
+3. Work on implementation with full E2E testing capability
+4. **`kinfra done <name>`** — Clean up after PR merge (releases sandbox slot)
 
 ---
 
