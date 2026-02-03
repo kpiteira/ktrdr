@@ -47,8 +47,14 @@ COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --extra ml --no-install-project
 
-# Copy the project files
-COPY . .
+# Copy application code (selective copy for smaller build context)
+COPY README.md ./
+COPY ktrdr ./ktrdr
+COPY mcp ./mcp
+COPY config ./config
+COPY strategies ./strategies
+COPY alembic ./alembic
+COPY alembic.ini ./
 
 # Install the project package with ML extras
 RUN --mount=type=cache,target=/root/.cache/uv \

@@ -48,7 +48,8 @@ EOF
 # Install Python dependencies with UV sync
 # This layer will be cached as long as dependency files don't change
 # Include ML extras for training/backtest workers (dev mode installs everything)
-RUN uv sync --frozen --no-install-project --extra ml
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-install-project --extra ml
 
 # Create non-root user for better security even in development
 RUN useradd -m ktrdr && \
