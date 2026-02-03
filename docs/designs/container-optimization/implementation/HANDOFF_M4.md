@@ -109,6 +109,24 @@ Code looks in `/app/strategies/` first. For new strategies, either:
 1. Copy to container: `docker cp file.yaml container:/app/strategies/`
 2. Or rebuild images with new strategies
 
+**Investigation: Why Backtest Generated 0 Trades**
+
+Initial backtest completed with 0 trades over 3 months. Deep investigation with logs revealed:
+
+1. **Backtest infrastructure worked correctly:**
+   - Loaded 115,243 rows of EURUSD 1h data
+   - Filtered to 1,394 bars for Jan-Mar 2024
+   - Processed 1,344 bars (skipping 50 for indicator warm-up)
+   - Neural model loaded and ran inference on each bar
+
+2. **Root cause: Model bias**
+   - Model outputs SELL with ~75-80% probability on every bar
+   - Example: `{'BUY': 0.169, 'HOLD': 0.076, 'SELL': 0.754}`
+   - Position starts FLAT → can't SELL from FLAT
+   - Model never outputs BUY → no trades can ever execute
+
+3. **Conclusion:** This is a **model training issue**, not an infrastructure issue. The backtest code correctly processes data, loads models, runs inference, and respects position constraints.
+
 ---
 
 ## M4 Complete - Ready for PR
@@ -118,3 +136,5 @@ All tasks completed:
 - 4.2: Canary docker-compose updated for split images
 - 4.3: Split images built and canary started
 - 4.4: Full E2E validation - backtest + training both exercised
+
+**Container optimization validated:** Split images work correctly. Backend (533MB, no torch) orchestrates workers (1.35GB, with torch) for both training and backtest operations.

@@ -1,0 +1,72 @@
+name: v3_e2e_test
+description: Minimal v3 strategy for E2E testing
+version: '3.0'
+scope: universal
+
+training_data:
+  symbols:
+    mode: single
+    symbol: EURUSD
+  timeframes:
+    mode: single
+    list: [1h]
+    base_timeframe: 1h
+  history_required: 100
+
+indicators:
+  rsi_14:
+    type: RSI
+    period: 14
+    source: close
+
+fuzzy_sets:
+  rsi_14:
+    oversold:
+      type: triangular
+      parameters: [0, 20, 40]
+    neutral:
+      type: triangular
+      parameters: [30, 50, 70]
+    overbought:
+      type: triangular
+      parameters: [60, 80, 100]
+    indicator: rsi_14
+
+nn_inputs:
+  - fuzzy_set: rsi_14
+    timeframes: all
+
+model:
+  type: mlp
+  architecture:
+    hidden_layers: [16, 8]
+    activation: relu
+    output_activation: softmax
+    dropout: 0.1
+  features:
+    include_price_context: false
+    lookback_periods: 1
+    scale_features: true
+  training:
+    learning_rate: 0.001
+    batch_size: 32
+    epochs: 3
+    optimizer: adam
+    early_stopping:
+      enabled: false
+
+decisions:
+  output_format: classification
+  confidence_threshold: 0.6
+  position_awareness: false
+
+training:
+  method: supervised
+  labels:
+    source: zigzag
+    zigzag_threshold: 0.02
+    label_lookahead: 10
+  data_split:
+    train: 0.7
+    validation: 0.15
+    test: 0.15
