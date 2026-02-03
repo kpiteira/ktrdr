@@ -33,42 +33,12 @@ Use `True in workflow or "on" in workflow` to check.
 - Full multi-arch build takes 15-30+ minutes
 - This task is explicitly marked "optional"
 
-## Task 5.3: Push and Verify CI Build (External Validation)
+## Task 5.3: Prepare for CI Verification
 
 **What was done:**
-- Confirmed all changes committed (2 commits ahead of main)
-- Documented verification steps for post-push validation
+- Confirmed all changes committed
+- Created M5b milestone for post-merge verification
 
-**This is an external system validation** that requires:
-1. Pushing to GitHub (or merging PR)
-2. Observing GitHub Actions workflow
-3. Verifying ghcr.io images
+**Next step:** After M5 is merged to main, run `/kmilestone container-optimization/M5b` to verify CI worked correctly.
 
-**Post-Push Verification Steps:**
-
-1. **Monitor CI:**
-   - Go to GitHub Actions tab
-   - Watch "Build and Push Images" workflow
-   - Verify all three matrix jobs complete (backend, worker-cpu, worker-gpu)
-
-2. **Verify images in registry:**
-   ```bash
-   # Pull and inspect
-   docker pull ghcr.io/kpiteira/ktrdr-backend:latest
-   docker pull ghcr.io/kpiteira/ktrdr-worker-cpu:latest
-   docker pull ghcr.io/kpiteira/ktrdr-worker-gpu:latest
-
-   # Check sizes
-   docker images | grep ghcr.io/kpiteira/ktrdr
-
-   # Verify multi-arch (backend and worker-cpu)
-   docker manifest inspect ghcr.io/kpiteira/ktrdr-backend:latest | grep architecture
-   docker manifest inspect ghcr.io/kpiteira/ktrdr-worker-cpu:latest | grep architecture
-   ```
-
-**Acceptance Criteria (to be validated after CI):**
-- [ ] CI workflow triggered
-- [ ] All three matrix jobs pass
-- [ ] Images available in ghcr.io
-- [ ] Backend and worker-cpu have multi-arch manifests (amd64 + arm64)
-- [ ] Image tags correct (sha-xxx + latest)
+See: `M5b_cicd-verification.md` for verification tasks.
