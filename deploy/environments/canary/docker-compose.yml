@@ -41,7 +41,7 @@ services:
       - ktrdr-canary
 
   # ---------------------------------------------------------------------------
-  # Backend API (Production Image)
+  # Backend API (Production Image - no torch)
   # ---------------------------------------------------------------------------
   backend:
     image: ktrdr-backend:test
@@ -84,10 +84,10 @@ services:
       - ktrdr-canary
 
   # ---------------------------------------------------------------------------
-  # Backtest Worker (Production Image)
+  # Backtest Worker (CPU Worker Image)
   # ---------------------------------------------------------------------------
   backtest-worker:
-    image: ktrdr-backend:test
+    image: ktrdr-worker-cpu:test
     container_name: ktrdr-backtest-worker-canary
     # M6: Graceful shutdown - gives worker 30s to save checkpoint before SIGKILL
     stop_grace_period: 30s
@@ -129,10 +129,10 @@ services:
       - ktrdr-canary
 
   # ---------------------------------------------------------------------------
-  # Training Worker (Production Image)
+  # Training Worker (CPU Worker Image)
   # ---------------------------------------------------------------------------
   training-worker:
-    image: ktrdr-backend:test
+    image: ktrdr-worker-cpu:test
     container_name: ktrdr-training-worker-canary
     # M6: Graceful shutdown - gives worker 30s to save checkpoint before SIGKILL
     stop_grace_period: 30s

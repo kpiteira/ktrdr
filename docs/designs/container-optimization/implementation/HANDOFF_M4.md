@@ -35,7 +35,21 @@ Valid strategies are: `v3_minimal`, `v3_single_indicator`, etc.
 | Training Lifecycle | ⚠️ Test script issue |
 | Backtest Lifecycle | ✅ PASS |
 
+## Task 4.2 Complete: Update Canary for Split Images
+
+**What was done:**
+- Updated docker-compose.yml image references for split architecture
+- Backend: `ktrdr-backend:test` (no torch)
+- Workers: `ktrdr-worker-cpu:test` (CPU torch)
+
+**Reminder for Task 4.3:**
+The Dockerfile.backend doesn't have alembic. For canary with split images, either:
+1. Run migrations using worker image: `docker run --rm ktrdr-worker-cpu:test ...`
+2. Or add alembic to Dockerfile.backend (future consideration)
+
 **Next Task Notes:**
-Task 4.2 updates canary docker-compose to use split images:
-- Backend: `ktrdr-backend:test` (from Dockerfile.backend, no torch)
-- Workers: `ktrdr-worker-cpu:test` (from Dockerfile.worker-cpu, CPU torch)
+Task 4.3 builds the split images and starts canary. Build commands:
+```bash
+docker build -f deploy/docker/Dockerfile.backend -t ktrdr-backend:test .
+docker build -f deploy/docker/Dockerfile.worker-cpu -t ktrdr-worker-cpu:test .
+```
