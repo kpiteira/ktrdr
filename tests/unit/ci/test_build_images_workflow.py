@@ -110,15 +110,14 @@ class TestBuildImagesWorkflow:
         ), f"cache-to should use matrix.image: {cache_to}"
 
     def test_image_base_env_variable(self, workflow: dict) -> None:
-        """Workflow should use IMAGE_BASE env variable for image naming."""
+        """Workflow should use IMAGE_BASE (not IMAGE_NAME) for multi-image naming."""
         env = workflow.get("env", {})
-        # Should have IMAGE_BASE for constructing image names
-        assert (
-            "IMAGE_BASE" in env or "IMAGE_NAME" not in env
-        ), "Should use IMAGE_BASE for multi-image builds"
+        # Should have IMAGE_BASE for constructing image names and NOT use IMAGE_NAME
+        assert "IMAGE_BASE" in env, "Should use IMAGE_BASE for multi-image builds"
+        assert "IMAGE_NAME" not in env, "Should not use IMAGE_NAME for multi-image builds"
 
-    def test_merge_job_handles_all_images(self, workflow: dict) -> None:
-        """Merge job should create manifests for all three images."""
+    def test_merge_job_verifies_all_images(self, workflow: dict) -> None:
+        """Merge job should verify manifests for all images after build completes."""
         # The merge job should iterate over all images
         merge_job = workflow["jobs"].get("merge")
         assert merge_job is not None, "Merge job should exist for multi-arch builds"
