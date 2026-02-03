@@ -26,16 +26,16 @@ class TestDockerfileWorkerCpu:
 
     def test_has_ml_extra(self, dockerfile_content: str) -> None:
         """Verify Dockerfile uses --extra ml flag for torch/sklearn."""
-        assert "--extra ml" in dockerfile_content, (
-            "Worker image should include ML extras for torch"
-        )
+        assert (
+            "--extra ml" in dockerfile_content
+        ), "Worker image should include ML extras for torch"
 
     def test_injects_cpu_pytorch_source(self, dockerfile_content: str) -> None:
         """Verify CPU-only PyTorch source is injected."""
         assert "pytorch-cpu" in dockerfile_content, "Should inject pytorch-cpu index"
-        assert "download.pytorch.org/whl/cpu" in dockerfile_content, (
-            "Should use CPU wheel URL"
-        )
+        assert (
+            "download.pytorch.org/whl/cpu" in dockerfile_content
+        ), "Should use CPU wheel URL"
 
     def test_source_injection_before_sync(self, dockerfile_content: str) -> None:
         """Verify source injection happens BEFORE uv sync --extra ml."""
@@ -45,9 +45,9 @@ class TestDockerfileWorkerCpu:
 
         assert injection_pos != -1, "Should have CPU source injection"
         assert sync_ml_pos != -1, "Should have uv sync command"
-        assert injection_pos < sync_ml_pos, (
-            "CPU source should be injected BEFORE uv sync"
-        )
+        assert (
+            injection_pos < sync_ml_pos
+        ), "CPU source should be injected BEFORE uv sync"
 
     def test_uses_multi_stage_build(self, dockerfile_content: str) -> None:
         """Verify multi-stage build is used."""
@@ -73,12 +73,12 @@ class TestDockerfileWorkerCpu:
         """Verify all required directories are copied."""
         required = ["ktrdr", "config", "strategies"]
         for dir_name in required:
-            assert f"/app/{dir_name}" in dockerfile_content, (
-                f"Should copy {dir_name} directory"
-            )
+            assert (
+                f"/app/{dir_name}" in dockerfile_content
+            ), f"Should copy {dir_name} directory"
 
     def test_uses_uv_sync_frozen(self, dockerfile_content: str) -> None:
         """Verify uv sync uses --frozen flag for reproducible builds."""
-        assert "uv sync --frozen" in dockerfile_content, (
-            "Should use --frozen flag with uv sync"
-        )
+        assert (
+            "uv sync --frozen" in dockerfile_content
+        ), "Should use --frozen flag with uv sync"

@@ -26,26 +26,26 @@ class TestDockerfileWorkerGpu:
 
     def test_has_ml_extra(self, dockerfile_content: str) -> None:
         """Verify Dockerfile uses --extra ml flag for torch/sklearn."""
-        assert "--extra ml" in dockerfile_content, (
-            "GPU Worker image should include ML extras for torch"
-        )
+        assert (
+            "--extra ml" in dockerfile_content
+        ), "GPU Worker image should include ML extras for torch"
 
     def test_uses_cuda_pytorch_source(self, dockerfile_content: str) -> None:
         """Verify CUDA PyTorch source is injected."""
-        assert "pytorch-cu" in dockerfile_content, (
-            "GPU worker should inject CUDA PyTorch source"
-        )
-        assert "pytorch-cpu" not in dockerfile_content, (
-            "GPU worker should NOT use CPU-only source"
-        )
+        assert (
+            "pytorch-cu" in dockerfile_content
+        ), "GPU worker should inject CUDA PyTorch source"
+        assert (
+            "pytorch-cpu" not in dockerfile_content
+        ), "GPU worker should NOT use CPU-only source"
 
     def test_header_indicates_gpu_worker(self, dockerfile_content: str) -> None:
         """Verify header comments indicate this is for GPU workers."""
         # Check the first few lines have GPU/CUDA context
         first_lines = dockerfile_content[:500].lower()
-        assert "gpu" in first_lines or "cuda" in first_lines, (
-            "Header should indicate this is for GPU workers"
-        )
+        assert (
+            "gpu" in first_lines or "cuda" in first_lines
+        ), "Header should indicate this is for GPU workers"
 
     def test_uses_multi_stage_build(self, dockerfile_content: str) -> None:
         """Verify multi-stage build is used."""
@@ -69,6 +69,6 @@ class TestDockerfileWorkerGpu:
 
     def test_uses_uv_sync_frozen(self, dockerfile_content: str) -> None:
         """Verify uv sync uses --frozen flag for reproducible builds."""
-        assert "uv sync --frozen" in dockerfile_content, (
-            "Should use --frozen flag with uv sync"
-        )
+        assert (
+            "uv sync --frozen" in dockerfile_content
+        ), "Should use --frozen flag with uv sync"

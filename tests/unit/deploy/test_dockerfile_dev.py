@@ -26,21 +26,21 @@ class TestDockerfileDev:
 
     def test_has_ml_extra(self, dockerfile_content: str) -> None:
         """Verify Dockerfile uses --extra ml flag for torch/sklearn."""
-        assert "--extra ml" in dockerfile_content, (
-            "Dev image should include ML extras for torch"
-        )
+        assert (
+            "--extra ml" in dockerfile_content
+        ), "Dev image should include ML extras for torch"
 
     def test_injects_cpu_pytorch_source(self, dockerfile_content: str) -> None:
         """Verify CPU-only PyTorch source is injected.
 
         Dev machines (Mac) don't have GPUs, so CPU torch saves ~2.8GB.
         """
-        assert "pytorch-cpu" in dockerfile_content, (
-            "Should inject pytorch-cpu index for smaller image"
-        )
-        assert "download.pytorch.org/whl/cpu" in dockerfile_content, (
-            "Should use CPU wheel URL"
-        )
+        assert (
+            "pytorch-cpu" in dockerfile_content
+        ), "Should inject pytorch-cpu index for smaller image"
+        assert (
+            "download.pytorch.org/whl/cpu" in dockerfile_content
+        ), "Should use CPU wheel URL"
 
     def test_source_injection_before_sync(self, dockerfile_content: str) -> None:
         """Verify source injection happens BEFORE uv sync --extra ml."""
@@ -49,9 +49,9 @@ class TestDockerfileDev:
 
         assert injection_pos != -1, "Should have CPU source injection"
         assert sync_ml_pos != -1, "Should have uv sync command"
-        assert injection_pos < sync_ml_pos, (
-            "CPU source should be injected BEFORE uv sync"
-        )
+        assert (
+            injection_pos < sync_ml_pos
+        ), "CPU source should be injected BEFORE uv sync"
 
     def test_has_healthcheck(self, dockerfile_content: str) -> None:
         """Verify healthcheck is configured."""
