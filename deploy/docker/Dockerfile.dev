@@ -1,5 +1,6 @@
 # Development Dockerfile for KTRDR
 # Optimized for quick rebuilds and live code changes
+# Uses CPU-only PyTorch (~500MB vs ~4GB with CUDA)
 
 FROM python:3.13-slim as dev
 
@@ -31,6 +32,17 @@ RUN mkdir -p /root/.cache/pip /root/.cache/uv && \
 
 # Copy ONLY dependency files first - this is the key caching optimization
 COPY pyproject.toml uv.lock ./
+
+# Inject CPU-only PyTorch source (Mac dev machines have no GPU)
+RUN cat >> pyproject.toml << 'EOF'
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+EOF
 
 # Install Python dependencies with UV sync
 # This layer will be cached as long as dependency files don't change
