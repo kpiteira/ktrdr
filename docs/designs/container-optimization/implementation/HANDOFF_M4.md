@@ -42,14 +42,32 @@ Valid strategies are: `v3_minimal`, `v3_single_indicator`, etc.
 - Backend: `ktrdr-backend:test` (no torch)
 - Workers: `ktrdr-worker-cpu:test` (CPU torch)
 
-**Reminder for Task 4.3:**
-The Dockerfile.backend doesn't have alembic. For canary with split images, either:
-1. Run migrations using worker image: `docker run --rm ktrdr-worker-cpu:test ...`
-2. Or add alembic to Dockerfile.backend (future consideration)
+## Task 4.3 Complete: Build and Start Canary with Split Images
+
+**What was done:**
+- Built both split images successfully
+- Started canary with split image configuration
+- Verified all services healthy
+
+**Correction: Dockerfile.backend DOES have alembic**
+Previous handoff note was incorrect. The backend Dockerfile includes alembic at lines 36-37 and 65-66.
+
+**Image sizes (as expected):**
+| Image | Size | Torch |
+|-------|------|-------|
+| ktrdr-backend:test | 533MB | None |
+| ktrdr-worker-cpu:test | 1.35GB | 2.8.0+cpu |
+
+**Verification:**
+- Backend: healthy, no torch (ModuleNotFoundError as expected)
+- Workers: healthy, torch 2.8.0+cpu available
+
+**Canary is running on:**
+- Backend: http://localhost:18000
+- Backtest Worker: http://localhost:15003
+- Training Worker: http://localhost:15004
 
 **Next Task Notes:**
-Task 4.3 builds the split images and starts canary. Build commands:
-```bash
-docker build -f deploy/docker/Dockerfile.backend -t ktrdr-backend:test .
-docker build -f deploy/docker/Dockerfile.worker-cpu -t ktrdr-worker-cpu:test .
-```
+Task 4.4 runs functional tests. Remember:
+- Test script uses invalid strategy `neuro_mean_reversion`
+- DB may need migrations if fresh: `docker exec ktrdr-backend-canary python -m alembic upgrade head`
