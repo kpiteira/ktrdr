@@ -1,0 +1,80 @@
+# =============================================================================
+# KTRDR Backend - Production (No ML Dependencies)
+# =============================================================================
+# This image runs the API backend only. It does NOT include torch or ML deps.
+# Workers use separate images with ML dependencies.
+#
+# Build: docker build -f deploy/docker/Dockerfile.backend -t ktrdr-backend .
+# =============================================================================
+
+FROM python:3.13-slim AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install UV
+RUN pip install --no-cache-dir uv
+
+# Copy dependency files
+COPY pyproject.toml uv.lock ./
+
+# Install dependencies WITHOUT ML extras
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-install-project
+
+# Copy application code (README.md required by pyproject.toml)
+COPY README.md ./
+COPY ktrdr ./ktrdr
+COPY mcp ./mcp
+COPY config ./config
+COPY strategies ./strategies
+COPY alembic ./alembic
+COPY alembic.ini ./
+
+# Install the project
+RUN uv sync --frozen --no-dev
+
+# =============================================================================
+# Runtime Stage
+# =============================================================================
+FROM python:3.13-slim AS runtime
+
+# Create non-root user FIRST (before copying files)
+RUN groupadd -r ktrdr && \
+    useradd -r -g ktrdr -d /app -s /sbin/nologin ktrdr
+
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tini \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy from builder with correct ownership
+COPY --from=builder --chown=ktrdr:ktrdr /app/.venv /app/.venv
+COPY --from=builder --chown=ktrdr:ktrdr /app/ktrdr /app/ktrdr
+COPY --from=builder --chown=ktrdr:ktrdr /app/mcp /app/mcp
+COPY --from=builder --chown=ktrdr:ktrdr /app/config /app/config
+COPY --from=builder --chown=ktrdr:ktrdr /app/strategies /app/strategies
+COPY --from=builder --chown=ktrdr:ktrdr /app/alembic /app/alembic
+COPY --from=builder --chown=ktrdr:ktrdr /app/alembic.ini /app/
+COPY --from=builder --chown=ktrdr:ktrdr /app/pyproject.toml /app/
+
+# Set PATH for venv
+ENV PATH="/app/.venv/bin:$PATH"
+
+USER ktrdr
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -fs http://localhost:8000/api/v1/health || exit 1
+
+EXPOSE 8000
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["uvicorn", "ktrdr.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
