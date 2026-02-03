@@ -9,6 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     ENVIRONMENT=development \
     PYTHONPATH=/app \
+    PATH="/app/.venv/bin:$PATH" \
     PIP_CACHE_DIR=/root/.cache/pip \
     UV_CACHE_DIR=/root/.cache/uv
 

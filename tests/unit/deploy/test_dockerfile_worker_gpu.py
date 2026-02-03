@@ -30,11 +30,11 @@ class TestDockerfileWorkerGpu:
             "--extra ml" in dockerfile_content
         ), "GPU Worker image should include ML extras for torch"
 
-    def test_uses_cuda_pytorch_source(self, dockerfile_content: str) -> None:
-        """Verify CUDA PyTorch source is injected."""
+    def test_installs_cuda_pytorch(self, dockerfile_content: str) -> None:
+        """Verify CUDA PyTorch is installed from PyTorch index."""
         assert (
-            "pytorch-cu" in dockerfile_content
-        ), "GPU worker should inject CUDA PyTorch source"
+            "download.pytorch.org/whl/cu" in dockerfile_content
+        ), "GPU worker should install from CUDA PyTorch index"
         assert (
             "pytorch-cpu" not in dockerfile_content
         ), "GPU worker should NOT use CPU-only source"

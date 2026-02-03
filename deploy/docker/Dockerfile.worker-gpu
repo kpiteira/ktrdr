@@ -2,13 +2,9 @@
 # KTRDR Worker - GPU (CUDA 12.6 PyTorch)
 # =============================================================================
 # This image runs training workers with CUDA-enabled PyTorch.
-# Size depends on torch variant installed.
+# ~2.5GB+ due to CUDA dependencies.
 #
 # Build: docker build -f deploy/docker/Dockerfile.worker-gpu -t ktrdr-worker-gpu .
-#
-# Note: The --frozen flag uses the existing lockfile. To get CUDA torch:
-#   1. Regenerate uv.lock with CUDA source in pyproject.toml, OR
-#   2. Replace --frozen with --upgrade in uv sync commands
 # Requires NVIDIA Container Toolkit for GPU access at runtime.
 # =============================================================================
 # Multi-stage build for optimized size and security
@@ -45,20 +41,9 @@ RUN pip install --no-cache-dir uv
 # Copy dependency files
 COPY pyproject.toml uv.lock ./
 
-# Inject CUDA PyTorch source (cu126) for GPU support
-RUN cat >> pyproject.toml << 'EOF'
-
-[tool.uv.sources]
-torch = { index = "pytorch-cu126" }
-
-[[tool.uv.index]]
-name = "pytorch-cu126"
-url = "https://download.pytorch.org/whl/cu126"
-EOF
-
 # Install Python dependencies with uv sync (creates .venv)
 # Use BuildKit cache mount to persist uv package cache between CI builds
-# Include ML extras for torch and sklearn (CUDA version)
+# Include ML extras for torch and sklearn
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --extra ml --no-install-project
 
@@ -68,6 +53,11 @@ COPY . .
 # Install the project package with ML extras
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --extra ml
+
+# Replace CPU torch with CUDA torch from PyTorch index
+# This must happen AFTER all uv sync calls to override the lockfile's CPU version
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install torch --index-url https://download.pytorch.org/whl/cu126 --reinstall
 
 # --------------------------------------
 # STAGE 2: Runtime stage
