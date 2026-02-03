@@ -1,4 +1,16 @@
-# KTRDR Backend Dockerfile
+# =============================================================================
+# KTRDR Worker - GPU (CUDA 12.6 PyTorch)
+# =============================================================================
+# This image runs training workers with CUDA-enabled PyTorch.
+# Size depends on torch variant installed.
+#
+# Build: docker build -f deploy/docker/Dockerfile.worker-gpu -t ktrdr-worker-gpu .
+#
+# Note: The --frozen flag uses the existing lockfile. To get CUDA torch:
+#   1. Regenerate uv.lock with CUDA source in pyproject.toml, OR
+#   2. Replace --frozen with --upgrade in uv sync commands
+# Requires NVIDIA Container Toolkit for GPU access at runtime.
+# =============================================================================
 # Multi-stage build for optimized size and security
 
 # --------------------------------------
@@ -33,17 +45,29 @@ RUN pip install --no-cache-dir uv
 # Copy dependency files
 COPY pyproject.toml uv.lock ./
 
+# Inject CUDA PyTorch source (cu126) for GPU support
+RUN cat >> pyproject.toml << 'EOF'
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu126" }
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+EOF
+
 # Install Python dependencies with uv sync (creates .venv)
 # Use BuildKit cache mount to persist uv package cache between CI builds
+# Include ML extras for torch and sklearn (CUDA version)
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-install-project
+    uv sync --frozen --no-dev --extra ml --no-install-project
 
 # Copy the project files
 COPY . .
 
-# Install the project package
+# Install the project package with ML extras
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+    uv sync --frozen --no-dev --extra ml
 
 # --------------------------------------
 # STAGE 2: Runtime stage
@@ -51,8 +75,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM python:3.13-slim AS runtime
 
 # Set metadata labels following best practices
-LABEL org.opencontainers.image.title="KTRDR Backend"
-LABEL org.opencontainers.image.description="KTRDR trading system backend API"
+LABEL org.opencontainers.image.title="KTRDR GPU Worker"
+LABEL org.opencontainers.image.description="KTRDR training worker with CUDA PyTorch"
 LABEL org.opencontainers.image.version="1.0.5.5"
 LABEL org.opencontainers.image.licenses="Proprietary"
 LABEL org.opencontainers.image.authors="KTRDR Team"
@@ -96,12 +120,12 @@ RUN chown -R $APP_USER:$APP_USER /app
 # Setup volume for data persistence
 VOLUME ["/app/data", "/app/logs"]
 
-# Configure health check
+# Configure health check (worker port)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -fs http://localhost:8000/api/v1/health || exit 1
+    CMD curl -fs http://localhost:5002/health || exit 1
 
-# Expose the API port
-EXPOSE 8000
+# Expose the training worker port
+EXPOSE 5002
 
 # Switch to non-root user
 USER $APP_USER
@@ -109,5 +133,5 @@ USER $APP_USER
 # Set up entrypoint with tini for proper signal handling
 ENTRYPOINT ["/usr/bin/tini", "--"]
 
-# Default command to run the FastAPI server
-CMD ["python", "-m", "uvicorn", "ktrdr.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--log-config", "/app/ktrdr/config/logging_config.json"]
+# Default command to run the training worker
+CMD ["python", "-m", "uvicorn", "ktrdr.training.training_worker_api:app", "--host", "0.0.0.0", "--port", "5002"]
