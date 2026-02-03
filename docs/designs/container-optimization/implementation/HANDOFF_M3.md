@@ -93,3 +93,30 @@ Task 3.5 adds `archive/` to .dockerignore.
 - No changes needed
 
 The task was already complete from previous work.
+
+---
+
+## E2E Validation Complete
+
+**Tests executed:**
+1. `infra/backend-lazy-imports` - ✅ PASSED (validates code-level lazy imports)
+2. `infra/image-torch-availability` - ✅ PASSED (validates image-level torch config)
+
+**Issues found and fixed during E2E:**
+
+1. **Dockerfile.dev PATH issue**
+   - Problem: `python` command used system python, not venv
+   - Fix: Added `PATH="/app/.venv/bin:$PATH"` to ENV
+
+2. **Dockerfile.worker-gpu CUDA torch overwritten**
+   - Problem: Final `uv sync --frozen` re-installed CPU torch after CUDA install
+   - Fix: Moved `uv pip install torch --index-url cu126` to AFTER final uv sync
+
+**Final image validation:**
+
+| Image | Size | Torch Version | CUDA |
+|-------|------|---------------|------|
+| ktrdr-backend:prod | 534MB | None | N/A |
+| ktrdr-backend:dev | 3.26GB | 2.8.0+cpu | No |
+| ktrdr-worker-cpu:test | 1.35GB | 2.8.0+cpu | No |
+| ktrdr-worker-gpu:test | 9.19GB | 2.10.0+cu126 | 12.6 |
