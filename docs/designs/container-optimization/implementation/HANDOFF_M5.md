@@ -32,3 +32,43 @@ Use `True in workflow or "on" in workflow` to check.
 - Task 5.1 unit tests verified workflow structure
 - Full multi-arch build takes 15-30+ minutes
 - This task is explicitly marked "optional"
+
+## Task 5.3: Push and Verify CI Build (External Validation)
+
+**What was done:**
+- Confirmed all changes committed (2 commits ahead of main)
+- Documented verification steps for post-push validation
+
+**This is an external system validation** that requires:
+1. Pushing to GitHub (or merging PR)
+2. Observing GitHub Actions workflow
+3. Verifying ghcr.io images
+
+**Post-Push Verification Steps:**
+
+1. **Monitor CI:**
+   - Go to GitHub Actions tab
+   - Watch "Build and Push Images" workflow
+   - Verify all three matrix jobs complete (backend, worker-cpu, worker-gpu)
+
+2. **Verify images in registry:**
+   ```bash
+   # Pull and inspect
+   docker pull ghcr.io/kpiteira/ktrdr-backend:latest
+   docker pull ghcr.io/kpiteira/ktrdr-worker-cpu:latest
+   docker pull ghcr.io/kpiteira/ktrdr-worker-gpu:latest
+
+   # Check sizes
+   docker images | grep ghcr.io/kpiteira/ktrdr
+
+   # Verify multi-arch (backend and worker-cpu)
+   docker manifest inspect ghcr.io/kpiteira/ktrdr-backend:latest | grep architecture
+   docker manifest inspect ghcr.io/kpiteira/ktrdr-worker-cpu:latest | grep architecture
+   ```
+
+**Acceptance Criteria (to be validated after CI):**
+- [ ] CI workflow triggered
+- [ ] All three matrix jobs pass
+- [ ] Images available in ghcr.io
+- [ ] Backend and worker-cpu have multi-arch manifests (amd64 + arm64)
+- [ ] Image tags correct (sha-xxx + latest)
