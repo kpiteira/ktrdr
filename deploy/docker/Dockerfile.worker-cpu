@@ -1,0 +1,75 @@
+# =============================================================================
+# KTRDR Worker - CPU (CPU-only PyTorch)
+# =============================================================================
+# This image runs backtest and training workers with CPU-only torch.
+# ~500MB vs ~3.3GB for CUDA version.
+#
+# Build: docker build -f deploy/docker/Dockerfile.worker-cpu -t ktrdr-worker-cpu .
+# =============================================================================
+
+FROM python:3.13-slim AS builder
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir uv
+
+COPY pyproject.toml uv.lock ./
+
+# Inject CPU-only PyTorch source
+RUN cat >> pyproject.toml << 'EOF'
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+EOF
+
+# Install with ML dependencies (CPU torch)
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --extra ml --no-install-project
+
+# Copy application code (README.md required by pyproject.toml)
+COPY README.md ./
+COPY ktrdr ./ktrdr
+COPY config ./config
+COPY strategies ./strategies
+
+RUN uv sync --frozen --no-dev --extra ml
+
+# =============================================================================
+# Runtime Stage
+# =============================================================================
+FROM python:3.13-slim AS runtime
+
+RUN groupadd -r ktrdr && \
+    useradd -r -g ktrdr -d /app -s /sbin/nologin ktrdr
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tini \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder --chown=ktrdr:ktrdr /app/.venv /app/.venv
+COPY --from=builder --chown=ktrdr:ktrdr /app/ktrdr /app/ktrdr
+COPY --from=builder --chown=ktrdr:ktrdr /app/config /app/config
+COPY --from=builder --chown=ktrdr:ktrdr /app/strategies /app/strategies
+COPY --from=builder --chown=ktrdr:ktrdr /app/pyproject.toml /app/
+
+ENV PATH="/app/.venv/bin:$PATH"
+
+USER ktrdr
+
+# Default: backtest worker (can be overridden)
+EXPOSE 5003
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["uvicorn", "ktrdr.backtesting.backtest_worker:app", "--host", "0.0.0.0", "--port", "5003"]
