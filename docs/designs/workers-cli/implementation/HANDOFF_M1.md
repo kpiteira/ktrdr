@@ -29,3 +29,15 @@
 **Next Task Notes:**
 - Task 1.3 requires Docker sandbox running (`uv run kinfra sandbox up`)
 - Compare CLI output with direct API call to `/api/v1/workers`
+
+## Task 1.3 Complete: E2E Validation
+
+**E2E Test:** `cli/workers-command` — ✅ PASSED (6 steps)
+
+**Validated:**
+- Table output displays 5 workers with TYPE, STATUS, GPU, ENDPOINT, OPERATION columns
+- JSON output is valid array matching API response exactly
+- Worker count and IDs match between CLI and direct API call
+- Both commands exit with code 0
+
+**New test added to catalog:** `.claude/skills/e2e-testing/tests/cli/workers-command.md`
