@@ -26,7 +26,7 @@ This aligns with CLAUDE.md: *"Push back if something feels wrong"*
 
 ## Workflow
 
-### Step 1: Fetch ALL Review Comments
+### Step 1: Fetch ALL Review Comments (FULL CONTENT)
 
 **IMPORTANT**: Reviews come from TWO different GitHub APIs. You must check BOTH:
 
@@ -36,11 +36,13 @@ PR_NUMBER=$(gh pr view --json number -q '.number' 2>/dev/null)
 REPO=$(gh repo view --json nameWithOwner -q '.nameWithOwner')
 
 # 1. Fetch inline review comments (Copilot posts line-specific comments here)
-gh api "repos/$REPO/pulls/$PR_NUMBER/comments" | jq '.[].body'
+gh api "repos/$REPO/pulls/$PR_NUMBER/comments" --jq '.[] | {user: .user.login, file: .path, line: .line, body: .body}'
 
 # 2. Fetch general PR comments (Claude GitHub Action posts here)
-gh api "repos/$REPO/issues/$PR_NUMBER/comments" | jq '.[].body'
+gh api "repos/$REPO/issues/$PR_NUMBER/comments" --jq '.[] | {user: .user.login, body: .body}'
 ```
+
+**⚠️ DO NOT TRUNCATE**: Claude's reviews can be 2000+ characters with important details in "Areas for Improvement" sections. Never use `.body[:500]` or similar truncation - always fetch the FULL `.body` content.
 
 **Why two sources?**
 - **Pull request review comments** (`/pulls/.../comments`): Comments attached to specific code lines during a review. Copilot typically posts here.
