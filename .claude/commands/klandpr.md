@@ -194,10 +194,10 @@ This blocks until all checks complete.
 ### Phase 6: Merge
 
 ```bash
-gh pr merge --squash --delete-branch
+gh pr merge --squash
 ```
 
-**Important:** This merges the PR on GitHub (not a local merge). The `--delete-branch` removes the remote branch after merge.
+**Important:** This merges the PR on GitHub (not a local merge). GitHub automatically deletes the remote branch after merge. We do NOT use `--delete-branch` because it tries to switch to main locally, which fails in a worktree.
 
 ### Phase 7: Cleanup
 
