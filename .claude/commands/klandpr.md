@@ -31,7 +31,8 @@ Before starting the PR cycle, ensure the milestone report is visible. If kmilest
    ```bash
    # From current directory name, derive the handoff path
    # e.g., ktrdr-impl-genome-M1 → look for HANDOFF_M1.md
-   MILESTONE=$(basename "$PWD" | sed 's/ktrdr-impl-[^-]*-//')
+   # e.g., ktrdr-impl-cli-client-M1 → look for HANDOFF_M1.md
+   MILESTONE=$(basename "$PWD" | sed 's/.*-//')
    find docs/designs -name "HANDOFF_${MILESTONE}.md" 2>/dev/null
    ```
 
@@ -199,7 +200,8 @@ WORKTREE_NAME=$(basename "$PWD" | sed 's/ktrdr-impl-//')
 
 # Get session title (feature/milestone format)
 # e.g., genome-M1 → genome/M1
-SESSION_TITLE=$(echo "$WORKTREE_NAME" | sed 's/-/\//')
+# e.g., cli-client-M1 → cli-client/M1
+SESSION_TITLE=$(echo "$WORKTREE_NAME" | sed 's/-\([^-]*\)$/\/\1/')
 
 # Remove agent-deck session
 agent-deck remove "$SESSION_TITLE"
