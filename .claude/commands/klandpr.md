@@ -84,13 +84,19 @@ Before starting the PR cycle, ensure the milestone report is visible. If kmilest
    ```
    If issues, fix them before proceeding.
 
-2. **Create the PR:**
+2. **Check for existing PR (resume capability):**
+   ```bash
+   EXISTING_PR=$(gh pr view --json number -q '.number' 2>/dev/null)
+   ```
+   If PR already exists, skip creation and proceed to step 3.
+
+3. **Create the PR (if needed):**
    ```bash
    gh pr create --base main --fill
    ```
    Use the milestone summary from kmilestone output for the PR description.
 
-3. **Request Copilot review:**
+4. **Request Copilot review:**
    ```bash
    REPO=$(gh repo view --json nameWithOwner -q '.nameWithOwner')
    PR_NUMBER=$(gh pr view --json number -q '.number')
@@ -98,7 +104,7 @@ Before starting the PR cycle, ensure the milestone report is visible. If kmilest
      -f "reviewers[]=copilot-pull-request-reviewer[bot]"
    ```
 
-4. **Request Claude review:**
+5. **Request Claude review:**
    ```bash
    gh pr comment $PR_NUMBER --body "@claude review"
    ```
@@ -111,19 +117,23 @@ Poll every 60 seconds for review comments:
 REPO=$(gh repo view --json nameWithOwner -q '.nameWithOwner')
 PR_NUMBER=$(gh pr view --json number -q '.number')
 
-# Check for inline review comments (Copilot posts here)
-INLINE_COMMENTS=$(gh api "repos/$REPO/pulls/$PR_NUMBER/comments" --jq 'length')
+# Check for Copilot inline review comments
+COPILOT_COMMENTS=$(gh api "repos/$REPO/pulls/$PR_NUMBER/comments" \
+  --jq '[.[] | select(.user.login == "Copilot")] | length')
 
-# Check for issue comments (Claude posts here)
-ISSUE_COMMENTS=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --jq 'length')
+# Check for Claude bot review (not the user's @claude request!)
+CLAUDE_COMMENTS=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" \
+  --jq '[.[] | select(.user.login == "claude[bot]")] | length')
 ```
 
 **Wait conditions:**
 - Check every 60 seconds
 - Maximum wait: 10 minutes (10 iterations)
 - Consider reviews complete when:
-  - Copilot: At least 1 inline comment exists, OR
-  - Claude: Issue comment containing "review" from claude bot exists
+  - Copilot: At least 1 comment from user "Copilot" exists, AND/OR
+  - Claude: At least 1 comment from user "claude[bot]" exists
+
+**Important:** Don't count the user's `@claude review` request as a review!
 
 **While waiting:** Output a countdown: "Waiting for reviews... (X/10)"
 
