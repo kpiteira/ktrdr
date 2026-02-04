@@ -35,12 +35,14 @@ agent-deck add -t "spec/genome" -g "dev" -c claude ../ktrdr-spec-genome
 
 ### `/kworktree impl <feature/milestone>`
 
-Create an impl worktree with sandbox slot and agent-deck session.
+Create an impl worktree with sandbox slot, agent-deck session, and auto-start the milestone.
 
 **Steps:**
 1. Run: `uv run kinfra impl <feature/milestone>`
 2. Extract the worktree path from output (e.g., `../ktrdr-impl-<feature>-<milestone>`)
 3. Run: `agent-deck add -t "<feature>/<milestone>" -g "dev" -c claude <worktree_path>`
+4. Run: `agent-deck session start "<feature>/<milestone>"` (starts Claude in the session)
+5. Run: `agent-deck session send "<feature>/<milestone>" "/kmilestone <feature>/<milestone>"` (auto-starts milestone implementation)
 
 **Example:**
 ```bash
@@ -51,7 +53,15 @@ uv run kinfra impl genome/M1
 
 agent-deck add -t "genome/M1" -g "dev" -c claude ../ktrdr-impl-genome-M1
 # Adds session to agent-deck TUI
+
+agent-deck session start "genome/M1"
+# Starts Claude Code in the session
+
+agent-deck session send "genome/M1" "/kmilestone genome/M1"
+# Sends the milestone command to start implementation
 ```
+
+**Note:** After running this command, switch to the agent-deck TUI to monitor the milestone implementation progress.
 
 ---
 

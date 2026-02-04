@@ -149,9 +149,13 @@ If context becomes too large during execution, you may ask the user to run `/com
 
 ---
 
-### 3. Complete Milestone
+### 3. Complete Milestone (MANDATORY OUTPUT)
 
-After all tasks complete, produce an enhanced summary with tracked data:
+**⚠️ YOU MUST OUTPUT THIS SECTION. DO NOT SKIP IT.**
+
+After all tasks complete, you MUST produce this summary. This is not optional — the user depends on this output for PR creation and documentation.
+
+**If you've lost track of challenges/e2e tests due to context, reconstruct them by reading the handoff file sections for each task.**
 
 ```
 ## Milestone Complete: M4 - Cleanup
@@ -168,6 +172,8 @@ After all tasks complete, produce an enhanced summary with tracked data:
 | cli/kinfra-spec-workflow | 8 | ✅ PASSED |
 | infra/sandbox-init | 5 | ✅ PASSED |
 
+(If no VALIDATION tasks or no E2E tests run, state: "No E2E tests in this milestone")
+
 ### Challenges & Solutions
 
 | Task | Challenge | Solution |
@@ -176,8 +182,25 @@ After all tasks complete, produce an enhanced summary with tracked data:
 | 4.3 | Task already complete from earlier task | Added unit tests to validate existing code |
 | 4.5 | No existing E2E test in catalog | Designed new test via e2e-test-architect |
 
+(If no challenges encountered, state: "No significant challenges encountered")
+
+### Failed Tests (Not Due to This Work)
+
+List any test failures observed during the milestone that were:
+- Pre-existing (failed before your changes)
+- Flaky (passed on retry)
+- Unrelated to milestone scope
+
+| Test | Failure | Status |
+|------|---------|--------|
+| test_foo.py::test_bar | Timeout on CI | Pre-existing, not in scope |
+
+(If none, state: "All test failures were addressed")
+
 Ready for PR creation.
 ```
+
+**CRITICAL: Do not say "Ready for PR creation" without outputting the tables above.**
 
 **Notes on the summary tables:**
 
@@ -186,6 +209,7 @@ Ready for PR creation.
   - PR descriptions (copy directly)
   - Future debugging (what went wrong before)
   - Process improvement (recurring issues)
+- **Failed Tests**: Document any flaky or pre-existing failures so they don't block the PR or cause confusion during review.
 
 ---
 
