@@ -332,8 +332,15 @@ All must pass before completion:
 **EXCLUDE** (wastes tokens):
 - Task completion status (already in plan)
 - Process steps (already in this command)
-- Test counts or coverage numbers (observable)
+- Unit test counts or coverage numbers (observable from `make test-unit`)
 - File listings (observable from codebase)
+
+**INCLUDE for VALIDATION tasks:**
+- E2E test name and result (PASSED/FAILED)
+- Number of steps executed
+- Any failure details or investigation notes
+
+E2E tests are significant outcomes — they validate real system behavior, not just code correctness. Record them in the handoff so kmilestone can aggregate them into the milestone report.
 
 **Target size**: Under 100 lines total for the entire handoff file.
 
@@ -404,18 +411,6 @@ def test_help_shows_flags(self) -> None:
 The `runner` fixture (from `tests/unit/cli/conftest.py`) provides `CleanCliRunner` which automatically strips ANSI escape codes from output. Rich/Typer applies color codes in CI that break string assertions.
 
 See `tests/unit/cli/CLAUDE.md` for full CLI testing guidelines.
-
----
-
-## Multiple Tasks
-
-When given multiple tasks (a milestone or phase):
-
-1. Implement in the order specified in the plan
-2. Each task follows the full workflow above
-3. **Update handoff after EACH task** (not just at the end)
-4. Commit after each task (not just at the end)
-5. The final task in each milestone is a VALIDATION task — it runs the E2E test
 
 ---
 
