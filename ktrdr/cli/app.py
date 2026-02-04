@@ -27,6 +27,7 @@ from ktrdr.cli.commands.show import show_app
 from ktrdr.cli.commands.status import status
 from ktrdr.cli.commands.train import train
 from ktrdr.cli.commands.validate import validate_cmd
+from ktrdr.cli.commands.workers import workers
 from ktrdr.cli.sandbox_detect import (
     normalize_api_url,
     resolve_api_url,
@@ -105,6 +106,7 @@ app.command()(follow)
 app.command()(ops)
 app.command()(cancel)
 app.command()(resume)
+app.command()(workers)
 
 # Register M3 commands
 app.add_typer(list_app)  # ktrdr list strategies/models/checkpoints
