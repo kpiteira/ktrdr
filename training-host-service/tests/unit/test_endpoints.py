@@ -119,6 +119,27 @@ class TestTrainingEndpoints:
             assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
             assert "GPU allocation failed" in response.json()["detail"]
 
+    def test_start_training_db_auth_error_has_actionable_hint(self, client):
+        """Test DB auth failures return a clear host-service startup hint."""
+        training_config = {
+            "strategy_yaml": "model: {}\ntraining: {}\n",
+        }
+
+        with patch("endpoints.training.get_service") as mock_get_service:
+            mock_service = Mock()
+            mock_service.create_session.side_effect = Exception(
+                'Failed to create training session: password authentication failed for user "ktrdr"'
+            )
+            mock_service.sessions = {}
+            mock_get_service.return_value = mock_service
+
+            response = client.post("/training/start", json=training_config)
+
+            assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+            detail = response.json()["detail"]
+            assert "database authentication failed" in detail
+            assert "kinfra local-prod start-training-host" in detail
+
     def test_list_training_sessions(self, client, mock_training_service):
         """Test listing training sessions."""
         with patch(
