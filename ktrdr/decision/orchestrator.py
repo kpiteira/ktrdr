@@ -183,11 +183,12 @@ class DecisionOrchestrator:
                     "Backtest will use real-time feature computation (slow and may fail for v3)."
                 )
 
-    def prepare_feature_cache(self, historical_data: pd.DataFrame) -> None:
+    def prepare_feature_cache(self, historical_data: dict[str, pd.DataFrame]) -> None:
         """Pre-compute all features for backtesting performance.
 
         Args:
-            historical_data: Complete historical OHLCV data for backtesting
+            historical_data: Dict mapping timeframes to OHLCV DataFrames.
+                For single-TF: {"1h": df}. For multi-TF: {"1h": df, "5m": df, ...}
         """
         if self.feature_cache is None:
             return

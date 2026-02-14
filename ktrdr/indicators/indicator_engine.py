@@ -136,6 +136,18 @@ class IndicatorEngine:
         # Get extra params from model_extra (all fields except 'type')
         params = definition.model_extra or {}
 
+        # Filter params to only include fields the indicator's Params class accepts.
+        # AI-generated strategies may include params like 'source' for OHLC-based
+        # indicators (ADX, ATR, Stochastic) that don't accept them.
+        accepted_fields = set(indicator_class.Params.model_fields.keys())
+        if accepted_fields:
+            filtered = {k: v for k, v in params.items() if k in accepted_fields}
+            if dropped := set(params) - set(filtered):
+                logger.debug(
+                    f"Dropped unsupported params {dropped} for {definition.type}"
+                )
+            params = filtered
+
         # Create and return indicator instance
         try:
             return indicator_class(**params)

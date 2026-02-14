@@ -471,6 +471,10 @@ def _get_host_service_env(cwd: Path) -> dict[str, str]:
         env["KTRDR_MODELS_DIR"] = str(shared_dir / "models")
         env["KTRDR_STRATEGIES_DIR"] = str(shared_dir / "strategies")
 
+    # Host services may read either modern or legacy model env names.
+    env["KTRDR_DATA_MODELS_DIR"] = env["KTRDR_MODELS_DIR"]
+    env["MODELS_DIR"] = env["KTRDR_MODELS_DIR"]
+
     return env
 
 
@@ -546,9 +550,14 @@ def _start_host_service(cwd: Path, service_id: str, env: dict[str, str]) -> int:
         env["PYTHONPATH"] = str(cwd)
 
     # Start the service
+    command = ["uv", "run", "python", str(main_file)]
+    if service_id == "training-host":
+        # torch/scikit-learn are in optional dependency group `ml`
+        command = ["uv", "run", "--extra", "ml", "python", str(main_file)]
+
     with open(log_file, "w") as log:
         process = subprocess.Popen(
-            ["uv", "run", "python", str(main_file)],
+            command,
             cwd=str(service_dir),
             env=env,
             stdout=log,
@@ -610,7 +619,7 @@ def start_training_host() -> None:
         error_console.print(
             "[yellow]Warning:[/yellow] Training host service already running"
         )
-        error_console.print("Use 'ktrdr local-prod stop-hosts' to stop it first")
+        error_console.print("Use 'kinfra local-prod stop-hosts' to stop it first")
         raise typer.Exit(1)
 
     console.print("Starting training host service...")
@@ -647,7 +656,7 @@ def start_ib_host() -> None:
     # Check if already running
     if _get_host_service_pid(cwd, "ib-host"):
         error_console.print("[yellow]Warning:[/yellow] IB host service already running")
-        error_console.print("Use 'ktrdr local-prod stop-hosts' to stop it first")
+        error_console.print("Use 'kinfra local-prod stop-hosts' to stop it first")
         raise typer.Exit(1)
 
     console.print("Starting IB host service...")

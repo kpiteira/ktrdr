@@ -113,8 +113,8 @@ class BacktestingEngine:
         """Resume backtesting engine state from a checkpoint context.
 
         This method:
-        1. Loads data for the full original date range
-        2. Computes indicators for the full range (for lookback)
+        1. Loads data for the full original date range (all timeframes)
+        2. Computes features for the full range (for lookback)
         3. Restores portfolio state (cash, positions, trades)
         4. Restores equity curve samples to performance tracker
 
@@ -124,12 +124,14 @@ class BacktestingEngine:
             context: BacktestResumeContext with checkpoint data.
 
         Returns:
-            The loaded DataFrame for the full date range.
+            The base timeframe DataFrame for the full date range.
         """
         logger.info(f"🔄 Resuming backtest from bar {context.start_bar}")
 
-        # 1. Load data for full range
-        data = self._load_historical_data()
+        # 1. Load data for full range (may be multi-timeframe)
+        multi_tf_data = self._load_historical_data()
+        base_tf = self._get_base_timeframe()
+        data = multi_tf_data[base_tf]
 
         if data.empty:
             raise ValueError(
@@ -140,9 +142,9 @@ class BacktestingEngine:
             f"✅ Loaded {len(data):,} bars from {data.index[0]} to {data.index[-1]}"
         )
 
-        # 2. Compute indicators for full range (needed for lookback)
+        # 2. Compute features for full range (all timeframes, needed for lookback)
         logger.info("🚀 Pre-computing indicators for resume...")
-        self.orchestrator.prepare_feature_cache(data)
+        self.orchestrator.prepare_feature_cache(multi_tf_data)
         logger.info("✅ Feature cache ready")
 
         # 3. Restore portfolio state
@@ -272,13 +274,15 @@ class BacktestingEngine:
             print(f"💰 Initial Capital: ${self.config.initial_capital:,.2f}")
             print("=" * 60)
 
-        # Load historical data
+        # Load historical data (may be multi-timeframe)
         if self.config.verbose:
             print(
                 f"📈 Loading data for {self.config.symbol} {self.config.timeframe}..."
             )
 
-        data = self._load_historical_data()
+        multi_tf_data = self._load_historical_data()
+        base_tf = self._get_base_timeframe()
+        data = multi_tf_data[base_tf]
 
         if data.empty:
             raise ValueError(
@@ -289,16 +293,20 @@ class BacktestingEngine:
             print(
                 f"✅ Loaded {len(data):,} bars from {data.index[0]} to {data.index[-1]}"
             )
+            if len(multi_tf_data) > 1:
+                print(
+                    f"   ({len(multi_tf_data)} timeframes: {list(multi_tf_data.keys())})"
+                )
             print("🚀 Pre-computing features for backtesting performance...")
 
         # PERFORMANCE OPTIMIZATION: Pre-compute all features for fast backtesting
-        # Create telemetry span for strategy initialization phase
+        # Pass all timeframe data to feature cache for multi-TF feature computation
         with tracer.start_as_current_span("backtest.strategy_init") as span:
             span.set_attribute("progress.phase", "strategy_init")
             span.set_attribute("data.rows", len(data))
 
             logger.info("🚀 Pre-computing indicators and fuzzy memberships...")
-            self.orchestrator.prepare_feature_cache(data)
+            self.orchestrator.prepare_feature_cache(multi_tf_data)
             logger.info("✅ Feature cache ready - backtesting should be much faster!")
 
         if self.config.verbose:
@@ -900,52 +908,106 @@ class BacktestingEngine:
 
         return results
 
-    def _load_historical_data(self) -> pd.DataFrame:
-        """Load historical data for backtesting from cache.
+    def _get_base_timeframe(self) -> str:
+        """Get the base timeframe from strategy config.
 
         Returns:
-            DataFrame with OHLCV data
+            Base timeframe string (e.g., "1h")
         """
-        # Create telemetry span for data loading phase
+        td = self.orchestrator.strategy_config.get("training_data", {})
+        tf_config = td.get("timeframes", {})
+        if isinstance(tf_config, dict):
+            base = tf_config.get("base_timeframe")
+            if base:
+                return base
+        return self.config.timeframe
+
+    def _get_strategy_timeframes(self) -> list[str]:
+        """Get all timeframes from strategy config.
+
+        Returns:
+            List of timeframes. For single-TF strategies, returns [config.timeframe].
+        """
+        td = self.orchestrator.strategy_config.get("training_data", {})
+        tf_config = td.get("timeframes", {})
+        if isinstance(tf_config, dict):
+            mode = tf_config.get("mode", "single")
+            tf_list = tf_config.get("list", [])
+            if mode == "multi_timeframe" and len(tf_list) >= 2:
+                return tf_list
+        return [self.config.timeframe]
+
+    def _load_historical_data(self) -> dict[str, pd.DataFrame]:
+        """Load historical data for backtesting from cache.
+
+        For multi-timeframe strategies, loads all timeframes and synchronizes
+        them using MultiTimeframeCoordinator (same pattern as training pipeline).
+
+        Returns:
+            Dict mapping timeframes to OHLCV DataFrames
+        """
         with tracer.start_as_current_span("backtest.data_loading") as span:
-            # Set span attributes
             span.set_attribute("data.symbol", self.config.symbol)
             span.set_attribute("data.timeframe", self.config.timeframe)
             span.set_attribute("progress.phase", "data_loading")
 
-            # Load data from cache (backtesting always uses cached data)
-            data = self.repository.load_from_cache(
-                symbol=self.config.symbol,
-                timeframe=self.config.timeframe,
-            )
+            timeframes = self._get_strategy_timeframes()
 
-            # Filter by date range if specified
-            if self.config.start_date:
-                start_date = pd.to_datetime(self.config.start_date)
-                # Make timezone-aware if needed to match data index
-                if (
-                    hasattr(data.index, "tz")
-                    and data.index.tz is not None
-                    and start_date.tz is None
-                ):
-                    start_date = start_date.tz_localize("UTC")
-                data = data[data.index >= start_date]
+            if len(timeframes) >= 2:
+                # Multi-timeframe: use coordinator (same as training pipeline)
+                from ..data.multi_timeframe_coordinator import (
+                    MultiTimeframeCoordinator,
+                )
 
-            if self.config.end_date:
-                end_date = pd.to_datetime(self.config.end_date)
-                # Make timezone-aware if needed to match data index
-                if (
-                    hasattr(data.index, "tz")
-                    and data.index.tz is not None
-                    and end_date.tz is None
-                ):
-                    end_date = end_date.tz_localize("UTC")
-                data = data[data.index <= end_date]
+                coordinator = MultiTimeframeCoordinator(self.repository)
+                base_tf = self._get_base_timeframe()
 
-            # Add data metrics to span
-            span.set_attribute("data.rows", len(data))
+                logger.info(
+                    f"Loading multi-timeframe data: {timeframes} " f"(base: {base_tf})"
+                )
 
-            return data
+                multi_data = coordinator.load_multi_timeframe_data(
+                    symbol=self.config.symbol,
+                    timeframes=timeframes,
+                    start_date=self.config.start_date,
+                    end_date=self.config.end_date,
+                    base_timeframe=base_tf,
+                )
+
+                total_rows = sum(len(df) for df in multi_data.values())
+                span.set_attribute("data.rows", total_rows)
+                span.set_attribute("data.timeframes", len(timeframes))
+                return multi_data
+            else:
+                # Single timeframe: load directly with date filtering
+                data = self.repository.load_from_cache(
+                    symbol=self.config.symbol,
+                    timeframe=self.config.timeframe,
+                )
+
+                # Filter by date range if specified
+                if self.config.start_date:
+                    start_date = pd.to_datetime(self.config.start_date)
+                    if (
+                        hasattr(data.index, "tz")
+                        and data.index.tz is not None
+                        and start_date.tz is None
+                    ):
+                        start_date = start_date.tz_localize("UTC")
+                    data = data[data.index >= start_date]
+
+                if self.config.end_date:
+                    end_date = pd.to_datetime(self.config.end_date)
+                    if (
+                        hasattr(data.index, "tz")
+                        and data.index.tz is not None
+                        and end_date.tz is None
+                    ):
+                        end_date = end_date.tz_localize("UTC")
+                    data = data[data.index <= end_date]
+
+                span.set_attribute("data.rows", len(data))
+                return {self.config.timeframe: data}
 
     def _generate_results(
         self, start_time: pd.Timestamp, end_time: pd.Timestamp, execution_time: float

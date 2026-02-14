@@ -28,10 +28,15 @@ The service follows the same architecture patterns as the IB Host Service:
 
 ### Starting the Service
 ```bash
-# Make scripts executable (first time only)
-chmod +x start.sh stop.sh
+# Preferred (loads host-service secrets from 1Password)
+uv run kinfra local-prod start-training-host
+```
 
-# Start the service
+Legacy startup script (deprecated):
+```bash
+# Direct script startup is deprecated because it bypasses kinfra's
+# 1Password secret injection unless you export DB env vars manually.
+# If you still need it for debugging, ensure env is set first.
 ./start.sh
 ```
 
@@ -146,9 +151,11 @@ Service logs are written to:
 ### Common Issues
 
 1. **Service won't start**: Check that port 5002 is available
-2. **GPU not detected**: Verify PyTorch CUDA installation
-3. **Import errors**: Ensure PYTHONPATH includes parent directory
-4. **Permission errors**: Check file permissions on scripts
+2. **`ModuleNotFoundError: No module named 'torch'`**: Start via `uv run kinfra local-prod start-training-host` (it loads the `ml` extra path)
+3. **`password authentication failed for user "ktrdr"`**: Host service started without the right DB secret; restart via `uv run kinfra local-prod start-training-host`
+4. **GPU not detected**: Verify PyTorch CUDA installation
+5. **Import errors**: Ensure PYTHONPATH includes parent directory
+6. **Permission errors**: Check file permissions on scripts
 
 ### Health Checks
 

@@ -308,17 +308,20 @@ class TrainingService:
         self.session_timeout_minutes = session_timeout_minutes
         self.sessions: dict[str, TrainingSession] = {}
 
-        # Model storage - use MODELS_DIR env var (set by local_prod.py from .env.sandbox)
-        # Falls back to project root if env var not set
+        # Model storage - prefer current settings var names, keep legacy fallback.
+        # This must resolve to ~/.ktrdr/shared/models in local-prod to keep host
+        # training artifacts visible to containerized backtest workers.
         import os
-        from pathlib import Path
 
+        from ktrdr.config.settings import get_data_settings
         from ktrdr.training.model_storage import ModelStorage
 
-        models_dir = os.getenv("MODELS_DIR")
-        if not models_dir:
-            project_root = Path(__file__).parent.parent.parent
-            models_dir = str(project_root / "models")
+        models_dir = (
+            os.getenv("KTRDR_DATA_MODELS_DIR")
+            or os.getenv("KTRDR_MODELS_DIR")
+            or os.getenv("MODELS_DIR")
+            or get_data_settings().models_dir
+        )
         self.model_storage = ModelStorage(base_path=models_dir)
 
         # Global resource managers

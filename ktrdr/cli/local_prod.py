@@ -559,9 +559,14 @@ def _start_host_service(cwd: Path, service_id: str, env: dict[str, str]) -> int:
         env["PYTHONPATH"] = str(cwd)
 
     # Start the service
+    command = ["uv", "run", "python", str(main_file)]
+    if service_id == "training-host":
+        # torch/scikit-learn are in optional dependency group `ml`
+        command = ["uv", "run", "--extra", "ml", "python", str(main_file)]
+
     with open(log_file, "w") as log:
         process = subprocess.Popen(
-            ["uv", "run", "python", str(main_file)],
+            command,
             cwd=str(service_dir),
             env=env,
             stdout=log,

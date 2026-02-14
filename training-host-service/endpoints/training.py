@@ -164,6 +164,18 @@ async def start_training(request: TrainingStartRequest):
                 status_code=409,
                 detail=f"Session conflict: {str(e)}"
             ) from e
+        elif "password authentication failed for user" in str(e).lower():
+            # Clear operational hint for common host-service startup misconfiguration.
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "Training host service database authentication failed. "
+                    "This usually means the service was started without the correct "
+                    "DB secret. Start it with "
+                    "`uv run kinfra local-prod start-training-host` so "
+                    "`KTRDR_DB_PASSWORD` is loaded from 1Password."
+                ),
+            ) from e
         else:
             # 500 Internal Server Error - unexpected errors
             raise HTTPException(

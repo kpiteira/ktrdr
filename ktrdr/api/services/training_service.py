@@ -35,6 +35,52 @@ logger = get_logger(__name__)
 _loaded_models: dict[str, Any] = {}
 
 
+def _extract_worker_http_error_detail(response: Any) -> str:
+    """Extract a concise, user-facing detail message from a worker HTTP error."""
+    try:
+        payload = response.json()
+    except Exception:
+        payload = None
+
+    if isinstance(payload, dict):
+        detail = payload.get("detail")
+        if isinstance(detail, str) and detail.strip():
+            return detail.strip()
+        if detail is not None:
+            return str(detail)
+
+        message = payload.get("message")
+        if isinstance(message, str) and message.strip():
+            return message.strip()
+
+    text = getattr(response, "text", "")
+    if isinstance(text, str) and text.strip():
+        return text.strip()
+
+    return "No error detail returned by worker"
+
+
+def _build_worker_start_error_message(
+    *, worker_id: str | None, remote_url: str, status_code: int, detail: str
+) -> str:
+    """Build actionable error context for failed training start requests."""
+    worker_label = worker_id or "unknown-worker"
+    message = (
+        f"Training start failed on worker {worker_label} "
+        f"({remote_url}/training/start, HTTP {status_code}): {detail}"
+    )
+
+    if "password authentication failed for user" in detail.lower():
+        message += (
+            " Hint: the training host service likely started without the correct "
+            "database secret. Restart it with "
+            "`uv run kinfra local-prod start-training-host` so "
+            "`KTRDR_DB_PASSWORD` is loaded from 1Password."
+        )
+
+    return message
+
+
 class TrainingService(ServiceOrchestrator[None]):
     """Service for neural network training operations (distributed-only mode).
 
@@ -475,8 +521,16 @@ class TrainingService(ServiceOrchestrator[None]):
                             f"Tried workers: {attempted_workers}"
                         ) from e
                 else:
-                    # Other HTTP error, don't retry
-                    raise
+                    # Surface worker error details so callers get actionable context.
+                    detail = _extract_worker_http_error_detail(e.response)
+                    raise RuntimeError(
+                        _build_worker_start_error_message(
+                            worker_id=worker_id,
+                            remote_url=remote_url,
+                            status_code=e.response.status_code,
+                            detail=detail,
+                        )
+                    ) from e
 
         if not remote_operation_id:
             raise RuntimeError("Failed to start training on any worker")

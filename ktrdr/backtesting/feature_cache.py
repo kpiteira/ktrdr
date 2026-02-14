@@ -148,40 +148,25 @@ class FeatureCache:
 
         return result
 
-    def compute_all_features(self, historical_data: pd.DataFrame) -> None:
+    def compute_all_features(self, data: dict[str, pd.DataFrame]) -> None:
         """Pre-compute all features for backtesting.
 
         Args:
-            historical_data: Complete historical OHLCV data
+            data: Dict mapping timeframes to OHLCV DataFrames.
+                For single-TF: {"1h": df}. For multi-TF: {"1h": df, "5m": df, ...}
         """
+        total_bars = sum(len(df) for df in data.values())
         logger.info(
-            f"FeatureCache: Pre-computing features for {len(historical_data)} bars..."
+            f"FeatureCache: Pre-computing features for {len(data)} timeframe(s), "
+            f"{total_bars} total bars..."
         )
 
-        # Get base timeframe from config
-        base_timeframe: str | None = None
-        if hasattr(self.config, "training_data") and self.config.training_data:
-            if hasattr(self.config.training_data, "timeframes"):
-                tf = getattr(
-                    self.config.training_data.timeframes, "base_timeframe", None
-                )
-                if tf:
-                    base_timeframe = tf
-
-        if base_timeframe is None:
-            logger.warning(
-                "FeatureCache: base_timeframe not found in config; "
-                'falling back to default "1h". This may cause mismatches if '
-                "the model was trained on a different base timeframe."
-            )
-            base_timeframe = "1h"
-
-        # compute_features expects dict[timeframe, DataFrame]
-        data = {base_timeframe: historical_data}
-
-        # Compute features
+        # compute_features already handles multi-timeframe correctly
         self._cached_features = self.compute_features(data)
-        self._cached_index = historical_data.index
+
+        # Cache index from base timeframe
+        base_tf = self._get_base_timeframe_key(data)
+        self._cached_index = data[base_tf].index
 
         logger.info(
             f"FeatureCache: Cached {len(self._cached_features)} bars x "
@@ -238,6 +223,23 @@ class FeatureCache:
             result[f.timeframe]["indicators"].add(f.indicator_id)
             result[f.timeframe]["fuzzy_sets"].add(f.fuzzy_set_id)
         return result
+
+    def _get_base_timeframe_key(self, data: dict[str, pd.DataFrame]) -> str:
+        """Determine the base timeframe key from data dict and strategy config.
+
+        Args:
+            data: Dict mapping timeframes to DataFrames
+
+        Returns:
+            The base timeframe key present in data
+        """
+        if hasattr(self.config, "training_data") and self.config.training_data:
+            tf_config = getattr(self.config.training_data, "timeframes", None)
+            if tf_config:
+                base = getattr(tf_config, "base_timeframe", None)
+                if base and base in data:
+                    return base
+        return next(iter(data))
 
     def _validate_features(self, result: pd.DataFrame) -> None:
         """Validate features match expected from model metadata.

@@ -71,11 +71,28 @@ class ModelStorage:
         # Create version directory
         model_dir = self._create_version_directory(strategy_name, symbol, timeframe)
 
-        # Save model weights
-        torch.save(model.state_dict(), model_dir / "model.pt")
+        # Save device-portable artifacts by round-tripping through a buffer.
+        # model.cpu() moves tensors but pickle still records the original
+        # storage type (e.g. MPS), which fails on CPU-only Linux workers.
+        # Saving → reloading with map_location='cpu' → re-saving produces
+        # files with pure CPU storage that load everywhere.
+        import io
 
-        # Save full model architecture (for easier loading)
-        torch.save(model, model_dir / "model_full.pt")
+        model_cpu = model.cpu()
+
+        # Save model weights (state dict)
+        buf = io.BytesIO()
+        torch.save(model_cpu.state_dict(), buf)
+        buf.seek(0)
+        cpu_state = torch.load(buf, map_location="cpu", weights_only=True)
+        torch.save(cpu_state, model_dir / "model.pt")
+
+        # Save full model architecture
+        buf = io.BytesIO()
+        torch.save(model_cpu, buf)
+        buf.seek(0)
+        cpu_model = torch.load(buf, map_location="cpu", weights_only=False)
+        torch.save(cpu_model, model_dir / "model_full.pt")
 
         # Save configuration
         with open(model_dir / "config.json", "w") as f:
