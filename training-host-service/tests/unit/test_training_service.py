@@ -26,6 +26,25 @@ class TestTrainingService:
             assert service.sessions == {}
 
     @pytest.mark.asyncio
+    async def test_service_initialization_uses_ktrdr_models_dir(
+        self, mock_gpu_available, tmp_path, monkeypatch
+    ):
+        """KTRDR_MODELS_DIR should drive model storage path in local-prod."""
+        from services.training_service import TrainingService
+
+        shared_models_dir = tmp_path / "shared-models"
+        shared_models_dir.mkdir()
+
+        monkeypatch.delenv("KTRDR_DATA_MODELS_DIR", raising=False)
+        monkeypatch.delenv("MODELS_DIR", raising=False)
+        monkeypatch.setenv("KTRDR_MODELS_DIR", str(shared_models_dir))
+
+        with patch.object(TrainingService, "_initialize_global_resources"):
+            service = TrainingService()
+
+        assert service.model_storage.base_path == shared_models_dir
+
+    @pytest.mark.asyncio
     async def test_create_session_success(
         self, mock_gpu_available, sample_training_config
     ):

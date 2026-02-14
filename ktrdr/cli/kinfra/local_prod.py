@@ -471,6 +471,10 @@ def _get_host_service_env(cwd: Path) -> dict[str, str]:
         env["KTRDR_MODELS_DIR"] = str(shared_dir / "models")
         env["KTRDR_STRATEGIES_DIR"] = str(shared_dir / "strategies")
 
+    # Host services may read either modern or legacy model env names.
+    env["KTRDR_DATA_MODELS_DIR"] = env["KTRDR_MODELS_DIR"]
+    env["MODELS_DIR"] = env["KTRDR_MODELS_DIR"]
+
     return env
 
 
