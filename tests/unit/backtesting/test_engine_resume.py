@@ -107,7 +107,7 @@ class TestResumeFromContextLoadsData:
                 },
                 index=pd.date_range("2023-01-01", periods=100, freq="h"),
             )
-            engine._load_historical_data = MagicMock(return_value=mock_data)
+            engine._load_historical_data = MagicMock(return_value={"1h": mock_data})
 
             return engine
 
@@ -160,6 +160,7 @@ class TestResumeFromContextRestoresPortfolioState:
             engine = BacktestingEngine.__new__(BacktestingEngine)
 
             engine.config = MagicMock()
+            engine.config.timeframe = "1h"
             engine.repository = MagicMock()
             engine.orchestrator = MagicMock()
 
@@ -184,7 +185,7 @@ class TestResumeFromContextRestoresPortfolioState:
                 },
                 index=pd.date_range("2023-01-01", periods=100, freq="h"),
             )
-            engine._load_historical_data = MagicMock(return_value=mock_data)
+            engine._load_historical_data = MagicMock(return_value={"1h": mock_data})
 
             return engine
 
@@ -348,6 +349,7 @@ class TestResumeFromContextRestoresEquityCurve:
             engine = BacktestingEngine.__new__(BacktestingEngine)
 
             engine.config = MagicMock()
+            engine.config.timeframe = "1h"
             engine.repository = MagicMock()
             engine.orchestrator = MagicMock()
             engine.position_manager = MagicMock()
@@ -364,7 +366,7 @@ class TestResumeFromContextRestoresEquityCurve:
                 {"close": [1.0] * 100},
                 index=pd.date_range("2023-01-01", periods=100, freq="h"),
             )
-            engine._load_historical_data = MagicMock(return_value=mock_data)
+            engine._load_historical_data = MagicMock(return_value={"1h": mock_data})
 
             return engine
 
@@ -449,6 +451,7 @@ class TestResumeFromContextReturnsData:
             engine = BacktestingEngine.__new__(BacktestingEngine)
 
             engine.config = MagicMock()
+            engine.config.timeframe = "1h"
             engine.repository = MagicMock()
             engine.orchestrator = MagicMock()
             engine.position_manager = MagicMock()
@@ -463,7 +466,7 @@ class TestResumeFromContextReturnsData:
                 {"close": [1.0] * 100},
                 index=pd.date_range("2023-01-01", periods=100, freq="h"),
             )
-            engine._load_historical_data = MagicMock(return_value=mock_data)
+            engine._load_historical_data = MagicMock(return_value={"1h": mock_data})
 
             return engine
 

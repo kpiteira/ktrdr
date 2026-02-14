@@ -137,7 +137,7 @@ class TestEngineProgressBridgeIntegration:
         )
 
         # Mock data loading
-        monkeypatch.setattr(engine, "_load_historical_data", lambda: fake_data)
+        monkeypatch.setattr(engine, "_load_historical_data", lambda: {"1h": fake_data})
 
         # Run with bridge
         try:
@@ -169,7 +169,7 @@ class TestEngineProgressBridgeIntegration:
             index=pd.date_range("2024-01-01", periods=100, freq="1D"),
         )
 
-        monkeypatch.setattr(engine, "_load_historical_data", lambda: fake_data)
+        monkeypatch.setattr(engine, "_load_historical_data", lambda: {"1h": fake_data})
 
         try:
             engine.run(bridge=mock_bridge)
@@ -217,7 +217,7 @@ class TestEngineProgressBridgeIntegration:
             index=pd.date_range("2024-01-01", periods=250, freq="1D"),
         )
 
-        monkeypatch.setattr(engine, "_load_historical_data", lambda: fake_data)
+        monkeypatch.setattr(engine, "_load_historical_data", lambda: {"1h": fake_data})
 
         # Token is not cancelled
         mock_cancellation_token.is_cancelled_requested = False
@@ -254,7 +254,7 @@ class TestEngineProgressBridgeIntegration:
             index=pd.date_range("2024-01-01", periods=200, freq="1D"),
         )
 
-        monkeypatch.setattr(engine, "_load_historical_data", lambda: fake_data)
+        monkeypatch.setattr(engine, "_load_historical_data", lambda: {"1h": fake_data})
 
         # Set token to cancelled state
         mock_cancellation_token.is_cancelled_requested = True
@@ -283,7 +283,7 @@ class TestEngineProgressBridgeIntegration:
             index=pd.date_range("2024-01-01", periods=100, freq="1D"),
         )
 
-        monkeypatch.setattr(engine, "_load_historical_data", lambda: fake_data)
+        monkeypatch.setattr(engine, "_load_historical_data", lambda: {"1h": fake_data})
 
         # Should not raise any errors when bridge is None
         try:
@@ -309,7 +309,7 @@ class TestEngineProgressBridgeIntegration:
             index=pd.date_range("2024-01-01", periods=100, freq="1D"),
         )
 
-        monkeypatch.setattr(engine, "_load_historical_data", lambda: fake_data)
+        monkeypatch.setattr(engine, "_load_historical_data", lambda: {"1h": fake_data})
 
         # Should not raise any errors when token is None
         try:
