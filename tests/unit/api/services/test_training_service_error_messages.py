@@ -18,7 +18,9 @@ class _DummyResponse:
 
 
 def test_extract_worker_http_error_detail_prefers_json_detail():
-    response = _DummyResponse(payload={"detail": "database auth failed"}, text="ignored")
+    response = _DummyResponse(
+        payload={"detail": "database auth failed"}, text="ignored"
+    )
 
     detail = _extract_worker_http_error_detail(response)
 

@@ -296,7 +296,9 @@ async def start_training(
         raise HTTPException(status_code=422, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Failed to start training: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to start training: {str(e)}") from e
+        raise HTTPException(
+            status_code=500, detail=f"Failed to start training: {str(e)}"
+        ) from e
 
 
 @router.get("/{task_id}/performance", response_model=PerformanceResponse)

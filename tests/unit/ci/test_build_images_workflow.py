@@ -114,7 +114,9 @@ class TestBuildImagesWorkflow:
         env = workflow.get("env", {})
         # Should have IMAGE_BASE for constructing image names and NOT use IMAGE_NAME
         assert "IMAGE_BASE" in env, "Should use IMAGE_BASE for multi-image builds"
-        assert "IMAGE_NAME" not in env, "Should not use IMAGE_NAME for multi-image builds"
+        assert (
+            "IMAGE_NAME" not in env
+        ), "Should not use IMAGE_NAME for multi-image builds"
 
     def test_merge_job_verifies_all_images(self, workflow: dict) -> None:
         """Merge job should verify manifests for all images after build completes."""
