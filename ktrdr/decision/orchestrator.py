@@ -757,9 +757,9 @@ class DecisionOrchestrator:
         Returns:
             True if model has metadata_v3.json
         """
-        from ..backtesting.backtesting_service import BacktestingService
+        from ..backtesting.model_bundle import is_v3_model
 
-        return BacktestingService.is_v3_model(model_path)
+        return is_v3_model(model_path)
 
     def _create_feature_cache(self, model_path: str):
         """Create FeatureCache for v3 model.
@@ -773,14 +773,17 @@ class DecisionOrchestrator:
         Returns:
             FeatureCache instance
         """
-        from ..backtesting.backtesting_service import BacktestingService
         from ..backtesting.feature_cache import FeatureCache
+        from ..backtesting.model_bundle import (
+            load_v3_metadata,
+            reconstruct_config_from_metadata,
+        )
 
         # Load v3 metadata
-        metadata = BacktestingService.load_v3_metadata(model_path)
+        metadata = load_v3_metadata(model_path)
 
         # Reconstruct config from metadata
-        config = BacktestingService.reconstruct_config_from_metadata(metadata)
+        config = reconstruct_config_from_metadata(metadata)
 
         # Create feature cache
         return FeatureCache(config=config, model_metadata=metadata)

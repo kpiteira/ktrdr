@@ -1,4 +1,11 @@
-"""Model loader for loading trained neural network models."""
+"""Model loader for loading trained neural network models.
+
+DEPRECATED: Use ModelBundle from ktrdr.backtesting.model_bundle instead.
+ModelBundle provides a single, immutable load point with correct map_location="cpu".
+This module is kept only because DecisionOrchestrator still uses it for
+paper/live trading paths. It will be removed in M3 when the orchestrator is
+decoupled from the backtesting pipeline.
+"""
 
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
