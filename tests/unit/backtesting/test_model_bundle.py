@@ -48,7 +48,7 @@ def v3_metadata_dict() -> dict:
 def v3_model_dir(tmp_path: Path, v3_metadata_dict: dict) -> Path:
     """Create a v3 model directory with all required files on disk.
 
-    Contains: metadata_v3.json, features.json, model_config.json.
+    Contains: metadata_v3.json and features.json.
     Does NOT contain model.pt (torch file) — torch tests use a separate fixture.
     """
     model_dir = tmp_path / "models" / "test_strategy" / "1h_v1"

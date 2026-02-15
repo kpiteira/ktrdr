@@ -199,7 +199,7 @@ class ModelBundle:
     strategy_config: StrategyConfigurationV3
 
     @classmethod
-    def load(cls, model_path: str) -> ModelBundle:
+    def load(cls, model_path: str | Path) -> ModelBundle:
         """Load model artifacts from disk. ONE torch.load, always CPU-safe.
 
         Args:
@@ -241,9 +241,8 @@ class ModelBundle:
             )
 
         # 3. Build model architecture from config
-        model_config = metadata.indicators  # need the model section from metadata
-        # The model architecture is stored in the strategy config, not directly
-        # in metadata. Use a default MLP config.
+        # The model architecture is not stored directly in metadata; start from a
+        # default MLP config and allow config.json (if present) to override it.
         model_config = {"type": "mlp", "architecture": {"hidden_layers": [64, 32]}}
 
         # Try to load model config from disk if available
