@@ -109,8 +109,8 @@ class TestToEnvDict:
         assert env["KTRDR_DB_PORT"] == "5433"
         assert env["KTRDR_GRAFANA_PORT"] == "3001"
         assert env["KTRDR_JAEGER_UI_PORT"] == "16687"
-        assert env["KTRDR_JAEGER_OTLP_GRPC_PORT"] == "4327"
-        assert env["KTRDR_JAEGER_OTLP_HTTP_PORT"] == "4328"
+        assert env["KTRDR_OTLP_GRPC_PORT"] == "4327"
+        assert env["KTRDR_OTLP_HTTP_PORT"] == "4328"
         assert env["KTRDR_PROMETHEUS_PORT"] == "9091"
         # Slot 1 worker ports: 5007-5010 (shifted to avoid slot 0's 5003-5006)
         assert env["KTRDR_WORKER_PORT_1"] == "5007"

@@ -61,7 +61,7 @@ def _derive_otlp_endpoint_from_url(api_url: str | None) -> str:
     try:
         from ktrdr.cli.sandbox_detect import get_sandbox_var
 
-        port = get_sandbox_var("KTRDR_JAEGER_OTLP_GRPC_PORT", "4317")
+        port = get_sandbox_var("KTRDR_OTLP_GRPC_PORT", "4317")
         return f"http://localhost:{port}"
     except Exception:
         return "http://localhost:4317"

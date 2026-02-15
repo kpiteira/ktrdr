@@ -30,8 +30,8 @@ services:
       - {worktree_path}/ktrdr:/app/ktrdr
       - {worktree_path}/research_agents:/app/research_agents
       - {shared_dir}/data:/app/data
-      - {shared_dir}/models:/app/models
-      - {shared_dir}/strategies:/app/strategies
+      - {shared_dir}/models:/app/models:ro
+      - {shared_dir}/strategies:/app/strategies:ro
 
   training-worker:
     volumes:
@@ -39,7 +39,7 @@ services:
       - {worktree_path}/research_agents:/app/research_agents
       - {shared_dir}/data:/app/data
       - {shared_dir}/models:/app/models
-      - {shared_dir}/strategies:/app/strategies
+      - {shared_dir}/strategies:/app/strategies:ro
 """
 
 
