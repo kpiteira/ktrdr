@@ -1,6 +1,6 @@
 # Handoff: M1 — ModelBundle + map_location Fix
 
-## Status: Complete (pending Docker validation)
+## Status: Complete
 
 ## What Was Done
 
@@ -56,6 +56,6 @@
 
 2. **ModelBundle.load() model config fallback**: If `config.json` is missing from the model directory, ModelBundle uses a default MLP config `{"type": "mlp", "architecture": {"hidden_layers": [64, 32]}}`. This works because the state_dict load will fail if the architecture doesn't match, giving a clear error.
 
-3. **Docker validation deferred**: Container test (`ModelBundle.load()` inside CPU-only Docker with MPS-trained model) couldn't run because Docker wasn't available. Must be validated when sandbox is brought up.
+3. **Docker validation passed**: `ModelBundle.load()` tested inside CPU-only Docker backtest worker container with synthetic v3 model. Model loads on CPU, eval mode confirmed, inference produces correct output shape, frozen dataclass prevents mutation.
 
 4. **DecisionOrchestrator still imports ModelLoader**: The orchestrator at `ktrdr/decision/orchestrator.py:11` still does `from ..backtesting.model_loader import ModelLoader`. This is intentional — the orchestrator is used for paper/live trading paths. M3 will decouple it.
