@@ -1,11 +1,19 @@
 """Tests for Phase 1: Neural Network Foundation."""
 
+from unittest.mock import patch
+
 import pandas as pd
 import pytest
-import torch
 
-from ktrdr.decision import DecisionEngine, Position, Signal, TradingDecision
-from ktrdr.neural import MLPTradingModel
+torch = pytest.importorskip("torch", reason="torch required for neural tests")
+
+from ktrdr.decision import (  # noqa: E402
+    DecisionEngine,
+    Position,
+    Signal,
+    TradingDecision,
+)
+from ktrdr.neural import MLPTradingModel  # noqa: E402
 
 
 class TestBaseTypes:
@@ -137,6 +145,67 @@ class TestMLPModel:
         assert features.shape[0] == 5  # 5 time periods
         # Features: 3 fuzzy + price_ratio + roc + volume_ratio + 3 fuzzy lookback = 9
         assert features.shape[1] >= 9
+
+
+class TestBaseModelMapLocation:
+    """Test that base_model.py loads weights with map_location='cpu'."""
+
+    def test_load_model_uses_map_location_cpu(self, tmp_path):
+        """torch.load in load_model must use map_location='cpu' for MPS/CUDA portability."""
+        config = {
+            "architecture": {
+                "hidden_layers": [10],
+                "activation": "relu",
+                "dropout": 0.1,
+            }
+        }
+
+        # Save a model to disk
+        model = MLPTradingModel(config)
+        model.model = model.build_model(input_size=5)
+        model.is_trained = True
+        model.save_model(str(tmp_path))
+
+        # Patch torch.load to verify map_location is passed
+        original_torch_load = torch.load
+
+        def tracking_torch_load(*args, **kwargs):
+            tracking_torch_load.call_kwargs = kwargs
+            return original_torch_load(*args, **kwargs)
+
+        tracking_torch_load.call_kwargs = {}
+
+        with patch(
+            "ktrdr.neural.models.base_model.torch.load", side_effect=tracking_torch_load
+        ):
+            model2 = MLPTradingModel(config)
+            model2.load_model(str(tmp_path))
+
+        assert tracking_torch_load.call_kwargs.get("map_location") == "cpu", (
+            "torch.load must use map_location='cpu' to support loading "
+            "MPS/CUDA-trained models on CPU-only machines"
+        )
+
+    def test_loaded_model_on_cpu(self, tmp_path):
+        """Model loaded via load_model should have parameters on CPU."""
+        config = {
+            "architecture": {
+                "hidden_layers": [10],
+                "activation": "relu",
+                "dropout": 0.1,
+            }
+        }
+
+        model = MLPTradingModel(config)
+        model.model = model.build_model(input_size=5)
+        model.is_trained = True
+        model.save_model(str(tmp_path))
+
+        model2 = MLPTradingModel(config)
+        model2.load_model(str(tmp_path))
+
+        for param in model2.model.parameters():
+            assert param.device == torch.device("cpu")
 
 
 class TestDecisionEngine:

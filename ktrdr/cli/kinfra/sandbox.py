@@ -1353,84 +1353,63 @@ def init_shared(
 # =============================================================================
 
 
-def _get_slot_ports(slot_id: int) -> dict[str, int]:
-    """Get port allocation for a slot.
-
-    Port allocation scheme:
-    - API: 8000 + slot_id (e.g., slot 1 = 8001)
-    - DB: 5432 + slot_id (e.g., slot 1 = 5433)
-    - Grafana: 3000 + slot_id
-    - Jaeger UI: 16686 + slot_id
-    - Prometheus: 9090 + slot_id
-    - OTLP gRPC: 4316 + slot_id (e.g., slot 1 = 4317)
-    - OTLP HTTP: 4317 + slot_id (e.g., slot 1 = 4318)
-
-    Args:
-        slot_id: The slot number (1-6)
-
-    Returns:
-        Dictionary of service name to port number
-    """
-    return {
-        "api": 8000 + slot_id,
-        "db": 5432 + slot_id,
-        "grafana": 3000 + slot_id,
-        "jaeger_ui": 16686 + slot_id,
-        "prometheus": 9090 + slot_id,
-        "otlp_grpc": 4316 + slot_id,
-        "otlp_http": 4317 + slot_id,
-    }
-
-
-def _create_slot_env_file(slot_path: Path, slot_id: int, ports: dict[str, int]) -> None:
+def _create_slot_env_file(slot_path: Path, slot_id: int) -> None:
     """Create .env.sandbox file for a slot.
+
+    Uses get_ports() from sandbox_ports as the single source of truth
+    for port allocation. Also includes shared directory paths so the
+    compose template can find data/models/strategies.
 
     Args:
         slot_path: Path to the slot directory
-        slot_id: The slot number
-        ports: Port allocations for the slot
+        slot_id: The slot number (1-6)
     """
+    from ktrdr.cli.sandbox_ports import get_ports
+
+    allocation = get_ports(slot_id)
+    env_vars = allocation.to_env_dict()
+
+    # Add shared data directories
+    shared_dir = Path.home() / ".ktrdr" / "shared"
+    env_vars["KTRDR_SHARED_DIR"] = str(shared_dir)
+    env_vars["KTRDR_DATA_DIR"] = str(shared_dir / "data")
+    env_vars["KTRDR_MODELS_DIR"] = str(shared_dir / "models")
+    env_vars["KTRDR_STRATEGIES_DIR"] = str(shared_dir / "strategies")
+
     env_file = slot_path / ".env.sandbox"
-    env_vars = {
-        "SLOT_ID": str(slot_id),
-        "KTRDR_API_PORT": str(ports["api"]),
-        "KTRDR_DB_PORT": str(ports["db"]),
-        "KTRDR_GRAFANA_PORT": str(ports["grafana"]),
-        "KTRDR_JAEGER_UI_PORT": str(ports["jaeger_ui"]),
-        "KTRDR_PROMETHEUS_PORT": str(ports["prometheus"]),
-        "KTRDR_OTLP_GRPC_PORT": str(ports["otlp_grpc"]),
-        "KTRDR_OTLP_HTTP_PORT": str(ports["otlp_http"]),
-    }
     with open(env_file, "w") as f:
         for key, value in sorted(env_vars.items()):
             f.write(f"{key}={value}\n")
 
 
 def _create_slot_compose_file(slot_path: Path) -> None:
-    """Create docker-compose.yml for a slot from template.
+    """Create docker-compose.yml and supporting config files for a slot.
 
-    Copies the base compose template to the slot directory.
-    The .env.sandbox file provides slot-specific port values.
+    Copies the base compose template and service config files (e.g.
+    prometheus.yml) to the slot directory. The .env.sandbox file
+    provides slot-specific port values.
 
     Args:
         slot_path: Path to the slot directory
     """
-    from ktrdr.cli.kinfra.templates import get_compose_template
+    from ktrdr.cli.kinfra.templates import get_compose_template, get_prometheus_config
 
     compose_file = slot_path / "docker-compose.yml"
     compose_file.write_text(get_compose_template())
 
+    prometheus_file = slot_path / "prometheus.yml"
+    prometheus_file.write_text(get_prometheus_config())
 
-def _create_slot(slot_path: Path, slot_id: int, ports: dict[str, int]) -> None:
+
+def _create_slot(slot_path: Path, slot_id: int) -> None:
     """Create a slot directory with configuration files.
 
     Args:
         slot_path: Path to create the slot at
-        slot_id: The slot number
-        ports: Port allocations for the slot
+        slot_id: The slot number (1-6)
     """
     slot_path.mkdir(parents=True, exist_ok=True)
-    _create_slot_env_file(slot_path, slot_id, ports)
+    _create_slot_env_file(slot_path, slot_id)
     _create_slot_compose_file(slot_path)
 
 
@@ -1448,9 +1427,20 @@ def _update_registry_with_slots(base_path: Path) -> None:
             # Slot already registered
             continue
 
+        from ktrdr.cli.sandbox_ports import get_ports
+
         profile, workers = SLOT_PROFILES[slot_id]
-        ports = _get_slot_ports(slot_id)
+        allocation = get_ports(slot_id)
         slot_path = base_path / f"slot-{slot_id}"
+
+        # Convert PortAllocation to the dict format SlotInfo expects
+        ports = {
+            "api": allocation.backend,
+            "db": allocation.db,
+            "grafana": allocation.grafana,
+            "jaeger_ui": allocation.jaeger_ui,
+            "prometheus": allocation.prometheus,
+        }
 
         registry.slots[slot_key] = SlotInfo(
             slot_id=slot_id,
@@ -1494,7 +1484,6 @@ def provision(
     for slot_id in range(1, 7):
         slot_path = base_path / f"slot-{slot_id}"
         profile, workers = SLOT_PROFILES[slot_id]
-        ports = _get_slot_ports(slot_id)
 
         if slot_path.exists():
             console.print(f"Slot {slot_id}: [dim]already exists, skipping[/dim]")
@@ -1502,12 +1491,15 @@ def provision(
             continue
 
         if dry_run:
+            from ktrdr.cli.sandbox_ports import get_ports
+
+            allocation = get_ports(slot_id)
             console.print(f"Would create slot {slot_id} ({profile}) at {slot_path}")
-            console.print(f"  Ports: API={ports['api']}, DB={ports['db']}")
+            console.print(f"  Ports: API={allocation.backend}, DB={allocation.db}")
             console.print(f"  Workers: {workers}")
             continue
 
-        _create_slot(slot_path, slot_id, ports)
+        _create_slot(slot_path, slot_id)
         console.print(f"Created slot {slot_id} ({profile})")
         created_count += 1
 

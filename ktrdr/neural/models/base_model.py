@@ -340,7 +340,10 @@ class BaseNeuralModel(ABC):
 
         # Last resort: infer from model weights
         # Load weights once and reuse for both inference and model loading
-        model_state = torch.load(load_dir / "model.pt", weights_only=True)
+        # CPU mapping ensures models trained on MPS/CUDA load on any device
+        model_state = torch.load(
+            load_dir / "model.pt", map_location="cpu", weights_only=True
+        )
 
         if self.input_size is None:
             first_layer_key = next(

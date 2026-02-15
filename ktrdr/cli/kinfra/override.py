@@ -21,25 +21,25 @@ services:
       - {worktree_path}/research_agents:/app/research_agents
       - {worktree_path}/tests:/app/tests
       - {worktree_path}/config:/app/config:ro
-      - {main_repo_path}/data:/app/data
-      - {main_repo_path}/models:/app/models
-      - {main_repo_path}/strategies:/app/strategies
+      - {shared_dir}/data:/app/data
+      - {shared_dir}/models:/app/models
+      - {shared_dir}/strategies:/app/strategies
 
   backtest-worker:
     volumes:
       - {worktree_path}/ktrdr:/app/ktrdr
       - {worktree_path}/research_agents:/app/research_agents
-      - {main_repo_path}/data:/app/data
-      - {main_repo_path}/models:/app/models
-      - {main_repo_path}/strategies:/app/strategies
+      - {shared_dir}/data:/app/data
+      - {shared_dir}/models:/app/models:ro
+      - {shared_dir}/strategies:/app/strategies:ro
 
   training-worker:
     volumes:
       - {worktree_path}/ktrdr:/app/ktrdr
       - {worktree_path}/research_agents:/app/research_agents
-      - {main_repo_path}/data:/app/data
-      - {main_repo_path}/models:/app/models
-      - {main_repo_path}/strategies:/app/strategies
+      - {shared_dir}/data:/app/data
+      - {shared_dir}/models:/app/models
+      - {shared_dir}/strategies:/app/strategies:ro
 """
 
 
@@ -51,14 +51,13 @@ def generate_override(
     Args:
         slot: The slot info with infrastructure_path
         worktree_path: Path to the worktree to mount
-        main_repo_path: Path to main repo for shared data dirs (defaults to cwd)
+        main_repo_path: Path to main repo (unused, kept for API compat)
     """
-    if main_repo_path is None:
-        main_repo_path = Path.cwd()
+    shared_dir = Path.home() / ".ktrdr" / "shared"
 
     content = OVERRIDE_TEMPLATE.format(
         worktree_path=worktree_path,
-        main_repo_path=main_repo_path,
+        shared_dir=shared_dir,
         timestamp=datetime.now().isoformat(),
     )
 

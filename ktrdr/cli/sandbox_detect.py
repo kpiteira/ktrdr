@@ -252,7 +252,7 @@ def get_sandbox_var(name: str, default: str | None = None) -> str | None:
     the fallback logic themselves.
 
     Args:
-        name: Environment variable name (e.g., "KTRDR_JAEGER_OTLP_GRPC_PORT")
+        name: Environment variable name (e.g., "KTRDR_OTLP_GRPC_PORT")
         default: Default value if not found anywhere
 
     Returns:

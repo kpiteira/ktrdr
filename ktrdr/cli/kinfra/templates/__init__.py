@@ -23,3 +23,13 @@ def get_compose_template() -> str:
     """
     template_path = TEMPLATE_DIR / "docker-compose.base.yml"
     return template_path.read_text()
+
+
+def get_prometheus_config() -> str:
+    """Get the Prometheus configuration template for slots.
+
+    Returns:
+        The prometheus.yml content as a string
+    """
+    config_path = TEMPLATE_DIR / "prometheus.yml"
+    return config_path.read_text()
