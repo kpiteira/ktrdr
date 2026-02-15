@@ -1407,18 +1407,22 @@ def _create_slot_env_file(slot_path: Path, slot_id: int, ports: dict[str, int]) 
 
 
 def _create_slot_compose_file(slot_path: Path) -> None:
-    """Create docker-compose.yml for a slot from template.
+    """Create docker-compose.yml and supporting config files for a slot.
 
-    Copies the base compose template to the slot directory.
-    The .env.sandbox file provides slot-specific port values.
+    Copies the base compose template and service config files (e.g.
+    prometheus.yml) to the slot directory. The .env.sandbox file
+    provides slot-specific port values.
 
     Args:
         slot_path: Path to the slot directory
     """
-    from ktrdr.cli.kinfra.templates import get_compose_template
+    from ktrdr.cli.kinfra.templates import get_compose_template, get_prometheus_config
 
     compose_file = slot_path / "docker-compose.yml"
     compose_file.write_text(get_compose_template())
+
+    prometheus_file = slot_path / "prometheus.yml"
+    prometheus_file.write_text(get_prometheus_config())
 
 
 def _create_slot(slot_path: Path, slot_id: int, ports: dict[str, int]) -> None:
