@@ -162,7 +162,7 @@ class TestBaseModelMapLocation:
 
         # Save a model to disk
         model = MLPTradingModel(config)
-        model.build_model(input_size=5)
+        model.model = model.build_model(input_size=5)
         model.is_trained = True
         model.save_model(str(tmp_path))
 
@@ -197,7 +197,7 @@ class TestBaseModelMapLocation:
         }
 
         model = MLPTradingModel(config)
-        model.build_model(input_size=5)
+        model.model = model.build_model(input_size=5)
         model.is_trained = True
         model.save_model(str(tmp_path))
 
