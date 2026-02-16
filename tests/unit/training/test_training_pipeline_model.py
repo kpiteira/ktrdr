@@ -8,6 +8,9 @@ from StrategyTrainer to eliminate code duplication.
 from unittest.mock import Mock
 
 import pytest
+
+pytest.importorskip("torch")
+
 import torch
 import torch.nn as nn
 

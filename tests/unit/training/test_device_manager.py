@@ -11,9 +11,13 @@ Tests cover:
 
 from unittest.mock import patch
 
-import torch
+import pytest
 
-from ktrdr.training.device_manager import DeviceManager
+pytest.importorskip("torch")
+
+import torch  # noqa: E402
+
+from ktrdr.training.device_manager import DeviceManager  # noqa: E402
 
 
 class TestDeviceDetection:

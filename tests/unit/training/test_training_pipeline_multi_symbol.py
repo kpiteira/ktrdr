@@ -6,6 +6,10 @@ operate on patterns (technical indicators + fuzzy memberships) rather than
 symbol names.
 """
 
+import pytest
+
+pytest.importorskip("torch")
+
 import torch
 
 from ktrdr.training.training_pipeline import TrainingPipeline

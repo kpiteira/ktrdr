@@ -1,5 +1,6 @@
 """Backtesting system for strategy evaluation."""
 
+from .decision_function import DecisionFunction
 from .engine import BacktestConfig, BacktestingEngine, BacktestResults
 from .model_bundle import ModelBundle
 from .performance import PerformanceMetrics, PerformanceTracker
@@ -20,6 +21,7 @@ def __getattr__(name: str):
 __all__ = [
     "BacktestConfig",
     "BacktestingEngine",
+    "DecisionFunction",
     "BacktestProgressBridge",
     "BacktestResults",
     "ModelBundle",

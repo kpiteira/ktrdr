@@ -13,6 +13,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+pytest.importorskip("torch")
+
 # Add training-host-service to path for imports
 training_host_service_dir = (
     Path(__file__).parent.parent.parent.parent / "training-host-service"

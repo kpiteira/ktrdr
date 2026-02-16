@@ -4,6 +4,9 @@ import io
 from unittest.mock import MagicMock
 
 import pytest
+
+pytest.importorskip("torch")
+
 import torch
 import torch.nn as nn
 import torch.optim as optim

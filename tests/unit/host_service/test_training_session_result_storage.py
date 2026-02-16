@@ -11,6 +11,8 @@ from typing import Any
 
 import pytest
 
+pytest.importorskip("torch")
+
 # Add training-host-service to path for imports
 training_host_service_path = (
     Path(__file__).parent.parent.parent.parent / "training-host-service"

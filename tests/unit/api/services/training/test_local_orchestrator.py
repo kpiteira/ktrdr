@@ -11,6 +11,8 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+pytest.importorskip("torch")
+
 from ktrdr.api.services.training.context import TrainingOperationContext
 from ktrdr.api.services.training.local_orchestrator import LocalTrainingOrchestrator
 from ktrdr.api.services.training.progress_bridge import TrainingProgressBridge
