@@ -1,12 +1,16 @@
-"""Backtesting engine for strategy evaluation."""
+"""Backtesting engine for strategy evaluation.
+
+Uses ModelBundle (single model load), FeatureCache (pre-computed features),
+and DecisionFunction (stateless decisions) in a clean pipeline. The
+DecisionOrchestrator is not imported — it is preserved for future paper/live
+trading use (see DESIGN.md for rationale).
+"""
 
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, cast
 
 import pandas as pd
-
-# OpenTelemetry imports for instrumentation
 from opentelemetry import trace
 
 from .. import get_logger
@@ -15,6 +19,9 @@ from ..async_infrastructure.progress_bridge import ProgressBridge
 from ..data.repository import DataRepository
 from ..decision.base import Signal
 from .checkpoint_restore import BacktestResumeContext
+from .decision_function import DecisionFunction
+from .feature_cache import FeatureCache
+from .model_bundle import ModelBundle
 from .performance import PerformanceMetrics, PerformanceTracker
 from .position_manager import Position, PositionManager, PositionStatus, Trade
 
@@ -76,7 +83,11 @@ class BacktestResults:
 
 
 class BacktestingEngine:
-    """Event-driven backtesting engine that simulates trading using trained neural network models."""
+    """Backtesting engine using ModelBundle + FeatureCache + DecisionFunction pipeline.
+
+    Wires components directly instead of routing through DecisionOrchestrator.
+    One model load, one position tracker, stateless decisions.
+    """
 
     def __init__(self, config: BacktestConfig):
         """Initialize backtesting engine.
@@ -85,12 +96,28 @@ class BacktestingEngine:
             config: Backtesting configuration
         """
         self.config = config
-        self.progress_callback = (
-            None  # Can be set by API service for real progress tracking
+
+        # Load model bundle (ONE load, CPU-safe)
+        if not config.model_path:
+            raise ValueError("model_path is required for backtesting")
+        self.bundle = ModelBundle.load(config.model_path)
+        self.strategy_name = self.bundle.metadata.strategy_name
+
+        # Feature computation
+        self.feature_cache = FeatureCache(
+            config=self.bundle.strategy_config,
+            model_metadata=self.bundle.metadata,
         )
 
-        # Initialize components
-        self.repository = DataRepository()
+        # Decision making (stateless)
+        decisions_config = self._get_decisions_config()
+        self.decide = DecisionFunction(
+            model=self.bundle.model,
+            feature_names=self.bundle.feature_names,
+            decisions_config=decisions_config,
+        )
+
+        # Trade execution and tracking (SOLE position tracker)
         self.position_manager = PositionManager(
             initial_capital=config.initial_capital,
             commission=config.commission,
@@ -98,27 +125,220 @@ class BacktestingEngine:
         )
         self.performance_tracker = PerformanceTracker()
 
-        # Initialize decision orchestrator (lazy import to avoid circular dependency)
-        from ..decision.orchestrator import DecisionOrchestrator
+        # Data loading
+        self.repository = DataRepository()
 
-        self.orchestrator = DecisionOrchestrator(
-            strategy_config_path=config.strategy_config_path,
-            model_path=config.model_path,
-            mode="backtest",
+    def _get_decisions_config(self) -> dict[str, Any]:
+        """Extract decisions config as a plain dict from strategy_config."""
+        sc = self.bundle.strategy_config
+        # StrategyConfigurationV3 stores decisions as a dict or Pydantic model
+        decisions = getattr(sc, "decisions", {})
+        if hasattr(decisions, "model_dump"):
+            return decisions.model_dump()
+        if isinstance(decisions, dict):
+            return decisions
+        return {}
+
+    def run(
+        self,
+        bridge: Optional[ProgressBridge] = None,
+        cancellation_token: Optional[CancellationToken] = None,
+        checkpoint_callback: Optional[Callable[..., None]] = None,
+        resume_start_bar: Optional[int] = None,
+    ) -> BacktestResults:
+        """Execute the backtest simulation.
+
+        Args:
+            bridge: Optional ProgressBridge for async progress tracking
+            cancellation_token: Optional CancellationToken for cancellation
+            checkpoint_callback: Optional callback for periodic checkpoint saves
+            resume_start_bar: Optional bar index to resume from (processed bar space)
+
+        Returns:
+            BacktestResults with trades, metrics, and equity curve
+
+        Raises:
+            CancellationError: If cancellation is requested
+        """
+        execution_start = time.time()
+
+        logger.info(
+            f"Starting backtest: {self.strategy_name} | "
+            f"{self.config.symbol} {self.config.timeframe} | "
+            f"{self.config.start_date} to {self.config.end_date}"
         )
 
-        self.strategy_name = self.orchestrator.strategy_name
+        # 1. Load data
+        multi_tf_data = self._load_historical_data()
+        base_tf = self._get_base_timeframe()
+        data = multi_tf_data[base_tf]
+
+        if data.empty:
+            raise ValueError(
+                f"No data for {self.config.symbol} {self.config.timeframe}"
+            )
+
+        # 2. Pre-compute features
+        with tracer.start_as_current_span("backtest.feature_compute") as span:
+            span.set_attribute("data.rows", len(data))
+            self.feature_cache.compute_all_features(multi_tf_data)
+
+        # 3. Simulate
+        start_idx = (resume_start_bar + 50) if resume_start_bar is not None else 50
+        if start_idx >= len(data):
+            raise ValueError(
+                f"Insufficient data for backtesting: {len(data)} bars "
+                f"(need at least {start_idx + 1} for indicator warm-up)"
+            )
+        last_signal_time = None
+
+        for idx in range(start_idx, len(data)):
+            bar = data.iloc[idx]
+            price = bar["close"]
+            timestamp = cast(pd.Timestamp, bar.name)
+
+            # Feature lookup
+            features = self.feature_cache.get_features_for_timestamp(timestamp)
+            if features is not None:
+                # Decision (stateless — position passed in, not tracked internally)
+                decision = self.decide(
+                    features=features,
+                    position=self.position_manager.current_position_status,
+                    bar=bar,
+                    last_signal_time=last_signal_time,
+                )
+
+                # Execution
+                if decision.signal != Signal.HOLD:
+                    trade = self.position_manager.execute_trade(
+                        signal=decision.signal,
+                        price=price,
+                        timestamp=timestamp,
+                        symbol=self.config.symbol,
+                        decision_metadata={"confidence": decision.confidence},
+                    )
+                    if trade:
+                        last_signal_time = timestamp
+
+                # Track performance
+                self.position_manager.update_position(price, timestamp)
+                portfolio_value = self.position_manager.get_portfolio_value(price)
+                self.performance_tracker.update(
+                    timestamp=timestamp,
+                    price=price,
+                    portfolio_value=portfolio_value,
+                    position=self.position_manager.current_position_status,
+                )
+            else:
+                portfolio_value = self.position_manager.get_portfolio_value(price)
+
+            # Infrastructure (extracted to focused helpers)
+            self._report_progress(
+                idx, start_idx, len(data), timestamp, portfolio_value, bridge
+            )
+            self._maybe_checkpoint(idx, start_idx, timestamp, checkpoint_callback)
+            self._check_cancellation(idx, start_idx, len(data), cancellation_token)
+
+        # 4. Force-close and generate results
+        self._force_close_position(data)
+        return self._generate_results(execution_start)
+
+    # ------------------------------------------------------------------
+    # Infrastructure helpers
+    # ------------------------------------------------------------------
+
+    def _report_progress(
+        self,
+        idx: int,
+        start_idx: int,
+        total: int,
+        timestamp: pd.Timestamp,
+        portfolio_value: float,
+        bridge: Optional[ProgressBridge],
+    ) -> None:
+        """Update ProgressBridge with simulation progress."""
+        if not bridge:
+            return
+        if (idx - start_idx) % 50 != 0:
+            return
+        try:
+            pct = ((idx - start_idx) / (total - start_idx)) * 100.0
+            bridge._update_state(
+                percentage=pct,
+                message=f"Backtesting {self.config.symbol} {self.config.timeframe} [{timestamp}]",
+                current_bar=idx - start_idx,
+                total_bars=total - start_idx,
+                current_date=str(timestamp),
+                current_pnl=portfolio_value - self.config.initial_capital,
+                total_trades=len(self.position_manager.get_trade_history()),
+                win_rate=0.0,
+            )
+        except Exception as e:
+            logger.warning(f"ProgressBridge update failed: {e}")
+
+    def _maybe_checkpoint(
+        self,
+        idx: int,
+        start_idx: int,
+        timestamp: pd.Timestamp,
+        callback: Optional[Callable[..., None]],
+    ) -> None:
+        """Invoke checkpoint callback periodically."""
+        if not callback:
+            return
+        if (idx - start_idx) % 100 != 0:
+            return
+        try:
+            callback(
+                bar_index=idx - start_idx,
+                timestamp=timestamp,
+                engine=self,
+            )
+        except Exception as e:
+            logger.warning(f"Checkpoint callback failed: {e}")
+
+    def _check_cancellation(
+        self,
+        idx: int,
+        start_idx: int,
+        total: int,
+        token: Optional[CancellationToken],
+    ) -> None:
+        """Check for cancellation request."""
+        if not token:
+            return
+        if (idx - start_idx) % 100 != 0:
+            return
+        if token.is_cancelled_requested:
+            pct = ((idx - start_idx) / (total - start_idx)) * 100
+            logger.info(f"Backtest cancelled at bar {idx}/{total} ({pct:.1f}%)")
+            from ..async_infrastructure.cancellation import CancellationError
+
+            raise CancellationError(
+                f"Backtest cancelled by user request at bar {idx}/{total}"
+            )
+
+    def _force_close_position(self, data: pd.DataFrame) -> None:
+        """Force-close any open position at end of backtest."""
+        final_bar = data.iloc[-1]
+        final_price = final_bar["close"]
+        final_timestamp = cast(pd.Timestamp, final_bar.name)
+        self.position_manager.force_close_position(
+            price=final_price,
+            timestamp=final_timestamp,
+            symbol=self.config.symbol,
+            reason="End of backtest period",
+        )
+
+    # ------------------------------------------------------------------
+    # Resume and reset
+    # ------------------------------------------------------------------
 
     def resume_from_context(self, context: BacktestResumeContext) -> pd.DataFrame:
         """Resume backtesting engine state from a checkpoint context.
 
-        This method:
-        1. Loads data for the full original date range (all timeframes)
-        2. Computes features for the full range (for lookback)
-        3. Restores portfolio state (cash, positions, trades)
-        4. Restores equity curve samples to performance tracker
-
-        After calling this method, call run() with resume_start_bar=context.start_bar.
+        Loads data, computes features, restores portfolio state and equity curve.
+        After calling this, call run() with resume_start_bar=context.start_bar.
 
         Args:
             context: BacktestResumeContext with checkpoint data.
@@ -126,9 +346,9 @@ class BacktestingEngine:
         Returns:
             The base timeframe DataFrame for the full date range.
         """
-        logger.info(f"🔄 Resuming backtest from bar {context.start_bar}")
+        logger.info(f"Resuming backtest from bar {context.start_bar}")
 
-        # 1. Load data for full range (may be multi-timeframe)
+        # 1. Load data for full range
         multi_tf_data = self._load_historical_data()
         base_tf = self._get_base_timeframe()
         data = multi_tf_data[base_tf]
@@ -139,13 +359,12 @@ class BacktestingEngine:
             )
 
         logger.info(
-            f"✅ Loaded {len(data):,} bars from {data.index[0]} to {data.index[-1]}"
+            f"Loaded {len(data):,} bars from {data.index[0]} to {data.index[-1]}"
         )
 
-        # 2. Compute features for full range (all timeframes, needed for lookback)
-        logger.info("🚀 Pre-computing indicators for resume...")
-        self.orchestrator.prepare_feature_cache(multi_tf_data)
-        logger.info("✅ Feature cache ready")
+        # 2. Compute features for full range
+        self.feature_cache.compute_all_features(multi_tf_data)
+        logger.info("Feature cache ready")
 
         # 3. Restore portfolio state
         self._restore_portfolio_state(context)
@@ -153,23 +372,17 @@ class BacktestingEngine:
         # 4. Restore equity curve samples
         if context.equity_samples:
             self.performance_tracker.equity_curve = list(context.equity_samples)
-            logger.info(f"📊 Restored {len(context.equity_samples)} equity samples")
+            logger.info(f"Restored {len(context.equity_samples)} equity samples")
 
         return data
 
     def _restore_portfolio_state(self, context: BacktestResumeContext) -> None:
-        """Restore portfolio state from checkpoint context.
-
-        Args:
-            context: BacktestResumeContext with portfolio data.
-        """
-        # Restore cash
+        """Restore portfolio state from checkpoint context."""
         self.position_manager.current_capital = context.cash
-        logger.info(f"💰 Restored cash: ${context.cash:,.2f}")
+        logger.info(f"Restored cash: ${context.cash:,.2f}")
 
-        # Restore position (if any)
         if context.positions:
-            pos_data = context.positions[0]  # Single position for now
+            pos_data = context.positions[0]
             self.position_manager.current_position = Position(
                 status=PositionStatus(pos_data["status"]),
                 entry_price=pos_data["entry_price"],
@@ -179,39 +392,29 @@ class BacktestingEngine:
                 last_update_time=pd.Timestamp(pos_data["entry_date"]),
             )
             logger.info(
-                f"📈 Restored {pos_data['status']} position: "
+                f"Restored {pos_data['status']} position: "
                 f"{pos_data['quantity']} @ ${pos_data['entry_price']:.4f}"
             )
         else:
             self.position_manager.current_position = None
-            logger.info("📊 No open position to restore (FLAT)")
+            logger.info("No open position to restore (FLAT)")
 
-        # Restore trade history
         if context.trades:
             self.position_manager.trade_history = [
-                self._dict_to_trade(trade_data) for trade_data in context.trades
+                self._dict_to_trade(td) for td in context.trades
             ]
-            # Set next_trade_id based on restored trades
             max_trade_id = max(t.trade_id for t in self.position_manager.trade_history)
             self.position_manager.next_trade_id = max_trade_id + 1
             logger.info(
-                f"📋 Restored {len(context.trades)} trades "
+                f"Restored {len(context.trades)} trades "
                 f"(next_trade_id={self.position_manager.next_trade_id})"
             )
         else:
             self.position_manager.trade_history = []
             self.position_manager.next_trade_id = 1
-            logger.info("📋 No trades to restore")
 
     def _dict_to_trade(self, trade_data: dict) -> Trade:
-        """Convert a trade dictionary back to a Trade object.
-
-        Args:
-            trade_data: Dictionary with trade data.
-
-        Returns:
-            Trade object.
-        """
+        """Convert a trade dictionary back to a Trade object."""
         return Trade(
             trade_id=trade_data["trade_id"],
             symbol=trade_data["symbol"],
@@ -231,682 +434,14 @@ class BacktestingEngine:
             decision_metadata=trade_data.get("decision_metadata", {}),
         )
 
-    def run(
-        self,
-        bridge: Optional[ProgressBridge] = None,
-        cancellation_token: Optional[CancellationToken] = None,
-        checkpoint_callback: Optional[Callable[..., None]] = None,
-        resume_start_bar: Optional[int] = None,
-    ) -> BacktestResults:
-        """Execute the backtest simulation.
-
-        Args:
-            bridge: Optional ProgressBridge for async operations progress tracking
-            cancellation_token: Optional CancellationToken for operation cancellation
-            checkpoint_callback: Optional callback for periodic checkpoint saves.
-                Called with (bar_index, timestamp, engine) for building checkpoint state.
-            resume_start_bar: Optional bar index to resume from (processed bar index).
-                If provided, the simulation starts from this bar + 50 (accounting for warmup).
-                Previous bars are skipped since their trades are already in trade_history.
-
-        Returns:
-            Comprehensive results including trades, metrics, and analysis
-
-        Raises:
-            CancellationError: If cancellation is requested via cancellation_token
-        """
-        start_time = pd.Timestamp.now()
-        execution_start = time.time()
-
-        logger.info(f"🚀 Starting backtest: {self.strategy_name}")
-        logger.info(
-            f"📊 Symbol: {self.config.symbol} | Timeframe: {self.config.timeframe}"
-        )
-        logger.info(f"📅 Period: {self.config.start_date} to {self.config.end_date}")
-        logger.info(f"💰 Initial Capital: ${self.config.initial_capital:,.2f}")
-
-        if self.config.verbose:
-            print(f"🚀 Starting backtest: {self.strategy_name}")
-            print(
-                f"📊 Symbol: {self.config.symbol} | Timeframe: {self.config.timeframe}"
-            )
-            print(f"📅 Period: {self.config.start_date} to {self.config.end_date}")
-            print(f"💰 Initial Capital: ${self.config.initial_capital:,.2f}")
-            print("=" * 60)
-
-        # Load historical data (may be multi-timeframe)
-        if self.config.verbose:
-            print(
-                f"📈 Loading data for {self.config.symbol} {self.config.timeframe}..."
-            )
-
-        multi_tf_data = self._load_historical_data()
-        base_tf = self._get_base_timeframe()
-        data = multi_tf_data[base_tf]
-
-        if data.empty:
-            raise ValueError(
-                f"No data loaded for {self.config.symbol} {self.config.timeframe}"
-            )
-
-        if self.config.verbose:
-            print(
-                f"✅ Loaded {len(data):,} bars from {data.index[0]} to {data.index[-1]}"
-            )
-            if len(multi_tf_data) > 1:
-                print(
-                    f"   ({len(multi_tf_data)} timeframes: {list(multi_tf_data.keys())})"
-                )
-            print("🚀 Pre-computing features for backtesting performance...")
-
-        # PERFORMANCE OPTIMIZATION: Pre-compute all features for fast backtesting
-        # Pass all timeframe data to feature cache for multi-TF feature computation
-        with tracer.start_as_current_span("backtest.strategy_init") as span:
-            span.set_attribute("progress.phase", "strategy_init")
-            span.set_attribute("data.rows", len(data))
-
-            logger.info("🚀 Pre-computing indicators and fuzzy memberships...")
-            self.orchestrator.prepare_feature_cache(multi_tf_data)
-            logger.info("✅ Feature cache ready - backtesting should be much faster!")
-
-        if self.config.verbose:
-            print("✅ Feature cache prepared - backtesting optimized!")
-            print("🔧 Running simulation...")
-            print(
-                f"🔍 DEBUG: Data range check - Start: {self.config.start_date}, End: {self.config.end_date}"
-            )
-            print(
-                f"🔍 DEBUG: Actual data range - Start: {data.index[0]}, End: {data.index[-1]}"
-            )
-            print(f"🔍 DEBUG: Data length: {len(data)} bars")
-
-        # Initialize tracking
-        trades_executed = 0
-        last_progress_update = 0.0
-
-        # DEBUG: Track signal statistics
-        signal_counts = {"BUY": 0, "SELL": 0, "HOLD": 0}
-        non_hold_signals = []
-        trade_attempts = []
-
-        # Main simulation loop with progress tracking
-        last_processed_timestamp = None
-        repeated_timestamp_count = 0
-
-        logger.info(
-            f"🚀 Starting main simulation loop with {len(data)} bars from {data.index[0]} to {data.index[-1]}"
-        )
-        logger.info(
-            f"📊 Processing {len(data) - 50} bars (skipping first 50 for indicator warm-up)"
-        )
-
-        # Initial progress callback to set total bars (only processable bars, not warm-up bars)
-        processable_bars = len(data) - 50  # Skip first 50 bars for indicator warm-up
-        if self.progress_callback:
-            try:
-                self.progress_callback(
-                    0,
-                    processable_bars,
-                    {
-                        "portfolio_value": self.config.initial_capital,
-                        "trades_executed": 0,
-                    },
-                )
-            except Exception as e:
-                logger.warning(f"Initial progress callback failed: {e}")
-
-        # PERFORMANCE OPTIMIZATION: Start from bar 50 to align with FeatureCache
-        # The first 50 bars are skipped because indicators need sufficient lookback data
-        # When resuming, start from resume_start_bar + 50 (resume_start_bar is in processed bar space)
-        if resume_start_bar is not None:
-            start_idx = resume_start_bar + 50
-            logger.info(
-                f"🔄 Resuming from bar {resume_start_bar} (raw index {start_idx})"
-            )
-        else:
-            start_idx = 50
-
-        # Create telemetry span for simulation phase
-        sim_span = tracer.start_span("backtest.simulation")
-        sim_span.set_attribute("progress.phase", "simulation")
-        sim_span.set_attribute("simulation.total_bars", len(data))
-        sim_span.set_attribute("simulation.processable_bars", processable_bars)
-
-        for idx in range(start_idx, len(data)):
-            current_bar = data.iloc[idx]
-            current_timestamp = cast(pd.Timestamp, current_bar.name)
-            current_price = current_bar["close"]
-
-            # DEBUG: Log first few bars to ensure loop is running
-            if idx < start_idx + 5:
-                # logger.info(f"📊 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Processing bar {idx+1}/{len(data)}, Price: ${current_price:.2f}")  # Commented for performance
-                pass
-
-            # Debug: Check for infinite loops on the same timestamp
-            if current_timestamp == last_processed_timestamp:
-                repeated_timestamp_count += 1
-                if repeated_timestamp_count > 5:
-                    print(
-                        f"🚨 INFINITE LOOP DETECTED: Processing {current_timestamp} repeatedly ({repeated_timestamp_count} times)"
-                    )
-                    print("   Breaking to prevent infinite loop")
-                    break
-            else:
-                repeated_timestamp_count = 0
-                last_processed_timestamp = current_timestamp
-
-            # Safety check: ensure we don't process beyond the configured end date
-            if self.config.end_date:
-                end_date = pd.to_datetime(self.config.end_date)
-                if current_timestamp.tz is not None and end_date.tz is None:
-                    end_date = end_date.tz_localize("UTC")
-                elif current_timestamp.tz is None and end_date.tz is not None:
-                    current_timestamp = current_timestamp.tz_localize("UTC")
-
-                if current_timestamp > end_date:
-                    if self.config.verbose:
-                        print(
-                            f"🛑 Breaking loop: {current_timestamp} exceeds end date {end_date}"
-                        )
-                    break
-
-            # Prepare historical data up to current point
-            historical_data = data.iloc[: idx + 1]
-
-            # Portfolio state for decision making
-            portfolio_state = {
-                "total_value": self.position_manager.get_portfolio_value(current_price),
-                "available_capital": self.position_manager.available_capital,
-            }
-
-            # Generate trading decision using orchestrator
-            logger.debug(
-                f"🎯 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Calling orchestrator.make_decision for bar {idx + 1}/{len(data)}"
-            )
-
-            try:
-                decision = self.orchestrator.make_decision(
-                    symbol=self.config.symbol,
-                    timeframe=self.config.timeframe,
-                    current_bar=current_bar,
-                    historical_data=historical_data,
-                    portfolio_state=portfolio_state,
-                )
-                logger.debug(
-                    f"✅ [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Orchestrator returned: {decision.signal.value} (confidence: {decision.confidence:.4f})"
-                )
-            except Exception as e:
-                # Check if this is a warm-up period error (normal and expected)
-                # NOTE: We now start from bar 50, so warm-up errors should be rare
-                is_warmup_error = (
-                    "No fuzzy membership features found" in str(e)
-                    or "likely warm-up period" in str(e)
-                    or idx
-                    < start_idx
-                    + 10  # First 10 bars after start_idx might still have issues
-                )
-
-                if is_warmup_error:
-                    # Log warm-up errors at DEBUG level - they're expected
-                    logger.debug(
-                        f"🔄 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Warm-up period - insufficient data: {e}"
-                    )
-                else:
-                    # Log real errors at ERROR level
-                    logger.error(
-                        f"🚨 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Decision error: {e}"
-                    )
-                    logger.error(f"🚨 Error details: {type(e).__name__}: {str(e)}")
-
-                    # Also print to console for immediate visibility (real errors only)
-                    print(f"🚨 DECISION ERROR at {current_timestamp}: {e}")
-
-                # Create a HOLD decision if error occurs
-                from ..decision.base import Position, TradingDecision
-
-                decision = TradingDecision(
-                    signal=Signal.HOLD,
-                    confidence=0.0,
-                    timestamp=current_timestamp,
-                    reasoning={"error": str(e), "warmup": is_warmup_error},
-                    current_position=Position.FLAT,
-                )
-
-                if is_warmup_error:
-                    logger.debug(
-                        f"🔄 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Using HOLD during warm-up period"
-                    )
-                else:
-                    logger.info(
-                        f"🛑 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Created fallback HOLD decision due to error"
-                    )
-
-            # DEBUG: Track all signals
-            signal_counts[decision.signal.value] += 1
-
-            # Log signal distribution every 1000 bars for debugging
-            if idx > start_idx and (idx - start_idx) % 1000 == 0:
-                # logger.info(f"📊 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Signal counts so far: BUY={signal_counts['BUY']}, HOLD={signal_counts['HOLD']}, SELL={signal_counts['SELL']}")  # Commented for performance
-                pass
-
-            # Track decision for analysis (even HOLD decisions)
-            if (
-                self.config.verbose
-                and (idx - start_idx) % max(1, (len(data) - start_idx) // 10) == 0
-            ):  # Log every 10% of progress
-                progress = ((idx - start_idx) / (len(data) - start_idx)) * 100
-                signal_name = decision.signal.value
-                print(
-                    f"⏳ {progress:.0f}% | {current_timestamp.strftime('%Y-%m-%d')} | Signal: {signal_name} | Confidence: {decision.confidence:.3f}"
-                )
-
-            # Execute decision if action required
-            if decision.signal != Signal.HOLD:
-                logger.debug(
-                    f"🎯 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Non-HOLD signal detected: {decision.signal.value}"
-                )
-
-                # CRITICAL DEBUG: Track position states before trade
-                pm_position = self.position_manager.current_position_status
-                de_position = self.orchestrator.decision_engine.current_position
-
-                logger.debug(
-                    f"🔍 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Position states - PositionManager: {pm_position.value}, DecisionEngine: {de_position.value}"
-                )
-
-                # CRITICAL: Validate signal logic
-                if decision.signal == Signal.SELL and pm_position.value == "FLAT":
-                    logger.error(
-                        f"🚨 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] IMPOSSIBLE: SELL signal when PositionManager shows FLAT!"
-                    )
-                    logger.error(f"🚨 Signal source: {decision.reasoning}")
-                if decision.signal == Signal.BUY and pm_position.value == "LONG":
-                    logger.error(
-                        f"🚨 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] IMPOSSIBLE: BUY signal when PositionManager shows LONG!"
-                    )
-                # DEBUG: Log every non-HOLD signal
-                non_hold_signals.append(
-                    {
-                        "timestamp": current_timestamp,
-                        "signal": decision.signal.value,
-                        "confidence": decision.confidence,
-                        "price": current_price,
-                    }
-                )
-
-                if self.config.verbose:
-                    print(
-                        f"🎯 NON-HOLD SIGNAL: {decision.signal.value} at {current_timestamp} "
-                        f"| Confidence: {decision.confidence:.4f} | Price: ${current_price:.2f}"
-                    )
-
-                trade = self.position_manager.execute_trade(
-                    signal=decision.signal,
-                    price=current_price,
-                    timestamp=current_timestamp,
-                    symbol=self.config.symbol,
-                    decision_metadata={
-                        "confidence": decision.confidence,
-                        "reasoning": decision.reasoning,
-                    },
-                )
-
-                # DEBUG: Log trade execution result
-                trade_attempts.append(
-                    {
-                        "timestamp": current_timestamp,
-                        "signal": decision.signal.value,
-                        "confidence": decision.confidence,
-                        "price": current_price,
-                        "trade_executed": trade is not None,
-                        "trade_details": trade.__dict__ if trade else None,
-                    }
-                )
-
-                if trade:
-                    trades_executed += 1
-
-                    # CRITICAL DEBUG: Verify position states after trade
-                    pm_position_after = self.position_manager.current_position_status
-
-                    # Update the decision engine's position state
-                    self.orchestrator.decision_engine.update_position(
-                        decision.signal, current_timestamp
-                    )
-
-                    de_position_after = (
-                        self.orchestrator.decision_engine.current_position
-                    )
-
-                    # DEBUG: Log detailed trade execution with position tracking
-                    portfolio_after = self.position_manager.get_portfolio_value(
-                        current_price
-                    )
-                    position_info = self.position_manager.get_position_summary()
-
-                    action = "BUY" if decision.signal == Signal.BUY else "SELL"
-                    logger.debug(
-                        f"ORDER EXECUTED: {current_timestamp.strftime('%Y-%m-%d %H:%M')} | {action} @ ${current_price:.2f} "
-                        f"| Confidence: {decision.confidence:.2f} | Order #{trades_executed}"
-                    )
-
-                    # CRITICAL: Log position synchronization
-                    logger.debug(
-                        f"🔄 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Position sync after trade - PM: {pm_position_after.value}, DE: {de_position_after.value}"
-                    )
-
-                    # FIXED: Only log DESYNC when positions are actually different (compare values)
-                    if pm_position_after.value != de_position_after.value:
-                        logger.error(
-                            f"🚨 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] POSITION DESYNC! PositionManager: {pm_position_after.value} vs DecisionEngine: {de_position_after.value}"
-                        )
-                    else:
-                        logger.debug(
-                            f"✅ [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Positions synchronized: {pm_position_after.value}"
-                        )
-
-                    # CRITICAL: Portfolio value tracking
-                    portfolio_change = portfolio_after - self.config.initial_capital
-                    portfolio_pct = (
-                        portfolio_change / self.config.initial_capital
-                    ) * 100
-
-                    logger.debug(
-                        f"💰 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Portfolio: ${portfolio_after:,.2f} | Change: ${portfolio_change:,.2f} ({portfolio_pct:+.2f}%) | Cash: ${position_info['capital']:,.2f}"
-                    )
-
-                    # Check for impossible portfolio states
-                    if position_info["capital"] < 0:
-                        logger.error(
-                            f"🚨 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] IMPOSSIBLE: Negative cash ${position_info['capital']:,.2f}"
-                        )
-                    if portfolio_pct < -100:
-                        logger.error(
-                            f"🚨 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] IMPOSSIBLE: Portfolio loss > 100% ({portfolio_pct:.1f}%)"
-                        )
-                    if portfolio_after <= 0:
-                        logger.error(
-                            f"🚨 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] IMPOSSIBLE: Portfolio value ${portfolio_after:,.2f} <= 0"
-                        )
-
-                    if self.config.verbose:
-                        action_emoji = (
-                            "🟢 BUY " if decision.signal == Signal.BUY else "🔴 SELL"
-                        )
-                        print(
-                            f"✅ ORDER EXECUTED: {current_timestamp.strftime('%Y-%m-%d %H:%M')} | {action_emoji} @ ${current_price:.2f} "
-                            f"| Confidence: {decision.confidence:.2f} | Order #{trades_executed}"
-                        )
-                else:
-                    if self.config.verbose:
-                        print(
-                            f"❌ ORDER FAILED: {decision.signal.value} signal not executed at {current_timestamp}"
-                        )
-
-            # Update position with current market price
-            self.position_manager.update_position(current_price, current_timestamp)
-
-            # Track performance metrics
-            portfolio_value = self.position_manager.get_portfolio_value(current_price)
-            position_status = self.position_manager.current_position_status
-
-            # DEBUG: Log portfolio state every 1000 bars to track capital management
-            if (idx - start_idx) % 1000 == 0 or self.config.verbose:
-                position_summary = self.position_manager.get_position_summary()
-                logger.debug(
-                    f"Portfolio state [{idx}/{len(data)}]: Portfolio=${portfolio_value:,.2f}, "
-                    f"Cash=${position_summary['capital']:,.2f}, Available=${position_summary['available_capital']:,.2f}, "
-                    f"Position={position_status.value}"
-                )
-
-                # Check for impossible metrics early
-                if portfolio_value < 0:
-                    logger.error(
-                        f"IMPOSSIBLE PORTFOLIO VALUE: ${portfolio_value:,.2f} detected at {current_timestamp}"
-                    )
-                if position_summary["capital"] < 0:
-                    logger.error(
-                        f"NEGATIVE CASH: ${position_summary['capital']:,.2f} detected at {current_timestamp}"
-                    )
-
-            self.performance_tracker.update(
-                timestamp=current_timestamp,
-                price=current_price,
-                portfolio_value=portfolio_value,
-                position=position_status,
-            )
-
-            # Progress update with REAL progress tracking
-            if idx > start_idx:
-                progress = ((idx - start_idx) / (len(data) - start_idx)) * 100
-                if progress - last_progress_update >= 10:  # Update every 10%
-                    total_trades = len(self.position_manager.get_trade_history())
-
-                    # Log progress at info level
-                    logger.info(
-                        f"Progress: {progress:.0f}% | Portfolio: ${portfolio_value:,.2f} | "
-                        f"Orders: {trades_executed} | Completed Trades: {total_trades}"
-                    )
-
-                    # Check for drawdown issues
-                    if hasattr(self.performance_tracker, "get_current_drawdown"):
-                        try:
-                            current_dd = self.performance_tracker.get_current_drawdown()
-                            if current_dd > 0.5:  # > 50% drawdown
-                                logger.warning(
-                                    f"High drawdown detected: {current_dd * 100:.1f}%"
-                                )
-                        except Exception:
-                            pass
-
-                    # Additional sanity checks at progress milestones
-                    if portfolio_value <= 0:
-                        logger.error(
-                            f"BANKRUPT: Portfolio value reached ${portfolio_value:,.2f} at {progress:.0f}% progress"
-                        )
-                        logger.warning(
-                            "Should backtest terminate here? Current logic continues..."
-                        )
-
-                    # Verbose console output for user feedback
-                    if self.config.verbose:
-                        drawdown_info = ""
-                        if hasattr(self.performance_tracker, "get_current_drawdown"):
-                            try:
-                                current_dd = (
-                                    self.performance_tracker.get_current_drawdown()
-                                )
-                                if current_dd > 0.5:  # > 50% drawdown
-                                    drawdown_info = (
-                                        f" | 🚨 Drawdown: {current_dd * 100:.1f}%"
-                                    )
-                            except Exception:
-                                pass
-
-                        print(
-                            f"⏳ Progress: {progress:.0f}% | Portfolio: ${portfolio_value:,.2f} | "
-                            f"Orders: {trades_executed} | Completed Trades: {total_trades}{drawdown_info}"
-                        )
-
-                    last_progress_update = progress
-
-            # Call API progress callback with REAL data
-            if (
-                self.progress_callback and (idx - start_idx) % 100 == 0
-            ):  # Update every 100 bars for API responsiveness
-                try:
-                    additional_data = {
-                        "portfolio_value": portfolio_value,
-                        "trades_executed": trades_executed,
-                    }
-                    # Progress callback expects current processed bars vs total processable bars
-                    self.progress_callback(
-                        idx - start_idx + 1, len(data) - start_idx, additional_data
-                    )
-                except Exception as e:
-                    logger.warning(f"Progress callback failed: {e}")
-
-            # NEW: ProgressBridge updates (every 50 bars)
-            if bridge and (idx - start_idx) % 50 == 0:
-                try:
-                    # Calculate win rate from performance tracker
-                    win_rate = 0.0
-                    if hasattr(self.performance_tracker, "calculate_win_rate"):
-                        try:
-                            win_rate = self.performance_tracker.calculate_win_rate(
-                                self.position_manager.get_trade_history()
-                            )
-                        except Exception:
-                            pass
-
-                    # Update bridge with current progress
-                    bridge._update_state(
-                        percentage=((idx - start_idx) / (len(data) - start_idx))
-                        * 100.0,
-                        message=f"Backtesting {self.config.symbol} {self.config.timeframe} [{current_timestamp}]",
-                        current_bar=idx - start_idx,
-                        total_bars=len(data) - start_idx,
-                        current_date=str(current_timestamp),
-                        current_pnl=portfolio_value - self.config.initial_capital,
-                        total_trades=trades_executed,
-                        win_rate=win_rate,
-                    )
-                except Exception as e:
-                    logger.warning(f"ProgressBridge update failed: {e}")
-
-            # Checkpoint callback (called periodically for checkpoint saves)
-            # The callback is responsible for deciding when to actually save
-            if checkpoint_callback and (idx - start_idx) % 100 == 0:
-                try:
-                    checkpoint_callback(
-                        bar_index=idx - start_idx,  # Processed bars (excluding warmup)
-                        timestamp=current_timestamp,
-                        engine=self,
-                    )
-                except Exception as e:
-                    logger.warning(f"Checkpoint callback failed: {e}")
-
-            # NEW: Cancellation checks (every 100 bars)
-            if cancellation_token and (idx - start_idx) % 100 == 0:
-                if cancellation_token.is_cancelled_requested:
-                    logger.info(
-                        f"Backtest cancelled at bar {idx}/{len(data)} ({((idx - start_idx) / (len(data) - start_idx)) * 100:.1f}%)"
-                    )
-                    # Use custom CancellationError for consistency with other workers
-                    from ..async_infrastructure.cancellation import CancellationError
-
-                    raise CancellationError(
-                        f"Backtest cancelled by user request at bar {idx}/{len(data)}"
-                    )
-
-        # Force-close any open position at the end of the backtest
-        # This prevents unrealized losses from skewing performance metrics
-        final_bar = data.iloc[-1]
-        final_price = final_bar["close"]
-        final_timestamp = cast(
-            pd.Timestamp,
-            (
-                final_bar.name
-                if hasattr(final_bar.name, "strftime")
-                else pd.Timestamp(cast(str, final_bar.name))
-            ),
-        )
-
-        # CRITICAL DEBUG: Track force-close logic
-        pm_final_position = self.position_manager.current_position_status
-        logger.info(
-            f"🔒 [{final_timestamp.strftime('%Y-%m-%d %H:%M')}] Force-close check - Position: {pm_final_position.value}"
-        )
-
-        if pm_final_position.value != "FLAT":
-            logger.info(
-                f"🔒 [{final_timestamp.strftime('%Y-%m-%d %H:%M')}] Force-closing {pm_final_position.value} position at ${final_price:.2f}"
-            )
-
-        forced_trade = self.position_manager.force_close_position(
-            price=final_price,
-            timestamp=final_timestamp,
-            symbol=self.config.symbol,
-            reason="End of backtest period",
-        )
-
-        if forced_trade:
-            trades_executed += 1  # Count the forced closure
-            if self.config.verbose:
-                print("\n🔒 FORCED POSITION CLOSURE:")
-                print("   Closed open position at end of backtest")
-                print(
-                    f"   Entry: ${forced_trade.entry_price:.2f} @ {forced_trade.entry_time}"
-                )
-                print(
-                    f"   Exit: ${forced_trade.exit_price:.2f} @ {forced_trade.exit_time}"
-                )
-                print(f"   P&L: ${forced_trade.net_pnl:.2f}")
-                print("   This trade is included in performance calculations")
-
-        # Generate final results
-        execution_time = time.time() - execution_start
-        end_time = pd.Timestamp.now()
-
-        if self.config.verbose:
-            print("=" * 60)
-            print("✅ Backtest completed!")
-
-            # Summary of orders vs trades for clarity
-            completed_trades = len(self.position_manager.get_trade_history())
-            print("\n📋 EXECUTION SUMMARY:")
-            print(
-                f"   Orders executed: {trades_executed} (individual BUY/SELL operations)"
-            )
-            print(
-                f"   Trades completed: {completed_trades} (round-trip BUY→SELL pairs)"
-            )
-
-            # DEBUG: Print detailed signal analysis
-            print("\n🔍 SIGNAL ANALYSIS:")
-            print(f"   Total bars in dataset: {len(data):,}")
-            print(f"   Bars processed (after warm-up): {len(data) - 50:,}")
-            print(f"   HOLD signals: {signal_counts['HOLD']:,}")
-            print(f"   BUY signals: {signal_counts['BUY']:,}")
-            print(f"   SELL signals: {signal_counts['SELL']:,}")
-            print(f"   Non-HOLD signals: {len(non_hold_signals):,}")
-            print(f"   Order attempts: {len(trade_attempts):,}")
-            print(f"   Successful orders: {trades_executed}")
-
-            if non_hold_signals:
-                print("\n📊 FIRST 5 NON-HOLD SIGNALS:")
-                for i, signal in enumerate(non_hold_signals[:5]):
-                    print(
-                        f"   {i + 1}. {signal['timestamp']} | {signal['signal']} | "
-                        f"Confidence: {signal['confidence']:.4f} | Price: ${signal['price']:.2f}"
-                    )
-
-            if trade_attempts:
-                print("\n💼 ORDER EXECUTION ANALYSIS:")
-                successful = sum(1 for t in trade_attempts if t["trade_executed"])
-                failed = len(trade_attempts) - successful
-                print(f"   Successful: {successful}")
-                print(f"   Failed: {failed}")
-
-                if failed > 0:
-                    print("\n❌ FAILED ORDER ATTEMPTS:")
-                    for i, attempt in enumerate(
-                        [t for t in trade_attempts if not t["trade_executed"]][:5]
-                    ):
-                        print(
-                            f"   {i + 1}. {attempt['timestamp']} | {attempt['signal']} | "
-                            f"Confidence: {attempt['confidence']:.4f} | Price: ${attempt['price']:.2f}"
-                        )
-
-        # End simulation span
-        sim_span.end()
-
-        results = self._generate_results(start_time, end_time, execution_time)
-
-        if self.config.verbose:
-            self._print_summary(results)
-
-        return results
+    def reset(self):
+        """Reset the backtesting engine for a new run."""
+        self.position_manager.reset()
+        self.performance_tracker.reset()
+
+    # ------------------------------------------------------------------
+    # Data loading and config access
+    # ------------------------------------------------------------------
 
     def _get_base_timeframe(self) -> str:
         """Get the base timeframe from strategy config.
@@ -914,10 +449,9 @@ class BacktestingEngine:
         Returns:
             Base timeframe string (e.g., "1h")
         """
-        td = self.orchestrator.strategy_config.get("training_data", {})
-        tf_config = td.get("timeframes", {})
-        if isinstance(tf_config, dict):
-            base = tf_config.get("base_timeframe")
+        td = self.bundle.strategy_config.training_data
+        if td and hasattr(td, "timeframes") and td.timeframes:
+            base = getattr(td.timeframes, "base_timeframe", None)
             if base:
                 return base
         return self.config.timeframe
@@ -928,20 +462,18 @@ class BacktestingEngine:
         Returns:
             List of timeframes. For single-TF strategies, returns [config.timeframe].
         """
-        td = self.orchestrator.strategy_config.get("training_data", {})
-        tf_config = td.get("timeframes", {})
-        if isinstance(tf_config, dict):
-            mode = tf_config.get("mode", "single")
-            tf_list = tf_config.get("list", [])
-            if mode == "multi_timeframe" and len(tf_list) >= 2:
-                return tf_list
+        td = self.bundle.strategy_config.training_data
+        if td and hasattr(td, "timeframes") and td.timeframes:
+            mode = getattr(td.timeframes, "mode", None)
+            tf_list = getattr(td.timeframes, "timeframes", None)
+            if mode and hasattr(mode, "value"):
+                mode = mode.value
+            if mode == "multi_timeframe" and tf_list and len(tf_list) >= 2:
+                return list(tf_list)
         return [self.config.timeframe]
 
     def _load_historical_data(self) -> dict[str, pd.DataFrame]:
         """Load historical data for backtesting from cache.
-
-        For multi-timeframe strategies, loads all timeframes and synchronizes
-        them using MultiTimeframeCoordinator (same pattern as training pipeline).
 
         Returns:
             Dict mapping timeframes to OHLCV DataFrames
@@ -949,12 +481,10 @@ class BacktestingEngine:
         with tracer.start_as_current_span("backtest.data_loading") as span:
             span.set_attribute("data.symbol", self.config.symbol)
             span.set_attribute("data.timeframe", self.config.timeframe)
-            span.set_attribute("progress.phase", "data_loading")
 
             timeframes = self._get_strategy_timeframes()
 
             if len(timeframes) >= 2:
-                # Multi-timeframe: use coordinator (same as training pipeline)
                 from ..data.multi_timeframe_coordinator import (
                     MultiTimeframeCoordinator,
                 )
@@ -963,7 +493,7 @@ class BacktestingEngine:
                 base_tf = self._get_base_timeframe()
 
                 logger.info(
-                    f"Loading multi-timeframe data: {timeframes} " f"(base: {base_tf})"
+                    f"Loading multi-timeframe data: {timeframes} (base: {base_tf})"
                 )
 
                 multi_data = coordinator.load_multi_timeframe_data(
@@ -976,16 +506,13 @@ class BacktestingEngine:
 
                 total_rows = sum(len(df) for df in multi_data.values())
                 span.set_attribute("data.rows", total_rows)
-                span.set_attribute("data.timeframes", len(timeframes))
                 return multi_data
             else:
-                # Single timeframe: load directly with date filtering
                 data = self.repository.load_from_cache(
                     symbol=self.config.symbol,
                     timeframe=self.config.timeframe,
                 )
 
-                # Filter by date range if specified
                 if self.config.start_date:
                     start_date = pd.to_datetime(self.config.start_date)
                     if (
@@ -1009,15 +536,11 @@ class BacktestingEngine:
                 span.set_attribute("data.rows", len(data))
                 return {self.config.timeframe: data}
 
-    def _generate_results(
-        self, start_time: pd.Timestamp, end_time: pd.Timestamp, execution_time: float
-    ) -> BacktestResults:
-        """Compile comprehensive backtest results.
+    def _generate_results(self, execution_start: float) -> BacktestResults:
+        """Compile backtest results.
 
         Args:
-            start_time: Backtest start time
-            end_time: Backtest end time
-            execution_time: Execution time in seconds
+            execution_start: time.time() when execution started
 
         Returns:
             BacktestResults object
@@ -1025,7 +548,6 @@ class BacktestingEngine:
         trades = self.position_manager.get_trade_history()
         equity_curve = self.performance_tracker.get_equity_curve()
 
-        # Calculate performance metrics
         start_date = (
             pd.to_datetime(self.config.start_date) if self.config.start_date else None
         )
@@ -1048,103 +570,7 @@ class BacktestingEngine:
             trades=trades,
             metrics=metrics,
             equity_curve=equity_curve,
-            start_time=start_time,
-            end_time=end_time,
-            execution_time_seconds=execution_time,
+            start_time=start_date or pd.Timestamp.now(),
+            end_time=end_date or pd.Timestamp.now(),
+            execution_time_seconds=time.time() - execution_start,
         )
-
-    def _print_summary(self, results: BacktestResults):
-        """Print backtest summary.
-
-        Args:
-            results: Backtest results
-        """
-        print(f"\n📊 BACKTEST RESULTS - {results.strategy_name}")
-        print("=" * 60)
-
-        # Check if any trades were executed
-        metrics = results.metrics
-        if metrics.total_trades == 0:
-            print("⚠️  NO TRADES EXECUTED")
-            print("\n🔍 Analysis:")
-            print("   • No trading signals were generated")
-            print("   • Possible causes:")
-            print("     - Model may need retraining with different parameters")
-            print("     - Confidence thresholds may be too high")
-            print("     - Market conditions don't match training period")
-            print("     - Fuzzy membership functions may need adjustment")
-
-            # Show decision statistics if available
-            decision_stats = getattr(self.orchestrator, "decision_history", [])
-            if decision_stats:
-                hold_count = sum(1 for d in decision_stats if d.signal.value == "HOLD")
-                buy_signals = sum(1 for d in decision_stats if d.signal.value == "BUY")
-                sell_signals = sum(
-                    1 for d in decision_stats if d.signal.value == "SELL"
-                )
-
-                print("\n📈 Signal Distribution:")
-                print(f"   HOLD signals: {hold_count}")
-                print(f"   BUY signals: {buy_signals}")
-                print(f"   SELL signals: {sell_signals}")
-
-                if len(decision_stats) > 0:
-                    avg_confidence = sum(d.confidence for d in decision_stats) / len(
-                        decision_stats
-                    )
-                    print(f"   Average confidence: {avg_confidence:.3f}")
-
-            print("\n💡 Recommendations:")
-            print("   • Review model training performance and validation accuracy")
-            print("   • Consider adjusting confidence thresholds in strategy config")
-            print("   • Verify fuzzy membership function parameters")
-            print("   • Try different training periods or market conditions")
-
-            final_value = (
-                results.equity_curve["portfolio_value"].iloc[-1]
-                if len(results.equity_curve) > 0
-                else self.config.initial_capital
-            )
-            print(f"\n🎯 Portfolio Value: ${final_value:,.2f} (unchanged)")
-            return
-
-        # Performance metrics (only show if trades were made)
-        print("💰 Performance Metrics:")
-        print(
-            f"   Total Return: ${metrics.total_return:,.2f} ({metrics.total_return_pct * 100:.2f}%)"
-        )
-        print(f"   Annualized Return: {metrics.annualized_return * 100:.2f}%")
-        print(f"   Sharpe Ratio: {metrics.sharpe_ratio:.3f}")
-        print(
-            f"   Max Drawdown: ${metrics.max_drawdown:,.2f} ({metrics.max_drawdown_pct * 100:.2f}%)"
-        )
-        print(f"   Volatility: {metrics.volatility * 100:.2f}%")
-
-        print("\n📈 Trade Statistics:")
-        print(f"   Total Trades: {metrics.total_trades}")
-        print(
-            f"   Win Rate: {metrics.win_rate * 100:.1f}% ({metrics.winning_trades}/{metrics.total_trades})"
-        )
-        print(f"   Profit Factor: {metrics.profit_factor:.2f}")
-        print(f"   Avg Win: ${metrics.avg_win:.2f} | Avg Loss: ${metrics.avg_loss:.2f}")
-        print(
-            f"   Largest Win: ${metrics.largest_win:.2f} | Largest Loss: ${metrics.largest_loss:.2f}"
-        )
-
-        print("\n⏱️  Execution:")
-        print(f"   Execution Time: {results.execution_time_seconds:.2f} seconds")
-        print(f"   Data Points: {len(results.equity_curve):,}")
-
-        # Final portfolio value
-        final_value = (
-            results.equity_curve["portfolio_value"].iloc[-1]
-            if len(results.equity_curve) > 0
-            else self.config.initial_capital
-        )
-        print(f"\n🎯 Final Portfolio Value: ${final_value:,.2f}")
-
-    def reset(self):
-        """Reset the backtesting engine for a new run."""
-        self.position_manager.reset()
-        self.performance_tracker.reset()
-        self.orchestrator.reset_state()
