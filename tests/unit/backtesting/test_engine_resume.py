@@ -1,7 +1,5 @@
 """Unit tests for BacktestingEngine resume from checkpoint functionality.
 
-Task 5.4: Implement Indicator Recomputation on Resume
-
 Tests that the engine can:
 1. Resume from a BacktestResumeContext
 2. Load full data range for indicator computation
@@ -65,51 +63,57 @@ class TestEngineRunSupportsResume:
         assert param.default is None
 
 
+def _make_mock_engine():
+    """Create a mock BacktestingEngine with feature_cache (not orchestrator)."""
+    with patch(
+        "ktrdr.backtesting.engine.BacktestingEngine.__init__",
+        lambda self, config: None,
+    ):
+        from ktrdr.backtesting.engine import BacktestingEngine
+
+        engine = BacktestingEngine.__new__(BacktestingEngine)
+
+        # Set up minimal mocks
+        engine.config = MagicMock()
+        engine.config.symbol = "EURUSD"
+        engine.config.timeframe = "1h"
+        engine.config.start_date = "2023-01-01"
+        engine.config.end_date = "2023-12-31"
+
+        engine.repository = MagicMock()
+        engine.feature_cache = MagicMock()
+        engine.bundle = MagicMock()
+        engine.position_manager = MagicMock()
+        engine.position_manager.current_capital = 100000.0
+        engine.position_manager.current_position = None
+        engine.position_manager.trade_history = []
+        engine.position_manager.next_trade_id = 1
+        engine.performance_tracker = MagicMock()
+        engine.performance_tracker.equity_curve = []
+
+        # Mock data loading
+        mock_data = pd.DataFrame(
+            {
+                "open": [1.0] * 100,
+                "high": [1.1] * 100,
+                "low": [0.9] * 100,
+                "close": [1.05] * 100,
+                "volume": [1000] * 100,
+            },
+            index=pd.date_range("2023-01-01", periods=100, freq="h"),
+        )
+        engine._load_historical_data = MagicMock(return_value={"1h": mock_data})
+        engine._get_base_timeframe = MagicMock(return_value="1h")
+
+        return engine
+
+
 class TestResumeFromContextLoadsData:
     """Tests that resume_from_context loads data for full range."""
 
     @pytest.fixture
     def mock_engine(self):
-        """Create a mock BacktestingEngine with minimal initialization."""
-        with patch(
-            "ktrdr.backtesting.engine.BacktestingEngine.__init__",
-            lambda self, config: None,
-        ):
-            from ktrdr.backtesting.engine import BacktestingEngine
-
-            engine = BacktestingEngine.__new__(BacktestingEngine)
-
-            # Set up minimal mocks
-            engine.config = MagicMock()
-            engine.config.symbol = "EURUSD"
-            engine.config.timeframe = "1h"
-            engine.config.start_date = "2023-01-01"
-            engine.config.end_date = "2023-12-31"
-
-            engine.repository = MagicMock()
-            engine.orchestrator = MagicMock()
-            engine.position_manager = MagicMock()
-            engine.position_manager.current_capital = 100000.0
-            engine.position_manager.current_position = None
-            engine.position_manager.trade_history = []
-            engine.position_manager.next_trade_id = 1
-            engine.performance_tracker = MagicMock()
-            engine.performance_tracker.equity_curve = []
-
-            # Mock data loading
-            mock_data = pd.DataFrame(
-                {
-                    "open": [1.0] * 100,
-                    "high": [1.1] * 100,
-                    "low": [0.9] * 100,
-                    "close": [1.05] * 100,
-                    "volume": [1000] * 100,
-                },
-                index=pd.date_range("2023-01-01", periods=100, freq="h"),
-            )
-            engine._load_historical_data = MagicMock(return_value={"1h": mock_data})
-
-            return engine
+        return _make_mock_engine()
 
     @pytest.fixture
     def sample_context(self):
@@ -137,12 +141,12 @@ class TestResumeFromContextLoadsData:
         # Should call _load_historical_data
         mock_engine._load_historical_data.assert_called_once()
 
-    def test_computes_indicators(self, mock_engine, sample_context):
-        """resume_from_context should compute indicators via prepare_feature_cache."""
+    def test_computes_features(self, mock_engine, sample_context):
+        """resume_from_context should compute features via feature_cache."""
         mock_engine.resume_from_context(sample_context)
 
-        # Should call orchestrator.prepare_feature_cache with the loaded data
-        mock_engine.orchestrator.prepare_feature_cache.assert_called_once()
+        # Should call feature_cache.compute_all_features with the loaded data
+        mock_engine.feature_cache.compute_all_features.assert_called_once()
 
 
 class TestResumeFromContextRestoresPortfolioState:
@@ -150,44 +154,7 @@ class TestResumeFromContextRestoresPortfolioState:
 
     @pytest.fixture
     def mock_engine(self):
-        """Create a mock BacktestingEngine."""
-        with patch(
-            "ktrdr.backtesting.engine.BacktestingEngine.__init__",
-            lambda self, config: None,
-        ):
-            from ktrdr.backtesting.engine import BacktestingEngine
-
-            engine = BacktestingEngine.__new__(BacktestingEngine)
-
-            engine.config = MagicMock()
-            engine.config.timeframe = "1h"
-            engine.repository = MagicMock()
-            engine.orchestrator = MagicMock()
-
-            # Real position manager mock with settable attributes
-            engine.position_manager = MagicMock()
-            engine.position_manager.current_capital = 100000.0
-            engine.position_manager.current_position = None
-            engine.position_manager.trade_history = []
-            engine.position_manager.next_trade_id = 1
-
-            engine.performance_tracker = MagicMock()
-            engine.performance_tracker.equity_curve = []
-
-            # Mock data loading
-            mock_data = pd.DataFrame(
-                {
-                    "open": [1.0] * 100,
-                    "high": [1.1] * 100,
-                    "low": [0.9] * 100,
-                    "close": [1.05] * 100,
-                    "volume": [1000] * 100,
-                },
-                index=pd.date_range("2023-01-01", periods=100, freq="h"),
-            )
-            engine._load_historical_data = MagicMock(return_value={"1h": mock_data})
-
-            return engine
+        return _make_mock_engine()
 
     def test_restores_cash(self, mock_engine):
         """resume_from_context should restore cash from context."""
@@ -339,36 +306,7 @@ class TestResumeFromContextRestoresEquityCurve:
 
     @pytest.fixture
     def mock_engine(self):
-        """Create a mock BacktestingEngine."""
-        with patch(
-            "ktrdr.backtesting.engine.BacktestingEngine.__init__",
-            lambda self, config: None,
-        ):
-            from ktrdr.backtesting.engine import BacktestingEngine
-
-            engine = BacktestingEngine.__new__(BacktestingEngine)
-
-            engine.config = MagicMock()
-            engine.config.timeframe = "1h"
-            engine.repository = MagicMock()
-            engine.orchestrator = MagicMock()
-            engine.position_manager = MagicMock()
-            engine.position_manager.current_capital = 100000.0
-            engine.position_manager.current_position = None
-            engine.position_manager.trade_history = []
-            engine.position_manager.next_trade_id = 1
-
-            # Real performance tracker mock
-            engine.performance_tracker = MagicMock()
-            engine.performance_tracker.equity_curve = []
-
-            mock_data = pd.DataFrame(
-                {"close": [1.0] * 100},
-                index=pd.date_range("2023-01-01", periods=100, freq="h"),
-            )
-            engine._load_historical_data = MagicMock(return_value={"1h": mock_data})
-
-            return engine
+        return _make_mock_engine()
 
     def test_restores_equity_samples(self, mock_engine):
         """resume_from_context should restore equity samples to performance tracker."""
@@ -395,39 +333,8 @@ class TestResumeFromContextRestoresEquityCurve:
 class TestRunWithResumeStartBar:
     """Tests that run() correctly starts from resume_start_bar when provided."""
 
-    @pytest.fixture
-    def minimal_mock_engine(self):
-        """Create a minimal mock engine to test run() bar logic."""
-        with patch(
-            "ktrdr.backtesting.engine.BacktestingEngine.__init__",
-            lambda self, config: None,
-        ):
-            from ktrdr.backtesting.engine import BacktestingEngine
-
-            engine = BacktestingEngine.__new__(BacktestingEngine)
-
-            engine.config = MagicMock()
-            engine.config.symbol = "EURUSD"
-            engine.config.timeframe = "1h"
-            engine.config.start_date = "2023-01-01"
-            engine.config.end_date = "2023-12-31"
-            engine.config.initial_capital = 100000.0
-            engine.config.verbose = False
-
-            engine.strategy_name = "test_strategy"
-            engine.progress_callback = None
-
-            return engine
-
-    def test_run_respects_resume_start_bar(self, minimal_mock_engine):
-        """run() with resume_start_bar should skip bars before that point.
-
-        This is a behavioral test - actual verification would require
-        integration testing with a real engine.
-        """
-        # This test verifies the parameter exists and is used
-        # Full behavior testing is done in integration tests
-        # Verify the method signature includes resume_start_bar
+    def test_run_respects_resume_start_bar(self):
+        """run() with resume_start_bar should skip bars before that point."""
         import inspect
 
         from ktrdr.backtesting.engine import BacktestingEngine
@@ -441,34 +348,7 @@ class TestResumeFromContextReturnsData:
 
     @pytest.fixture
     def mock_engine(self):
-        """Create a mock BacktestingEngine."""
-        with patch(
-            "ktrdr.backtesting.engine.BacktestingEngine.__init__",
-            lambda self, config: None,
-        ):
-            from ktrdr.backtesting.engine import BacktestingEngine
-
-            engine = BacktestingEngine.__new__(BacktestingEngine)
-
-            engine.config = MagicMock()
-            engine.config.timeframe = "1h"
-            engine.repository = MagicMock()
-            engine.orchestrator = MagicMock()
-            engine.position_manager = MagicMock()
-            engine.position_manager.current_capital = 100000.0
-            engine.position_manager.current_position = None
-            engine.position_manager.trade_history = []
-            engine.position_manager.next_trade_id = 1
-            engine.performance_tracker = MagicMock()
-            engine.performance_tracker.equity_curve = []
-
-            mock_data = pd.DataFrame(
-                {"close": [1.0] * 100},
-                index=pd.date_range("2023-01-01", periods=100, freq="h"),
-            )
-            engine._load_historical_data = MagicMock(return_value={"1h": mock_data})
-
-            return engine
+        return _make_mock_engine()
 
     def test_returns_loaded_data(self, mock_engine):
         """resume_from_context should return the loaded data."""
