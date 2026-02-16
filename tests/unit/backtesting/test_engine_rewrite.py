@@ -387,6 +387,45 @@ class TestSimulationLoop:
         assert "self.config.verbose" not in source
 
 
+class TestSimulationLoopEdgeCases:
+    """Edge case tests for the simulation loop."""
+
+    def test_insufficient_data_raises_value_error(self):
+        """run() should raise ValueError if data has fewer bars than warmup period."""
+        with patch(
+            "ktrdr.backtesting.engine.BacktestingEngine.__init__",
+            lambda self, config: None,
+        ):
+            from ktrdr.backtesting.engine import BacktestingEngine
+
+            engine = BacktestingEngine.__new__(BacktestingEngine)
+            engine.config = _make_config()
+            engine.strategy_name = "test_strategy"
+            engine.bundle = _make_mock_bundle()
+            engine.feature_cache = MagicMock()
+            engine.position_manager = MagicMock()
+            engine.performance_tracker = MagicMock()
+            engine.repository = MagicMock()
+
+            # Only 30 bars — less than 50 warmup
+            dates = pd.date_range("2024-01-01", periods=30, freq="h")
+            mock_data = pd.DataFrame(
+                {
+                    "open": [1.1] * 30,
+                    "high": [1.12] * 30,
+                    "low": [1.08] * 30,
+                    "close": [1.1] * 30,
+                    "volume": [1000] * 30,
+                },
+                index=dates,
+            )
+            engine._load_historical_data = MagicMock(return_value={"1h": mock_data})
+            engine._get_base_timeframe = MagicMock(return_value="1h")
+
+            with pytest.raises(ValueError, match="Insufficient data"):
+                engine.run()
+
+
 class TestSimulationLoopTradeExecution:
     """Test that run() executes trades correctly."""
 

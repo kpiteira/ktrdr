@@ -185,6 +185,11 @@ class BacktestingEngine:
 
         # 3. Simulate
         start_idx = (resume_start_bar + 50) if resume_start_bar is not None else 50
+        if start_idx >= len(data):
+            raise ValueError(
+                f"Insufficient data for backtesting: {len(data)} bars "
+                f"(need at least {start_idx + 1} for indicator warm-up)"
+            )
         last_signal_time = None
 
         for idx in range(start_idx, len(data)):
@@ -194,38 +199,38 @@ class BacktestingEngine:
 
             # Feature lookup
             features = self.feature_cache.get_features_for_timestamp(timestamp)
-            if features is None:
-                continue
-
-            # Decision (stateless — position passed in, not tracked internally)
-            decision = self.decide(
-                features=features,
-                position=self.position_manager.current_position_status,
-                bar=bar,
-                last_signal_time=last_signal_time,
-            )
-
-            # Execution
-            if decision.signal != Signal.HOLD:
-                trade = self.position_manager.execute_trade(
-                    signal=decision.signal,
-                    price=price,
-                    timestamp=timestamp,
-                    symbol=self.config.symbol,
-                    decision_metadata={"confidence": decision.confidence},
+            if features is not None:
+                # Decision (stateless — position passed in, not tracked internally)
+                decision = self.decide(
+                    features=features,
+                    position=self.position_manager.current_position_status,
+                    bar=bar,
+                    last_signal_time=last_signal_time,
                 )
-                if trade:
-                    last_signal_time = timestamp
 
-            # Track performance
-            self.position_manager.update_position(price, timestamp)
-            portfolio_value = self.position_manager.get_portfolio_value(price)
-            self.performance_tracker.update(
-                timestamp=timestamp,
-                price=price,
-                portfolio_value=portfolio_value,
-                position=self.position_manager.current_position_status,
-            )
+                # Execution
+                if decision.signal != Signal.HOLD:
+                    trade = self.position_manager.execute_trade(
+                        signal=decision.signal,
+                        price=price,
+                        timestamp=timestamp,
+                        symbol=self.config.symbol,
+                        decision_metadata={"confidence": decision.confidence},
+                    )
+                    if trade:
+                        last_signal_time = timestamp
+
+                # Track performance
+                self.position_manager.update_position(price, timestamp)
+                portfolio_value = self.position_manager.get_portfolio_value(price)
+                self.performance_tracker.update(
+                    timestamp=timestamp,
+                    price=price,
+                    portfolio_value=portfolio_value,
+                    position=self.position_manager.current_position_status,
+                )
+            else:
+                portfolio_value = self.position_manager.get_portfolio_value(price)
 
             # Infrastructure (extracted to focused helpers)
             self._report_progress(
@@ -565,7 +570,7 @@ class BacktestingEngine:
             trades=trades,
             metrics=metrics,
             equity_curve=equity_curve,
-            start_time=pd.Timestamp.now(),
-            end_time=pd.Timestamp.now(),
+            start_time=start_date or pd.Timestamp.now(),
+            end_time=end_date or pd.Timestamp.now(),
             execution_time_seconds=time.time() - execution_start,
         )
