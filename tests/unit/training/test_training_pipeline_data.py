@@ -10,6 +10,8 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 
+pytest.importorskip("torch")
+
 from ktrdr.training.training_pipeline import TrainingPipeline
 
 

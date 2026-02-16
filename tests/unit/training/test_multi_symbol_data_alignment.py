@@ -14,6 +14,9 @@ Related to: Task 4.1 - Debugging Multi-Symbol Data Combination
 import numpy as np
 import pandas as pd
 import pytest
+
+pytest.importorskip("torch")
+
 import torch
 
 from ktrdr.training.training_pipeline import TrainingPipeline

@@ -9,6 +9,10 @@ Tests follow the same pattern as tests/unit/api/test_main_startup.py.
 
 import inspect
 
+import pytest
+
+pytest.importorskip("torch")
+
 
 class TestBacktestWorkerStartupValidation:
     """Test that backtest_worker.py has startup validation calls."""

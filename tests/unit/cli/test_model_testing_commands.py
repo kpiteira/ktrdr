@@ -7,6 +7,8 @@ import pandas as pd
 import pytest
 import typer
 
+pytest.importorskip("torch")
+
 from ktrdr.cli.model_testing_commands import show_model_signals
 from ktrdr.errors.exceptions import DataNotFoundError
 

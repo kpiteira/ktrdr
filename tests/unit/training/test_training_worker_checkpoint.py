@@ -9,6 +9,9 @@ from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
+pytest.importorskip("torch")
+
 import torch
 import torch.nn as nn
 

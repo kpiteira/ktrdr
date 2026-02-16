@@ -11,6 +11,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+pytest.importorskip("torch")
+
 from ktrdr.api.models.operations import OperationMetadata, OperationType
 from ktrdr.api.services.operations_service import OperationsService
 

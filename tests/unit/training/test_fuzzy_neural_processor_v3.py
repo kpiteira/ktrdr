@@ -10,6 +10,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+pytest.importorskip("torch")
+
 from ktrdr.training.fuzzy_neural_processor import FuzzyNeuralProcessor
 
 

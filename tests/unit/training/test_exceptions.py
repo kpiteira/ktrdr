@@ -6,6 +6,8 @@ not experiments to learn from. They should fail operations visibly.
 
 import pytest
 
+pytest.importorskip("torch")
+
 
 class TestPipelineExceptionHierarchy:
     """Test exception class hierarchy and basic functionality."""

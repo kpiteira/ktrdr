@@ -5,6 +5,9 @@ from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+pytest.importorskip("torch")
+
 import torch
 import torch.nn as nn
 import torch.optim as optim

@@ -11,6 +11,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+pytest.importorskip("torch")
+
 from ktrdr.backtesting.backtesting_service import BacktestingService
 
 

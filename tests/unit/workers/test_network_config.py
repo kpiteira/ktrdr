@@ -3,6 +3,10 @@
 import socket
 from unittest.mock import Mock, patch
 
+import pytest
+
+pytest.importorskip("torch")
+
 from ktrdr.backtesting.worker_registration import (
     WorkerRegistration as BacktestWorkerRegistration,
 )
