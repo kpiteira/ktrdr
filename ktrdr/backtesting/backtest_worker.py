@@ -250,27 +250,16 @@ class BacktestWorker(WorkerAPIBase):
         operation_id: str,
         request: BacktestStartRequest,
     ) -> dict[str, Any]:
-        """
-        Execute backtest work.
+        """Execute a fresh backtest: parse request, create operation, delegate.
 
         Follows training-host-service pattern:
         1. Create operation in worker's OperationsService
-        2. Create and register progress bridge
-        3. Execute actual work (Engine, not Service!)
-        4. Complete operation
-
-        Checkpoint integration (M5):
-        - Periodic checkpoint every N bars (configurable)
-        - Cancellation checkpoint on cancel
-        - Delete checkpoint on success
+        2. Build progress bridge
+        3. Delegate to _run_backtest for engine execution
         """
-
         # Parse dates
         start_date = datetime.fromisoformat(request.start_date)
         end_date = datetime.fromisoformat(request.end_date)
-
-        # Build strategy config path
-        strategy_config_path = f"strategies/{request.strategy_name}.yaml"
 
         # Build original request for checkpoint (needed for resume)
         original_request = {
@@ -304,272 +293,121 @@ class BacktestWorker(WorkerAPIBase):
             ),
         )
 
-        # 2. Create and register progress bridge
+        # 2. Mark operation as RUNNING
+        dummy_task = asyncio.create_task(asyncio.sleep(0))
+        await self._operations_service.start_operation(operation_id, dummy_task)
+        logger.info(f"Marked operation {operation_id} as RUNNING")
+
+        # 3. Build engine config
+        model_path = _translate_model_path(request.model_path)
+        engine_config = BacktestConfig(
+            symbol=request.symbol,
+            timeframe=request.timeframe,
+            strategy_config_path=f"strategies/{request.strategy_name}.yaml",
+            model_path=model_path,
+            start_date=start_date.isoformat(),
+            end_date=end_date.isoformat(),
+            initial_capital=request.initial_capital,
+            commission=request.commission,
+            slippage=request.slippage,
+        )
+
+        # 4. Build progress bridge
         days = (end_date - start_date).days
         bars_per_day = {"1h": 24, "4h": 6, "1d": 1, "5m": 288, "1w": 0.2}
         total_bars = int(days * bars_per_day.get(request.timeframe, 1))
-
         bridge = BacktestProgressBridge(
             operation_id=operation_id,
             symbol=request.symbol,
             timeframe=request.timeframe,
             total_bars=max(total_bars, 100),
         )
-
         self._operations_service.register_local_bridge(operation_id, bridge)
-        logger.info(f"Registered backtest bridge for operation {operation_id}")
 
-        # 2.5. Mark operation as RUNNING (CRITICAL for progress reporting!)
-        # Create a dummy task - actual work happens in asyncio.to_thread below
-        dummy_task = asyncio.create_task(asyncio.sleep(0))
-        await self._operations_service.start_operation(operation_id, dummy_task)
-        logger.info(f"Marked operation {operation_id} as RUNNING")
-
-        # 3. Setup checkpoint infrastructure
-        checkpoint_service = self._get_checkpoint_service()
-
-        from ktrdr.backtesting.checkpoint_builder import build_backtest_checkpoint_state
-        from ktrdr.checkpoint.checkpoint_policy import CheckpointPolicy
-
-        checkpoint_policy = CheckpointPolicy(
-            unit_interval=self.checkpoint_bar_interval,
-            time_interval_seconds=300,  # Also checkpoint every 5 minutes
+        # 5. Delegate to shared execution
+        return await self._run_backtest(
+            operation_id=operation_id,
+            engine_config=engine_config,
+            original_request=original_request,
+            bridge=bridge,
         )
-
-        # Track latest state for cancellation checkpoint
-        last_checkpoint_state: dict[str, Any] = {}
-
-        # Capture main event loop for use in checkpoint callback (Task 5.8 fix)
-        # The callback runs in a thread pool via asyncio.to_thread(), but database
-        # connections have Futures attached to this main loop. Using new_event_loop()
-        # in the callback causes "Task got Future attached to a different loop" errors.
-        main_loop = asyncio.get_running_loop()
-
-        def checkpoint_callback(**kwargs):
-            """Called periodically from engine's bar loop.
-
-            Runs in thread pool (via asyncio.to_thread), so we use
-            run_coroutine_threadsafe() to schedule saves on the main event loop.
-            This avoids the "Future attached to different loop" error.
-            """
-            bar_index = kwargs["bar_index"]
-            timestamp = kwargs["timestamp"]
-            engine = kwargs["engine"]
-
-            # Always update last state for potential cancellation checkpoint
-            last_checkpoint_state["bar_index"] = bar_index
-            last_checkpoint_state["timestamp"] = timestamp
-            last_checkpoint_state["engine"] = engine
-
-            # Check if we should save a periodic checkpoint
-            if checkpoint_policy.should_checkpoint(bar_index):
-                try:
-                    # Build checkpoint state
-                    state = build_backtest_checkpoint_state(
-                        engine=engine,
-                        bar_index=bar_index,
-                        current_timestamp=timestamp,
-                        original_request=original_request,
-                    )
-
-                    # Schedule checkpoint save on main event loop (Task 5.8 fix)
-                    # This ensures database operations use the correct event loop
-                    future = asyncio.run_coroutine_threadsafe(
-                        checkpoint_service.save_checkpoint(
-                            operation_id=operation_id,
-                            checkpoint_type="periodic",
-                            state=state.to_dict(),
-                            artifacts=None,  # No artifacts for backtesting
-                        ),
-                        main_loop,
-                    )
-                    # Wait for completion with timeout
-                    future.result(timeout=30.0)
-                    checkpoint_policy.record_checkpoint(bar_index)
-                    logger.info(
-                        f"Periodic checkpoint saved for {operation_id} at bar {bar_index}"
-                    )
-
-                except Exception as e:
-                    logger.warning(f"Failed to save periodic checkpoint: {e}")
-
-        # 4. Execute actual work (Engine, not Service!)
-        try:
-            # Translate model_path from host path to container path if needed
-            model_path = _translate_model_path(request.model_path)
-
-            # Build engine configuration
-            engine_config = BacktestConfig(
-                symbol=request.symbol,
-                timeframe=request.timeframe,
-                strategy_config_path=strategy_config_path,
-                model_path=model_path,  # Use explicit path if provided (for v3)
-                start_date=start_date.isoformat(),
-                end_date=end_date.isoformat(),
-                initial_capital=request.initial_capital,
-                commission=request.commission,
-                slippage=request.slippage,
-            )
-
-            # Create engine
-            engine = BacktestingEngine(config=engine_config)
-
-            # Get cancellation token
-            cancellation_token = self._operations_service.get_cancellation_token(
-                operation_id
-            )
-
-            # Run engine in thread pool (blocking operation) with checkpoint callback
-            results = await asyncio.to_thread(
-                engine.run,
-                bridge=bridge,
-                cancellation_token=cancellation_token,
-                checkpoint_callback=checkpoint_callback,
-            )
-
-            # 5. Complete operation - delete checkpoint on success
-            results_dict = results.to_dict()
-            await self._operations_service.complete_operation(
-                operation_id,
-                results_dict,
-            )
-
-            # Delete checkpoint on successful completion
-            try:
-                await checkpoint_service.delete_checkpoint(operation_id)
-                logger.info(
-                    f"Checkpoint deleted after successful completion: {operation_id}"
-                )
-            except Exception as e:
-                logger.warning(f"Failed to delete checkpoint on success: {e}")
-
-            logger.info(
-                f"Backtest completed for {request.symbol} {request.timeframe}: "
-                f"{results_dict.get('total_return', 0):.2%} return"
-            )
-
-            return {
-                "result_summary": results_dict.get("result_summary", {}),
-            }
-
-        except CancellationError:
-            logger.info(f"Backtest operation {operation_id} cancelled")
-
-            # Save cancellation checkpoint if we have state
-            if last_checkpoint_state:
-                try:
-                    state = build_backtest_checkpoint_state(
-                        engine=last_checkpoint_state["engine"],
-                        bar_index=last_checkpoint_state["bar_index"],
-                        current_timestamp=last_checkpoint_state["timestamp"],
-                        original_request=original_request,
-                    )
-                    await checkpoint_service.save_checkpoint(
-                        operation_id=operation_id,
-                        checkpoint_type="cancellation",
-                        state=state.to_dict(),
-                        artifacts=None,
-                    )
-                    logger.info(
-                        f"Cancellation checkpoint saved for {operation_id} "
-                        f"at bar {last_checkpoint_state['bar_index']}"
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to save cancellation checkpoint: {e}")
-
-            if bridge:
-                bridge.on_cancellation("Backtest cancelled")
-            return {
-                "status": "cancelled",
-                "operation_id": operation_id,
-            }
-
-        except asyncio.CancelledError:
-            # Handle standard asyncio cancellation if it occurs
-            logger.info(f"Backtest operation {operation_id} cancelled (asyncio)")
-
-            # Save cancellation checkpoint if we have state
-            if last_checkpoint_state:
-                try:
-                    state = build_backtest_checkpoint_state(
-                        engine=last_checkpoint_state["engine"],
-                        bar_index=last_checkpoint_state["bar_index"],
-                        current_timestamp=last_checkpoint_state["timestamp"],
-                        original_request=original_request,
-                    )
-                    await checkpoint_service.save_checkpoint(
-                        operation_id=operation_id,
-                        checkpoint_type="cancellation",
-                        state=state.to_dict(),
-                        artifacts=None,
-                    )
-                    logger.info(
-                        f"Cancellation checkpoint saved for {operation_id} "
-                        f"at bar {last_checkpoint_state['bar_index']}"
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to save cancellation checkpoint: {e}")
-
-            if bridge:
-                bridge.on_cancellation("Backtest cancelled")
-            return {
-                "status": "cancelled",
-                "operation_id": operation_id,
-            }
-
-        except Exception as e:
-            # Fail operation on error
-            await self._operations_service.fail_operation(operation_id, str(e))
-            raise
 
     async def _execute_resumed_backtest_work(
         self,
         operation_id: str,
         context: "BacktestResumeContext",
     ) -> dict[str, Any]:
-        """
-        Execute resumed backtest work from checkpoint.
-
-        Similar to _execute_backtest_work but:
-        1. Uses checkpoint context instead of fresh request
-        2. Calls engine.resume_from_context() to restore state
-        3. Passes resume_start_bar to engine.run()
+        """Execute a resumed backtest: restore context, adopt operation, delegate.
 
         Uses shared infrastructure from WorkerAPIBase:
         - adopt_and_start_operation() for resume-to-different-worker support
-        - create_checkpoint_callback() for proper event loop handling
-        - save_cancellation_checkpoint() for cancellation checkpoints
         """
-        # Extract original request from context
         original_request = context.original_request
 
         # Parse dates from original request
         start_date = datetime.fromisoformat(original_request["start_date"])
         end_date = datetime.fromisoformat(original_request["end_date"])
 
-        # Build strategy config path
-        strategy_config_path = f"strategies/{original_request['strategy_name']}.yaml"
-
         # 1. Adopt operation and transition to RUNNING
-        # This handles resume-to-different-worker: loads from DB if not in cache
         await self.adopt_and_start_operation(operation_id)
 
-        # 2. Create and register progress bridge
+        # 2. Build engine config from original request
+        model_path = _translate_model_path(original_request.get("model_path"))
+        engine_config = BacktestConfig(
+            symbol=original_request["symbol"],
+            timeframe=original_request["timeframe"],
+            strategy_config_path=f"strategies/{original_request['strategy_name']}.yaml",
+            model_path=model_path,
+            start_date=original_request["start_date"],
+            end_date=original_request["end_date"],
+            initial_capital=original_request.get("initial_capital", 100000.0),
+            commission=original_request.get("commission", 0.001),
+            slippage=original_request.get("slippage", 0.0),
+        )
+
+        # 3. Build progress bridge
         days = (end_date - start_date).days
         bars_per_day = {"1h": 24, "4h": 6, "1d": 1, "5m": 288, "1w": 0.2}
         total_bars = int(days * bars_per_day.get(original_request["timeframe"], 1))
-
         bridge = BacktestProgressBridge(
             operation_id=operation_id,
             symbol=original_request["symbol"],
             timeframe=original_request["timeframe"],
             total_bars=max(total_bars, 100),
         )
-
         self._operations_service.register_local_bridge(operation_id, bridge)
-        logger.info(f"Registered resumed backtest bridge for operation {operation_id}")
 
-        # 3. Setup checkpoint infrastructure using shared patterns
+        # 4. Delegate to shared execution with resume context
+        return await self._run_backtest(
+            operation_id=operation_id,
+            engine_config=engine_config,
+            original_request=original_request,
+            bridge=bridge,
+            resume_context=context,
+        )
+
+    async def _run_backtest(
+        self,
+        operation_id: str,
+        engine_config: BacktestConfig,
+        original_request: dict[str, Any],
+        bridge: BacktestProgressBridge,
+        resume_context: Optional["BacktestResumeContext"] = None,
+    ) -> dict[str, Any]:
+        """Shared backtest execution: checkpoint setup, engine run, result handling.
+
+        Handles both fresh and resumed backtests. Uses shared checkpoint
+        infrastructure from WorkerAPIBase (create_checkpoint_callback,
+        save_cancellation_checkpoint).
+
+        Args:
+            operation_id: Operation identifier
+            engine_config: Engine configuration
+            original_request: Original request dict (for checkpoint context)
+            bridge: Progress bridge for async progress tracking
+            resume_context: Optional resume context (None for fresh backtests)
+        """
+        # 1. Setup checkpoint infrastructure
         checkpoint_service = self._get_checkpoint_service()
 
         from ktrdr.backtesting.checkpoint_builder import build_backtest_checkpoint_state
@@ -580,13 +418,9 @@ class BacktestWorker(WorkerAPIBase):
             time_interval_seconds=300,
         )
 
-        # Track latest state for cancellation checkpoint
         last_checkpoint_state: dict[str, Any] = {}
-
-        # Capture main event loop for checkpoint callback
         main_loop = asyncio.get_running_loop()
 
-        # Create state builder closure that captures original_request
         def backtest_state_builder(**kwargs):
             return build_backtest_checkpoint_state(
                 engine=kwargs["engine"],
@@ -595,7 +429,6 @@ class BacktestWorker(WorkerAPIBase):
                 original_request=original_request,
             )
 
-        # Use shared checkpoint callback infrastructure
         checkpoint_callback = self.create_checkpoint_callback(
             operation_id=operation_id,
             checkpoint_service=checkpoint_service,
@@ -603,113 +436,73 @@ class BacktestWorker(WorkerAPIBase):
             state_builder=backtest_state_builder,
             main_loop=main_loop,
             last_checkpoint_state=last_checkpoint_state,
-            artifacts_builder=None,  # No artifacts for backtesting
+            artifacts_builder=None,
         )
 
-        # 4. Execute resumed backtest
+        # 2. Create engine and optionally resume
         try:
-            # Translate model_path from host path to container path if needed
-            model_path = _translate_model_path(original_request.get("model_path"))
-
-            # Build engine configuration from original request
-            engine_config = BacktestConfig(
-                symbol=original_request["symbol"],
-                timeframe=original_request["timeframe"],
-                strategy_config_path=strategy_config_path,
-                model_path=model_path,  # Preserve model_path for v3
-                start_date=original_request["start_date"],
-                end_date=original_request["end_date"],
-                initial_capital=original_request.get("initial_capital", 100000.0),
-                commission=original_request.get("commission", 0.001),
-                slippage=original_request.get("slippage", 0.0),
-            )
-
-            # Create engine
             engine = BacktestingEngine(config=engine_config)
 
-            # Resume from checkpoint context (loads data, computes indicators, restores portfolio)
-            engine.resume_from_context(context)
+            if resume_context:
+                engine.resume_from_context(resume_context)
 
-            # Get cancellation token
             cancellation_token = self._operations_service.get_cancellation_token(
                 operation_id
             )
 
-            # Run engine continuing from checkpoint bar
+            # Run engine in thread pool (blocking operation)
             results = await asyncio.to_thread(
                 engine.run,
                 bridge=bridge,
                 cancellation_token=cancellation_token,
                 checkpoint_callback=checkpoint_callback,
-                resume_start_bar=context.start_bar,
+                resume_start_bar=(resume_context.start_bar if resume_context else None),
             )
 
-            # 5. Complete operation - delete checkpoint on success
+            # 3. Complete operation — delete checkpoint on success
             results_dict = results.to_dict()
             await self._operations_service.complete_operation(
-                operation_id,
-                results_dict,
+                operation_id, results_dict
             )
 
-            # Delete checkpoint on successful completion
             try:
                 await checkpoint_service.delete_checkpoint(operation_id)
-                logger.info(
-                    f"Checkpoint deleted after successful resumed completion: {operation_id}"
-                )
+                logger.info(f"Checkpoint deleted after completion: {operation_id}")
             except Exception as e:
                 logger.warning(f"Failed to delete checkpoint on success: {e}")
 
             logger.info(
-                f"Resumed backtest completed for {original_request['symbol']} "
-                f"{original_request['timeframe']}: "
+                f"Backtest completed for {engine_config.symbol} "
+                f"{engine_config.timeframe}: "
                 f"{results_dict.get('total_return', 0):.2%} return"
             )
-
-            return {
-                "result_summary": results_dict.get("result_summary", {}),
-            }
+            return {"result_summary": results_dict.get("result_summary", {})}
 
         except CancellationError:
-            logger.info(f"Resumed backtest operation {operation_id} cancelled")
-
-            # Save cancellation checkpoint using shared infrastructure
+            logger.info(f"Backtest operation {operation_id} cancelled")
             await self.save_cancellation_checkpoint(
                 operation_id=operation_id,
                 checkpoint_service=checkpoint_service,
                 last_checkpoint_state=last_checkpoint_state,
                 state_builder=backtest_state_builder,
             )
-
             if bridge:
-                bridge.on_cancellation("Resumed backtest cancelled")
-            return {
-                "status": "cancelled",
-                "operation_id": operation_id,
-            }
+                bridge.on_cancellation("Backtest cancelled")
+            return {"status": "cancelled", "operation_id": operation_id}
 
         except asyncio.CancelledError:
-            logger.info(
-                f"Resumed backtest operation {operation_id} cancelled (asyncio)"
-            )
-
-            # Save cancellation checkpoint using shared infrastructure
+            logger.info(f"Backtest operation {operation_id} cancelled (asyncio)")
             await self.save_cancellation_checkpoint(
                 operation_id=operation_id,
                 checkpoint_service=checkpoint_service,
                 last_checkpoint_state=last_checkpoint_state,
                 state_builder=backtest_state_builder,
             )
-
             if bridge:
-                bridge.on_cancellation("Resumed backtest cancelled")
-            return {
-                "status": "cancelled",
-                "operation_id": operation_id,
-            }
+                bridge.on_cancellation("Backtest cancelled")
+            return {"status": "cancelled", "operation_id": operation_id}
 
         except Exception as e:
-            # Fail operation on error
             await self._operations_service.fail_operation(operation_id, str(e))
             raise
 
