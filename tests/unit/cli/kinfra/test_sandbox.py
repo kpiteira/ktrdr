@@ -299,3 +299,105 @@ class TestSlotsCommand:
         assert (
             "no slots" in result.output.lower() or "provision" in result.output.lower()
         )
+
+
+class TestSlotPortRefresh:
+    """Tests that slot ports are refreshed from get_ports() on provision (#329)."""
+
+    def test_provision_refreshes_stale_ports(self, tmp_path, monkeypatch) -> None:
+        """Re-provisioning should fix stale port values in existing slots."""
+        import json
+
+        from ktrdr.cli.kinfra.sandbox import _update_registry_with_slots
+
+        sandboxes_path = tmp_path / "sandboxes"
+        sandboxes_path.mkdir()
+        registry_path = tmp_path / "registry.json"
+        monkeypatch.setattr("ktrdr.cli.sandbox_registry.REGISTRY_FILE", registry_path)
+        monkeypatch.setattr("ktrdr.cli.sandbox_registry.REGISTRY_DIR", tmp_path)
+
+        # Seed registry with slot 1 having WRONG ports (slot 3's ports)
+        registry_data = {
+            "version": 2,
+            "local_prod": None,
+            "instances": {},
+            "slots": {
+                "1": {
+                    "slot_id": 1,
+                    "infrastructure_path": str(sandboxes_path / "slot-1"),
+                    "profile": "light",
+                    "workers": {"backtest": 1, "training": 1},
+                    "ports": {
+                        "api": 8003,
+                        "db": 5435,
+                        "grafana": 3003,
+                        "jaeger_ui": 16689,
+                        "prometheus": 9093,
+                    },
+                    "claimed_by": None,
+                    "claimed_at": None,
+                    "status": "stopped",
+                }
+            },
+        }
+        registry_path.write_text(json.dumps(registry_data))
+
+        # Run the update — should refresh ports
+        _update_registry_with_slots(sandboxes_path)
+
+        # Verify ports are now correct (base + 1)
+        updated = json.loads(registry_path.read_text())
+        slot1_ports = updated["slots"]["1"]["ports"]
+        assert slot1_ports["api"] == 8001
+        assert slot1_ports["db"] == 5433
+        assert slot1_ports["grafana"] == 3001
+        assert slot1_ports["jaeger_ui"] == 16687
+        assert slot1_ports["prometheus"] == 9091
+
+    def test_provision_preserves_claim_state(self, tmp_path, monkeypatch) -> None:
+        """Port refresh should not disturb claimed_by or status."""
+        import json
+
+        from ktrdr.cli.kinfra.sandbox import _update_registry_with_slots
+
+        sandboxes_path = tmp_path / "sandboxes"
+        sandboxes_path.mkdir()
+        registry_path = tmp_path / "registry.json"
+        monkeypatch.setattr("ktrdr.cli.sandbox_registry.REGISTRY_FILE", registry_path)
+        monkeypatch.setattr("ktrdr.cli.sandbox_registry.REGISTRY_DIR", tmp_path)
+
+        # Slot 1 with wrong ports AND claimed by a worktree
+        registry_data = {
+            "version": 2,
+            "local_prod": None,
+            "instances": {},
+            "slots": {
+                "1": {
+                    "slot_id": 1,
+                    "infrastructure_path": str(sandboxes_path / "slot-1"),
+                    "profile": "light",
+                    "workers": {"backtest": 1, "training": 1},
+                    "ports": {
+                        "api": 9999,
+                        "db": 9998,
+                        "grafana": 9997,
+                        "jaeger_ui": 9996,
+                        "prometheus": 9995,
+                    },
+                    "claimed_by": "/some/worktree",
+                    "claimed_at": "2026-02-16T00:00:00+00:00",
+                    "status": "running",
+                }
+            },
+        }
+        registry_path.write_text(json.dumps(registry_data))
+
+        _update_registry_with_slots(sandboxes_path)
+
+        updated = json.loads(registry_path.read_text())
+        slot1 = updated["slots"]["1"]
+        # Ports fixed
+        assert slot1["ports"]["api"] == 8001
+        # Claim state preserved
+        assert slot1["claimed_by"] == "/some/worktree"
+        assert slot1["status"] == "running"

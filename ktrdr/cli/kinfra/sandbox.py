@@ -1416,19 +1416,18 @@ def _create_slot(slot_path: Path, slot_id: int) -> None:
 def _update_registry_with_slots(base_path: Path) -> None:
     """Update the registry with slot information.
 
+    Creates new slots and refreshes ports for existing slots to ensure
+    they always match the canonical values from get_ports().
+
     Args:
         base_path: Base path where slots are located
     """
+    from ktrdr.cli.sandbox_ports import get_ports
+
     registry = load_registry()
 
     for slot_id in range(1, 7):
         slot_key = str(slot_id)
-        if slot_key in registry.slots:
-            # Slot already registered
-            continue
-
-        from ktrdr.cli.sandbox_ports import get_ports
-
         profile, workers = SLOT_PROFILES[slot_id]
         allocation = get_ports(slot_id)
         slot_path = base_path / f"slot-{slot_id}"
@@ -1442,13 +1441,17 @@ def _update_registry_with_slots(base_path: Path) -> None:
             "prometheus": allocation.prometheus,
         }
 
-        registry.slots[slot_key] = SlotInfo(
-            slot_id=slot_id,
-            infrastructure_path=slot_path,
-            profile=profile,
-            workers=workers,
-            ports=ports,
-        )
+        if slot_key in registry.slots:
+            # Refresh ports to match canonical values (fixes #329)
+            registry.slots[slot_key].ports = ports
+        else:
+            registry.slots[slot_key] = SlotInfo(
+                slot_id=slot_id,
+                infrastructure_path=slot_path,
+                profile=profile,
+                workers=workers,
+                ports=ports,
+            )
 
     save_registry(registry)
 
