@@ -61,7 +61,6 @@ def _make_config(**overrides):
         "initial_capital": 100000.0,
         "commission": 0.001,
         "slippage": 0.0005,
-        "verbose": False,
     }
     defaults.update(overrides)
     return BacktestConfig(**defaults)
@@ -377,14 +376,21 @@ class TestSimulationLoop:
         assert "non_hold_signals" not in source
         assert "trade_attempts" not in source
 
-    def test_no_verbose_print_blocks(self):
-        """run() should not have self.config.verbose print blocks."""
-        import inspect
+    def test_no_verbose_field_in_config(self):
+        """BacktestConfig should not have a verbose field (removed in M4)."""
+        from ktrdr.backtesting.engine import BacktestConfig
 
-        from ktrdr.backtesting import engine as engine_module
-
-        source = inspect.getsource(engine_module.BacktestingEngine.run)
-        assert "self.config.verbose" not in source
+        assert not hasattr(
+            BacktestConfig(
+                strategy_config_path="s.yaml",
+                model_path="/p",
+                symbol="X",
+                timeframe="1h",
+                start_date="2024-01-01",
+                end_date="2024-02-01",
+            ),
+            "verbose",
+        )
 
 
 class TestSimulationLoopEdgeCases:
