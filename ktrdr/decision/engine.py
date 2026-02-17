@@ -1,4 +1,18 @@
-"""Decision engine for generating trading signals from neural network outputs."""
+"""Decision engine for paper and live trading modes.
+
+NOTE: As of the backtesting pipeline refactor, this module is NOT used by
+the backtesting pipeline. Backtesting uses DecisionFunction (stateless,
+position passed as input) instead of this stateful engine.
+
+This engine remains for future paper/live trading modes where:
+- Stateful position tracking per engine instance is desired
+- The prepare_features -> FuzzyNeuralProcessor pipeline is needed
+
+The backtesting refactor replaced this with DecisionFunction because:
+- Position-as-input eliminates sync bugs between PositionManager and engine
+- Stateless design simplifies checkpoint/resume
+See docs/designs/backtesting-pipeline-refactor/ARCHITECTURE.md for details.
+"""
 
 from pathlib import Path
 from typing import Any, Optional

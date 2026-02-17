@@ -189,6 +189,10 @@ class ModelStorage:
     ) -> dict[str, Any]:
         """Load a saved model with all metadata.
 
+        NOTE: Backtesting loads models via ModelBundle.load() (state dict only,
+        map_location="cpu"). This method is used by training pipeline internals
+        and future paper/live trading modes.
+
         UNIVERSAL MODEL SUPPORT: First tries to load universal (symbol-agnostic) models,
         then falls back to legacy symbol-specific models for backward compatibility.
 
