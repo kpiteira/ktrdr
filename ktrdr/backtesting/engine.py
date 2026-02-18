@@ -42,7 +42,6 @@ class BacktestConfig:
     initial_capital: float = 100000.0
     commission: float = 0.001  # 0.1%
     slippage: float = 0.0005  # 0.05%
-    verbose: bool = False
 
 
 @dataclass

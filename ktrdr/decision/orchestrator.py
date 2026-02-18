@@ -1,4 +1,20 @@
-"""Decision orchestrator that coordinates the complete decision pipeline."""
+"""Decision orchestrator for paper and live trading modes.
+
+NOTE: As of the backtesting pipeline refactor, this module is NOT used by
+the backtesting pipeline. Backtesting uses BacktestingEngine with ModelBundle +
+DecisionFunction + FeatureCache directly, bypassing this orchestrator.
+
+This orchestrator remains for future paper/live trading modes where:
+- Real-time feature computation is needed (_compute_features_realtime)
+- Multi-symbol model management is needed (_load_model_for_symbol)
+- Orchestrator-level risk overrides are needed (_apply_orchestrator_logic)
+
+The refactor was motivated by:
+- Triple model loading (3 separate torch.load calls per backtest init)
+- Triple position tracking (PositionManager, DecisionEngine, PositionState)
+- Circular dependency (decision -> backtesting_service for static utilities)
+See docs/designs/backtesting-pipeline-refactor/DESIGN.md for full context.
+"""
 
 from dataclasses import dataclass
 from pathlib import Path

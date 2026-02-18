@@ -304,6 +304,11 @@ class BaseNeuralModel(ABC):
     def load_model(self, path: str):
         """Load pre-trained model.
 
+        NOTE: The backtesting pipeline does NOT use this method. Backtesting
+        loads models via ModelBundle.load() which uses torch.load() with
+        map_location="cpu" and weights_only=True directly. This method is
+        used by the training pipeline and future paper/live trading.
+
         Args:
             path: Directory path containing saved model files
         """
