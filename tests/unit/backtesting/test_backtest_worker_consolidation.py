@@ -180,6 +180,17 @@ class TestFreshBacktestFlow:
             "Fresh path should build original_request dict for checkpoint context"
         )
 
+    def test_original_request_includes_model_path(self):
+        """original_request must include model_path for checkpoint resume."""
+        from ktrdr.backtesting.backtest_worker import BacktestWorker
+
+        source = inspect.getsource(BacktestWorker._execute_backtest_work)
+        # Find the original_request dict construction and verify model_path
+        assert '"model_path"' in source or "'model_path'" in source, (
+            "original_request dict must include model_path — "
+            "resume path reads it via original_request.get('model_path')"
+        )
+
 
 class TestResumedBacktestFlow:
     """Tests for the resumed backtest execution flow after consolidation."""

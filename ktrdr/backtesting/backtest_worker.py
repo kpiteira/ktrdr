@@ -271,6 +271,7 @@ class BacktestWorker(WorkerAPIBase):
             "initial_capital": request.initial_capital,
             "commission": request.commission,
             "slippage": request.slippage,
+            "model_path": request.model_path,
         }
 
         # 1. Create operation in worker's OperationsService
