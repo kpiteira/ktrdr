@@ -2,6 +2,7 @@
 
 from ktrdr.evolution.brief import BriefTranslator
 from ktrdr.evolution.config import DateRange, EvolutionConfig
+from ktrdr.evolution.fitness import FitnessEvaluator
 from ktrdr.evolution.genome import Genome, Researcher, TraitLevel
 from ktrdr.evolution.population import PopulationManager
 from ktrdr.evolution.tracker import EvolutionTracker
@@ -11,6 +12,7 @@ __all__ = [
     "DateRange",
     "EvolutionConfig",
     "EvolutionTracker",
+    "FitnessEvaluator",
     "Genome",
     "PopulationManager",
     "Researcher",
