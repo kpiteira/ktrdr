@@ -61,9 +61,7 @@ class EvolutionTracker:
 
     # --- Population ---
 
-    def save_population(
-        self, generation: int, population: list[Researcher]
-    ) -> None:
+    def save_population(self, generation: int, population: list[Researcher]) -> None:
         """Save population for a generation."""
         gen_dir = self._gen_dir(generation)
         self._ensure_dir(gen_dir)
@@ -83,9 +81,7 @@ class EvolutionTracker:
 
     # --- Results ---
 
-    def save_results(
-        self, generation: int, results: list[dict[str, Any]]
-    ) -> None:
+    def save_results(self, generation: int, results: list[dict[str, Any]]) -> None:
         """Save results for a generation."""
         gen_dir = self._gen_dir(generation)
         self._ensure_dir(gen_dir)

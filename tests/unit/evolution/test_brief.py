@@ -17,9 +17,7 @@ class TestBriefTranslator:
         return EvolutionConfig(
             symbol="EURUSD",
             timeframe="1h",
-            training_window=DateRange(
-                start=date(2015, 1, 1), end=date(2020, 12, 31)
-            ),
+            training_window=DateRange(start=date(2015, 1, 1), end=date(2020, 12, 31)),
             fitness_slices=[
                 DateRange(start=date(2021, 1, 1), end=date(2022, 6, 30)),
                 DateRange(start=date(2022, 7, 1), end=date(2023, 12, 31)),

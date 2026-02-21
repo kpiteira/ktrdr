@@ -31,9 +31,7 @@ class TestEvolveStartCommand:
 
     def test_start_calls_harness(self, runner) -> None:
         """Start command should invoke the generation harness."""
-        with patch(
-            "ktrdr.cli.commands.evolve._run_evolution"
-        ) as mock_run:
+        with patch("ktrdr.cli.commands.evolve._run_evolution") as mock_run:
             mock_run.return_value = None
             result = runner.invoke(
                 app,
@@ -44,14 +42,10 @@ class TestEvolveStartCommand:
 
     def test_start_rejects_population_below_2(self, runner) -> None:
         """Population < 2 should be rejected."""
-        result = runner.invoke(
-            app, ["evolve", "start", "--population", "1"]
-        )
+        result = runner.invoke(app, ["evolve", "start", "--population", "1"])
         assert result.exit_code != 0
 
     def test_start_rejects_generations_below_1(self, runner) -> None:
         """Generations < 1 should be rejected."""
-        result = runner.invoke(
-            app, ["evolve", "start", "--generations", "0"]
-        )
+        result = runner.invoke(app, ["evolve", "start", "--generations", "0"])
         assert result.exit_code != 0

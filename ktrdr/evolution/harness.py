@@ -116,9 +116,7 @@ class GenerationHarness:
 
         return results
 
-    async def _trigger_researcher(
-        self, generation: int, researcher: Researcher
-    ) -> str:
+    async def _trigger_researcher(self, generation: int, researcher: Researcher) -> str:
         """Trigger a research cycle for one researcher.
 
         Retries on at_capacity with exponential backoff.
@@ -139,9 +137,7 @@ class GenerationHarness:
                 op_id = data["operation_id"]
                 # Persist immediately for crash safety
                 self._tracker.save_operation_id(generation, researcher.id, op_id)
-                logger.info(
-                    "Triggered %s → %s", researcher.id, op_id
-                )
+                logger.info("Triggered %s → %s", researcher.id, op_id)
                 return op_id
 
             reason = data.get("reason", "unknown")
@@ -150,9 +146,7 @@ class GenerationHarness:
                 raise BudgetExhaustedError()
 
             if reason == "at_capacity":
-                logger.info(
-                    "At capacity, retrying %s in %.0fs", researcher.id, backoff
-                )
+                logger.info("At capacity, retrying %s in %.0fs", researcher.id, backoff)
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, _MAX_BACKOFF)
                 continue

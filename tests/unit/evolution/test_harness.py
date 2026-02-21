@@ -204,9 +204,7 @@ class TestGenerationHarnessPoll:
             ),
         ]
         mock_client = AsyncMock()
-        mock_client.post = AsyncMock(
-            return_value=_make_trigger_response("op_000")
-        )
+        mock_client.post = AsyncMock(return_value=_make_trigger_response("op_000"))
         mock_client.get = AsyncMock(
             return_value=_make_completed_operation("op_000", sharpe=1.5, max_dd=0.1)
         )
@@ -236,12 +234,8 @@ class TestGenerationHarnessPoll:
             ),
         ]
         mock_client = AsyncMock()
-        mock_client.post = AsyncMock(
-            return_value=_make_trigger_response("op_000")
-        )
-        mock_client.get = AsyncMock(
-            return_value=_make_failed_operation("op_000")
-        )
+        mock_client.post = AsyncMock(return_value=_make_trigger_response("op_000"))
+        mock_client.get = AsyncMock(return_value=_make_failed_operation("op_000"))
 
         harness = GenerationHarness(
             config=config, tracker=tracker, http_client=mock_client
