@@ -86,3 +86,22 @@
 - E2E validation needs local-prod running with backend + workers
 - `ktrdr evolve start --population 3 --generations 1` is the test command
 - State files land in `data/evolution/run_YYYYMMDD_HHMMSS/`
+
+## Task 1.8 Complete: E2E Validation
+
+**E2E test:** `evolution/single-generation` — PARTIAL PASS (infrastructure limited)
+
+**Bug found and fixed:**
+- Harness used `isinstance(response, dict)` to check trigger/poll responses
+- Unit tests passed because AsyncMock returns dicts directly
+- Real httpx.AsyncClient returns Response objects → every trigger misinterpreted as "unknown rejection"
+- Fix: added `_to_dict()` helper in `harness.py` that calls `.json()` on Response objects
+
+**E2E result (post-fix):**
+- CLI exits cleanly (code 0), creates run directory, persists config/population/results
+- Budget exhausted (remaining=0) → all 3 researchers get MINIMUM_FITNESS — correct behavior
+- 8/10 success criteria passed; 2 failed due to budget=0 (not code bugs)
+- Full PASS requires re-running when budget > 0 and agent is idle
+
+**Gotcha for M2:**
+- Harness hardcodes `base_url=http://localhost:8000` — sandbox environments need port override

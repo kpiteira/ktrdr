@@ -74,7 +74,7 @@ def _run_evolution(
             harness = GenerationHarness(
                 config=config,
                 tracker=tracker,
-                http_client=client,
+                http_client=client,  # type: ignore[arg-type]
             )
             return await harness.run_generation(0, population)
 
@@ -112,15 +112,9 @@ def start(
     generations: int = typer.Option(
         5, "--generations", "-g", help="Number of generations (min 1)", min=1
     ),
-    symbol: str = typer.Option(
-        "EURUSD", "--symbol", "-s", help="Trading symbol"
-    ),
-    timeframe: str = typer.Option(
-        "1h", "--timeframe", "-t", help="Timeframe"
-    ),
-    model: str = typer.Option(
-        "haiku", "--model", "-m", help="LLM model for research"
-    ),
+    symbol: str = typer.Option("EURUSD", "--symbol", "-s", help="Trading symbol"),
+    timeframe: str = typer.Option("1h", "--timeframe", "-t", help="Timeframe"),
+    model: str = typer.Option("haiku", "--model", "-m", help="LLM model for research"),
     seed: int | None = typer.Option(
         None, "--seed", help="Random seed for reproducibility"
     ),
