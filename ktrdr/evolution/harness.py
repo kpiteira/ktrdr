@@ -168,11 +168,13 @@ class GenerationHarness:
             )
             data = _to_dict(raw_response)
 
-            status = data.get("status")
+            # Operations API wraps response in {"success": ..., "data": {...}}
+            op = data.get("data", data)
+            status = op.get("status")
 
             if status == "completed":
                 # Extract backtest_result from operation metadata
-                metadata = data.get("metadata", {})
+                metadata = op.get("metadata", {})
                 params = metadata.get("parameters", {})
                 return params.get("backtest_result")
 

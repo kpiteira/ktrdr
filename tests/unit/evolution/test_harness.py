@@ -244,6 +244,69 @@ class TestGenerationHarnessPoll:
 
         assert results[0]["fitness"] == MINIMUM_FITNESS
 
+    @pytest.mark.asyncio
+    async def test_completed_operation_with_api_envelope(
+        self,
+        config: EvolutionConfig,
+        tracker: EvolutionTracker,
+    ) -> None:
+        """Operations API wraps responses in {success, data} — harness should unwrap."""
+        population = [
+            Researcher(
+                id="r_g00_000",
+                genome=Genome(TraitLevel.LOW, TraitLevel.LOW, TraitLevel.LOW),
+                generation=0,
+            ),
+        ]
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=_make_trigger_response("op_000"))
+        # Wrap in API envelope like real backend does
+        mock_client.get = AsyncMock(
+            return_value={
+                "success": True,
+                "data": _make_completed_operation("op_000", sharpe=2.0, max_dd=0.05),
+            }
+        )
+
+        harness = GenerationHarness(
+            config=config, tracker=tracker, http_client=mock_client
+        )
+        results = await harness.run_generation(0, population)
+
+        assert len(results) == 1
+        # fitness = 2.0 - 1.0 * 0.05 = 1.95
+        assert abs(results[0]["fitness"] - 1.95) < 1e-9
+
+    @pytest.mark.asyncio
+    async def test_failed_operation_with_api_envelope(
+        self,
+        config: EvolutionConfig,
+        tracker: EvolutionTracker,
+    ) -> None:
+        """Failed operation with API envelope should return minimum fitness."""
+        population = [
+            Researcher(
+                id="r_g00_000",
+                genome=Genome(TraitLevel.LOW, TraitLevel.LOW, TraitLevel.LOW),
+                generation=0,
+            ),
+        ]
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=_make_trigger_response("op_000"))
+        mock_client.get = AsyncMock(
+            return_value={
+                "success": True,
+                "data": _make_failed_operation("op_000"),
+            }
+        )
+
+        harness = GenerationHarness(
+            config=config, tracker=tracker, http_client=mock_client
+        )
+        results = await harness.run_generation(0, population)
+
+        assert results[0]["fitness"] == MINIMUM_FITNESS
+
 
 class TestGenerationHarnessFullRun:
     """Tests for full run_generation flow."""
