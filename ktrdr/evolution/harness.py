@@ -34,6 +34,17 @@ class BudgetExhaustedError(Exception):
     """Raised when the trigger API reports budget exhaustion."""
 
 
+def _to_dict(response: Any) -> dict[str, Any]:
+    """Extract dict from an HTTP response.
+
+    Handles both httpx.Response objects (real HTTP) and plain dicts (test mocks).
+    """
+    if isinstance(response, dict):
+        return response
+    # httpx.Response — call .json()
+    return response.json()
+
+
 class GenerationHarness:
     """Orchestrates one generation: trigger → poll → score.
 
@@ -118,13 +129,14 @@ class GenerationHarness:
         backoff = 1.0
 
         while True:
-            response = await self._client.post(
+            raw_response = await self._client.post(
                 f"{self._base_url}/api/v1/agent/trigger",
                 json={"model": self._config.model, "brief": brief},
             )
+            data = _to_dict(raw_response)
 
-            if isinstance(response, dict) and response.get("triggered"):
-                op_id = response["operation_id"]
+            if data.get("triggered"):
+                op_id = data["operation_id"]
                 # Persist immediately for crash safety
                 self._tracker.save_operation_id(generation, researcher.id, op_id)
                 logger.info(
@@ -132,7 +144,7 @@ class GenerationHarness:
                 )
                 return op_id
 
-            reason = response.get("reason", "unknown") if isinstance(response, dict) else "unknown"
+            reason = data.get("reason", "unknown")
 
             if reason == "budget_exhausted":
                 raise BudgetExhaustedError()
@@ -157,15 +169,16 @@ class GenerationHarness:
         Returns the backtest_result dict, or None if failed.
         """
         while True:
-            response = await self._client.get(
+            raw_response = await self._client.get(
                 f"{self._base_url}/api/v1/operations/{operation_id}",
             )
+            data = _to_dict(raw_response)
 
-            status = response.get("status") if isinstance(response, dict) else None
+            status = data.get("status")
 
             if status == "completed":
                 # Extract backtest_result from operation metadata
-                metadata = response.get("metadata", {})
+                metadata = data.get("metadata", {})
                 params = metadata.get("parameters", {})
                 return params.get("backtest_result")
 
