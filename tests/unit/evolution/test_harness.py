@@ -1040,9 +1040,7 @@ class TestHarnessAdditionalBacktests:
         mock_client.post = AsyncMock(
             side_effect=[_make_trigger_response("op_research")]
         )
-        mock_client.get = AsyncMock(
-            side_effect=[_make_failed_operation("op_research")]
-        )
+        mock_client.get = AsyncMock(side_effect=[_make_failed_operation("op_research")])
 
         harness = GenerationHarness(
             config=three_slice_config, tracker=tracker, http_client=mock_client

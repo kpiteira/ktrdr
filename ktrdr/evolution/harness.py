@@ -454,9 +454,7 @@ class GenerationHarness:
             )
             return None
 
-    async def _poll_until_terminal(
-        self, operation_id: str
-    ) -> dict[str, Any] | None:
+    async def _poll_until_terminal(self, operation_id: str) -> dict[str, Any] | None:
         """Poll an operation until completed or failed.
 
         Returns the full operation data dict on completion, None on failure.
@@ -545,9 +543,7 @@ class GenerationHarness:
     ) -> dict[str, Any] | None:
         """Run a single backtest and return the result. Retries once on failure."""
         for attempt in range(2):
-            op_id = await self._trigger_backtest(
-                model_path, strategy_name, date_range
-            )
+            op_id = await self._trigger_backtest(model_path, strategy_name, date_range)
             if op_id is None:
                 if attempt == 0:
                     logger.info("Backtest trigger failed for %s, retrying", date_range)

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from ktrdr.evolution.genome import Genome, Researcher, TraitLevel
 from ktrdr.evolution.report import (
-    MonocultureWarning,
     compute_genome_diversity,
     compute_trait_convergence,
+    trace_lineage,
 )
 
 
@@ -64,7 +66,9 @@ class TestGenomeDiversity:
             )
         for i in range(4):
             researchers.append(
-                _make_researcher(0, i + 4, TraitLevel.LOW, TraitLevel.LOW, TraitLevel.LOW)
+                _make_researcher(
+                    0, i + 4, TraitLevel.LOW, TraitLevel.LOW, TraitLevel.LOW
+                )
             )
         for i in range(4):
             researchers.append(
@@ -86,7 +90,9 @@ class TestGenomeDiversity:
             )
         for i in range(3):
             researchers.append(
-                _make_researcher(0, i + 3, TraitLevel.LOW, TraitLevel.LOW, TraitLevel.LOW)
+                _make_researcher(
+                    0, i + 3, TraitLevel.LOW, TraitLevel.LOW, TraitLevel.LOW
+                )
             )
         for i in range(3):
             researchers.append(
@@ -96,7 +102,9 @@ class TestGenomeDiversity:
             )
         for i in range(3):
             researchers.append(
-                _make_researcher(0, i + 9, TraitLevel.OFF, TraitLevel.LOW, TraitLevel.HIGH)
+                _make_researcher(
+                    0, i + 9, TraitLevel.OFF, TraitLevel.LOW, TraitLevel.HIGH
+                )
             )
         result = compute_genome_diversity(researchers)
         assert result.diversity == 4 / 12
@@ -120,7 +128,9 @@ class TestTraitConvergence:
             )
         for i in range(2):
             researchers.append(
-                _make_researcher(0, i + 10, TraitLevel.OFF, TraitLevel.LOW, TraitLevel.LOW)
+                _make_researcher(
+                    0, i + 10, TraitLevel.OFF, TraitLevel.LOW, TraitLevel.LOW
+                )
             )
 
         convergence = compute_trait_convergence(researchers)
@@ -161,3 +171,87 @@ class TestTraitConvergence:
         """Empty population → empty convergence."""
         convergence = compute_trait_convergence([])
         assert len(convergence) == 0
+
+
+class TestTraceLineage:
+    """Tests for lineage tracing from a researcher back to gen 0."""
+
+    def test_trace_from_gen0_returns_single_entry(self, tmp_path: Path) -> None:
+        """Tracing a gen-0 researcher returns just that entry."""
+        from ktrdr.evolution.tracker import EvolutionTracker
+
+        tracker = EvolutionTracker(run_dir=tmp_path)
+        r0 = _make_researcher(0, 0, TraitLevel.HIGH, TraitLevel.LOW, TraitLevel.OFF)
+        tracker.save_population(0, [r0])
+        tracker.save_results(0, [{"researcher_id": r0.id, "fitness": 1.5}])
+
+        lineage = trace_lineage(tracker, r0.id, 0)
+        assert len(lineage) == 1
+        assert lineage[0]["researcher_id"] == r0.id
+        assert lineage[0]["generation"] == 0
+
+    def test_trace_from_gen2_returns_full_chain(self, tmp_path: Path) -> None:
+        """Tracing from gen 2 → gen 1 → gen 0 returns 3 entries."""
+        from ktrdr.evolution.tracker import EvolutionTracker
+
+        tracker = EvolutionTracker(run_dir=tmp_path)
+
+        # Gen 0: grandparent
+        g0 = _make_researcher(0, 0, TraitLevel.LOW, TraitLevel.LOW, TraitLevel.LOW)
+        tracker.save_population(0, [g0])
+        tracker.save_results(0, [{"researcher_id": g0.id, "fitness": 1.0}])
+
+        # Gen 1: parent (child of g0)
+        g1 = Researcher(
+            id="r_g01_000",
+            genome=Genome(TraitLevel.HIGH, TraitLevel.LOW, TraitLevel.LOW),
+            generation=1,
+            parent_id=g0.id,
+            mutation="novelty_seeking: low → high",
+        )
+        tracker.save_population(1, [g1])
+        tracker.save_results(1, [{"researcher_id": g1.id, "fitness": 1.5}])
+
+        # Gen 2: child (child of g1)
+        g2 = Researcher(
+            id="r_g02_000",
+            genome=Genome(TraitLevel.HIGH, TraitLevel.HIGH, TraitLevel.LOW),
+            generation=2,
+            parent_id=g1.id,
+            mutation="skepticism: low → high",
+        )
+        tracker.save_population(2, [g2])
+        tracker.save_results(2, [{"researcher_id": g2.id, "fitness": 2.0}])
+
+        lineage = trace_lineage(tracker, g2.id, 2)
+        assert len(lineage) == 3
+        # Ordered gen 0 → gen 2
+        assert lineage[0]["researcher_id"] == g0.id
+        assert lineage[0]["generation"] == 0
+        assert lineage[1]["researcher_id"] == g1.id
+        assert lineage[1]["generation"] == 1
+        assert lineage[1]["mutation"] == "novelty_seeking: low → high"
+        assert lineage[2]["researcher_id"] == g2.id
+        assert lineage[2]["generation"] == 2
+
+    def test_trace_with_missing_parent_stops_gracefully(self, tmp_path: Path) -> None:
+        """If parent population is missing, return partial lineage."""
+        from ktrdr.evolution.tracker import EvolutionTracker
+
+        tracker = EvolutionTracker(run_dir=tmp_path)
+
+        # Only gen 1 saved, gen 0 missing
+        g1 = Researcher(
+            id="r_g01_000",
+            genome=Genome(TraitLevel.HIGH, TraitLevel.LOW, TraitLevel.LOW),
+            generation=1,
+            parent_id="r_g00_000",
+            mutation="novelty_seeking: low → high",
+        )
+        tracker.save_population(1, [g1])
+        tracker.save_results(1, [{"researcher_id": g1.id, "fitness": 1.5}])
+
+        lineage = trace_lineage(tracker, g1.id, 1)
+        # Should return just the gen 1 entry since gen 0 is missing
+        assert len(lineage) == 1
+        assert lineage[0]["researcher_id"] == g1.id

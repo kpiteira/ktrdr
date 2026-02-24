@@ -8,8 +8,6 @@ from __future__ import annotations
 
 import math
 
-import pytest
-
 from ktrdr.evolution.config import EvolutionConfig
 from ktrdr.evolution.fitness import MINIMUM_FITNESS, FitnessEvaluator
 
@@ -115,9 +113,7 @@ class TestFitnessMultiSliceScoring:
 
     def test_3_slices_known_values(self) -> None:
         """3 slices with known Sharpe/DD → verify exact fitness value."""
-        config = EvolutionConfig(
-            lambda_dd=1.0, lambda_var=1.0, lambda_complexity=0.0
-        )
+        config = EvolutionConfig(lambda_dd=1.0, lambda_var=1.0, lambda_complexity=0.0)
         evaluator = FitnessEvaluator(config)
         slices = [
             _make_slice(sharpe=1.0, max_dd=0.10),
@@ -139,9 +135,7 @@ class TestFitnessMultiSliceScoring:
 
     def test_identical_sharpes_zero_variance_penalty(self) -> None:
         """Identical Sharpes across slices → 0 variance penalty."""
-        config = EvolutionConfig(
-            lambda_dd=0.0, lambda_var=1.0, lambda_complexity=0.0
-        )
+        config = EvolutionConfig(lambda_dd=0.0, lambda_var=1.0, lambda_complexity=0.0)
         evaluator = FitnessEvaluator(config)
         slices = [
             _make_slice(sharpe=1.5, max_dd=0.0),
@@ -154,9 +148,7 @@ class TestFitnessMultiSliceScoring:
 
     def test_divergent_sharpes_large_variance_penalty(self) -> None:
         """Divergent Sharpes → large variance penalty."""
-        config = EvolutionConfig(
-            lambda_dd=0.0, lambda_var=1.0, lambda_complexity=0.0
-        )
+        config = EvolutionConfig(lambda_dd=0.0, lambda_var=1.0, lambda_complexity=0.0)
         evaluator = FitnessEvaluator(config)
         slices = [
             _make_slice(sharpe=0.0, max_dd=0.0),
@@ -243,9 +235,7 @@ class TestFitnessGracefulSliceHandling:
 
     def test_single_slice_variance_zero(self) -> None:
         """1 slice → variance penalty = 0, mean = single value."""
-        config = EvolutionConfig(
-            lambda_dd=1.0, lambda_var=1.0, lambda_complexity=0.0
-        )
+        config = EvolutionConfig(lambda_dd=1.0, lambda_var=1.0, lambda_complexity=0.0)
         evaluator = FitnessEvaluator(config)
         slices = [_make_slice(sharpe=2.0, max_dd=0.10)]
         fitness = evaluator.evaluate_slices(slices)
@@ -255,9 +245,7 @@ class TestFitnessGracefulSliceHandling:
 
     def test_two_slices_variance_computed(self) -> None:
         """2 slices → variance computed from 2 values."""
-        config = EvolutionConfig(
-            lambda_dd=0.0, lambda_var=1.0, lambda_complexity=0.0
-        )
+        config = EvolutionConfig(lambda_dd=0.0, lambda_var=1.0, lambda_complexity=0.0)
         evaluator = FitnessEvaluator(config)
         slices = [
             _make_slice(sharpe=1.0, max_dd=0.0),
@@ -279,9 +267,7 @@ class TestFitnessLambdaConfigurable:
 
     def test_all_lambdas_at_zero(self) -> None:
         """All lambdas = 0 → fitness = mean(Sharpe)."""
-        config = EvolutionConfig(
-            lambda_dd=0.0, lambda_var=0.0, lambda_complexity=0.0
-        )
+        config = EvolutionConfig(lambda_dd=0.0, lambda_var=0.0, lambda_complexity=0.0)
         evaluator = FitnessEvaluator(config)
         slices = [
             _make_slice(sharpe=1.0, max_dd=0.20),
@@ -292,9 +278,7 @@ class TestFitnessLambdaConfigurable:
 
     def test_custom_lambda_dd(self) -> None:
         """Custom lambda_dd changes drawdown penalty."""
-        config = EvolutionConfig(
-            lambda_dd=2.0, lambda_var=0.0, lambda_complexity=0.0
-        )
+        config = EvolutionConfig(lambda_dd=2.0, lambda_var=0.0, lambda_complexity=0.0)
         evaluator = FitnessEvaluator(config)
         slices = [_make_slice(sharpe=1.0, max_dd=0.20)]
         fitness = evaluator.evaluate_slices(slices)
@@ -317,9 +301,7 @@ class TestFitnessBackwardCompat:
 
     def test_evaluate_single_result_scores(self) -> None:
         """Single dict delegates to evaluate_slices with 1 slice."""
-        config = EvolutionConfig(
-            lambda_dd=1.0, lambda_var=0.0, lambda_complexity=0.0
-        )
+        config = EvolutionConfig(lambda_dd=1.0, lambda_var=0.0, lambda_complexity=0.0)
         evaluator = FitnessEvaluator(config)
         result = {"sharpe_ratio": 1.5, "max_drawdown": 0.10, "total_trades": 50}
         fitness = evaluator.evaluate(result)

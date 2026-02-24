@@ -1,16 +1,19 @@
 """Evolution report — monoculture detection and analysis utilities.
 
 Provides functions for analyzing genome diversity, trait convergence,
-and generating evolution experiment reports.
+lineage tracing, and generating evolution experiment reports.
 """
 
 from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ktrdr.evolution.genome import Researcher, _TRAIT_NAMES
+from ktrdr.evolution.genome import _TRAIT_NAMES, Researcher
+
+if TYPE_CHECKING:
+    from ktrdr.evolution.tracker import EvolutionTracker
 
 # Diversity below this threshold triggers a monoculture warning
 _DIVERSITY_WARNING_THRESHOLD = 0.3
@@ -98,9 +101,7 @@ def compute_trait_convergence(
     pop_size = len(population)
 
     for trait_name in _TRAIT_NAMES:
-        values = [
-            getattr(r.genome, trait_name).name.lower() for r in population
-        ]
+        values = [getattr(r.genome, trait_name).name.lower() for r in population]
         counter = Counter(values)
         dominant_value, dominant_count = counter.most_common(1)[0]
 
@@ -111,3 +112,70 @@ def compute_trait_convergence(
         }
 
     return result
+
+
+def trace_lineage(
+    tracker: EvolutionTracker,
+    researcher_id: str,
+    generation: int,
+) -> list[dict[str, Any]]:
+    """Trace a researcher's ancestry back to generation 0.
+
+    Follows parent_id links through saved population data.
+
+    Args:
+        tracker: EvolutionTracker with saved population data.
+        researcher_id: ID of the researcher to trace.
+        generation: Generation number of the researcher.
+
+    Returns:
+        List from gen 0 to current gen, each entry:
+        {researcher_id, generation, genome, mutation, fitness}.
+        If parent data is missing, returns a partial chain.
+    """
+    chain: list[dict[str, Any]] = []
+    current_id = researcher_id
+    current_gen = generation
+
+    while current_gen >= 0:
+        population = tracker.load_population(current_gen)
+        if not population:
+            break
+
+        # Find the researcher in this generation
+        researcher = None
+        for r in population:
+            if r.id == current_id:
+                researcher = r
+                break
+
+        if researcher is None:
+            break
+
+        # Look up fitness from results
+        results = tracker.load_results(current_gen)
+        fitness = None
+        for res in results:
+            if res.get("researcher_id") == current_id:
+                fitness = res.get("fitness")
+                break
+
+        chain.append(
+            {
+                "researcher_id": researcher.id,
+                "generation": current_gen,
+                "genome": researcher.genome.to_dict(),
+                "mutation": researcher.mutation,
+                "fitness": fitness,
+            }
+        )
+
+        if researcher.parent_id is None or current_gen == 0:
+            break
+
+        current_id = researcher.parent_id
+        current_gen -= 1
+
+    # Reverse so gen 0 is first
+    chain.reverse()
+    return chain
