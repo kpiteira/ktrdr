@@ -3,18 +3,22 @@
 from __future__ import annotations
 
 import tempfile
+from datetime import date
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
 
-from ktrdr.evolution.config import EvolutionConfig
+from ktrdr.evolution.config import DateRange, EvolutionConfig
 from ktrdr.evolution.fitness import MINIMUM_FITNESS
 from ktrdr.evolution.genome import Genome, Researcher, TraitLevel
 from ktrdr.evolution.harness import GenerationHarness
 from ktrdr.evolution.population import PopulationManager
 from ktrdr.evolution.tracker import EvolutionTracker
+
+# Single-slice config avoids additional backtest calls in basic tests
+_SINGLE_SLICE = [DateRange(date(2021, 1, 1), date(2022, 6, 30))]
 
 
 @pytest.fixture
@@ -26,8 +30,10 @@ def tmp_run_dir() -> Path:
 
 @pytest.fixture
 def config() -> EvolutionConfig:
-    """Config with fast poll interval for testing."""
-    return EvolutionConfig(population_size=3, seed=42, poll_interval=0)
+    """Config with fast poll interval and single slice for basic tests."""
+    return EvolutionConfig(
+        population_size=3, seed=42, poll_interval=0, fitness_slices=_SINGLE_SLICE
+    )
 
 
 @pytest.fixture
@@ -415,9 +421,13 @@ class TestHarnessMultiGeneration:
 
     @pytest.fixture
     def multi_gen_config(self) -> EvolutionConfig:
-        """Config for 3 generations, 6 researchers, fast polling."""
+        """Config for 3 generations, 6 researchers, fast polling, single slice."""
         return EvolutionConfig(
-            population_size=6, generations=3, seed=42, poll_interval=0
+            population_size=6,
+            generations=3,
+            seed=42,
+            poll_interval=0,
+            fitness_slices=_SINGLE_SLICE,
         )
 
     @pytest.mark.asyncio
@@ -512,7 +522,11 @@ class TestHarnessMultiGeneration:
     async def test_budget_check_aborts_early(self, tmp_run_dir: Path) -> None:
         """If budget exhausted mid-run, should abort and not continue."""
         config = EvolutionConfig(
-            population_size=4, generations=3, seed=42, poll_interval=0
+            population_size=4,
+            generations=3,
+            seed=42,
+            poll_interval=0,
+            fitness_slices=_SINGLE_SLICE,
         )
         tracker = EvolutionTracker(run_dir=tmp_run_dir)
         mock_client = AsyncMock()
@@ -622,9 +636,13 @@ class TestHarnessResume:
 
     @pytest.fixture
     def resume_config(self) -> EvolutionConfig:
-        """Config for 5 generations, 6 researchers."""
+        """Config for 5 generations, 6 researchers, single slice."""
         return EvolutionConfig(
-            population_size=6, generations=5, seed=42, poll_interval=0
+            population_size=6,
+            generations=5,
+            seed=42,
+            poll_interval=0,
+            fitness_slices=_SINGLE_SLICE,
         )
 
     @pytest.mark.asyncio
@@ -735,6 +753,7 @@ class TestHarnessResume:
             seed=42,
             poll_interval=0,
             stale_operation_timeout=0,  # treat all as stale immediately
+            fitness_slices=_SINGLE_SLICE,
         )
         tracker = EvolutionTracker(run_dir=tmp_run_dir)
         _setup_completed_run(tracker, config, through_gen=0)
@@ -780,3 +799,325 @@ class TestHarnessResume:
         # Gen 1 should have results from re-triggered ops
         gen1_results = tracker.load_results(1)
         assert len(gen1_results) == 4
+
+
+# --- Helpers for additional backtest tests (Task 3.1) ---
+
+
+def _make_backtest_start_response(op_id: str) -> dict[str, Any]:
+    """Successful backtest start response (POST /backtests/start)."""
+    return {
+        "success": True,
+        "operation_id": op_id,
+        "status": "started",
+        "message": "Backtest started",
+        "symbol": "EURUSD",
+        "timeframe": "1h",
+    }
+
+
+def _make_backtest_completed(
+    op_id: str,
+    sharpe: float = 1.0,
+    max_dd: float = 0.1,
+    total_trades: int = 50,
+    long_trades: int = 25,
+    short_trades: int = 25,
+) -> dict[str, Any]:
+    """Completed backtest operation (GET /operations/{id})."""
+    return {
+        "operation_id": op_id,
+        "status": "completed",
+        "result_summary": {
+            "success": True,
+            "backtest_result": {
+                "sharpe_ratio": sharpe,
+                "max_drawdown": max_dd,
+                "total_trades": total_trades,
+                "long_trades": long_trades,
+                "short_trades": short_trades,
+            },
+        },
+    }
+
+
+_THREE_SLICES = [
+    DateRange(date(2021, 1, 1), date(2022, 6, 30)),
+    DateRange(date(2022, 7, 1), date(2023, 12, 31)),
+    DateRange(date(2024, 1, 1), date(2025, 6, 30)),
+]
+
+
+class TestHarnessAdditionalBacktests:
+    """Tests for additional backtest slices (Task 3.1)."""
+
+    @pytest.fixture
+    def three_slice_config(self) -> EvolutionConfig:
+        """Config with 3 fitness slices for testing additional backtests."""
+        return EvolutionConfig(
+            population_size=2,
+            generations=1,
+            seed=42,
+            poll_interval=0,
+            fitness_slices=list(_THREE_SLICES),
+        )
+
+    def _single_researcher(self) -> list[Researcher]:
+        return [
+            Researcher(id="r_g00_000", genome=Genome(), generation=0),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_additional_backtests_triggered_with_correct_dates(
+        self,
+        three_slice_config: EvolutionConfig,
+        tmp_run_dir: Path,
+    ) -> None:
+        """Should trigger backtests for slices 2 and 3 with correct date ranges."""
+        tracker = EvolutionTracker(run_dir=tmp_run_dir)
+        mock_client = AsyncMock()
+
+        mock_client.post = AsyncMock(
+            side_effect=[
+                _make_trigger_response("op_research"),
+                _make_backtest_start_response("op_bt_s2"),
+                _make_backtest_start_response("op_bt_s3"),
+            ]
+        )
+        mock_client.get = AsyncMock(
+            side_effect=[
+                _make_completed_operation("op_research", sharpe=1.0, max_dd=0.1),
+                _make_backtest_completed("op_bt_s2", sharpe=0.8, max_dd=0.15),
+                _make_backtest_completed("op_bt_s3", sharpe=0.9, max_dd=0.12),
+            ]
+        )
+
+        harness = GenerationHarness(
+            config=three_slice_config, tracker=tracker, http_client=mock_client
+        )
+        await harness.run_generation(0, self._single_researcher())
+
+        # Verify 3 POST calls: 1 research trigger + 2 backtest triggers
+        post_calls = mock_client.post.call_args_list
+        assert len(post_calls) == 3
+
+        # Slice 2 backtest has correct dates and model metadata
+        bt_s2_json = post_calls[1][1]["json"]
+        assert bt_s2_json["start_date"] == "2022-07-01"
+        assert bt_s2_json["end_date"] == "2023-12-31"
+        assert bt_s2_json["model_path"] == "/models/test"
+        assert bt_s2_json["strategy_name"] == "test_strategy"
+
+        # Slice 3 backtest
+        bt_s3_json = post_calls[2][1]["json"]
+        assert bt_s3_json["start_date"] == "2024-01-01"
+        assert bt_s3_json["end_date"] == "2025-06-30"
+
+    @pytest.mark.asyncio
+    async def test_model_path_from_research_operation_used(
+        self,
+        three_slice_config: EvolutionConfig,
+        tmp_run_dir: Path,
+    ) -> None:
+        """Model path from research op metadata should be used for backtests."""
+        tracker = EvolutionTracker(run_dir=tmp_run_dir)
+        mock_client = AsyncMock()
+
+        # Custom model_path in research operation
+        research_op = _make_completed_operation("op_research", sharpe=1.0, max_dd=0.1)
+        research_op["metadata"]["parameters"]["model_path"] = "/models/custom_v2"
+        research_op["metadata"]["parameters"]["strategy_name"] = "custom_strat"
+
+        mock_client.post = AsyncMock(
+            side_effect=[
+                _make_trigger_response("op_research"),
+                _make_backtest_start_response("op_bt_s2"),
+                _make_backtest_start_response("op_bt_s3"),
+            ]
+        )
+        mock_client.get = AsyncMock(
+            side_effect=[
+                research_op,
+                _make_backtest_completed("op_bt_s2"),
+                _make_backtest_completed("op_bt_s3"),
+            ]
+        )
+
+        harness = GenerationHarness(
+            config=three_slice_config, tracker=tracker, http_client=mock_client
+        )
+        await harness.run_generation(0, self._single_researcher())
+
+        bt_s2_json = mock_client.post.call_args_list[1][1]["json"]
+        assert bt_s2_json["model_path"] == "/models/custom_v2"
+        assert bt_s2_json["strategy_name"] == "custom_strat"
+
+    @pytest.mark.asyncio
+    async def test_failed_additional_backtest_retries_once(
+        self,
+        three_slice_config: EvolutionConfig,
+        tmp_run_dir: Path,
+    ) -> None:
+        """Failed additional backtest should retry once, then proceed."""
+        tracker = EvolutionTracker(run_dir=tmp_run_dir)
+        mock_client = AsyncMock()
+
+        # Slice 2: first attempt fails, retry succeeds. Slice 3: succeeds.
+        mock_client.post = AsyncMock(
+            side_effect=[
+                _make_trigger_response("op_research"),
+                _make_backtest_start_response("op_bt_s2_fail"),
+                _make_backtest_start_response("op_bt_s2_retry"),
+                _make_backtest_start_response("op_bt_s3"),
+            ]
+        )
+        mock_client.get = AsyncMock(
+            side_effect=[
+                _make_completed_operation("op_research"),
+                _make_failed_operation("op_bt_s2_fail"),
+                _make_backtest_completed("op_bt_s2_retry", sharpe=0.9),
+                _make_backtest_completed("op_bt_s3", sharpe=0.7),
+            ]
+        )
+
+        harness = GenerationHarness(
+            config=three_slice_config, tracker=tracker, http_client=mock_client
+        )
+        results = await harness.run_generation(0, self._single_researcher())
+
+        # All 3 slice results collected (retry succeeded)
+        assert len(results[0]["slice_results"]) == 3
+
+    @pytest.mark.asyncio
+    async def test_failed_additional_backtest_both_attempts_degrades(
+        self,
+        three_slice_config: EvolutionConfig,
+        tmp_run_dir: Path,
+    ) -> None:
+        """If both attempts fail, proceed with available slices only."""
+        tracker = EvolutionTracker(run_dir=tmp_run_dir)
+        mock_client = AsyncMock()
+
+        # Slice 2: both attempts fail. Slice 3: succeeds.
+        mock_client.post = AsyncMock(
+            side_effect=[
+                _make_trigger_response("op_research"),
+                _make_backtest_start_response("op_bt_s2_a1"),
+                _make_backtest_start_response("op_bt_s2_a2"),
+                _make_backtest_start_response("op_bt_s3"),
+            ]
+        )
+        mock_client.get = AsyncMock(
+            side_effect=[
+                _make_completed_operation("op_research"),
+                _make_failed_operation("op_bt_s2_a1"),
+                _make_failed_operation("op_bt_s2_a2"),
+                _make_backtest_completed("op_bt_s3", sharpe=0.7),
+            ]
+        )
+
+        harness = GenerationHarness(
+            config=three_slice_config, tracker=tracker, http_client=mock_client
+        )
+        results = await harness.run_generation(0, self._single_researcher())
+
+        # Only 2 slice results (first + slice 3; slice 2 failed)
+        assert len(results[0]["slice_results"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_skipped_for_failed_researcher(
+        self,
+        three_slice_config: EvolutionConfig,
+        tmp_run_dir: Path,
+    ) -> None:
+        """Researchers that failed research skip additional backtests."""
+        tracker = EvolutionTracker(run_dir=tmp_run_dir)
+        mock_client = AsyncMock()
+
+        mock_client.post = AsyncMock(
+            side_effect=[_make_trigger_response("op_research")]
+        )
+        mock_client.get = AsyncMock(
+            side_effect=[_make_failed_operation("op_research")]
+        )
+
+        harness = GenerationHarness(
+            config=three_slice_config, tracker=tracker, http_client=mock_client
+        )
+        results = await harness.run_generation(0, self._single_researcher())
+
+        assert results[0]["fitness"] == MINIMUM_FITNESS
+        assert len(results[0]["slice_results"]) == 0
+        # Only 1 POST (research trigger), no backtest triggers
+        assert mock_client.post.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_all_3_slice_results_collected(
+        self,
+        three_slice_config: EvolutionConfig,
+        tmp_run_dir: Path,
+    ) -> None:
+        """All 3 slice results should be collected with correct values."""
+        tracker = EvolutionTracker(run_dir=tmp_run_dir)
+        mock_client = AsyncMock()
+
+        mock_client.post = AsyncMock(
+            side_effect=[
+                _make_trigger_response("op_research"),
+                _make_backtest_start_response("op_bt_s2"),
+                _make_backtest_start_response("op_bt_s3"),
+            ]
+        )
+        mock_client.get = AsyncMock(
+            side_effect=[
+                _make_completed_operation("op_research", sharpe=1.5, max_dd=0.1),
+                _make_backtest_completed("op_bt_s2", sharpe=1.2, max_dd=0.12),
+                _make_backtest_completed("op_bt_s3", sharpe=0.8, max_dd=0.2),
+            ]
+        )
+
+        harness = GenerationHarness(
+            config=three_slice_config, tracker=tracker, http_client=mock_client
+        )
+        results = await harness.run_generation(0, self._single_researcher())
+
+        slices = results[0]["slice_results"]
+        assert len(slices) == 3
+        assert slices[0]["sharpe_ratio"] == 1.5
+        assert slices[1]["sharpe_ratio"] == 1.2
+        assert slices[2]["sharpe_ratio"] == 0.8
+
+    @pytest.mark.asyncio
+    async def test_no_additional_backtests_with_single_slice(
+        self,
+        tmp_run_dir: Path,
+    ) -> None:
+        """With 1 fitness slice, no additional backtests are triggered."""
+        config = EvolutionConfig(
+            population_size=2,
+            generations=1,
+            seed=42,
+            poll_interval=0,
+            fitness_slices=_SINGLE_SLICE,
+        )
+        tracker = EvolutionTracker(run_dir=tmp_run_dir)
+        mock_client = AsyncMock()
+
+        mock_client.post = AsyncMock(
+            side_effect=[_make_trigger_response("op_research")]
+        )
+        mock_client.get = AsyncMock(
+            side_effect=[
+                _make_completed_operation("op_research", sharpe=1.0, max_dd=0.1)
+            ]
+        )
+
+        harness = GenerationHarness(
+            config=config, tracker=tracker, http_client=mock_client
+        )
+        results = await harness.run_generation(0, self._single_researcher())
+
+        # Only 1 POST (research trigger), no backtest triggers
+        assert mock_client.post.call_count == 1
+        # 1 slice result from research pipeline
+        assert len(results[0]["slice_results"]) == 1
