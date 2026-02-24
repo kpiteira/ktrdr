@@ -69,12 +69,19 @@ def _run_evolution(
 
     console.print(f"[green]Seeded {len(population)} researchers[/green]")
 
+    # Detect sandbox port for correct API URL
+    from ktrdr.cli.sandbox_detect import resolve_api_url
+
+    base_url = resolve_api_url()
+    console.print(f"  API: {base_url}")
+
     async def _run_async() -> list[dict]:
         async with httpx.AsyncClient(timeout=60.0) as client:
             harness = GenerationHarness(
                 config=config,
                 tracker=tracker,
                 http_client=client,  # type: ignore[arg-type]
+                base_url=base_url,
             )
             return await harness.run_generation(0, population)
 
