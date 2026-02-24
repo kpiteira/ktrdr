@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from ktrdr.evolution.config import EvolutionConfig
-from ktrdr.evolution.fitness import FitnessEvaluator
-
-MINIMUM_FITNESS = -999.0
+from ktrdr.evolution.fitness import MINIMUM_FITNESS, FitnessEvaluator
 
 
 class TestFitnessEvaluator:

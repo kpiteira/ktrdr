@@ -34,9 +34,12 @@ class FitnessEvaluator:
 
         try:
             # Accept both "sharpe_ratio" (from research worker) and "sharpe" (legacy)
-            sharpe = float(
-                backtest_result.get("sharpe_ratio", backtest_result.get("sharpe", None))
+            raw_sharpe = backtest_result.get(
+                "sharpe_ratio", backtest_result.get("sharpe")
             )
+            if raw_sharpe is None:
+                return MINIMUM_FITNESS
+            sharpe = float(raw_sharpe)
             max_dd = float(backtest_result["max_drawdown"])
         except (KeyError, TypeError, ValueError):
             return MINIMUM_FITNESS

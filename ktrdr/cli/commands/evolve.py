@@ -60,6 +60,11 @@ def _run_evolution(
     console.print(f"\n[bold]Evolution Experiment[/bold]: {run_id}")
     console.print(f"  Population: {population_size}, Generations: {generations}")
     console.print(f"  Symbol: {symbol}, Timeframe: {timeframe}, Model: {model}")
+    if generations > 1:
+        console.print(
+            "[yellow]  Note: M1 runs generation 0 only. "
+            "Multi-generation loop comes in M2.[/yellow]"
+        )
     console.print()
 
     # Seed initial population
@@ -100,7 +105,11 @@ def _run_evolution(
 
     for r in sorted(results, key=lambda x: x["fitness"], reverse=True):
         fitness = r["fitness"]
-        status = "[red]FAILED[/red]" if fitness <= -999 else "[green]OK[/green]"
+        from ktrdr.evolution.fitness import MINIMUM_FITNESS
+
+        status = (
+            "[red]FAILED[/red]" if fitness <= MINIMUM_FITNESS else "[green]OK[/green]"
+        )
         table.add_row(
             r["researcher_id"],
             f"{fitness:.4f}",

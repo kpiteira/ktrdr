@@ -48,15 +48,20 @@ class EvolutionTracker:
         self._ensure_dir(self.run_dir)
         path = self.run_dir / "config.yaml"
         with open(path, "w") as f:
-            yaml.dump(config.to_dict(), f, default_flow_style=False)
+            yaml.dump(config.to_dict(), f, default_flow_style=False, sort_keys=False)
 
     def load_config(self) -> EvolutionConfig | None:
-        """Load run configuration. Returns None if file doesn't exist."""
+        """Load run configuration. Returns None if file doesn't exist or is invalid."""
         path = self.run_dir / "config.yaml"
         if not path.exists():
             return None
-        with open(path) as f:
-            data = yaml.safe_load(f)
+        try:
+            with open(path) as f:
+                data = yaml.safe_load(f)
+        except yaml.YAMLError:
+            return None
+        if data is None:
+            return None
         return EvolutionConfig.from_dict(data)
 
     # --- Population ---
@@ -68,7 +73,7 @@ class EvolutionTracker:
         path = gen_dir / "population.yaml"
         data = [r.to_dict() for r in population]
         with open(path, "w") as f:
-            yaml.dump(data, f, default_flow_style=False)
+            yaml.dump(data, f, default_flow_style=False, sort_keys=False)
 
     def load_population(self, generation: int) -> list[Researcher]:
         """Load population for a generation. Returns empty list if missing."""
@@ -76,7 +81,7 @@ class EvolutionTracker:
         if not path.exists():
             return []
         with open(path) as f:
-            data = yaml.safe_load(f)
+            data = yaml.safe_load(f) or []
         return [Researcher.from_dict(d) for d in data]
 
     # --- Results ---

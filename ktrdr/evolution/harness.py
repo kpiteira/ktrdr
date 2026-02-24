@@ -83,7 +83,9 @@ class GenerationHarness:
         for researcher in population:
             try:
                 op_id = await self._trigger_researcher(generation, researcher)
-                operation_map[researcher.id] = op_id
+                if op_id is not None:
+                    operation_map[researcher.id] = op_id
+                # else: researcher rejected (non-budget) — gets MINIMUM_FITNESS
             except BudgetExhaustedError:
                 logger.warning("Budget exhausted — aborting generation %d", generation)
                 aborted = True
@@ -103,7 +105,17 @@ class GenerationHarness:
         # Phase 2: Poll all operations and collect results
         results: list[dict[str, Any]] = []
         for researcher in population:
-            op_id = operation_map[researcher.id]
+            op_id = operation_map.get(researcher.id)
+            if op_id is None:
+                # Researcher was rejected at trigger — minimum fitness
+                results.append(
+                    {
+                        "researcher_id": researcher.id,
+                        "fitness": MINIMUM_FITNESS,
+                        "backtest_result": None,
+                    }
+                )
+                continue
             backtest_result = await self._poll_operation(op_id)
             fitness = self._fitness.evaluate(backtest_result)
             results.append(
@@ -116,7 +128,9 @@ class GenerationHarness:
 
         return results
 
-    async def _trigger_researcher(self, generation: int, researcher: Researcher) -> str:
+    async def _trigger_researcher(
+        self, generation: int, researcher: Researcher
+    ) -> str | None:
         """Trigger a research cycle for one researcher.
 
         Retries on at_capacity with exponential backoff.
@@ -151,11 +165,11 @@ class GenerationHarness:
                 backoff = min(backoff * 2, _MAX_BACKOFF)
                 continue
 
-            # Unknown rejection — treat as fatal for this researcher
+            # Unknown rejection — fatal for this researcher, not the generation
             logger.warning(
                 "Unexpected trigger rejection for %s: %s", researcher.id, reason
             )
-            raise BudgetExhaustedError()
+            return None
 
     async def _poll_operation(self, operation_id: str) -> dict[str, Any] | None:
         """Poll an operation until completed or failed.

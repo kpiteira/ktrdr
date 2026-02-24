@@ -626,7 +626,9 @@ def align_feature_dataframes(
 
     Returns:
         Single DataFrame with all features on the base timeframe's index.
-        No NaN values in the output (cleaned via bfill/ffill/fillna).
+        NaN values introduced by reindexing non-base timeframes are cleaned
+        via bfill/ffill/fillna. Pre-existing NaN in input DataFrames are
+        passed through unchanged.
 
     Raises:
         ValueError: If timeframe_features is empty or base_timeframe
@@ -654,9 +656,10 @@ def align_feature_dataframes(
     base_df = timeframe_features[base_timeframe]
     aligned_parts: list[pd.DataFrame] = [base_df]
 
-    for timeframe, tf_df in timeframe_features.items():
-        if timeframe == base_timeframe:
-            continue
+    # Iterate non-base timeframes in sorted order for deterministic column ordering
+    other_timeframes = sorted(tf for tf in timeframe_features if tf != base_timeframe)
+    for timeframe in other_timeframes:
+        tf_df = timeframe_features[timeframe]
 
         # Reindex to base timeframe using forward-fill
         aligned = tf_df.reindex(base_df.index, method="ffill")
