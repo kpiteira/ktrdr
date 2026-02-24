@@ -159,9 +159,9 @@ class TestBacktestEngineCheckpointCallback:
         params = list(sig.parameters.keys())
 
         # Verify checkpoint_callback is in the parameters
-        assert "checkpoint_callback" in params, (
-            "BacktestingEngine.run() should accept checkpoint_callback parameter"
-        )
+        assert (
+            "checkpoint_callback" in params
+        ), "BacktestingEngine.run() should accept checkpoint_callback parameter"
 
     def test_engine_calls_checkpoint_callback_periodically(self):
         """Engine should call checkpoint_callback during bar loop."""
@@ -353,9 +353,9 @@ class TestCheckpointCallbackEventLoop:
         from ktrdr.backtesting.backtest_worker import BacktestWorker
 
         source = inspect.getsource(BacktestWorker._run_backtest)
-        assert "get_running_loop" in source, (
-            "_run_backtest should capture main loop with asyncio.get_running_loop()"
-        )
+        assert (
+            "get_running_loop" in source
+        ), "_run_backtest should capture main loop with asyncio.get_running_loop()"
 
     def test_base_class_callback_uses_run_coroutine_threadsafe(self):
         """Base class create_checkpoint_callback uses run_coroutine_threadsafe."""
@@ -378,12 +378,12 @@ class TestCheckpointCallbackEventLoop:
                 if node.attr == "new_event_loop":
                     uses_new_event_loop = True
 
-        assert uses_run_coroutine_threadsafe, (
-            "Base class callback should use asyncio.run_coroutine_threadsafe()"
-        )
-        assert not uses_new_event_loop, (
-            "Base class callback should NOT use new_event_loop"
-        )
+        assert (
+            uses_run_coroutine_threadsafe
+        ), "Base class callback should use asyncio.run_coroutine_threadsafe()"
+        assert (
+            not uses_new_event_loop
+        ), "Base class callback should NOT use new_event_loop"
 
     def test_base_class_callback_waits_with_timeout(self):
         """Base class callback should wait for completion with timeout."""
@@ -392,6 +392,6 @@ class TestCheckpointCallbackEventLoop:
         from ktrdr.workers.base import WorkerAPIBase
 
         source = inspect.getsource(WorkerAPIBase.create_checkpoint_callback)
-        assert ".result(" in source, (
-            "Base class callback should wait with future.result(timeout=...)"
-        )
+        assert (
+            ".result(" in source
+        ), "Base class callback should wait with future.result(timeout=...)"

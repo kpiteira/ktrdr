@@ -303,105 +303,41 @@ class FuzzyNeuralProcessor:
         """
         Align multi-timeframe fuzzy features for neural network input.
 
-        This method implements proper temporal alignment where each neural network
-        input row contains features from all timeframes at the corresponding time.
-        Higher frequency timeframes drive the temporal resolution.
-
-        Example for 1h + 1d alignment:
-        - 1h timestamp 2024-01-02 09:00 → uses 1d features from 2024-01-02
-        - 1h timestamp 2024-01-02 10:00 → uses SAME 1d features from 2024-01-02
-        - 1h timestamp 2024-01-03 09:00 → uses NEW 1d features from 2024-01-03
+        Delegates core alignment to the shared align_feature_dataframes utility,
+        then applies temporal features and converts to tensor.
 
         Args:
             timeframe_features: Dict mapping timeframes to feature DataFrames
+                (columns are unprefixed — prefixing happens here before alignment)
             timeframe_feature_names: Dict mapping timeframes to feature name lists
             timeframe_order: Ordered list of timeframes for feature combination
 
         Returns:
             Tuple of (aligned_features_tensor, combined_feature_names)
         """
-        # Find the highest frequency (most granular) timeframe to use as base
-        # Assume first timeframe in order is highest frequency (shortest period)
+        from ktrdr.data.components.timeframe_synchronizer import (
+            align_feature_dataframes,
+        )
+
         base_timeframe = timeframe_order[0]
-        base_features = timeframe_features[base_timeframe]
 
         logger.info(
-            f"Using {base_timeframe} as base timeframe for temporal alignment ({len(base_features)} timestamps)"
+            f"Using {base_timeframe} as base timeframe for temporal alignment "
+            f"({len(timeframe_features[base_timeframe])} timestamps)"
         )
 
-        # Create aligned feature matrix
-        aligned_features_list = []
-        combined_feature_names = []
+        # Prefix columns with timeframe before alignment
+        prefixed: dict[str, pd.DataFrame] = {}
+        for tf in timeframe_order:
+            if tf not in timeframe_features:
+                continue
+            df = timeframe_features[tf]
+            prefixed[tf] = df.rename(columns={col: f"{tf}_{col}" for col in df.columns})
 
-        # Start with base timeframe features
-        aligned_features_list.append(base_features.values)
-        combined_feature_names.extend(
-            [
-                f"{base_timeframe}_{name}"
-                for name in timeframe_feature_names[base_timeframe]
-            ]
-        )
-
-        # Align other timeframes to base timeframe timestamps
-        for timeframe in timeframe_order[1:]:
-            tf_features = timeframe_features[timeframe]
-            tf_names = timeframe_feature_names[timeframe]
-
-            logger.debug(
-                f"Aligning {timeframe} ({len(tf_features)} bars) to {base_timeframe} ({len(base_features)} bars)"
-            )
-
-            # Align using forward-fill to match base timeframe timestamps
-            # This correctly maps daily features to each hour within that day
-            aligned_tf_features = tf_features.reindex(
-                base_features.index, method="ffill"
-            )
-
-            # Check for NaN values and provide detailed logging
-            nan_count = aligned_tf_features.isnull().sum().sum()
-            if nan_count > 0:
-                logger.warning(
-                    f"Temporal alignment of {timeframe} created {nan_count} NaN values. "
-                    f"This indicates gaps between {timeframe} and {base_timeframe} coverage."
-                )
-                logger.debug(
-                    f"Original {timeframe} coverage: {tf_features.index[0]} to {tf_features.index[-1]}"
-                )
-                logger.debug(
-                    f"Base {base_timeframe} coverage: {base_features.index[0]} to {base_features.index[-1]}"
-                )
-
-            # Handle any remaining NaN values using multiple strategies
-            if nan_count > 0:
-                # First try backward fill for gaps at the beginning
-                aligned_tf_features = aligned_tf_features.bfill()
-
-                # Then forward fill for any remaining gaps
-                aligned_tf_features = aligned_tf_features.ffill()
-
-                # Finally, fill any remaining NaN with 0.0 (neutral fuzzy values)
-                aligned_tf_features = aligned_tf_features.fillna(0.0)
-
-                # Verify all NaN values are resolved
-                remaining_nans = aligned_tf_features.isnull().sum().sum()
-                if remaining_nans > 0:
-                    logger.error(
-                        f"Failed to resolve {remaining_nans} NaN values in {timeframe} alignment"
-                    )
-                else:
-                    logger.debug(
-                        f"Successfully resolved all NaN values in {timeframe} alignment"
-                    )
-
-            aligned_features_list.append(aligned_tf_features.values)
-            combined_feature_names.extend([f"{timeframe}_{name}" for name in tf_names])
-
-            logger.debug(
-                f"Aligned {timeframe}: {aligned_tf_features.shape[1]} features → {len(aligned_tf_features)} timestamps"
-            )
-
-        # Combine all aligned features horizontally
-        combined_features_matrix = np.concatenate(aligned_features_list, axis=1)
+        # Use shared alignment utility
+        aligned_df = align_feature_dataframes(prefixed, base_timeframe=base_timeframe)
+        combined_feature_names = list(aligned_df.columns)
+        combined_features_matrix = aligned_df.values
 
         # Check for NaN values after alignment but before temporal features
         pre_temporal_nans = np.isnan(combined_features_matrix).sum()
@@ -409,11 +345,7 @@ class FuzzyNeuralProcessor:
             logger.warning(
                 f"Found {pre_temporal_nans} NaN values after alignment, before temporal features"
             )
-            # Fill any remaining NaN values before temporal processing
             combined_features_matrix = np.nan_to_num(combined_features_matrix, nan=0.0)
-            logger.debug(
-                "Filled NaN values with 0.0 before temporal feature extraction"
-            )
 
         # Apply temporal features if configured
         if self.config.get("lookback_periods", 0) > 0:

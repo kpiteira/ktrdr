@@ -603,6 +603,80 @@ def align_timeframes_to_lowest(
     return aligned_data, reference_timeframe
 
 
+def align_feature_dataframes(
+    timeframe_features: dict[str, pd.DataFrame],
+    base_timeframe: str | None = None,
+) -> pd.DataFrame:
+    """Align feature DataFrames from multiple timeframes to a common index.
+
+    Higher-timeframe features are forward-filled to match the base (most
+    granular) timeframe's index. This is the shared alignment step used by
+    both the training pipeline (FuzzyNeuralProcessor) and the backtesting
+    pipeline (FeatureCache) to ensure identical feature computation.
+
+    Single-timeframe input (dict with one key) passes through unchanged.
+
+    Args:
+        timeframe_features: Dict mapping timeframe strings to feature
+            DataFrames. Each DataFrame has feature columns (already prefixed
+            with timeframe by the caller) and a DatetimeIndex at that
+            timeframe's resolution.
+        base_timeframe: Timeframe to align to (most granular). If None,
+            auto-detected via TimeframeSynchronizer.
+
+    Returns:
+        Single DataFrame with all features on the base timeframe's index.
+        No NaN values in the output (cleaned via bfill/ffill/fillna).
+
+    Raises:
+        ValueError: If timeframe_features is empty or base_timeframe
+            not found in the dict.
+    """
+    if not timeframe_features:
+        raise ValueError("No feature data provided — timeframe_features is empty")
+
+    # Single timeframe — no alignment needed
+    if len(timeframe_features) == 1:
+        return next(iter(timeframe_features.values()))
+
+    # Determine base timeframe
+    if base_timeframe is not None:
+        if base_timeframe not in timeframe_features:
+            raise ValueError(
+                f"base_timeframe '{base_timeframe}' not found in "
+                f"timeframe_features keys: {list(timeframe_features.keys())}"
+            )
+    else:
+        base_timeframe = TimeframeSynchronizer.get_optimal_reference_timeframe(
+            list(timeframe_features.keys())
+        )
+
+    base_df = timeframe_features[base_timeframe]
+    aligned_parts: list[pd.DataFrame] = [base_df]
+
+    for timeframe, tf_df in timeframe_features.items():
+        if timeframe == base_timeframe:
+            continue
+
+        # Reindex to base timeframe using forward-fill
+        aligned = tf_df.reindex(base_df.index, method="ffill")
+
+        # Clean up NaN from coverage gaps
+        nan_count = int(aligned.isna().sum().sum())
+        if nan_count > 0:
+            aligned = aligned.bfill().ffill().fillna(0.0)
+            logger.debug(
+                "Resolved %d NaN values aligning %s to %s",
+                nan_count,
+                timeframe,
+                base_timeframe,
+            )
+
+        aligned_parts.append(aligned)
+
+    return pd.concat(aligned_parts, axis=1)
+
+
 def calculate_multi_timeframe_periods(
     primary_timeframe: str, auxiliary_timeframes: list[str], primary_periods: int
 ) -> dict[str, int]:

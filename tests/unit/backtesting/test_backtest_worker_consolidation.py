@@ -21,9 +21,9 @@ class TestSharedRunBacktestMethod:
         """BacktestWorker should have a shared _run_backtest method."""
         from ktrdr.backtesting.backtest_worker import BacktestWorker
 
-        assert hasattr(BacktestWorker, "_run_backtest"), (
-            "BacktestWorker should have _run_backtest() shared method"
-        )
+        assert hasattr(
+            BacktestWorker, "_run_backtest"
+        ), "BacktestWorker should have _run_backtest() shared method"
 
     def test_run_backtest_accepts_resume_context(self):
         """_run_backtest should accept optional resume_context parameter."""
@@ -33,27 +33,27 @@ class TestSharedRunBacktestMethod:
 
         sig = inspect.signature(BacktestWorker._run_backtest)
         params = list(sig.parameters.keys())
-        assert "resume_context" in params, (
-            "_run_backtest should accept resume_context for resumed backtests"
-        )
+        assert (
+            "resume_context" in params
+        ), "_run_backtest should accept resume_context for resumed backtests"
 
     def test_execute_backtest_work_delegates_to_run_backtest(self):
         """_execute_backtest_work should delegate to _run_backtest."""
         from ktrdr.backtesting.backtest_worker import BacktestWorker
 
         source = inspect.getsource(BacktestWorker._execute_backtest_work)
-        assert "_run_backtest" in source, (
-            "_execute_backtest_work should delegate to _run_backtest"
-        )
+        assert (
+            "_run_backtest" in source
+        ), "_execute_backtest_work should delegate to _run_backtest"
 
     def test_execute_resumed_work_delegates_to_run_backtest(self):
         """_execute_resumed_backtest_work should delegate to _run_backtest."""
         from ktrdr.backtesting.backtest_worker import BacktestWorker
 
         source = inspect.getsource(BacktestWorker._execute_resumed_backtest_work)
-        assert "_run_backtest" in source, (
-            "_execute_resumed_backtest_work should delegate to _run_backtest"
-        )
+        assert (
+            "_run_backtest" in source
+        ), "_execute_resumed_backtest_work should delegate to _run_backtest"
 
 
 class TestSharedCheckpointInfrastructure:
@@ -75,18 +75,18 @@ class TestSharedCheckpointInfrastructure:
         from ktrdr.backtesting.backtest_worker import BacktestWorker
 
         source = inspect.getsource(BacktestWorker._run_backtest)
-        assert "create_checkpoint_callback" in source, (
-            "_run_backtest should use self.create_checkpoint_callback()"
-        )
+        assert (
+            "create_checkpoint_callback" in source
+        ), "_run_backtest should use self.create_checkpoint_callback()"
 
     def test_run_backtest_uses_save_cancellation_checkpoint(self):
         """_run_backtest should use save_cancellation_checkpoint from base."""
         from ktrdr.backtesting.backtest_worker import BacktestWorker
 
         source = inspect.getsource(BacktestWorker._run_backtest)
-        assert "save_cancellation_checkpoint" in source, (
-            "_run_backtest should use self.save_cancellation_checkpoint()"
-        )
+        assert (
+            "save_cancellation_checkpoint" in source
+        ), "_run_backtest should use self.save_cancellation_checkpoint()"
 
 
 class TestNoDuplicatedErrorHandling:
@@ -127,12 +127,12 @@ class TestNoDuplicatedErrorHandling:
         from ktrdr.backtesting.backtest_worker import BacktestWorker
 
         source = inspect.getsource(BacktestWorker._run_backtest)
-        assert "CancellationError" in source, (
-            "_run_backtest should handle CancellationError"
-        )
-        assert "CancelledError" in source, (
-            "_run_backtest should handle asyncio.CancelledError"
-        )
+        assert (
+            "CancellationError" in source
+        ), "_run_backtest should handle CancellationError"
+        assert (
+            "CancelledError" in source
+        ), "_run_backtest should handle asyncio.CancelledError"
 
 
 class TestFreshBacktestFlow:
@@ -158,27 +158,27 @@ class TestFreshBacktestFlow:
         from ktrdr.backtesting.backtest_worker import BacktestWorker
 
         source = inspect.getsource(BacktestWorker._execute_backtest_work)
-        assert "create_operation" in source, (
-            "Fresh path should create operation before delegating to _run_backtest"
-        )
+        assert (
+            "create_operation" in source
+        ), "Fresh path should create operation before delegating to _run_backtest"
 
     def test_fresh_path_starts_operation(self):
         """Fresh path should still start operation before delegating."""
         from ktrdr.backtesting.backtest_worker import BacktestWorker
 
         source = inspect.getsource(BacktestWorker._execute_backtest_work)
-        assert "start_operation" in source, (
-            "Fresh path should start operation before delegating"
-        )
+        assert (
+            "start_operation" in source
+        ), "Fresh path should start operation before delegating"
 
     def test_fresh_path_builds_original_request(self):
         """Fresh path should build original_request dict for checkpoints."""
         from ktrdr.backtesting.backtest_worker import BacktestWorker
 
         source = inspect.getsource(BacktestWorker._execute_backtest_work)
-        assert "original_request" in source, (
-            "Fresh path should build original_request dict for checkpoint context"
-        )
+        assert (
+            "original_request" in source
+        ), "Fresh path should build original_request dict for checkpoint context"
 
     def test_original_request_includes_model_path(self):
         """original_request must include model_path for checkpoint resume."""
@@ -200,15 +200,15 @@ class TestResumedBacktestFlow:
         from ktrdr.backtesting.backtest_worker import BacktestWorker
 
         source = inspect.getsource(BacktestWorker._execute_resumed_backtest_work)
-        assert "adopt_and_start_operation" in source, (
-            "Resume path should adopt operation before delegating to _run_backtest"
-        )
+        assert (
+            "adopt_and_start_operation" in source
+        ), "Resume path should adopt operation before delegating to _run_backtest"
 
     def test_resume_path_passes_context(self):
         """Resume path should pass resume_context to _run_backtest."""
         from ktrdr.backtesting.backtest_worker import BacktestWorker
 
         source = inspect.getsource(BacktestWorker._execute_resumed_backtest_work)
-        assert "resume_context" in source, (
-            "Resume path should pass context to _run_backtest"
-        )
+        assert (
+            "resume_context" in source
+        ), "Resume path should pass context to _run_backtest"

@@ -84,7 +84,12 @@ class FeatureCache:
         # Group requirements by timeframe
         tf_requirements = self._group_requirements_by_timeframe(resolved)
 
-        feature_dfs: list[pd.DataFrame] = []
+        from ktrdr.data.components.timeframe_synchronizer import (
+            align_feature_dataframes,
+        )
+
+        # Collect feature DataFrames grouped by timeframe
+        tf_feature_dfs: dict[str, list[pd.DataFrame]] = {}
         for timeframe, df in data.items():
             if timeframe not in tf_requirements:
                 logger.debug(
@@ -135,12 +140,17 @@ class FeatureCache:
                 fuzzy_df = fuzzy_df.rename(
                     columns={col: f"{timeframe}_{col}" for col in fuzzy_df.columns}
                 )
-                feature_dfs.append(fuzzy_df)
+                tf_feature_dfs.setdefault(timeframe, []).append(fuzzy_df)
 
-        if not feature_dfs:
+        if not tf_feature_dfs:
             raise ValueError("No features computed - check data and configuration")
 
-        result = pd.concat(feature_dfs, axis=1)
+        # Concat within each timeframe (same index — safe)
+        tf_features = {tf: pd.concat(dfs, axis=1) for tf, dfs in tf_feature_dfs.items()}
+
+        # Align across timeframes using shared utility
+        base_tf = self._get_base_timeframe_key(data)
+        result = align_feature_dataframes(tf_features, base_timeframe=base_tf)
 
         # CRITICAL: Validate and reorder
         self._validate_features(result)
