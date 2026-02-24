@@ -75,7 +75,7 @@ class PopulationManager:
         Args:
             survivors: Researchers that survived selection.
             generation: Generation number for the offspring.
-            seed: Random seed (combined with generation for reproducibility).
+            seed: Random seed for reproducibility (used directly when provided).
             offspring_per_survivor: Number of offspring per survivor (default 2).
 
         Returns:

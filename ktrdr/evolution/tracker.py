@@ -137,7 +137,7 @@ class EvolutionTracker:
             return {}
         with open(path) as f:
             data = yaml.safe_load(f)
-        return data if data else {}
+        return data if isinstance(data, dict) else {}
 
     # --- Summary (cross-generation) ---
 
@@ -155,7 +155,7 @@ class EvolutionTracker:
             return {}
         with open(path) as f:
             data = yaml.safe_load(f)
-        return data if data else {}
+        return data if isinstance(data, dict) else {}
 
     # --- Generation tracking ---
 

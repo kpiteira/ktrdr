@@ -184,7 +184,7 @@ def start(
 
 @evolve_app.command("status")
 def status(
-    run_id: str = typer.Argument(None, help="Run ID (default: most recent)"),
+    run_id: str | None = typer.Argument(None, help="Run ID (default: most recent)"),
 ) -> None:
     """Show evolution run status and per-generation stats.
 
