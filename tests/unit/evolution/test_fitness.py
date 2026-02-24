@@ -85,3 +85,17 @@ class TestFitnessEvaluator:
         result = {"sharpe": 0.0, "max_drawdown": 0.0}
         fitness = evaluator.evaluate(result)
         assert abs(fitness) < 1e-9
+
+    def test_sharpe_ratio_key_from_worker(self) -> None:
+        """Worker uses 'sharpe_ratio' key — evaluator should accept it."""
+        evaluator = FitnessEvaluator(EvolutionConfig())
+        result = {"sharpe_ratio": 1.5, "max_drawdown": 0.10}
+        fitness = evaluator.evaluate(result)
+        assert abs(fitness - 1.4) < 1e-9
+
+    def test_sharpe_ratio_preferred_over_sharpe(self) -> None:
+        """When both keys present, sharpe_ratio takes precedence."""
+        evaluator = FitnessEvaluator(EvolutionConfig())
+        result = {"sharpe_ratio": 2.0, "sharpe": 1.0, "max_drawdown": 0.0}
+        fitness = evaluator.evaluate(result)
+        assert abs(fitness - 2.0) < 1e-9

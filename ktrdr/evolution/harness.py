@@ -173,10 +173,12 @@ class GenerationHarness:
             status = op.get("status")
 
             if status == "completed":
-                # Extract backtest_result from operation metadata
-                metadata = op.get("metadata", {})
-                params = metadata.get("parameters", {})
-                return params.get("backtest_result")
+                # Extract backtest_result from result_summary (persisted by
+                # complete_operation) rather than metadata.parameters (in-memory only)
+                result_summary = op.get("result_summary", {})
+                if result_summary:
+                    return result_summary.get("backtest_result")
+                return None
 
             if status == "failed":
                 logger.warning("Operation %s failed", operation_id)

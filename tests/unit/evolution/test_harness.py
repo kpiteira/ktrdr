@@ -64,16 +64,23 @@ def _make_trigger_response(op_id: str) -> dict[str, Any]:
 def _make_completed_operation(
     op_id: str, sharpe: float = 1.0, max_dd: float = 0.1
 ) -> dict[str, Any]:
-    """Completed operation response with backtest result."""
+    """Completed operation response with backtest result.
+
+    Mirrors real API: backtest_result is in result_summary (persisted
+    by complete_operation), not in metadata.parameters (in-memory only).
+    """
     return {
         "operation_id": op_id,
         "status": "completed",
+        "result_summary": {
+            "success": True,
+            "backtest_result": {
+                "sharpe_ratio": sharpe,
+                "max_drawdown": max_dd,
+            },
+        },
         "metadata": {
             "parameters": {
-                "backtest_result": {
-                    "sharpe": sharpe,
-                    "max_drawdown": max_dd,
-                },
                 "model_path": "/models/test",
                 "strategy_name": "test_strategy",
             }
