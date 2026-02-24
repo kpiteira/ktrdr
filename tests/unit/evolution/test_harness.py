@@ -13,6 +13,7 @@ from ktrdr.evolution.config import EvolutionConfig
 from ktrdr.evolution.fitness import MINIMUM_FITNESS
 from ktrdr.evolution.genome import Genome, Researcher, TraitLevel
 from ktrdr.evolution.harness import GenerationHarness
+from ktrdr.evolution.population import PopulationManager
 from ktrdr.evolution.tracker import EvolutionTracker
 
 
@@ -389,3 +390,393 @@ class TestGenerationHarnessFullRun:
         assert results_by_id["r_g00_001"]["fitness"] == MINIMUM_FITNESS
         assert results_by_id["r_g00_000"]["fitness"] != MINIMUM_FITNESS
         assert results_by_id["r_g00_002"]["fitness"] != MINIMUM_FITNESS
+
+
+def _mock_generation_responses(
+    pop_size: int, generation: int, base_sharpe: float = 1.0
+) -> tuple[list[dict], list[dict]]:
+    """Create trigger + completion mock responses for a generation.
+
+    Returns (trigger_responses, get_responses) for pop_size researchers.
+    Each researcher gets a unique sharpe so selection is deterministic.
+    """
+    triggers = []
+    completions = []
+    for i in range(pop_size):
+        op_id = f"op_g{generation:02d}_{i:03d}"
+        triggers.append(_make_trigger_response(op_id))
+        sharpe = base_sharpe + i * 0.1  # spread so selection is deterministic
+        completions.append(_make_completed_operation(op_id, sharpe=sharpe, max_dd=0.05))
+    return triggers, completions
+
+
+class TestHarnessMultiGeneration:
+    """Tests for GenerationHarness.run() — multi-generation loop."""
+
+    @pytest.fixture
+    def multi_gen_config(self) -> EvolutionConfig:
+        """Config for 3 generations, 6 researchers, fast polling."""
+        return EvolutionConfig(
+            population_size=6, generations=3, seed=42, poll_interval=0
+        )
+
+    @pytest.mark.asyncio
+    async def test_runs_correct_number_of_generations(
+        self, multi_gen_config: EvolutionConfig, tmp_run_dir: Path
+    ) -> None:
+        """run() should execute exactly config.generations generations."""
+        tracker = EvolutionTracker(run_dir=tmp_run_dir)
+        mock_client = AsyncMock()
+
+        # Build responses for 3 generations × 6 researchers each
+        all_triggers = []
+        all_completions = []
+        for gen in range(3):
+            t, c = _mock_generation_responses(6, gen)
+            all_triggers.extend(t)
+            all_completions.extend(c)
+
+        mock_client.post = AsyncMock(side_effect=all_triggers)
+        mock_client.get = AsyncMock(side_effect=all_completions)
+
+        harness = GenerationHarness(
+            config=multi_gen_config, tracker=tracker, http_client=mock_client
+        )
+        await harness.run(PopulationManager())
+
+        # 3 generation directories should have results
+        for gen in range(3):
+            results = tracker.load_results(gen)
+            assert len(results) > 0, f"Generation {gen} has no results"
+
+    @pytest.mark.asyncio
+    async def test_population_flows_between_generations(
+        self, multi_gen_config: EvolutionConfig, tmp_run_dir: Path
+    ) -> None:
+        """Gen 0 survivors should become gen 1's population (mutated)."""
+        tracker = EvolutionTracker(run_dir=tmp_run_dir)
+        mock_client = AsyncMock()
+
+        all_triggers = []
+        all_completions = []
+        for gen in range(3):
+            t, c = _mock_generation_responses(6, gen)
+            all_triggers.extend(t)
+            all_completions.extend(c)
+
+        mock_client.post = AsyncMock(side_effect=all_triggers)
+        mock_client.get = AsyncMock(side_effect=all_completions)
+
+        harness = GenerationHarness(
+            config=multi_gen_config, tracker=tracker, http_client=mock_client
+        )
+        await harness.run(PopulationManager())
+
+        # Gen 1 population should be offspring of gen 0 survivors
+        gen1_pop = tracker.load_population(1)
+        assert len(gen1_pop) == 6
+        # All gen 1 researchers should have parent_ids from gen 0
+        for r in gen1_pop:
+            assert r.parent_id is not None
+            assert r.parent_id.startswith("r_g00_")
+            assert r.generation == 1
+
+    @pytest.mark.asyncio
+    async def test_summary_updated_after_each_generation(
+        self, multi_gen_config: EvolutionConfig, tmp_run_dir: Path
+    ) -> None:
+        """Summary.yaml should be updated incrementally after each generation."""
+        tracker = EvolutionTracker(run_dir=tmp_run_dir)
+        mock_client = AsyncMock()
+
+        all_triggers = []
+        all_completions = []
+        for gen in range(3):
+            t, c = _mock_generation_responses(6, gen)
+            all_triggers.extend(t)
+            all_completions.extend(c)
+
+        mock_client.post = AsyncMock(side_effect=all_triggers)
+        mock_client.get = AsyncMock(side_effect=all_completions)
+
+        harness = GenerationHarness(
+            config=multi_gen_config, tracker=tracker, http_client=mock_client
+        )
+        await harness.run(PopulationManager())
+
+        summary = tracker.load_summary()
+        assert "generations" in summary
+        assert len(summary["generations"]) == 3
+
+    @pytest.mark.asyncio
+    async def test_budget_check_aborts_early(self, tmp_run_dir: Path) -> None:
+        """If budget exhausted mid-run, should abort and not continue."""
+        config = EvolutionConfig(
+            population_size=4, generations=3, seed=42, poll_interval=0
+        )
+        tracker = EvolutionTracker(run_dir=tmp_run_dir)
+        mock_client = AsyncMock()
+
+        # Gen 0 succeeds, gen 1 hits budget_exhausted
+        gen0_t, gen0_c = _mock_generation_responses(4, 0)
+        mock_client.post = AsyncMock(
+            side_effect=[
+                *gen0_t,
+                # Gen 1: budget exhausted on first trigger
+                {"triggered": False, "reason": "budget_exhausted"},
+            ]
+        )
+        mock_client.get = AsyncMock(side_effect=gen0_c)
+
+        harness = GenerationHarness(
+            config=config, tracker=tracker, http_client=mock_client
+        )
+        await harness.run(PopulationManager())
+
+        # Gen 0 should have real results
+        gen0_results = tracker.load_results(0)
+        assert len(gen0_results) == 4
+        # Gen 1 should have results (all minimum fitness from budget abort)
+        gen1_results = tracker.load_results(1)
+        assert len(gen1_results) == 4
+        for r in gen1_results:
+            assert r["fitness"] == MINIMUM_FITNESS
+        # Gen 2 should NOT exist (aborted)
+        gen2_results = tracker.load_results(2)
+        assert len(gen2_results) == 0
+
+    @pytest.mark.asyncio
+    async def test_correct_generation_numbers_in_ids(
+        self, multi_gen_config: EvolutionConfig, tmp_run_dir: Path
+    ) -> None:
+        """Researcher IDs should contain correct generation numbers."""
+        tracker = EvolutionTracker(run_dir=tmp_run_dir)
+        mock_client = AsyncMock()
+
+        all_triggers = []
+        all_completions = []
+        for gen in range(3):
+            t, c = _mock_generation_responses(6, gen)
+            all_triggers.extend(t)
+            all_completions.extend(c)
+
+        mock_client.post = AsyncMock(side_effect=all_triggers)
+        mock_client.get = AsyncMock(side_effect=all_completions)
+
+        harness = GenerationHarness(
+            config=multi_gen_config, tracker=tracker, http_client=mock_client
+        )
+        await harness.run(PopulationManager())
+
+        for gen in range(3):
+            pop = tracker.load_population(gen)
+            for r in pop:
+                assert r.id.startswith(f"r_g{gen:02d}_")
+
+
+def _setup_completed_run(
+    tracker: EvolutionTracker,
+    config: EvolutionConfig,
+    through_gen: int,
+) -> None:
+    """Helper: set up tracker state as if generations 0..through_gen completed.
+
+    Creates config, population, operations, and results for each generation.
+    Uses PopulationManager to create realistic population flow.
+    """
+    tracker.save_config(config)
+    pm = PopulationManager()
+    population = pm.seed(config)
+
+    for gen in range(through_gen + 1):
+        tracker.save_population(gen, population)
+
+        # Fake operations and results
+        ops = {r.id: f"op_{r.id}" for r in population}
+        for rid, oid in ops.items():
+            tracker.save_operation_id(gen, rid, oid)
+
+        results = [
+            {
+                "researcher_id": r.id,
+                "fitness": float(i) + 0.5,
+                "backtest_result": {
+                    "sharpe_ratio": float(i) + 0.5,
+                    "max_drawdown": 0.05,
+                },
+            }
+            for i, r in enumerate(population)
+        ]
+        tracker.save_results(gen, results)
+
+        # Evolve for next gen
+        if gen < through_gen:
+            survivor_ids, _ = pm.select(results, kill_rate=config.kill_rate)
+            survivor_map = {r.id: r for r in population}
+            survivors = [survivor_map[sid] for sid in survivor_ids]
+            population = pm.reproduce(survivors, generation=gen + 1, seed=config.seed)
+
+
+class TestHarnessResume:
+    """Tests for GenerationHarness.resume()."""
+
+    @pytest.fixture
+    def resume_config(self) -> EvolutionConfig:
+        """Config for 5 generations, 6 researchers."""
+        return EvolutionConfig(
+            population_size=6, generations=5, seed=42, poll_interval=0
+        )
+
+    @pytest.mark.asyncio
+    async def test_resume_after_gen2_continues_from_gen3(
+        self, resume_config: EvolutionConfig, tmp_run_dir: Path
+    ) -> None:
+        """Resume after gen 2 of 5: should continue from gen 3."""
+        tracker = EvolutionTracker(run_dir=tmp_run_dir)
+        _setup_completed_run(tracker, resume_config, through_gen=2)
+
+        mock_client = AsyncMock()
+        # Need responses for gens 3 and 4 (2 remaining)
+        all_triggers = []
+        all_completions = []
+        for gen in range(3, 5):
+            t, c = _mock_generation_responses(6, gen)
+            all_triggers.extend(t)
+            all_completions.extend(c)
+
+        mock_client.post = AsyncMock(side_effect=all_triggers)
+        mock_client.get = AsyncMock(side_effect=all_completions)
+
+        harness = GenerationHarness(
+            config=resume_config, tracker=tracker, http_client=mock_client
+        )
+        await harness.resume(PopulationManager())
+
+        # All 5 generations should now have results
+        for gen in range(5):
+            results = tracker.load_results(gen)
+            assert len(results) > 0, f"Gen {gen} has no results"
+
+    @pytest.mark.asyncio
+    async def test_resume_with_incomplete_generation_polls_running(
+        self, resume_config: EvolutionConfig, tmp_run_dir: Path
+    ) -> None:
+        """Resume with an incomplete generation: ops with status should be polled."""
+        tracker = EvolutionTracker(run_dir=tmp_run_dir)
+        # Complete through gen 1
+        _setup_completed_run(tracker, resume_config, through_gen=1)
+
+        # Set up gen 2 as incomplete: population + operations saved, but no results
+        gen2_pop = tracker.load_population(1)  # reuse for simplicity
+        pm = PopulationManager()
+        gen1_results = tracker.load_results(1)
+        survivor_ids, _ = pm.select(gen1_results, kill_rate=resume_config.kill_rate)
+        gen1_pop_map = {r.id: r for r in tracker.load_population(1)}
+        survivors = [gen1_pop_map[sid] for sid in survivor_ids]
+        gen2_pop = pm.reproduce(survivors, generation=2, seed=resume_config.seed)
+        tracker.save_population(2, gen2_pop)
+
+        # Save operations for gen 2 but NO results
+        for r in gen2_pop:
+            tracker.save_operation_id(2, r.id, f"op_{r.id}")
+
+        mock_client = AsyncMock()
+        # Gen 2 ops are "completed" when polled
+        gen2_completions = [
+            _make_completed_operation(f"op_{r.id}", sharpe=1.0 + i * 0.1, max_dd=0.05)
+            for i, r in enumerate(gen2_pop)
+        ]
+        # Gens 3 and 4 normal
+        all_triggers = []
+        all_completions = list(gen2_completions)
+        for gen in range(3, 5):
+            t, c = _mock_generation_responses(6, gen)
+            all_triggers.extend(t)
+            all_completions.extend(c)
+
+        mock_client.post = AsyncMock(side_effect=all_triggers)
+        mock_client.get = AsyncMock(side_effect=all_completions)
+
+        harness = GenerationHarness(
+            config=resume_config, tracker=tracker, http_client=mock_client
+        )
+        await harness.resume(PopulationManager())
+
+        # Gen 2 should now have results
+        gen2_results = tracker.load_results(2)
+        assert len(gen2_results) == 6
+
+    @pytest.mark.asyncio
+    async def test_resume_all_complete_reports_done(
+        self, resume_config: EvolutionConfig, tmp_run_dir: Path
+    ) -> None:
+        """Resume with all generations complete: should not trigger anything."""
+        tracker = EvolutionTracker(run_dir=tmp_run_dir)
+        _setup_completed_run(tracker, resume_config, through_gen=4)
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock()
+        mock_client.get = AsyncMock()
+
+        harness = GenerationHarness(
+            config=resume_config, tracker=tracker, http_client=mock_client
+        )
+        await harness.resume(PopulationManager())
+
+        # No HTTP calls should have been made
+        mock_client.post.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_resume_with_orphaned_ops_retriggers(self, tmp_run_dir: Path) -> None:
+        """Resume with orphaned ops (failed status): should re-trigger."""
+        config = EvolutionConfig(
+            population_size=4,
+            generations=3,
+            seed=42,
+            poll_interval=0,
+            stale_operation_timeout=0,  # treat all as stale immediately
+        )
+        tracker = EvolutionTracker(run_dir=tmp_run_dir)
+        _setup_completed_run(tracker, config, through_gen=0)
+
+        # Set up gen 1 incomplete with operations but no results
+        gen0_results = tracker.load_results(0)
+        pm = PopulationManager()
+        survivor_ids, _ = pm.select(gen0_results, kill_rate=config.kill_rate)
+        gen0_pop_map = {r.id: r for r in tracker.load_population(0)}
+        survivors = [gen0_pop_map[sid] for sid in survivor_ids]
+        gen1_pop = pm.reproduce(survivors, generation=1, seed=config.seed)
+        tracker.save_population(1, gen1_pop)
+        for r in gen1_pop:
+            tracker.save_operation_id(1, r.id, f"op_{r.id}")
+
+        mock_client = AsyncMock()
+        # When polled, ops show as failed → harness should re-trigger
+        failed_poll_responses = [_make_failed_operation(f"op_{r.id}") for r in gen1_pop]
+        # Re-trigger responses
+        retrigger_responses = [
+            _make_trigger_response(f"retrig_{r.id}") for r in gen1_pop
+        ]
+        # Then complete
+        retrigger_completions = [
+            _make_completed_operation(
+                f"retrig_{r.id}", sharpe=1.0 + i * 0.1, max_dd=0.05
+            )
+            for i, r in enumerate(gen1_pop)
+        ]
+        # Gen 2 normal
+        gen2_t, gen2_c = _mock_generation_responses(4, 2)
+
+        mock_client.get = AsyncMock(
+            side_effect=[*failed_poll_responses, *retrigger_completions, *gen2_c]
+        )
+        mock_client.post = AsyncMock(side_effect=[*retrigger_responses, *gen2_t])
+
+        harness = GenerationHarness(
+            config=config, tracker=tracker, http_client=mock_client
+        )
+        await harness.resume(pm)
+
+        # Gen 1 should have results from re-triggered ops
+        gen1_results = tracker.load_results(1)
+        assert len(gen1_results) == 4
