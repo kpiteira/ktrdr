@@ -238,16 +238,21 @@ async def get_recent_strategies(
                 with open(yaml_path) as f:
                     config = yaml.safe_load(f)
 
-                if config:
+                if isinstance(config, dict):
                     # Extract model type
                     model = config.get("model", {})
-                    strategy_info["type"] = model.get("type")
+                    if isinstance(model, dict):
+                        strategy_info["type"] = model.get("type")
 
-                    # Extract indicator names
-                    indicators = config.get("indicators", [])
-                    if indicators:
+                    # Extract indicator names (v3 dict or v2 list)
+                    raw_indicators = config.get("indicators", {})
+                    if isinstance(raw_indicators, dict):
+                        strategy_info["indicators"] = list(raw_indicators.keys())
+                    elif isinstance(raw_indicators, list):
                         strategy_info["indicators"] = [
-                            ind.get("name") for ind in indicators if ind.get("name")
+                            ind.get("name")
+                            for ind in raw_indicators
+                            if isinstance(ind, dict) and ind.get("name")
                         ]
 
             except Exception as e:

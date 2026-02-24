@@ -161,29 +161,29 @@ class ADLineIndicator(BaseIndicator):
         result = pd.DataFrame(
             index=data.index
         )  # CRITICAL FIX: Only return computed columns
-        result["AD_Line"] = ad_line
-        result["AD_MF_Multiplier"] = money_flow_multiplier
-        result["AD_MF_Volume"] = money_flow_volume
+        result["line"] = ad_line
+        result["mf_multiplier"] = money_flow_multiplier
+        result["mf_volume"] = money_flow_volume
 
         # Apply smoothing if requested
         if use_sma_smoothing:
             ad_line_smooth = ad_line.rolling(
                 window=smoothing_period, min_periods=smoothing_period
             ).mean()
-            result[f"AD_Line_SMA_{smoothing_period}"] = ad_line_smooth
+            result[f"line_sma_{smoothing_period}"] = ad_line_smooth
 
         # Calculate rate of change for trend analysis
         ad_roc = ad_line.pct_change(periods=10) * 100  # 10-period rate of change
-        result["AD_ROC_10"] = ad_roc
+        result["roc_10"] = ad_roc
 
         # Calculate momentum (difference between current and N periods ago)
         ad_momentum = ad_line - ad_line.shift(21)  # 21-period momentum
-        result["AD_Momentum_21"] = ad_momentum
+        result["momentum_21"] = ad_momentum
 
         # Calculate relative strength (current A/D vs recent average)
         ad_recent_avg = ad_line.rolling(window=50, min_periods=20).mean()
         ad_relative_strength = (ad_line / ad_recent_avg - 1) * 100
-        result["AD_Relative_Strength"] = ad_relative_strength
+        result["relative_strength"] = ad_relative_strength
 
         logger.debug(f"Computed A/D Line with smoothing={use_sma_smoothing}")
 
@@ -206,7 +206,7 @@ class ADLineIndicator(BaseIndicator):
         use_sma_smoothing = self.params.get("use_sma_smoothing", False)
         smoothing_period = self.params.get("smoothing_period", 21)
 
-        ad_col = f"AD_Line_SMA_{smoothing_period}" if use_sma_smoothing else "AD_Line"
+        ad_col = f"line_sma_{smoothing_period}" if use_sma_smoothing else "line"
 
         if ad_col not in data.columns:
             result = self.compute(data)
@@ -220,7 +220,7 @@ class ADLineIndicator(BaseIndicator):
         result["AD_Falling"] = ad_falling
 
         # Momentum signals
-        ad_momentum = result["AD_Momentum_21"]
+        ad_momentum = result["momentum_21"]
         result["AD_Strong_Accumulation"] = (
             ad_momentum > ad_momentum.rolling(window=10).mean()
         )
@@ -229,7 +229,7 @@ class ADLineIndicator(BaseIndicator):
         )
 
         # Rate of change signals
-        ad_roc = result["AD_ROC_10"]
+        ad_roc = result["roc_10"]
         result["AD_Accelerating_Up"] = (
             ad_roc > 5
         )  # A/D Line growing faster than 5% per 10 periods
@@ -253,7 +253,7 @@ class ADLineIndicator(BaseIndicator):
             result["AD_Bearish_Divergence"] = price_rising & ad_momentum_falling
 
         # Extreme values signals
-        ad_rel_strength = result["AD_Relative_Strength"]
+        ad_rel_strength = result["relative_strength"]
         result["AD_Extremely_Strong"] = (
             ad_rel_strength > 20
         )  # A/D Line 20% above recent average
@@ -262,7 +262,7 @@ class ADLineIndicator(BaseIndicator):
         )  # A/D Line 20% below recent average
 
         # Money Flow signals
-        mf_multiplier = result["AD_MF_Multiplier"]
+        mf_multiplier = result["mf_multiplier"]
         result["AD_Strong_Buying_Pressure"] = mf_multiplier > 0.5
         result["AD_Strong_Selling_Pressure"] = mf_multiplier < -0.5
         result["AD_Neutral_Flow"] = (mf_multiplier >= -0.2) & (mf_multiplier <= 0.2)
@@ -282,7 +282,7 @@ class ADLineIndicator(BaseIndicator):
         use_sma_smoothing = self.params.get("use_sma_smoothing", False)
         smoothing_period = self.params.get("smoothing_period", 21)
 
-        ad_col = f"AD_Line_SMA_{smoothing_period}" if use_sma_smoothing else "AD_Line"
+        ad_col = f"line_sma_{smoothing_period}" if use_sma_smoothing else "line"
 
         if ad_col not in data.columns:
             data = self.compute(data)
@@ -293,11 +293,11 @@ class ADLineIndicator(BaseIndicator):
 
         # Current values
         current_ad = latest[ad_col]
-        current_mf_multiplier = latest["AD_MF_Multiplier"]
-        current_mf_volume = latest["AD_MF_Volume"]
-        current_roc = latest["AD_ROC_10"]
-        current_momentum = latest["AD_Momentum_21"]
-        current_rel_strength = latest["AD_Relative_Strength"]
+        current_mf_multiplier = latest["mf_multiplier"]
+        current_mf_volume = latest["mf_volume"]
+        current_roc = latest["roc_10"]
+        current_momentum = latest["momentum_21"]
+        current_rel_strength = latest["relative_strength"]
         current_price = latest["close"]
 
         # Trend analysis
@@ -318,7 +318,7 @@ class ADLineIndicator(BaseIndicator):
             trend_direction = "Insufficient Data"
 
         # Momentum analysis
-        momentum_values = recent_data["AD_Momentum_21"].dropna()
+        momentum_values = recent_data["momentum_21"].dropna()
         avg_momentum = momentum_values.mean() if len(momentum_values) > 0 else 0
         momentum_strength = (
             "Strong"
@@ -331,7 +331,7 @@ class ADLineIndicator(BaseIndicator):
         )
 
         # Volume flow analysis
-        mf_multiplier_values = recent_data["AD_MF_Multiplier"].dropna()
+        mf_multiplier_values = recent_data["mf_multiplier"].dropna()
         avg_mf_multiplier = (
             mf_multiplier_values.mean() if len(mf_multiplier_values) > 0 else 0
         )

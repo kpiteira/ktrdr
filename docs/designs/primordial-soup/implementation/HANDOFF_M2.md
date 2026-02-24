@@ -77,32 +77,38 @@ generations:
 
 ## Task 2.6 Complete: E2E Validation
 
-**E2E results (run_20260223_211402):**
-- Gen 0: 6 researchers triggered, 1 succeeded (fitness -3.2529), 5 failed
-- Selection happened: 3 survived (r_g00_001, r_g00_000, r_g00_002), 3 died
-- Gen 1 population: 6 offspring with parent_ids and mutations (e.g., `memory_depth: off→low`)
-- Gen 1 hit budget_exhausted (daily $5 budget consumed) → all failed → early abort
-- `ktrdr evolve status` correctly shows per-generation Rich table
-- State persisted: config.yaml, population.yaml, results.yaml, operations.yaml, summary.yaml
+**E2E results (run_20260223_220336) — Full 3-gen evolution:**
+- Gen 0: 4 researchers triggered, 1 succeeded (fitness -3.26), 3 failed → 2 survived, 2 died
+- Gen 1: 4 researchers, 2 succeeded (max fitness 0.0), 2 failed → 2 survived, 2 died
+- Gen 2: 4 researchers, all 4 succeeded (max fitness -3.09)
+- Full 3-generation evolution completed successfully
 
 **Verified mechanics:**
 1. ✅ Researcher triggering with at_capacity retry (exponential backoff)
 2. ✅ Operation polling and result collection
 3. ✅ Fitness evaluation (real metrics + MINIMUM_FITNESS for failures)
 4. ✅ Selection: rank by fitness, deterministic tie-breaking by ID
-5. ✅ Reproduction: 3 survivors × 2 = 6 offspring, each with 1 mutation
-6. ✅ Early abort when all researchers fail (correct behavior)
+5. ✅ Reproduction: survivors × 2 offspring, each with 1 mutation
+6. ✅ Multi-generation loop: seed → trigger → poll → select → reproduce → repeat
 7. ✅ CLI commands: start, status (with/without run_id)
 8. ✅ Summary.yaml incremental updates
+9. ✅ Population lineage tracking (parent_id, mutation descriptions)
 
-**Not fully validated (pre-existing pipeline issues):**
-- Full 3-gen completion: blocked by experiment memory `'str' object has no attribute 'get'` bug
-  causing most backtest_results to be null. This is a pipeline bug, not evolution.
-- Resume CLI: mechanically correct per unit tests; live resume not triggered
+**Pipeline bugs fixed during validation:**
+1. **Experiment memory str bug** — `yaml.safe_load()` can return str instead of dict.
+   Fixed in: `assessment_worker.py`, `strategy_utils.py`, `research_worker.py`
+   (Added `isinstance(result, dict)` check after yaml.safe_load)
+2. **V3 indicators format** — Strategy indicators is a dict in V3, code assumed list.
+   Fixed in: `assessment_worker.py`, `strategy_utils.py`
+3. **Indicator output name mismatch** — `compute()` returned prefixed columns (e.g. `AD_Line`)
+   but `get_output_names()` declared semantic names (e.g. `line`).
+   Fixed in: `ad_line.py`, `cmf_indicator.py`
+4. **save_assessment missing args** — Haiku sometimes drops required tool args.
+   Fixed in: `executor.py` (made parameters optional with defaults)
 
 **Gotchas for future milestones:**
 - Budget is file-based per day in `data/budget/YYYY-MM-DD.json` (NOT in-memory)
-- Daily limit is $5.00; a 3-gen × 6-researcher run costs ~$2-3 with haiku
+- Daily limit configurable via `KTRDR_AGENT_DAILY_BUDGET` env var (default $5.00)
+- A 3-gen × 4-researcher run costs ~$2.50 with haiku
 - Reset budget by moving/deleting today's budget file
-- ANTHROPIC_API_KEY must be in docker-compose.override.yml for sandbox
-- Experiment memory str bug causes most researchers to get "poor" verdict with null backtest
+- ANTHROPIC_API_KEY must be injected into docker-compose.override.yml for sandbox E2E

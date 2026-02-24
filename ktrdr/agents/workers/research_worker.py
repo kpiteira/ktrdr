@@ -208,7 +208,8 @@ class AgentResearchWorker:
         """
         try:
             with open(strategy_path) as f:
-                return yaml.safe_load(f) or {}
+                result = yaml.safe_load(f)
+                return result if isinstance(result, dict) else {}
         except Exception as e:
             logger.warning(
                 f"Failed to load strategy config: {strategy_path}, error={e}"

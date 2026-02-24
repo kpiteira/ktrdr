@@ -176,7 +176,8 @@ class AgentAssessmentWorker:
         try:
             path = Path(strategy_path)
             if path.exists():
-                return yaml.safe_load(path.read_text()) or {}
+                result = yaml.safe_load(path.read_text())
+                return result if isinstance(result, dict) else {}
         except Exception as e:
             logger.warning(f"Failed to load strategy config: {e}")
         return {}
@@ -190,7 +191,17 @@ class AgentAssessmentWorker:
         Returns:
             Context dict with indicators, composition, timeframe, etc.
         """
-        indicators = [ind.get("name") for ind in strategy_config.get("indicators", [])]
+        raw_indicators = strategy_config.get("indicators", {})
+        if isinstance(raw_indicators, dict):
+            # V3 format: dict keyed by indicator name
+            indicators = list(raw_indicators.keys())
+        elif isinstance(raw_indicators, list):
+            # V2 format: list of dicts with "name" key
+            indicators = [
+                ind.get("name") for ind in raw_indicators if isinstance(ind, dict)
+            ]
+        else:
+            indicators = []
         training_data = strategy_config.get("training_data", {})
         training = strategy_config.get("training", {})
 
