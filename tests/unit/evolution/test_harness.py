@@ -75,6 +75,7 @@ def _make_completed_operation(
 
     Mirrors real API: backtest_result is in result_summary (persisted
     by complete_operation), not in metadata.parameters (in-memory only).
+    Includes total_trades for gate checks (M3 fitness gates).
     """
     return {
         "operation_id": op_id,
@@ -84,6 +85,7 @@ def _make_completed_operation(
             "backtest_result": {
                 "sharpe_ratio": sharpe,
                 "max_drawdown": max_dd,
+                "total_trades": 50,
             },
         },
         "metadata": {
@@ -230,8 +232,8 @@ class TestGenerationHarnessPoll:
 
         assert len(results) == 1
         assert results[0]["researcher_id"] == "r_g00_000"
-        # fitness = 1.5 - 1.0 * 0.1 = 1.4
-        assert abs(results[0]["fitness"] - 1.4) < 1e-9
+        # M3 fitness: 1.5 - 1.0*0.1 - 0.1*0.5(complexity) = 1.35
+        assert abs(results[0]["fitness"] - 1.35) < 1e-9
 
     @pytest.mark.asyncio
     async def test_failed_operation_returns_minimum_fitness(
@@ -288,8 +290,8 @@ class TestGenerationHarnessPoll:
         results = await harness.run_generation(0, population)
 
         assert len(results) == 1
-        # fitness = 2.0 - 1.0 * 0.05 = 1.95
-        assert abs(results[0]["fitness"] - 1.95) < 1e-9
+        # M3 fitness: 2.0 - 1.0*0.05 - 0.1*0.5(complexity) = 1.9
+        assert abs(results[0]["fitness"] - 1.9) < 1e-9
 
     @pytest.mark.asyncio
     async def test_failed_operation_with_api_envelope(
@@ -617,6 +619,7 @@ def _setup_completed_run(
                 "backtest_result": {
                     "sharpe_ratio": float(i) + 0.5,
                     "max_drawdown": 0.05,
+                    "total_trades": 50,
                 },
             }
             for i, r in enumerate(population)

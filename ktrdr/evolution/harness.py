@@ -399,7 +399,7 @@ class GenerationHarness:
                 )
                 slice_results.extend(additional)
 
-            fitness = self._fitness.evaluate(backtest_result)
+            fitness = self._fitness.evaluate_slices(slice_results)
             results.append(
                 {
                     "researcher_id": researcher.id,

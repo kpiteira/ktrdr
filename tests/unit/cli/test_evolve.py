@@ -44,6 +44,7 @@ def _setup_run(
                 "backtest_result": {
                     "sharpe_ratio": float(i) + 0.5,
                     "max_drawdown": 0.05,
+                    "total_trades": 50,
                 },
             }
             for i, r in enumerate(population)
