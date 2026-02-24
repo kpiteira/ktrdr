@@ -252,3 +252,105 @@ class TestFeatureCacheFeatureOrder:
             "5m_rsi_fast_overbought",
             "5m_rsi_fast_oversold",
         ]
+
+
+class TestFeatureCacheMultiTimeframe:
+    """Tests for multi-timeframe feature computation."""
+
+    @pytest.fixture
+    def multi_tf_strategy_config(self):
+        """V3 config with 5m + 1h timeframes."""
+        return StrategyConfigurationV3(
+            name="test_multi_tf",
+            version="3.0",
+            description="Multi-TF test",
+            indicators={
+                "rsi_14": IndicatorDefinition(type="rsi", period=14),
+            },
+            fuzzy_sets={
+                "rsi_fast": FuzzySetDefinition(
+                    indicator="rsi_14",
+                    oversold=[0, 25, 40],
+                    overbought=[60, 75, 100],
+                ),
+            },
+            nn_inputs=[
+                NNInputSpec(fuzzy_set="rsi_fast", timeframes=["5m", "1h"]),
+            ],
+            model={"type": "mlp"},
+            decisions={"output_format": "classification"},
+            training={"epochs": 10},
+            training_data=TrainingDataConfiguration(
+                symbols=SymbolConfiguration(mode=SymbolMode.SINGLE, symbol="EURUSD"),
+                timeframes=TimeframeConfiguration(
+                    mode=TimeframeMode.MULTI_TIMEFRAME,
+                    timeframes=["5m", "1h"],
+                    base_timeframe="5m",
+                ),
+                history_required=100,
+            ),
+        )
+
+    @pytest.fixture
+    def multi_tf_metadata(self):
+        """Metadata with features from both 5m and 1h timeframes."""
+        return ModelMetadataV3(
+            model_name="test_model",
+            strategy_name="test_multi_tf",
+            resolved_features=[
+                "5m_rsi_fast_oversold",
+                "5m_rsi_fast_overbought",
+                "1h_rsi_fast_oversold",
+                "1h_rsi_fast_overbought",
+            ],
+        )
+
+    @pytest.fixture
+    def multi_tf_data(self):
+        """5m and 1h OHLCV data with sufficient bars for indicators."""
+        np.random.seed(42)
+        dates_5m = pd.date_range("2024-01-01", periods=300, freq="5min")
+        dates_1h = pd.date_range("2024-01-01", periods=25, freq="1h")
+
+        def make_ohlcv(n: int) -> dict[str, np.ndarray]:
+            close = 100 + np.cumsum(np.random.randn(n) * 0.1)
+            return {
+                "open": close - np.abs(np.random.randn(n) * 0.05),
+                "high": close + np.abs(np.random.randn(n) * 0.1),
+                "low": close - np.abs(np.random.randn(n) * 0.1),
+                "close": close,
+                "volume": np.random.uniform(1000, 2000, n),
+            }
+
+        return {
+            "5m": pd.DataFrame(make_ohlcv(300), index=dates_5m),
+            "1h": pd.DataFrame(make_ohlcv(25), index=dates_1h),
+        }
+
+    def test_multi_tf_no_nan_after_warmup(
+        self, multi_tf_strategy_config, multi_tf_metadata, multi_tf_data
+    ):
+        """Multi-TF compute_features should produce no NaN after warmup."""
+        cache = FeatureCache(multi_tf_strategy_config, multi_tf_metadata)
+        result = cache.compute_features(multi_tf_data)
+
+        # After indicator warmup period (RSI needs ~14 bars), no NaN
+        assert not result.iloc[50:].isna().any().any()
+
+    def test_multi_tf_result_uses_base_index(
+        self, multi_tf_strategy_config, multi_tf_metadata, multi_tf_data
+    ):
+        """Result should use 5m (base) timeframe index, not 1h."""
+        cache = FeatureCache(multi_tf_strategy_config, multi_tf_metadata)
+        result = cache.compute_features(multi_tf_data)
+
+        assert len(result) == len(multi_tf_data["5m"])
+
+    def test_multi_tf_columns_match_expected(
+        self, multi_tf_strategy_config, multi_tf_metadata, multi_tf_data
+    ):
+        """All expected features from both TFs should be present."""
+        cache = FeatureCache(multi_tf_strategy_config, multi_tf_metadata)
+        result = cache.compute_features(multi_tf_data)
+
+        assert list(result.columns) == multi_tf_metadata.resolved_features

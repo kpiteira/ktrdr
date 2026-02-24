@@ -15,6 +15,7 @@ from ktrdr.data.components.timeframe_synchronizer import (
     SynchronizationStats,
     TimeframeRelation,
     TimeframeSynchronizer,
+    align_feature_dataframes,
     align_timeframes_to_lowest,
     calculate_multi_timeframe_periods,
     validate_timeframe_compatibility,
@@ -585,3 +586,119 @@ class TestEdgeCases:
         assert "4h" in estimates
         assert estimates["1h"] >= 0
         assert estimates["4h"] >= 0
+
+
+class TestAlignFeatureDataframes:
+    """Tests for align_feature_dataframes utility."""
+
+    def test_single_timeframe_returns_unchanged(self):
+        """Single-timeframe dict should pass through without modification."""
+        dates = pd.date_range("2024-01-01", periods=100, freq="5min", tz="UTC")
+        features_5m = pd.DataFrame(
+            {
+                "5m_rsi_oversold": np.random.uniform(0, 1, 100),
+                "5m_rsi_overbought": np.random.uniform(0, 1, 100),
+            },
+            index=dates,
+        )
+
+        result = align_feature_dataframes({"5m": features_5m})
+
+        assert len(result) == 100
+        assert list(result.columns) == ["5m_rsi_oversold", "5m_rsi_overbought"]
+        pd.testing.assert_index_equal(result.index, dates)
+
+    def test_multi_timeframe_aligns_to_base(self):
+        """Multi-timeframe should align to most granular timeframe."""
+        dates_5m = pd.date_range("2024-01-01", periods=24, freq="5min", tz="UTC")
+        dates_1h = pd.date_range("2024-01-01", periods=2, freq="1h", tz="UTC")
+
+        features_5m = pd.DataFrame({"5m_rsi_low": np.ones(24) * 0.3}, index=dates_5m)
+        features_1h = pd.DataFrame({"1h_macd_bullish": [0.1, 0.9]}, index=dates_1h)
+
+        result = align_feature_dataframes({"5m": features_5m, "1h": features_1h})
+
+        # Should have 5m row count (most granular)
+        assert len(result) == 24
+        assert "5m_rsi_low" in result.columns
+        assert "1h_macd_bullish" in result.columns
+
+    def test_no_nan_in_output(self):
+        """Aligned output should have no NaN values."""
+        dates_5m = pd.date_range("2024-01-01", periods=24, freq="5min", tz="UTC")
+        dates_1h = pd.date_range("2024-01-01", periods=2, freq="1h", tz="UTC")
+
+        features_5m = pd.DataFrame({"5m_f1": np.ones(24)}, index=dates_5m)
+        features_1h = pd.DataFrame({"1h_f1": [1.0, 2.0]}, index=dates_1h)
+
+        result = align_feature_dataframes({"5m": features_5m, "1h": features_1h})
+
+        assert not result.isna().any().any()
+
+    def test_forward_fill_correctness(self):
+        """1h values should be forward-filled to 5m timestamps correctly."""
+        dates_5m = pd.date_range("2024-01-01", periods=24, freq="5min", tz="UTC")
+        dates_1h = pd.date_range("2024-01-01", periods=2, freq="1h", tz="UTC")
+
+        features_5m = pd.DataFrame({"5m_f": np.ones(24)}, index=dates_5m)
+        features_1h = pd.DataFrame({"1h_f": [0.1, 0.9]}, index=dates_1h)
+
+        result = align_feature_dataframes({"5m": features_5m, "1h": features_1h})
+
+        # First 12 bars (00:00 to 00:55) get 1h value 0.1
+        for i in range(12):
+            assert result.iloc[i]["1h_f"] == pytest.approx(0.1)
+        # Next 12 bars (01:00 to 01:55) get 1h value 0.9
+        for i in range(12, 24):
+            assert result.iloc[i]["1h_f"] == pytest.approx(0.9)
+
+    def test_handles_leading_gap(self):
+        """When higher-TF data starts after base, bfill should handle leading gap."""
+        dates_5m = pd.date_range("2024-01-01 00:00", periods=36, freq="5min", tz="UTC")
+        # 1h data starts at 01:00, 1 hour after 5m data starts
+        dates_1h = pd.date_range("2024-01-01 01:00", periods=2, freq="1h", tz="UTC")
+
+        features_5m = pd.DataFrame({"5m_f": np.ones(36)}, index=dates_5m)
+        features_1h = pd.DataFrame({"1h_f": [2.0, 3.0]}, index=dates_1h)
+
+        result = align_feature_dataframes({"5m": features_5m, "1h": features_1h})
+
+        assert not result.isna().any().any()
+        # First 12 bars (before 1h data starts) should be bfilled with 2.0
+        assert result.iloc[0]["1h_f"] == pytest.approx(2.0)
+
+    def test_empty_dict_raises_error(self):
+        """Empty dict should raise ValueError."""
+        with pytest.raises(ValueError, match="[Ee]mpty|[Nn]o feature"):
+            align_feature_dataframes({})
+
+    def test_dict_ordering_does_not_matter(self):
+        """Result should be the same regardless of dict insertion order."""
+        dates_5m = pd.date_range("2024-01-01", periods=24, freq="5min", tz="UTC")
+        dates_1h = pd.date_range("2024-01-01", periods=2, freq="1h", tz="UTC")
+
+        f5m = pd.DataFrame({"5m_f": np.ones(24)}, index=dates_5m)
+        f1h = pd.DataFrame({"1h_f": [1.0, 2.0]}, index=dates_1h)
+
+        result_1 = align_feature_dataframes({"5m": f5m, "1h": f1h})
+        result_2 = align_feature_dataframes({"1h": f1h, "5m": f5m})
+
+        pd.testing.assert_frame_equal(
+            result_1.sort_index(axis=1),
+            result_2.sort_index(axis=1),
+        )
+
+    def test_explicit_base_timeframe(self):
+        """Caller can specify which timeframe is base."""
+        dates_5m = pd.date_range("2024-01-01", periods=24, freq="5min", tz="UTC")
+        dates_1h = pd.date_range("2024-01-01", periods=2, freq="1h", tz="UTC")
+
+        f5m = pd.DataFrame({"5m_f": np.ones(24)}, index=dates_5m)
+        f1h = pd.DataFrame({"1h_f": [1.0, 2.0]}, index=dates_1h)
+
+        result = align_feature_dataframes(
+            {"5m": f5m, "1h": f1h},
+            base_timeframe="5m",
+        )
+
+        assert len(result) == 24
