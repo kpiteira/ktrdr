@@ -391,9 +391,9 @@ class GenerationHarness:
                 [backtest_result] if backtest_result else []
             )
 
-            # Run additional backtests if we have model metadata
+            # Run additional backtests if we have strategy metadata
             model_path, strategy_name = self._extract_metadata(op_data)
-            if backtest_result and model_path and strategy_name:
+            if backtest_result and strategy_name:
                 additional = await self._run_additional_backtests(
                     model_path, strategy_name
                 )
@@ -503,31 +503,46 @@ class GenerationHarness:
     def _extract_metadata(
         op_data: dict[str, Any],
     ) -> tuple[str | None, str | None]:
-        """Extract model_path and strategy_name from operation metadata."""
+        """Extract model_path and strategy_name from operation data.
+
+        Checks metadata.parameters first (set by research worker in-memory),
+        then falls back to result_summary (always persisted by the API).
+        model_path is optional — the backtest API can auto-discover it
+        from strategy_name.
+        """
         metadata = op_data.get("metadata", {})
         params = metadata.get("parameters", {})
-        return params.get("model_path"), params.get("strategy_name")
+        result_summary = op_data.get("result_summary", {}) or {}
+
+        model_path = params.get("model_path")
+        strategy_name = params.get("strategy_name") or result_summary.get(
+            "strategy_name"
+        )
+        return model_path, strategy_name
 
     async def _trigger_backtest(
         self,
-        model_path: str,
+        model_path: str | None,
         strategy_name: str,
         date_range: DateRange,
     ) -> str | None:
         """Trigger a single backtest via the backtest API.
 
         Returns the operation_id on success, None on failure.
+        model_path is optional — the backtest API can auto-discover it.
         """
+        payload: dict[str, Any] = {
+            "strategy_name": strategy_name,
+            "symbol": self._config.symbol,
+            "timeframe": self._config.timeframe,
+            "start_date": date_range.start.isoformat(),
+            "end_date": date_range.end.isoformat(),
+        }
+        if model_path:
+            payload["model_path"] = model_path
         raw_response = await self._client.post(
             f"{self._base_url}/api/v1/backtests/start",
-            json={
-                "strategy_name": strategy_name,
-                "model_path": model_path,
-                "symbol": self._config.symbol,
-                "timeframe": self._config.timeframe,
-                "start_date": date_range.start.isoformat(),
-                "end_date": date_range.end.isoformat(),
-            },
+            json=payload,
         )
         data = _to_dict(raw_response)
         if data.get("success"):
@@ -537,7 +552,7 @@ class GenerationHarness:
 
     async def _run_single_backtest(
         self,
-        model_path: str,
+        model_path: str | None,
         strategy_name: str,
         date_range: DateRange,
     ) -> dict[str, Any] | None:
@@ -560,7 +575,7 @@ class GenerationHarness:
 
     async def _run_additional_backtests(
         self,
-        model_path: str,
+        model_path: str | None,
         strategy_name: str,
     ) -> list[dict[str, Any]]:
         """Run additional backtests for fitness slices beyond the first.
