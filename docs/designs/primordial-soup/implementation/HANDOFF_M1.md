@@ -103,7 +103,26 @@
 - All researchers scored MINIMUM_FITNESS — backtests fail due to EURUSD data not covering training window
 - The harness code is fully functional; backtest failures are a data/config issue for M2
 
+## Post-M1 Fix: Multi-Timeframe Feature Alignment
+
+**Root cause:** `FeatureCache.compute_features()` (backtesting) did `pd.concat(axis=1)` on DataFrames with different temporal indices (5m: 288 bars/day vs 1h: 24 bars/day). Pandas outer-joins → NaN for all 1h columns at non-hour 5m timestamps. Training worked because `FuzzyNeuralProcessor` did `reindex(base_index, method="ffill")`.
+
+**Fix:** Shared utility `align_feature_dataframes()` in `ktrdr/data/components/timeframe_synchronizer.py`:
+- Groups features by timeframe, concat within each (same index = safe)
+- Forward-fills higher-TF features to base-TF timestamps
+- Used by both `FeatureCache` and `FuzzyNeuralProcessor` (eliminates divergence)
+
+**Files changed:**
+- `ktrdr/data/components/timeframe_synchronizer.py` — new `align_feature_dataframes()` function
+- `ktrdr/backtesting/feature_cache.py` — use shared utility instead of bare `pd.concat`
+- `ktrdr/training/fuzzy_neural_processor.py` — delegate alignment to shared utility
+- `ktrdr/cli/commands/evolve.py` — sandbox-aware API URL via `resolve_api_url()`
+- `tests/unit/data/components/test_timeframe_synchronizer.py` — 8 tests for shared utility
+- `tests/unit/backtesting/test_feature_cache_v3.py` — 3 multi-TF FeatureCache tests
+
+**E2E re-validation:** BLOCKED — `ANTHROPIC_API_KEY` not in sandbox container. Researchers fail at design phase (Claude API call) before reaching training/backtest. Key is managed via 1Password + `kinfra sandbox up`. Need `kinfra sandbox down && kinfra sandbox up` to re-inject secrets.
+
 **Gotchas for M2:**
-- Harness hardcodes `base_url=http://localhost:8000` — sandbox environments need port override
+- Evolve CLI now uses `resolve_api_url()` from `ktrdr.cli.sandbox_detect` for sandbox port detection
 - Budget system tracks estimated cost in-memory; can diverge from file. Reset requires deleting container's `/app/data/budget/YYYY-MM-DD.json` + restart
 - EURUSD 1h data only covers ~1 month (2025-08-13 to 2025-09-12), not the training window (2015-2020)
