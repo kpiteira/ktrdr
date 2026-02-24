@@ -120,9 +120,20 @@
 - `tests/unit/data/components/test_timeframe_synchronizer.py` — 8 tests for shared utility
 - `tests/unit/backtesting/test_feature_cache_v3.py` — 3 multi-TF FeatureCache tests
 
-**E2E re-validation:** BLOCKED — `ANTHROPIC_API_KEY` not in sandbox container. Researchers fail at design phase (Claude API call) before reaching training/backtest. Key is managed via 1Password + `kinfra sandbox up`. Need `kinfra sandbox down && kinfra sandbox up` to re-inject secrets.
+**Additional bugs found during E2E:**
+3. `backtest_result` stored in operation metadata in-memory but not persisted in `completion_result`.
+   Fix: include `backtest_result` in completion_result dict, read from `result_summary` in harness.
+4. FitnessEvaluator reads `"sharpe"` but research worker stores `"sharpe_ratio"`.
+   Fix: accept both keys with `sharpe_ratio` taking precedence.
+
+**E2E re-validation:** PASSED — all 3 researchers completed full pipeline:
+- r_g00_000: fitness -3.78, 498 trades
+- r_g00_002: fitness -4.02, 538 trades
+- r_g00_001: fitness -4.70, 729 trades
+- No NaN errors in logs — multi-TF alignment fix confirmed working
 
 **Gotchas for M2:**
-- Evolve CLI now uses `resolve_api_url()` from `ktrdr.cli.sandbox_detect` for sandbox port detection
-- Budget system tracks estimated cost in-memory; can diverge from file. Reset requires deleting container's `/app/data/budget/YYYY-MM-DD.json` + restart
-- EURUSD 1h data only covers ~1 month (2025-08-13 to 2025-09-12), not the training window (2015-2020)
+- Evolve CLI uses `resolve_api_url()` from `ktrdr.cli.sandbox_detect` for sandbox port detection
+- `kinfra sandbox up` needed for 1Password secrets (ANTHROPIC_API_KEY)
+- Budget system tracks estimated cost in-memory; can diverge from file
+- Pre-existing bug: `Failed to save experiment to memory: 'str' object has no attribute 'get'` in assessment_worker (non-blocking)
