@@ -137,7 +137,25 @@ class EvolutionTracker:
             return {}
         with open(path) as f:
             data = yaml.safe_load(f)
-        return data if data else {}
+        return data if isinstance(data, dict) else {}
+
+    # --- Summary (cross-generation) ---
+
+    def save_summary(self, summary: dict[str, Any]) -> None:
+        """Save or update the cross-generation summary."""
+        self._ensure_dir(self.run_dir)
+        path = self.run_dir / "summary.yaml"
+        with open(path, "w") as f:
+            yaml.dump(summary, f, default_flow_style=False, sort_keys=False)
+
+    def load_summary(self) -> dict[str, Any]:
+        """Load cross-generation summary. Returns empty dict if missing."""
+        path = self.run_dir / "summary.yaml"
+        if not path.exists():
+            return {}
+        with open(path) as f:
+            data = yaml.safe_load(f)
+        return data if isinstance(data, dict) else {}
 
     # --- Generation tracking ---
 

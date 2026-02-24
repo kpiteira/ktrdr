@@ -502,10 +502,10 @@ class ToolExecutor:
 
     async def _handle_save_assessment(
         self,
-        verdict: str,
-        strengths: list[str],
-        weaknesses: list[str],
-        suggestions: list[str],
+        verdict: str = "poor",
+        strengths: list[str] | None = None,
+        weaknesses: list[str] | None = None,
+        suggestions: list[str] | None = None,
     ) -> dict[str, Any]:
         """Handle save_assessment tool call.
 
@@ -529,12 +529,12 @@ class ToolExecutor:
         assessment_dir = f"strategies/{strategy_name}"
         os.makedirs(assessment_dir, exist_ok=True)
 
-        # Build assessment data
+        # Build assessment data (defaults for missing fields from Haiku)
         assessment = {
             "verdict": verdict,
-            "strengths": strengths,
-            "weaknesses": weaknesses,
-            "suggestions": suggestions,
+            "strengths": strengths or [],
+            "weaknesses": weaknesses or [],
+            "suggestions": suggestions or [],
             "assessed_at": datetime.now(UTC).isoformat(),
         }
 

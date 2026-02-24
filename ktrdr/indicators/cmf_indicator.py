@@ -162,28 +162,28 @@ class CMFIndicator(BaseIndicator):
         result = pd.DataFrame(
             index=data.index
         )  # CRITICAL FIX: Only return computed columns
-        result[f"CMF_{period}"] = cmf
-        result[f"CMF_MF_Multiplier_{period}"] = money_flow_multiplier
-        result[f"CMF_MF_Volume_{period}"] = money_flow_volume
+        result["cmf"] = cmf
+        result["mf_multiplier"] = money_flow_multiplier
+        result["mf_volume"] = money_flow_volume
 
         # Calculate additional analysis metrics
         # CMF momentum (rate of change)
         cmf_momentum = cmf - cmf.shift(5)  # 5-period momentum
-        result[f"CMF_Momentum_{period}"] = cmf_momentum
+        result["momentum"] = cmf_momentum
 
         # CMF signal line (EMA of CMF for smoothing)
         cmf_signal = cmf.ewm(span=9, adjust=False).mean()
-        result[f"CMF_Signal_{period}"] = cmf_signal
+        result["signal"] = cmf_signal
 
         # CMF histogram (difference between CMF and signal)
         cmf_histogram = cmf - cmf_signal
-        result[f"CMF_Histogram_{period}"] = cmf_histogram
+        result["histogram"] = cmf_histogram
 
         # Zero-line crossings
         cmf_above_zero = cmf > 0
         cmf_below_zero = cmf < 0
-        result[f"CMF_Above_Zero_{period}"] = cmf_above_zero
-        result[f"CMF_Below_Zero_{period}"] = cmf_below_zero
+        result["above_zero"] = cmf_above_zero
+        result["below_zero"] = cmf_below_zero
 
         logger.debug(f"Computed CMF with period={period}")
 
@@ -199,23 +199,19 @@ class CMFIndicator(BaseIndicator):
         Returns:
             DataFrame with signal columns added
         """
+        period = self.params.get("period", 21)
+
         result = pd.DataFrame(
             index=data.index
         )  # CRITICAL FIX: Only return computed columns
 
-        period = self.params.get("period", 21)
-        cmf_col = f"CMF_{period}"
-        signal_col = f"CMF_Signal_{period}"
-        histogram_col = f"CMF_Histogram_{period}"
-        momentum_col = f"CMF_Momentum_{period}"
-
-        if cmf_col not in data.columns:
+        if "cmf" not in data.columns:
             result = self.compute(data)
 
-        cmf_values = result[cmf_col]
-        cmf_signal = result[signal_col]
-        cmf_histogram = result[histogram_col]
-        cmf_momentum = result[momentum_col]
+        cmf_values = result["cmf"]
+        cmf_signal = result["signal"]
+        cmf_histogram = result["histogram"]
+        cmf_momentum = result["momentum"]
 
         # Zero line crossing signals
         cmf_crossing_up = (cmf_values > 0) & (cmf_values.shift(1) <= 0)
@@ -289,9 +285,9 @@ class CMFIndicator(BaseIndicator):
             Dictionary with analysis results
         """
         period = self.params.get("period", 21)
-        cmf_col = f"CMF_{period}"
-        signal_col = f"CMF_Signal_{period}"
-        momentum_col = f"CMF_Momentum_{period}"
+        cmf_col = "cmf"
+        signal_col = "signal"
+        momentum_col = "momentum"
 
         if cmf_col not in data.columns:
             data = self.compute(data)
