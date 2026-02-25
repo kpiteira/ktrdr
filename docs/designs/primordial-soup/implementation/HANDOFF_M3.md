@@ -10,6 +10,7 @@
 | 3.4 CLI Report Command | Done | evolve report: trend, genome, lineage, diversity |
 | 3.5 E2E Validation | Done | Partial — pipeline validated, researchers gate-failed on real data |
 | model_path bug fix | Done | research_worker persists model_path in result_summary; harness reads it |
+| multi-TF backtest fix | Done | harness omits timeframe from additional backtest payload; engine fallback |
 
 ## Key Patterns
 
@@ -23,6 +24,7 @@
 ### Additional Backtests (harness.py)
 - After research completes: trigger 2 more backtests via POST /api/v1/backtests/start
 - Uses `config.fitness_slices[1:]` for date ranges
+- **Timeframe omitted from payload** — backend resolves from strategy config (fixes multi-TF KeyError)
 - Retry once per backtest on failure; graceful degradation to fewer slices
 - Skipped for researchers that failed research (no backtest_result)
 - All slice results collected in `slice_results` list and passed to `evaluate_slices()`
@@ -59,15 +61,18 @@
 10. **Fresh DB needs `alembic upgrade head`** — run inside the backend container after first sandbox start
 11. **Budget estimator overestimates ~3x** — local estimate shows $8.05 but Anthropic billing shows $2.62. Pre-existing issue.
 12. **Test mock `_make_completed_operation` mirrors real API** — model_path and strategy_name in result_summary, NOT metadata.parameters. The previous mock structure was incorrect.
+13. **Harness must NOT pass timeframe to additional backtests** — the evolution config timeframe (e.g. "1h") may not match the strategy's base_timeframe (e.g. "5m"). The BacktestStartRequest accepts timeframe=None and the API endpoint resolves it from the strategy YAML on disk, which correctly handles multi-TF.
+14. **Engine has defensive base_tf fallback** — if `_get_base_timeframe()` returns a TF not in the loaded data dict, the engine falls back to the first available TF with a warning log. This prevents KeyError when strategy config and loaded data disagree.
 
 ## Files Modified (M3)
 
-- `ktrdr/evolution/harness.py` — Additional backtests + evaluate_slices call + model_path from result_summary
+- `ktrdr/evolution/harness.py` — Additional backtests + evaluate_slices call + model_path from result_summary + omit timeframe from backtest payload
 - `ktrdr/evolution/fitness.py` — Complete rewrite with gates + multi-slice scoring
 - `ktrdr/evolution/report.py` — Monoculture detection + trait convergence + lineage tracing
 - `ktrdr/cli/commands/evolve.py` — Report command
 - `ktrdr/agents/workers/research_worker.py` — Include model_path in completion result_summary
-- `tests/unit/evolution/test_harness.py` — Updated fixtures + 7 additional backtest tests + 5 extract_metadata tests
+- `ktrdr/backtesting/engine.py` — Defensive base_tf fallback when not in loaded data
+- `tests/unit/evolution/test_harness.py` — Updated fixtures + 7 additional backtest tests + 5 extract_metadata tests + 2 payload tests
 - `tests/unit/evolution/test_fitness.py` — Complete rewrite with 26 tests
 - `tests/unit/evolution/test_report.py` — 12 tests (diversity, convergence, lineage)
 - `tests/unit/cli/test_evolve.py` — 7 report command tests
@@ -96,7 +101,13 @@
 
 **model_path fix confirmed**: Error changed from `ValueError: model_path is required` (run 1) to `KeyError: '5m'` (run 2). The model loads successfully now — the new failure is a pre-existing multi-timeframe feature alignment bug (model trained on 5m+1h, but additional backtests only pass timeframe=1h data).
 
+### Multi-TF Fix (2026-02-25)
+
+**Root cause**: Harness passed `timeframe: "1h"` (from EvolutionConfig) to additional backtest API. The engine's `_get_base_timeframe()` read `"5m"` from the model bundle but `_get_strategy_timeframes()` fell back to `["1h"]` (the passed config timeframe). Single-TF data loaded for "1h" but then `multi_tf_data["5m"]` → KeyError.
+
+**Fix**: (1) Harness omits `timeframe` from additional backtest payload — backend resolves from strategy YAML. (2) Engine adds defensive fallback at line 173 when `base_tf` not in loaded data.
+
 **Not fully validated** (blocked by pre-existing issues):
-- Multi-slice fitness with 3 successful slices (blocked by multi-TF KeyError: '5m')
+- Multi-slice fitness with 3 successful slices (needs E2E re-run post multi-TF fix)
 - Lineage tracing with real ancestry (all gate-failed → no lineage)
 - Monoculture warning with real convergence (too few generations)

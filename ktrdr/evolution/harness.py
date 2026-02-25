@@ -528,10 +528,12 @@ class GenerationHarness:
 
         Returns the operation_id on success, None on failure.
         """
+        # Omit timeframe — the backend resolves it from the strategy config.
+        # This correctly handles multi-timeframe strategies where the base
+        # timeframe (e.g. 5m) differs from the evolution config (e.g. 1h).
         payload: dict[str, Any] = {
             "strategy_name": strategy_name,
             "symbol": self._config.symbol,
-            "timeframe": self._config.timeframe,
             "start_date": date_range.start.isoformat(),
             "end_date": date_range.end.isoformat(),
         }

@@ -1185,3 +1185,105 @@ class TestExtractMetadata:
         }
         _, strategy_name = GenerationHarness._extract_metadata(op_data)
         assert strategy_name == "from_summary"
+
+
+class TestAdditionalBacktestPayload:
+    """Tests for additional backtest request payload construction."""
+
+    @pytest.fixture
+    def three_slice_config(self) -> EvolutionConfig:
+        return EvolutionConfig(
+            population_size=2,
+            generations=1,
+            seed=42,
+            poll_interval=0,
+            fitness_slices=[
+                DateRange(date(2021, 1, 1), date(2022, 6, 30)),
+                DateRange(date(2022, 7, 1), date(2023, 12, 31)),
+                DateRange(date(2024, 1, 1), date(2025, 6, 30)),
+            ],
+        )
+
+    def _single_researcher(self) -> list[Researcher]:
+        return [Researcher(id="r_g00_000", genome=Genome(), generation=0)]
+
+    @pytest.mark.asyncio
+    async def test_additional_backtest_omits_timeframe(
+        self,
+        three_slice_config: EvolutionConfig,
+        tmp_run_dir: Path,
+    ) -> None:
+        """Additional backtest payloads should NOT include timeframe.
+
+        The backend resolves timeframe from the strategy config, which
+        correctly handles multi-timeframe strategies. Passing timeframe
+        from the evolution config causes KeyError when the strategy's
+        base_timeframe differs from the evolution config timeframe.
+        """
+        tracker = EvolutionTracker(run_dir=tmp_run_dir)
+        mock_client = AsyncMock()
+
+        mock_client.post = AsyncMock(
+            side_effect=[
+                _make_trigger_response("op_research"),
+                _make_backtest_start_response("op_bt_s2"),
+                _make_backtest_start_response("op_bt_s3"),
+            ]
+        )
+        mock_client.get = AsyncMock(
+            side_effect=[
+                _make_completed_operation("op_research", sharpe=1.0, max_dd=0.1),
+                _make_backtest_completed("op_bt_s2", sharpe=0.8, max_dd=0.15),
+                _make_backtest_completed("op_bt_s3", sharpe=0.9, max_dd=0.12),
+            ]
+        )
+
+        harness = GenerationHarness(
+            config=three_slice_config, tracker=tracker, http_client=mock_client
+        )
+        await harness.run_generation(0, self._single_researcher())
+
+        # Backtest POST payloads (indices 1 and 2) should NOT contain timeframe
+        post_calls = mock_client.post.call_args_list
+        bt_s2_json = post_calls[1][1]["json"]
+        bt_s3_json = post_calls[2][1]["json"]
+
+        assert "timeframe" not in bt_s2_json
+        assert "timeframe" not in bt_s3_json
+        # But should still have the required fields
+        assert bt_s2_json["strategy_name"] == "test_strategy"
+        assert bt_s2_json["symbol"] == "EURUSD"
+        assert bt_s2_json["start_date"] == "2022-07-01"
+
+    @pytest.mark.asyncio
+    async def test_additional_backtest_includes_symbol(
+        self,
+        three_slice_config: EvolutionConfig,
+        tmp_run_dir: Path,
+    ) -> None:
+        """Additional backtest payloads should include symbol (always correct)."""
+        tracker = EvolutionTracker(run_dir=tmp_run_dir)
+        mock_client = AsyncMock()
+
+        mock_client.post = AsyncMock(
+            side_effect=[
+                _make_trigger_response("op_research"),
+                _make_backtest_start_response("op_bt_s2"),
+                _make_backtest_start_response("op_bt_s3"),
+            ]
+        )
+        mock_client.get = AsyncMock(
+            side_effect=[
+                _make_completed_operation("op_research", sharpe=1.0, max_dd=0.1),
+                _make_backtest_completed("op_bt_s2"),
+                _make_backtest_completed("op_bt_s3"),
+            ]
+        )
+
+        harness = GenerationHarness(
+            config=three_slice_config, tracker=tracker, http_client=mock_client
+        )
+        await harness.run_generation(0, self._single_researcher())
+
+        bt_json = mock_client.post.call_args_list[1][1]["json"]
+        assert bt_json["symbol"] == "EURUSD"

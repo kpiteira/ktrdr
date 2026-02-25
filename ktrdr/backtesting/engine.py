@@ -170,6 +170,15 @@ class BacktestingEngine:
         # 1. Load data
         multi_tf_data = self._load_historical_data()
         base_tf = self._get_base_timeframe()
+        if base_tf not in multi_tf_data:
+            available = list(multi_tf_data.keys())
+            logger.warning(
+                "Base timeframe %s not in loaded data %s; falling back to %s",
+                base_tf,
+                available,
+                available[0],
+            )
+            base_tf = available[0]
         data = multi_tf_data[base_tf]
 
         if data.empty:
