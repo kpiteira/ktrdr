@@ -9,6 +9,7 @@
 | 3.3 Monoculture Detection | Done | report.py: diversity + trait convergence |
 | 3.4 CLI Report Command | Done | evolve report: trend, genome, lineage, diversity |
 | 3.5 E2E Validation | Done | Partial — pipeline validated, researchers gate-failed on real data |
+| model_path bug fix | Done | research_worker persists model_path in result_summary; harness reads it |
 
 ## Key Patterns
 
@@ -23,7 +24,7 @@
 - After research completes: trigger 2 more backtests via POST /api/v1/backtests/start
 - Uses `config.fitness_slices[1:]` for date ranges
 - Retry once per backtest on failure; graceful degradation to fewer slices
-- Skipped for researchers that failed research (no model_path)
+- Skipped for researchers that failed research (no backtest_result)
 - All slice results collected in `slice_results` list and passed to `evaluate_slices()`
 
 ### Report Command (evolve.py)
@@ -37,6 +38,13 @@
 - Follows parent_id chain through saved population data
 - Returns partial chain if parent data missing
 
+### model_path Persistence (research_worker.py + harness.py)
+- Research worker now includes `model_path` in `completion_result` passed to `complete_operation()`
+- The training phase sets `model_path` in `parent_op.metadata.parameters` (line 597)
+- The completion handler reads it back and includes in `result_summary` (persisted to DB)
+- Harness `_extract_metadata` checks both `metadata.parameters` and `result_summary` for model_path
+- BacktestEngine requires model_path (no auto-discovery) — this was the root cause of additional backtest failures
+
 ## Gotchas
 
 1. **Test fixtures need `total_trades: 50`** in mock backtest results — otherwise the min-trades gate (30) fails
@@ -44,23 +52,27 @@
 3. **Complexity penalty of 0.05** (default 0.5 * λ_complexity 0.1) affects expected fitness values in tests
 4. **population_size minimum is 2** — EvolutionConfig.__post_init__ validates this
 5. **Import sorting matters** — ruff I001 catches unsorted TYPE_CHECKING blocks
-6. **strategy_name is in result_summary, NOT metadata.parameters** — the API persists initial trigger metadata, not in-memory updates from the research worker. `_extract_metadata` must check both locations.
-7. **model_path may be None** — the backtest API auto-discovers models from strategy_name, so model_path is optional in `_trigger_backtest`
+6. **strategy_name and model_path are in result_summary, NOT metadata.parameters** — the API persists initial trigger metadata only; the research worker's in-memory updates to metadata.parameters are not persisted. `_extract_metadata` checks both locations.
+7. **BacktestEngine requires model_path** — despite BacktestStartRequest having it as Optional, the engine raises ValueError if None. There is NO auto-discovery in the backtest pipeline (DecisionOrchestrator's auto-discovery is for paper/live trading only).
 8. **Sandbox needs .env.sandbox** — the CLI uses this file to detect sandbox port; if missing, it defaults to prod (port 8000). Copy from `~/.ktrdr/sandboxes/slot-N/.env.sandbox` if lost.
 9. **Sandbox needs `kinfra sandbox up` (not direct docker compose)** — to inject 1Password secrets (ANTHROPIC_API_KEY etc.)
 10. **Fresh DB needs `alembic upgrade head`** — run inside the backend container after first sandbox start
 11. **Budget estimator overestimates ~3x** — local estimate shows $8.05 but Anthropic billing shows $2.62. Pre-existing issue.
+12. **Test mock `_make_completed_operation` mirrors real API** — model_path and strategy_name in result_summary, NOT metadata.parameters. The previous mock structure was incorrect.
 
 ## Files Modified (M3)
 
-- `ktrdr/evolution/harness.py` — Additional backtests + evaluate_slices call
+- `ktrdr/evolution/harness.py` — Additional backtests + evaluate_slices call + model_path from result_summary
 - `ktrdr/evolution/fitness.py` — Complete rewrite with gates + multi-slice scoring
 - `ktrdr/evolution/report.py` — Monoculture detection + trait convergence + lineage tracing
 - `ktrdr/cli/commands/evolve.py` — Report command
-- `tests/unit/evolution/test_harness.py` — Updated fixtures + 7 additional backtest tests
+- `ktrdr/agents/workers/research_worker.py` — Include model_path in completion result_summary
+- `tests/unit/evolution/test_harness.py` — Updated fixtures + 7 additional backtest tests + 5 extract_metadata tests
 - `tests/unit/evolution/test_fitness.py` — Complete rewrite with 26 tests
 - `tests/unit/evolution/test_report.py` — 12 tests (diversity, convergence, lineage)
 - `tests/unit/cli/test_evolve.py` — 7 report command tests
+- `tests/unit/agents/test_research_worker_multi.py` — 1 test: completion result includes model_path
+- `tests/unit/agent_tests/test_budget.py` — Budget test updated for $20 default
 - `ktrdr/config/settings.py` — Daily budget default bumped from $5 to $20
 - `tests/unit/config/test_agent_settings.py` — Budget test updated
 
@@ -80,7 +92,9 @@
 | Report command | Yes | All sections rendered with real data |
 | Graceful degradation | Yes | Proceeded with 1 slice when additional backtests failed |
 
-**Not fully validated** (would need more runs with better-performing strategies):
-- Multi-slice fitness with 3 successful slices (workers were contended)
+**Additional backtests failed** because model_path was not persisted in result_summary — **fixed** by including model_path in research worker's completion result. The fix requires rebuilding sandbox containers to take effect (backend code change).
+
+**Not fully validated** (would need more runs with better-performing strategies + rebuilt containers):
+- Multi-slice fitness with 3 successful slices (model_path fix needs container rebuild)
 - Lineage tracing with real ancestry (all failed → no lineage to show)
 - Monoculture warning with real convergence (too few generations)

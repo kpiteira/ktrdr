@@ -506,15 +506,13 @@ class GenerationHarness:
         """Extract model_path and strategy_name from operation data.
 
         Checks metadata.parameters first (set by research worker in-memory),
-        then falls back to result_summary (always persisted by the API).
-        model_path is optional — the backtest API can auto-discover it
-        from strategy_name.
+        then falls back to result_summary (persisted via complete_operation).
         """
         metadata = op_data.get("metadata", {})
         params = metadata.get("parameters", {})
         result_summary = op_data.get("result_summary", {}) or {}
 
-        model_path = params.get("model_path")
+        model_path = params.get("model_path") or result_summary.get("model_path")
         strategy_name = params.get("strategy_name") or result_summary.get(
             "strategy_name"
         )
@@ -529,7 +527,6 @@ class GenerationHarness:
         """Trigger a single backtest via the backtest API.
 
         Returns the operation_id on success, None on failure.
-        model_path is optional — the backtest API can auto-discover it.
         """
         payload: dict[str, Any] = {
             "strategy_name": strategy_name,

@@ -983,15 +983,18 @@ class AgentResearchWorker:
             # Include backtest_result so external consumers (e.g. evolution harness)
             # can retrieve it via the operations API.
             backtest_for_result = None
+            model_path_for_result = None
             if parent_op and parent_op.metadata and parent_op.metadata.parameters:
                 backtest_for_result = parent_op.metadata.parameters.get(
                     "backtest_result"
                 )
+                model_path_for_result = parent_op.metadata.parameters.get("model_path")
             completion_result = {
                 "success": True,
                 "strategy_name": strategy_name,
                 "verdict": result.get("verdict", "unknown"),
                 "backtest_result": backtest_for_result,
+                "model_path": model_path_for_result,
             }
             await self.ops.complete_operation(operation_id, completion_result)
 

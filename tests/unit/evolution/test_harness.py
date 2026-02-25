@@ -73,8 +73,9 @@ def _make_completed_operation(
 ) -> dict[str, Any]:
     """Completed operation response with backtest result.
 
-    Mirrors real API: backtest_result is in result_summary (persisted
-    by complete_operation), not in metadata.parameters (in-memory only).
+    Mirrors real API: strategy_name, model_path, and backtest_result are
+    in result_summary (persisted by complete_operation). metadata.parameters
+    only has the initial trigger params (brief, model).
     Includes total_trades for gate checks (M3 fitness gates).
     """
     return {
@@ -82,6 +83,8 @@ def _make_completed_operation(
         "status": "completed",
         "result_summary": {
             "success": True,
+            "strategy_name": "test_strategy",
+            "model_path": "/models/test",
             "backtest_result": {
                 "sharpe_ratio": sharpe,
                 "max_drawdown": max_dd,
@@ -90,8 +93,8 @@ def _make_completed_operation(
         },
         "metadata": {
             "parameters": {
-                "model_path": "/models/test",
-                "strategy_name": "test_strategy",
+                "brief": "Build on proven patterns...",
+                "model": "claude-haiku-4-5-20251001",
             }
         },
     }
@@ -1122,3 +1125,63 @@ class TestHarnessAdditionalBacktests:
         assert mock_client.post.call_count == 1
         # 1 slice result from research pipeline
         assert len(results[0]["slice_results"]) == 1
+
+
+class TestExtractMetadata:
+    """Tests for _extract_metadata — model_path and strategy_name resolution."""
+
+    def test_model_path_from_result_summary(self) -> None:
+        """model_path in result_summary (real API behavior) should be extracted."""
+        op_data = {
+            "result_summary": {
+                "strategy_name": "test_strat",
+                "model_path": "models/test_strat/5m_v1",
+                "backtest_result": {},
+            },
+            "metadata": {"parameters": {"brief": "..."}},
+        }
+        model_path, strategy_name = GenerationHarness._extract_metadata(op_data)
+        assert model_path == "models/test_strat/5m_v1"
+        assert strategy_name == "test_strat"
+
+    def test_model_path_from_metadata_params(self) -> None:
+        """model_path in metadata.parameters (in-memory state) should be extracted."""
+        op_data = {
+            "result_summary": {"strategy_name": "test_strat"},
+            "metadata": {
+                "parameters": {
+                    "model_path": "/models/from_params",
+                    "strategy_name": "test_strat",
+                }
+            },
+        }
+        model_path, strategy_name = GenerationHarness._extract_metadata(op_data)
+        assert model_path == "/models/from_params"
+
+    def test_metadata_params_takes_precedence(self) -> None:
+        """metadata.parameters.model_path should take precedence over result_summary."""
+        op_data = {
+            "result_summary": {"model_path": "models/from_summary"},
+            "metadata": {"parameters": {"model_path": "/models/from_params"}},
+        }
+        model_path, _ = GenerationHarness._extract_metadata(op_data)
+        assert model_path == "/models/from_params"
+
+    def test_model_path_none_when_absent(self) -> None:
+        """model_path should be None when absent from both locations."""
+        op_data = {
+            "result_summary": {"strategy_name": "test_strat"},
+            "metadata": {"parameters": {}},
+        }
+        model_path, strategy_name = GenerationHarness._extract_metadata(op_data)
+        assert model_path is None
+        assert strategy_name == "test_strat"
+
+    def test_strategy_name_fallback_to_result_summary(self) -> None:
+        """strategy_name should fall back to result_summary when not in params."""
+        op_data = {
+            "result_summary": {"strategy_name": "from_summary"},
+            "metadata": {"parameters": {}},
+        }
+        _, strategy_name = GenerationHarness._extract_metadata(op_data)
+        assert strategy_name == "from_summary"

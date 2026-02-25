@@ -984,6 +984,63 @@ class TestOperationCompletion:
         )
 
     @pytest.mark.asyncio
+    async def test_completion_result_includes_model_path(
+        self, mock_operations_service, mock_design_worker, mock_assessment_worker
+    ):
+        """Completion result_summary should include model_path for evolution harness."""
+        from ktrdr.agents.workers.research_worker import AgentResearchWorker
+
+        worker = AgentResearchWorker(
+            operations_service=mock_operations_service,
+            design_worker=mock_design_worker,
+            assessment_worker=mock_assessment_worker,
+        )
+
+        # Create parent operation with model_path in metadata (set during training)
+        parent_op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_RESEARCH,
+            metadata=OperationMetadata(
+                parameters={
+                    "phase": "assessing",
+                    "strategy_name": "test_strategy",
+                    "model_path": "models/test_strategy/5m_v1",
+                    "assessment_op_id": "op_assessment_1",
+                    "backtest_result": {"sharpe_ratio": 1.5},
+                }
+            ),
+        )
+        mock_operations_service._operations[parent_op.operation_id].status = (
+            OperationStatus.RUNNING
+        )
+
+        # Create completed child assessment
+        child_op = await mock_operations_service.create_operation(
+            operation_type=OperationType.AGENT_ASSESSMENT,
+            metadata=OperationMetadata(),
+            parent_operation_id=parent_op.operation_id,
+        )
+        mock_operations_service._operations[child_op.operation_id].status = (
+            OperationStatus.COMPLETED
+        )
+        mock_operations_service._operations[child_op.operation_id].result_summary = {
+            "verdict": "PROMISING",
+        }
+
+        with (
+            patch("ktrdr.agents.workers.research_worker.record_cycle_duration"),
+            patch("ktrdr.agents.workers.research_worker.record_cycle_outcome"),
+        ):
+            await worker._handle_assessing_phase(parent_op.operation_id, child_op)
+
+        # result_summary should include model_path
+        result = mock_operations_service._operations[
+            parent_op.operation_id
+        ].result_summary
+        assert result["model_path"] == "models/test_strategy/5m_v1"
+        assert result["strategy_name"] == "test_strategy"
+        assert result["backtest_result"] == {"sharpe_ratio": 1.5}
+
+    @pytest.mark.asyncio
     async def test_metrics_recorded_on_completion(
         self, mock_operations_service, mock_design_worker, mock_assessment_worker
     ):
