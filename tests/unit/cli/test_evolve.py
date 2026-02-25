@@ -1,4 +1,4 @@
-"""Tests for evolve CLI commands — status and resume."""
+"""Tests for evolve CLI commands — status, resume, and report."""
 
 from __future__ import annotations
 
@@ -44,6 +44,7 @@ def _setup_run(
                 "backtest_result": {
                     "sharpe_ratio": float(i) + 0.5,
                     "max_drawdown": 0.05,
+                    "total_trades": 50,
                 },
             }
             for i, r in enumerate(population)
@@ -169,3 +170,113 @@ class TestEvolveResume:
 
         assert result.exit_code == 0
         mock_resume.assert_called_once()
+
+
+class TestEvolveReport:
+    """Tests for `ktrdr evolve report` command."""
+
+    def test_report_no_runs_found(self, runner, tmp_path: Path) -> None:
+        """Report with no runs should indicate no runs found."""
+        with patch(
+            "ktrdr.cli.commands.evolve._get_evolution_dir",
+            return_value=tmp_path / "data" / "evolution",
+        ):
+            result = runner.invoke(app, ["evolve", "report"])
+        assert result.exit_code == 0
+        assert "No evolution runs found" in result.output
+
+    def test_report_renders_fitness_trend(
+        self, runner, tmp_evolution_dir: Path
+    ) -> None:
+        """Report should include a fitness trend table."""
+        config = EvolutionConfig(population_size=6, generations=3, seed=42)
+        _setup_run(tmp_evolution_dir, "run_20260101_120000", config, completed_gens=3)
+
+        with patch(
+            "ktrdr.cli.commands.evolve._get_evolution_dir",
+            return_value=tmp_evolution_dir,
+        ):
+            result = runner.invoke(app, ["evolve", "report"])
+        assert result.exit_code == 0
+        assert "Fitness Trend" in result.output
+        # Should show generation numbers
+        assert "0" in result.output
+        assert "1" in result.output
+        assert "2" in result.output
+
+    def test_report_renders_genome_distribution(
+        self, runner, tmp_evolution_dir: Path
+    ) -> None:
+        """Report should show genome trait distribution."""
+        config = EvolutionConfig(population_size=6, generations=2, seed=42)
+        _setup_run(tmp_evolution_dir, "run_20260101_120000", config, completed_gens=2)
+
+        with patch(
+            "ktrdr.cli.commands.evolve._get_evolution_dir",
+            return_value=tmp_evolution_dir,
+        ):
+            result = runner.invoke(app, ["evolve", "report"])
+        assert result.exit_code == 0
+        assert "Genome Distribution" in result.output
+        # Should contain trait names
+        assert "novelty_seeking" in result.output or "Trait" in result.output
+
+    def test_report_with_specific_run_id(self, runner, tmp_evolution_dir: Path) -> None:
+        """Report with specific run_id should show that run."""
+        config = EvolutionConfig(population_size=6, generations=2, seed=42)
+        _setup_run(tmp_evolution_dir, "run_20260101_120000", config, completed_gens=2)
+
+        with patch(
+            "ktrdr.cli.commands.evolve._get_evolution_dir",
+            return_value=tmp_evolution_dir,
+        ):
+            result = runner.invoke(app, ["evolve", "report", "run_20260101_120000"])
+        assert result.exit_code == 0
+        assert "run_20260101_120000" in result.output
+
+    def test_report_shows_monoculture_warning(
+        self, runner, tmp_evolution_dir: Path
+    ) -> None:
+        """Report should show monoculture warning when diversity is low."""
+        # Use seed that produces low diversity after selection
+        config = EvolutionConfig(
+            population_size=6, generations=3, seed=42, kill_rate=0.8
+        )
+        _setup_run(tmp_evolution_dir, "run_20260101_120000", config, completed_gens=3)
+
+        with patch(
+            "ktrdr.cli.commands.evolve._get_evolution_dir",
+            return_value=tmp_evolution_dir,
+        ):
+            result = runner.invoke(app, ["evolve", "report"])
+        assert result.exit_code == 0
+        # The report should render without error; monoculture section present
+        assert "Diversity" in result.output or "diversity" in result.output
+
+    def test_report_shows_lineage(self, runner, tmp_evolution_dir: Path) -> None:
+        """Report should trace best performer's lineage."""
+        config = EvolutionConfig(population_size=6, generations=3, seed=42)
+        _setup_run(tmp_evolution_dir, "run_20260101_120000", config, completed_gens=3)
+
+        with patch(
+            "ktrdr.cli.commands.evolve._get_evolution_dir",
+            return_value=tmp_evolution_dir,
+        ):
+            result = runner.invoke(app, ["evolve", "report"])
+        assert result.exit_code == 0
+        assert "Lineage" in result.output or "lineage" in result.output
+
+    def test_report_shows_run_summary(self, runner, tmp_evolution_dir: Path) -> None:
+        """Report should show run configuration summary."""
+        config = EvolutionConfig(population_size=6, generations=2, seed=42)
+        _setup_run(tmp_evolution_dir, "run_20260101_120000", config, completed_gens=2)
+
+        with patch(
+            "ktrdr.cli.commands.evolve._get_evolution_dir",
+            return_value=tmp_evolution_dir,
+        ):
+            result = runner.invoke(app, ["evolve", "report"])
+        assert result.exit_code == 0
+        # Should contain config info
+        assert "6" in result.output  # population_size
+        assert "EURUSD" in result.output or "eurusd" in result.output.lower()

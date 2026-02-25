@@ -71,11 +71,11 @@ class TestAgentSettingsDefaults:
         assert settings.max_input_tokens == 50000
 
     def test_default_daily_budget(self):
-        """Daily budget should default to 5.0."""
+        """Daily budget should default to 20.0."""
         from ktrdr.config.settings import get_agent_settings
 
         settings = get_agent_settings()
-        assert settings.daily_budget == 5.0
+        assert settings.daily_budget == 20.0
 
     def test_default_budget_dir(self):
         """Budget dir should default to data/budget."""

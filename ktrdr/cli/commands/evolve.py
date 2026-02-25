@@ -1,6 +1,6 @@
 """Evolve command implementation.
 
-Implements `ktrdr evolve start|status|resume` for population-based evolution.
+Implements `ktrdr evolve start|status|resume|report` for population-based evolution.
 
 PERFORMANCE NOTE: Heavy imports (httpx, evolution module, Rich) are deferred
 inside function bodies to keep CLI startup fast.
@@ -300,3 +300,197 @@ def resume_cmd(
 
     _print_run_summary(console, tracker, config)
     console.print(f"\n[bold]State saved to:[/bold] {run_dir}")
+
+
+@evolve_app.command("report")
+def report_cmd(
+    run_id: str | None = typer.Argument(None, help="Run ID (default: most recent)"),
+) -> None:
+    """Show a detailed evolution experiment report.
+
+    Renders fitness trends, genome distribution, lineage of top performer,
+    monoculture warnings, and experiment summary.
+
+    Examples:
+        ktrdr evolve report
+
+        ktrdr evolve report run_20260101_120000
+    """
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.table import Table
+
+    from ktrdr.evolution.fitness import MINIMUM_FITNESS
+    from ktrdr.evolution.report import (
+        compute_genome_diversity,
+        compute_trait_convergence,
+        trace_lineage,
+    )
+    from ktrdr.evolution.tracker import EvolutionTracker
+
+    console = Console()
+    evo_dir = _get_evolution_dir()
+
+    if not evo_dir.exists():
+        console.print("[yellow]No evolution runs found.[/yellow]")
+        return
+
+    if run_id is None:
+        run_dirs = sorted(evo_dir.glob("run_*"))
+        if not run_dirs:
+            console.print("[yellow]No evolution runs found.[/yellow]")
+            return
+        run_dir = run_dirs[-1]
+        run_id = run_dir.name
+    else:
+        run_dir = evo_dir / run_id
+
+    if not run_dir.exists():
+        console.print(f"[red]Run not found:[/red] {run_id}")
+        raise typer.Exit(code=1)
+
+    tracker = EvolutionTracker(run_dir=run_dir)
+    config = tracker.load_config()
+
+    if config is None:
+        console.print(f"[red]Invalid run directory:[/red] {run_id}")
+        raise typer.Exit(code=1)
+
+    summary = tracker.load_summary()
+    gen_stats = summary.get("generations", [])
+
+    # --- Run Summary ---
+    console.print(
+        Panel(
+            f"[bold]{run_id}[/bold]\n"
+            f"Population: {config.population_size}  |  "
+            f"Generations: {config.generations}  |  "
+            f"Symbol: {config.symbol}  |  "
+            f"Timeframe: {config.timeframe}\n"
+            f"Kill rate: {config.kill_rate}  |  "
+            f"Model: {config.model}  |  "
+            f"Seed: {config.seed or 'random'}",
+            title="Run Summary",
+        )
+    )
+
+    if not gen_stats:
+        console.print("[yellow]No generation data available.[/yellow]")
+        return
+
+    # --- Fitness Trend ---
+    ft_table = Table(title="Fitness Trend")
+    ft_table.add_column("Gen", justify="right", style="cyan")
+    ft_table.add_column("Pop", justify="right")
+    ft_table.add_column("OK", justify="right", style="green")
+    ft_table.add_column("Failed", justify="right", style="red")
+    ft_table.add_column("Mean", justify="right")
+    ft_table.add_column("Max", justify="right", style="bold")
+    ft_table.add_column("Min", justify="right")
+
+    for gs in gen_stats:
+        mean_f = gs.get("mean_fitness", 0.0)
+        max_f = gs.get("max_fitness", MINIMUM_FITNESS)
+        min_f = gs.get("min_fitness", MINIMUM_FITNESS)
+        ft_table.add_row(
+            str(gs["generation"]),
+            str(gs["population_size"]),
+            str(gs.get("successful", 0)),
+            str(gs.get("failed", 0)),
+            f"{mean_f:.4f}" if mean_f > MINIMUM_FITNESS else "N/A",
+            f"{max_f:.4f}" if max_f > MINIMUM_FITNESS else "N/A",
+            f"{min_f:.4f}" if min_f > MINIMUM_FITNESS else "N/A",
+        )
+
+    console.print(ft_table)
+
+    # --- Genome Distribution (last generation) ---
+    last_gen_num = gen_stats[-1]["generation"]
+    last_population = tracker.load_population(last_gen_num)
+
+    if last_population:
+        convergence = compute_trait_convergence(last_population)
+        gd_table = Table(title=f"Genome Distribution (Gen {last_gen_num})")
+        gd_table.add_column("Trait", style="cyan")
+        gd_table.add_column("Dominant", style="bold")
+        gd_table.add_column("Fraction", justify="right")
+        gd_table.add_column("Distribution")
+
+        for trait_name, info in convergence.items():
+            dist_str = ", ".join(
+                f"{v}: {c}" for v, c in sorted(info["distribution"].items())
+            )
+            gd_table.add_row(
+                trait_name,
+                info["dominant_value"],
+                f"{info['fraction']:.0%}",
+                dist_str,
+            )
+
+        console.print(gd_table)
+
+        # --- Diversity per generation ---
+        diversity_table = Table(title="Diversity Across Generations")
+        diversity_table.add_column("Gen", justify="right", style="cyan")
+        diversity_table.add_column("Unique Genomes", justify="right")
+        diversity_table.add_column("Diversity", justify="right")
+        diversity_table.add_column("Warning", style="yellow")
+
+        for gs in gen_stats:
+            gen_num = gs["generation"]
+            pop = tracker.load_population(gen_num)
+            if pop:
+                div_result = compute_genome_diversity(pop)
+                warning_text = div_result.warning.message if div_result.warning else ""
+                diversity_table.add_row(
+                    str(gen_num),
+                    f"{div_result.unique_genomes}/{div_result.population_size}",
+                    f"{div_result.diversity:.2f}",
+                    warning_text,
+                )
+
+        console.print(diversity_table)
+
+    # --- Lineage of top performer ---
+    last_results = tracker.load_results(last_gen_num)
+    if last_results:
+        # Find best researcher
+        best = max(last_results, key=lambda r: r.get("fitness", MINIMUM_FITNESS))
+        best_id = best.get("researcher_id", "")
+        best_fitness = best.get("fitness", MINIMUM_FITNESS)
+
+        if best_id and best_fitness > MINIMUM_FITNESS:
+            lineage = trace_lineage(tracker, best_id, last_gen_num)
+            if lineage:
+                lineage_lines = [
+                    f"[bold]Best performer:[/bold] {best_id} "
+                    f"(fitness: {best_fitness:.4f})"
+                ]
+                for entry in lineage:
+                    genome = entry["genome"]
+                    genome_str = "/".join(genome.values())
+                    mutation_str = (
+                        f" [{entry['mutation']}]" if entry["mutation"] else ""
+                    )
+                    fit_str = (
+                        f" → fitness: {entry['fitness']:.4f}"
+                        if entry["fitness"] is not None
+                        else ""
+                    )
+                    lineage_lines.append(
+                        f"  Gen {entry['generation']}: {entry['researcher_id']} "
+                        f"({genome_str}){mutation_str}{fit_str}"
+                    )
+                console.print(Panel("\n".join(lineage_lines), title="Lineage"))
+
+    # --- Experiment summary ---
+    completed = len(gen_stats)
+    total_experiments = sum(gs.get("population_size", 0) for gs in gen_stats)
+    if completed >= config.generations:
+        status_str = f"[green]Complete[/green]: {completed}/{config.generations}"
+    else:
+        status_str = f"[yellow]In progress[/yellow]: {completed}/{config.generations}"
+
+    console.print(
+        f"\n{status_str} generations | " f"{total_experiments} total experiments"
+    )

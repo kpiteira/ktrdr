@@ -38,11 +38,11 @@ class TestBudgetTracker:
     # === Basic Functionality ===
 
     def test_default_daily_limit(self, temp_budget_dir):
-        """Test default daily limit is $5.00."""
+        """Test default daily limit is $20.00."""
         from ktrdr.agents.budget import BudgetTracker
 
         tracker = BudgetTracker(data_dir=str(temp_budget_dir))
-        assert tracker.daily_limit == 5.0
+        assert tracker.daily_limit == 20.0
 
     def test_custom_daily_limit(self, temp_budget_dir):
         """Test custom daily limit is respected."""

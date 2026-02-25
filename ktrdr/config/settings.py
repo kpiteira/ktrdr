@@ -991,7 +991,7 @@ class AgentSettings(BaseSettings):
 
     # Budget settings
     daily_budget: float = deprecated_field(
-        5.0,
+        20.0,
         "KTRDR_AGENT_DAILY_BUDGET",
         "AGENT_DAILY_BUDGET",
         ge=0,

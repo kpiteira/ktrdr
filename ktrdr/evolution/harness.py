@@ -12,7 +12,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Protocol
 
 from ktrdr.evolution.brief import BriefTranslator
-from ktrdr.evolution.config import EvolutionConfig
+from ktrdr.evolution.config import DateRange, EvolutionConfig
 from ktrdr.evolution.fitness import MINIMUM_FITNESS, FitnessEvaluator
 from ktrdr.evolution.genome import Researcher
 from ktrdr.evolution.tracker import EvolutionTracker
@@ -229,12 +229,14 @@ class GenerationHarness:
                     new_op_id = await self._trigger_researcher(generation, researcher)
                     if new_op_id:
                         backtest_result = await self._poll_operation(new_op_id)
-                        fitness = self._fitness.evaluate(backtest_result)
+                        slice_results = [backtest_result] if backtest_result else []
+                        fitness = self._fitness.evaluate_slices(slice_results)
                         results.append(
                             {
                                 "researcher_id": researcher.id,
                                 "fitness": fitness,
                                 "backtest_result": backtest_result,
+                                "slice_results": slice_results,
                             }
                         )
                     else:
@@ -243,6 +245,7 @@ class GenerationHarness:
                                 "researcher_id": researcher.id,
                                 "fitness": MINIMUM_FITNESS,
                                 "backtest_result": None,
+                                "slice_results": [],
                             }
                         )
                 except BudgetExhaustedError:
@@ -251,6 +254,7 @@ class GenerationHarness:
                             "researcher_id": researcher.id,
                             "fitness": MINIMUM_FITNESS,
                             "backtest_result": None,
+                            "slice_results": [],
                         }
                     )
                 continue
@@ -258,12 +262,14 @@ class GenerationHarness:
             # Has operation — check status
             backtest_result = await self._poll_operation(op_id)
             if backtest_result is not None:
-                fitness = self._fitness.evaluate(backtest_result)
+                slice_results = [backtest_result]
+                fitness = self._fitness.evaluate_slices(slice_results)
                 results.append(
                     {
                         "researcher_id": researcher.id,
                         "fitness": fitness,
                         "backtest_result": backtest_result,
+                        "slice_results": slice_results,
                     }
                 )
             else:
@@ -272,12 +278,16 @@ class GenerationHarness:
                     new_op_id = await self._trigger_researcher(generation, researcher)
                     if new_op_id:
                         backtest_result = await self._poll_operation(new_op_id)
-                        fitness = self._fitness.evaluate(backtest_result)
+                        slice_results = (
+                            [backtest_result] if backtest_result else []
+                        )
+                        fitness = self._fitness.evaluate_slices(slice_results)
                         results.append(
                             {
                                 "researcher_id": researcher.id,
                                 "fitness": fitness,
                                 "backtest_result": backtest_result,
+                                "slice_results": slice_results,
                             }
                         )
                     else:
@@ -286,6 +296,7 @@ class GenerationHarness:
                                 "researcher_id": researcher.id,
                                 "fitness": MINIMUM_FITNESS,
                                 "backtest_result": None,
+                                "slice_results": [],
                             }
                         )
                 except BudgetExhaustedError:
@@ -294,6 +305,7 @@ class GenerationHarness:
                             "researcher_id": researcher.id,
                             "fitness": MINIMUM_FITNESS,
                             "backtest_result": None,
+                            "slice_results": [],
                         }
                     )
 
@@ -328,7 +340,8 @@ class GenerationHarness:
         """Run one generation: trigger all researchers, poll, score.
 
         Returns a list of result dicts, one per researcher, containing
-        researcher_id, fitness, and backtest_result.
+        researcher_id, fitness, backtest_result (first slice), and
+        slice_results (all slices including additional backtests).
         """
         # Phase 1: Trigger all researchers
         operation_map: dict[str, str] = {}  # researcher_id → operation_id
@@ -352,31 +365,59 @@ class GenerationHarness:
                     "researcher_id": r.id,
                     "fitness": MINIMUM_FITNESS,
                     "backtest_result": None,
+                    "slice_results": [],
                 }
                 for r in population
             ]
 
-        # Phase 2: Poll all operations and collect results
+        # Phase 2: Poll, run additional backtests, score
         results: list[dict[str, Any]] = []
         for researcher in population:
             op_id = operation_map.get(researcher.id)
             if op_id is None:
-                # Researcher was rejected at trigger — minimum fitness
                 results.append(
                     {
                         "researcher_id": researcher.id,
                         "fitness": MINIMUM_FITNESS,
                         "backtest_result": None,
+                        "slice_results": [],
                     }
                 )
                 continue
-            backtest_result = await self._poll_operation(op_id)
-            fitness = self._fitness.evaluate(backtest_result)
+
+            # Poll research operation (get full operation data)
+            op_data = await self._poll_until_terminal(op_id)
+            if op_data is None:
+                results.append(
+                    {
+                        "researcher_id": researcher.id,
+                        "fitness": MINIMUM_FITNESS,
+                        "backtest_result": None,
+                        "slice_results": [],
+                    }
+                )
+                continue
+
+            backtest_result = self._extract_backtest_result(op_data)
+            slice_results: list[dict[str, Any]] = (
+                [backtest_result] if backtest_result else []
+            )
+
+            # Run additional backtests if we have strategy metadata
+            model_path, strategy_name = self._extract_metadata(op_data)
+            if backtest_result and strategy_name:
+                additional = await self._run_additional_backtests(
+                    model_path, strategy_name
+                )
+                slice_results.extend(additional)
+
+            fitness = self._fitness.evaluate_slices(slice_results)
             results.append(
                 {
                     "researcher_id": researcher.id,
                     "fitness": fitness,
                     "backtest_result": backtest_result,
+                    "slice_results": slice_results,
                 }
             )
 
@@ -425,10 +466,10 @@ class GenerationHarness:
             )
             return None
 
-    async def _poll_operation(self, operation_id: str) -> dict[str, Any] | None:
+    async def _poll_until_terminal(self, operation_id: str) -> dict[str, Any] | None:
         """Poll an operation until completed or failed.
 
-        Returns the backtest_result dict, or None if failed.
+        Returns the full operation data dict on completion, None on failure.
         """
         while True:
             raw_response = await self._client.get(
@@ -441,12 +482,7 @@ class GenerationHarness:
             status = op.get("status")
 
             if status == "completed":
-                # Extract backtest_result from result_summary (persisted by
-                # complete_operation) rather than metadata.parameters (in-memory only)
-                result_summary = op.get("result_summary", {})
-                if result_summary:
-                    return result_summary.get("backtest_result")
-                return None
+                return op
 
             if status == "failed":
                 logger.warning("Operation %s failed", operation_id)
@@ -455,3 +491,124 @@ class GenerationHarness:
             # Still running — wait and poll again
             if self._config.poll_interval > 0:
                 await asyncio.sleep(self._config.poll_interval)
+
+    async def _poll_operation(self, operation_id: str) -> dict[str, Any] | None:
+        """Poll an operation and extract backtest_result.
+
+        Convenience wrapper around _poll_until_terminal for callers that
+        only need the backtest result (e.g. resume recovery, additional backtests).
+        """
+        op = await self._poll_until_terminal(operation_id)
+        return self._extract_backtest_result(op) if op else None
+
+    @staticmethod
+    def _extract_backtest_result(
+        op_data: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Extract backtest_result from completed operation data."""
+        result_summary = op_data.get("result_summary", {})
+        if result_summary:
+            return result_summary.get("backtest_result")
+        return None
+
+    @staticmethod
+    def _extract_metadata(
+        op_data: dict[str, Any],
+    ) -> tuple[str | None, str | None]:
+        """Extract model_path and strategy_name from operation data.
+
+        Prefers metadata.parameters (the original trigger parameters persisted
+        on the operation), then falls back to result_summary (values persisted
+        by the research worker via complete_operation). Note that any
+        in-memory updates a worker makes to metadata.parameters are not
+        reflected in the operation data returned by the operations API.
+        """
+        metadata = op_data.get("metadata", {})
+        params = metadata.get("parameters", {})
+        result_summary = op_data.get("result_summary", {}) or {}
+
+        model_path = params.get("model_path") or result_summary.get("model_path")
+        strategy_name = params.get("strategy_name") or result_summary.get(
+            "strategy_name"
+        )
+        return model_path, strategy_name
+
+    async def _trigger_backtest(
+        self,
+        model_path: str | None,
+        strategy_name: str,
+        date_range: DateRange,
+    ) -> str | None:
+        """Trigger a single backtest via the backtest API.
+
+        Returns the operation_id on success, None on failure.
+        """
+        # Omit timeframe — the backend resolves it from the strategy config.
+        # This correctly handles multi-timeframe strategies where the base
+        # timeframe (e.g. 5m) differs from the evolution config (e.g. 1h).
+        payload: dict[str, Any] = {
+            "strategy_name": strategy_name,
+            "symbol": self._config.symbol,
+            "start_date": date_range.start.isoformat(),
+            "end_date": date_range.end.isoformat(),
+        }
+        if model_path:
+            payload["model_path"] = model_path
+        raw_response = await self._client.post(
+            f"{self._base_url}/api/v1/backtests/start",
+            json=payload,
+        )
+        data = _to_dict(raw_response)
+        if data.get("success"):
+            return data.get("operation_id")
+        logger.warning("Backtest trigger failed: %s", data)
+        return None
+
+    async def _run_single_backtest(
+        self,
+        model_path: str | None,
+        strategy_name: str,
+        date_range: DateRange,
+    ) -> dict[str, Any] | None:
+        """Run a single backtest and return the result. Retries once on failure."""
+        for attempt in range(2):
+            op_id = await self._trigger_backtest(model_path, strategy_name, date_range)
+            if op_id is None:
+                if attempt == 0:
+                    logger.info("Backtest trigger failed for %s, retrying", date_range)
+                    continue
+                return None
+
+            result = await self._poll_operation(op_id)
+            if result is not None:
+                return result
+
+            if attempt == 0:
+                logger.info("Backtest %s failed, retrying", op_id)
+        return None
+
+    async def _run_additional_backtests(
+        self,
+        model_path: str | None,
+        strategy_name: str,
+    ) -> list[dict[str, Any]]:
+        """Run additional backtests for fitness slices beyond the first.
+
+        Returns list of backtest_result dicts (one per successful slice).
+        Failed slices are omitted — the fitness evaluator handles partial data.
+        """
+        additional_slices = self._config.fitness_slices[1:]
+        results: list[dict[str, Any]] = []
+
+        for slice_range in additional_slices:
+            result = await self._run_single_backtest(
+                model_path, strategy_name, slice_range
+            )
+            if result is not None:
+                results.append(result)
+            else:
+                logger.warning(
+                    "Additional backtest failed for %s after retry", slice_range
+                )
+
+        return results
