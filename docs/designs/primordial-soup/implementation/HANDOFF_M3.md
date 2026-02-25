@@ -84,17 +84,19 @@
 |---------|-----------|-------|
 | Research trigger | Yes | Both researchers triggered via agent/trigger API |
 | Research polling | Yes | 30s poll interval, detected completed/failed states |
-| Additional backtests triggered | Yes | POST /api/v1/backtests/start fired after research |
-| Backtest retry on failure | Yes | First attempt failed, retry attempted |
-| Worker contention handled | Yes | 503 "no workers available" handled gracefully |
-| Gate checks (max_drawdown) | Yes | 0.494 > 0.35 → MINIMUM_FITNESS correctly |
-| Selection pressure | Yes (prev run) | 1 survived, 1 died in gen 0 |
+| model_path in result_summary | Yes | Fix confirmed: model_path now persisted and extracted by harness |
+| Additional backtests triggered | Yes | POST /api/v1/backtests/start fired with model_path after research |
+| Backtest retry on failure | Yes | First attempt failed, retry attempted (x2 per slice) |
+| Gate checks (max_drawdown) | Yes | 0.494 > 0.35 → MINIMUM_FITNESS (run 1); 0.697 > 0.35 (run 2) |
+| Selection pressure | Yes (run 1) | 1 survived, 1 died in gen 0 |
 | Report command | Yes | All sections rendered with real data |
 | Graceful degradation | Yes | Proceeded with 1 slice when additional backtests failed |
 
-**Additional backtests failed** because model_path was not persisted in result_summary — **fixed** by including model_path in research worker's completion result. The fix requires rebuilding sandbox containers to take effect (backend code change).
+### E2E Run 2 (2026-02-25, post model_path fix)
 
-**Not fully validated** (would need more runs with better-performing strategies + rebuilt containers):
-- Multi-slice fitness with 3 successful slices (model_path fix needs container rebuild)
-- Lineage tracing with real ancestry (all failed → no lineage to show)
+**model_path fix confirmed**: Error changed from `ValueError: model_path is required` (run 1) to `KeyError: '5m'` (run 2). The model loads successfully now — the new failure is a pre-existing multi-timeframe feature alignment bug (model trained on 5m+1h, but additional backtests only pass timeframe=1h data).
+
+**Not fully validated** (blocked by pre-existing issues):
+- Multi-slice fitness with 3 successful slices (blocked by multi-TF KeyError: '5m')
+- Lineage tracing with real ancestry (all gate-failed → no lineage)
 - Monoculture warning with real convergence (too few generations)
