@@ -95,8 +95,8 @@ class TestFitnessGateActionDiversity:
         slices = [_make_slice(long_trades=80, short_trades=20, total_trades=100)]
         assert evaluator.evaluate_slices(slices) != MINIMUM_FITNESS
 
-    def test_90pct_short_fails_gate(self) -> None:
-        """90% short (>90% in one direction) → fails."""
+    def test_95pct_short_fails_gate(self) -> None:
+        """95% short (>90% in one direction) → fails."""
         evaluator = FitnessEvaluator(EvolutionConfig())
         slices = [_make_slice(long_trades=5, short_trades=95, total_trades=100)]
         assert evaluator.evaluate_slices(slices) == MINIMUM_FITNESS

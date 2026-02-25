@@ -229,12 +229,14 @@ class GenerationHarness:
                     new_op_id = await self._trigger_researcher(generation, researcher)
                     if new_op_id:
                         backtest_result = await self._poll_operation(new_op_id)
-                        fitness = self._fitness.evaluate(backtest_result)
+                        slice_results = [backtest_result] if backtest_result else []
+                        fitness = self._fitness.evaluate_slices(slice_results)
                         results.append(
                             {
                                 "researcher_id": researcher.id,
                                 "fitness": fitness,
                                 "backtest_result": backtest_result,
+                                "slice_results": slice_results,
                             }
                         )
                     else:
@@ -243,6 +245,7 @@ class GenerationHarness:
                                 "researcher_id": researcher.id,
                                 "fitness": MINIMUM_FITNESS,
                                 "backtest_result": None,
+                                "slice_results": [],
                             }
                         )
                 except BudgetExhaustedError:
@@ -251,6 +254,7 @@ class GenerationHarness:
                             "researcher_id": researcher.id,
                             "fitness": MINIMUM_FITNESS,
                             "backtest_result": None,
+                            "slice_results": [],
                         }
                     )
                 continue
@@ -258,12 +262,14 @@ class GenerationHarness:
             # Has operation — check status
             backtest_result = await self._poll_operation(op_id)
             if backtest_result is not None:
-                fitness = self._fitness.evaluate(backtest_result)
+                slice_results = [backtest_result]
+                fitness = self._fitness.evaluate_slices(slice_results)
                 results.append(
                     {
                         "researcher_id": researcher.id,
                         "fitness": fitness,
                         "backtest_result": backtest_result,
+                        "slice_results": slice_results,
                     }
                 )
             else:
@@ -272,12 +278,16 @@ class GenerationHarness:
                     new_op_id = await self._trigger_researcher(generation, researcher)
                     if new_op_id:
                         backtest_result = await self._poll_operation(new_op_id)
-                        fitness = self._fitness.evaluate(backtest_result)
+                        slice_results = (
+                            [backtest_result] if backtest_result else []
+                        )
+                        fitness = self._fitness.evaluate_slices(slice_results)
                         results.append(
                             {
                                 "researcher_id": researcher.id,
                                 "fitness": fitness,
                                 "backtest_result": backtest_result,
+                                "slice_results": slice_results,
                             }
                         )
                     else:
@@ -286,6 +296,7 @@ class GenerationHarness:
                                 "researcher_id": researcher.id,
                                 "fitness": MINIMUM_FITNESS,
                                 "backtest_result": None,
+                                "slice_results": [],
                             }
                         )
                 except BudgetExhaustedError:
@@ -294,6 +305,7 @@ class GenerationHarness:
                             "researcher_id": researcher.id,
                             "fitness": MINIMUM_FITNESS,
                             "backtest_result": None,
+                            "slice_results": [],
                         }
                     )
 
@@ -505,8 +517,11 @@ class GenerationHarness:
     ) -> tuple[str | None, str | None]:
         """Extract model_path and strategy_name from operation data.
 
-        Checks metadata.parameters first (set by research worker in-memory),
-        then falls back to result_summary (persisted via complete_operation).
+        Prefers metadata.parameters (the original trigger parameters persisted
+        on the operation), then falls back to result_summary (values persisted
+        by the research worker via complete_operation). Note that any
+        in-memory updates a worker makes to metadata.parameters are not
+        reflected in the operation data returned by the operations API.
         """
         metadata = op_data.get("metadata", {})
         params = metadata.get("parameters", {})
