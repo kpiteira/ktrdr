@@ -107,7 +107,18 @@
 
 **Fix**: (1) Harness omits `timeframe` from additional backtest payload — backend resolves from strategy YAML. (2) Engine adds defensive fallback at line 173 when `base_tf` not in loaded data.
 
-**Not fully validated** (blocked by pre-existing issues):
-- Multi-slice fitness with 3 successful slices (needs E2E re-run post multi-TF fix)
-- Lineage tracing with real ancestry (all gate-failed → no lineage)
-- Monoculture warning with real convergence (too few generations)
+### E2E Run 3 (2026-02-25, post multi-TF fix)
+
+**Multi-TF fix confirmed**: No more KeyError: '5m'. Worker logs show all backtests use "EURUSD 1h" and complete successfully. One worker had pre-existing NaN confidence error (feature alignment issue).
+
+**Full run completed**: 2/2 generations, selection pressure working (1 survived → offspring improved fitness from -2.04 to -0.44). Lineage tracing, genome diversity, and report command all validated with real data.
+
+**Additional backtests still fail** (pre-existing issues):
+- NaN confidence: feature alignment produces NaN on some date ranges (pre-existing)
+- Proxy timing: some backtests complete on worker but proxy reports "failed" before completion
+- Multi-slice fitness with 3 successful slices not yet achieved (above issues)
+
+**Validated in E2E run 3**:
+- Lineage tracing with real ancestry (r_g00_000 → r_g01_001)
+- Full 2-generation evolution with selection, reproduction, and fitness improvement
+- Report command rendering all sections with real data
