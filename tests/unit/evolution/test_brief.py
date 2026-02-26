@@ -138,3 +138,40 @@ class TestBriefTranslator:
         )
         brief = translator.translate(genome, config).lower()
         assert "synthesize" in brief or "all experiment history" in brief
+
+    def test_brief_contains_zigzag_guidance(self) -> None:
+        """All briefs should include zigzag threshold guidance."""
+        config = self._make_config()
+        translator = BriefTranslator()
+        genome = Genome(
+            novelty_seeking=TraitLevel.OFF,
+            skepticism=TraitLevel.OFF,
+            memory_depth=TraitLevel.OFF,
+        )
+        brief = translator.translate(genome, config)
+        assert "zigzag_threshold" in brief
+        assert "0.005" in brief
+        assert "0.05" in brief
+
+    def test_brief_contains_uniqueness_guidance(self) -> None:
+        """All briefs should include strategy name uniqueness guidance."""
+        config = self._make_config()
+        translator = BriefTranslator()
+        genome = Genome(
+            novelty_seeking=TraitLevel.OFF,
+            skepticism=TraitLevel.OFF,
+            memory_depth=TraitLevel.OFF,
+        )
+        brief = translator.translate(genome, config)
+        assert "unique" in brief.lower()
+
+    def test_guidance_present_for_all_genomes(self) -> None:
+        """Zigzag and uniqueness guidance should appear in ALL 27 briefs."""
+        config = self._make_config()
+        translator = BriefTranslator()
+        for genome in Genome.all_combinations():
+            brief = translator.translate(genome, config)
+            assert "zigzag_threshold" in brief, f"Missing zigzag guidance for {genome}"
+            assert (
+                "unique" in brief.lower()
+            ), f"Missing uniqueness guidance for {genome}"

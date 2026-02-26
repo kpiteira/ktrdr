@@ -88,4 +88,16 @@ class BriefTranslator:
             f"Symbol: {config.symbol}, Timeframe: {config.timeframe}."
         )
 
-        return " ".join(paragraphs) + "\n\n" + date_section
+        # Parameter guidance (always included, regardless of genome)
+        guidance = (
+            "IMPORTANT: The zigzag_threshold in training labels must be a "
+            "decimal between 0.005 and 0.05 (e.g. 0.015 = 1.5%, 0.03 = 3%). "
+            "Values like 1.5 or 0.5 are INVALID — they represent 150% and 50% "
+            "price moves. Reasonable range: 0.01-0.03 for forex pairs."
+            "\n\n"
+            "Your strategy name MUST be unique. Include a distinctive element "
+            "(e.g. a random suffix or specific indicator combination) to avoid "
+            "collisions with other concurrent researchers."
+        )
+
+        return " ".join(paragraphs) + "\n\n" + guidance + "\n\n" + date_section

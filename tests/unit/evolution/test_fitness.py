@@ -32,30 +32,30 @@ def _make_slice(
     return result
 
 
-class TestFitnessGateMinTrades:
-    """Gate: minimum trades per slice (default 30)."""
+class TestFitnessNoMinTradesGate:
+    """Min trades gate was removed — low-trade strategies should be scored."""
 
-    def test_29_trades_fails_gate(self) -> None:
-        """29 trades < 30 threshold → minimum fitness."""
+    def test_1_trade_gets_scored(self) -> None:
+        """A strategy with 1 trade should be scored, not gate-killed."""
         evaluator = FitnessEvaluator(EvolutionConfig())
-        slices = [_make_slice(total_trades=29)]
-        assert evaluator.evaluate_slices(slices) == MINIMUM_FITNESS
-
-    def test_30_trades_passes_gate(self) -> None:
-        """30 trades = threshold → passes gate."""
-        evaluator = FitnessEvaluator(EvolutionConfig())
-        slices = [_make_slice(total_trades=30)]
+        slices = [_make_slice(total_trades=1)]
         assert evaluator.evaluate_slices(slices) != MINIMUM_FITNESS
 
-    def test_any_slice_fails_all_fail(self) -> None:
-        """If ANY slice fails min trades gate → minimum fitness."""
+    def test_0_trades_still_scored(self) -> None:
+        """Even 0 trades gets scored (no min trades gate)."""
+        evaluator = FitnessEvaluator(EvolutionConfig())
+        slices = [_make_slice(total_trades=0)]
+        assert evaluator.evaluate_slices(slices) != MINIMUM_FITNESS
+
+    def test_low_trade_slices_not_killed(self) -> None:
+        """Mixed trade counts should all pass (no min trades gate)."""
         evaluator = FitnessEvaluator(EvolutionConfig())
         slices = [
             _make_slice(total_trades=50),
-            _make_slice(total_trades=10),  # Fails
+            _make_slice(total_trades=1),
             _make_slice(total_trades=50),
         ]
-        assert evaluator.evaluate_slices(slices) == MINIMUM_FITNESS
+        assert evaluator.evaluate_slices(slices) != MINIMUM_FITNESS
 
 
 class TestFitnessGateMaxDrawdown:
@@ -77,6 +77,25 @@ class TestFitnessGateMaxDrawdown:
         """0.35 = threshold → passes (boundary)."""
         evaluator = FitnessEvaluator(EvolutionConfig())
         slices = [_make_slice(max_dd=0.35)]
+        assert evaluator.evaluate_slices(slices) != MINIMUM_FITNESS
+
+    def test_max_drawdown_pct_preferred_over_dollar_amount(self) -> None:
+        """Standalone backtests have max_drawdown in dollars, max_drawdown_pct as ratio.
+
+        The evaluator should use max_drawdown_pct when available to avoid
+        treating dollar amounts (e.g. 2205.49) as percentages.
+        """
+        evaluator = FitnessEvaluator(EvolutionConfig())
+        # max_drawdown is a dollar amount (would fail gate), but
+        # max_drawdown_pct is the actual ratio (should pass gate)
+        slices = [
+            {
+                "sharpe_ratio": 0.09,
+                "max_drawdown": 2205.49,  # Dollar amount — NOT a ratio
+                "max_drawdown_pct": 0.0216,  # Actual ratio — 2.16%
+                "total_trades": 1,
+            }
+        ]
         assert evaluator.evaluate_slices(slices) != MINIMUM_FITNESS
 
 

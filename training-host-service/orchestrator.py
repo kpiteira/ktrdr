@@ -842,6 +842,16 @@ class HostTrainingOrchestrator:
 
             logger.info(f"Model saved to: {model_path}")
 
+            # Save V3 metadata (required for backtesting with ModelBundle.load())
+            self._save_v3_metadata(
+                model_path=model_path,
+                config=strategy_config,
+                resolved_features=resolved_features,
+                training_metrics={**training_results, **test_metrics},
+                training_symbols=symbols,
+                training_timeframes=timeframes,
+            )
+
             # Build result
             result = {
                 "model_path": str(model_path),
@@ -877,3 +887,42 @@ class HostTrainingOrchestrator:
                 os.unlink(strategy_path)
             except Exception:
                 pass
+
+    @staticmethod
+    def _save_v3_metadata(
+        model_path: Path | str,
+        config: dict[str, Any],
+        resolved_features: list[str],
+        training_metrics: dict[str, Any],
+        training_symbols: list[str],
+        training_timeframes: list[str],
+    ) -> None:
+        """Save ModelMetadataV3 to the model directory.
+
+        Creates metadata_v3.json with v3-specific information including
+        the critical resolved_features list that defines feature order.
+        Required by ModelBundle.load() for backtesting.
+        """
+        import json
+
+        from ktrdr.models.model_metadata import ModelMetadataV3
+
+        metadata = ModelMetadataV3(
+            model_name=config.get("name", "unknown"),
+            strategy_name=config.get("name", "unknown"),
+            strategy_version=config.get("version", "3.0"),
+            indicators=config.get("indicators", {}),
+            fuzzy_sets=config.get("fuzzy_sets", {}),
+            nn_inputs=config.get("nn_inputs", []),
+            resolved_features=resolved_features,
+            training_symbols=training_symbols,
+            training_timeframes=training_timeframes,
+            training_metrics=training_metrics,
+        )
+
+        model_dir = Path(model_path)
+        metadata_file = model_dir / "metadata_v3.json"
+        with open(metadata_file, "w") as f:
+            json.dump(metadata.to_dict(), f, indent=2)
+
+        logger.info(f"Saved ModelMetadataV3 to {metadata_file}")

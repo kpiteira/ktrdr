@@ -124,7 +124,7 @@ class AnthropicInvokerConfig:
     max_tokens: int = 4096
     timeout_seconds: int = 300  # 5 minutes default (Task 1.13b)
     max_iterations: int = 10  # Prevent infinite tool loops (Task 8.5)
-    max_input_tokens: int = 50000  # Circuit breaker for large contexts (Task 8.5)
+    max_input_tokens: int = 150000  # Circuit breaker for large contexts (Task 8.5)
 
     def __post_init__(self):
         """Validate model and log selection (Task 8.3)."""

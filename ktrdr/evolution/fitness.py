@@ -1,7 +1,6 @@
 """Fitness evaluator — multi-layer scoring for evolution.
 
 Layer A: Gate checks (instant death for failures)
-  - Minimum trades per slice (default 30)
   - Maximum drawdown per slice (default 35%)
   - Action diversity (not >90% same direction)
 
@@ -19,7 +18,6 @@ from ktrdr.evolution.config import EvolutionConfig
 MINIMUM_FITNESS = -999.0
 
 # Gate thresholds
-_MIN_TRADES_PER_SLICE = 30
 _MAX_DRAWDOWN_PER_SLICE = 0.35
 _MAX_DIRECTION_RATIO = 0.90
 
@@ -90,7 +88,9 @@ class FitnessEvaluator:
         for s in slice_results:
             # Extract Sharpe — accept both key variants
             raw_sharpe = s.get("sharpe_ratio", s.get("sharpe"))
-            raw_dd = s.get("max_drawdown")
+            # Prefer max_drawdown_pct (ratio) over max_drawdown which may be
+            # a dollar amount in standalone backtest results
+            raw_dd = s.get("max_drawdown_pct", s.get("max_drawdown"))
             if raw_sharpe is None or raw_dd is None:
                 return MINIMUM_FITNESS
             try:
@@ -101,20 +101,11 @@ class FitnessEvaluator:
 
             # --- Layer A: Gate checks ---
 
-            # Gate 1: Minimum trades
-            total_trades = s.get("total_trades", 0)
-            try:
-                total_trades = int(total_trades)
-            except (TypeError, ValueError):
-                total_trades = 0
-            if total_trades < _MIN_TRADES_PER_SLICE:
-                return MINIMUM_FITNESS
-
-            # Gate 2: Maximum drawdown
+            # Gate 1: Maximum drawdown
             if dd_val > _MAX_DRAWDOWN_PER_SLICE:
                 return MINIMUM_FITNESS
 
-            # Gate 3: Action diversity (skip if direction data unavailable)
+            # Gate 2: Action diversity (skip if direction data unavailable)
             long_trades = s.get("long_trades")
             short_trades = s.get("short_trades")
             if long_trades is not None and short_trades is not None:

@@ -456,15 +456,17 @@ class AgentResearchWorker:
                 if phase_start:
                     record_phase_duration("designing", time.time() - phase_start)
 
-                # Record token usage from design
+                # Record token usage from design (once only)
                 if input_tokens or output_tokens:
-                    record_tokens("design", input_tokens + output_tokens)
-
-                    # Record budget spend immediately after design phase
-                    estimated_cost = self._estimate_cost(input_tokens, output_tokens)
-                    budget = get_budget_tracker()
-                    budget.record_spend(estimated_cost, operation_id)
-                    record_budget_spend(estimated_cost)
+                    if not parent_op.metadata.parameters.get("design_budget_recorded"):
+                        record_tokens("design", input_tokens + output_tokens)
+                        estimated_cost = self._estimate_cost(
+                            input_tokens, output_tokens
+                        )
+                        budget = get_budget_tracker()
+                        budget.record_spend(estimated_cost, operation_id)
+                        record_budget_spend(estimated_cost)
+                        parent_op.metadata.parameters["design_budget_recorded"] = True
 
             # Check training worker availability before transitioning
             if not await self._is_training_worker_available():
@@ -963,15 +965,15 @@ class AgentResearchWorker:
             if phase_start:
                 record_phase_duration("assessing", time.time() - phase_start)
 
-            # Record token usage from assessment
+            # Record token usage from assessment (once only)
             if input_tokens or output_tokens:
-                record_tokens("assessment", input_tokens + output_tokens)
-
-                # Record budget spend immediately after assessment phase
-                estimated_cost = self._estimate_cost(input_tokens, output_tokens)
-                budget = get_budget_tracker()
-                budget.record_spend(estimated_cost, operation_id)
-                record_budget_spend(estimated_cost)
+                if not parent_op.metadata.parameters.get("assess_budget_recorded"):
+                    record_tokens("assessment", input_tokens + output_tokens)
+                    estimated_cost = self._estimate_cost(input_tokens, output_tokens)
+                    budget = get_budget_tracker()
+                    budget.record_spend(estimated_cost, operation_id)
+                    record_budget_spend(estimated_cost)
+                    parent_op.metadata.parameters["assess_budget_recorded"] = True
 
             # Update progress to 100% on completion (M9)
             await self.ops.update_progress(

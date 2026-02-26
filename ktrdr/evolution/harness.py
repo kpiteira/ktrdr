@@ -278,9 +278,7 @@ class GenerationHarness:
                     new_op_id = await self._trigger_researcher(generation, researcher)
                     if new_op_id:
                         backtest_result = await self._poll_operation(new_op_id)
-                        slice_results = (
-                            [backtest_result] if backtest_result else []
-                        )
+                        slice_results = [backtest_result] if backtest_result else []
                         fitness = self._fitness.evaluate_slices(slice_results)
                         results.append(
                             {
@@ -345,7 +343,6 @@ class GenerationHarness:
         """
         # Phase 1: Trigger all researchers
         operation_map: dict[str, str] = {}  # researcher_id → operation_id
-        aborted = False
 
         for researcher in population:
             try:
@@ -354,21 +351,13 @@ class GenerationHarness:
                     operation_map[researcher.id] = op_id
                 # else: researcher rejected (non-budget) — gets MINIMUM_FITNESS
             except BudgetExhaustedError:
-                logger.warning("Budget exhausted — aborting generation %d", generation)
-                aborted = True
+                logger.warning(
+                    "Budget exhausted — skipping remaining triggers "
+                    "(%d/%d triggered), polling already-running researchers",
+                    len(operation_map),
+                    len(population),
+                )
                 break
-
-        # If budget exhausted, all remaining researchers get minimum fitness
-        if aborted:
-            return [
-                {
-                    "researcher_id": r.id,
-                    "fitness": MINIMUM_FITNESS,
-                    "backtest_result": None,
-                    "slice_results": [],
-                }
-                for r in population
-            ]
 
         # Phase 2: Poll, run additional backtests, score
         results: list[dict[str, Any]] = []
@@ -505,10 +494,21 @@ class GenerationHarness:
     def _extract_backtest_result(
         op_data: dict[str, Any],
     ) -> dict[str, Any] | None:
-        """Extract backtest_result from completed operation data."""
+        """Extract backtest_result from completed operation data.
+
+        Handles two formats:
+        1. Research worker: result_summary.backtest_result (nested)
+        2. Standalone backtest: result_summary.metrics (direct)
+        """
         result_summary = op_data.get("result_summary", {})
-        if result_summary:
-            return result_summary.get("backtest_result")
+        if not result_summary:
+            return None
+        # Format 1: research worker wraps under backtest_result
+        if "backtest_result" in result_summary:
+            return result_summary["backtest_result"]
+        # Format 2: standalone backtest puts metrics at top level
+        if "metrics" in result_summary:
+            return result_summary["metrics"]
         return None
 
     @staticmethod
@@ -570,12 +570,19 @@ class GenerationHarness:
         strategy_name: str,
         date_range: DateRange,
     ) -> dict[str, Any] | None:
-        """Run a single backtest and return the result. Retries once on failure."""
-        for attempt in range(2):
+        """Run a single backtest and return the result. Retries with backoff."""
+        max_attempts = 4
+        for attempt in range(max_attempts):
             op_id = await self._trigger_backtest(model_path, strategy_name, date_range)
             if op_id is None:
-                if attempt == 0:
-                    logger.info("Backtest trigger failed for %s, retrying", date_range)
+                if attempt < max_attempts - 1:
+                    delay = 2**attempt  # 1s, 2s, 4s
+                    logger.info(
+                        "Backtest trigger failed for %s, retrying in %ds",
+                        date_range,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
                     continue
                 return None
 
@@ -583,8 +590,10 @@ class GenerationHarness:
             if result is not None:
                 return result
 
-            if attempt == 0:
-                logger.info("Backtest %s failed, retrying", op_id)
+            if attempt < max_attempts - 1:
+                delay = 2**attempt
+                logger.info("Backtest %s failed, retrying in %ds", op_id, delay)
+                await asyncio.sleep(delay)
         return None
 
     async def _run_additional_backtests(

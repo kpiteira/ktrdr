@@ -164,9 +164,9 @@ class TestTokenBudgetLimits:
         assert config.max_iterations == 10
 
     def test_default_max_input_tokens(self):
-        """Config has default max_input_tokens of 50000."""
+        """Config has default max_input_tokens of 150000."""
         config = AnthropicInvokerConfig()
-        assert config.max_input_tokens == 50000
+        assert config.max_input_tokens == 150000
 
     def test_max_iterations_from_env(self):
         """Config reads max_iterations from AGENT_MAX_ITERATIONS env var."""

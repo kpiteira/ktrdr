@@ -1000,16 +1000,18 @@ class TestHarnessAdditionalBacktests:
         three_slice_config: EvolutionConfig,
         tmp_run_dir: Path,
     ) -> None:
-        """If both attempts fail, proceed with available slices only."""
+        """If all attempts fail, proceed with available slices only."""
         tracker = EvolutionTracker(run_dir=tmp_run_dir)
         mock_client = AsyncMock()
 
-        # Slice 2: both attempts fail. Slice 3: succeeds.
+        # Slice 2: all 4 attempts fail. Slice 3: succeeds.
         mock_client.post = AsyncMock(
             side_effect=[
                 _make_trigger_response("op_research"),
                 _make_backtest_start_response("op_bt_s2_a1"),
                 _make_backtest_start_response("op_bt_s2_a2"),
+                _make_backtest_start_response("op_bt_s2_a3"),
+                _make_backtest_start_response("op_bt_s2_a4"),
                 _make_backtest_start_response("op_bt_s3"),
             ]
         )
@@ -1018,6 +1020,8 @@ class TestHarnessAdditionalBacktests:
                 _make_completed_operation("op_research"),
                 _make_failed_operation("op_bt_s2_a1"),
                 _make_failed_operation("op_bt_s2_a2"),
+                _make_failed_operation("op_bt_s2_a3"),
+                _make_failed_operation("op_bt_s2_a4"),
                 _make_backtest_completed("op_bt_s3", sharpe=0.7),
             ]
         )
