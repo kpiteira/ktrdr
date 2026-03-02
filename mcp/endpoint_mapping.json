@@ -1,19 +1,65 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "MCP Tool to Backend API Endpoint Mapping",
-  "description": "Maps MCP tool names to their corresponding backend API endpoints for validation",
+  "description": "Maps MCP tool names to their corresponding backend API endpoints for validation. Tools marked with endpoint: null operate on the local filesystem only.",
   "tools": {
-    "start_training": {
-      "endpoint": "/api/v1/trainings/start",
-      "method": "POST",
-      "critical": true,
-      "description": "Start neural network training"
+    "hello_ktrdr": {
+      "endpoint": null,
+      "method": null,
+      "critical": false,
+      "description": "Test tool to verify MCP server is working"
     },
-    "trigger_data_loading": {
-      "endpoint": "/api/v1/data/acquire/download",
+    "check_backend_health": {
+      "endpoint": "/health",
+      "method": "GET",
+      "critical": false,
+      "description": "Check backend API health"
+    },
+    "get_available_symbols": {
+      "endpoint": "/api/v1/symbols",
+      "method": "GET",
+      "critical": false,
+      "description": "Get available trading symbols"
+    },
+    "get_market_data": {
+      "endpoint": "/api/v1/data/{symbol}/{timeframe}",
+      "method": "GET",
+      "critical": false,
+      "path_params": ["symbol", "timeframe"],
+      "description": "Get cached market data"
+    },
+    "get_data_summary": {
+      "endpoint": "/api/v1/data/summary/{symbol}",
+      "method": "GET",
+      "critical": false,
+      "path_params": ["symbol"],
+      "description": "Get summary of available data for a symbol"
+    },
+    "get_available_indicators": {
+      "endpoint": "/api/v1/indicators/",
+      "method": "GET",
+      "critical": false,
+      "description": "List available technical indicators"
+    },
+    "get_available_strategies": {
+      "endpoint": "/api/v1/strategies/",
+      "method": "GET",
+      "critical": false,
+      "description": "List all available strategies"
+    },
+    "get_model_performance": {
+      "endpoint": "/api/v1/trainings/{task_id}/performance",
+      "method": "GET",
+      "critical": false,
+      "path_params": ["task_id"],
+      "description": "Get detailed model performance metrics"
+    },
+    "test_model_prediction": {
+      "endpoint": "/api/v1/models/{model_name}/predict",
       "method": "POST",
-      "critical": true,
-      "description": "Trigger async data loading operation"
+      "critical": false,
+      "path_params": ["model_name"],
+      "description": "Test model prediction on specific data"
     },
     "list_operations": {
       "endpoint": "/api/v1/operations",
@@ -26,58 +72,70 @@
       "method": "GET",
       "critical": false,
       "path_params": ["operation_id"],
-      "description": "Get detailed operation status"
+      "description": "Get detailed operation status and progress"
     },
     "cancel_operation": {
       "endpoint": "/api/v1/operations/{operation_id}",
       "method": "DELETE",
       "critical": false,
       "path_params": ["operation_id"],
-      "description": "Cancel running operation"
+      "description": "Cancel a running or pending operation"
     },
     "get_operation_results": {
       "endpoint": "/api/v1/operations/{operation_id}/results",
       "method": "GET",
       "critical": false,
       "path_params": ["operation_id"],
-      "description": "Get operation results summary"
+      "description": "Get results from a completed operation"
     },
-    "get_market_data": {
-      "endpoint": "/api/v1/data/{symbol}/{timeframe}",
+    "get_operation_metrics": {
+      "endpoint": "/api/v1/operations/{operation_id}/metrics",
       "method": "GET",
       "critical": false,
-      "path_params": ["symbol", "timeframe"],
-      "description": "Get cached market data"
+      "path_params": ["operation_id"],
+      "description": "Get training metrics for an operation"
     },
-    "get_symbols": {
-      "endpoint": "/api/v1/symbols",
-      "method": "GET",
-      "critical": false,
-      "description": "Get available trading symbols"
+    "trigger_data_loading": {
+      "endpoint": "/api/v1/data/acquire/download",
+      "method": "POST",
+      "critical": true,
+      "description": "Trigger async data loading operation"
     },
-    "get_indicators": {
-      "endpoint": "/api/v1/indicators/",
-      "method": "GET",
-      "critical": false,
-      "description": "List available indicators"
+    "start_training": {
+      "endpoint": "/api/v1/trainings/start",
+      "method": "POST",
+      "critical": true,
+      "description": "Start neural network training"
     },
-    "get_strategies": {
-      "endpoint": "/api/v1/strategies/",
-      "method": "GET",
-      "critical": false,
-      "description": "List available strategies"
+    "start_backtest": {
+      "endpoint": "/api/v1/backtests/start",
+      "method": "POST",
+      "critical": true,
+      "description": "Start a backtest run"
     },
-    "list_trained_models": {
-      "endpoint": "/api/v1/models",
-      "method": "GET",
+    "validate_strategy": {
+      "endpoint": null,
+      "method": null,
       "critical": false,
-      "description": "List trained models"
+      "description": "Validate a strategy file (v3 format detection, filesystem only)"
     },
-    "health_check": {
-      "endpoint": "/health",
-      "method": "GET",
+    "save_strategy_config": {
+      "endpoint": null,
+      "method": null,
+      "critical": true,
+      "description": "Validate and save a v3 strategy atomically (filesystem only)"
+    },
+    "get_recent_strategies": {
+      "endpoint": null,
+      "method": null,
       "critical": false,
-      "description": "Backend health check"
+      "description": "List recent strategies with context (filesystem only)"
+    },
+    "save_assessment": {
+      "endpoint": null,
+      "method": null,
+      "critical": true,
+      "description": "Save structured assessment of a strategy (filesystem only)"
     }
   }
 }

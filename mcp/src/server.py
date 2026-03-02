@@ -8,6 +8,7 @@ from mcp.server.fastmcp import FastMCP
 
 from .api_client import get_api_client
 from .telemetry import trace_mcp_tool
+from .tools.assessment_tools import register_assessment_tools
 from .tools.strategy_tools import register_strategy_tools
 
 logger = structlog.get_logger()
@@ -360,45 +361,6 @@ async def get_available_strategies() -> list[dict[str, Any]]:
 
 
 # Neural Network Training Tools
-
-
-@trace_mcp_tool("get_training_status")
-@mcp.tool()
-async def get_training_status(task_id: str) -> dict[str, Any]:
-    """
-    Get status and progress of a neural network training task.
-
-    DEPRECATED: Use get_operation_status() instead for unified operation tracking.
-    This tool remains for backward compatibility.
-
-    Args:
-        task_id: Training task ID (same as operation_id)
-
-    Returns:
-        Dict with training status, progress, and current metrics
-
-    See Also:
-        - get_operation_status(): Preferred method for checking training progress
-        - start_training(): Start new training operations
-
-    Notes:
-        - This is a legacy endpoint
-        - Use get_operation_status() for new code
-        - Will be removed in future version
-    """
-    try:
-        # Get status directly from backend
-        async with get_api_client() as client:
-            status = await client.get_training_status(task_id)
-
-        logger.info(
-            "Training status retrieved", task_id=task_id, status=status.get("status")
-        )
-        return status
-
-    except Exception as e:
-        logger.error("Failed to get training status", task_id=task_id, error=str(e))
-        raise
 
 
 @trace_mcp_tool("get_model_performance")
@@ -1259,8 +1221,11 @@ async def start_backtest(
         raise
 
 
-# Register Strategy Management Tools (Task 1.3)
+# Register Strategy Management Tools
 register_strategy_tools(mcp)
+
+# Register Assessment Management Tools
+register_assessment_tools(mcp)
 
 
 class KTRDRMCPServer:
