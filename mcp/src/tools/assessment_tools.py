@@ -27,7 +27,7 @@ def register_assessment_tools(mcp: FastMCP) -> None:
     """
 
     @trace_mcp_tool("save_assessment")
-    @mcp.tool()
+    @mcp.tool(name="save_assessment")
     async def save_assessment_tool(
         strategy_name: str,
         verdict: str,

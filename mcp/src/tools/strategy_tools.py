@@ -33,7 +33,7 @@ def register_strategy_tools(mcp: FastMCP) -> None:
     """
 
     @trace_mcp_tool("validate_strategy")
-    @mcp.tool()
+    @mcp.tool(name="validate_strategy")
     async def validate_strategy_tool(path: str) -> dict[str, Any]:
         """
         Validate a strategy file.
@@ -75,7 +75,7 @@ def register_strategy_tools(mcp: FastMCP) -> None:
         return await _validate_strategy(path)
 
     @trace_mcp_tool("save_strategy_config")
-    @mcp.tool()
+    @mcp.tool(name="save_strategy_config")
     async def save_strategy_config_tool(
         strategy_name: str,
         strategy_yaml: str,
@@ -124,7 +124,7 @@ def register_strategy_tools(mcp: FastMCP) -> None:
         )
 
     @trace_mcp_tool("get_recent_strategies")
-    @mcp.tool()
+    @mcp.tool(name="get_recent_strategies")
     async def get_recent_strategies_tool(
         limit: int = 10,
     ) -> list[dict[str, Any]]:
