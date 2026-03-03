@@ -8,6 +8,8 @@ user_invocable: true
 
 Orchestrates `kinfra` commands with `agent-deck` session management.
 
+**CRITICAL: Always use `uv run kinfra`, never bare `kinfra`.** This project has its own kinfra CLI at `ktrdr.cli.kinfra`. A global `kinfra` binary (from devops-ai) may also exist on PATH and will resolve to the wrong project root.
+
 ---
 
 ## Commands
@@ -96,12 +98,13 @@ uv run kinfra done genome-M1 --force
 When the user invokes a kworktree command:
 
 1. **Parse the command** to extract feature/milestone names
-2. **Run the commands** in sequence using Bash tool
+2. **Run the commands** in sequence using Bash tool — always `uv run kinfra`, never bare `kinfra`
 3. **Report results** including:
    - Worktree path created
    - Slot claimed (for impl)
    - Agent-deck session added/removed
 4. **Handle errors** gracefully — if kinfra fails, don't run agent-deck
+5. **Do not implement the milestone** — this session creates the worktree and hands off to a new Claude session via agent-deck
 
 ---
 

@@ -229,6 +229,32 @@ services:
         condition: service_started
     command: /app/.venv/bin/uvicorn ktrdr.training.training_worker:app --host 0.0.0.0 --port 5005
 
+  # MCP Server (Local) - For Claude Code/Desktop targeting local backend
+  # Uses stdio transport (no port needed), Claude exec's into the container
+  # NOTE: MCP code is mounted at /mcp (not /app/mcp) to avoid shadowing the pip 'mcp' package
+  mcp-local:
+    image: ${KTRDR_BACKEND_IMAGE:-ktrdr-backend:dev}
+    restart: unless-stopped
+    volumes:
+      - ${KTRDR_STRATEGIES_DIR:-./strategies}:/app/strategies
+      - pip-cache:/root/.cache/pip
+      - uv-cache:/root/.cache/uv
+    environment:
+      - KTRDR_API_ENVIRONMENT=development
+      - KTRDR_LOG_LEVEL=INFO
+      - PYTHONPATH=/app:/mcp
+      - KTRDR_API_CLIENT_BASE_URL=http://backend:8000/api/v1
+      - KTRDR_OTEL_OTLP_ENDPOINT=http://jaeger:4317
+    working_dir: /mcp
+    stdin_open: true               # Required for stdio MCP transport
+    networks:
+      - ktrdr-network
+    depends_on:
+      backend:
+        condition: service_healthy
+    # No command - container stays running, Claude exec's into it
+    command: ["sleep", "infinity"]
+
 networks:
   ktrdr-network:
     driver: bridge

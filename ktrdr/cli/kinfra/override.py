@@ -40,6 +40,14 @@ services:
       - {shared_dir}/data:/app/data
       - {shared_dir}/models:/app/models
       - {shared_dir}/strategies:/app/strategies:ro
+
+  mcp-local:
+    volumes:
+      - {worktree_path}/mcp:/mcp:ro
+      - {worktree_path}/ktrdr:/app/ktrdr
+      - {worktree_path}/research_agents:/app/research_agents
+      - {worktree_path}/config:/app/config:ro
+      - {shared_dir}/strategies:/app/strategies
 """
 
 
