@@ -85,17 +85,18 @@ async def save_assessment(
     safe_name = _sanitize_filename(strategy_name)
     target_path = target_dir / f"{safe_name}_assessment.json"
 
+    tmp_out: Path | None = None
     try:
         target_dir.mkdir(parents=True, exist_ok=True)
 
-        # Atomic write: temp file then rename
+        # Atomic write: temp file then replace
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".json", dir=target_dir, delete=False
         ) as out:
             json.dump(assessment, out, indent=2)
             tmp_out = Path(out.name)
 
-        tmp_out.rename(target_path)
+        tmp_out.replace(target_path)
 
         logger.info("Assessment saved: %s -> %s", strategy_name, target_path)
 
@@ -106,10 +107,11 @@ async def save_assessment(
 
     except Exception as e:
         # Clean up partial write
-        try:
-            tmp_out.unlink(missing_ok=True)
-        except Exception:
-            pass
+        if tmp_out is not None:
+            try:
+                tmp_out.unlink(missing_ok=True)
+            except Exception:
+                pass
         logger.error("Error saving assessment: %s", e)
         return {
             "success": False,

@@ -143,6 +143,7 @@ async def save_strategy_config(
     # Step 2: Write to temp file and validate via existing loader
     # (The loader requires a file path, so we write temporarily)
     safe_name = _sanitize_filename(strategy_name)
+    tmp_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as tmp:
             tmp.write(strategy_yaml)
@@ -165,25 +166,27 @@ async def save_strategy_config(
         }
     finally:
         # Clean up temp file
-        try:
-            tmp_path.unlink(missing_ok=True)
-        except Exception:
-            pass
+        if tmp_path is not None:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
 
-    # Step 3: Save atomically (write to temp, then rename)
+    # Step 3: Save atomically (write to temp, then replace)
     target_path = target_dir / f"{safe_name}.yaml"
+    tmp_out: Path | None = None
     try:
         target_dir.mkdir(parents=True, exist_ok=True)
 
-        # Write to temp file in same directory (for atomic rename)
+        # Write to temp file in same directory (for atomic replace)
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".yaml", dir=target_dir, delete=False
         ) as out:
             out.write(strategy_yaml.strip() + "\n")
             tmp_out = Path(out.name)
 
-        # Atomic rename
-        tmp_out.rename(target_path)
+        # Atomic replace (works correctly when target exists)
+        tmp_out.replace(target_path)
 
         logger.info("Strategy saved: %s -> %s", strategy_name, target_path)
 
@@ -195,10 +198,11 @@ async def save_strategy_config(
 
     except Exception as e:
         # Clean up partial write
-        try:
-            tmp_out.unlink(missing_ok=True)
-        except Exception:
-            pass
+        if tmp_out is not None:
+            try:
+                tmp_out.unlink(missing_ok=True)
+            except Exception:
+                pass
         logger.error(f"Error saving strategy: {e}")
         return {
             "success": False,

@@ -161,6 +161,6 @@ def register_strategy_tools(mcp: FastMCP) -> None:
         Notes:
             - Sorted by modification date, newest first
             - Includes assessment verdict if available
-            - Only returns v3 format YAML strategies
+            - Returns all YAML strategies (v2 and v3)
         """
         return await _get_recent_strategies(limit=limit)

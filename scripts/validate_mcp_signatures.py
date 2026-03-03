@@ -336,6 +336,10 @@ class SignatureComparator:
             endpoint = tool_config["endpoint"]
             method = tool_config["method"]
 
+            # Skip filesystem-only tools (no backend endpoint to validate)
+            if endpoint is None:
+                continue
+
             # Get schema from OpenAPI
             schema = self.fetcher.get_request_schema(endpoint, method)
             if not schema:

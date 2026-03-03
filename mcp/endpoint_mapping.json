@@ -55,11 +55,10 @@
       "description": "Get detailed model performance metrics"
     },
     "test_model_prediction": {
-      "endpoint": "/api/v1/models/{model_name}/predict",
-      "method": "POST",
+      "endpoint": null,
+      "method": null,
       "critical": false,
-      "path_params": ["model_name"],
-      "description": "Test model prediction on specific data"
+      "description": "Test model prediction on specific data (endpoint not in OpenAPI spec)"
     },
     "list_operations": {
       "endpoint": "/api/v1/operations",
