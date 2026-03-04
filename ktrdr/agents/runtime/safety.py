@@ -20,6 +20,7 @@ class BudgetChecker(Protocol):
 
     def can_spend(self, estimated_amount: float) -> tuple[bool, str]: ...
 
+
 logger = get_logger(__name__)
 
 # Default max turns if not specified
@@ -98,8 +99,7 @@ class SafetyGuard:
         # 3. Turn limit check
         if max_turns > self._max_turns_limit:
             msg = (
-                f"Requested {max_turns} turns exceeds limit of "
-                f"{self._max_turns_limit}"
+                f"Requested {max_turns} turns exceeds limit of {self._max_turns_limit}"
             )
             logger.warning("Safety: turn limit check failed — %s", msg)
             return SafetyResult(allowed=False, reason=msg)
