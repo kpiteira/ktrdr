@@ -288,3 +288,59 @@ class DesignAgentWorker(WorkerAPIBase):
                 operation_id=operation_id,
                 error_message=str(e),
             )
+
+
+# ==============================================================================
+# Module-level app for uvicorn (same pattern as backtest_worker.py)
+# ==============================================================================
+
+
+def _create_default_worker() -> DesignAgentWorker:
+    """Create the default worker instance for container deployment.
+
+    Reads configuration from environment variables and creates a
+    ClaudeAgentRuntime as the runtime provider.
+    """
+    from ktrdr.agents.runtime.claude import ClaudeAgentRuntime
+    from ktrdr.agents.runtime.protocol import AgentRuntimeConfig
+    from ktrdr.config.settings import get_api_service_settings, get_worker_settings
+
+    worker_settings = get_worker_settings()
+
+    # Backend URL (strip /api/v1 suffix if present)
+    api_settings = get_api_service_settings()
+    backend_url = api_settings.base_url
+    if backend_url.endswith("/api/v1"):
+        backend_url = backend_url[:-7]
+
+    # Create runtime
+    runtime_config = AgentRuntimeConfig(
+        model=os.environ.get("KTRDR_AGENT_MODEL", DEFAULT_DESIGN_MODEL),
+        max_budget_usd=float(
+            os.environ.get("KTRDR_AGENT_MAX_BUDGET", str(DEFAULT_DESIGN_MAX_BUDGET))
+        ),
+        max_turns=int(
+            os.environ.get("KTRDR_AGENT_MAX_TURNS", str(DEFAULT_DESIGN_MAX_TURNS))
+        ),
+    )
+    runtime = ClaudeAgentRuntime(config=runtime_config)
+
+    return DesignAgentWorker(
+        runtime=runtime,
+        worker_port=worker_settings.port,
+        backend_url=backend_url,
+        model=runtime_config.model,
+        max_turns=runtime_config.max_turns,
+        max_budget_usd=runtime_config.max_budget_usd,
+    )
+
+
+# Only create worker instance when running as a module (uvicorn),
+# not when imported for testing
+if os.environ.get("KTRDR_WORKER_TYPE") == "agent_design":
+    _worker = _create_default_worker()
+    app = _worker.app
+else:
+    # When imported for testing, app is not created at module level.
+    # Tests create DesignAgentWorker directly with mock runtime.
+    app = None  # type: ignore[assignment]
