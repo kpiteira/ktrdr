@@ -1,0 +1,114 @@
+# =============================================================================
+# KTRDR Agent Worker — Claude Code + MCP
+# =============================================================================
+# Shared base image for Design Agent and Assessment Agent workers.
+# Runs Claude Code via SDK with ktrdr MCP server for system access.
+#
+# Contents:
+#   - Python 3.13 + Node.js 20 LTS
+#   - Claude Code CLI (@anthropic-ai/claude-code)
+#   - claude-agent-sdk Python package
+#   - ktrdr MCP server (stdio subprocess)
+#   - ktrdr package (runtime protocol, worker base)
+#
+# Volumes (configured in docker-compose, not baked in):
+#   - ~/.claude → /home/agent/.claude (read-only, subscription auth)
+#   - strategies, models, data, memory directories
+#
+# Build:
+#   docker build -f deploy/docker/Dockerfile.agent -t ktrdr-agent:dev .
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Stage 1: Builder — install Python dependencies
+# -----------------------------------------------------------------------------
+FROM python:3.13-slim AS builder
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir uv
+
+# Install ktrdr Python dependencies (no ML extras — agents don't train)
+COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-install-project
+
+# Copy application code
+COPY README.md ./
+COPY ktrdr ./ktrdr
+COPY config ./config
+COPY strategies ./strategies
+
+RUN uv sync --frozen --no-dev
+
+# Install MCP server dependencies separately
+COPY mcp/ /mcp/
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --python /app/.venv/bin/python \
+    "mcp[cli]>=1.2.0" \
+    structlog \
+    httpx \
+    python-dotenv \
+    opentelemetry-api \
+    opentelemetry-sdk
+
+# -----------------------------------------------------------------------------
+# Stage 2: Runtime — lean image with Node.js + Claude Code CLI
+# -----------------------------------------------------------------------------
+FROM python:3.13-slim AS runtime
+
+WORKDIR /app
+
+# Install Node.js 20 LTS (required for Claude Code CLI) + curl for healthcheck
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    tini \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Claude Code CLI globally
+RUN npm install -g @anthropic-ai/claude-code
+
+# Create non-root user
+# Claude Code CLI refuses --dangerously-skip-permissions as root
+RUN groupadd -r agent && \
+    useradd -r -g agent -d /home/agent -m -s /bin/bash agent
+
+# Copy Python virtualenv and application from builder
+COPY --from=builder --chown=agent:agent /app/.venv /app/.venv
+COPY --from=builder --chown=agent:agent /app/ktrdr /app/ktrdr
+COPY --from=builder --chown=agent:agent /app/config /app/config
+COPY --from=builder --chown=agent:agent /app/strategies /app/strategies
+COPY --from=builder --chown=agent:agent /app/pyproject.toml /app/
+
+# Copy MCP server
+COPY --from=builder --chown=agent:agent /mcp /mcp
+
+# Create shared directories (volumes mounted at runtime)
+RUN mkdir -p /app/data /app/models /app/memory \
+    && chown -R agent:agent /app /mcp
+
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+USER agent
+
+# Default port for agent worker HTTP server
+EXPOSE 5010
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD curl -f http://localhost:5010/health || exit 1
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+
+# Default: design agent worker (overridden per service in docker-compose)
+CMD ["uvicorn", "ktrdr.agents.workers.design_agent_worker:app", "--host", "0.0.0.0", "--port", "5010"]
