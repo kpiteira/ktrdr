@@ -33,3 +33,9 @@
 **Pattern: test classes organized by concern** — TestStartEndpoint, TestResultExtraction, TestBackgroundExecution (3.1), then TestBackgroundExecutionExtended, TestResultExtractionExtended, TestPromptComposition (3.4). Extended classes avoid modifying 3.1's tested code.
 
 **Next Task Notes (3.5)**: VALIDATION task — E2E test via e2e agent workflow. Requires sandbox running with design-agent-1 container, Claude auth volume provisioned, and EURUSD data available.
+
+## Task 3.5: E2E Validation — BLOCKED (no sandbox)
+
+**E2E test designed and cataloged**: `.claude/skills/e2e-testing/tests/agents/design-agent-brief-to-strategy.md` (8 steps, 13 success criteria, 11 sanity checks). Test covers full POST /designs/start → Claude Code loop → v3 strategy produced flow.
+
+**Blocker**: This worktree has no `.env.sandbox` — it wasn't created with `kinfra impl`. E2E execution requires sandbox with backend + design-agent-1 container + Claude auth volume + EURUSD data. Test is ready to execute when infrastructure is available.
