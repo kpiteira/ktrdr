@@ -49,13 +49,23 @@ Straightforward — added `AGENT_DESIGN = "agent_design"` and `AGENT_ASSESSMENT 
 
 **E2E test:** `agents/sdk-invocation-in-container` — 7 steps, **PASSED**
 
-**Gotcha: macOS Keychain OAuth not portable to Linux containers** — `~/.claude` mount alone is insufficient. Claude Code CLI on macOS stores OAuth tokens in the Keychain, not in `~/.claude.json`. Containers must use `ANTHROPIC_API_KEY` env var instead. `ClaudeAgentRuntime` accepts `api_key` param → injected into SDK options via `options.env["ANTHROPIC_API_KEY"]`.
+**Gotcha: container auth requires named Docker volume, not host mount** — `~/.claude` host mount doesn't work: macOS stores OAuth tokens in the Keychain (not filesystem), and mounting the host dir risks interfering with the running CLI session. Solution: use a **named Docker volume** (pattern from agent-memory):
+1. `docker volume create ktrdr-agent-claude-auth`
+2. Run `claude setup-token` once in a throwaway container with that volume mounted writable
+3. docker-compose mounts `ktrdr-agent-claude-auth:/home/agent/.claude`
+4. Auth persists in the volume across container rebuilds, isolated from host
+
+Reference: `agent-memory/docker-compose.yml` uses `claude-config` named volume (`agent-memory-claude-auth`, external: true).
+
+**Gotcha: `~/.claude.json` is separate from `~/.claude/`** — Claude CLI needs both. The `.claude.json` file lives at the home directory root, not inside `.claude/`. Without it: "Claude configuration file not found". A backup exists at `~/.claude/backups/.claude.json.backup.*`.
 
 **Gotcha: missing .env.sandbox in worktree** — gitignored `.env.sandbox` was missing from worktree (slot containers were running fine). Root cause: no auto-recovery when file is lost. Fix: `load_env_sandbox()` now checks slot registry and regenerates automatically.
 
 **Verified full chain:** SDK invoke → MCP tool call (`mcp__ktrdr__get_available_indicators`) → backend API → 31 indicators returned. Cost: $0.08, turns: 2, duration: 20s.
 
 **Next Milestone Notes (M3):**
-- Agent container auth MUST use `ANTHROPIC_API_KEY`, not `~/.claude` mount
+- Container auth: named Docker volume + `claude setup-token` (one-time), NOT `~/.claude` host mount
+- Fallback: `ANTHROPIC_API_KEY` env var works but uses API billing, not subscription
 - Docker network for sandbox slots: `slot-<N>_ktrdr-network`
 - Backend reachable as `http://backend:8000` (internal port) from agent container
+- Dockerfile comment about `~/.claude` volume mount should be updated to reference named volume
