@@ -4,8 +4,9 @@ Receives a research brief, invokes Claude Code via AgentRuntime protocol,
 and extracts the designed strategy from the SDK transcript. Follows the
 same WorkerAPIBase contract as training and backtest workers.
 
-Run via uvicorn:
-    uvicorn ktrdr.agents.workers.design_agent_worker:app --host 0.0.0.0 --port 5010
+Note: This worker's FastAPI app is only initialized when
+KTRDR_WORKER_TYPE=agent_design is set in the environment.
+It is typically started via the container entrypoint.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from typing import Any
 from pydantic import Field
 
 from ktrdr.agents.runtime.protocol import AgentRuntime
-from ktrdr.api.models.operations import OperationType
+from ktrdr.api.models.operations import OperationMetadata, OperationType
 from ktrdr.api.models.workers import WorkerType
 from ktrdr.logging import get_logger
 from ktrdr.workers.base import WorkerAPIBase, WorkerOperationMixin
@@ -99,7 +100,20 @@ class DesignAgentWorker(WorkerAPIBase):
             """
             operation_id = request.task_id or f"worker_design_{uuid.uuid4().hex[:12]}"
 
-            asyncio.create_task(
+            # Register operation with OperationsService (same pattern as backtest_worker)
+            ops = self.get_operations_service()
+            await ops.create_operation(
+                operation_id=operation_id,
+                operation_type=OperationType.AGENT_DESIGN,
+                metadata=OperationMetadata(
+                    symbol=request.symbol,
+                    timeframe=request.timeframe,
+                    mode="design",
+                    parameters={"brief": request.brief[:200]},
+                ),
+            )
+
+            task = asyncio.create_task(
                 self._execute_design_work(
                     operation_id=operation_id,
                     brief=request.brief,
@@ -108,6 +122,9 @@ class DesignAgentWorker(WorkerAPIBase):
                     experiment_context=request.experiment_context,
                 )
             )
+
+            # Mark as RUNNING so /health shows active and polling works
+            await ops.start_operation(operation_id, task)
 
             return {
                 "success": True,

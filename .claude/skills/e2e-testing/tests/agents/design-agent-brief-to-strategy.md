@@ -14,7 +14,7 @@
 
 **Test-specific checks:**
 - [ ] design-agent-1 container is running: `docker ps --format '{{.Names}}' | grep -q design-agent`
-- [ ] design-agent-1 is healthy: `[ -f .env.sandbox ] && source .env.sandbox; curl -sf http://localhost:${KTRDR_DESIGN_AGENT_PORT:-5010}/health | python3 -c "import sys,json; d=json.load(sys.stdin); assert d.get('status')=='ok', f'Unhealthy: {d}'; print('Design agent healthy')"`
+- [ ] design-agent-1 is healthy: `[ -f .env.sandbox ] && source .env.sandbox; curl -sf http://localhost:${KTRDR_DESIGN_AGENT_PORT:-5010}/health | python3 -c "import sys,json; d=json.load(sys.stdin); assert d.get('healthy') is True or d.get('status')=='operational', f'Unhealthy: {d}'; print('Design agent healthy')"`
 - [ ] Claude auth available: named Docker volume `ktrdr-agent-claude-auth` exists (`docker volume inspect ktrdr-agent-claude-auth`) OR `ANTHROPIC_API_KEY` is set in the container
 - [ ] design-agent-1 registered with backend: `[ -f .env.sandbox ] && source .env.sandbox; API_PORT=${KTRDR_API_PORT:-8000}; curl -s http://localhost:$API_PORT/api/v1/workers | python3 -c "import sys,json; w=json.load(sys.stdin).get('workers',[]); found=[x for x in w if x.get('type')=='agent_design']; assert found, 'No agent_design worker'; print(f'Design agent registered: {found[0].get(\"worker_id\")}')"`
 - [ ] EURUSD data available (needed for indicator discovery): `[ -f .env.sandbox ] && source .env.sandbox; API_PORT=${KTRDR_API_PORT:-8000}; curl -sf http://localhost:$API_PORT/api/v1/data/status/EURUSD/1h | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'EURUSD 1h data: {d}')"`
@@ -669,7 +669,7 @@ docker exec "$CONTAINER" bash -c 'rm -f /app/strategies/e2e_design_test_*.yaml /
 echo "Cleanup complete"
 ```
 
-No other state to clean: operations are in-memory and will be garbage collected.
+No other state to clean: operations are persisted by the backend, and old operation records do not require explicit cleanup for this test.
 
 ---
 

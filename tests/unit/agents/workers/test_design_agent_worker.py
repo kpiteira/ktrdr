@@ -17,6 +17,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from ktrdr.agents.runtime.protocol import AgentResult
+from ktrdr.api.models.operations import OperationType
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -94,6 +95,7 @@ def mock_ops():
     """Create a mock OperationsService."""
     ops = MagicMock()
     ops.create_operation = AsyncMock(return_value=MagicMock(operation_id="op_test_123"))
+    ops.start_operation = AsyncMock()
     ops.update_operation_progress = AsyncMock()
     ops.complete_operation = AsyncMock()
     ops.fail_operation = AsyncMock()
@@ -129,8 +131,8 @@ def client(worker):
 class TestStartEndpoint:
     """Tests for POST /designs/start."""
 
-    def test_start_creates_operation_and_returns(self, client):
-        """Start endpoint returns operation_id and started status."""
+    def test_start_creates_operation_and_returns(self, client, mock_ops):
+        """Start endpoint registers operation and returns started status."""
         response = client.post(
             "/designs/start",
             json={
@@ -145,6 +147,13 @@ class TestStartEndpoint:
         assert data["success"] is True
         assert data["operation_id"] == "op_backend_456"
         assert data["status"] == "started"
+
+        # Verify operation was registered with OperationsService
+        mock_ops.create_operation.assert_called_once()
+        create_kwargs = mock_ops.create_operation.call_args[1]
+        assert create_kwargs["operation_id"] == "op_backend_456"
+        assert create_kwargs["operation_type"] == OperationType.AGENT_DESIGN
+        mock_ops.start_operation.assert_called_once()
 
     def test_start_generates_id_when_no_task_id(self, client):
         """Start endpoint generates operation_id when task_id not provided."""
