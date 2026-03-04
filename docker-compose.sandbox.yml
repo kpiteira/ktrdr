@@ -461,6 +461,57 @@ services:
     command: ["sleep", "infinity"]
 
   # =============================================================================
+  # AGENT WORKERS (Claude Code + MCP)
+  # =============================================================================
+  # Agent workers use the ktrdr-agent:dev image (Dockerfile.agent) which includes
+  # Claude Code CLI, claude-agent-sdk, and the ktrdr MCP server.
+  # Auth: named Docker volume (one-time 'claude login'), NOT host mount.
+  # See HANDOFF_M2.md for auth setup instructions.
+
+  # Design Agent Worker 1
+  design-agent-1:
+    image: ktrdr-agent:dev
+    restart: unless-stopped
+    stop_grace_period: 60s
+    ports:
+      - "${KTRDR_DESIGN_AGENT_PORT:-5010}:5010"
+    volumes:
+      # Claude Code auth (named volume, provisioned once via 'claude login')
+      - ktrdr-agent-claude-auth:/home/agent/.claude
+      # Shared data directories (same as other workers)
+      - ${KTRDR_DATA_DIR:-./data}:/app/data:ro
+      - ${KTRDR_MODELS_DIR:-./models}:/app/models:ro
+      - ${KTRDR_STRATEGIES_DIR:-./strategies}:/app/strategies
+      # Experiment memory (read/write for saving experiment records)
+      - ./memory:/app/memory
+      # MCP server (mounted outside /app to avoid pip mcp package shadowing)
+      - ./mcp:/mcp:ro
+      # Hot-reload ktrdr source
+      - ./ktrdr:/app/ktrdr
+      - ./config:/app/config:ro
+    environment:
+      - KTRDR_WORKER_TYPE=agent_design
+      - KTRDR_WORKER_PORT=5010
+      - KTRDR_WORKER_PUBLIC_BASE_URL=http://design-agent-1:5010
+      - KTRDR_API_CLIENT_BASE_URL=http://backend:8000/api/v1
+      - KTRDR_MCP_BACKEND_URL=http://backend:8000/api/v1
+      - KTRDR_AGENT_MODEL=${KTRDR_AGENT_MODEL:-claude-sonnet-4-6}
+      - KTRDR_LOG_LEVEL=INFO
+      - PYTHONPATH=/app:/mcp
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5010/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    networks:
+      - ktrdr-network
+    depends_on:
+      backend:
+        condition: service_healthy
+    command: /app/.venv/bin/uvicorn ktrdr.agents.workers.design_agent_worker:app --host 0.0.0.0 --port 5010
+
+  # =============================================================================
   # EXTRA WORKERS (local-prod profile only) - CURRENTLY DISABLED
   # =============================================================================
   # Uncomment these workers if you need more than 4 workers for local-prod.
@@ -701,3 +752,8 @@ volumes:
   grafana_data:
   pip-cache:
   uv-cache:
+  # Named volume for Claude Code auth (shared across agent containers)
+  # Created once via: docker volume create ktrdr-agent-claude-auth
+  # Provisioned via: docker run --rm -it -v ktrdr-agent-claude-auth:/home/agent/.claude ktrdr-agent:dev claude login
+  ktrdr-agent-claude-auth:
+    external: true
