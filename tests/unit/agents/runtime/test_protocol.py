@@ -159,9 +159,7 @@ class TestAgentRuntimeProtocol:
                     transcript=[{"role": "assistant", "content": prompt}],
                 )
 
-        result = asyncio.get_event_loop().run_until_complete(
-            FakeRuntime().invoke("test prompt", max_turns=5)
-        )
+        result = asyncio.run(FakeRuntime().invoke("test prompt", max_turns=5))
         assert isinstance(result, AgentResult)
         assert result.output == "processed: test prompt"
         assert result.turns == 1

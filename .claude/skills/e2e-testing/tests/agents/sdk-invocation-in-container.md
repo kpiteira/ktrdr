@@ -298,7 +298,7 @@ START_TIME=$(date +%s)
 
 SDK_OUTPUT=$(docker run --rm \
   --network "$NETWORK_NAME" \
-  -v "$HOME/.claude:/home/agent/.claude:ro" \
+  -v ktrdr-agent-claude-auth:/home/agent/.claude:ro \
   -v /tmp/ktrdr_sdk_e2e_test.py:/tmp/test_script.py:ro \
   -e PYTHONPATH=/app:/mcp \
   ktrdr-agent:dev \
