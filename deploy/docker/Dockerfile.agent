@@ -12,8 +12,14 @@
 #   - ktrdr package (runtime protocol, worker base)
 #
 # Volumes (configured in docker-compose, not baked in):
-#   - ~/.claude → /home/agent/.claude (read-only, subscription auth)
+#   - Named volume → /home/agent/.claude (subscription auth via setup-token)
+#   - Named volume → /home/agent/.claude.json (CLI config)
 #   - strategies, models, data, memory directories
+#
+# Auth: Use a named Docker volume (NOT host ~/.claude mount).
+#   docker volume create ktrdr-agent-claude-auth
+#   docker run --rm -it -v ktrdr-agent-claude-auth:/home/agent/.claude <image> claude setup-token
+# See: agent-memory/docker-compose.yml for reference pattern.
 #
 # Build:
 #   docker build -f deploy/docker/Dockerfile.agent -t ktrdr-agent:dev .
