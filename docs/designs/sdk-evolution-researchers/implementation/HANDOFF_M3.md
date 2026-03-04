@@ -16,4 +16,12 @@
 
 **Prompt structure (60 lines)**: Role → Workflow (5 steps) → Output Contract → Discovery Tools → Filesystem Access → Design Guidelines → Safety Constraints. No YAML templates, no enum lists, no indicator lists.
 
-**Next Task Notes (3.3)**: Wire `design-agent-1` service into docker-compose.sandbox.yml. Use `ktrdr-agent:dev` image from M2. Key env vars: KTRDR_WORKER_TYPE, KTRDR_WORKER_PORT, backend URL. Auth via named volume. Command: uvicorn `ktrdr.agents.workers.design_agent_worker:app`. Port 5010.
+## Task 3.3 Complete: Wire Design Agent into Docker Compose
+
+**Pattern: conditional module-level app creation** — Worker's module-level `app` is only created when `KTRDR_WORKER_TYPE=agent_design` env var is set (container context). Tests import the module without triggering runtime creation. Uses `_create_default_worker()` factory that reads settings and creates `ClaudeAgentRuntime`.
+
+**Gotcha: port 5010 conflicts with commented-out training-worker-4** — Used `KTRDR_DESIGN_AGENT_PORT` env var (defaults to 5010) to avoid collision.
+
+**Auth volume: `ktrdr-agent-claude-auth` (external: true)** — Must be created before `docker compose up`. One-time setup: `docker volume create ktrdr-agent-claude-auth` then `docker run --rm -it -v ktrdr-agent-claude-auth:/home/agent/.claude ktrdr-agent:dev claude login`.
+
+**Next Task Notes (3.4)**: Unit tests for design agent worker already exist from Task 3.1 (16 tests). Task 3.4 adds comprehensive coverage — mock AgentRuntime, test prompt composition, edge cases. Tests should import from `ktrdr.agents.workers.design_agent_worker` directly (module-level app is None when not in container).
