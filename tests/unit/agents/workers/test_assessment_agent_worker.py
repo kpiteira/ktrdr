@@ -11,7 +11,8 @@ Coverage:
 """
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -507,6 +508,136 @@ class TestBackgroundExecution:
         assert "momentum_rsi_1h" in prompt
         assert "0.72" in prompt  # accuracy
         assert "1.2" in prompt  # sharpe
+
+
+# ---------------------------------------------------------------------------
+# Tests: Memory Integration
+# ---------------------------------------------------------------------------
+
+
+class TestMemoryIntegration:
+    """Tests for experiment record and hypothesis saving after assessment."""
+
+    @pytest.mark.asyncio
+    async def test_experiment_record_saved_after_assessment(self, worker, mock_runtime):
+        """Successful assessment saves an experiment record."""
+        mock_runtime.invoke.return_value = AgentResult(
+            output="Assessment complete.",
+            cost_usd=0.06,
+            turns=4,
+            transcript=_make_transcript_with_assessment("promising"),
+            session_id="sess_abc",
+        )
+
+        with patch(
+            "ktrdr.agents.workers.assessment_agent_worker.memory"
+        ) as mock_memory:
+            mock_memory.generate_experiment_id.return_value = "exp_test_123"
+            mock_memory.save_experiment.return_value = Path(
+                "/app/memory/experiments/exp_test_123.yaml"
+            )
+
+            await worker._execute_assessment_work(
+                operation_id="op_mem_test",
+                strategy_name="momentum_rsi_1h",
+                strategy_config=None,
+                training_metrics={"accuracy": 0.72, "loss": 0.31},
+                backtest_results={"sharpe": 1.2, "max_dd": 0.15, "total_trades": 145},
+                experiment_history=None,
+            )
+
+            mock_memory.save_experiment.assert_called_once()
+            record = mock_memory.save_experiment.call_args[0][0]
+            assert record.strategy_name == "momentum_rsi_1h"
+            assert record.assessment["verdict"] == "promising"
+            assert record.results["sharpe"] == 1.2
+
+    @pytest.mark.asyncio
+    async def test_hypotheses_saved_after_assessment(self, worker, mock_runtime):
+        """Successful assessment saves new hypotheses."""
+        mock_runtime.invoke.return_value = AgentResult(
+            output="Assessment complete.",
+            cost_usd=0.06,
+            turns=4,
+            transcript=_make_transcript_with_assessment("promising"),
+            session_id="sess_abc",
+        )
+
+        with patch(
+            "ktrdr.agents.workers.assessment_agent_worker.memory"
+        ) as mock_memory:
+            mock_memory.generate_experiment_id.return_value = "exp_test_456"
+            mock_memory.generate_hypothesis_id.side_effect = ["H_001", "H_002"]
+            mock_memory.save_experiment.return_value = Path("/tmp/test.yaml")
+
+            await worker._execute_assessment_work(
+                operation_id="op_hyp_test",
+                strategy_name="test_strat",
+                strategy_config=None,
+                training_metrics={"accuracy": 0.72},
+                backtest_results={"sharpe": 1.2},
+                experiment_history=None,
+            )
+
+            # The transcript fixture has 1 hypothesis
+            assert mock_memory.save_hypothesis.call_count >= 1
+
+    @pytest.mark.asyncio
+    async def test_memory_failure_does_not_fail_operation(self, worker, mock_runtime):
+        """Memory save failure doesn't prevent operation completion."""
+        mock_runtime.invoke.return_value = AgentResult(
+            output="Assessment complete.",
+            cost_usd=0.06,
+            turns=4,
+            transcript=_make_transcript_with_assessment("promising"),
+            session_id="sess_abc",
+        )
+
+        with patch(
+            "ktrdr.agents.workers.assessment_agent_worker.memory"
+        ) as mock_memory:
+            mock_memory.generate_experiment_id.return_value = "exp_fail"
+            mock_memory.save_experiment.side_effect = OSError("Disk full")
+
+            await worker._execute_assessment_work(
+                operation_id="op_mem_fail",
+                strategy_name="test_strat",
+                strategy_config=None,
+                training_metrics={"accuracy": 0.72},
+                backtest_results={"sharpe": 1.2},
+                experiment_history=None,
+            )
+
+            # Operation should still complete despite memory failure
+            ops = worker.get_operations_service()
+            ops.complete_operation.assert_called_once()
+            ops.fail_operation.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_no_memory_save_on_failed_assessment(self, worker, mock_runtime):
+        """Memory is not saved when assessment fails (no save_assessment call)."""
+        mock_runtime.invoke.return_value = AgentResult(
+            output="Failed.",
+            cost_usd=0.03,
+            turns=2,
+            transcript=_make_transcript_no_assessment(),
+            session_id="sess_fail",
+        )
+
+        with patch(
+            "ktrdr.agents.workers.assessment_agent_worker.memory"
+        ) as mock_memory:
+            await worker._execute_assessment_work(
+                operation_id="op_no_mem",
+                strategy_name="test_strat",
+                strategy_config=None,
+                training_metrics={"accuracy": 0.5},
+                backtest_results={"sharpe": 0.3},
+                experiment_history=None,
+            )
+
+            mock_memory.save_experiment.assert_not_called()
+            mock_memory.save_hypothesis.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

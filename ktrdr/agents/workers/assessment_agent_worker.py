@@ -15,11 +15,14 @@ import asyncio
 import json
 import os
 import uuid
+from datetime import datetime
 from typing import Any
 
 import yaml
 from pydantic import Field
 
+from ktrdr.agents import memory
+from ktrdr.agents.memory import ExperimentRecord, Hypothesis
 from ktrdr.agents.runtime.protocol import AgentRuntime
 from ktrdr.api.models.operations import OperationMetadata, OperationType
 from ktrdr.api.models.workers import WorkerType
@@ -247,6 +250,64 @@ class AssessmentAgentWorker(WorkerAPIBase):
 
         return last_save
 
+    def _save_memory(
+        self,
+        strategy_name: str,
+        training_metrics: dict[str, Any],
+        backtest_results: dict[str, Any],
+        assessment_info: dict[str, Any],
+    ) -> None:
+        """Save experiment record and hypotheses to memory (best-effort).
+
+        Called after a successful assessment. Failures are logged as warnings
+        but do not affect operation completion.
+        """
+        try:
+            experiment_id = memory.generate_experiment_id()
+
+            record = ExperimentRecord(
+                id=experiment_id,
+                timestamp=datetime.now().isoformat(),
+                strategy_name=strategy_name,
+                context={},
+                results=backtest_results,
+                assessment={
+                    "verdict": assessment_info.get("verdict"),
+                    "observations": assessment_info.get("strengths", []),
+                    "hypotheses": [
+                        h.get("text", "") for h in assessment_info.get("hypotheses", [])
+                    ],
+                    "limitations": assessment_info.get("weaknesses", []),
+                },
+                source="agent",
+            )
+            memory.save_experiment(record)
+
+            # Save new hypotheses from the assessment
+            for h in assessment_info.get("hypotheses", []):
+                if not h.get("text"):
+                    continue
+                hypothesis = Hypothesis(
+                    id=memory.generate_hypothesis_id(),
+                    text=h["text"],
+                    source_experiment=experiment_id,
+                    rationale=h.get("rationale", ""),
+                )
+                memory.save_hypothesis(hypothesis)
+
+            logger.info(
+                "Saved experiment %s with %d hypotheses",
+                experiment_id,
+                len(assessment_info.get("hypotheses", [])),
+            )
+
+        except Exception:
+            logger.warning(
+                "Failed to save memory for strategy %s (non-blocking)",
+                strategy_name,
+                exc_info=True,
+            )
+
     async def _execute_assessment_work(
         self,
         operation_id: str,
@@ -308,6 +369,14 @@ class AssessmentAgentWorker(WorkerAPIBase):
                     result.cost_usd,
                 )
                 return
+
+            # Save memory (best-effort, non-blocking)
+            self._save_memory(
+                strategy_name=strategy_name,
+                training_metrics=training_metrics,
+                backtest_results=backtest_results,
+                assessment_info=assessment_info,
+            )
 
             await ops.complete_operation(
                 operation_id=operation_id,
