@@ -498,6 +498,11 @@ services:
       - KTRDR_AGENT_MODEL=${KTRDR_AGENT_MODEL:-claude-sonnet-4-6}
       - KTRDR_LOG_LEVEL=INFO
       - PYTHONPATH=/app:/mcp
+      - KTRDR_DB_HOST=db
+      - KTRDR_DB_PORT=5432
+      - KTRDR_DB_NAME=${KTRDR_DB_NAME:-ktrdr}
+      - KTRDR_DB_USER=${KTRDR_DB_USER:-ktrdr}
+      - KTRDR_DB_PASSWORD=${KTRDR_DB_PASSWORD:-localdev}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5010/health"]
       interval: 30s
@@ -541,6 +546,11 @@ services:
       - KTRDR_AGENT_MODEL=${KTRDR_AGENT_MODEL:-claude-sonnet-4-6}
       - KTRDR_LOG_LEVEL=INFO
       - PYTHONPATH=/app:/mcp
+      - KTRDR_DB_HOST=db
+      - KTRDR_DB_PORT=5432
+      - KTRDR_DB_NAME=${KTRDR_DB_NAME:-ktrdr}
+      - KTRDR_DB_USER=${KTRDR_DB_USER:-ktrdr}
+      - KTRDR_DB_PASSWORD=${KTRDR_DB_PASSWORD:-localdev}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5020/health"]
       interval: 30s

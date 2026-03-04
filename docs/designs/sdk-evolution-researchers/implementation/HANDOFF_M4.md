@@ -20,4 +20,20 @@
 
 **Gotcha: mock pattern uses `patch("...assessment_agent_worker.memory")`** — Must patch the module-level import, not `ktrdr.agents.memory` directly. The worker imports `memory` as a module, so tests mock the whole module object.
 
-**Next Task Notes (4.4)**: Docker compose service `assessment-agent-1` uses same `ktrdr-agent:dev` image as design agent, port 5020, env `KTRDR_WORKER_TYPE=agent_assessment`. Unit tests already comprehensive from 4.1 + 4.3 (30 tests). Task 4.4 adds compose config + any additional edge case tests.
+## Task 4.4 Complete: Wire into Docker Compose + Unit Tests
+
+**Docker service `assessment-agent-1`** — Mirrors `design-agent-1` pattern: same image, auth volume, shared mounts. Port 5020 via `KTRDR_ASSESSMENT_AGENT_PORT` env var. Strategies mounted read-only (assessment reads, doesn't write).
+
+**Unit tests already comprehensive (30 tests)** from tasks 4.1-4.3 covering all acceptance criteria listed in 4.4 (endpoint validation, runtime invocation, transcript extraction, memory integration, best-effort failure handling).
+
+## Task 4.5 Complete: E2E Validation
+
+**E2E test: `agents/assessment-agent-metrics-to-verdict`** — 9-step test designed by e2e-test-architect, executed by e2e-tester. Result: **PASSED (functional)** with known infrastructure issues.
+
+**What worked**: Agent starts, registers, invokes Claude Code (5 turns, $0.24), produces verdict="promising" with 5 strengths, 5 weaknesses, 6 suggestions, 4 hypotheses. Memory integration confirmed (experiment record + hypotheses saved). Assessment references 5/5 input metrics — not generic.
+
+**Gotcha: missing DB env vars in agent containers** — Both `design-agent-1` and `assessment-agent-1` were missing `KTRDR_DB_HOST=db` and related DB vars. Workers need these for OperationsService DB access. Fixed in docker-compose.sandbox.yml.
+
+**Known issue: orphan detector marks operation "failed"** — Pre-existing architectural issue. Backend's in-memory OperationsService doesn't see worker-side operation claims. Worker completes successfully (data in result_summary) but backend orphan detector overwrites status to "failed". Affects all agent workers, not M4-specific. Filed for future fix.
+
+**Known issue: assessment_path null** — MCP `save_assessment` tool was called (data extracted from transcript) but file not written to disk. Minor — assessment data is fully captured in result_summary and memory.
