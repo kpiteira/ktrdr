@@ -2,8 +2,15 @@
 
 Tests the containerized design agent worker that uses AgentRuntime
 to invoke Claude Code with MCP for strategy design.
+
+Comprehensive coverage per Task 3.4:
+- Start endpoint: valid requests, validation errors, optional fields
+- Result extraction: save tool call parsing, multiple saves, empty transcript, path extraction
+- Background execution: success, no save, runtime error, timeout, prompt composition
+- Health endpoint
 """
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -383,6 +390,237 @@ class TestBackgroundExecution:
 
         prompt = mock_runtime.invoke.call_args[0][0]
         assert "RSI-only strategies underperformed" in prompt
+
+
+# ---------------------------------------------------------------------------
+# Tests: Health Endpoint
+# ---------------------------------------------------------------------------
+
+
+class TestBackgroundExecutionExtended:
+    """Extended tests for background execution — timeout, result fields, prompt composition."""
+
+    @pytest.mark.asyncio
+    async def test_timeout_error_fails_operation(self, worker, mock_runtime):
+        """Runtime invoke() timeout is caught and fails the operation."""
+        mock_runtime.invoke.side_effect = asyncio.TimeoutError()
+
+        await worker._execute_design_work(
+            operation_id="op_timeout",
+            brief="Design a strategy",
+            symbol="EURUSD",
+            timeframe="1h",
+            experiment_context=None,
+        )
+
+        ops = worker.get_operations_service()
+        ops.fail_operation.assert_called_once()
+        call_kwargs = ops.fail_operation.call_args[1]
+        assert call_kwargs["operation_id"] == "op_timeout"
+
+    @pytest.mark.asyncio
+    async def test_result_summary_contains_all_fields(self, worker, mock_runtime):
+        """Completed operation result_summary includes cost, turns, session_id."""
+        mock_runtime.invoke.return_value = AgentResult(
+            output="Done.",
+            cost_usd=0.12,
+            turns=7,
+            transcript=_make_transcript_with_save("full_fields_strategy"),
+            session_id="sess_xyz_123",
+        )
+
+        await worker._execute_design_work(
+            operation_id="op_fields",
+            brief="Design a strategy",
+            symbol="EURUSD",
+            timeframe="1h",
+            experiment_context=None,
+        )
+
+        ops = worker.get_operations_service()
+        result = ops.complete_operation.call_args[1]["result_summary"]
+        assert result["strategy_name"] == "full_fields_strategy"
+        assert result["strategy_path"] == "strategies/full_fields_strategy.yaml"
+        assert result["cost_usd"] == 0.12
+        assert result["turns"] == 7
+        assert result["session_id"] == "sess_xyz_123"
+
+    @pytest.mark.asyncio
+    async def test_system_prompt_is_design_prompt(self, worker, mock_runtime):
+        """System prompt passed to runtime is the DESIGN_SYSTEM_PROMPT."""
+        from ktrdr.agents.design_sdk_prompt import DESIGN_SYSTEM_PROMPT
+
+        mock_runtime.invoke.return_value = AgentResult(
+            output="Done.",
+            cost_usd=0.01,
+            turns=1,
+            transcript=_make_transcript_with_save("prompt_test"),
+        )
+
+        await worker._execute_design_work(
+            operation_id="op_prompt",
+            brief="Test brief",
+            symbol="EURUSD",
+            timeframe="1h",
+            experiment_context=None,
+        )
+
+        call_kwargs = mock_runtime.invoke.call_args[1]
+        assert call_kwargs["system_prompt"] == DESIGN_SYSTEM_PROMPT
+
+    @pytest.mark.asyncio
+    async def test_mcp_servers_include_ktrdr(self, worker, mock_runtime):
+        """MCP servers config includes ktrdr server with correct command."""
+        mock_runtime.invoke.return_value = AgentResult(
+            output="Done.",
+            cost_usd=0.01,
+            turns=1,
+            transcript=_make_transcript_with_save("mcp_test"),
+        )
+
+        await worker._execute_design_work(
+            operation_id="op_mcp",
+            brief="Test",
+            symbol="EURUSD",
+            timeframe="1h",
+            experiment_context=None,
+        )
+
+        mcp_servers = mock_runtime.invoke.call_args[1]["mcp_servers"]
+        assert "ktrdr" in mcp_servers
+        assert mcp_servers["ktrdr"]["command"] == "bash"
+
+    @pytest.mark.asyncio
+    async def test_user_prompt_without_context(self, worker, mock_runtime):
+        """User prompt contains brief, symbol, timeframe but no context section."""
+        mock_runtime.invoke.return_value = AgentResult(
+            output="Done.",
+            cost_usd=0.01,
+            turns=1,
+            transcript=_make_transcript_with_save("no_ctx"),
+        )
+
+        await worker._execute_design_work(
+            operation_id="op_no_ctx",
+            brief="Design a mean reversion strategy",
+            symbol="GBPJPY",
+            timeframe="4h",
+            experiment_context=None,
+        )
+
+        prompt = mock_runtime.invoke.call_args[0][0]
+        assert "mean reversion" in prompt
+        assert "GBPJPY" in prompt
+        assert "4h" in prompt
+        assert "Experiment Context" not in prompt
+
+
+# ---------------------------------------------------------------------------
+# Tests: Result Extraction Extended
+# ---------------------------------------------------------------------------
+
+
+class TestResultExtractionExtended:
+    """Extended tests for transcript parsing edge cases."""
+
+    def test_extract_returns_strategy_path(self, worker):
+        """Extracts strategy_path from tool_result content."""
+        transcript = _make_transcript_with_save("path_test")
+        result = worker.extract_strategy_from_transcript(transcript)
+        assert result is not None
+        assert result["strategy_path"] == "strategies/path_test.yaml"
+
+    def test_extract_handles_malformed_tool_result(self, worker):
+        """Handles tool_result with non-JSON content gracefully."""
+        transcript = [
+            {
+                "type": "tool_use",
+                "tool": "mcp__ktrdr__save_strategy_config",
+                "input": {"strategy_name": "malformed_test"},
+                "id": "tu_bad",
+            },
+            {
+                "type": "tool_result",
+                "tool_use_id": "tu_bad",
+                "content": "Error: validation failed",
+            },
+        ]
+        result = worker.extract_strategy_from_transcript(transcript)
+        # Should still extract strategy_name from tool_use input
+        assert result is not None
+        assert result["strategy_name"] == "malformed_test"
+        assert result["strategy_path"] is None
+
+    def test_extract_ignores_non_save_tools(self, worker):
+        """Other tool calls are ignored during extraction."""
+        transcript = [
+            {
+                "type": "tool_use",
+                "tool": "mcp__ktrdr__validate_strategy",
+                "input": {"strategy_name": "ignore_me"},
+                "id": "tu_validate",
+            },
+            {
+                "type": "tool_result",
+                "tool_use_id": "tu_validate",
+                "content": '{"valid": true}',
+            },
+        ]
+        result = worker.extract_strategy_from_transcript(transcript)
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Tests: Prompt Composition
+# ---------------------------------------------------------------------------
+
+
+class TestPromptComposition:
+    """Tests for _build_user_prompt method."""
+
+    def test_prompt_contains_brief_section(self, worker):
+        """User prompt includes Research Brief section."""
+        prompt = worker._build_user_prompt(
+            brief="Design RSI strategy",
+            symbol="EURUSD",
+            timeframe="1h",
+            experiment_context=None,
+        )
+        assert "## Research Brief" in prompt
+        assert "Design RSI strategy" in prompt
+
+    def test_prompt_contains_target_section(self, worker):
+        """User prompt includes Target section with symbol and timeframe."""
+        prompt = worker._build_user_prompt(
+            brief="Test",
+            symbol="USDJPY",
+            timeframe="15m",
+            experiment_context=None,
+        )
+        assert "## Target" in prompt
+        assert "Symbol: USDJPY" in prompt
+        assert "Timeframe: 15m" in prompt
+
+    def test_prompt_includes_context_when_provided(self, worker):
+        """User prompt includes Experiment Context section when provided."""
+        prompt = worker._build_user_prompt(
+            brief="Test",
+            symbol="EURUSD",
+            timeframe="1h",
+            experiment_context="RSI-only failed, try MACD.",
+        )
+        assert "## Experiment Context" in prompt
+        assert "RSI-only failed, try MACD." in prompt
+
+    def test_prompt_excludes_context_when_none(self, worker):
+        """User prompt does not include Experiment Context when None."""
+        prompt = worker._build_user_prompt(
+            brief="Test",
+            symbol="EURUSD",
+            timeframe="1h",
+            experiment_context=None,
+        )
+        assert "Experiment Context" not in prompt
 
 
 # ---------------------------------------------------------------------------
