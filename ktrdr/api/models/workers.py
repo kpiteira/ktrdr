@@ -21,6 +21,8 @@ class WorkerType(str, Enum):
     )
     CPU_TRAINING = "cpu_training"  # Deprecated - use TRAINING with capabilities
     GPU_HOST = "gpu_host"
+    AGENT_DESIGN = "agent_design"
+    AGENT_ASSESSMENT = "agent_assessment"
 
 
 class WorkerStatus(str, Enum):

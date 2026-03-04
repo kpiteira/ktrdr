@@ -477,6 +477,75 @@ ktrdr agent status --json         # Machine-readable output
 
 ---
 
+## Agent Container Auth (ktrdr-agent Docker image)
+
+Agent workers run Claude Code SDK inside Docker containers. Auth uses a **named Docker volume** — NOT host `~/.claude` mount, NOT API keys.
+
+### Why not host `~/.claude` mount?
+
+- macOS stores OAuth tokens in the Keychain, not `~/.claude/` filesystem
+- Host mount risks interfering with running Claude Code CLI sessions
+- UID mismatches between host and container cause permission errors
+
+### Setup (one-time per environment)
+
+```bash
+# 1. Create named volume
+docker volume create ktrdr-agent-claude-auth
+
+# 2. Prepare the volume (fix ownership, create required dirs)
+docker run --rm --user root \
+  -v ktrdr-agent-claude-auth:/home/agent/.claude \
+  ktrdr-agent:dev \
+  bash -c 'chown -R agent:agent /home/agent/.claude && mkdir -p /home/agent/.claude/debug /home/agent/.claude/backups /home/agent/.claude/cache'
+
+# 3. Login interactively (opens browser for OAuth)
+docker run --rm -it \
+  -v ktrdr-agent-claude-auth:/home/agent/.claude \
+  ktrdr-agent:dev \
+  claude login
+```
+
+### Using in docker-compose (M3+)
+
+```yaml
+services:
+  design-agent:
+    image: ktrdr-agent:dev
+    volumes:
+      - claude-auth:/home/agent/.claude:ro
+      # ... other volumes
+
+volumes:
+  claude-auth:
+    name: ktrdr-agent-claude-auth
+    external: true
+```
+
+### Verify auth works
+
+```bash
+docker run --rm \
+  -v ktrdr-agent-claude-auth:/home/agent/.claude:ro \
+  ktrdr-agent:dev \
+  claude -p "say hello" --output-format json 2>&1 | head -5
+```
+
+If you see a real response (not "Not logged in"), auth is working.
+
+### Reference
+
+Pattern from `agent-memory/docker-compose.yml`: named volume `agent-memory-claude-auth` (external: true) mounted at `/root/.claude`.
+
+### Important notes
+
+- `~/.claude.json` is a **separate file** from the `~/.claude/` directory. Claude CLI needs both. The `.claude.json` at the home root contains account metadata; the `.claude/` dir contains session state.
+- The volume stores subscription auth — no API keys, no explicit tokens, no secrets in env vars.
+- Multiple containers can mount the same volume read-only for concurrent sessions.
+- Auth persists across container rebuilds (it's in the volume, not the image).
+
+---
+
 ## Gotchas
 
 ### Polling loop is NOT a sequential state machine

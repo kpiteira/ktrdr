@@ -42,11 +42,11 @@ Evolution researchers currently run inside the backend process using direct Anth
 
 **Rationale**: Claude Code + MCP gives agents real system access (data exploration, strategy validation, indicator discovery) on subscription pricing. The MCP server already has 20 tools covering the full researcher workflow.
 
-### D4: Container auth via credential mount
+### D4: Container auth via named Docker volume
 
-**Decision**: Mount `~/.claude/` from host into containers for subscription authentication. Multiple concurrent sessions on the same subscription are confirmed working.
+**Decision**: Use a named Docker volume for Claude auth (`ktrdr-agent-claude-auth:/home/agent/.claude`), provisioned once via `claude login`. Do NOT mount host `~/.claude` — macOS stores OAuth tokens in the Keychain (not filesystem), and host mounts risk interfering with the running CLI session.
 
-**Rationale**: Karl runs 5-6 concurrent Claude Code sessions already. Rate limits won't be hit by research workloads. No API keys needed.
+**Rationale**: Pattern proven in agent-memory (`agent-memory-claude-auth` named volume). Subscription auth, no API keys, isolated from host. Multiple concurrent sessions on the same subscription are confirmed working.
 
 ### D5: stdio MCP inside container
 
@@ -219,5 +219,5 @@ The sister project `agent-memory` has production-proven patterns for Claude Code
 | Safety guards (budget, tools) | `runtime/safety.py` | Adapt to use ktrdr BudgetTracker |
 | Stdio MCP subprocess | `mcp/telegram_stdio.py` | Same pattern for ktrdr MCP in container |
 | CLAUDECODE env var handling | `runtime/claude.py:89` | Required — blocks nested SDK calls |
-| Auth via named Docker volumes | `docker-compose.yml` | `~/.claude` mount (read-only) |
+| Auth via named Docker volumes | `docker-compose.yml` | Named volume + `claude login` (same pattern) |
 | Transcript → structured output | `runtime/claude.py` | Parse ToolUseBlock for strategy/assessment results |
