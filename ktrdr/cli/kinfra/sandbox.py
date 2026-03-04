@@ -553,8 +553,37 @@ def init(
     console.print("\nRun 'ktrdr sandbox up' to start")
 
 
+def _recover_env_sandbox(path: Path) -> bool:
+    """Attempt to recover a missing .env.sandbox from the slot registry.
+
+    When .env.sandbox is gitignored (correct) and gets deleted or lost,
+    this checks the slot registry for a slot claimed by this path and
+    regenerates the file.
+
+    Args:
+        path: Directory that should contain .env.sandbox.
+
+    Returns:
+        True if the file was regenerated, False if no matching slot found.
+    """
+    try:
+        registry = load_registry()
+        slot_info = registry.get_slot_for_worktree(path)
+        if slot_info is None:
+            return False
+
+        instance_id = derive_instance_id(path)
+        generate_env_file(path, instance_id, slot_info.slot_id)
+        return True
+    except Exception:
+        return False
+
+
 def load_env_sandbox(path: Optional[Path] = None) -> dict[str, str]:
     """Load .env.sandbox from current or specified directory.
+
+    If the file is missing but the registry has a slot claimed by this path,
+    the file is regenerated automatically.
 
     Args:
         path: Directory containing .env.sandbox. Defaults to cwd.
@@ -567,7 +596,9 @@ def load_env_sandbox(path: Optional[Path] = None) -> dict[str, str]:
 
     env_file = path / ".env.sandbox"
     if not env_file.exists():
-        return {}
+        if not _recover_env_sandbox(path):
+            return {}
+        # File was regenerated — fall through to read it
 
     env: dict[str, str] = {}
     with open(env_file) as f:
