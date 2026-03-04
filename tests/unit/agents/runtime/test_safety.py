@@ -110,7 +110,10 @@ class TestSafetyGuardTools:
         )
         result = guard.check(
             estimated_cost=0.10,
-            tools=["mcp__ktrdr__get_available_indicators", "mcp__ktrdr__save_strategy_config"],
+            tools=[
+                "mcp__ktrdr__get_available_indicators",
+                "mcp__ktrdr__save_strategy_config",
+            ],
             max_turns=5,
         )
         assert result.allowed is True

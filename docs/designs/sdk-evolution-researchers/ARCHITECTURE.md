@@ -96,10 +96,8 @@ options = ClaudeAgentOptions(
     system_prompt=DESIGN_SYSTEM_PROMPT,
     mcp_servers={
         "ktrdr": {
-            "type": "stdio",
-            "command": "python",
-            "args": ["-m", "src.main"],
-            "cwd": "/mcp",
+            "command": "bash",
+            "args": ["-c", "cd /mcp && python -m src.main"],
             "env": {"KTRDR_API_URL": "http://backend:8000/api/v1"}
         }
     },
@@ -210,7 +208,7 @@ Shared base image for Design Agent Worker and Assessment Agent Worker.
 │  Volumes (same shared dirs as all        │
 │  other workers):                         │
 │  ├── claude-auth vol → /home/agent/      │
-│  │   .claude/ (setup-token, named vol)   │
+│  │   .claude/ (claude login, named vol)   │
 │  ├── ~/.ktrdr/shared/data → /app/data   │
 │  ├── ~/.ktrdr/shared/models → /app/     │
 │  │   models                              │
@@ -237,10 +235,8 @@ The MCP server config is passed directly to `ClaudeAgentOptions.mcp_servers` (no
 ```python
 mcp_servers = {
     "ktrdr": {
-        "type": "stdio",
-        "command": "python",
-        "args": ["-m", "src.main"],
-        "cwd": "/mcp",
+        "command": "bash",
+        "args": ["-c", "cd /mcp && python -m src.main"],
         "env": {
             "KTRDR_API_URL": "http://backend:8000/api/v1",
             "LOG_LEVEL": "WARNING",  # Reduce noise on stderr
@@ -248,6 +244,8 @@ mcp_servers = {
     }
 }
 ```
+
+**Note**: `McpStdioServerConfig` does not support a `cwd` field. Use `bash -c "cd /mcp && ..."` instead.
 
 The ktrdr MCP server is Python-based (FastMCP, `mcp[cli]>=1.2.0`). It runs as a stdio subprocess of Claude Code inside the container. It connects to the backend via HTTP on the Docker network. No port exposure needed.
 

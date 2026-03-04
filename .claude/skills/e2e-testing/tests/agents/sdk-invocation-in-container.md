@@ -38,10 +38,8 @@ Prompt: "Call the get_available_indicators tool and return the results. Do not d
 ```json
 {
     "ktrdr": {
-        "type": "stdio",
-        "command": "python",
-        "args": ["-m", "src.main"],
-        "cwd": "/mcp",
+        "command": "bash",
+        "args": ["-c", "cd /mcp && python -m src.main"],
         "env": {
             "KTRDR_API_URL": "http://backend:8000/api/v1",
             "PYTHONPATH": "/app:/mcp"
@@ -49,6 +47,8 @@ Prompt: "Call the get_available_indicators tool and return the results. Do not d
     }
 }
 ```
+
+**Note:** `McpStdioServerConfig` does not support `cwd`. Use `bash -c "cd /mcp && ..."` instead.
 
 ---
 
@@ -242,10 +242,8 @@ async def main():
 
     mcp_servers = {
         "ktrdr": {
-            "type": "stdio",
-            "command": "python",
-            "args": ["-m", "src.main"],
-            "cwd": "/mcp",
+            "command": "bash",
+            "args": ["-c", "cd /mcp && python -m src.main"],
             "env": {
                 "KTRDR_API_URL": "http://backend:8000/api/v1",
                 "PYTHONPATH": "/app:/mcp",
@@ -611,7 +609,7 @@ else:
 
 **If SDK invocation fails with auth error ("Please log in" / "Not logged in"):**
 - **Cause:** No auth credentials available. On macOS, host `~/.claude` does NOT contain OAuth tokens (stored in Keychain).
-- **Cure:** Use one of: (1) Named Docker volume provisioned via `claude setup-token`, (2) `ANTHROPIC_API_KEY` env var. See `agent-memory/docker-compose.yml` for the named volume pattern.
+- **Cure:** Use one of: (1) Named Docker volume provisioned via `claude login`, (2) `ANTHROPIC_API_KEY` env var. See `agent-memory/docker-compose.yml` for the named volume pattern.
 
 **If MCP server fails to start (import error in SDK invocation):**
 - **Cause:** Missing MCP dependencies or PYTHONPATH not including `/mcp`. The MCP server has its own deps (fastmcp, structlog, httpx) installed separately in the builder stage.
@@ -663,5 +661,5 @@ else:
 - **PYTHONPATH must include both `/app` and `/mcp`.** The MCP server at `/mcp/src/main.py` imports from `ktrdr` (at `/app/ktrdr/`) and from its own modules (at `/mcp/src/`). The env var in the MCP server config handles this.
 - **The `mcp` pip package shadowing issue.** In development, ktrdr's local `mcp/` directory shadows the pip `mcp` package. Inside the Docker container this is NOT an issue because the MCP code lives at `/mcp/` (outside `/app/`) and PYTHONPATH is configured correctly.
 - **Network name varies by sandbox.** Each sandbox worktree creates a Docker compose project with a unique name. The network name is `<project>_ktrdr-network`. Step 0 dynamically detects this. If detection fails, run `docker network ls | grep ktrdr` to find it manually.
-- **Do NOT mount host `~/.claude` directly.** macOS stores OAuth tokens in the Keychain, not the filesystem. Host mounts also risk interfering with running CLI sessions. Use a named Docker volume provisioned via `claude setup-token` (pattern from agent-memory).
+- **Do NOT mount host `~/.claude` directly.** macOS stores OAuth tokens in the Keychain, not the filesystem. Host mounts also risk interfering with running CLI sessions. Use a named Docker volume provisioned via `claude login` (pattern from agent-memory).
 - **The `timeout 120` wrapper is critical.** Without it, a hanging SDK invocation will block the test forever. 120 seconds is generous for a single tool call but fast enough to fail early on real problems.

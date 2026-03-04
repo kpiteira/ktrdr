@@ -12,13 +12,15 @@
 #   - ktrdr package (runtime protocol, worker base)
 #
 # Volumes (configured in docker-compose, not baked in):
-#   - Named volume → /home/agent/.claude (subscription auth via setup-token)
-#   - Named volume → /home/agent/.claude.json (CLI config)
+#   - Named volume → /home/agent/.claude (OAuth auth via claude login)
 #   - strategies, models, data, memory directories
 #
 # Auth: Use a named Docker volume (NOT host ~/.claude mount).
 #   docker volume create ktrdr-agent-claude-auth
-#   docker run --rm -it -v ktrdr-agent-claude-auth:/home/agent/.claude <image> claude setup-token
+#   # Prepare dirs, then login interactively (one-time):
+#   docker run --rm --user root -v ktrdr-agent-claude-auth:/home/agent/.claude ktrdr-agent:dev \
+#     bash -c 'chown -R agent:agent /home/agent/.claude && mkdir -p /home/agent/.claude/{debug,backups,cache}'
+#   docker run --rm -it -v ktrdr-agent-claude-auth:/home/agent/.claude ktrdr-agent:dev claude login
 # See: agent-memory/docker-compose.yml for reference pattern.
 #
 # Build:
@@ -98,6 +100,10 @@ COPY --from=builder --chown=agent:agent /app/pyproject.toml /app/
 # Copy MCP server
 COPY --from=builder --chown=agent:agent /mcp /mcp
 
+# Copy entrypoint script
+COPY --chown=agent:agent deploy/docker/agent-entrypoint.sh /usr/local/bin/agent-entrypoint.sh
+RUN chmod +x /usr/local/bin/agent-entrypoint.sh
+
 # Create shared directories (volumes mounted at runtime)
 RUN mkdir -p /app/data /app/models /app/memory \
     && chown -R agent:agent /app /mcp
@@ -114,7 +120,7 @@ EXPOSE 5010
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
     CMD curl -f http://localhost:5010/health || exit 1
 
-ENTRYPOINT ["/usr/bin/tini", "--"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/agent-entrypoint.sh"]
 
 # Default: design agent worker (overridden per service in docker-compose)
 CMD ["uvicorn", "ktrdr.agents.workers.design_agent_worker:app", "--host", "0.0.0.0", "--port", "5010"]

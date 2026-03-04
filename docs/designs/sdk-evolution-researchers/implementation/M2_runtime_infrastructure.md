@@ -20,7 +20,7 @@ This milestone is a **port, not an experiment**. agent-memory has all of this ru
 | AgentRuntime Protocol | `src/agent_memory/runtime/protocol.py` | Remove PersistentAgentRuntime (not needed) |
 | ClaudeAgentRuntime | `src/agent_memory/runtime/claude.py` | Adapt for container context, remove persistence |
 | Dockerfile | `Dockerfile` (multi-stage, Node + Python + Claude CLI) | Adapt base image, add ktrdr MCP server |
-| Auth via named Docker volume | `docker-compose.yml` (`claude-config:/root/.claude`) | Same pattern: named volume + `setup-token` |
+| Auth via named Docker volume | `docker-compose.yml` (`claude-config:/root/.claude`) | Same pattern: named volume + `claude login` |
 | SDK invocation pattern | `runtime/claude.py:invoke()` | Direct port |
 | CLAUDECODE env var handling | `runtime/claude.py:89` | Direct port |
 | MCP subprocess config | `mcp/telegram_stdio.py` pattern | Adapt for ktrdr MCP server |
@@ -224,7 +224,7 @@ Contents:
 - AgentRuntime protocol + Claude implementation
 
 Volumes (configured in docker-compose, not baked in):
-- Named Docker volume → `/home/agent/.claude` (subscription auth via `setup-token`)
+- Named Docker volume → `/home/agent/.claude` (subscription auth via `claude login`)
 - Shared strategies, models, data, memory directories
 
 **Implementation Notes**:
