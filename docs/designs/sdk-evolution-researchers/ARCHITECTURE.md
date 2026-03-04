@@ -209,8 +209,8 @@ Shared base image for Design Agent Worker and Assessment Agent Worker.
 │                                          │
 │  Volumes (same shared dirs as all        │
 │  other workers):                         │
-│  ├── ~/.claude/ → /home/agent/.claude/  │
-│  │   (subscription auth, read-only)      │
+│  ├── claude-auth vol → /home/agent/      │
+│  │   .claude/ (setup-token, named vol)   │
 │  ├── ~/.ktrdr/shared/data → /app/data   │
 │  ├── ~/.ktrdr/shared/models → /app/     │
 │  │   models                              │

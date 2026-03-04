@@ -68,4 +68,4 @@ Reference: `agent-memory/docker-compose.yml` uses `claude-config` named volume (
 - Fallback: `ANTHROPIC_API_KEY` env var works but uses API billing, not subscription
 - Docker network for sandbox slots: `slot-<N>_ktrdr-network`
 - Backend reachable as `http://backend:8000` (internal port) from agent container
-- Dockerfile comment about `~/.claude` volume mount should be updated to reference named volume
+- Dockerfile comment updated to reference named volume pattern

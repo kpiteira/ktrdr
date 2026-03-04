@@ -20,7 +20,7 @@ This milestone is a **port, not an experiment**. agent-memory has all of this ru
 | AgentRuntime Protocol | `src/agent_memory/runtime/protocol.py` | Remove PersistentAgentRuntime (not needed) |
 | ClaudeAgentRuntime | `src/agent_memory/runtime/claude.py` | Adapt for container context, remove persistence |
 | Dockerfile | `Dockerfile` (multi-stage, Node + Python + Claude CLI) | Adapt base image, add ktrdr MCP server |
-| Auth volume mount | `docker-compose.yml` (`claude-config:/root/.claude`) | Same pattern, read-only mount |
+| Auth via named Docker volume | `docker-compose.yml` (`claude-config:/root/.claude`) | Same pattern: named volume + `setup-token` |
 | SDK invocation pattern | `runtime/claude.py:invoke()` | Direct port |
 | CLAUDECODE env var handling | `runtime/claude.py:89` | Direct port |
 | MCP subprocess config | `mcp/telegram_stdio.py` pattern | Adapt for ktrdr MCP server |
@@ -35,14 +35,14 @@ This milestone is a **port, not an experiment**. agent-memory has all of this ru
 
 **Duration**: ~60 seconds
 
-**Prerequisites**: Backend running, `~/.claude` credentials available on host, `ktrdr-agent:dev` image built
+**Prerequisites**: Backend running, Claude auth provisioned (named volume or `ANTHROPIC_API_KEY`), `ktrdr-agent:dev` image built
 
 **Test Steps**:
 
 | Step | Action | Expected Result | Evidence |
 |------|--------|-----------------|----------|
 | 1 | Build `ktrdr-agent:dev` Docker image | Image builds without errors | `docker images` shows image |
-| 2 | Start container with `~/.claude` mount (ro) and backend network | Container starts, healthcheck passes | `docker ps` shows healthy |
+| 2 | Start container with auth (named volume or API key) and backend network | Container starts, healthcheck passes | `docker ps` shows healthy |
 | 3 | From inside container, run Python script that invokes Claude Code SDK with a simple prompt ("List available indicators using the ktrdr MCP tools") | SDK returns structured response, transcript contains MCP tool call | AgentResult with output + transcript |
 | 4 | Verify transcript shows `mcp__ktrdr__get_available_indicators` tool call | MCP tool was actually called (not just text response) | ToolUseBlock in transcript |
 | 5 | Verify MCP tool returned real indicator data from backend | Indicator list matches what backend serves | Response contains known indicators (RSI, MACD, etc.) |
@@ -224,7 +224,7 @@ Contents:
 - AgentRuntime protocol + Claude implementation
 
 Volumes (configured in docker-compose, not baked in):
-- `~/.claude` → `/home/agent/.claude` (read-only, subscription auth)
+- Named Docker volume → `/home/agent/.claude` (subscription auth via `setup-token`)
 - Shared strategies, models, data, memory directories
 
 **Implementation Notes**:
@@ -234,7 +234,7 @@ Volumes (configured in docker-compose, not baked in):
   - Add ktrdr MCP server (copy `/mcp/` into image)
   - Add WorkerAPIBase dependencies
   - Keep the Claude Code CLI install pattern (`npm install -g @anthropic-ai/claude-code`)
-  - Keep the auth volume mount pattern
+  - Keep the named volume auth pattern (not host mount)
 - Also reference `Dockerfile.worker-cpu` for ktrdr-specific patterns (non-root user, uv setup)
 - Do NOT add to docker-compose yet (M3 wires it up) — just ensure the image builds
 
@@ -273,7 +273,7 @@ This is a new test (no existing catalog match). Steps:
 - [ ] SDK invocation succeeds inside container
 - [ ] MCP tool call reaches backend and returns real data
 - [ ] AgentResult is structured and parseable
-- [ ] Auth via ~/.claude mount works
+- [ ] Auth works (named volume or API key)
 - [ ] E2E test executed via agent
 
 ---
