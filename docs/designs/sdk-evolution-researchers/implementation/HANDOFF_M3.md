@@ -34,8 +34,10 @@
 
 **Next Task Notes (3.5)**: VALIDATION task — E2E test via e2e agent workflow. Requires sandbox running with design-agent-1 container, Claude auth volume provisioned, and EURUSD data available.
 
-## Task 3.5: E2E Validation — BLOCKED (no sandbox)
+## Task 3.5 Complete: E2E Validation — Design Agent Creates Strategy From Brief
 
-**E2E test designed and cataloged**: `.claude/skills/e2e-testing/tests/agents/design-agent-brief-to-strategy.md` (8 steps, 13 success criteria, 11 sanity checks). Test covers full POST /designs/start → Claude Code loop → v3 strategy produced flow.
+**E2E test: agents/design-agent-brief-to-strategy — PASSED** (181s, 15 turns, $0.74). Strategy `rsi_bb_mean_reversion_eurusd_1h_v1` produced with valid v3 format (2 indicators, 2 fuzzy_sets, 2 nn_inputs).
 
-**Blocker**: This worktree has no `.env.sandbox` — it wasn't created with `kinfra impl`. E2E execution requires sandbox with backend + design-agent-1 container + Claude auth volume + EURUSD data. Test is ready to execute when infrastructure is available.
+**Gotcha: sandbox init needs manual port fixes** — `kinfra sandbox init` doesn't set `KTRDR_JAEGER_OTLP_GRPC_PORT` or `KTRDR_DESIGN_AGENT_PORT`. Must add manually to `.env.sandbox` to avoid conflicts with prod (4317) and training-worker-4 (5010).
+
+**Note: operations table missing in fresh sandbox** — `alembic upgrade head` needed after sandbox init. Design agent works without it (strategy saved to disk) but backend polling for operation status fails.
