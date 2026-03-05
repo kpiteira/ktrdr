@@ -208,7 +208,9 @@ def generate_env_file(path: Path, instance_id: str, slot: int) -> None:
 
     # Add instance identity
     env_vars["INSTANCE_ID"] = instance_id
-    env_vars["COMPOSE_PROJECT_NAME"] = instance_id
+    # Use slot-based project name so containers match regardless of whether
+    # started from worktree or from ~/.ktrdr/sandboxes/slot-N/ directory
+    env_vars["COMPOSE_PROJECT_NAME"] = f"slot-{slot}"
 
     # Add shared data directories (matches docker-compose.sandbox.yml volume mounts)
     shared_dir = Path.home() / ".ktrdr" / "shared"

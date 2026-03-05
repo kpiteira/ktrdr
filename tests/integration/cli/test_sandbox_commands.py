@@ -128,7 +128,7 @@ class TestGenerateEnvFile:
 
         # Check instance identity
         assert "INSTANCE_ID=test-instance" in content
-        assert "COMPOSE_PROJECT_NAME=test-instance" in content
+        assert "COMPOSE_PROJECT_NAME=slot-1" in content
 
         # Check shared data dir
         assert "KTRDR_SHARED_DIR=" in content
