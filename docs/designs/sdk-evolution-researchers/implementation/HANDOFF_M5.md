@@ -11,3 +11,13 @@
 **Key integration point for Task 5.2**: `AgentService._get_worker()` needs to create `AgentDispatchService` (using worker registry) and pass it to `AgentResearchWorker`. Currently creates workers without `agent_dispatch`, so container dispatch isn't wired yet.
 
 **Container endpoints**: Design at `/designs/start` (DesignStartRequest: brief, symbol, timeframe, task_id), Assessment at `/assessments/start` (AssessmentStartRequest: strategy_name, training_metrics, backtest_results, task_id). Both return `{"operation_id": ..., "success": true}`.
+
+## Task 5.2 Complete: Update worker registry and backend dispatch for agent types
+
+**Wiring in `AgentService._get_worker()`** — Non-stub path now creates `AgentDispatchService(worker_registry=registry)` and passes it as `agent_dispatch` kwarg. Stub path unchanged (no dispatch).
+
+**Worker status includes agent types** — `_get_worker_status()` now queries AGENT_DESIGN and AGENT_ASSESSMENT in addition to TRAINING and BACKTESTING.
+
+**Gotcha: lazy import patching** — `get_worker_registry` is imported lazily inside function bodies. Tests must patch `ktrdr.api.endpoints.workers.get_worker_registry`, not `ktrdr.api.services.agent_service.get_worker_registry`.
+
+**Note for Task 5.3**: `resolve_model` is still imported from `ktrdr.agents.invoker` at top of agent_service.py. Will need to be moved before invoker is deleted in Task 5.4.
