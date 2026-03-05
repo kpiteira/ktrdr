@@ -41,3 +41,17 @@
 **Deleted test files**: 8 test files testing old invoker/executor/tools/workers. New `test_invoker_removal.py` with 15 tests verifying extraction and deletion.
 
 **Gotcha**: Tests from Task 5.2 patched `AgentDesignWorker`/`AgentAssessmentWorker` on agent_service module — needed updating after those imports were removed.
+
+## Task 5.5 Complete: E2E Validation
+
+**Test**: `evolution/single-generation` — PARTIAL PASS (11/12 checks)
+
+**What passed**: CLI command, run directory structure, config/population/operations/results files, genome seeding, 3 operations triggered+completed, full pipeline flow (design→train→backtest→gate→assess), operation ID consistency, API resolution, duration 272s.
+
+**What failed**: All 3 fitness scores = -999.0. Stub design worker produces `strategy_name: "unknown"` → real training/backtest produce low win rates → gate rejection → -999.0. Structural limitation of stub mode.
+
+**What couldn't be tested**: Container dispatch to AGENT_DESIGN/AGENT_ASSESSMENT — no agent containers running. Requires `ktrdr-agent:dev` containers with Claude Code auth volume.
+
+**Bonus fix**: `COMPOSE_PROJECT_NAME` mismatch in sandbox — `kinfra sandbox status` was using instance ID (long name) but containers use `slot-N`. Fixed `generate_env_file` in both `sandbox.py` and `kinfra/sandbox.py`.
+
+**Infrastructure note**: Fresh sandbox needs `alembic upgrade head` before agent endpoints work.
