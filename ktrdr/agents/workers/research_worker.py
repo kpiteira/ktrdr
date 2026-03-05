@@ -541,6 +541,14 @@ class AgentResearchWorker:
             "strategy_path"
         ) or parent_op.metadata.parameters.get("strategy_path")
 
+        # If no path, resolve from strategy_name (container dispatch returns name but not path)
+        if not strategy_path:
+            strategy_name_from_metadata = parent_op.metadata.parameters.get(
+                "strategy_name"
+            )
+            if strategy_name_from_metadata:
+                strategy_path = f"strategies/{strategy_name_from_metadata}.yaml"
+
         # Load strategy config to get training params
         config = self._load_strategy_config(strategy_path)
         symbols = (
