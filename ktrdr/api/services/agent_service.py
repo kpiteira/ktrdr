@@ -15,9 +15,7 @@ from typing import TYPE_CHECKING, Any
 from ktrdr import get_logger
 from ktrdr.agents.budget import get_budget_tracker
 from ktrdr.agents.checkpoint_builder import build_agent_checkpoint_state
-from ktrdr.agents.invoker import resolve_model
-from ktrdr.agents.workers.assessment_worker import AgentAssessmentWorker
-from ktrdr.agents.workers.design_worker import AgentDesignWorker
+from ktrdr.agents.models import resolve_model
 from ktrdr.agents.workers.research_worker import AgentResearchWorker
 from ktrdr.agents.workers.stubs import (
     StubAssessmentWorker,
@@ -81,8 +79,7 @@ class AgentService:
 
         When not using stubs, creates an AgentDispatchService that dispatches
         design and assessment operations to containerized workers via HTTP.
-        The in-process workers (AgentDesignWorker, AgentAssessmentWorker) are
-        kept as fallback but agent_dispatch takes priority.
+        Stub workers are used as fallback (agent_dispatch takes priority).
         """
         if self._worker is None:
             checkpoint_svc = self._get_checkpoint_service()
@@ -108,8 +105,8 @@ class AgentService:
 
                 self._worker = AgentResearchWorker(
                     operations_service=self.ops,
-                    design_worker=AgentDesignWorker(self.ops),  # Fallback
-                    assessment_worker=AgentAssessmentWorker(self.ops),  # Fallback
+                    design_worker=StubDesignWorker(),  # Fallback only
+                    assessment_worker=StubAssessmentWorker(),  # Fallback only
                     # Services lazy-loaded inside orchestrator
                     training_service=None,
                     backtest_service=None,

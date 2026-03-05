@@ -53,3 +53,150 @@ hypotheses:
   status: untested
   tested_by: []
   created: '2025-12-27T00:00:00Z'
+- id: H_007
+  text: Wider RSI bands will increase trade count
+  source_experiment: exp_20260304_184340_50901d1b
+  rationale: Current RSI thresholds too conservative
+  status: untested
+  tested_by: []
+  created: '2026-03-04T18:43:40.024986'
+- id: H_008
+  text: Wider RSI bands will increase trade count
+  source_experiment: exp_20260304_184340_b5dc50f6
+  rationale: Current RSI thresholds too conservative
+  status: untested
+  tested_by: []
+  created: '2026-03-04T18:43:40.077905'
+- id: H_009
+  text: Wider RSI bands will increase trade count
+  source_experiment: exp_20260304_184340_7be5cad9
+  rationale: Current RSI thresholds too conservative
+  status: untested
+  tested_by: []
+  created: '2026-03-04T18:43:40.103312'
+- id: H_010
+  text: Wider RSI bands will increase trade count
+  source_experiment: exp_20260304_184643_cabe0275
+  rationale: Current RSI thresholds too conservative
+  status: untested
+  tested_by: []
+  created: '2026-03-04T18:46:43.856901'
+- id: H_011
+  text: Wider RSI bands will increase trade count
+  source_experiment: exp_20260304_184644_78527b30
+  rationale: Current RSI thresholds too conservative
+  status: untested
+  tested_by: []
+  created: '2026-03-04T18:46:44.009230'
+- id: H_012
+  text: Wider RSI bands will increase trade count
+  source_experiment: exp_20260304_184644_882b89d3
+  rationale: Current RSI thresholds too conservative
+  status: untested
+  tested_by: []
+  created: '2026-03-04T18:46:44.043788'
+- id: H_013
+  text: Wider RSI bands will increase trade count
+  source_experiment: exp_20260304_185037_02a5c1da
+  rationale: Current RSI thresholds too conservative
+  status: untested
+  tested_by: []
+  created: '2026-03-04T18:50:37.058180'
+- id: H_014
+  text: Wider RSI bands will increase trade count
+  source_experiment: exp_20260304_185037_d96c9cf0
+  rationale: Current RSI thresholds too conservative
+  status: untested
+  tested_by: []
+  created: '2026-03-04T18:50:37.120657'
+- id: H_015
+  text: Wider RSI bands will increase trade count
+  source_experiment: exp_20260304_185037_7381bf59
+  rationale: Current RSI thresholds too conservative
+  status: untested
+  tested_by: []
+  created: '2026-03-04T18:50:37.151454'
+- id: H_016
+  text: Wider RSI bands will increase trade count
+  source_experiment: exp_20260304_185513_68ea7a72
+  rationale: Current RSI thresholds too conservative
+  status: untested
+  tested_by: []
+  created: '2026-03-04T18:55:13.903808'
+- id: H_017
+  text: Wider RSI bands will increase trade count
+  source_experiment: exp_20260304_185514_08e1f25c
+  rationale: Current RSI thresholds too conservative
+  status: untested
+  tested_by: []
+  created: '2026-03-04T18:55:14.074756'
+- id: H_018
+  text: Wider RSI bands will increase trade count
+  source_experiment: exp_20260304_185514_bef6ffca
+  rationale: Current RSI thresholds too conservative
+  status: untested
+  tested_by: []
+  created: '2026-03-04T18:55:14.229492'
+- id: H_019
+  text: Wider RSI bands will increase trade count
+  source_experiment: exp_20260304_190044_e2876621
+  rationale: Current RSI thresholds too conservative
+  status: untested
+  tested_by: []
+  created: '2026-03-04T19:00:44.028775'
+- id: H_020
+  text: Wider RSI bands will increase trade count
+  source_experiment: exp_20260304_190044_56a633fa
+  rationale: Current RSI thresholds too conservative
+  status: untested
+  tested_by: []
+  created: '2026-03-04T19:00:44.146743'
+- id: H_021
+  text: Wider RSI bands will increase trade count
+  source_experiment: exp_20260304_190044_0e030d92
+  rationale: Current RSI thresholds too conservative
+  status: untested
+  tested_by: []
+  created: '2026-03-04T19:00:44.222780'
+- id: H_022
+  text: Wider RSI bands will increase trade count
+  source_experiment: exp_20260304_190203_8d6f2733
+  rationale: Current RSI thresholds too conservative
+  status: untested
+  tested_by: []
+  created: '2026-03-04T19:02:03.875985'
+- id: H_023
+  text: Wider RSI bands will increase trade count
+  source_experiment: exp_20260304_190203_3e3ceaf3
+  rationale: Current RSI thresholds too conservative
+  status: untested
+  tested_by: []
+  created: '2026-03-04T19:02:03.989799'
+- id: H_024
+  text: Wider RSI bands will increase trade count
+  source_experiment: exp_20260304_190204_ef02485b
+  rationale: Current RSI thresholds too conservative
+  status: untested
+  tested_by: []
+  created: '2026-03-04T19:02:04.056031'
+- id: H_025
+  text: Wider RSI bands will increase trade count
+  source_experiment: exp_20260304_190351_da5bf792
+  rationale: Current RSI thresholds too conservative
+  status: untested
+  tested_by: []
+  created: '2026-03-04T19:03:51.656468'
+- id: H_026
+  text: Wider RSI bands will increase trade count
+  source_experiment: exp_20260304_190351_b1d95e03
+  rationale: Current RSI thresholds too conservative
+  status: untested
+  tested_by: []
+  created: '2026-03-04T19:03:51.792621'
+- id: H_027
+  text: Wider RSI bands will increase trade count
+  source_experiment: exp_20260304_190351_5476d7a1
+  rationale: Current RSI thresholds too conservative
+  status: untested
+  tested_by: []
+  created: '2026-03-04T19:03:51.926621'

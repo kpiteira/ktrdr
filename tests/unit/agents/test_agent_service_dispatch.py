@@ -17,12 +17,16 @@ class TestAgentServiceDispatchWiring:
         from ktrdr.api.services.agent_service import AgentService
 
         mock_ops = AsyncMock()
-        service = AgentService(operations_service=mock_ops, checkpoint_service=MagicMock())
+        service = AgentService(
+            operations_service=mock_ops, checkpoint_service=MagicMock()
+        )
 
-        with patch("ktrdr.api.services.agent_service._use_stub_workers", return_value=False), \
-             patch("ktrdr.api.services.agent_service.AgentDesignWorker"), \
-             patch("ktrdr.api.services.agent_service.AgentAssessmentWorker"), \
-             patch("ktrdr.api.endpoints.workers.get_worker_registry") as mock_get_reg:
+        with (
+            patch(
+                "ktrdr.api.services.agent_service._use_stub_workers", return_value=False
+            ),
+            patch("ktrdr.api.endpoints.workers.get_worker_registry") as mock_get_reg,
+        ):
             mock_registry = MagicMock()
             mock_get_reg.return_value = mock_registry
 
@@ -36,9 +40,13 @@ class TestAgentServiceDispatchWiring:
         from ktrdr.api.services.agent_service import AgentService
 
         mock_ops = AsyncMock()
-        service = AgentService(operations_service=mock_ops, checkpoint_service=MagicMock())
+        service = AgentService(
+            operations_service=mock_ops, checkpoint_service=MagicMock()
+        )
 
-        with patch("ktrdr.api.services.agent_service._use_stub_workers", return_value=True):
+        with patch(
+            "ktrdr.api.services.agent_service._use_stub_workers", return_value=True
+        ):
             worker = service._get_worker()
 
             # No dispatch in stub mode — uses asyncio tasks
@@ -49,12 +57,16 @@ class TestAgentServiceDispatchWiring:
         from ktrdr.api.services.agent_service import AgentService
 
         mock_ops = AsyncMock()
-        service = AgentService(operations_service=mock_ops, checkpoint_service=MagicMock())
+        service = AgentService(
+            operations_service=mock_ops, checkpoint_service=MagicMock()
+        )
 
-        with patch("ktrdr.api.services.agent_service._use_stub_workers", return_value=False), \
-             patch("ktrdr.api.services.agent_service.AgentDesignWorker"), \
-             patch("ktrdr.api.services.agent_service.AgentAssessmentWorker"), \
-             patch("ktrdr.api.endpoints.workers.get_worker_registry") as mock_get_reg:
+        with (
+            patch(
+                "ktrdr.api.services.agent_service._use_stub_workers", return_value=False
+            ),
+            patch("ktrdr.api.endpoints.workers.get_worker_registry") as mock_get_reg,
+        ):
             mock_registry = MagicMock()
             mock_get_reg.return_value = mock_registry
 
@@ -72,7 +84,9 @@ class TestWorkerStatusIncludesAgentTypes:
         from ktrdr.api.services.agent_service import AgentService
 
         mock_ops = AsyncMock()
-        service = AgentService(operations_service=mock_ops, checkpoint_service=MagicMock())
+        service = AgentService(
+            operations_service=mock_ops, checkpoint_service=MagicMock()
+        )
 
         with patch("ktrdr.api.endpoints.workers.get_worker_registry") as mock_get_reg:
             mock_registry = MagicMock()
@@ -95,7 +109,9 @@ class TestWorkerStatusIncludesAgentTypes:
         from ktrdr.api.services.agent_service import AgentService
 
         mock_ops = AsyncMock()
-        service = AgentService(operations_service=mock_ops, checkpoint_service=MagicMock())
+        service = AgentService(
+            operations_service=mock_ops, checkpoint_service=MagicMock()
+        )
 
         with patch("ktrdr.api.endpoints.workers.get_worker_registry") as mock_get_reg:
             mock_registry = MagicMock()
@@ -107,6 +123,7 @@ class TestWorkerStatusIncludesAgentTypes:
                     worker.status.value = "available"
                     # Not busy
                     from ktrdr.api.models.workers import WorkerStatus
+
                     worker.status = WorkerStatus.AVAILABLE
                     return [worker]
                 return []

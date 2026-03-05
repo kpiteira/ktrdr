@@ -45,7 +45,7 @@ class AgentTriggerRequest(BaseModel):
         if v is None:
             return None
         # Import here to avoid circular dependency
-        from ktrdr.agents.invoker import MODEL_ALIASES, VALID_MODELS
+        from ktrdr.agents.models import MODEL_ALIASES, VALID_MODELS
 
         v_lower = v.lower()
         if v_lower in MODEL_ALIASES or v in VALID_MODELS:

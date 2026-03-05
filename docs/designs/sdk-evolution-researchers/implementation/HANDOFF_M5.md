@@ -29,3 +29,15 @@
 **Subscription model**: When `daily_limit == 0`, budget enforcement is disabled: `can_spend()` always returns True, `get_remaining()` returns `float("inf")`, `get_status()` includes `budget_disabled: True`.
 
 **Backward compatible**: All 21 existing budget tests pass unchanged. Non-zero limits enforce budgets as before. `get_status()` adds `budget_disabled` field for all cases (True/False).
+
+## Task 5.4 Complete: Remove old invoker code + update stub workers
+
+**Deleted files**: `invoker.py`, `executor.py`, `tools.py` (old Anthropic API client, tool executor, tool definitions). Also deleted old in-process `design_worker.py` and `assessment_worker.py` — replaced by containerized `design_agent_worker.py`/`assessment_agent_worker.py` (M3/M4).
+
+**Extracted model resolution**: `VALID_MODELS`, `MODEL_ALIASES`, `DEFAULT_MODEL`, `resolve_model()` moved to new `ktrdr/agents/models.py`. Consumers updated: `agent_service.py`, `api/models/agent.py`, `agents/__init__.py`.
+
+**Agent service cleanup**: Non-stub path now uses `StubDesignWorker`/`StubAssessmentWorker` as fallback (instead of old in-process workers). Container dispatch via `agent_dispatch` takes priority.
+
+**Deleted test files**: 8 test files testing old invoker/executor/tools/workers. New `test_invoker_removal.py` with 15 tests verifying extraction and deletion.
+
+**Gotcha**: Tests from Task 5.2 patched `AgentDesignWorker`/`AgentAssessmentWorker` on agent_service module — needed updating after those imports were removed.
