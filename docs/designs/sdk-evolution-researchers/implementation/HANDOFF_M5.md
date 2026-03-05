@@ -42,16 +42,22 @@
 
 **Gotcha**: Tests from Task 5.2 patched `AgentDesignWorker`/`AgentAssessmentWorker` on agent_service module — needed updating after those imports were removed.
 
-## Task 5.5 Complete: E2E Validation
+## Task 5.5 Complete: E2E Validation — PASSED (Real Agents)
 
-**Test**: `evolution/single-generation` — PARTIAL PASS (11/12 checks)
+**Test**: Full evolution with containerized Claude Code agents — PASSED
 
-**What passed**: CLI command, run directory structure, config/population/operations/results files, genome seeding, 3 operations triggered+completed, full pipeline flow (design→train→backtest→gate→assess), operation ID consistency, API resolution, duration 272s.
+**Full pipeline verified**: design (container) → training → backtest (gate rejected) → assessment (container) → completed. Duration: ~8 minutes per research. Real Claude API calls (claude-haiku-4-5).
 
-**What failed**: All 3 fitness scores = -999.0. Stub design worker produces `strategy_name: "unknown"` → real training/backtest produce low win rates → gate rejection → -999.0. Structural limitation of stub mode.
+**Bugs found and fixed during E2E**:
 
-**What couldn't be tested**: Container dispatch to AGENT_DESIGN/AGENT_ASSESSMENT — no agent containers running. Requires `ktrdr-agent:dev` containers with Claude Code auth volume.
+1. **Operation ID collision** — Container workers reused parent's `task_id` as their own `operation_id`, causing PostgreSQL unique constraint violation. Fix: generate unique `op_design_*`/`op_assessment_*` IDs, store parent reference in metadata.
 
-**Bonus fix**: `COMPOSE_PROJECT_NAME` mismatch in sandbox — `kinfra sandbox status` was using instance ID (long name) but containers use `slot-N`. Fixed `generate_env_file` in both `sandbox.py` and `kinfra/sandbox.py`.
+2. **Orphan detector killing agent ops** — 60s timeout was killing 3-7 minute Claude API calls. Fix: skip `AGENT_DESIGN`/`AGENT_ASSESSMENT` types in orphan detector.
 
-**Infrastructure note**: Fresh sandbox needs `alembic upgrade head` before agent endpoints work.
+3. **Stale cache (split-brain)** — Backend cached container operations as `running` and never refreshed from DB/container. Coordinator saw stale status indefinitely. Fix: register `OperationServiceProxy` for container-dispatched operations (same pattern as training/backtest workers).
+
+4. **Strategy path null** — Container design agent returns `strategy_name` but `strategy_path=null` (MCP saves via API, path is container-local). Fix: fall back to `strategies/{name}.yaml` when path is missing.
+
+**COMPOSE_PROJECT_NAME fix**: `kinfra sandbox status` used instance ID but containers use `slot-N`. Fixed `generate_env_file` in both `sandbox.py` and `kinfra/sandbox.py`.
+
+**Key architectural pattern**: Container agent workers need `OperationServiceProxy` registration (via `_register_container_proxy`) so the backend can poll their HTTP API for status updates, just like training/backtest workers.
