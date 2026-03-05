@@ -520,66 +520,6 @@ class TestAgentServiceNoResearchAgentsImports:
                     ), f"Found research_agents import: from {node.module}"
 
 
-class TestAgentServiceDesignWorkerWiring:
-    """Test Task 2.2: Real design worker wiring.
-
-    Verifies that AgentService uses AgentDesignWorker (not stub) and
-    that stub workers are still used for assessment.
-    """
-
-    def test_get_worker_uses_real_design_worker(self):
-        """AgentService._get_worker() returns orchestrator with real AgentDesignWorker."""
-        from ktrdr.agents.workers.design_worker import AgentDesignWorker
-        from ktrdr.api.services.agent_service import AgentService
-
-        mock_ops = AsyncMock()
-        service = AgentService(operations_service=mock_ops)
-
-        worker = service._get_worker()
-
-        # Design worker should be the real implementation
-        assert isinstance(worker.design_worker, AgentDesignWorker)
-
-    def test_get_worker_uses_services_for_training_and_backtest(self):
-        """AgentService._get_worker() passes None services (lazy loaded)."""
-        from ktrdr.api.services.agent_service import AgentService
-
-        mock_ops = AsyncMock()
-        service = AgentService(operations_service=mock_ops)
-
-        worker = service._get_worker()
-
-        # Training and backtest services are lazy-loaded (None at init)
-        assert worker._training_service is None
-        assert worker._backtest_service is None
-
-    def test_get_worker_uses_real_assessment_worker(self):
-        """AgentService._get_worker() uses AgentAssessmentWorker."""
-        from ktrdr.agents.workers.assessment_worker import AgentAssessmentWorker
-        from ktrdr.api.services.agent_service import AgentService
-
-        mock_ops = AsyncMock()
-        service = AgentService(operations_service=mock_ops)
-
-        worker = service._get_worker()
-
-        assert isinstance(worker.assessment_worker, AgentAssessmentWorker)
-
-    def test_design_worker_receives_operations_service(self):
-        """AgentDesignWorker is initialized with the operations service."""
-        from ktrdr.agents.workers.design_worker import AgentDesignWorker
-        from ktrdr.api.services.agent_service import AgentService
-
-        mock_ops = AsyncMock()
-        service = AgentService(operations_service=mock_ops)
-
-        worker = service._get_worker()
-
-        # Design worker should have the same ops service
-        assert isinstance(worker.design_worker, AgentDesignWorker)
-        assert worker.design_worker.ops is mock_ops
-
-
 class TestAgentServiceCancelById:
     """Test cancel(operation_id) method - M4 Task 4.1.
 

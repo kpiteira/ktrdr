@@ -15,9 +15,7 @@ from typing import TYPE_CHECKING, Any
 from ktrdr import get_logger
 from ktrdr.agents.budget import get_budget_tracker
 from ktrdr.agents.checkpoint_builder import build_agent_checkpoint_state
-from ktrdr.agents.invoker import resolve_model
-from ktrdr.agents.workers.assessment_worker import AgentAssessmentWorker
-from ktrdr.agents.workers.design_worker import AgentDesignWorker
+from ktrdr.agents.models import resolve_model
 from ktrdr.agents.workers.research_worker import AgentResearchWorker
 from ktrdr.agents.workers.stubs import (
     StubAssessmentWorker,
@@ -79,9 +77,9 @@ class AgentService:
             The configured AgentResearchWorker with real or stub workers
             depending on USE_STUB_WORKERS environment variable.
 
-        Note:
-            Design and Assessment are workers (Claude API calls).
-            Training and Backtest are services (lazy-loaded inside orchestrator).
+        When not using stubs, creates an AgentDispatchService that dispatches
+        design and assessment operations to containerized workers via HTTP.
+        Stub workers are used as fallback (agent_dispatch takes priority).
         """
         if self._worker is None:
             checkpoint_svc = self._get_checkpoint_service()
@@ -95,16 +93,25 @@ class AgentService:
                     training_service=None,
                     backtest_service=None,
                     checkpoint_service=checkpoint_svc,
+                    # No dispatch — stub mode uses in-process asyncio tasks
                 )
             else:
+                # Create dispatch service for container workers
+                from ktrdr.agents.dispatch import AgentDispatchService
+                from ktrdr.api.endpoints.workers import get_worker_registry
+
+                registry = get_worker_registry()
+                agent_dispatch = AgentDispatchService(worker_registry=registry)
+
                 self._worker = AgentResearchWorker(
                     operations_service=self.ops,
-                    design_worker=AgentDesignWorker(self.ops),  # Real Claude
-                    assessment_worker=AgentAssessmentWorker(self.ops),  # Real Claude
+                    design_worker=StubDesignWorker(),  # Fallback only
+                    assessment_worker=StubAssessmentWorker(),  # Fallback only
                     # Services lazy-loaded inside orchestrator
                     training_service=None,
                     backtest_service=None,
                     checkpoint_service=checkpoint_svc,
+                    agent_dispatch=agent_dispatch,
                 )
         return self._worker
 
@@ -369,6 +376,7 @@ class AgentService:
 
         Returns:
             Dict mapping worker type to busy/total counts.
+            Includes training, backtesting, and agent worker types.
         """
         from ktrdr.api.endpoints.workers import get_worker_registry
         from ktrdr.api.models.workers import WorkerStatus, WorkerType
@@ -376,7 +384,12 @@ class AgentService:
         registry = get_worker_registry()
         result = {}
 
-        for worker_type in [WorkerType.TRAINING, WorkerType.BACKTESTING]:
+        for worker_type in [
+            WorkerType.TRAINING,
+            WorkerType.BACKTESTING,
+            WorkerType.AGENT_DESIGN,
+            WorkerType.AGENT_ASSESSMENT,
+        ]:
             all_workers = registry.list_workers(worker_type=worker_type)
             busy_workers = [w for w in all_workers if w.status == WorkerStatus.BUSY]
             result[worker_type.value] = {

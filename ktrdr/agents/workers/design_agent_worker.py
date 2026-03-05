@@ -98,7 +98,9 @@ class DesignAgentWorker(WorkerAPIBase):
             Accepts a research brief, creates an operation, and launches
             Claude Code in the background.
             """
-            operation_id = request.task_id or f"worker_design_{uuid.uuid4().hex[:12]}"
+            # Generate unique child operation ID — task_id is the parent research op
+            operation_id = f"op_design_{uuid.uuid4().hex[:12]}"
+            parent_task_id = request.task_id
 
             # Register operation with OperationsService (same pattern as backtest_worker)
             ops = self.get_operations_service()
@@ -109,7 +111,10 @@ class DesignAgentWorker(WorkerAPIBase):
                     symbol=request.symbol,
                     timeframe=request.timeframe,
                     mode="design",
-                    parameters={"brief": request.brief[:200]},
+                    parameters={
+                        "brief": request.brief[:200],
+                        "parent_task_id": parent_task_id,
+                    },
                 ),
             )
 

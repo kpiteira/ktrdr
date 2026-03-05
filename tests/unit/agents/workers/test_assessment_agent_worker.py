@@ -163,13 +163,17 @@ class TestStartEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
-        assert data["operation_id"] == "op_backend_456"
+        assert data["operation_id"].startswith("op_assessment_")
         assert data["status"] == "started"
 
         mock_ops.create_operation.assert_called_once()
         create_kwargs = mock_ops.create_operation.call_args[1]
-        assert create_kwargs["operation_id"] == "op_backend_456"
+        assert create_kwargs["operation_id"].startswith("op_assessment_")
         assert create_kwargs["operation_type"] == OperationType.AGENT_ASSESSMENT
+        # task_id stored as parent reference in metadata
+        assert (
+            create_kwargs["metadata"].parameters["parent_task_id"] == "op_backend_456"
+        )
         mock_ops.start_operation.assert_called_once()
 
     def test_start_generates_id_when_no_task_id(self, client):
@@ -185,7 +189,7 @@ class TestStartEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
-        assert data["operation_id"].startswith("worker_assessment_")
+        assert data["operation_id"].startswith("op_assessment_")
 
     def test_start_requires_strategy_name(self, client):
         """Start endpoint requires strategy_name field."""

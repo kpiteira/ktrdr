@@ -110,9 +110,9 @@ class AssessmentAgentWorker(WorkerAPIBase):
             Accepts strategy metrics and results, creates an operation,
             and launches Claude Code in the background.
             """
-            operation_id = (
-                request.task_id or f"worker_assessment_{uuid.uuid4().hex[:12]}"
-            )
+            # Generate unique child operation ID — task_id is the parent research op
+            operation_id = f"op_assessment_{uuid.uuid4().hex[:12]}"
+            parent_task_id = request.task_id
 
             ops = self.get_operations_service()
             await ops.create_operation(
@@ -124,6 +124,7 @@ class AssessmentAgentWorker(WorkerAPIBase):
                     mode="assessment",
                     parameters={
                         "strategy_name": request.strategy_name,
+                        "parent_task_id": parent_task_id,
                     },
                 ),
             )

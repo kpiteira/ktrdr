@@ -2,14 +2,13 @@
 
 This module contains worker classes for each phase of the agent research cycle:
 - AgentResearchWorker - Orchestrator that manages the full research cycle
-- StubDesignWorker / AgentDesignWorker - Strategy design (Claude)
-- StubAssessmentWorker / AgentAssessmentWorker - Result assessment (Claude)
+- StubDesignWorker / StubAssessmentWorker - Stub workers for testing
+- DesignAgentWorker / AssessmentAgentWorker - Containerized Claude Code workers
 
 Training and Backtest phases are handled by the orchestrator calling
 TrainingService and BacktestingService directly.
 """
 
-from ktrdr.agents.workers.assessment_worker import AgentAssessmentWorker
 from ktrdr.agents.workers.research_worker import AgentResearchWorker
 from ktrdr.agents.workers.stubs import (
     StubAssessmentWorker,
@@ -18,7 +17,6 @@ from ktrdr.agents.workers.stubs import (
 
 __all__ = [
     "AgentResearchWorker",
-    "AgentAssessmentWorker",
     "StubDesignWorker",
     "StubAssessmentWorker",
 ]

@@ -123,5 +123,5 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/agent-entrypoint.sh"]
 
 # No default CMD — docker-compose provides the command per worker type.
-# Example: uvicorn ktrdr.agents.workers.design_worker:app --host 0.0.0.0 --port 5010
+# Example: uvicorn ktrdr.agents.workers.design_agent_worker:app --host 0.0.0.0 --port 5010
 CMD ["echo", "No worker command specified. Use docker-compose to set the command."]

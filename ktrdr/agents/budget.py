@@ -41,14 +41,17 @@ class BudgetTracker:
 
         Args:
             daily_limit: Daily budget limit in dollars. Defaults to
-                KTRDR_AGENT_DAILY_BUDGET env var or $5.00.
+                KTRDR_AGENT_DAILY_BUDGET env var or $20.00.
+                Set to 0 to disable budget enforcement (subscription model).
             data_dir: Directory for budget files. Defaults to KTRDR_AGENT_BUDGET_DIR
                 env var or "data/budget".
         """
         from ktrdr.config.settings import get_agent_settings
 
         settings = get_agent_settings()
-        self.daily_limit = daily_limit or settings.daily_budget
+        self.daily_limit = (
+            daily_limit if daily_limit is not None else settings.daily_budget
+        )
         resolved_dir = data_dir if data_dir else settings.budget_dir
         self.data_dir = Path(resolved_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -91,7 +94,10 @@ class BudgetTracker:
 
         Returns:
             Remaining budget in dollars (never negative).
+            Returns infinity when budget is disabled (limit=0).
         """
+        if self.daily_limit == 0:
+            return float("inf")
         return max(0, self.daily_limit - self.get_today_spend())
 
     def can_spend(self, estimated_amount: float = 0.15) -> tuple[bool, str]:
@@ -104,6 +110,8 @@ class BudgetTracker:
             Tuple of (can_spend, reason). reason is "ok" if can spend,
             otherwise describes why budget is exhausted.
         """
+        if self.daily_limit == 0:
+            return True, "ok"
         remaining = self.get_remaining()
         if remaining < estimated_amount:
             return (
@@ -144,14 +152,20 @@ class BudgetTracker:
         """
         data = self._load_today()
         total_spend = data.get("total_spend", 0.0)
-        remaining = max(0, self.daily_limit - total_spend)
-        cycles_affordable = int(remaining / 0.15) if remaining > 0 else 0
+        budget_disabled = self.daily_limit == 0
+        remaining = (
+            float("inf") if budget_disabled else max(0, self.daily_limit - total_spend)
+        )
+        cycles_affordable = (
+            -1 if budget_disabled else int(remaining / 0.15) if remaining > 0 else 0
+        )
 
         return {
             "date": data.get("date"),
             "daily_limit": self.daily_limit,
             "today_spend": total_spend,
             "remaining": remaining,
+            "budget_disabled": budget_disabled,
             "cycles_affordable": cycles_affordable,
             "spend_events": len(data.get("spend", [])),
         }

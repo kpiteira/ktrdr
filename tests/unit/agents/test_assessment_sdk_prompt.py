@@ -58,9 +58,9 @@ class TestAssessmentSystemPrompt:
         """Prompt is slim (~60-100 lines), not a massive context dump."""
         line_count = len(ASSESSMENT_SYSTEM_PROMPT.strip().split("\n"))
         assert line_count < 120, f"Prompt is {line_count} lines — should be under 120"
-        assert line_count > 30, (
-            f"Prompt is only {line_count} lines — too short to be useful"
-        )
+        assert (
+            line_count > 30
+        ), f"Prompt is only {line_count} lines — too short to be useful"
 
     def test_prompt_does_not_contain_indicator_lists(self):
         """Prompt should NOT pre-load indicator lists (D7: discover via MCP)."""
