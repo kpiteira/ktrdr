@@ -153,7 +153,9 @@ class TestStartEndpoint:
         create_kwargs = mock_ops.create_operation.call_args[1]
         assert create_kwargs["operation_id"].startswith("op_design_")
         # task_id stored as parent reference in metadata
-        assert create_kwargs["metadata"].parameters["parent_task_id"] == "op_backend_456"
+        assert (
+            create_kwargs["metadata"].parameters["parent_task_id"] == "op_backend_456"
+        )
         assert create_kwargs["operation_type"] == OperationType.AGENT_DESIGN
         mock_ops.start_operation.assert_called_once()
 
