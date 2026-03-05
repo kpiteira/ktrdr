@@ -21,3 +21,11 @@
 **Gotcha: lazy import patching** — `get_worker_registry` is imported lazily inside function bodies. Tests must patch `ktrdr.api.endpoints.workers.get_worker_registry`, not `ktrdr.api.services.agent_service.get_worker_registry`.
 
 **Note for Task 5.3**: `resolve_model` is still imported from `ktrdr.agents.invoker` at top of agent_service.py. Will need to be moved before invoker is deleted in Task 5.4.
+
+## Task 5.3 Complete: Adapt BudgetTracker for subscription model
+
+**Constructor fix**: `daily_limit=0.0` was treated as falsy and replaced with default ($20). Changed to `daily_limit if daily_limit is not None else settings.daily_budget`.
+
+**Subscription model**: When `daily_limit == 0`, budget enforcement is disabled: `can_spend()` always returns True, `get_remaining()` returns `float("inf")`, `get_status()` includes `budget_disabled: True`.
+
+**Backward compatible**: All 21 existing budget tests pass unchanged. Non-zero limits enforce budgets as before. `get_status()` adds `budget_disabled` field for all cases (True/False).
