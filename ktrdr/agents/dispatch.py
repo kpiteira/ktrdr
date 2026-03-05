@@ -85,6 +85,7 @@ class AgentDispatchService:
             raise RuntimeError("Design worker did not return operation_id")
 
         logger.info(f"Design accepted by worker {worker.worker_id}: op={operation_id}")
+        result["worker_endpoint"] = worker.endpoint_url
         return result
 
     async def dispatch_assessment(
@@ -149,4 +150,5 @@ class AgentDispatchService:
         logger.info(
             f"Assessment accepted by worker {worker.worker_id}: op={operation_id}"
         )
+        result["worker_endpoint"] = worker.endpoint_url
         return result

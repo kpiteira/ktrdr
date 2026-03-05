@@ -330,9 +330,15 @@ class AgentResearchWorker:
                     timeframe=timeframe,
                 )
                 design_op_id = result["operation_id"]
+                worker_endpoint = result.get("worker_endpoint")
                 if parent_op:
                     parent_op.metadata.parameters["design_op_id"] = design_op_id
                 self._current_service_child_op_id = design_op_id
+
+                # Register remote proxy so backend can poll container for status
+                if worker_endpoint:
+                    self._register_container_proxy(design_op_id, worker_endpoint)
+
                 logger.info(f"Design dispatched to container: {design_op_id}")
                 return
             except Exception as e:
@@ -882,9 +888,15 @@ class AgentResearchWorker:
                     backtest_results=backtest_result or {},
                 )
                 assessment_op_id = result["operation_id"]
+                worker_endpoint = result.get("worker_endpoint")
                 if parent_op:
                     parent_op.metadata.parameters["assessment_op_id"] = assessment_op_id
                 self._current_service_child_op_id = assessment_op_id
+
+                # Register remote proxy so backend can poll container for status
+                if worker_endpoint:
+                    self._register_container_proxy(assessment_op_id, worker_endpoint)
+
                 logger.info(f"Assessment dispatched to container: {assessment_op_id}")
                 return
             except Exception as e:
@@ -1315,6 +1327,31 @@ class AgentResearchWorker:
 
         # Record metrics
         record_cycle_outcome("failed")
+
+    def _register_container_proxy(self, child_op_id: str, worker_endpoint: str) -> None:
+        """Register a remote proxy for a container-dispatched operation.
+
+        This enables the backend's OperationsService to poll the container
+        worker for status updates instead of relying on stale cache entries.
+        Follows the same pattern as training/backtest worker proxies.
+
+        Args:
+            child_op_id: The child operation ID on the container worker.
+            worker_endpoint: The container worker's base URL (e.g., http://host:port).
+        """
+        from ktrdr.api.services.adapters.operation_service_proxy import (
+            OperationServiceProxy,
+        )
+
+        proxy = OperationServiceProxy(base_url=worker_endpoint)
+        self.ops.register_remote_proxy(
+            backend_operation_id=child_op_id,
+            proxy=proxy,
+            host_operation_id=child_op_id,
+        )
+        logger.info(
+            f"Registered container proxy for {child_op_id} at {worker_endpoint}"
+        )
 
     def _get_child_op_id(self, op: Any, phase: str) -> str | None:
         """Get child operation ID for current phase.
