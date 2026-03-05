@@ -137,7 +137,7 @@ class OrphanOperationDetector:
         3. If not seen before, start tracking with current timestamp
         4. If timeout exceeded, mark as FAILED
         """
-        from ktrdr.api.models.operations import OperationStatus
+        from ktrdr.api.models.operations import OperationStatus, OperationType
 
         now = datetime.now(timezone.utc)
 
@@ -165,6 +165,16 @@ class OrphanOperationDetector:
             if self._is_backend_local(op):
                 # Skip - already handled on startup
                 # Defensive: remove from tracking if previously tracked
+                self._potential_orphans.pop(op_id, None)
+                continue
+
+            # Skip agent operations — these run in containers with Claude API
+            # calls that take 3-10 minutes, far exceeding the orphan timeout.
+            # Container workers manage their own lifecycle.
+            if op.operation_type in (
+                OperationType.AGENT_DESIGN,
+                OperationType.AGENT_ASSESSMENT,
+            ):
                 self._potential_orphans.pop(op_id, None)
                 continue
 
