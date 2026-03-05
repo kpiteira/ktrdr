@@ -331,13 +331,16 @@ class AgentResearchWorker:
                 )
                 design_op_id = result["operation_id"]
                 worker_endpoint = result.get("worker_endpoint")
+                if not worker_endpoint:
+                    raise WorkerError(
+                        f"Design dispatch missing worker_endpoint for {design_op_id}"
+                    )
                 if parent_op:
                     parent_op.metadata.parameters["design_op_id"] = design_op_id
                 self._current_service_child_op_id = design_op_id
 
                 # Register remote proxy so backend can poll container for status
-                if worker_endpoint:
-                    self._register_container_proxy(design_op_id, worker_endpoint)
+                self._register_container_proxy(design_op_id, worker_endpoint)
 
                 logger.info(f"Design dispatched to container: {design_op_id}")
                 return
@@ -897,13 +900,16 @@ class AgentResearchWorker:
                 )
                 assessment_op_id = result["operation_id"]
                 worker_endpoint = result.get("worker_endpoint")
+                if not worker_endpoint:
+                    raise WorkerError(
+                        f"Assessment dispatch missing worker_endpoint for {assessment_op_id}"
+                    )
                 if parent_op:
                     parent_op.metadata.parameters["assessment_op_id"] = assessment_op_id
                 self._current_service_child_op_id = assessment_op_id
 
                 # Register remote proxy so backend can poll container for status
-                if worker_endpoint:
-                    self._register_container_proxy(assessment_op_id, worker_endpoint)
+                self._register_container_proxy(assessment_op_id, worker_endpoint)
 
                 logger.info(f"Assessment dispatched to container: {assessment_op_id}")
                 return

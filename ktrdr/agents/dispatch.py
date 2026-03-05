@@ -75,6 +75,8 @@ class AgentDispatchService:
             f"(task_id={task_id})"
         )
 
+        # Timeout is for the dispatch handshake only (accepting the work),
+        # not for the full operation which runs asynchronously (3-10 min).
         async with httpx.AsyncClient() as client:
             response = await client.post(url, json=payload, timeout=30.0)
             response.raise_for_status()
@@ -138,6 +140,8 @@ class AgentDispatchService:
             f"(task_id={task_id}, strategy={strategy_name})"
         )
 
+        # Timeout is for the dispatch handshake only (accepting the work),
+        # not for the full operation which runs asynchronously (3-10 min).
         async with httpx.AsyncClient() as client:
             response = await client.post(url, json=payload, timeout=30.0)
             response.raise_for_status()

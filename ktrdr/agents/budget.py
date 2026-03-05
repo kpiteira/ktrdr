@@ -157,7 +157,7 @@ class BudgetTracker:
             float("inf") if budget_disabled else max(0, self.daily_limit - total_spend)
         )
         cycles_affordable = (
-            int(remaining / 0.15) if remaining > 0 and not budget_disabled else 0
+            -1 if budget_disabled else int(remaining / 0.15) if remaining > 0 else 0
         )
 
         return {

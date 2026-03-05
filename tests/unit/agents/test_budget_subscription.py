@@ -41,6 +41,7 @@ class TestBudgetDisabledWithZeroLimit:
         status = tracker_disabled.get_status()
         assert status["budget_disabled"] is True
         assert status["remaining"] == float("inf")
+        assert status["cycles_affordable"] == -1  # unlimited
 
     def test_record_spend_still_works_when_disabled(self, tracker_disabled):
         """Spend is still recorded for auditing even when disabled."""

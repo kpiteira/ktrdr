@@ -150,6 +150,7 @@ def mock_agent_dispatch():
             "operation_id": "op_design_container_1",
             "success": True,
             "status": "started",
+            "worker_endpoint": "http://design-agent:5010",
         }
     )
     dispatch.dispatch_assessment = AsyncMock(
@@ -157,6 +158,7 @@ def mock_agent_dispatch():
             "operation_id": "op_assess_container_1",
             "success": True,
             "status": "started",
+            "worker_endpoint": "http://assessment-agent:5020",
         }
     )
     return dispatch
