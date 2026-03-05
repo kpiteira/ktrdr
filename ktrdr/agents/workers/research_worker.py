@@ -147,16 +147,20 @@ class AgentResearchWorker:
         training_service: Any = None,  # TrainingService - lazy loaded if None
         backtest_service: Any = None,  # BacktestingService - lazy loaded if None
         checkpoint_service: Any = None,  # CheckpointService - for save/delete on failure/success
+        agent_dispatch: Any = None,  # AgentDispatchService - HTTP dispatch to container workers
     ):
         """Initialize the orchestrator.
 
         Args:
             operations_service: Service for tracking operations.
-            design_worker: Worker for strategy design phase.
-            assessment_worker: Worker for result assessment phase.
+            design_worker: Worker for strategy design phase (in-process/stub fallback).
+            assessment_worker: Worker for result assessment phase (in-process/stub fallback).
             training_service: Optional TrainingService (lazy loaded if None).
             backtest_service: Optional BacktestingService (lazy loaded if None).
             checkpoint_service: Optional CheckpointService for checkpoint operations.
+            agent_dispatch: Optional AgentDispatchService for container worker dispatch.
+                When provided, design and assessment are dispatched via HTTP to containers.
+                When None, falls back to in-process workers (stub mode).
         """
         self.ops = operations_service
         self.design_worker = design_worker
@@ -164,6 +168,7 @@ class AgentResearchWorker:
         self._training_service = training_service
         self._backtest_service = backtest_service
         self._checkpoint_service = checkpoint_service
+        self._agent_dispatch = agent_dispatch
 
         # Read poll interval from environment
         self.POLL_INTERVAL = _get_poll_interval()
@@ -288,6 +293,9 @@ class AgentResearchWorker:
     async def _start_design(self, operation_id: str) -> None:
         """Start the design phase with design worker.
 
+        When agent_dispatch is available, dispatches to container workers via HTTP.
+        Otherwise falls back to in-process workers (stub mode).
+
         Args:
             operation_id: Parent operation ID.
         """
@@ -295,9 +303,13 @@ class AgentResearchWorker:
         # Get model and brief from parent metadata (Task 8.3 runtime selection, M3 brief)
         model = None
         brief = None
+        symbol = "EURUSD"
+        timeframe = "1h"
         if parent_op:
             model = parent_op.metadata.parameters.get("model")
             brief = parent_op.metadata.parameters.get("brief")
+            symbol = getattr(parent_op.metadata, "symbol", None) or "EURUSD"
+            timeframe = getattr(parent_op.metadata, "timeframe", None) or "1h"
             parent_op.metadata.parameters["phase"] = "designing"
             parent_op.metadata.parameters["phase_start_time"] = time.time()
         logger.info(f"Phase started: {operation_id}, phase=designing, model={model}")
@@ -308,7 +320,25 @@ class AgentResearchWorker:
             OperationProgress(percentage=5.0, current_step="Designing strategy..."),
         )
 
-        # Create task wrapper - worker owns its child operation
+        # Container dispatch path — HTTP to container workers
+        if self._agent_dispatch is not None:
+            try:
+                result = await self._agent_dispatch.dispatch_design(
+                    task_id=operation_id,
+                    brief=brief or "Design a trading strategy",
+                    symbol=symbol,
+                    timeframe=timeframe,
+                )
+                design_op_id = result["operation_id"]
+                if parent_op:
+                    parent_op.metadata.parameters["design_op_id"] = design_op_id
+                self._current_service_child_op_id = design_op_id
+                logger.info(f"Design dispatched to container: {design_op_id}")
+                return
+            except Exception as e:
+                raise WorkerError(f"Design dispatch failed: {e}") from e
+
+        # Fallback: in-process workers (stub mode)
         async def run_child():
             # Pass parent operation_id - worker creates and manages its own child op
             # Worker stores child op ID in parent metadata (design_op_id) for tracking
@@ -809,6 +839,9 @@ class AgentResearchWorker:
     ) -> None:
         """Start the assessment phase with assessment worker.
 
+        When agent_dispatch is available, dispatches to container workers via HTTP.
+        Otherwise falls back to in-process workers (stub mode).
+
         Args:
             operation_id: Parent operation ID.
             gate_rejection_reason: If set, indicates a gate rejection scenario.
@@ -833,13 +866,33 @@ class AgentResearchWorker:
         # Get results for assessment from parent metadata
         params = parent_op.metadata.parameters if parent_op else {}
         training_result = params.get("training_result", {})
+        strategy_name = params.get("strategy_name", "unknown")
         # For training gate rejection, backtest_result is None (not empty dict)
         backtest_result = params.get("backtest_result")
         if backtest_result == {}:
             backtest_result = None if gate_rejection_reason else {}
+
+        # Container dispatch path — HTTP to container workers
+        if self._agent_dispatch is not None:
+            try:
+                result = await self._agent_dispatch.dispatch_assessment(
+                    task_id=operation_id,
+                    strategy_name=strategy_name,
+                    training_metrics=training_result,
+                    backtest_results=backtest_result or {},
+                )
+                assessment_op_id = result["operation_id"]
+                if parent_op:
+                    parent_op.metadata.parameters["assessment_op_id"] = assessment_op_id
+                self._current_service_child_op_id = assessment_op_id
+                logger.info(f"Assessment dispatched to container: {assessment_op_id}")
+                return
+            except Exception as e:
+                raise WorkerError(f"Assessment dispatch failed: {e}") from e
+
+        # Fallback: in-process workers (stub mode)
         results = {"training": training_result, "backtest": backtest_result}
 
-        # Create task wrapper - worker owns its child operation
         async def run_child():
             # Pass parent operation_id - worker creates and manages its own child op
             # Worker stores child op ID in parent metadata (assessment_op_id) for tracking
@@ -1157,6 +1210,10 @@ class AgentResearchWorker:
         RUNNING but no asyncio task exists. This orphaned state needs
         detection and recovery.
 
+        When using container dispatch (agent_dispatch is set), orphan detection
+        is skipped because container workers survive backend restarts — they're
+        separate processes that continue running independently.
+
         Args:
             operation_id: Parent research operation ID.
             phase: Current phase name ("designing" or "assessing").
@@ -1165,6 +1222,10 @@ class AgentResearchWorker:
         Returns:
             True if an orphan was detected and handled, False otherwise.
         """
+        # Container workers survive backend restarts — no orphan detection needed
+        if self._agent_dispatch is not None:
+            return False
+
         # Only check if child operation exists and is RUNNING
         if child_op is None:
             return False
