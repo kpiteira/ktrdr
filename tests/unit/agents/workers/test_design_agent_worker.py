@@ -145,13 +145,15 @@ class TestStartEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
-        assert data["operation_id"] == "op_backend_456"
+        assert data["operation_id"].startswith("op_design_")
         assert data["status"] == "started"
 
         # Verify operation was registered with OperationsService
         mock_ops.create_operation.assert_called_once()
         create_kwargs = mock_ops.create_operation.call_args[1]
-        assert create_kwargs["operation_id"] == "op_backend_456"
+        assert create_kwargs["operation_id"].startswith("op_design_")
+        # task_id stored as parent reference in metadata
+        assert create_kwargs["metadata"].parameters["parent_task_id"] == "op_backend_456"
         assert create_kwargs["operation_type"] == OperationType.AGENT_DESIGN
         mock_ops.start_operation.assert_called_once()
 
@@ -168,7 +170,7 @@ class TestStartEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
-        assert data["operation_id"].startswith("worker_design_")
+        assert data["operation_id"].startswith("op_design_")
 
     def test_start_requires_brief(self, client):
         """Start endpoint requires brief field."""
