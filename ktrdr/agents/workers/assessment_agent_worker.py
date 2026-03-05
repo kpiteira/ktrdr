@@ -237,7 +237,7 @@ class AssessmentAgentWorker(WorkerAPIBase):
                                 pass
                         break
 
-                if verdict or strategy_name:
+                if verdict and strategy_name:
                     last_save = {
                         "verdict": verdict,
                         "strategy_name": strategy_name,

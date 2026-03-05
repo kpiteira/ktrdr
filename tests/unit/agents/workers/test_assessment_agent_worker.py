@@ -329,6 +329,25 @@ class TestResultExtraction:
         assert result["verdict"] == "poor"
         assert result["assessment_path"] is None
 
+    def test_extract_requires_both_verdict_and_strategy_name(self, worker):
+        """Extraction returns None if verdict is missing (strategy_name alone is not enough)."""
+        transcript = [
+            {
+                "type": "tool_use",
+                "tool": "mcp__ktrdr__save_assessment",
+                "input": {
+                    "strategy_name": "test_strategy",
+                    # verdict is missing
+                    "strengths": [],
+                    "weaknesses": [],
+                    "suggestions": [],
+                },
+                "id": "tu_no_verdict",
+            },
+        ]
+        result = worker.extract_assessment_from_transcript(transcript)
+        assert result is None
+
     def test_extract_ignores_non_assessment_tools(self, worker):
         """Other tool calls are ignored during extraction."""
         transcript = [

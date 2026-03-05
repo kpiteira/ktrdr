@@ -6,7 +6,7 @@
 
 **Key differences from design worker**: Assessment input is structured (strategy_name, training_metrics, backtest_results dicts) vs design's free-form brief. Result extraction targets `mcp__ktrdr__save_assessment` tool and extracts verdict, strengths, weaknesses, suggestions, hypotheses, assessment_path.
 
-**Placeholder prompt at `ktrdr/agents/assessment_sdk_prompt.py`** — Minimal one-liner. Task 4.2 will flesh out the full analysis rubric.
+**Assessment system prompt implemented at `ktrdr/agents/assessment_sdk_prompt.py`** — see Task 4.2 for the full analysis rubric and prompt structure.
 
 ## Task 4.2 Complete: Write Assessment Agent System Prompt
 

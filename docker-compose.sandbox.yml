@@ -529,7 +529,7 @@ services:
       # Shared data directories (same as other workers)
       - ${KTRDR_DATA_DIR:-./data}:/app/data:ro
       - ${KTRDR_MODELS_DIR:-./models}:/app/models:ro
-      - ${KTRDR_STRATEGIES_DIR:-./strategies}:/app/strategies:ro
+      - ${KTRDR_STRATEGIES_DIR:-./strategies}:/app/strategies
       # Experiment memory (read/write for saving experiment records and hypotheses)
       - ./memory:/app/memory
       # MCP server (mounted outside /app to avoid pip mcp package shadowing)
