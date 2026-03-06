@@ -54,44 +54,2131 @@ hypotheses:
   tested_by: []
   created: '2025-12-27T00:00:00Z'
 - id: H_007
-  text: Wider RSI bands will increase trade count
-  source_experiment: exp_20260305_134039_e5c47437
-  rationale: Current RSI thresholds too conservative
+  text: Data artifact or configuration error in backtest setup caused anomalous single-trade
+    result
+  source_experiment: exp_20260225_215304_1de8fffb
+  rationale: Generated during assessment
   status: untested
   tested_by: []
-  created: '2026-03-05T13:40:39.234074'
+  created: '2026-02-25T21:53:04.595084'
 - id: H_008
-  text: Wider RSI bands will increase trade count
-  source_experiment: exp_20260305_134039_cf815f52
-  rationale: Current RSI thresholds too conservative
+  text: Indicator relevance or fuzzy set configurations are misaligned with market
+    dynamics
+  source_experiment: exp_20260225_215304_1de8fffb
+  rationale: Generated during assessment
   status: untested
   tested_by: []
-  created: '2026-03-05T13:40:39.274063'
+  created: '2026-02-25T21:53:04.602034'
 - id: H_009
-  text: Wider RSI bands will increase trade count
-  source_experiment: exp_20260305_134039_ae152ac0
-  rationale: Current RSI thresholds too conservative
+  text: Trade filtering logic needed to prevent over-trading and improve signal confirmation
+  source_experiment: exp_20260225_215304_1de8fffb
+  rationale: Generated during assessment
   status: untested
   tested_by: []
-  created: '2026-03-05T13:40:39.294970'
+  created: '2026-02-25T21:53:04.608199'
 - id: H_010
-  text: Wider RSI bands will increase trade count
-  source_experiment: exp_20260305_134115_572ba315
-  rationale: Current RSI thresholds too conservative
+  text: ADX/ROC indicator configuration thresholds are set too stringently, preventing
+    signal generation
+  source_experiment: exp_20260225_215329_8a248aa1
+  rationale: Generated during assessment
   status: untested
   tested_by: []
-  created: '2026-03-05T13:41:15.218154'
+  created: '2026-02-25T21:53:29.556819'
 - id: H_011
-  text: Wider RSI bands will increase trade count
-  source_experiment: exp_20260305_134115_f679ecbb
-  rationale: Current RSI thresholds too conservative
+  text: Fuzzy logic membership functions are miscalibrated, filtering out valid trading
+    opportunities
+  source_experiment: exp_20260225_215329_8a248aa1
+  rationale: Generated during assessment
   status: untested
   tested_by: []
-  created: '2026-03-05T13:41:15.404271'
+  created: '2026-02-25T21:53:29.563679'
 - id: H_012
-  text: Wider RSI bands will increase trade count
-  source_experiment: exp_20260305_134115_843dfd04
-  rationale: Current RSI thresholds too conservative
+  text: Neural network architecture or hyperparameters are inappropriate for this
+    prediction task
+  source_experiment: exp_20260225_215329_8a248aa1
+  rationale: Generated during assessment
   status: untested
   tested_by: []
-  created: '2026-03-05T13:41:15.442862'
+  created: '2026-02-25T21:53:29.570895'
+- id: H_013
+  text: Indicator thresholds are too restrictive, preventing normal signal generation
+  source_experiment: exp_20260225_215403_15bc5c18
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-25T21:54:03.840350'
+- id: H_014
+  text: Position sizing logic contains exponential multipliers causing unrealistic
+    return calculations
+  source_experiment: exp_20260225_215403_15bc5c18
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-25T21:54:03.848503'
+- id: H_015
+  text: Model architecture or training configuration prevents proper learning
+  source_experiment: exp_20260225_215403_15bc5c18
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-25T21:54:03.857271'
+- id: H_016
+  text: Backtesting implementation has bugs in order execution or slippage modeling
+  source_experiment: exp_20260225_215403_15bc5c18
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-25T21:54:03.866455'
+- id: H_017
+  text: Data integrity issues exist in price feeds or training data
+  source_experiment: exp_20260225_215403_15bc5c18
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-25T21:54:03.875899'
+- id: H_018
+  text: RSI and CMF indicators are not being calculated correctly
+  source_experiment: exp_20260225_215615_10e29f92
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-25T21:56:15.073003'
+- id: H_019
+  text: The fuzzy logic system has a fundamental architectural flaw for processing
+    technical indicator data
+  source_experiment: exp_20260225_215615_10e29f92
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-25T21:56:15.083275'
+- id: H_020
+  text: There is a critical implementation bug causing signal reversal or exponential
+    loss multiplication
+  source_experiment: exp_20260225_215615_10e29f92
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-25T21:56:15.094965'
+- id: H_021
+  text: Price and volume data sources have integrity issues
+  source_experiment: exp_20260225_215615_10e29f92
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-25T21:56:15.106183'
+- id: H_022
+  text: A simplified strategy architecture with fewer components would improve learning
+    and performance
+  source_experiment: exp_20260225_215615_10e29f92
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-25T21:56:15.117974'
+- id: H_023
+  text: Standard RSI thresholds (30/70 levels) would generate better trading signals
+    than the 1-3 range
+  source_experiment: exp_20260226_031012_272e3f10
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:10:12.209274'
+- id: H_024
+  text: Multi-indicator confirmation combining RSI with moving averages and trend
+    filters would reduce false signals
+  source_experiment: exp_20260226_031012_272e3f10
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:10:12.235338'
+- id: H_025
+  text: Implementation of stop-losses and position sizing would prevent catastrophic
+    drawdowns
+  source_experiment: exp_20260226_031012_272e3f10
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:10:12.256791'
+- id: H_026
+  text: Training data quality issues prevented the model from learning meaningful
+    predictive patterns
+  source_experiment: exp_20260226_031012_272e3f10
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:10:12.280500'
+- id: H_027
+  text: Buy/sell signals are inverted in the decision logic
+  source_experiment: exp_20260226_031035_41a460ed
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:10:35.688613'
+- id: H_028
+  text: Position sizing or leverage calculation contains critical errors
+  source_experiment: exp_20260226_031035_41a460ed
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:10:35.712034'
+- id: H_029
+  text: Fisher Transform or momentum indicator calculations are misconfigured
+  source_experiment: exp_20260226_031035_41a460ed
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:10:35.737786'
+- id: H_030
+  text: Training data contains corrupted or mismatched feature-label relationships
+  source_experiment: exp_20260226_031035_41a460ed
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:10:35.765727'
+- id: H_031
+  text: Simplified momentum signals without Fisher Transform complexity will perform
+    better
+  source_experiment: exp_20260226_031035_41a460ed
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:10:35.788352'
+- id: H_032
+  text: The RSI/ADX filter conservative approach is fundamentally misaligned with
+    actual market dynamics
+  source_experiment: exp_20260226_031113_f2c55a27
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:11:13.269686'
+- id: H_033
+  text: The fuzzy logic model is generating false signals or misclassifying market
+    conditions
+  source_experiment: exp_20260226_031113_f2c55a27
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:11:13.300963'
+- id: H_034
+  text: Model experienced severe overfitting during training with zero loss but zero
+    real-world predictive power
+  source_experiment: exp_20260226_031113_f2c55a27
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:11:13.329738'
+- id: H_035
+  text: Simpler, more robust trading logic would outperform the complex fuzzy system
+    approach
+  source_experiment: exp_20260226_031113_f2c55a27
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:11:13.363370'
+- id: H_036
+  text: Buy/sell signals may be inverted, causing opposite directional trades
+  source_experiment: exp_20260226_033903_c65a38a3
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:39:03.450539'
+- id: H_037
+  text: Indicator calculations (Stochastic, Williams %R, dual momentum) are incorrect
+    or producing inverted values
+  source_experiment: exp_20260226_033903_c65a38a3
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:39:03.481893'
+- id: H_038
+  text: Combination of three indicators creates conflicting signals that reduce strategy
+    effectiveness
+  source_experiment: exp_20260226_033903_c65a38a3
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:39:03.510421'
+- id: H_039
+  text: Historical price data or indicator values contain errors or misalignment
+  source_experiment: exp_20260226_033903_c65a38a3
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:39:03.540289'
+- id: H_040
+  text: Training pipeline contains a critical bug preventing model convergence
+  source_experiment: exp_20260226_035203_a5d3afbc
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:52:03.563222'
+- id: H_041
+  text: Data quality issues or formatting errors caused the extreme backtest results
+  source_experiment: exp_20260226_035203_a5d3afbc
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:52:03.595287'
+- id: H_042
+  text: Increasing sample size to 50+ trades will reveal true strategy performance
+  source_experiment: exp_20260226_035203_a5d3afbc
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:52:03.626990'
+- id: H_043
+  text: Testing across longer periods and diverse market conditions will expose strategy
+    limitations
+  source_experiment: exp_20260226_035203_a5d3afbc
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:52:03.667689'
+- id: H_044
+  text: Model architecture is incompatible with the prediction task or has structural
+    flaws preventing gradient propagation
+  source_experiment: exp_20260226_035208_f0570498
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:52:08.880360'
+- id: H_045
+  text: Training data preprocessing is corrupted or misaligned, preventing the model
+    from learning meaningful patterns
+  source_experiment: exp_20260226_035208_f0570498
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:52:08.924350'
+- id: H_046
+  text: Loss function is misconfigured or inappropriate for the binary classification
+    problem
+  source_experiment: exp_20260226_035208_f0570498
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:52:08.959528'
+- id: H_047
+  text: Multi-timeframe RSI signals are too noisy or statistically random rather than
+    predictive
+  source_experiment: exp_20260226_035208_f0570498
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:52:08.995716'
+- id: H_048
+  text: Breakthrough detection logic generates excessive false positives due to loose
+    thresholds
+  source_experiment: exp_20260226_035208_f0570498
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:52:09.032619'
+- id: H_049
+  text: Buy/sell signals are inverted or reversed in implementation
+  source_experiment: exp_20260226_035251_2f83feb3
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:52:51.199069'
+- id: H_050
+  text: The three indicators (Williams R, Aroon, Trend) are conflicting with each
+    other and should be tested independently first
+  source_experiment: exp_20260226_035251_2f83feb3
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:52:51.226988'
+- id: H_051
+  text: Data pipeline or configuration error is preventing proper training and signal
+    generation
+  source_experiment: exp_20260226_035251_2f83feb3
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:52:51.257273'
+- id: H_052
+  text: Data quality issues in the training dataset are preventing model learning
+  source_experiment: exp_20260226_035309_638af948
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:53:09.517015'
+- id: H_053
+  text: Lookahead bias in the training pipeline is causing artificially inflated validation
+    metrics that don't generalize
+  source_experiment: exp_20260226_035309_638af948
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:53:09.547373'
+- id: H_054
+  text: Fuzzy logic rules are inverted or fundamentally misconfigured, generating
+    inverse signals
+  source_experiment: exp_20260226_035309_638af948
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:53:09.581311'
+- id: H_055
+  text: Indicator calculations contain errors that produce misleading signals
+  source_experiment: exp_20260226_035309_638af948
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:53:09.612126'
+- id: H_056
+  text: Training configuration parameters (learning rate, epochs, architecture) are
+    inappropriate for this problem
+  source_experiment: exp_20260226_035309_638af948
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:53:09.643473'
+- id: H_057
+  text: Training data quality or volume is insufficient for the fuzzy neural network
+    to learn patterns
+  source_experiment: exp_20260226_035509_08fb6ec1
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:55:09.504650'
+- id: H_058
+  text: Fuzzy set definitions are fundamentally incompatible with the underlying market
+    data distribution
+  source_experiment: exp_20260226_035509_08fb6ec1
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:55:09.541163'
+- id: H_059
+  text: Alternative indicator combinations (not RVI-based) may have better historical
+    performance
+  source_experiment: exp_20260226_035509_08fb6ec1
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:55:09.583617'
+- id: H_060
+  text: Simplified fuzzy logic rules without neural network component may perform
+    better
+  source_experiment: exp_20260226_035509_08fb6ec1
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:55:09.620738'
+- id: H_061
+  text: Performance may improve with different market symbols or timeframes
+  source_experiment: exp_20260226_035509_08fb6ec1
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:55:09.660453'
+- id: H_062
+  text: Data pipeline contains errors or corruption preventing proper model training
+  source_experiment: exp_20260226_035554_a630154f
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:55:54.025089'
+- id: H_063
+  text: Loss function is incorrectly implemented, causing inverted or nonsensical
+    optimization signals
+  source_experiment: exp_20260226_035554_a630154f
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:55:54.062533'
+- id: H_064
+  text: Fuzzy logic system architecture is fundamentally incompatible with the trading
+    task
+  source_experiment: exp_20260226_035554_a630154f
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:55:54.106935'
+- id: H_065
+  text: A simpler baseline model will successfully train and achieve reasonable performance
+  source_experiment: exp_20260226_035554_a630154f
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:55:54.144488'
+- id: H_066
+  text: Training data was corrupted or had misaligned features and labels
+  source_experiment: exp_20260226_035721_650448dd
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:57:21.448634'
+- id: H_067
+  text: Model architecture is fundamentally incompatible with the problem space
+  source_experiment: exp_20260226_035721_650448dd
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:57:21.508565'
+- id: H_068
+  text: Target labels were inverted or incorrectly encoded during preprocessing
+  source_experiment: exp_20260226_035721_650448dd
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:57:21.571161'
+- id: H_069
+  text: Trades were executed in inverse positions (long instead of short or vice versa)
+  source_experiment: exp_20260226_035721_650448dd
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:57:21.623042'
+- id: H_070
+  text: Loss function calculation is broken or not properly updating during training
+  source_experiment: exp_20260226_035721_650448dd
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:57:21.679076'
+- id: H_071
+  text: RSI-based multiframe breakthrough rules are generating false signals due to
+    indicator miscalibration or unsuitable parameters
+  source_experiment: exp_20260226_035751_de831f5d
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:57:51.443171'
+- id: H_072
+  text: Position sizing or leverage is excessive, causing rapid account depletion
+  source_experiment: exp_20260226_035751_de831f5d
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:57:51.481170'
+- id: H_073
+  text: Strategy logic is inverted or backward in implementation
+  source_experiment: exp_20260226_035751_de831f5d
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:57:51.522741'
+- id: H_074
+  text: Simple single-timeframe strategies with proven logic would perform better
+    than current multiframe approach
+  source_experiment: exp_20260226_035751_de831f5d
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:57:51.562433'
+- id: H_075
+  text: Trend-following or mean-reversion signals with alternative indicators could
+    provide positive edge
+  source_experiment: exp_20260226_035751_de831f5d
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:57:51.604962'
+- id: H_076
+  text: RVI indicator calculation contains errors or is misaligned with expected signal
+    patterns
+  source_experiment: exp_20260226_035758_e3a445a1
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:57:58.480631'
+- id: H_077
+  text: Data preprocessing or input normalization is causing incorrect feature representation
+  source_experiment: exp_20260226_035758_e3a445a1
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:57:58.528230'
+- id: H_078
+  text: Loss function or training objective is inverted or misconfigured
+  source_experiment: exp_20260226_035758_e3a445a1
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:57:58.582718'
+- id: H_079
+  text: Multi-indicator fusion approach is fundamentally flawed; single well-tested
+    indicator would perform better
+  source_experiment: exp_20260226_035758_e3a445a1
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:57:58.635423'
+- id: H_080
+  text: CCI momentum indicator requires complementary indicators or signal filtering
+    to generate reliable entry/exit signals
+  source_experiment: exp_20260226_035807_4949a46a
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:58:07.113887'
+- id: H_081
+  text: Position sizing and stop-loss mechanisms are critical to prevent exponential
+    loss compounding in momentum strategies
+  source_experiment: exp_20260226_035807_4949a46a
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:58:07.177666'
+- id: H_082
+  text: Alternative indicators beyond CCI momentum would better capture market predictive
+    patterns for this asset
+  source_experiment: exp_20260226_035807_4949a46a
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:58:07.241757'
+- id: H_083
+  text: The training pipeline has a systematic bug preventing model convergence
+  source_experiment: exp_20260226_035807_4949a46a
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:58:07.296482'
+- id: H_084
+  text: Model architecture or training configuration is broken and prevented learning
+    during training phase
+  source_experiment: exp_20260226_035838_1ce16be2
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:58:38.329736'
+- id: H_085
+  text: Buy/sell signals are inverted, generating opposite signals to what is intended
+  source_experiment: exp_20260226_035838_1ce16be2
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:58:38.372878'
+- id: H_086
+  text: Position sizing has no limits, allowing exponentially growing losses on losing
+    trades
+  source_experiment: exp_20260226_035838_1ce16be2
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:58:38.416746'
+- id: H_087
+  text: Data pipeline or timeframe synchronization issues are generating invalid or
+    misaligned signals
+  source_experiment: exp_20260226_035838_1ce16be2
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T03:58:38.460517'
+- id: H_088
+  text: Data loading pipeline is broken, preventing proper model training
+  source_experiment: exp_20260226_041430_e93fdb7d
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:14:30.910525'
+- id: H_089
+  text: Model configuration parameters are incorrect or incompatible
+  source_experiment: exp_20260226_041430_e93fdb7d
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:14:30.975382'
+- id: H_090
+  text: The ultra-simple strategy design is insufficient to capture meaningful market
+    dynamics
+  source_experiment: exp_20260226_041430_e93fdb7d
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:14:31.025664'
+- id: H_091
+  text: Backtest calculation logic contains an error producing spurious returns
+  source_experiment: exp_20260226_041430_e93fdb7d
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:14:31.076026'
+- id: H_092
+  text: Data pipeline contains corrupted or improperly formatted training data
+  source_experiment: exp_20260226_041517_d004de63
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:15:17.538204'
+- id: H_093
+  text: Loss function or gradient computation is misconfigured
+  source_experiment: exp_20260226_041517_d004de63
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:15:17.605549'
+- id: H_094
+  text: Backtest configuration contains errors in entry/exit signal generation
+  source_experiment: exp_20260226_041517_d004de63
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:15:17.668868'
+- id: H_095
+  text: Simpler indicator combinations with proven effectiveness would establish baseline
+    functionality
+  source_experiment: exp_20260226_041517_d004de63
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:15:17.730805'
+- id: H_096
+  text: Training data is missing or inaccessible, causing the model to fail to learn
+  source_experiment: exp_20260226_041547_da48c28e
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:15:47.054199'
+- id: H_097
+  text: Backtest contains data anomalies or configuration errors that produced the
+    unrealistic 32,625% return
+  source_experiment: exp_20260226_041547_da48c28e
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:15:47.253081'
+- id: H_098
+  text: Indicator combinations are too weak or misaligned to generate sufficient trading
+    signals
+  source_experiment: exp_20260226_041547_da48c28e
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:15:47.305907'
+- id: H_099
+  text: Model requires different hyperparameter tuning or architecture to achieve
+    convergence during training
+  source_experiment: exp_20260226_041547_da48c28e
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:15:47.356097'
+- id: H_100
+  text: Data loading pipeline has a critical bug preventing training data from reaching
+    the model
+  source_experiment: exp_20260226_041551_34f7768b
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:15:51.476424'
+- id: H_101
+  text: Indicator calculations are producing invalid or constant values across all
+    samples
+  source_experiment: exp_20260226_041551_34f7768b
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:15:51.525486'
+- id: H_102
+  text: Model initialization or hyperparameters are preventing gradient-based learning
+  source_experiment: exp_20260226_041551_34f7768b
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:15:51.574505'
+- id: H_103
+  text: Backtest configuration error is causing trades to be filtered or not executed
+    properly
+  source_experiment: exp_20260226_041551_34f7768b
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:15:51.624860'
+- id: H_104
+  text: Model training failure is caused by incorrect loss function implementation
+  source_experiment: exp_20260226_041607_df68971a
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:16:07.888738'
+- id: H_105
+  text: Data preprocessing pipeline contains errors corrupting training inputs
+  source_experiment: exp_20260226_041607_df68971a
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:16:07.944337'
+- id: H_106
+  text: Entry/exit signal generation logic is too restrictive, filtering out valid
+    opportunities
+  source_experiment: exp_20260226_041607_df68971a
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:16:08.000091'
+- id: H_107
+  text: Backtesting framework contains a calculation error producing inflated returns
+  source_experiment: exp_20260226_041607_df68971a
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:16:08.059141'
+- id: H_108
+  text: Strategy will show improved trade frequency and robustness when tested across
+    multiple assets and timeframes
+  source_experiment: exp_20260226_041607_df68971a
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:16:08.119072'
+- id: H_109
+  text: Buy and sell signals are inverted in the strategy implementation
+  source_experiment: exp_20260226_041627_c2c6cb43
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:16:27.545409'
+- id: H_110
+  text: Training data labels are incorrectly assigned or corrupted
+  source_experiment: exp_20260226_041627_c2c6cb43
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:16:27.601140'
+- id: H_111
+  text: Model is receiving incorrect or misaligned input data
+  source_experiment: exp_20260226_041627_c2c6cb43
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:16:27.657700'
+- id: H_112
+  text: A simpler baseline strategy would perform better than the current complex
+    approach
+  source_experiment: exp_20260226_041627_c2c6cb43
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:16:27.713304'
+- id: H_113
+  text: Buy/sell conditions in fuzzy decision rules are inverted
+  source_experiment: exp_20260226_041635_71998960
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:16:35.299531'
+- id: H_114
+  text: Trend, volatility, and squeeze indicators are conflicting or redundant
+  source_experiment: exp_20260226_041635_71998960
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:16:35.368732'
+- id: H_115
+  text: Fuzzy membership functions are generating opposite signals from intended
+  source_experiment: exp_20260226_041635_71998960
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:16:35.429636'
+- id: H_116
+  text: Poor combination of indicators rather than individual indicator weakness
+  source_experiment: exp_20260226_041635_71998960
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:16:35.491746'
+- id: H_117
+  text: Logic errors are data-specific rather than systemic
+  source_experiment: exp_20260226_041635_71998960
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:16:35.552054'
+- id: H_118
+  text: Training pipeline has bugs preventing model convergence
+  source_experiment: exp_20260226_041651_c23a1800
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:16:51.088469'
+- id: H_119
+  text: Fuzzy logic rules are misconfigured and too restrictive
+  source_experiment: exp_20260226_041651_c23a1800
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:16:51.156638'
+- id: H_120
+  text: Data integrity issues are producing unrealistic backtest results
+  source_experiment: exp_20260226_041651_c23a1800
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:16:51.219995'
+- id: H_121
+  text: Alternative technical indicators would generate more reliable signals for
+    mean reversion
+  source_experiment: exp_20260226_041651_c23a1800
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:16:51.281307'
+- id: H_122
+  text: Multi-indicator approach (RSI + MACD + Volume) would capture more meaningful
+    patterns than RSI alone
+  source_experiment: exp_20260226_041705_9dde67a9
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:17:05.434243'
+- id: H_123
+  text: Adding protective mechanisms (stop-losses, position sizing, max drawdown limits)
+    would reduce catastrophic losses
+  source_experiment: exp_20260226_041705_9dde67a9
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:17:05.495383'
+- id: H_124
+  text: Optimizing RSI parameters (period and threshold values) rather than using
+    defaults would improve signal quality
+  source_experiment: exp_20260226_041705_9dde67a9
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:17:05.554083'
+- id: H_125
+  text: Trend filtering to align signals with dominant trend direction would increase
+    win rate
+  source_experiment: exp_20260226_041705_9dde67a9
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:17:05.613999'
+- id: H_126
+  text: Regime detection to adapt parameters based on market conditions (volatility,
+    trend strength) would improve robustness
+  source_experiment: exp_20260226_041705_9dde67a9
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:17:05.675345'
+- id: H_127
+  text: Training infrastructure has fundamental issues with model initialization,
+    loss function, or gradient updates
+  source_experiment: exp_20260226_041725_9b05f5d5
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:17:25.750669'
+- id: H_128
+  text: RSI indicators and price data are incorrectly normalized or fed to the model
+  source_experiment: exp_20260226_041725_9b05f5d5
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:17:25.814366'
+- id: H_129
+  text: Model complexity is insufficient; adding complementary indicators (moving
+    averages, volume, volatility) will improve performance
+  source_experiment: exp_20260226_041725_9b05f5d5
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:17:25.880151'
+- id: H_130
+  text: Proper train/validation/test splits with early stopping will improve out-of-sample
+    generalization
+  source_experiment: exp_20260226_041725_9b05f5d5
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:17:25.945104'
+- id: H_131
+  text: RSI alone is insufficient as a trading signal and needs to be combined with
+    additional indicators
+  source_experiment: exp_20260226_041743_7f0429f4
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:17:43.422560'
+- id: H_132
+  text: Fuzzy logic decision rules were misconfigured and require redesign
+  source_experiment: exp_20260226_041743_7f0429f4
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:17:43.488211'
+- id: H_133
+  text: Training data contained look-ahead bias or other data quality issues that
+    prevented proper model learning
+  source_experiment: exp_20260226_041743_7f0429f4
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:17:43.553206'
+- id: H_134
+  text: Ensemble approaches combining multiple uncorrelated indicators would perform
+    better than single-indicator fuzzy logic
+  source_experiment: exp_20260226_041743_7f0429f4
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:17:43.618639'
+- id: H_135
+  text: Adding risk controls like strict stop-losses and position sizing would improve
+    strategy performance
+  source_experiment: exp_20260226_041743_7f0429f4
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:17:43.689246'
+- id: H_136
+  text: Strategy requires clearer initial hypothesis before implementation
+  source_experiment: exp_20260226_041748_93d1c292
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:17:48.054058'
+- id: H_137
+  text: Simpler initial indicators should be tested before adding complexity
+  source_experiment: exp_20260226_041748_93d1c292
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:17:48.129395'
+- id: H_138
+  text: Data validation issues may be contributing to poor performance
+  source_experiment: exp_20260226_041748_93d1c292
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:17:48.206038'
+- id: H_139
+  text: Position sizing or leverage management errors created unlimited downside risk
+  source_experiment: exp_20260226_041755_58531e67
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:17:55.709948'
+- id: H_140
+  text: Training pipeline problems exist in data, labels, or model architecture
+  source_experiment: exp_20260226_041755_58531e67
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:17:55.803516'
+- id: H_141
+  text: Signal generation is fundamentally flawed and needs confirmation indicators,
+    trend filters, or multi-timeframe analysis
+  source_experiment: exp_20260226_041755_58531e67
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:17:55.889424'
+- id: H_142
+  text: Implementing proper risk management (2% risk per trade, stops, take-profits,
+    position limits) will improve performance
+  source_experiment: exp_20260226_041755_58531e67
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:17:56.092058'
+- id: H_143
+  text: Neural network architecture or learning process is fundamentally broken, preventing
+    model from learning any patterns
+  source_experiment: exp_20260226_041815_d2223f25
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:18:15.240571'
+- id: H_144
+  text: RSI entry/exit signals are inverted or misconfigured, causing trades to be
+    placed at opposite intended times
+  source_experiment: exp_20260226_041815_d2223f25
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:18:15.316046'
+- id: H_145
+  text: Backtest calculation logic contains errors that are inflating loss percentages
+  source_experiment: exp_20260226_041815_d2223f25
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:18:15.422509'
+- id: H_146
+  text: Data pipeline is corrupted or misaligned, preventing proper model training
+  source_experiment: exp_20260226_041815_d2223f25
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:18:15.491237'
+- id: H_147
+  text: Data pipeline has integrity issues or labels are misaligned with features
+  source_experiment: exp_20260226_041841_b43fb938
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:18:41.677062'
+- id: H_148
+  text: Position sizing is using extreme leverage causing exponential loss scaling
+  source_experiment: exp_20260226_041841_b43fb938
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:18:41.747612'
+- id: H_149
+  text: Model is making consistently inverse predictions relative to correct signal
+    direction
+  source_experiment: exp_20260226_041841_b43fb938
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:18:41.820240'
+- id: H_150
+  text: Simulation engine contains calculation errors in position or loss computation
+  source_experiment: exp_20260226_041841_b43fb938
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:18:41.890281'
+- id: H_151
+  text: Feature engineering is inadequate for the ADX and Williams %R indicator combination
+  source_experiment: exp_20260226_041841_b43fb938
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:18:41.961055'
+- id: H_152
+  text: Training data pipeline has technical issues such as data not loading correctly
+    or indicators miscalculating
+  source_experiment: exp_20260226_041954_c32dad60
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:19:54.442333'
+- id: H_153
+  text: Fuzzy logic rules are inverted or misconfigured, causing opposite trading
+    signals
+  source_experiment: exp_20260226_041954_c32dad60
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:19:54.548499'
+- id: H_154
+  text: Model architecture is incompatible with the input data structure or dimensionality
+  source_experiment: exp_20260226_041954_c32dad60
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:19:54.644186'
+- id: H_155
+  text: A simpler model configuration would isolate and reveal the root cause of training
+    failure
+  source_experiment: exp_20260226_041954_c32dad60
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:19:54.761880'
+- id: H_156
+  text: Trading signals may be inverted (buy/sell logic reversed)
+  source_experiment: exp_20260226_041958_7cde8e79
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:19:58.474331'
+- id: H_157
+  text: Single indicator (RSI only) would establish baseline performance better than
+    multi-indicator approach
+  source_experiment: exp_20260226_041958_7cde8e79
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:19:58.560133'
+- id: H_158
+  text: Issue is asset-specific and strategy may perform better on different symbols
+    or timeframes
+  source_experiment: exp_20260226_041958_7cde8e79
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:19:58.644677'
+- id: H_159
+  text: Training data quality or indicator calculations are flawed
+  source_experiment: exp_20260226_041958_7cde8e79
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:19:58.743373'
+- id: H_160
+  text: Model training pipeline has a fundamental bug preventing weight updates or
+    gradient flow
+  source_experiment: exp_20260226_042029_b85ed5ec
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:20:29.723541'
+- id: H_161
+  text: Indicator calculations (Aroon, Volume, Trend) contain implementation errors
+  source_experiment: exp_20260226_042029_b85ed5ec
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:20:29.800612'
+- id: H_162
+  text: Buy/sell signal generation logic does not align with market dynamics or indicator
+    semantics
+  source_experiment: exp_20260226_042029_b85ed5ec
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:20:29.883260'
+- id: H_163
+  text: Neural network architecture is mismatched to the trading signal prediction
+    problem
+  source_experiment: exp_20260226_042029_b85ed5ec
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:20:29.960213'
+- id: H_164
+  text: Data preprocessing or normalization is incorrect, causing invalid input to
+    the model
+  source_experiment: exp_20260226_042029_b85ed5ec
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:20:30.038436'
+- id: H_165
+  text: Critical bug exists in signal logic or position sizing causing systematic
+    losses
+  source_experiment: exp_20260226_042043_5e5d5e6b
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:20:43.466823'
+- id: H_166
+  text: 'Data feed issues present: prices in wrong units, NaN values, or data corruption'
+  source_experiment: exp_20260226_042043_5e5d5e6b
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:20:43.548318'
+- id: H_167
+  text: Buy/sell signals are inverted, causing opposite trades from intended mean
+    reversion strategy
+  source_experiment: exp_20260226_042043_5e5d5e6b
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:20:43.628648'
+- id: H_168
+  text: Model training did not occur or model is making invalid predictions
+  source_experiment: exp_20260226_042043_5e5d5e6b
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:20:43.707660'
+- id: H_169
+  text: Buy/sell signals may be inverted or logically reversed
+  source_experiment: exp_20260226_042100_6293ca9b
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:21:00.364714'
+- id: H_170
+  text: CCI parameters or fuzzy set definitions are misconfigured and unsuitable for
+    the target market
+  source_experiment: exp_20260226_042100_6293ca9b
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:21:00.448139'
+- id: H_171
+  text: The fundamental strategy design approach is not viable for this use case and
+    requires complete redesign
+  source_experiment: exp_20260226_042100_6293ca9b
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:21:00.531758'
+- id: H_172
+  text: Signal generation logic contains critical bugs that produce invalid or contradictory
+    trading signals
+  source_experiment: exp_20260226_042100_6293ca9b
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:21:00.811409'
+- id: H_173
+  text: Trading signals are inverted relative to intended direction
+  source_experiment: exp_20260226_042147_fdb9fe58
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:21:47.360350'
+- id: H_174
+  text: Position sizing or leverage settings are misconfigured causing excessive losses
+    per trade
+  source_experiment: exp_20260226_042147_fdb9fe58
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:21:47.459289'
+- id: H_175
+  text: Individual indicators are not functioning as intended when used in combination
+  source_experiment: exp_20260226_042147_fdb9fe58
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:21:47.558992'
+- id: H_176
+  text: Model training process has a fundamental implementation error preventing convergence
+  source_experiment: exp_20260226_042147_fdb9fe58
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:21:47.652549'
+- id: H_177
+  text: Training data is not flowing properly through the pipeline to the model
+  source_experiment: exp_20260226_043150_f4223abb
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:31:50.343688'
+- id: H_178
+  text: Fisher and other technical indicators are computing incorrectly or producing
+    invalid values
+  source_experiment: exp_20260226_043150_f4223abb
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:31:50.443386'
+- id: H_179
+  text: Input data contains NaN values or is not properly normalized/scaled
+  source_experiment: exp_20260226_043150_f4223abb
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:31:50.536375'
+- id: H_180
+  text: Fuzzy logic architecture is fundamentally unsuitable for this trading application
+  source_experiment: exp_20260226_043150_f4223abb
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:31:50.627692'
+- id: H_181
+  text: Training pipeline has integrity issues preventing model learning
+  source_experiment: exp_20260226_043208_31b819f2
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:32:08.435213'
+- id: H_182
+  text: Indicator logic or parameter ranges are misconfigured
+  source_experiment: exp_20260226_043208_31b819f2
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:32:08.687626'
+- id: H_183
+  text: Risk management controls are absent or ineffective
+  source_experiment: exp_20260226_043208_31b819f2
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:32:08.784735'
+- id: H_184
+  text: Strategy performance differs significantly across market regimes
+  source_experiment: exp_20260226_043208_31b819f2
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:32:08.879619'
+- id: H_185
+  text: Indicator calculations are malformed or not properly fed into fuzzy sets
+  source_experiment: exp_20260226_043646_e028ec8d
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:36:46.284027'
+- id: H_186
+  text: Fuzzy set membership thresholds are too strict, preventing signal generation
+  source_experiment: exp_20260226_043646_e028ec8d
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:36:46.380515'
+- id: H_187
+  text: Backtest return calculation contains errors in data handling or position tracking
+  source_experiment: exp_20260226_043646_e028ec8d
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:36:46.491681'
+- id: H_188
+  text: Model loss function or gradient flow is broken during training
+  source_experiment: exp_20260226_043646_e028ec8d
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:36:46.602798'
+- id: H_189
+  text: Extreme return values are caused by incorrect position sizing configuration
+    or unrealistic initial position sizes in backtest setup
+  source_experiment: exp_20260226_044012_9a326a36
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:40:12.944216'
+- id: H_190
+  text: Multi-frame RSI coordination is generating contradictory signals that reduce
+    strategy effectiveness
+  source_experiment: exp_20260226_044012_9a326a36
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:40:13.036707'
+- id: H_191
+  text: Neural network model is receiving meaningless or poorly formatted training
+    data preventing convergence
+  source_experiment: exp_20260226_044012_9a326a36
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:40:13.129431'
+- id: H_192
+  text: Single timeframe approach with simpler configuration would improve signal
+    quality compared to multi-frame design
+  source_experiment: exp_20260226_044012_9a326a36
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:40:13.223110'
+- id: H_193
+  text: RSI signal logic is inverted or misconfigured in the fuzzy rules
+  source_experiment: exp_20260226_044019_16dfd9c9
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:40:19.197996'
+- id: H_194
+  text: Training pipeline has a fundamental bug preventing model from learning
+  source_experiment: exp_20260226_044019_16dfd9c9
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:40:19.297466'
+- id: H_195
+  text: Trade frequency is too high, degrading signal quality; implementing strict
+    filters could improve performance
+  source_experiment: exp_20260226_044019_16dfd9c9
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:40:19.400931'
+- id: H_196
+  text: Adding position sizing limits and proper risk management would significantly
+    improve results
+  source_experiment: exp_20260226_044019_16dfd9c9
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:40:19.504167'
+- id: H_197
+  text: Volatility squeeze mean reversion logic is fundamentally flawed in its current
+    implementation
+  source_experiment: exp_20260226_044037_29516e68
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:40:37.580856'
+- id: H_198
+  text: Decision thresholds are inverted, causing the model to trade opposite intended
+    direction
+  source_experiment: exp_20260226_044037_29516e68
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:40:37.700948'
+- id: H_199
+  text: Training data contains quality issues or misalignment problems preventing
+    model learning
+  source_experiment: exp_20260226_044037_29516e68
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:40:37.823431'
+- id: H_200
+  text: Fuzzy set membership thresholds do not align with intuitive market behavior
+    patterns
+  source_experiment: exp_20260226_044037_29516e68
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:40:37.931463'
+- id: H_201
+  text: Training configuration or loss function is incorrectly implemented, preventing
+    proper model convergence
+  source_experiment: exp_20260226_044103_791e1387
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:41:03.288551'
+- id: H_202
+  text: RSI indicator or fuzzy logic rules are inverted or miscalibrated, generating
+    signals opposite to intended direction
+  source_experiment: exp_20260226_044103_791e1387
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:41:03.572272'
+- id: H_203
+  text: Backtest was executed on inverted price data or with reversed entry/exit logic
+  source_experiment: exp_20260226_044103_791e1387
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:41:03.669772'
+- id: H_204
+  text: A simpler RSI baseline strategy without fuzzy logic would perform better
+  source_experiment: exp_20260226_044103_791e1387
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:41:03.785805'
+- id: H_205
+  text: Indicator scaling or normalization is incompatible with model input requirements
+  source_experiment: exp_20260226_044211_d2d3644b
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:42:11.160422'
+- id: H_206
+  text: Trading signals are inverted (long when should be short)
+  source_experiment: exp_20260226_044211_d2d3644b
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:42:11.279714'
+- id: H_207
+  text: Position sizing or leverage implementation contains critical errors
+  source_experiment: exp_20260226_044211_d2d3644b
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:42:11.389359'
+- id: H_208
+  text: A simple RSI baseline strategy would provide better performance than current
+    multi-timeframe approach
+  source_experiment: exp_20260226_044211_d2d3644b
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:42:11.493527'
+- id: H_209
+  text: RSI indicator calculations contain errors or are misconfigured in the fuzzy
+    logic system
+  source_experiment: exp_20260226_044231_8614a27f
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:42:32.003207'
+- id: H_210
+  text: Signal generation logic is inverted (buy signals triggering sells and vice
+    versa)
+  source_experiment: exp_20260226_044231_8614a27f
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:42:32.100314'
+- id: H_211
+  text: Single RSI indicator lacks sufficient signal quality; complementary indicators
+    needed for robust trading signals
+  source_experiment: exp_20260226_044231_8614a27f
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:42:32.198136'
+- id: H_212
+  text: Fuzzy set membership functions are poorly calibrated for the asset being traded
+  source_experiment: exp_20260226_044231_8614a27f
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:42:32.476547'
+- id: H_213
+  text: Fuzzy set membership functions for CMF and OBV are too narrowly defined, preventing
+    signal generation
+  source_experiment: exp_20260226_044248_53d5e83f
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:42:48.170662'
+- id: H_214
+  text: Data pipeline is not correctly passing indicator values to the fuzzy logic
+    system
+  source_experiment: exp_20260226_044248_53d5e83f
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:42:48.269085'
+- id: H_215
+  text: Simplified threshold-based filtering would generate viable signals before
+    applying fuzzy logic
+  source_experiment: exp_20260226_044248_53d5e83f
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:42:48.366793'
+- id: H_216
+  text: Single-indicator strategy would establish baseline functionality before multi-indicator
+    approach
+  source_experiment: exp_20260226_044248_53d5e83f
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:42:48.467840'
+- id: H_217
+  text: Training configuration contains errors in fuzzy set definitions, data pipeline,
+    or model architecture
+  source_experiment: exp_20260226_044252_da7818a6
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:42:52.682778'
+- id: H_218
+  text: A simpler single-timeframe RSI strategy would work better as a baseline approach
+  source_experiment: exp_20260226_044252_da7818a6
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:42:52.783938'
+- id: H_219
+  text: Historical price data or RSI calculations contain errors preventing proper
+    model learning
+  source_experiment: exp_20260226_044252_da7818a6
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:42:52.884460'
+- id: H_220
+  text: Signal generation rules lack logical coherence and need validation before
+    training
+  source_experiment: exp_20260226_044252_da7818a6
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:42:52.988351'
+- id: H_221
+  text: Invalid or insufficient training data caused the model to fail learning
+  source_experiment: exp_20260226_044258_783ce425
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:42:59.007018'
+- id: H_222
+  text: Fuzzy logic rules are too restrictive or contain contradictions preventing
+    signal generation
+  source_experiment: exp_20260226_044258_783ce425
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:42:59.109274'
+- id: H_223
+  text: Indicator calculations contain errors or parameter mismatches with the decision
+    model
+  source_experiment: exp_20260226_044258_783ce425
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:42:59.211379'
+- id: H_224
+  text: Decision thresholds are unreachable by model outputs, blocking all trades
+  source_experiment: exp_20260226_044258_783ce425
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:42:59.375655'
+- id: H_225
+  text: CMF, OBV, and volume calculations are producing NaN or invalid values in the
+    data pipeline
+  source_experiment: exp_20260226_044303_40c1e931
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:43:03.420920'
+- id: H_226
+  text: Fuzzy set membership functions are too restrictive and prevent signal generation
+    under normal market conditions
+  source_experiment: exp_20260226_044303_40c1e931
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:43:03.527165'
+- id: H_227
+  text: Buy/sell decision logic contains contradictory conditions that cancel each
+    other out
+  source_experiment: exp_20260226_044303_40c1e931
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:43:03.633850'
+- id: H_228
+  text: A simplified version using only CMF and OBV indicators will generate valid
+    signals
+  source_experiment: exp_20260226_044303_40c1e931
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:43:03.737401'
+- id: H_229
+  text: Strategy YAML configuration contains syntax errors or invalid parameter definitions
+  source_experiment: exp_20260226_044432_5af9b20d
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:44:32.375955'
+- id: H_230
+  text: Indicator computation (ATR and others) is failing due to missing or malformed
+    input data
+  source_experiment: exp_20260226_044432_5af9b20d
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:44:32.497965'
+- id: H_231
+  text: Fuzzy rule evaluation logic has a bug preventing any rules from firing
+  source_experiment: exp_20260226_044432_5af9b20d
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:44:32.612962'
+- id: H_232
+  text: Signal generation threshold or condition is set impossibly high, filtering
+    out all trades
+  source_experiment: exp_20260226_044432_5af9b20d
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:44:32.729012'
+- id: H_233
+  text: Indicator parameter ranges are outside valid bounds for the asset/timeframe
+    tested
+  source_experiment: exp_20260226_044432_5af9b20d
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:44:32.844253'
+- id: H_234
+  text: The Aroon/ADX/mean reversion signal logic is inverted, causing buy signals
+    to trigger on sell conditions
+  source_experiment: exp_20260226_045611_0c3a3dff
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:56:11.476893'
+- id: H_235
+  text: Simplifying the fuzzy rule set and validating each rule independently will
+    improve model performance
+  source_experiment: exp_20260226_045611_0c3a3dff
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:56:11.594958'
+- id: H_236
+  text: Adding mandatory risk controls (stop-loss, position sizing, max drawdown limits)
+    will prevent catastrophic losses
+  source_experiment: exp_20260226_045611_0c3a3dff
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:56:11.712612'
+- id: H_237
+  text: Retraining with validated data and a simpler indicator combination will achieve
+    positive returns
+  source_experiment: exp_20260226_045611_0c3a3dff
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:56:11.829884'
+- id: H_238
+  text: Buy/sell signals are inverted (long when should be short and vice versa)
+  source_experiment: exp_20260226_045627_76670540
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:56:27.438563'
+- id: H_239
+  text: Position sizing errors exist, possibly exponential sizing or missing maximum
+    position limits
+  source_experiment: exp_20260226_045627_76670540
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:56:27.674349'
+- id: H_240
+  text: Indicator parameters are miscalibrated for the asset and timeframe being tested
+  source_experiment: exp_20260226_045627_76670540
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:56:27.791445'
+- id: H_241
+  text: Fuzzy system failed to converge and learn meaningful patterns from the data
+  source_experiment: exp_20260226_045627_76670540
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:56:27.917998'
+- id: H_242
+  text: RSI calculations or normalization are incorrect, causing invalid signals
+  source_experiment: exp_20260226_045635_d0c8ed5a
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:56:35.737087'
+- id: H_243
+  text: Trading signals should be reversed (inverse logic) to improve performance
+  source_experiment: exp_20260226_045635_d0c8ed5a
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:56:35.859471'
+- id: H_244
+  text: Simple proven RSI thresholds (70/30) would perform better than the current
+    model
+  source_experiment: exp_20260226_045635_d0c8ed5a
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:56:35.979414'
+- id: H_245
+  text: Model configuration or data pipeline has fundamental issues preventing proper
+    training
+  source_experiment: exp_20260226_045635_d0c8ed5a
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:56:36.107424'
+- id: H_246
+  text: The fuzzy logic implementation or neural network architecture is fundamentally
+    flawed and requires redesign
+  source_experiment: exp_20260226_045651_2f7d65b1
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:56:51.395295'
+- id: H_247
+  text: Feature engineering approach for Aroon and ADX indicators needs complete reevaluation
+  source_experiment: exp_20260226_045651_2f7d65b1
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:56:51.514516'
+- id: H_248
+  text: Different indicator combinations may be more suitable for the tested market
+    and timeframe
+  source_experiment: exp_20260226_045651_2f7d65b1
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:56:51.752119'
+- id: H_249
+  text: Model training process has critical issues preventing convergence and learning
+  source_experiment: exp_20260226_045651_2f7d65b1
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:56:51.872033'
+- id: H_250
+  text: Mean reversion approach is fundamentally unsuitable for this market/timeframe;
+    momentum or trend-following strategies may be more effective
+  source_experiment: exp_20260226_045711_8d66809b
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:57:11.460632'
+- id: H_251
+  text: Keltner Channels and volatility indicators are not predictive features for
+    this specific market and timeframe
+  source_experiment: exp_20260226_045711_8d66809b
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:57:11.578232'
+- id: H_252
+  text: Position sizing and leverage controls are absent or misconfigured, causing
+    outsized losses
+  source_experiment: exp_20260226_045711_8d66809b
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:57:11.694687'
+- id: H_253
+  text: Proper cross-validation separation between training and validation data would
+    reveal generalization failures
+  source_experiment: exp_20260226_045711_8d66809b
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:57:11.814270'
+- id: H_254
+  text: Fuzzy logic implementation contains a critical bug preventing proper model
+    training
+  source_experiment: exp_20260226_045715_4c8eeeae
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:57:15.861562'
+- id: H_255
+  text: Mean reversion is not a viable strategy for this asset/timeframe combination
+  source_experiment: exp_20260226_045715_4c8eeeae
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:57:15.979465'
+- id: H_256
+  text: Momentum-based strategies may be more effective than mean reversion for this
+    asset
+  source_experiment: exp_20260226_045715_4c8eeeae
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:57:16.096809'
+- id: H_257
+  text: Trend-following approaches could outperform mean reversion for this market
+  source_experiment: exp_20260226_045715_4c8eeeae
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:57:16.230080'
+- id: H_258
+  text: Pattern recognition strategies may capture market dynamics better than current
+    approach
+  source_experiment: exp_20260226_045715_4c8eeeae
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:57:16.407056'
+- id: H_259
+  text: Buy/sell signals are inverted in the strategy logic
+  source_experiment: exp_20260226_045824_daea39af
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:58:24.170594'
+- id: H_260
+  text: Training data pipeline has preprocessing or label generation errors
+  source_experiment: exp_20260226_045824_daea39af
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:58:24.318314'
+- id: H_261
+  text: Fuzzy membership functions do not correctly map to indicator ranges
+  source_experiment: exp_20260226_045824_daea39af
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:58:24.454589'
+- id: H_262
+  text: A simpler baseline model with a single indicator would demonstrate correct
+    functionality
+  source_experiment: exp_20260226_045824_daea39af
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T04:58:24.586299'
+- id: H_263
+  text: Data pipeline contains errors in indicator calculations or price data ingestion
+  source_experiment: exp_20260226_050523_e338ff0a
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T05:05:23.383818'
+- id: H_264
+  text: Buy/sell signal labels are inverted in the training data
+  source_experiment: exp_20260226_050523_e338ff0a
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T05:05:23.518390'
+- id: H_265
+  text: Model configuration error is causing 0% accuracy rather than poor model design
+  source_experiment: exp_20260226_050523_e338ff0a
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T05:05:23.656031'
+- id: H_266
+  text: ROC and Supertrend indicators are conflicting or miscalculated
+  source_experiment: exp_20260226_050523_e338ff0a
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T05:05:23.805119'
+- id: H_267
+  text: Data loading or preprocessing pipeline contains critical errors preventing
+    model training
+  source_experiment: exp_20260226_050531_0fdc8cae
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T05:05:31.079576'
+- id: H_268
+  text: Label generation logic is fundamentally flawed, producing invalid training
+    targets
+  source_experiment: exp_20260226_050531_0fdc8cae
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T05:05:31.204081'
+- id: H_269
+  text: RSI and fuzzy set indicator calculations are incorrect or misconfigured
+  source_experiment: exp_20260226_050531_0fdc8cae
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T05:05:31.450231'
+- id: H_270
+  text: Decision logic (if/then rules) does not align with actual market behavior
+  source_experiment: exp_20260226_050531_0fdc8cae
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T05:05:31.576600'
+- id: H_271
+  text: Training pipeline has data integrity issues or label alignment problems
+  source_experiment: exp_20260226_050538_77b36982
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T05:05:38.415958'
+- id: H_272
+  text: Trading signals are inverted or position sizing is uncontrolled
+  source_experiment: exp_20260226_050538_77b36982
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T05:05:38.548916'
+- id: H_273
+  text: ROC/SMA signal logic has fundamental bugs that are not reflected in training
+    metrics
+  source_experiment: exp_20260226_050538_77b36982
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T05:05:38.680130'
+- id: H_274
+  text: Complex neural network architecture is inappropriate for this problem; simpler
+    ML models may isolate issues
+  source_experiment: exp_20260226_050538_77b36982
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T05:05:38.814964'
+- id: H_275
+  text: Data loading or normalization issues are preventing the neural network from
+    learning properly
+  source_experiment: exp_20260226_050556_1190e9f9
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T05:05:56.366994'
+- id: H_276
+  text: Indicator thresholds are too strict, filtering out valid trade signals and
+    reducing sample size
+  source_experiment: exp_20260226_050556_1190e9f9
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T05:05:56.500726'
+- id: H_277
+  text: Backtesting configuration contains unrealistic assumptions (slippage, commissions,
+    position sizing)
+  source_experiment: exp_20260226_050556_1190e9f9
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T05:05:56.637253'
+- id: H_278
+  text: Neural network architecture is inappropriate for this problem; simpler decision
+    rules would be more effective
+  source_experiment: exp_20260226_050556_1190e9f9
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T05:05:56.846735'
+- id: H_279
+  text: Training pipeline contains a bug preventing gradient updates and loss computation
+  source_experiment: exp_20260226_050601_f9e18196
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T05:06:01.089158'
+- id: H_280
+  text: Data configuration or indicator calculations are incorrect
+  source_experiment: exp_20260226_050601_f9e18196
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T05:06:01.222978'
+- id: H_281
+  text: Donchian/MFI breakout logic is oversensitive or contains errors causing spurious
+    signals
+  source_experiment: exp_20260226_050601_f9e18196
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T05:06:01.388411'
+- id: H_282
+  text: Position sizing or exit conditions have logic errors producing extreme leverage
+  source_experiment: exp_20260226_050601_f9e18196
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T05:06:01.525018'
+- id: H_283
+  text: The single profitable trade is a statistical anomaly rather than evidence
+    of edge
+  source_experiment: exp_20260226_050601_f9e18196
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T05:06:01.658234'
+- id: H_284
+  text: Data quality issues (missing values, incorrect formatting, or corrupted inputs)
+    prevented model from learning
+  source_experiment: exp_20260226_050622_3f2ba019
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T05:06:23.078669'
+- id: H_285
+  text: Model architecture is misaligned with the problem structure or data dimensionality
+  source_experiment: exp_20260226_050622_3f2ba019
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T05:06:23.213229'
+- id: H_286
+  text: Training hyperparameters (learning rate, batch size, epochs) are suboptimal
+    for convergence
+  source_experiment: exp_20260226_050622_3f2ba019
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T05:06:23.421613'
+- id: H_287
+  text: Signal generation logic is too restrictive, causing insufficient trade opportunities
+  source_experiment: exp_20260226_050622_3f2ba019
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T05:06:23.555573'
+- id: H_288
+  text: The single high-return trade is a data anomaly or result of broken trading
+    logic rather than strategy merit
+  source_experiment: exp_20260226_050622_3f2ba019
+  rationale: Generated during assessment
+  status: untested
+  tested_by: []
+  created: '2026-02-26T05:06:23.690053'

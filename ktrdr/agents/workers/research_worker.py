@@ -554,13 +554,23 @@ class AgentResearchWorker:
 
         # Load strategy config to get training params
         config = self._load_strategy_config(strategy_path)
+        if not config:
+            # Strategy file not found — design agent may have failed to save
+            strategy_name_from_meta = parent_op.metadata.parameters.get("strategy_name")
+            raise CycleError(
+                f"Strategy config not found at {strategy_path}. "
+                f"strategy_name={strategy_name_from_meta}. "
+                "The design agent may have failed to save the strategy file."
+            )
         symbols = (
             config.get("training_data", {}).get("symbols", {}).get("list", ["EURUSD"])
         )
         timeframes = (
             config.get("training_data", {}).get("timeframes", {}).get("list", ["1h"])
         )
-        strategy_name = config.get("name", "unknown")
+        strategy_name = config.get("name") or parent_op.metadata.parameters.get(
+            "strategy_name", "unknown"
+        )
 
         # Get date range from config or settings
         from ktrdr.config.settings import get_agent_settings
@@ -701,6 +711,13 @@ class AgentResearchWorker:
 
         strategy_path = params.get("strategy_path")
         model_path = params.get("model_path")
+
+        # If no path, resolve from strategy_name (container dispatch returns name but not path)
+        if not strategy_path:
+            strategy_name_from_metadata = params.get("strategy_name")
+            if strategy_name_from_metadata:
+                strategy_path = f"strategies/{strategy_name_from_metadata}.yaml"
+                params["strategy_path"] = strategy_path
 
         # Load strategy config for symbol/timeframe
         config = self._load_strategy_config(strategy_path)

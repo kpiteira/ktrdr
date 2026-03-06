@@ -72,6 +72,9 @@ def load_v3_metadata(model_path: str | Path) -> ModelMetadata:
 
 def reconstruct_config_from_metadata(
     metadata: ModelMetadata,
+    decisions_config: dict[str, Any] | None = None,
+    model_config: dict[str, Any] | None = None,
+    training_config: dict[str, Any] | None = None,
 ) -> StrategyConfigurationV3:
     """Reconstruct StrategyConfigurationV3 from model metadata.
 
@@ -80,6 +83,10 @@ def reconstruct_config_from_metadata(
 
     Args:
         metadata: ModelMetadata instance
+        decisions_config: Optional decisions config (confidence_threshold, filters, etc.)
+            from config.json. If None, uses safe defaults.
+        model_config: Optional model config from config.json.
+        training_config: Optional training config from config.json.
 
     Returns:
         StrategyConfigurationV3 that matches the training configuration
@@ -146,9 +153,9 @@ def reconstruct_config_from_metadata(
         indicators=indicators,
         fuzzy_sets=fuzzy_sets,
         nn_inputs=nn_inputs,
-        model={"type": "mlp"},
-        decisions={"output_format": "classification"},
-        training={"epochs": 1},
+        model=model_config or {"type": "mlp"},
+        decisions=decisions_config or {"output_format": "classification"},
+        training=training_config or {"epochs": 1},
         training_data=training_data,
     )
 
@@ -245,8 +252,9 @@ class ModelBundle:
         # default MLP config and allow config.json (if present) to override it.
         model_config = {"type": "mlp", "architecture": {"hidden_layers": [64, 32]}}
 
-        # Try to load model config from disk if available
+        # Try to load full strategy config from disk if available
         config_path = path / "config.json"
+        loaded_config: dict[str, Any] = {}
         if config_path.exists():
             with open(config_path) as f:
                 loaded_config = json.load(f)
@@ -272,8 +280,15 @@ class ModelBundle:
         model.load_state_dict(state_dict)
         model.eval()
 
-        # 5. Reconstruct strategy config
-        strategy_config = reconstruct_config_from_metadata(metadata)
+        # 5. Reconstruct strategy config, preserving decisions/model/training
+        # from config.json so backtesting uses the same confidence_threshold,
+        # filters, etc. that the strategy designer intended.
+        strategy_config = reconstruct_config_from_metadata(
+            metadata,
+            decisions_config=loaded_config.get("decisions"),
+            model_config=loaded_config.get("model"),
+            training_config=loaded_config.get("training"),
+        )
 
         return cls(
             model=model,

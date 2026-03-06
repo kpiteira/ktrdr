@@ -64,9 +64,26 @@ which validates the v3 format atomically before writing.
 - The `nn_inputs` section is required — it defines what feeds the neural network
 - Be specific in your hypothesis — vague hypotheses produce vague strategies
 
+## Valid Indicator Types (case-insensitive)
+
+You MUST use these exact type names in strategy YAML. Using any other name will
+cause a validation error.
+
+**Momentum:** RSI, ROC, Momentum, CCI, WilliamsR, Stochastic, RVI, FisherTransform, Aroon
+**Volatility:** ATR, BollingerBands, BollingerBandWidth, KeltnerChannels, DonchianChannels, SuperTrend
+**Trend:** MACD, ADX, ParabolicSAR, Ichimoku, SMA, EMA, WMA
+**Volume:** OBV, VWAP, MFI, CMF, ADLine, VolumeRatio
+**Other:** DistanceFromMA, SqueezeIntensity
+
+Common mistakes to avoid:
+- Use `WilliamsR` not `Williams_R` or `WilliamsPercentR`
+- Use `BollingerBands` not `Bollinger` or `BB`
+- Use `Stochastic` not `StochasticOscillator`
+- Use `SMA`/`EMA`/`WMA` not `SimpleMovingAverage`/etc.
+
 ## Safety Constraints
 
-- Only use indicators returned by `get_available_indicators`
+- Only use indicator types listed above or returned by `get_available_indicators`
 - Only use symbols/timeframes confirmed by `get_data_summary`
 - Always validate before saving — do not save unvalidated strategies
 - Do not modify existing strategy files — create new strategies only
