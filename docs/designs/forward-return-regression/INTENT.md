@@ -38,8 +38,8 @@ Regression solves all three: HOLD emerges naturally when predicted returns are t
 
 ## Prior Thinking (Read These)
 
-The investigation report is the primary context:
-- `~/.claude/projects/.../memory/notes/2026-03-06-backtest-investigation.md` — Full 6-phase investigation trail with evidence tables, root cause analysis, and cost math
+The investigation findings are captured in this design:
+- `RESEARCH.md` (in this directory) — Full 6-phase investigation trail with evidence tables, root cause analysis, and cost math
 
 The evolution docs provide the broader vision (paused, not abandoned):
 - `docs/agentic/evolution/BRAINSTORM.md` — "Baby forever" problem, selection pressure

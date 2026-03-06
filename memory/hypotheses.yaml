@@ -2191,8 +2191,9 @@ hypotheses:
     \ The most parsimonious explanation is that model class index 0/1/2 maps to HOLD/BUY/SELL\
     \ in training but HOLD/SELL/BUY (or BUY/SELL/HOLD \u2192 SELL/BUY/HOLD) in backtest\
     \ execution. This pattern has been flagged in H_020 from prior experiments and\
-    \ has not been conclusively investigated."
-  status: untested
+    \ has not been conclusively investigated. Later refuted by H_INV_005, which confirmed\
+    \ no signal inversion exists — the signal chain is correctly wired throughout."
+  status: refuted
   tested_by: []
   created: '2026-03-06T00:14:10.146420'
 - id: H_290
@@ -2350,7 +2351,7 @@ hypotheses:
 
 # === INVESTIGATION SESSION 2026-03-06: Evidence-based findings ===
 # These hypotheses are based on direct code analysis and data-driven testing,
-# not assessment agent speculation. See notes/2026-03-06-backtest-investigation.md
+# not assessment agent speculation. See docs/designs/forward-return-regression/RESEARCH.md
 
 - id: H_INV_001
   text: "Backtest decisions config is lost during model reconstruction, causing confidence\
