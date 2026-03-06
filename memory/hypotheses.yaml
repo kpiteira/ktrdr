@@ -2182,3 +2182,233 @@ hypotheses:
   status: untested
   tested_by: []
   created: '2026-02-26T05:06:23.690053'
+- id: H_289
+  text: The backtest signal translation layer has a class-index mapping bug causing
+    BUY and SELL outputs to be swapped, producing a ~10% win rate instead of ~64%
+  source_experiment: exp_20260306_001410_0c2bec8c
+  rationale: "A win rate of 10.57% on a 3-class model with 64.1% accuracy is not explainable\
+    \ by normal overfitting or noise \u2014 it is ~3\u03C3 below random chance (33%).\
+    \ The most parsimonious explanation is that model class index 0/1/2 maps to HOLD/BUY/SELL\
+    \ in training but HOLD/SELL/BUY (or BUY/SELL/HOLD \u2192 SELL/BUY/HOLD) in backtest\
+    \ execution. This pattern has been flagged in H_020 from prior experiments and\
+    \ has not been conclusively investigated."
+  status: untested
+  tested_by: []
+  created: '2026-03-06T00:14:10.146420'
+- id: H_290
+  text: MACD provides zero marginal signal over RSI on EURUSD 1h at 1.5% ZigZag threshold,
+    and adding it as a fuzzy input dilutes rather than confirms RSI-derived features
+  source_experiment: exp_20260306_001410_0c2bec8c
+  rationale: "RSI-only baseline (exp_v15_rsi_zigzag_1_5) achieved 64.2% accuracy with\
+    \ [64,32] architecture; this strategy with RSI+MACD and [32,16] achieves 64.1%.\
+    \ The MACD addition has not improved and may have marginally degraded accuracy\
+    \ while halving model capacity. A controlled test \u2014 same [64,32] architecture,\
+    \ same data range, same ZigZag threshold, RSI-only vs RSI+MACD \u2014 would isolate\
+    \ the MACD contribution."
+  status: untested
+  tested_by: []
+  created: '2026-03-06T00:14:10.280867'
+- id: H_291
+  text: The training date_range misconfiguration (YAML says 2024, trained on 2015-2019)
+    caused the backtest to run on out-of-distribution data, amplifying performance
+    collapse
+  source_experiment: exp_20260306_001410_0c2bec8c
+  rationale: If the backtest engine uses the YAML date_range to determine the evaluation
+    window, it may have run on 2024 data while the model was trained on 2015-2019.
+    EURUSD 2024 exhibits different volatility regimes (post-2022 rate cycle). Correcting
+    the YAML to match the actual training range and retesting on a held-out 2020-2023
+    window would produce a fair out-of-sample result.
+  status: untested
+  tested_by: []
+  created: '2026-03-06T00:14:10.415927'
+- id: H_292
+  text: MACD fuzzy membership boundaries are miscalibrated for EURUSD 1h scale, causing
+    near-zero membership scores that effectively remove MACD as an input signal
+  source_experiment: exp_20260306_001410_0c2bec8c
+  rationale: "The MACD bullish trapezoidal parameters start at 0.0005 and the bearish\
+    \ end at -0.0005. For EURUSD 1h with fast=12 EMA period only (not standard 12/26\
+    \ MACD), the MACD line distribution may cluster near zero much of the time, causing\
+    \ most bars to receive high 'neutral' membership and near-zero bullish/bearish\
+    \ membership. If confirmed, the 6 MACD fuzzy features collapse to near-constant\
+    \ values and the model effectively trains on RSI features only \u2014 explaining\
+    \ why accuracy matches the RSI baseline."
+  status: untested
+  tested_by: []
+  created: '2026-03-06T00:14:10.552451'
+- id: H_293
+  text: 'The lookback_periods: 3 configuration is silently not applied in the feature
+    engineering pipeline, resulting in only 9 flat features being passed to the model
+    instead of 27. Fixing this will lower test loss from ~0.6936 toward <0.65 and
+    increase test accuracy beyond 62%, as temporal RSI/stochastic trajectory patterns
+    will become available to the model.'
+  source_experiment: exp_20260306_043710_a3b6d973
+  rationale: "The model has exactly 899 parameters, which matches 9 inputs (not 27).\
+    \ With lookback_periods: 3 active, inputs should be 9\xD73=27, yielding 27\xD7\
+    32+32+32\xD716+16+16\xD73+3=1475 parameters. The discrepancy is mathematically\
+    \ definitive."
+  status: untested
+  tested_by: []
+  created: '2026-03-06T04:37:10.892186'
+- id: H_294
+  text: The 1% zigzag threshold generates >85% HOLD labels on EURUSD 1h, making the
+    model a near-trivial HOLD predictor. Reducing the threshold to 0.5% will produce
+    a more balanced label distribution and increase the proportion of actionable BUY/SELL
+    training samples, which should improve backtest win rate above 35%.
+  source_experiment: exp_20260306_043710_a3b6d973
+  rationale: A 1% move in EURUSD represents ~100 pips on 1h bars. Typical EURUSD 1h
+    ATR is 10-20 pips, meaning genuine 1% swings are rare over a 15-bar lookahead
+    window. Most bars will receive HOLD labels, and the 59.1% accuracy is consistent
+    with a majority-class predictor.
+  status: untested
+  tested_by: []
+  created: '2026-03-06T04:37:11.038337'
+- id: H_295
+  text: The backtest confidence_threshold of 0.60 is not filtering signals effectively
+    because the softmax output rarely exceeds 0.60 for any class given the model produces
+    near-uniform probability distributions (consistent with a random classifier at
+    loss=0.6936). Logging the distribution of max-class softmax probabilities will
+    confirm >95% of outputs fall below 0.60, and if so, lowering the threshold to
+    0.40 while fixing the underlying model issues will reveal whether any directional
+    signal exists.
+  source_experiment: exp_20260306_043710_a3b6d973
+  rationale: "With test loss of 0.6936 \u2248 ln(3)/1.1, the model outputs near-uniform\
+    \ probabilities across 3 classes (~0.33 each). A 0.60 threshold in this regime\
+    \ would block virtually all signals, and the 726 backtest trades suggest the threshold\
+    \ is either not being applied or is set to a lower value in the backtest runner."
+  status: untested
+  tested_by: []
+  created: '2026-03-06T04:37:11.186598'
+- id: H_296
+  text: "The mean-reversion signals are firing into strong trending moves when the\
+    \ BBW volatility filter fails \u2014 BBW fuzzy set thresholds calibrated for general\
+    \ market data may not match 2015-2019 EURUSD conditions where prolonged low-volatility\
+    \ compression (BBW < 0.3) was common post-ECB QE. Adding a 200-period EMA trend\
+    \ filter will reduce false mean-reversion signals in trending regimes and improve\
+    \ win rate from 10.3% to above 40%."
+  source_experiment: exp_20260306_043710_a3b6d973
+  rationale: The Stochastic + BB extremes setup frequently generates counter-trend
+    signals in persistent trends. Without an effective volatility/trend gate, the
+    strategy enters and loses repeatedly. The BBW filter's effectiveness depends entirely
+    on whether its fuzzy thresholds match the empirical distribution.
+  status: untested
+  tested_by: []
+  created: '2026-03-06T04:37:11.332137'
+- id: H_297
+  text: Replacing ADX with RSI in the three-indicator set (RSI + Williams %R + ATR)
+    will achieve test accuracy above 58% on the same training data
+  source_experiment: exp_20260306_044403_fee90d2a
+  rationale: 'exp_v15_rsi_williams demonstrated 61.6% test accuracy on EURUSD 1h with
+    RSI+Williams %R alone. ADX has never exceeded 56% in any EURUSD 1h experiment
+    (exp_v15_adx_only: 50%, exp_v15_adx_aroon: 55.6%). Adding ATR for volatility context
+    should maintain or improve the RSI+Williams baseline, while replacing the dead-weight
+    ADX signal removes the primary source of noise.'
+  status: untested
+  tested_by: []
+  created: '2026-03-06T04:44:03.370666'
+- id: H_298
+  text: Reducing ZigZag threshold from 2.0% to 1.5% on the same ADX+Williams %R+ATR
+    indicator set will increase test accuracy from 49.4% to at least 53% by providing
+    a higher density of directional training labels
+  source_experiment: exp_20260306_044403_fee90d2a
+  rationale: "A 2% threshold on EURUSD 1h produces very rare BUY/SELL labels (extreme\
+    \ swings only), leading to severe class imbalance and a model that defaults to\
+    \ HOLD predictions. The 1.5% threshold was used in exp_v15_rsi_williams (zigzag_threshold:\
+    \ 0.025 \u2248 2.5%), but prior experiments showed diminishing returns at 3.0%\
+    \ and 3.5%. The sweet spot is likely 1.5%, which balances label density against\
+    \ noise."
+  status: untested
+  tested_by: []
+  created: '2026-03-06T04:44:03.521349'
+- id: H_299
+  text: Using ADX > 25 as a hard post-hoc signal gate (mask) rather than a fuzzy neural
+    input will improve backtest Sharpe from -2.31 to above 0.0 when applied to a model
+    that already achieves >55% accuracy on its own
+  source_experiment: exp_20260306_044403_fee90d2a
+  rationale: "The core hypothesis of this strategy \u2014 that ADX filters out range-bound\
+    \ noise \u2014 cannot be tested when ADX is encoded as a fuzzy feature competing\
+    \ with other features. A hard gate decouples regime detection from signal generation,\
+    \ allowing verification of whether ADX truly adds value as a trade filter. If\
+    \ the Sharpe improves, the regime-gating hypothesis is confirmed; if not, ADX\
+    \ should be abandoned entirely."
+  status: untested
+  tested_by: []
+  created: '2026-03-06T04:44:03.669132'
+- id: H_300
+  text: Expanding the MLP architecture from [32, 16] to [64, 32] on the same indicator
+    set will improve test accuracy by at least 2 percentage points due to the current
+    architecture being parameter-constrained for conjunctive rule learning
+  source_experiment: exp_20260306_044403_fee90d2a
+  rationale: "All strong-signal experiments in the v1.5 bootstrap (exp_v15_rsi_williams,\
+    \ exp_v15_adx_aroon, etc.) used [64, 32] architectures. The current [32, 16] model\
+    \ has 995 parameters \u2014 with 36 fuzzy inputs (12 features \xD7 3 lookback\
+    \ periods) the first hidden layer has fewer nodes than inputs, fundamentally limiting\
+    \ the network's ability to represent the multi-condition 'ADX-high AND Williams-oversold'\
+    \ pattern."
+  status: untested
+  tested_by: []
+  created: '2026-03-06T04:44:03.910836'
+
+# === INVESTIGATION SESSION 2026-03-06: Evidence-based findings ===
+# These hypotheses are based on direct code analysis and data-driven testing,
+# not assessment agent speculation. See notes/2026-03-06-backtest-investigation.md
+
+- id: H_INV_001
+  text: "Backtest decisions config is lost during model reconstruction, causing confidence\
+    \ threshold to default to 0.5 instead of strategy-intended value (e.g. 0.6)"
+  source_experiment: exp_20260306_001410_0c2bec8c
+  rationale: "Direct code analysis: reconstruct_config_from_metadata() in model_bundle.py\
+    \ hardcodes decisions={'output_format': 'classification'}, losing confidence_threshold,\
+    \ filters, and position_awareness from the original strategy config. Verified by\
+    \ simulation: conf=0.5 produces 247 trades (matching actual 246), conf=0.6 produces\
+    \ 87 trades. FIX APPLIED to model_bundle.py."
+  status: confirmed
+  tested_by: [exp_20260306_001410_0c2bec8c]
+  created: '2026-03-06T05:20:00.000000'
+
+- id: H_INV_002
+  text: "ZigZag labeling with threshold=1.5% and lookahead=20 produces almost no HOLD\
+    \ labels, causing models to never predict HOLD (degenerate 2-class classifier)"
+  source_experiment: exp_20260306_001410_0c2bec8c
+  rationale: "Empirical evidence: model produces 36.8% BUY, 0.0% HOLD, 63.2% SELL\
+    \ across 115,229 bars. A 1.5% move within 20 hourly bars is common for EURUSD,\
+    \ so nearly every bar gets labeled BUY or SELL. HOLD only when price is flat for\
+    \ 20+ hours — rare. This is a fundamental labeling problem, not a training problem."
+  status: supported
+  tested_by: [exp_20260306_001410_0c2bec8c]
+  created: '2026-03-06T05:20:00.000000'
+
+- id: H_INV_003
+  text: "Model confidence does not correlate with prediction accuracy — higher confidence\
+    \ predictions are not more accurate (and may be slightly worse)"
+  source_experiment: exp_20260306_001410_0c2bec8c
+  rationale: "Tested across all confidence levels: BUY next-bar accuracy at conf>=0.4\
+    \ is 47.5%, at conf>=0.8 is 46.3%. SELL accuracy at conf>=0.4 is 47.9%, at conf>=0.8\
+    \ is 46.4%. All below 50% (worse than random). Confidence threshold is not selecting\
+    \ for quality predictions."
+  status: confirmed
+  tested_by: [exp_20260306_001410_0c2bec8c]
+  created: '2026-03-06T05:20:00.000000'
+
+- id: H_INV_004
+  text: "Current models capture a thin pre-cost edge (~1 pip/trade) that is destroyed\
+    \ by round-trip costs of ~15 pips (0.3%). Strategies need either wider edges or\
+    \ longer hold times to survive costs."
+  source_experiment: exp_20260306_001410_0c2bec8c
+  rationale: "Simulation results: without costs, 36.8% win rate with 2.53x win/loss\
+    \ ratio gives positive expectancy (+0.00106/trade). With costs (0.1% commission\
+    \ + 0.05% slippage/side), win rate drops to 27.6% with 1.75x ratio, negative expectancy\
+    \ (-0.00128/trade). The cost hurdle is ~0.3% per round trip."
+  status: confirmed
+  tested_by: [exp_20260306_001410_0c2bec8c]
+  created: '2026-03-06T05:20:00.000000'
+
+- id: H_INV_005
+  text: "Signal inversion (BUY/SELL swapped) does NOT exist — the signal chain is\
+    \ correctly wired from ZigZag labels through to trade execution"
+  source_experiment: exp_20260306_001410_0c2bec8c
+  rationale: "Full chain traced: ZigZag BUY=0/HOLD=1/SELL=2 → model training → softmax/argmax\
+    \ → _SIGNAL_MAP{0:BUY,1:HOLD,2:SELL} → DecisionFunction → PositionManager. No\
+    \ inversion at any point. Also refutes H_027, H_036."
+  status: confirmed
+  tested_by: [exp_20260306_001410_0c2bec8c]
+  created: '2026-03-06T05:20:00.000000'
