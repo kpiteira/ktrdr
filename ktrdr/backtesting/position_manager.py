@@ -172,8 +172,22 @@ class PositionManager:
                 # Update position's unrealized P&L for tracking
                 self.current_position.unrealized_pnl = unrealized_pnl
 
-            # CORRECT CALCULATION: Total portfolio value = cash + current position market value
-            total_value = self.current_capital + position_market_value
+            # Portfolio value depends on position type
+            if self.current_position.status == PositionStatus.SHORT:
+                # Short: cash + reserved margin + unrealized P&L
+                entry_value = (
+                    self.current_position.entry_price * self.current_position.quantity
+                )
+                entry_commission = entry_value * self.commission
+                total_value = (
+                    self.current_capital
+                    + entry_value
+                    + entry_commission
+                    + self.current_position.unrealized_pnl
+                )
+            else:
+                # Long: cash + current market value of position
+                total_value = self.current_capital + position_market_value
 
             # DEBUG: Log portfolio calculation details
             logger.debug(
@@ -211,16 +225,24 @@ class PositionManager:
             return False
 
         if signal == Signal.BUY:
-            # Check if we have capital and aren't already long
             if self.current_position_status == PositionStatus.LONG:
                 return False
-
+            if self.current_position_status == PositionStatus.SHORT:
+                # BUY closes a short position — always allowed
+                return True
+            # BUY from FLAT — check capital
             required_capital = self._calculate_required_capital(price, quantity)
             return self.available_capital >= required_capital
 
         elif signal == Signal.SELL:
-            # Can sell if we have a long position
-            return self.current_position_status == PositionStatus.LONG
+            if self.current_position_status == PositionStatus.SHORT:
+                return False
+            if self.current_position_status == PositionStatus.LONG:
+                # SELL closes a long position — always allowed
+                return True
+            # SELL from FLAT — open short, check capital
+            required_capital = self._calculate_required_capital(price, quantity)
+            return self.available_capital >= required_capital
 
         return False
 
@@ -253,9 +275,19 @@ class PositionManager:
         trade = None
 
         if signal == Signal.BUY:
-            trade = self._execute_buy(price, timestamp, symbol, decision_metadata)
-        elif signal == Signal.SELL and self.current_position:
-            trade = self._execute_sell(price, timestamp, symbol, decision_metadata)
+            if self.current_position_status == PositionStatus.SHORT:
+                trade = self._execute_short_exit(
+                    price, timestamp, symbol, decision_metadata
+                )
+            else:
+                trade = self._execute_buy(price, timestamp, symbol, decision_metadata)
+        elif signal == Signal.SELL:
+            if self.current_position_status == PositionStatus.LONG:
+                trade = self._execute_sell(price, timestamp, symbol, decision_metadata)
+            else:
+                trade = self._execute_short_entry(
+                    price, timestamp, symbol, decision_metadata
+                )
 
         return trade
 
@@ -437,6 +469,139 @@ class PositionManager:
 
         return trade
 
+    def _execute_short_entry(
+        self,
+        price: float,
+        timestamp: pd.Timestamp,
+        symbol: str,
+        decision_metadata: dict[str, Any],
+    ) -> Optional[Trade]:
+        """Open a short position (SELL from FLAT).
+
+        In forex, this is just buying the quote currency. Margin treatment
+        mirrors a long entry: capital is reserved for the notional value.
+        """
+        quantity = self._calculate_quantity(price)
+        if quantity <= 0:
+            return None
+
+        # Apply slippage (sell at lower price when opening short)
+        execution_price = price * (1 - self.slippage)
+
+        trade_value = execution_price * quantity
+        commission_cost = trade_value * self.commission
+        total_cost = trade_value + commission_cost
+
+        if total_cost > self.available_capital:
+            max_trade_value = self.available_capital / (1 + self.commission)
+            quantity = int(max_trade_value / execution_price)
+            if quantity <= 0:
+                return None
+            trade_value = execution_price * quantity
+            commission_cost = trade_value * self.commission
+            total_cost = trade_value + commission_cost
+
+        # Reserve capital (margin for the short)
+        self.current_capital -= total_cost
+        logger.info(
+            f"Position opened: SHORT {quantity} units at ${execution_price:.4f} "
+            f"on {timestamp.strftime('%Y-%m-%d %H:%M')}, Cost: ${total_cost:,.2f}"
+        )
+
+        self.current_position = Position(
+            status=PositionStatus.SHORT,
+            entry_price=execution_price,
+            entry_time=timestamp,
+            quantity=quantity,
+            current_price=execution_price,
+            last_update_time=timestamp,
+        )
+
+        return Trade(
+            trade_id=self.next_trade_id,
+            symbol=symbol,
+            side="SELL_ENTRY",
+            entry_price=execution_price,
+            entry_time=timestamp,
+            exit_price=0.0,
+            exit_time=timestamp,
+            quantity=quantity,
+            gross_pnl=0.0,
+            commission=commission_cost,
+            slippage=(price - execution_price) * quantity,
+            net_pnl=0.0,
+            holding_period_hours=0.0,
+            max_favorable_excursion=0.0,
+            max_adverse_excursion=0.0,
+            decision_metadata=decision_metadata,
+        )
+
+    def _execute_short_exit(
+        self,
+        price: float,
+        timestamp: pd.Timestamp,
+        symbol: str,
+        decision_metadata: dict[str, Any],
+    ) -> Optional[Trade]:
+        """Close a short position (BUY from SHORT).
+
+        P&L = (entry_price - exit_price) * quantity (profit when price falls).
+        """
+        if not self.current_position:
+            return None
+
+        # Apply slippage (buy at higher price when closing short)
+        execution_price = price * (1 + self.slippage)
+
+        trade_value = execution_price * self.current_position.quantity
+        commission_cost = trade_value * self.commission
+
+        # Short P&L: profit when price drops below entry
+        entry_value = self.current_position.entry_price * self.current_position.quantity
+        gross_pnl = entry_value - trade_value
+        net_pnl = gross_pnl - commission_cost
+
+        # Return reserved margin + net P&L
+        self.current_capital += (
+            entry_value
+            + (
+                self.current_position.entry_price
+                * self.current_position.quantity
+                * self.commission
+            )
+            + net_pnl
+        )
+        logger.info(
+            f"Position closed: COVER {self.current_position.quantity} units at "
+            f"${execution_price:.4f} on {timestamp.strftime('%Y-%m-%d %H:%M')}, "
+            f"P&L: ${net_pnl:,.2f}"
+        )
+
+        trade = Trade(
+            trade_id=self.next_trade_id,
+            symbol=symbol,
+            side="SHORT",
+            entry_price=self.current_position.entry_price,
+            entry_time=self.current_position.entry_time,
+            exit_price=execution_price,
+            exit_time=timestamp,
+            quantity=self.current_position.quantity,
+            gross_pnl=gross_pnl,
+            commission=commission_cost,
+            slippage=(execution_price - price) * self.current_position.quantity,
+            net_pnl=net_pnl,
+            holding_period_hours=self.current_position.holding_period,
+            max_favorable_excursion=self.current_position.max_favorable_excursion,
+            max_adverse_excursion=self.current_position.max_adverse_excursion,
+            decision_metadata=decision_metadata,
+        )
+
+        self.trade_history.append(trade)
+        self.next_trade_id += 1
+        self.current_position = None
+
+        return trade
+
     def _calculate_quantity(self, price: float) -> int:
         """Calculate quantity to buy based on available capital.
 
@@ -543,13 +708,14 @@ class PositionManager:
         if not self.current_position:
             return None
 
-        # Force-close the position using the sell logic
         decision_metadata = {
             "signal_type": "FORCE_CLOSE",
             "reason": reason,
             "forced": True,
         }
 
+        if self.current_position.status == PositionStatus.SHORT:
+            return self._execute_short_exit(price, timestamp, symbol, decision_metadata)
         return self._execute_sell(price, timestamp, symbol, decision_metadata)
 
     def reset(self):

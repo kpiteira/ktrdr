@@ -14,6 +14,16 @@ from ktrdr.api.models.operations import OperationStatus, OperationType
 
 pytestmark = pytest.mark.asyncio
 
+# Minimal v3 strategy config for mocking _load_strategy_config
+_MOCK_STRATEGY_CONFIG = {
+    "name": "test_strategy",
+    "version": "3.0",
+    "training_data": {
+        "symbols": {"mode": "single", "symbol": "EURUSD", "list": ["EURUSD"]},
+        "timeframes": {"mode": "single", "timeframe": "1h", "list": ["1h"]},
+    },
+}
+
 
 class TestDesignToTrainingWorkerCheck:
     """Tests for worker availability check in design→training transition."""
@@ -112,6 +122,9 @@ class TestDesignToTrainingWorkerCheck:
         worker._training_service.start_training = AsyncMock(
             return_value={"operation_id": "op_training_456"}
         )
+
+        # Mock strategy config loading (file doesn't exist in test env)
+        worker._load_strategy_config = MagicMock(return_value=_MOCK_STRATEGY_CONFIG)
 
         with patch(
             "ktrdr.api.endpoints.workers.get_worker_registry",
@@ -216,6 +229,9 @@ class TestDesignToTrainingWorkerCheck:
         worker._training_service.start_training = AsyncMock(
             return_value={"operation_id": "op_training_456"}
         )
+
+        # Mock strategy config loading (file doesn't exist in test env)
+        worker._load_strategy_config = MagicMock(return_value=_MOCK_STRATEGY_CONFIG)
 
         with patch(
             "ktrdr.api.endpoints.workers.get_worker_registry",
@@ -325,9 +341,18 @@ class TestDesignToTrainingWithRealChildOp:
             return_value={"operation_id": "op_training_456"}
         )
 
-        with patch(
-            "ktrdr.api.endpoints.workers.get_worker_registry",
-            return_value=mock_registry,
+        # Mock strategy config loading (file doesn't exist in test env)
+        worker._load_strategy_config = MagicMock(return_value=_MOCK_STRATEGY_CONFIG)
+
+        with (
+            patch(
+                "ktrdr.api.endpoints.workers.get_worker_registry",
+                return_value=mock_registry,
+            ),
+            patch(
+                "ktrdr.agents.workers.research_worker.get_budget_tracker",
+                return_value=MagicMock(),
+            ),
         ):
             await worker._handle_designing_phase("op_research_123", completed_child_op)
 
@@ -346,9 +371,15 @@ class TestDesignToTrainingWithRealChildOp:
         worker._training_service = MagicMock()
         worker._training_service.start_training = AsyncMock()
 
-        with patch(
-            "ktrdr.api.endpoints.workers.get_worker_registry",
-            return_value=mock_registry,
+        with (
+            patch(
+                "ktrdr.api.endpoints.workers.get_worker_registry",
+                return_value=mock_registry,
+            ),
+            patch(
+                "ktrdr.agents.workers.research_worker.get_budget_tracker",
+                return_value=MagicMock(),
+            ),
         ):
             await worker._handle_designing_phase("op_research_123", completed_child_op)
 
@@ -634,6 +665,9 @@ class TestMultipleResearchesQueuing:
 
         mock_ops.get_operation.side_effect = get_op_side_effect
 
+        # Mock strategy config loading (files don't exist in test env)
+        worker._load_strategy_config = MagicMock(return_value=_MOCK_STRATEGY_CONFIG)
+
         with patch(
             "ktrdr.api.endpoints.workers.get_worker_registry",
             return_value=mock_registry,
@@ -687,6 +721,9 @@ class TestMultipleResearchesQueuing:
         worker._training_service.start_training = AsyncMock(
             return_value={"operation_id": "op_training_B"}
         )
+
+        # Mock strategy config loading (file doesn't exist in test env)
+        worker._load_strategy_config = MagicMock(return_value=_MOCK_STRATEGY_CONFIG)
 
         with patch(
             "ktrdr.api.endpoints.workers.get_worker_registry",

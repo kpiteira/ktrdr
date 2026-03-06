@@ -61,10 +61,20 @@ class DecisionFunction:
         """
         self.model = model
         self.feature_names = feature_names
-        self.confidence_threshold = decisions_config.get("confidence_threshold", 0.5)
+        self.output_format = decisions_config.get("output_format", "classification")
         filters = decisions_config.get("filters", {})
         self.min_separation_hours = filters.get("min_signal_separation", 4)
         self.position_awareness = decisions_config.get("position_awareness", True)
+
+        if self.output_format == "regression":
+            cost_model = decisions_config.get("cost_model", {})
+            self.round_trip_cost = cost_model.get("round_trip_cost", 0.003)
+            self.min_edge_multiplier = cost_model.get("min_edge_multiplier", 1.5)
+            self.trade_threshold = self.round_trip_cost * self.min_edge_multiplier
+        else:
+            self.confidence_threshold = decisions_config.get(
+                "confidence_threshold", 0.5
+            )
 
     def __call__(
         self,
@@ -108,15 +118,19 @@ class DecisionFunction:
             raw_signal, confidence, position, timestamp, last_signal_time
         )
 
+        reasoning: dict[str, Any] = {
+            "raw_signal": raw_signal.value,
+            "nn_probabilities": nn_output["probabilities"],
+            "position_aware": self.position_awareness,
+        }
+        if "predicted_return" in nn_output:
+            reasoning["predicted_return"] = nn_output["predicted_return"]
+
         return TradingDecision(
             signal=final_signal,
             confidence=confidence,
             timestamp=timestamp,
-            reasoning={
-                "raw_signal": raw_signal.value,
-                "nn_probabilities": nn_output["probabilities"],
-                "position_aware": self.position_awareness,
-            },
+            reasoning=reasoning,
             current_position=_POSITION_MAP[position],
         )
 
@@ -143,6 +157,39 @@ class DecisionFunction:
         if hasattr(outputs, "shape") and len(outputs.shape) == 1:
             outputs = outputs.unsqueeze(0)
 
+        if self.output_format == "regression":
+            predicted_return = float(outputs[0, 0].cpu().numpy())
+
+            if predicted_return > self.trade_threshold:
+                signal = Signal.BUY
+            elif predicted_return < -self.trade_threshold:
+                signal = Signal.SELL
+            else:
+                signal = Signal.HOLD
+
+            # Cosmetic confidence for TradingDecision compatibility
+            confidence = min(abs(predicted_return) / (3 * self.trade_threshold), 1.0)
+
+            return {
+                "signal": signal,
+                "confidence": confidence,
+                "predicted_return": predicted_return,
+                "probabilities": {
+                    "BUY": (
+                        max(predicted_return, 0) / self.trade_threshold
+                        if self.trade_threshold > 0
+                        else 0.0
+                    ),
+                    "HOLD": 0.0,
+                    "SELL": (
+                        max(-predicted_return, 0) / self.trade_threshold
+                        if self.trade_threshold > 0
+                        else 0.0
+                    ),
+                },
+            }
+
+        # Classification path (unchanged)
         raw_outputs = outputs[0].cpu().numpy()
 
         # Check if softmax was already applied
@@ -189,8 +236,11 @@ class DecisionFunction:
         Returns:
             Filtered signal
         """
-        # 1. Confidence threshold filter
-        if confidence < self.confidence_threshold:
+        # 1. Confidence threshold filter (skip for regression — cost threshold applied in _predict)
+        if (
+            self.output_format != "regression"
+            and confidence < self.confidence_threshold
+        ):
             return Signal.HOLD
 
         # 2. Signal separation filter
@@ -223,8 +273,11 @@ class DecisionFunction:
         if position == PositionStatus.SHORT and raw_signal == Signal.SELL:
             return Signal.HOLD
 
-        # No short positions in MVP
-        if raw_signal == Signal.SELL and position == PositionStatus.FLAT:
-            return Signal.HOLD
+        # Block short-selling from FLAT for classification (equity-style).
+        # Regression mode allows shorts — in forex there's no real "short",
+        # and regression models legitimately predict negative returns.
+        if self.output_format != "regression":
+            if raw_signal == Signal.SELL and position == PositionStatus.FLAT:
+                return Signal.HOLD
 
         return raw_signal
