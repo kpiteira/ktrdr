@@ -47,7 +47,22 @@ Added "Regression Mode" section to `DESIGN_SYSTEM_PROMPT` with:
 - Design guidance (architecture sizing, horizon selection, selectivity)
 - Classification mode documented as legacy alternative
 
-**Next task notes:**
-- Task 2.5 modifies research_worker.py and assessment_agent_worker.py
-- Research worker needs to pass output_format through the research cycle
-- Assessment worker needs to include regression context when calling the assessment LLM
+## Task 2.5 Complete: Research Worker Regression Metadata
+
+**Research worker changes:**
+- `_start_training()`: Extracts `output_format` and `cost_model` from strategy config, stores in parent op metadata
+- `_handle_training_phase()`: Injects `output_format` into training result before `check_training_gate()`
+- `_handle_backtesting_phase()`: Injects `output_format` into backtest result before `check_backtest_gate()`, extracts `net_return`/`trade_count`
+
+**Assessment worker changes:**
+- `_build_user_prompt()`: Adds regression evaluation guidance section when `output_format == "regression"`
+- New `_format_regression_guidance()` static method
+
+**Gotchas:**
+- Design prompt line count test updated from 100→150 to accommodate regression docs
+- Pre-existing: `test_forward_return_labeler.py` errors on collection (no importorskip guard)
+
+**For Task 2.6 (E2E Validation):**
+- Requires running sandbox with design, training, and assessment workers
+- Trigger: `ktrdr research start --brief "Design a regression strategy..."`
+- Verify: strategy has output_format=regression, training uses regression gate, assessment includes regression guidance

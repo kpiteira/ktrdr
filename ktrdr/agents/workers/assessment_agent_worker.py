@@ -160,6 +160,7 @@ class AssessmentAgentWorker(WorkerAPIBase):
 
         The system prompt is static (defines role/rubric). The user prompt
         carries the strategy data, metrics, and experiment context.
+        Adds regression guidance when output_format is regression.
         """
         parts = [
             f"## Strategy: {strategy_name}",
@@ -176,10 +177,30 @@ class AssessmentAgentWorker(WorkerAPIBase):
             f"\n## Backtest Results\n\n```json\n{json.dumps(backtest_results, indent=2)}\n```"
         )
 
+        # Add regression evaluation guidance when applicable
+        output_format = training_metrics.get("output_format", "classification")
+        if output_format == "regression":
+            parts.append(self._format_regression_guidance(training_metrics))
+
         if experiment_history:
             parts.append(f"\n## Experiment History\n\n{experiment_history}")
 
         return "\n".join(parts)
+
+    @staticmethod
+    def _format_regression_guidance(training_metrics: dict[str, Any]) -> str:
+        """Format regression-specific evaluation guidance for the assessment agent."""
+        return """
+## Regression Evaluation Guidance
+
+This strategy predicts **forward returns** (not BUY/HOLD/SELL classes).
+
+Key metrics to evaluate:
+- **Directional accuracy**: Fraction of correct sign predictions (must beat 50% coin flip)
+- **R-squared**: Variance explained by the model (modest R² with good directional accuracy can still be profitable)
+- **MAE**: Average absolute prediction error
+- The trading rule only trades when predicted return exceeds a cost threshold
+- Consider the tradeoff between trade count and selectivity — fewer trades with higher win rate may outperform many trades with thin edge"""
 
     def _get_mcp_servers(self) -> dict[str, Any]:
         """Build MCP server config for Claude Code invocation."""

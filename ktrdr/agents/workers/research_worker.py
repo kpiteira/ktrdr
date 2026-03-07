@@ -572,6 +572,15 @@ class AgentResearchWorker:
             "strategy_name", "unknown"
         )
 
+        # Store output_format for gate checks and assessment context
+        decisions_config = config.get("decisions", {})
+        output_format = decisions_config.get("output_format", "classification")
+        parent_op.metadata.parameters["output_format"] = output_format
+        if output_format == "regression":
+            parent_op.metadata.parameters["cost_model"] = decisions_config.get(
+                "cost_model", {}
+            )
+
         # Get date range from config or settings
         from ktrdr.config.settings import get_agent_settings
 
@@ -626,6 +635,12 @@ class AgentResearchWorker:
         if child_op.status == OperationStatus.COMPLETED:
             result = child_op.result_summary or {}
             parent_op = await self.ops.get_operation(operation_id)
+
+            # Inject output_format for gate check (stored during _start_training)
+            if parent_op:
+                output_format = parent_op.metadata.parameters.get("output_format")
+                if output_format:
+                    result["output_format"] = output_format
 
             # Check training gate (skip if bypass_gates is True)
             bypass_gates = (
@@ -802,10 +817,18 @@ class AgentResearchWorker:
                 "max_drawdown": metrics.get("max_drawdown_pct", 1.0),
                 "total_return": metrics.get("total_return", 0),
                 "total_trades": metrics.get("total_trades", 0),
+                "net_return": metrics.get("net_return", metrics.get("total_return", 0)),
+                "trade_count": metrics.get("total_trades", 0),
             }
 
             # Get parent operation for gate check and metadata update
             parent_op = await self.ops.get_operation(operation_id)
+
+            # Inject output_format for gate check (stored during _start_training)
+            if parent_op:
+                output_format = parent_op.metadata.parameters.get("output_format")
+                if output_format:
+                    backtest_result["output_format"] = output_format
 
             # Check backtest gate (skip if bypass_gates is True)
             bypass_gates = (
