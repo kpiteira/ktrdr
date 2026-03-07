@@ -415,64 +415,75 @@ class TrainingPipeline:
         price_data: dict[str, pd.DataFrame], label_config: dict[str, Any]
     ) -> torch.Tensor:
         """
-        Generate training labels using ZigZag method with multi-timeframe support.
-
-        EXTRACTED FROM: StrategyTrainer._generate_labels()
-        (train_strategy.py:880-923)
+        Generate training labels with support for ZigZag (classification) and
+        forward return (regression) modes.
 
         Args:
             price_data: Dictionary mapping timeframes to OHLCV data
-            label_config: Label generation configuration
+            label_config: Label generation configuration. Key fields:
+                - source: "zigzag" (default) or "forward_return"
+                - For zigzag: zigzag_threshold, label_lookahead
+                - For forward_return: horizon (int)
 
         Returns:
-            Tensor of labels
+            Tensor of labels (LongTensor for zigzag, FloatTensor for forward_return)
         """
-        logger.info(
-            f"🔧 TrainingPipeline.create_labels() - Generating labels from {len(price_data)} timeframe(s) "
-            f"(threshold={label_config.get('zigzag_threshold', 'N/A')}, "
-            f"lookahead={label_config.get('label_lookahead', 'N/A')})"
-        )
+        source = label_config.get("source", "zigzag")
 
-        # CRITICAL: For multi-timeframe, MUST use the same base timeframe as features
-        # Features are generated from timeframes[0], so labels must also use timeframes[0]
-        # This ensures tensor size consistency (same number of samples)
+        # Resolve base timeframe price data
         if len(price_data) == 1:
-            # Single timeframe case
             timeframe, tf_price_data = next(iter(price_data.items()))
             logger.debug(f"Generating labels from {timeframe} data")
         else:
-            # Multi-timeframe case - use SAME base timeframe as features (highest frequency)
-            # Features use frequency-based ordering, so we must match that
             timeframe_list = sorted(price_data.keys())
-            # Convert to frequency-based order (highest frequency first)
             frequency_order = TrainingPipeline._sort_timeframes_by_frequency(
                 timeframe_list
             )
-            base_timeframe = frequency_order[
-                0
-            ]  # Use highest frequency (same as features)
+            base_timeframe = frequency_order[0]
             tf_price_data = price_data[base_timeframe]
             logger.debug(
                 f"Generating labels from base timeframe {base_timeframe} "
                 f"(out of {frequency_order}) - matching features"
             )
 
+        if source == "forward_return":
+            from ktrdr.training.forward_return_labeler import ForwardReturnLabeler
+
+            horizon = label_config.get("horizon", 20)
+            logger.info(
+                f"TrainingPipeline.create_labels() - Forward return labels "
+                f"(horizon={horizon}, bars={len(tf_price_data)})"
+            )
+            fr_labeler = ForwardReturnLabeler(horizon=horizon)
+            labels = fr_labeler.generate_labels(tf_price_data)
+            label_tensor: torch.Tensor = torch.FloatTensor(labels.values)
+
+            stats = fr_labeler.get_label_statistics(labels)
+            logger.info(
+                f"Generated {len(label_tensor)} forward return labels - "
+                f"mean={stats['mean']:.6f}, std={stats['std']:.6f}, "
+                f"positive={stats['pct_positive']:.1f}%, negative={stats['pct_negative']:.1f}%"
+            )
+            return label_tensor
+
+        # Default: ZigZag classification labels
+        logger.info(
+            f"TrainingPipeline.create_labels() - ZigZag labels "
+            f"(threshold={label_config.get('zigzag_threshold', 'N/A')}, "
+            f"lookahead={label_config.get('label_lookahead', 'N/A')})"
+        )
+
         labeler = ZigZagLabeler(
             threshold=label_config["zigzag_threshold"],
             lookahead=label_config["label_lookahead"],
         )
 
-        # Use segment-based labeling for better class balance
-        logger.debug(
-            "Using ZigZag segment labeling (balanced) instead of sparse extreme labeling..."
-        )
         labels = labeler.generate_segment_labels(tf_price_data)
         label_tensor = torch.LongTensor(labels.values)
 
-        # Log label distribution
         unique, counts = torch.unique(label_tensor, return_counts=True)
         dist = {int(u): int(c) for u, c in zip(unique, counts)}
-        logger.info(f"✅ Generated {len(label_tensor)} labels - Distribution: {dist}")
+        logger.info(f"Generated {len(label_tensor)} labels - Distribution: {dist}")
 
         return label_tensor
 
@@ -657,25 +668,22 @@ class TrainingPipeline:
         X_test: Optional[torch.Tensor],
         y_test: Optional[torch.Tensor],
         symbol_indices_test: Optional[torch.Tensor] = None,
+        output_format: str = "classification",
     ) -> dict[str, Any]:
         """
         Evaluate model on test set.
-
-        EXTRACTED FROM: StrategyTrainer._evaluate_model() (train_strategy.py:1021-1080)
 
         Args:
             model: Trained model
             X_test: Test features (None for no test data)
             y_test: Test labels (None for no test data)
             symbol_indices_test: Optional symbol indices for multi-symbol evaluation
+            output_format: 'classification' or 'regression'
 
         Returns:
-            Test metrics dict containing:
-                - test_accuracy: Test set accuracy
-                - test_loss: Test set loss
-                - precision: Weighted precision score
-                - recall: Weighted recall score
-                - f1_score: Weighted F1 score
+            Test metrics dict. For classification: test_accuracy, test_loss,
+            precision, recall, f1_score. For regression: test_accuracy
+            (directional accuracy), test_loss, mae.
         """
         logger.info(
             "🔧 TrainingPipeline.evaluate_model() - Evaluating model on test set"
@@ -700,39 +708,63 @@ class TrainingPipeline:
         with torch.no_grad():
             outputs = model(X_test)
 
-            # Calculate accuracy
-            _, predicted = torch.max(outputs, 1)
-            accuracy = (predicted == y_test).float().mean().item()
+            if output_format == "regression":
+                # Regression: directional accuracy, Huber loss, MAE
+                predicted_returns = outputs.squeeze(-1)
+                criterion: nn.Module = nn.HuberLoss()
+                loss = criterion(predicted_returns, y_test).item()
 
-            # Calculate loss
-            criterion = nn.CrossEntropyLoss()
-            loss = criterion(outputs, y_test).item()
+                # Directional accuracy: sign(predicted) == sign(actual)
+                pred_sign = torch.sign(predicted_returns)
+                actual_sign = torch.sign(y_test)
+                accuracy = (pred_sign == actual_sign).float().mean().item()
 
-            # Convert tensors to numpy for sklearn metrics
-            y_true = y_test.cpu().numpy()
-            y_pred = predicted.cpu().numpy()
+                mae = torch.abs(predicted_returns - y_test).mean().item()
 
-            # Calculate precision, recall, and f1_score using weighted average
-            # This handles multi-class classification properly
-            precision = precision_score(
-                y_true, y_pred, average="weighted", zero_division=0
-            )
-            recall = recall_score(y_true, y_pred, average="weighted", zero_division=0)
-            f1 = f1_score(y_true, y_pred, average="weighted", zero_division=0)
+                logger.info(
+                    f"✅ Regression evaluation complete - "
+                    f"directional_accuracy={accuracy:.4f}, test_loss={loss:.6f}, "
+                    f"mae={mae:.6f}"
+                )
 
-        logger.info(
-            f"✅ Evaluation complete - "
-            f"test_accuracy={accuracy:.4f}, test_loss={loss:.4f}, "
-            f"precision={precision:.4f}, recall={recall:.4f}, f1_score={f1:.4f}"
-        )
+                return {
+                    "test_accuracy": accuracy,
+                    "test_loss": loss,
+                    "mae": mae,
+                }
+            else:
+                # Classification: argmax accuracy, CrossEntropyLoss, sklearn metrics
+                _, predicted = torch.max(outputs, 1)
+                accuracy = (predicted == y_test).float().mean().item()
 
-        return {
-            "test_accuracy": accuracy,
-            "test_loss": loss,
-            "precision": precision,
-            "recall": recall,
-            "f1_score": f1,
-        }
+                criterion = nn.CrossEntropyLoss()
+                loss = criterion(outputs, y_test).item()
+
+                y_true = y_test.cpu().numpy()
+                y_pred = predicted.cpu().numpy()
+
+                precision = precision_score(
+                    y_true, y_pred, average="weighted", zero_division=0
+                )
+                recall = recall_score(
+                    y_true, y_pred, average="weighted", zero_division=0
+                )
+                f1 = f1_score(y_true, y_pred, average="weighted", zero_division=0)
+
+                logger.info(
+                    f"✅ Evaluation complete - "
+                    f"test_accuracy={accuracy:.4f}, test_loss={loss:.4f}, "
+                    f"precision={precision:.4f}, recall={recall:.4f}, "
+                    f"f1_score={f1:.4f}"
+                )
+
+                return {
+                    "test_accuracy": accuracy,
+                    "test_loss": loss,
+                    "precision": precision,
+                    "recall": recall,
+                    "f1_score": f1,
+                }
 
     # ======================================================================
     # MULTI-SYMBOL METHODS

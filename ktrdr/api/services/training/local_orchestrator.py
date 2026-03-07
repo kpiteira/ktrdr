@@ -224,16 +224,34 @@ class LocalTrainingOrchestrator:
         # Extract training section and label config from v3 config
         training_section = config.get("training", {})
         labels_config = training_section.get("labels", {})
+        label_source = labels_config.get("source", "zigzag")
 
-        # Build v2-compatible label config for create_labels()
-        label_config = {
-            "zigzag_threshold": labels_config.get("zigzag_threshold", 0.02),
-            "label_lookahead": labels_config.get("label_lookahead", 10),
-        }
+        # Build label config for create_labels()
+        if label_source == "forward_return":
+            label_config = {
+                "source": "forward_return",
+                "horizon": labels_config.get("horizon", 20),
+            }
+        else:
+            label_config = {
+                "source": "zigzag",
+                "zigzag_threshold": labels_config.get("zigzag_threshold", 0.02),
+                "label_lookahead": labels_config.get("label_lookahead", 10),
+            }
 
         labels = TrainingPipeline.create_labels(price_data, label_config)
 
-        # Align features and labels (they may have different lengths due to NaN handling)
+        # Align features and labels
+        # For forward_return labels: labels are shorter (last `horizon` bars dropped),
+        # so truncate features from the front to match
+        if label_source == "forward_return" and len(labels) < len(features):
+            truncated_from = len(features)
+            features = features[: len(labels)]  # type: ignore[assignment]
+            logger.info(
+                f"Truncated features from {truncated_from} to {len(features)} "
+                f"to match forward return labels (horizon={labels_config.get('horizon', 20)})"
+            )
+
         min_len = min(len(features), len(labels))
         if min_len == 0:
             raise ValueError(
@@ -269,16 +287,38 @@ class LocalTrainingOrchestrator:
         )
 
         # Create model
+        decisions_config = config.get("decisions", {})
+        output_format = decisions_config.get("output_format", "classification")
+        output_dim = 1 if output_format == "regression" else 3
+
         model_config = config.get("model", {})
+        # Inject output_format so MLPTradingModel builds the right architecture
+        if output_format == "regression":
+            model_config["output_format"] = "regression"
         model = TrainingPipeline.create_model(
             input_dim=features.shape[1],
-            output_dim=3,  # Buy, Hold, Sell
+            output_dim=output_dim,
             model_config=model_config,
         )
 
         # Train model
         progress_callback = self._create_progress_callback()
-        training_config = model_config.get("training", {})
+        # Build training_config from the strategy's top-level training section
+        # (not from model_config which has no training sub-key)
+        training_config = {
+            "epochs": training_section.get("epochs", 100),
+            "learning_rate": training_section.get("learning_rate", 0.001),
+            "batch_size": training_section.get("batch_size", 32),
+        }
+
+        # Inject regression config into training config so ModelTrainer knows the mode
+        if output_format == "regression":
+            training_config["output_format"] = "regression"
+            training_config["loss"] = training_section.get("loss", "huber")
+            training_config["huber_delta"] = training_section.get("huber_delta", 0.01)
+            # Disable weight decay for regression — L2 regularization kills models
+            # with tiny labels (forward returns ~0.003) by pushing weights to zero
+            training_config["weight_decay"] = 0.0
 
         training_results = TrainingPipeline.train_model(
             model=model,
@@ -294,7 +334,9 @@ class LocalTrainingOrchestrator:
         )
 
         # Evaluate model
-        test_metrics = TrainingPipeline.evaluate_model(model, X_test, y_test)
+        test_metrics = TrainingPipeline.evaluate_model(
+            model, X_test, y_test, output_format=output_format
+        )
 
         # Save model
         model_path = self._model_storage.save_model(

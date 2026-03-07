@@ -115,6 +115,12 @@ See [e2e-tester agent](../../agents/e2e-tester.md) for full details.
 | [backtest/error-missing-data](tests/backtest/error-missing-data.md) | Backtest (Error) | ~2s | Error handling |
 | [backtest/error-model-not-found](tests/backtest/error-model-not-found.md) | Backtest (Error) | ~2s | Error handling |
 
+### Regression Tests
+
+| Test | Category | Duration | Use When |
+|------|----------|----------|----------|
+| [regression/full-cycle](tests/regression/full-cycle.md) | Regression (Full Cycle) | ~5min | Regression strategy train + backtest, output_format validation, cost filtering |
+
 ### Agent Tests
 
 | Test | Category | Duration | Use When |

@@ -49,6 +49,64 @@ FUZZY_TYPE_PARAM_COUNTS: dict[str, int] = {
 }
 
 
+def _validate_regression_config(
+    decisions: dict[str, Any],
+    training: dict[str, Any] | None = None,
+) -> tuple[list[str], list[str]]:
+    """Validate regression-specific decisions (and optionally training) config.
+
+    Shared helper used by both v1/v2 StrategyValidator and v3 validate_v3_strategy.
+
+    Args:
+        decisions: The decisions config dict
+        training: Optional training config dict (for label/loss validation)
+
+    Returns:
+        Tuple of (errors, warnings) as plain string lists
+    """
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    cost_model = decisions.get("cost_model")
+    if not cost_model or not isinstance(cost_model, dict):
+        errors.append(
+            "decisions.cost_model is required for regression mode "
+            "(must include round_trip_cost and min_edge_multiplier)"
+        )
+    else:
+        rtc = cost_model.get("round_trip_cost")
+        if rtc is None or not isinstance(rtc, (int, float)) or rtc <= 0:
+            errors.append(
+                "decisions.cost_model.round_trip_cost must be a positive number"
+            )
+        mem = cost_model.get("min_edge_multiplier")
+        if mem is None or not isinstance(mem, (int, float)) or mem <= 0:
+            errors.append(
+                "decisions.cost_model.min_edge_multiplier must be a positive number"
+            )
+
+    if "confidence_threshold" in decisions:
+        warnings.append(
+            "decisions.confidence_threshold is ignored in regression mode "
+            "(cost threshold is used instead)"
+        )
+
+    if training is not None:
+        labels = training.get("labels", {})
+        if labels.get("source") == "forward_return":
+            horizon = labels.get("horizon")
+            if horizon is None or not isinstance(horizon, int) or horizon <= 0:
+                errors.append(
+                    "training.labels.horizon must be a positive integer "
+                    "for forward_return labels"
+                )
+        loss = training.get("loss")
+        if loss is not None and loss not in ("huber", "mse"):
+            errors.append(f"training.loss must be 'huber' or 'mse', got '{loss}'")
+
+    return errors, warnings
+
+
 @dataclass
 class ValidationResult:
     """Result of strategy validation."""
@@ -490,19 +548,46 @@ class StrategyValidator:
         """Validate decisions section."""
         result = ValidationResult(is_valid=True)
 
-        for field_name, expected_type in self.DECISIONS_REQUIRED.items():
-            if field_name not in decisions_config:
-                result.is_valid = False
-                result.missing_sections.append(f"decisions.{field_name}")
-                result.errors.append(f"Missing required decisions field: {field_name}")
-            elif not isinstance(decisions_config[field_name], expected_type):  # type: ignore[arg-type]
-                result.is_valid = False
-                type_name = getattr(expected_type, "__name__", str(expected_type))
-                result.errors.append(
-                    f"Decisions field '{field_name}' must be of type {type_name}"
-                )
+        output_format = decisions_config.get("output_format", "classification")
+
+        # Validate output_format value
+        if output_format not in ("classification", "regression"):
+            result.is_valid = False
+            result.errors.append(
+                f"decisions.output_format must be 'classification' or 'regression', got '{output_format}'"
+            )
+            return result
+
+        if output_format == "regression":
+            # Regression-specific validation
+            self._validate_regression_decisions(decisions_config, result)
+        else:
+            # Classification requires confidence_threshold
+            for field_name, expected_type in self.DECISIONS_REQUIRED.items():
+                if field_name not in decisions_config:
+                    result.is_valid = False
+                    result.missing_sections.append(f"decisions.{field_name}")
+                    result.errors.append(
+                        f"Missing required decisions field: {field_name}"
+                    )
+                elif not isinstance(decisions_config[field_name], expected_type):  # type: ignore[arg-type]
+                    result.is_valid = False
+                    type_name = getattr(expected_type, "__name__", str(expected_type))
+                    result.errors.append(
+                        f"Decisions field '{field_name}' must be of type {type_name}"
+                    )
 
         return result
+
+    def _validate_regression_decisions(
+        self, decisions_config: dict[str, Any], result: ValidationResult
+    ) -> None:
+        """Validate regression-specific decisions fields."""
+        errors, warnings = _validate_regression_config(decisions_config)
+        if errors:
+            result.is_valid = False
+            result.errors.extend(errors)
+        result.warnings.extend(warnings)
 
     def _check_legacy_format(self, config: dict[str, Any], result: ValidationResult):
         """Check for legacy format indicators."""
@@ -1174,6 +1259,27 @@ def validate_v3_strategy(
                 message=f"Indicator '{unused_id}' is defined but not referenced by any fuzzy_set",
                 location=f"indicators.{unused_id}",
             )
+        )
+
+    # Validation 6: Regression-specific decisions/training validation
+    decisions = config.decisions if isinstance(config.decisions, dict) else {}
+    output_format = decisions.get("output_format", "classification")
+
+    if output_format == "regression":
+        training = config.training if isinstance(config.training, dict) else {}
+        reg_errors, reg_warnings = _validate_regression_config(decisions, training)
+        errors.extend(reg_errors)
+        for w in reg_warnings:
+            warnings.append(
+                StrategyValidationWarning(
+                    message=w,
+                    location="decisions",
+                )
+            )
+
+    elif output_format not in ("classification", "regression"):
+        errors.append(
+            f"decisions.output_format must be 'classification' or 'regression', got '{output_format}'"
         )
 
     # If we have errors, raise exception

@@ -286,7 +286,16 @@ class ModelTrainer:
             print("🔄 Restored optimizer state from checkpoint")
 
         # Setup loss function
-        criterion = nn.CrossEntropyLoss()
+        output_format = self.config.get("output_format", "classification")
+        if output_format == "regression":
+            loss_type = self.config.get("loss", "huber")
+            if loss_type == "huber":
+                huber_delta = self.config.get("huber_delta", 0.01)
+                criterion: nn.Module = nn.HuberLoss(delta=huber_delta)
+            else:
+                criterion = nn.MSELoss()
+        else:
+            criterion = nn.CrossEntropyLoss()
 
         # Setup learning rate scheduler
         scheduler = self._create_scheduler(optimizer)
@@ -371,7 +380,10 @@ class ModelTrainer:
                         f"🔍 DEBUG: Model outputs min/max: {outputs.min():.6f}/{outputs.max():.6f}"
                     )
 
-                loss = criterion(outputs, batch_y)
+                if output_format == "regression":
+                    loss = criterion(outputs.squeeze(-1), batch_y)
+                else:
+                    loss = criterion(outputs, batch_y)
 
                 # DEBUG: Check loss immediately after calculation
                 if epoch == 0 and batch_idx == 0:
@@ -403,9 +415,14 @@ class ModelTrainer:
 
                 # Track metrics
                 train_loss += loss.item() * batch_X.size(0)
-                _, predicted = torch.max(outputs.data, 1)
                 train_total += batch_y.size(0)
-                train_correct += (predicted == batch_y).sum().item()
+                if output_format == "regression":
+                    pred_sign = (outputs.squeeze(-1) > 0).float()
+                    actual_sign = (batch_y > 0).float()
+                    train_correct += (pred_sign == actual_sign).sum().item()
+                else:
+                    _, predicted = torch.max(outputs.data, 1)
+                    train_correct += (predicted == batch_y).sum().item()
 
                 # Batch-level progress callback (configurable frequency)
                 if (
@@ -470,12 +487,24 @@ class ModelTrainer:
                 model.eval()
                 with torch.no_grad():
                     val_outputs = model(X_val)
-                    val_loss = criterion(val_outputs, y_val)
-                    _, val_predicted = torch.max(val_outputs.data, 1)
-                    if y_val is not None:
-                        val_accuracy = (val_predicted == y_val).float().mean().item()
+                    if output_format == "regression":
+                        val_loss = criterion(val_outputs.squeeze(-1), y_val)
+                        val_pred_sign = (val_outputs.squeeze(-1) > 0).float()
+                        val_actual_sign = (y_val > 0).float()  # type: ignore[union-attr,operator]
+                        val_accuracy = (
+                            (val_pred_sign == val_actual_sign).float().mean().item()
+                        )
+                        # Set val_predicted for analytics compatibility
+                        val_predicted = val_pred_sign.long()
                     else:
-                        val_accuracy = 0.0
+                        val_loss = criterion(val_outputs, y_val)
+                        _, val_predicted = torch.max(val_outputs.data, 1)
+                        if y_val is not None:
+                            val_accuracy = (
+                                (val_predicted == y_val).float().mean().item()
+                            )
+                        else:
+                            val_accuracy = 0.0
                     val_loss = val_loss.item()
 
                 # Save best model

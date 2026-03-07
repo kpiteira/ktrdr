@@ -49,14 +49,12 @@ class MLPTradingModel(BaseNeuralModel):
             )
             prev_size = hidden_size
 
-        # Output layer (3 classes: BUY=0, HOLD=1, SELL=2)
-        layers.append(nn.Linear(prev_size, 3))
-
-        # CLASSIFICATION MODELS ALWAYS OUTPUT RAW LOGITS
-        # - CrossEntropyLoss expects raw logits and applies softmax internally
-        # - This prevents dangerous double-softmax bugs
-        # - Config "output_activation" is IGNORED for classification tasks
-        # - Inference code handles logit-to-probability conversion
+        # Output layer: 1 neuron for regression, 3 for classification
+        output_format = self.config.get("output_format", "classification")
+        if output_format == "regression":
+            layers.append(nn.Linear(prev_size, 1))
+        else:
+            layers.append(nn.Linear(prev_size, 3))
 
         return nn.Sequential(*layers)
 
@@ -132,7 +130,16 @@ class MLPTradingModel(BaseNeuralModel):
         else:
             optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
 
-        criterion = nn.CrossEntropyLoss()
+        output_format = self.config.get("output_format", "classification")
+        if output_format == "regression":
+            loss_type = self.config.get("loss", "huber")
+            if loss_type == "huber":
+                huber_delta = self.config.get("huber_delta", 0.01)
+                criterion: nn.Module = nn.HuberLoss(delta=huber_delta)
+            else:
+                criterion = nn.MSELoss()
+        else:
+            criterion = nn.CrossEntropyLoss()
 
         # Training history
         history: dict[str, list[float]] = {
@@ -142,15 +149,20 @@ class MLPTradingModel(BaseNeuralModel):
             "val_accuracy": [],
         }
 
-        # Convert labels to LongTensor for CrossEntropyLoss
-        y = y.long()
+        # Convert labels: float for regression, long for classification
+        if output_format != "regression":
+            y = y.long()
 
         # Simple training loop (placeholder - would be more sophisticated in production)
         self.model.train()
         for _epoch in range(epochs):
             # Forward pass
             outputs = self.model(X)
-            loss = criterion(outputs, y)
+
+            if output_format == "regression":
+                loss = criterion(outputs.squeeze(-1), y)
+            else:
+                loss = criterion(outputs, y)
 
             # Backward pass
             optimizer.zero_grad()
@@ -158,8 +170,14 @@ class MLPTradingModel(BaseNeuralModel):
             optimizer.step()
 
             # Calculate accuracy
-            _, predicted = torch.max(outputs.data, 1)
-            accuracy = (predicted == y).float().mean()
+            if output_format == "regression":
+                # Directional accuracy: % where sign(predicted) == sign(actual)
+                pred_sign = (outputs.squeeze(-1) > 0).float()
+                actual_sign = (y > 0).float()
+                accuracy = (pred_sign == actual_sign).float().mean()
+            else:
+                _, predicted = torch.max(outputs.data, 1)
+                accuracy = (predicted == y).float().mean()
 
             history["train_loss"].append(float(loss))
             history["train_accuracy"].append(float(accuracy))
@@ -167,14 +185,21 @@ class MLPTradingModel(BaseNeuralModel):
             # Validation
             if validation_data is not None:
                 X_val, y_val = validation_data
-                y_val = y_val.long()
+                if output_format != "regression":
+                    y_val = y_val.long()
 
                 self.model.eval()
                 with torch.no_grad():
                     val_outputs = self.model(X_val)
-                    val_loss = criterion(val_outputs, y_val)
-                    _, val_predicted = torch.max(val_outputs.data, 1)
-                    val_accuracy = (val_predicted == y_val).float().mean()
+                    if output_format == "regression":
+                        val_loss = criterion(val_outputs.squeeze(-1), y_val)
+                        val_pred_sign = (val_outputs.squeeze(-1) > 0).float()
+                        val_actual_sign = (y_val > 0).float()
+                        val_accuracy = (val_pred_sign == val_actual_sign).float().mean()
+                    else:
+                        val_loss = criterion(val_outputs, y_val)
+                        _, val_predicted = torch.max(val_outputs.data, 1)
+                        val_accuracy = (val_predicted == y_val).float().mean()
 
                 history["val_loss"].append(float(val_loss))
                 history["val_accuracy"].append(float(val_accuracy))
