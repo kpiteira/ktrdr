@@ -213,17 +213,15 @@ class TestPendingSignal:
         engine.run()
         engine.position_manager.execute_trade.assert_not_called()
 
-    def test_consecutive_non_hold_only_latest_executes(self):
-        """If BUY at bar 50 and SELL at bar 51, only SELL executes (overwrites BUY)."""
+    def test_consecutive_non_hold_both_execute_in_order(self):
+        """BUY at bar 50 and SELL at bar 51 both execute on successive bars."""
         data = _make_data(100)
         # BUY then SELL on consecutive bars
         engine = _make_engine(data=data, decision_sequence=[Signal.BUY, Signal.SELL])
         engine.run()
 
-        # The BUY at bar 50 becomes pending, but bar 51 decision is SELL
-        # which overwrites the pending. So SELL executes at bar 52's open.
-        # The BUY pending should execute at bar 51's open FIRST,
-        # then SELL becomes new pending and executes at bar 52's open.
+        # The BUY at bar 50 becomes pending and executes at bar 51's open.
+        # The SELL at bar 51 becomes the new pending and executes at bar 52's open.
         calls = engine.position_manager.execute_trade.call_args_list
         assert len(calls) == 2, f"Expected 2 trades, got {len(calls)}"
 

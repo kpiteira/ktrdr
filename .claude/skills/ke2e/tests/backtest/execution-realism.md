@@ -74,11 +74,11 @@ echo "Operation ID: $OPERATION_ID"
 source .env.sandbox
 # Check the operation metadata immediately (before completion)
 curl -s "http://localhost:${KTRDR_API_PORT}/api/v1/operations/$OPERATION_ID" | \
-  jq '{status: .data.status, slippage_in_metadata: .data.metadata.slippage}'
+  jq '{status: .data.status, slippage_in_metadata: .data.metadata.parameters.slippage}'
 ```
 
 **Expected:**
-- `metadata.slippage` equals `0.0005`
+- `metadata.parameters.slippage` equals `0.0005`
 - This confirms the API default was applied before execution began
 
 ### 3. Poll Until Completion
