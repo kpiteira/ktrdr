@@ -1,7 +1,5 @@
 """Tests for regression metadata flow through research worker."""
 
-import pytest
-
 from ktrdr.agents.gates import check_backtest_gate, check_training_gate
 
 
@@ -68,8 +66,9 @@ class TestAssessmentWorkerRegressionContext:
 
     def test_user_prompt_includes_output_format_in_training_metrics(self):
         """Assessment worker should pass output_format through training_metrics."""
-        from ktrdr.agents.workers.assessment_agent_worker import AssessmentAgentWorker
         from unittest.mock import MagicMock
+
+        from ktrdr.agents.workers.assessment_agent_worker import AssessmentAgentWorker
 
         runtime = MagicMock()
         worker = AssessmentAgentWorker(runtime=runtime)
@@ -99,8 +98,9 @@ class TestAssessmentWorkerRegressionContext:
 
     def test_user_prompt_includes_regression_guidance(self):
         """Assessment prompt includes regression evaluation guidance section."""
-        from ktrdr.agents.workers.assessment_agent_worker import AssessmentAgentWorker
         from unittest.mock import MagicMock
+
+        from ktrdr.agents.workers.assessment_agent_worker import AssessmentAgentWorker
 
         runtime = MagicMock()
         worker = AssessmentAgentWorker(runtime=runtime)
@@ -126,8 +126,9 @@ class TestAssessmentWorkerRegressionContext:
 
     def test_classification_prompt_unchanged(self):
         """Classification assessment prompt has no regression content."""
-        from ktrdr.agents.workers.assessment_agent_worker import AssessmentAgentWorker
         from unittest.mock import MagicMock
+
+        from ktrdr.agents.workers.assessment_agent_worker import AssessmentAgentWorker
 
         runtime = MagicMock()
         worker = AssessmentAgentWorker(runtime=runtime)

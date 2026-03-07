@@ -1,7 +1,5 @@
 """Tests for regression-specific gate checks."""
 
-import pytest
-
 from ktrdr.agents.gates import (
     BacktestGateConfig,
     TrainingGateConfig,
@@ -38,7 +36,9 @@ class TestTrainingGateRegression:
         }
         passed, reason = check_training_gate(metrics)
         assert passed is False
-        assert "directional_accuracy" in reason.lower() or "directional" in reason.lower()
+        assert (
+            "directional_accuracy" in reason.lower() or "directional" in reason.lower()
+        )
 
     def test_regression_fails_on_exactly_50_percent(self):
         """Directional accuracy at exactly 50% should fail (must beat coin flip)."""
