@@ -39,6 +39,15 @@ Added regression branch to `get_assessment_prompt()`:
 
 Extracted helpers: `_format_regression_training()`, `_format_regression_guidance()`, `_format_classification_training()`.
 
+## Task 2.4 Complete: Design Prompt Regression Guidance
+
+Added "Regression Mode" section to `DESIGN_SYSTEM_PROMPT` with:
+- `decisions` config example (output_format, cost_model)
+- `training` config example (forward_return labels, horizon, huber loss)
+- Design guidance (architecture sizing, horizon selection, selectivity)
+- Classification mode documented as legacy alternative
+
 **Next task notes:**
-- Task 2.4 modifies design_sdk_prompt.py — add regression mode documentation and example strategy
-- Task 2.5 modifies research_worker.py and assessment_agent_worker.py — pass output_format through research cycle
+- Task 2.5 modifies research_worker.py and assessment_agent_worker.py
+- Research worker needs to pass output_format through the research cycle
+- Assessment worker needs to include regression context when calling the assessment LLM
