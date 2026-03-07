@@ -55,9 +55,57 @@ which validates the v3 format atomically before writing.
 - `/app/memory/experiments/` — Past experiment results (optional context)
 - `/app/memory/hypotheses.yaml` — Open hypotheses to consider (optional)
 
+## Regression Mode
+
+Strategies can predict **forward returns** instead of BUY/HOLD/SELL classes. This is
+the preferred mode for new strategies — HOLD emerges naturally from small predicted
+returns rather than being a failed class prediction.
+
+### Regression Configuration
+
+In the `decisions` section, use:
+```yaml
+decisions:
+  output_format: regression
+  cost_model:
+    round_trip_cost: 0.003      # Known trading cost (spread + commission)
+    min_edge_multiplier: 1.5    # Only trade when predicted return > cost * multiplier
+```
+
+In the `training` section, use:
+```yaml
+training:
+  labels:
+    source: forward_return      # Predict returns, not classes
+    horizon: 20                 # Bars to look ahead (5-10 for scalping, 20-50 for swing)
+  loss: huber                   # Robust to outliers (or "mse" for standard loss)
+  huber_delta: 0.01             # Transition point for Huber loss
+```
+
+### Regression Design Guidance
+
+- Use **[64, 32] or larger** architectures — regression needs more capacity than classification
+- Set `horizon` based on trading frequency intent — shorter for scalping, longer for swing
+- `min_edge_multiplier` controls selectivity — higher means fewer but more confident trades
+- The model predicts a scalar return; trades only occur when the prediction exceeds the cost threshold
+- `output_activation` should be omitted or set to `none` for regression (not softmax)
+
+### Classification Mode (Legacy)
+
+For classification strategies, use:
+```yaml
+decisions:
+  output_format: classification
+  confidence_threshold: 0.6
+training:
+  labels:
+    source: zigzag
+    zigzag_threshold: 0.03
+```
+
 ## Design Guidelines
 
-- Start conservative: small networks ([32, 16] layers), moderate epochs (50)
+- Start conservative: small networks ([32, 16] for classification, [64, 32] for regression)
 - Each fuzzy set MUST reference an indicator via the `indicator` field
 - Use `parameters` (not `params`) for fuzzy membership function definitions
 - Multi-output indicators use dot notation: `indicator: macd_12_26_9.histogram`

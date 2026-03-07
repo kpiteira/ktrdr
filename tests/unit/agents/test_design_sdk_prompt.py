@@ -13,10 +13,10 @@ from ktrdr.agents.design_sdk_prompt import DESIGN_SYSTEM_PROMPT
 class TestDesignSystemPrompt:
     """Tests for DESIGN_SYSTEM_PROMPT content and constraints."""
 
-    def test_prompt_is_under_100_lines(self):
-        """System prompt stays slim — under 100 lines per D7."""
+    def test_prompt_is_under_150_lines(self):
+        """System prompt stays concise — under 150 lines (expanded for regression mode)."""
         line_count = len(DESIGN_SYSTEM_PROMPT.strip().splitlines())
-        assert line_count <= 100, f"Prompt is {line_count} lines, should be ≤100"
+        assert line_count <= 150, f"Prompt is {line_count} lines, should be ≤150"
 
     def test_prompt_references_save_strategy_config(self):
         """Prompt mentions save_strategy_config MCP tool."""

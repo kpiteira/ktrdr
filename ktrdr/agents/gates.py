@@ -27,11 +27,14 @@ class TrainingGateConfig:
         min_accuracy: Minimum accuracy threshold (default: 0.10 = 10% Baby mode)
         max_loss: Maximum final loss threshold (default: 0.8)
         min_loss_decrease: Minimum loss decrease ratio (default: -0.5, allows regression)
+        min_directional_accuracy: Minimum directional accuracy for regression (default: 0.50)
     """
 
     min_accuracy: float = 0.10  # Baby: only catch 0-10% (completely broken)
     max_loss: float = 0.8
     min_loss_decrease: float = -0.5  # Baby: allow regression while exploring
+    # Regression-specific
+    min_directional_accuracy: float = 0.50  # Must beat coin flip
 
     @classmethod
     def from_env(cls) -> "TrainingGateConfig":
@@ -41,6 +44,7 @@ class TrainingGateConfig:
             TRAINING_GATE_MIN_ACCURACY: Minimum accuracy (default: 0.10)
             TRAINING_GATE_MAX_LOSS: Maximum final loss (default: 0.8)
             TRAINING_GATE_MIN_LOSS_DECREASE: Minimum loss decrease (default: -0.5)
+            TRAINING_GATE_MIN_DIRECTIONAL_ACCURACY: Min directional accuracy for regression (default: 0.50)
 
         Returns:
             TrainingGateConfig instance with values from environment.
@@ -50,6 +54,9 @@ class TrainingGateConfig:
             max_loss=float(os.getenv("TRAINING_GATE_MAX_LOSS", "0.8")),
             min_loss_decrease=float(
                 os.getenv("TRAINING_GATE_MIN_LOSS_DECREASE", "-0.5")
+            ),
+            min_directional_accuracy=float(
+                os.getenv("TRAINING_GATE_MIN_DIRECTIONAL_ACCURACY", "0.50")
             ),
         )
 
@@ -83,8 +90,26 @@ def check_training_gate(
     if config is None:
         config = TrainingGateConfig.from_env()
 
-    # Extract accuracy - support nested structure from training pipeline
+    output_format = metrics.get("output_format", "classification")
     test_metrics = metrics.get("test_metrics", {})
+
+    if output_format == "regression":
+        # Regression: check directional accuracy instead of classification accuracy
+        dir_acc = test_metrics.get("directional_accuracy", 0)
+        if dir_acc <= config.min_directional_accuracy:
+            return (
+                False,
+                f"directional_accuracy_below_threshold ({dir_acc:.1%} <= {config.min_directional_accuracy:.0%})",
+            )
+
+        # Still check loss thresholds
+        test_loss = test_metrics.get("test_loss", metrics.get("final_loss", 1.0))
+        if test_loss > config.max_loss:
+            return False, f"loss_too_high ({test_loss:.3f} > {config.max_loss})"
+
+        return True, "passed"
+
+    # Classification path (unchanged)
     accuracy = test_metrics.get("test_accuracy", metrics.get("accuracy", 0))
     if accuracy < config.min_accuracy:
         return (
@@ -139,11 +164,16 @@ class BacktestGateConfig:
         min_win_rate: Minimum win rate threshold (default: 0.10 = 10% Baby mode)
         max_drawdown: Maximum drawdown threshold (default: 0.4 = 40%)
         min_sharpe: Minimum Sharpe ratio threshold (default: -0.5)
+        min_net_return: Minimum net return for regression (default: 0.0)
+        min_trades: Minimum trade count for regression (default: 5)
     """
 
     min_win_rate: float = 0.10  # Baby: only catch catastrophic backtest
     max_drawdown: float = 0.4
     min_sharpe: float = -0.5
+    # Regression-specific
+    min_net_return: float = 0.0  # Must not lose money
+    min_trades: int = 5  # Must actually trade
 
     @classmethod
     def from_env(cls) -> "BacktestGateConfig":
@@ -153,6 +183,8 @@ class BacktestGateConfig:
             BACKTEST_GATE_MIN_WIN_RATE: Minimum win rate (default: 0.10)
             BACKTEST_GATE_MAX_DRAWDOWN: Maximum drawdown (default: 0.4)
             BACKTEST_GATE_MIN_SHARPE: Minimum Sharpe ratio (default: -0.5)
+            BACKTEST_GATE_MIN_NET_RETURN: Min net return for regression (default: 0.0)
+            BACKTEST_GATE_MIN_TRADES: Min trade count for regression (default: 5)
 
         Returns:
             BacktestGateConfig instance with values from environment.
@@ -161,6 +193,8 @@ class BacktestGateConfig:
             min_win_rate=float(os.getenv("BACKTEST_GATE_MIN_WIN_RATE", "0.10")),
             max_drawdown=float(os.getenv("BACKTEST_GATE_MAX_DRAWDOWN", "0.4")),
             min_sharpe=float(os.getenv("BACKTEST_GATE_MIN_SHARPE", "-0.5")),
+            min_net_return=float(os.getenv("BACKTEST_GATE_MIN_NET_RETURN", "0.0")),
+            min_trades=int(os.getenv("BACKTEST_GATE_MIN_TRADES", "5")),
         )
 
 
@@ -188,6 +222,35 @@ def check_backtest_gate(
     if config is None:
         config = BacktestGateConfig.from_env()
 
+    output_format = metrics.get("output_format", "classification")
+
+    if output_format == "regression":
+        # Regression: check net return and trade count
+        net_return = metrics.get("net_return", 0)
+        if net_return < config.min_net_return:
+            return (
+                False,
+                f"net_return_negative ({net_return:.2%} < {config.min_net_return:.0%})",
+            )
+
+        trade_count = metrics.get("trade_count", 0)
+        if trade_count < config.min_trades:
+            return (
+                False,
+                f"too_few_trades ({trade_count} < {config.min_trades})",
+            )
+
+        # Still check drawdown for regression
+        max_drawdown = metrics.get("max_drawdown", 1.0)
+        if max_drawdown > config.max_drawdown:
+            return (
+                False,
+                f"drawdown_too_high ({max_drawdown:.1%} > {config.max_drawdown:.0%})",
+            )
+
+        return True, "passed"
+
+    # Classification path (unchanged)
     win_rate = metrics.get("win_rate", 0)
     if win_rate < config.min_win_rate:
         return False, f"win_rate_too_low ({win_rate:.1%} < {config.min_win_rate:.0%})"

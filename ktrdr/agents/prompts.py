@@ -912,6 +912,7 @@ class AssessmentContext:
         strategy_path: Path to the strategy configuration file.
         training_metrics: Results from training phase.
         backtest_metrics: Results from backtest phase.
+        cost_model: Cost model configuration for regression strategies (optional).
     """
 
     operation_id: str
@@ -919,6 +920,7 @@ class AssessmentContext:
     strategy_path: str
     training_metrics: dict[str, Any]
     backtest_metrics: dict[str, Any]
+    cost_model: dict[str, Any] | None = None
 
 
 ASSESSMENT_SYSTEM_PROMPT = """You are an expert trading strategy evaluator. Your role is to:
@@ -959,29 +961,34 @@ def get_assessment_prompt(context: AssessmentContext) -> str:
     """
     training = context.training_metrics
     backtest = context.backtest_metrics
-    loss_improvement = _calc_loss_improvement(training)
+    output_format = training.get("output_format", "classification")
 
-    return f"""# Strategy Assessment Request
+    header = f"""# Strategy Assessment Request
 
 ## Strategy Information
 - **Name**: {context.strategy_name}
 - **Operation ID**: {context.operation_id}
 - **Configuration**: {context.strategy_path}
+"""
 
-## Training Results
-- **Accuracy**: {training.get("accuracy", 0):.1%}
-- **Final Loss**: {training.get("final_loss", 0):.4f}
-- **Initial Loss**: {training.get("initial_loss", 0):.4f}
-- **Loss Improvement**: {loss_improvement:.1%}
+    if output_format == "regression":
+        training_section = _format_regression_training(training)
+        guidance_section = _format_regression_guidance(context.cost_model)
+    else:
+        training_section = _format_classification_training(training)
+        guidance_section = ""
 
-## Backtest Results
+    backtest_section = f"""## Backtest Results
 - **Sharpe Ratio**: {backtest.get("sharpe_ratio", 0):.2f}
 - **Win Rate**: {backtest.get("win_rate", 0):.1%}
 - **Max Drawdown**: {backtest.get("max_drawdown", 0):.1%}
 - **Total Return**: {backtest.get("total_return", 0):.1%}
 - **Total Trades**: {backtest.get("total_trades", 0)}
+"""
+    if output_format == "regression":
+        backtest_section += f"- **Net Return**: {backtest.get('net_return', 0):.2%}\n"
 
-## Your Task
+    task_section = """## Your Task
 
 Analyze these results and provide your assessment:
 
@@ -991,4 +998,62 @@ Analyze these results and provide your assessment:
 4. **Suggestions**: How could the strategy be improved? (list 2-4 points)
 
 Use the `save_assessment` tool to record your evaluation.
+"""
+
+    return (
+        header + training_section + backtest_section + guidance_section + task_section
+    )
+
+
+def _format_regression_training(training: dict[str, Any]) -> str:
+    """Format training results section for regression strategies."""
+    loss_improvement = _calc_loss_improvement(training)
+    return f"""## Training Results (Regression Mode)
+
+This model predicts **forward returns** (not BUY/HOLD/SELL classes).
+
+- **Directional Accuracy**: {training.get("directional_accuracy", 0):.1%}
+- **R-squared (R²)**: {training.get("r_squared", 0):.4f}
+- **MSE**: {training.get("mse", 0):.6f}
+- **MAE**: {training.get("mae", 0):.6f}
+- **Final Loss**: {training.get("final_loss", 0):.4f}
+- **Initial Loss**: {training.get("initial_loss", 0):.4f}
+- **Loss Improvement**: {loss_improvement:.1%}
+"""
+
+
+def _format_regression_guidance(cost_model: dict[str, Any] | None) -> str:
+    """Format regression-specific evaluation guidance."""
+    cost_section = ""
+    if cost_model:
+        rtc = cost_model.get("round_trip_cost", 0.003)
+        multiplier = cost_model.get("min_edge_multiplier", 1.5)
+        threshold = rtc * multiplier
+        cost_section = f"""
+### Cost Model
+- **Round-trip Cost**: {rtc:.4f}
+- **Min Edge Multiplier**: {multiplier}
+- **Trade Threshold**: {threshold:.4f} (only trades when predicted return exceeds this)
+"""
+
+    return f"""## Regression Evaluation Guidance
+
+When evaluating a REGRESSION strategy:
+- The model predicts forward returns, not BUY/HOLD/SELL classes
+- **Directional accuracy** measures sign prediction accuracy (must beat 50% coin flip)
+- **R-squared** measures variance explained (modest R² with good directional accuracy can still be profitable)
+- **MAE** shows average absolute prediction error
+- The trading rule only acts when predicted return exceeds a cost threshold
+- Consider the tradeoff between trade count and selectivity — fewer trades with higher win rate may be better than many trades with thin edge
+{cost_section}"""
+
+
+def _format_classification_training(training: dict[str, Any]) -> str:
+    """Format training results section for classification strategies."""
+    loss_improvement = _calc_loss_improvement(training)
+    return f"""## Training Results
+- **Accuracy**: {training.get("accuracy", 0):.1%}
+- **Final Loss**: {training.get("final_loss", 0):.4f}
+- **Initial Loss**: {training.get("initial_loss", 0):.4f}
+- **Loss Improvement**: {loss_improvement:.1%}
 """
