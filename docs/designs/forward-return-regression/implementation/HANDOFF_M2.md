@@ -29,6 +29,16 @@ Both `check_training_gate` and `check_backtest_gate` now branch on `output_forma
 - `output_format` comes from metrics dict, defaults to "classification" if absent
 - Gate configs load regression thresholds from env vars (TRAINING_GATE_MIN_DIRECTIONAL_ACCURACY, BACKTEST_GATE_MIN_NET_RETURN, BACKTEST_GATE_MIN_TRADES)
 
+## Task 2.3 Complete: Assessment Prompt Regression Context
+
+Added regression branch to `get_assessment_prompt()`:
+- Shows directional accuracy, R², MSE, MAE instead of classification accuracy
+- Includes regression evaluation guidance section
+- Includes cost_model details (round_trip_cost, min_edge_multiplier, computed threshold)
+- Added `cost_model` optional field to `AssessmentContext` dataclass
+
+Extracted helpers: `_format_regression_training()`, `_format_regression_guidance()`, `_format_classification_training()`.
+
 **Next task notes:**
-- Task 2.3 modifies `ktrdr/agents/prompts.py` — assessment prompt needs regression context
-- Gates pass `output_format` via metrics dict — assessment worker should include it when calling gates
+- Task 2.4 modifies design_sdk_prompt.py — add regression mode documentation and example strategy
+- Task 2.5 modifies research_worker.py and assessment_agent_worker.py — pass output_format through research cycle
