@@ -912,6 +912,7 @@ class AssessmentContext:
         strategy_path: Path to the strategy configuration file.
         training_metrics: Results from training phase.
         backtest_metrics: Results from backtest phase.
+        cost_model: Cost model configuration for regression strategies (optional).
     """
 
     operation_id: str
@@ -999,7 +1000,9 @@ Analyze these results and provide your assessment:
 Use the `save_assessment` tool to record your evaluation.
 """
 
-    return header + training_section + backtest_section + guidance_section + task_section
+    return (
+        header + training_section + backtest_section + guidance_section + task_section
+    )
 
 
 def _format_regression_training(training: dict[str, Any]) -> str:

@@ -180,7 +180,7 @@ class AssessmentAgentWorker(WorkerAPIBase):
         # Add regression evaluation guidance when applicable
         output_format = training_metrics.get("output_format", "classification")
         if output_format == "regression":
-            parts.append(self._format_regression_guidance(training_metrics))
+            parts.append(self._format_regression_guidance())
 
         if experiment_history:
             parts.append(f"\n## Experiment History\n\n{experiment_history}")
@@ -188,7 +188,7 @@ class AssessmentAgentWorker(WorkerAPIBase):
         return "\n".join(parts)
 
     @staticmethod
-    def _format_regression_guidance(training_metrics: dict[str, Any]) -> str:
+    def _format_regression_guidance() -> str:
         """Format regression-specific evaluation guidance for the assessment agent."""
         return """
 ## Regression Evaluation Guidance

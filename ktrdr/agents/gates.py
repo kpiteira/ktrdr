@@ -27,6 +27,7 @@ class TrainingGateConfig:
         min_accuracy: Minimum accuracy threshold (default: 0.10 = 10% Baby mode)
         max_loss: Maximum final loss threshold (default: 0.8)
         min_loss_decrease: Minimum loss decrease ratio (default: -0.5, allows regression)
+        min_directional_accuracy: Minimum directional accuracy for regression (default: 0.50)
     """
 
     min_accuracy: float = 0.10  # Baby: only catch 0-10% (completely broken)
@@ -163,6 +164,8 @@ class BacktestGateConfig:
         min_win_rate: Minimum win rate threshold (default: 0.10 = 10% Baby mode)
         max_drawdown: Maximum drawdown threshold (default: 0.4 = 40%)
         min_sharpe: Minimum Sharpe ratio threshold (default: -0.5)
+        min_net_return: Minimum net return for regression (default: 0.0)
+        min_trades: Minimum trade count for regression (default: 5)
     """
 
     min_win_rate: float = 0.10  # Baby: only catch catastrophic backtest
@@ -237,7 +240,7 @@ def check_backtest_gate(
                 f"too_few_trades ({trade_count} < {config.min_trades})",
             )
 
-        # Still check drawdown and sharpe for regression
+        # Still check drawdown for regression
         max_drawdown = metrics.get("max_drawdown", 1.0)
         if max_drawdown > config.max_drawdown:
             return (
