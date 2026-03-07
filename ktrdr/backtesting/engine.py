@@ -199,11 +199,28 @@ class BacktestingEngine:
                 f"(need at least {start_idx + 1} for indicator warm-up)"
             )
         last_signal_time = None
+        pending_signal = None
+        pending_metadata = None
 
         for idx in range(start_idx, len(data)):
             bar = data.iloc[idx]
-            price = bar["close"]
+            close_price = bar["close"]
             timestamp = cast(pd.Timestamp, bar.name)
+
+            # Execute pending signal from previous bar at THIS bar's open
+            if pending_signal is not None:
+                open_price = bar["open"]
+                trade = self.position_manager.execute_trade(
+                    signal=pending_signal,
+                    price=open_price,
+                    timestamp=timestamp,
+                    symbol=self.config.symbol,
+                    decision_metadata=pending_metadata,
+                )
+                if trade:
+                    last_signal_time = timestamp
+                pending_signal = None
+                pending_metadata = None
 
             # Feature lookup
             features = self.feature_cache.get_features_for_timestamp(timestamp)
@@ -216,29 +233,22 @@ class BacktestingEngine:
                     last_signal_time=last_signal_time,
                 )
 
-                # Execution
+                # Store non-HOLD as pending for next bar execution
                 if decision.signal != Signal.HOLD:
-                    trade = self.position_manager.execute_trade(
-                        signal=decision.signal,
-                        price=price,
-                        timestamp=timestamp,
-                        symbol=self.config.symbol,
-                        decision_metadata={"confidence": decision.confidence},
-                    )
-                    if trade:
-                        last_signal_time = timestamp
+                    pending_signal = decision.signal
+                    pending_metadata = {"confidence": decision.confidence}
 
-                # Track performance
-                self.position_manager.update_position(price, timestamp)
-                portfolio_value = self.position_manager.get_portfolio_value(price)
+                # Track performance at close price (mark-to-market)
+                self.position_manager.update_position(close_price, timestamp)
+                portfolio_value = self.position_manager.get_portfolio_value(close_price)
                 self.performance_tracker.update(
                     timestamp=timestamp,
-                    price=price,
+                    price=close_price,
                     portfolio_value=portfolio_value,
                     position=self.position_manager.current_position_status,
                 )
             else:
-                portfolio_value = self.position_manager.get_portfolio_value(price)
+                portfolio_value = self.position_manager.get_portfolio_value(close_price)
 
             # Infrastructure (extracted to focused helpers)
             self._report_progress(
