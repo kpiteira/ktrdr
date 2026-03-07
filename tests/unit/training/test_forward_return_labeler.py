@@ -4,9 +4,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from ktrdr.errors import DataError
+pytest.importorskip("torch", reason="torch required for training module imports")
 
-# Import directly to avoid torch dependency via training/__init__.py
+from ktrdr.errors import DataError
 from ktrdr.training.forward_return_labeler import ForwardReturnLabeler
 
 
