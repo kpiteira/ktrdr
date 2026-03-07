@@ -15,5 +15,20 @@ Added `collect_regression_metrics(y_true, y_pred)` to `MetricsCollector` returni
 - Pre-existing: `test_forward_return_labeler.py` errors on collection (missing torch, no importorskip guard)
 
 **Next task notes:**
-- Task 2.2 (Gates) needs to branch on `output_format`. The gate config is a dataclass in `ktrdr/agents/gates.py`.
-- Metric key names from this task: `directional_accuracy`, `r_squared`, `mse`, `mae`, `mean_predicted_return`, `std_predicted_return`
+- Metric key names from Task 2.1: `directional_accuracy`, `r_squared`, `mse`, `mae`, `mean_predicted_return`, `std_predicted_return`
+
+## Task 2.2 Complete: Gate System Regression Gates
+
+Both `check_training_gate` and `check_backtest_gate` now branch on `output_format` from metrics dict.
+
+**Training gate regression checks:** directional_accuracy > 50% (strict >), max_loss check preserved.
+**Backtest gate regression checks:** net_return >= 0, trade_count >= 5, max_drawdown check preserved.
+
+**Implementation notes:**
+- Regression path returns early — skips classification-specific loss_decrease check (not meaningful for Huber loss)
+- `output_format` comes from metrics dict, defaults to "classification" if absent
+- Gate configs load regression thresholds from env vars (TRAINING_GATE_MIN_DIRECTIONAL_ACCURACY, BACKTEST_GATE_MIN_NET_RETURN, BACKTEST_GATE_MIN_TRADES)
+
+**Next task notes:**
+- Task 2.3 modifies `ktrdr/agents/prompts.py` — assessment prompt needs regression context
+- Gates pass `output_format` via metrics dict — assessment worker should include it when calling gates
