@@ -496,16 +496,17 @@ class TestSimulationLoopTradeExecution:
             dates = pd.date_range("2024-01-01", periods=100, freq="h")
             mock_data = pd.DataFrame(
                 {
-                    "open": [1.1] * 100,
+                    "open": [1.1000 + i * 0.0001 for i in range(100)],
                     "high": [1.12] * 100,
                     "low": [1.08] * 100,
-                    "close": [1.1] * 100,
+                    "close": [1.1050 + i * 0.0001 for i in range(100)],
                     "volume": [1000] * 100,
                 },
                 index=dates,
             )
             engine._load_historical_data = MagicMock(return_value={"1h": mock_data})
             engine._get_base_timeframe = MagicMock(return_value="1h")
+            engine._mock_data = mock_data  # expose for assertions
 
             return engine
 
@@ -513,6 +514,21 @@ class TestSimulationLoopTradeExecution:
         """execute_trade called when signal is not HOLD."""
         trading_engine.run()
         trading_engine.position_manager.execute_trade.assert_called_once()
+
+    def test_trade_uses_next_bar_open_price(self, trading_engine):
+        """BUY at bar 50 executes at bar 51's open (next-bar execution)."""
+        trading_engine.run()
+        execute_call = trading_engine.position_manager.execute_trade.call_args
+        # BUY decision at bar 50, execution at bar 51's open
+        expected_open = trading_engine._mock_data.iloc[51]["open"]
+        assert execute_call.kwargs["price"] == pytest.approx(expected_open)
+
+    def test_trade_timestamp_is_next_bar(self, trading_engine):
+        """Trade timestamp should be bar 51, not bar 50 where decision was made."""
+        trading_engine.run()
+        execute_call = trading_engine.position_manager.execute_trade.call_args
+        expected_ts = trading_engine._mock_data.index[51]
+        assert execute_call.kwargs["timestamp"] == expected_ts
 
 
 # ---------------------------------------------------------------------------

@@ -379,7 +379,7 @@ class BacktestingOperationAdapter(OperationAdapter):
         end_date: str = "",
         initial_capital: float = 100000.0,
         commission: float = 0.001,
-        slippage: float = 0.001,
+        slippage: float = 0.0005,
         model_path: Optional[str] = None,
     ):
         """

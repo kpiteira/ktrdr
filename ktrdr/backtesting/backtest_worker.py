@@ -104,7 +104,7 @@ class BacktestStartRequest(WorkerOperationMixin):
     end_date: str
     initial_capital: float = 100000.0
     commission: float = 0.001
-    slippage: float = 0.0
+    slippage: float = 0.0005  # 0.05%
     model_path: Optional[str] = None  # Explicit model path for v3 models
 
 
@@ -363,7 +363,7 @@ class BacktestWorker(WorkerAPIBase):
             end_date=original_request["end_date"],
             initial_capital=original_request.get("initial_capital", 100000.0),
             commission=original_request.get("commission", 0.001),
-            slippage=original_request.get("slippage", 0.0),
+            slippage=original_request.get("slippage", 0.0005),
         )
 
         # 3. Build progress bridge
