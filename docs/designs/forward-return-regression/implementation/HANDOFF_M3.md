@@ -46,3 +46,17 @@ Standardized slippage default from inconsistent values (0.0, 0.001) to 0.0005 (0
 - `cli/commands/backtest.py` typer option: 0.001 → 0.0005
 - `cli/operation_adapters.py`: 0.001 → 0.0005
 - `engine.py` BacktestConfig was already correct (0.0005)
+
+## Task 3.4 Complete: E2E Validation
+
+**E2E test:** `backtest/execution-realism` — PASSED (5 steps)
+
+**Key evidence:**
+- Slippage default 0.0005 confirmed through full API→worker→engine pipeline
+- 97 trades produced, total_return=-7630.29, execution_time=2.2s
+- Commission (0.001) and slippage (0.0005) correctly distinct
+
+**Gotchas:**
+- Sandbox Jaeger port: `.env.sandbox` needs `KTRDR_JAEGER_OTLP_GRPC_PORT` (compose uses this, not `KTRDR_OTLP_GRPC_PORT`)
+- Sandbox agent ports: need `KTRDR_DESIGN_AGENT_PORT=5061` and `KTRDR_ASSESSMENT_AGENT_PORT=5062` to avoid conflicts
+- Operation metadata stores slippage at `metadata.parameters.slippage` (not `metadata.slippage`)
