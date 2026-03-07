@@ -1,11 +1,15 @@
 """Core metrics collection utilities for training analytics."""
 
-from typing import Any, Optional, cast
+from typing import Any, Optional, Union, cast
 
 import numpy as np
 import torch
 import torch.nn as nn
-from sklearn.metrics import precision_recall_fscore_support
+from sklearn.metrics import (
+    mean_absolute_error,
+    mean_squared_error,
+    precision_recall_fscore_support,
+)
 
 from ktrdr import get_logger
 
@@ -184,6 +188,53 @@ class MetricsCollector:
                 "class_f1_scores": dict.fromkeys(self.class_names, 0.0),
                 "class_supports": dict.fromkeys(self.class_names, 0),
             }
+
+    def collect_regression_metrics(
+        self,
+        y_true: Union[np.ndarray, torch.Tensor],
+        y_pred: Union[np.ndarray, torch.Tensor],
+    ) -> dict[str, Any]:
+        """Collect regression-specific metrics.
+
+        Args:
+            y_true: True values (forward returns)
+            y_pred: Predicted values
+
+        Returns:
+            Dictionary with mse, mae, r_squared, directional_accuracy,
+            mean_predicted_return, std_predicted_return
+        """
+        # Convert to numpy if needed
+        if isinstance(y_true, torch.Tensor):
+            y_true = y_true.cpu().numpy()
+        if isinstance(y_pred, torch.Tensor):
+            y_pred = y_pred.cpu().numpy()
+
+        y_true = np.asarray(y_true, dtype=float)
+        y_pred = np.asarray(y_pred, dtype=float)
+
+        mse = float(mean_squared_error(y_true, y_pred))
+        mae = float(mean_absolute_error(y_true, y_pred))
+
+        # R-squared: 1 - SS_res / SS_tot
+        ss_tot = float(np.sum((y_true - np.mean(y_true)) ** 2))
+        if ss_tot == 0.0:
+            r_squared = 0.0
+        else:
+            ss_res = float(np.sum((y_true - y_pred) ** 2))
+            r_squared = 1.0 - ss_res / ss_tot
+
+        # Directional accuracy: fraction where sign(pred) == sign(true)
+        directional_accuracy = float(np.mean(np.sign(y_pred) == np.sign(y_true)))
+
+        return {
+            "mse": mse,
+            "mae": mae,
+            "r_squared": r_squared,
+            "directional_accuracy": directional_accuracy,
+            "mean_predicted_return": float(np.mean(y_pred)),
+            "std_predicted_return": float(np.std(y_pred)),
+        }
 
     def collect_prediction_metrics(self, model_outputs: torch.Tensor) -> dict[str, Any]:
         """Calculate prediction confidence and entropy metrics.
