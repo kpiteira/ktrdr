@@ -742,15 +742,31 @@ class HostTrainingOrchestrator:
             training_section = strategy_config.get("training", {})
             labels_config = training_section.get("labels", {})
 
-            # Build v2-compatible label config for create_labels()
-            label_config = {
-                "zigzag_threshold": labels_config.get("zigzag_threshold", 0.02),
-                "label_lookahead": labels_config.get("label_lookahead", 10),
-            }
+            # Build label config for create_labels()
+            label_source = labels_config.get("source", "zigzag")
+            if label_source == "forward_return":
+                label_config = {
+                    "source": "forward_return",
+                    "horizon": labels_config.get("horizon", 20),
+                }
+            else:
+                label_config = {
+                    "zigzag_threshold": labels_config.get("zigzag_threshold", 0.02),
+                    "label_lookahead": labels_config.get("label_lookahead", 10),
+                }
 
             labels = TrainingPipeline.create_labels(price_data, label_config)
 
             # Align features and labels
+            # For forward_return labels: labels are shorter (last `horizon` bars dropped),
+            # so truncate features from the front to match
+            if label_source == "forward_return" and len(labels) < len(features):
+                logger.info(
+                    f"Truncated features from {len(features)} to {len(labels)} "
+                    f"to match forward return labels (horizon={labels_config.get('horizon', 20)})"
+                )
+                features = features[:len(labels)]
+
             min_len = min(len(features), len(labels))
             if min_len == 0:
                 raise ValueError(
@@ -794,15 +810,41 @@ class HostTrainingOrchestrator:
                     "input_dim": features.shape[1],
                 })
 
+            # Determine output format from decisions config
+            decisions_config = strategy_config.get("decisions", {})
+            output_format = decisions_config.get("output_format", "classification")
+            if output_format not in ("classification", "regression"):
+                raise ValueError(
+                    f"Unsupported output_format '{output_format}'. "
+                    "Must be 'classification' or 'regression'."
+                )
+            output_dim = 1 if output_format == "regression" else 3
+
             model_config = strategy_config.get("model", {})
+            # Inject output_format so MLPTradingModel builds the right architecture
+            if output_format == "regression":
+                model_config["output_format"] = "regression"
+
             model = TrainingPipeline.create_model(
                 input_dim=features.shape[1],
-                output_dim=3,  # Buy, Hold, Sell
+                output_dim=output_dim,
                 model_config=model_config,
             )
 
             # Train model
-            training_config = model_config.get("training", {})
+            training_section_for_config = strategy_config.get("training", {})
+            training_config: dict[str, Any] = {
+                "epochs": training_section_for_config.get("epochs", 100),
+                "learning_rate": training_section_for_config.get("learning_rate", 0.001),
+                "batch_size": training_section_for_config.get("batch_size", 32),
+            }
+
+            # Inject regression config into training config
+            if output_format == "regression":
+                training_config["output_format"] = "regression"
+                training_config["loss"] = training_section_for_config.get("loss", "huber")
+                training_config["huber_delta"] = training_section_for_config.get("huber_delta", 0.01)
+                training_config["weight_decay"] = 0.0
             training_results = TrainingPipeline.train_model(
                 model=model,
                 X_train=X_train,
@@ -819,6 +861,7 @@ class HostTrainingOrchestrator:
                 model=model,
                 X_test=X_test,
                 y_test=y_test,
+                output_format=output_format,
             )
 
             # Save model

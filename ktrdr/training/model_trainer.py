@@ -287,6 +287,10 @@ class ModelTrainer:
 
         # Setup loss function
         output_format = self.config.get("output_format", "classification")
+        if output_format not in ("classification", "regression"):
+            raise ValueError(
+                f"Unsupported output_format '{output_format}'. Must be 'classification' or 'regression'."
+            )
         if output_format == "regression":
             loss_type = self.config.get("loss", "huber")
             if loss_type == "huber":

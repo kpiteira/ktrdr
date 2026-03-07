@@ -62,6 +62,10 @@ class DecisionFunction:
         self.model = model
         self.feature_names = feature_names
         self.output_format = decisions_config.get("output_format", "classification")
+        if self.output_format not in ("classification", "regression"):
+            raise ValueError(
+                f"Unsupported output_format '{self.output_format}'. Must be 'classification' or 'regression'."
+            )
         filters = decisions_config.get("filters", {})
         self.min_separation_hours = filters.get("min_signal_separation", 4)
         self.position_awareness = decisions_config.get("position_awareness", True)

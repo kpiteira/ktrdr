@@ -53,8 +53,12 @@ class MLPTradingModel(BaseNeuralModel):
         output_format = self.config.get("output_format", "classification")
         if output_format == "regression":
             layers.append(nn.Linear(prev_size, 1))
-        else:
+        elif output_format == "classification":
             layers.append(nn.Linear(prev_size, 3))
+        else:
+            raise ValueError(
+                f"Unsupported output_format '{output_format}'. Must be 'classification' or 'regression'."
+            )
 
         return nn.Sequential(*layers)
 
@@ -131,6 +135,10 @@ class MLPTradingModel(BaseNeuralModel):
             optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
 
         output_format = self.config.get("output_format", "classification")
+        if output_format not in ("classification", "regression"):
+            raise ValueError(
+                f"Unsupported output_format '{output_format}'. Must be 'classification' or 'regression'."
+            )
         if output_format == "regression":
             loss_type = self.config.get("loss", "huber")
             if loss_type == "huber":
