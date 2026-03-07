@@ -63,7 +63,7 @@ class TestBacktestingOperationAdapter:
         )
 
         assert adapter.commission == 0.001  # Default
-        assert adapter.slippage == 0.001  # Default
+        assert adapter.slippage == 0.0005  # Default (0.05%)
 
     def test_get_start_endpoint_returns_correct_path(self):
         """Verify get_start_endpoint returns the correct API path."""

@@ -39,9 +39,9 @@ def backtest(
         help="Commission rate (default: 0.001)",
     ),
     slippage: float = typer.Option(
-        0.001,
+        0.0005,
         "--slippage",
-        help="Slippage rate (default: 0.001)",
+        help="Slippage rate (default: 0.0005)",
     ),
     model_path: str = typer.Option(
         None,

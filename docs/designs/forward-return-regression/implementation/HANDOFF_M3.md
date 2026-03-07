@@ -34,3 +34,15 @@ No existing tests broke from next-bar execution because they either:
 **Hand-verified:** Both new tests confirmed by computing expected values from fixture data:
 - Bar 51 open = 1.1000 + 51*0.0001 = 1.1051 (not bar 50 close = 1.1050 + 50*0.0001 = 1.1100)
 - Timestamp = 2024-01-01 + 51h (not +50h)
+
+## Task 3.3 Complete: Slippage Defaults Standardization
+
+Standardized slippage default from inconsistent values (0.0, 0.001) to 0.0005 (0.05%) across all entry points:
+- `backtest_worker.py` BacktestStartRequest: 0.0 → 0.0005
+- `backtest_worker.py` resume fallback: 0.0 → 0.0005
+- `api/models/backtesting.py` BacktestStartRequest: 0.001 → 0.0005
+- `backtesting_service.py` run_backtest + run_backtest_on_worker: 0.001 → 0.0005
+- `backtesting_service.py` context fallback: 0.001 → 0.0005
+- `cli/commands/backtest.py` typer option: 0.001 → 0.0005
+- `cli/operation_adapters.py`: 0.001 → 0.0005
+- `engine.py` BacktestConfig was already correct (0.0005)

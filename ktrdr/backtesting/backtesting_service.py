@@ -181,7 +181,7 @@ class BacktestingService(ServiceOrchestrator[None]):
         end_date: datetime,
         initial_capital: float = 100000.0,
         commission: float = 0.001,
-        slippage: float = 0.001,
+        slippage: float = 0.0005,
     ) -> dict[str, Any]:
         """
         Run backtest with async operations support.
@@ -279,7 +279,7 @@ class BacktestingService(ServiceOrchestrator[None]):
             end_date=datetime.fromisoformat(context["end_date"]),
             initial_capital=context["initial_capital"],
             commission=context.get("commission", 0.001),
-            slippage=context.get("slippage", 0.001),
+            slippage=context.get("slippage", 0.0005),
         )
 
     async def run_backtest_on_worker(
@@ -293,7 +293,7 @@ class BacktestingService(ServiceOrchestrator[None]):
         end_date: datetime,
         initial_capital: float,
         commission: float = 0.001,
-        slippage: float = 0.001,
+        slippage: float = 0.0005,
     ) -> dict[str, Any]:
         """
         Run backtest on worker using distributed execution pattern.
