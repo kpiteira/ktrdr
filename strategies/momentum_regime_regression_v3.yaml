@@ -1,0 +1,124 @@
+name: momentum_regime_regression
+version: "3.0"
+description: >
+  Multi-indicator regression strategy combining mean-reversion oscillators
+  (RSI, Stochastic) with trend direction (MACD line + histogram) and trend
+  strength (ADX). The ADX regime filter gives the network conditional context:
+  trust momentum in strong trends, mean-reversion in weak trends.
+
+training_data:
+  symbols:
+    mode: single
+    symbol: EURUSD
+  timeframes:
+    mode: single
+    timeframe: 1h
+  date_range:
+    start: "2024-01-01"
+    end: "2025-03-01"
+
+indicators:
+  rsi_14:
+    type: rsi
+    period: 14
+  stoch_14_3:
+    type: stochastic
+    k_period: 14
+    d_period: 3
+    smooth_k: 3
+  macd_12_26_9:
+    type: macd
+    fast: 12
+    slow: 26
+    signal: 9
+  adx_14:
+    type: adx
+    period: 14
+
+fuzzy_sets:
+  # RSI mean-reversion zones
+  rsi_oversold:
+    indicator: rsi_14
+    oversold: [20, 30, 40]
+  rsi_overbought:
+    indicator: rsi_14
+    overbought: [60, 70, 80]
+
+  # Stochastic confirmation — tighter zones than RSI for stronger signal
+  stoch_oversold:
+    indicator: stoch_14_3.k
+    oversold: [10, 20, 30]
+  stoch_overbought:
+    indicator: stoch_14_3.k
+    overbought: [70, 80, 90]
+
+  # MACD trend direction
+  macd_bullish:
+    indicator: macd_12_26_9.line
+    bullish: [-0.0005, 0, 0.0005]
+  macd_bearish:
+    indicator: macd_12_26_9.line
+    bearish: [-0.0005, 0, 0.0005]
+
+  # MACD histogram momentum (acceleration)
+  macd_accel_up:
+    indicator: macd_12_26_9.histogram
+    bullish: [0, 0.0002, 0.0005]
+  macd_accel_down:
+    indicator: macd_12_26_9.histogram
+    bearish: [-0.0005, -0.0002, 0]
+
+  # ADX regime filter — trend strength context
+  adx_strong_trend:
+    indicator: adx_14.adx
+    overbought: [20, 30, 45]
+  adx_weak_trend:
+    indicator: adx_14.adx
+    oversold: [10, 15, 25]
+
+nn_inputs:
+  - fuzzy_set: rsi_oversold
+    timeframes: all
+  - fuzzy_set: rsi_overbought
+    timeframes: all
+  - fuzzy_set: stoch_oversold
+    timeframes: all
+  - fuzzy_set: stoch_overbought
+    timeframes: all
+  - fuzzy_set: macd_bullish
+    timeframes: all
+  - fuzzy_set: macd_bearish
+    timeframes: all
+  - fuzzy_set: macd_accel_up
+    timeframes: all
+  - fuzzy_set: macd_accel_down
+    timeframes: all
+  - fuzzy_set: adx_strong_trend
+    timeframes: all
+  - fuzzy_set: adx_weak_trend
+    timeframes: all
+
+model:
+  type: mlp
+  architecture:
+    hidden_layers: [128, 64]
+    dropout: 0.25
+    activation: relu
+
+decisions:
+  output_format: regression
+  cost_model:
+    round_trip_cost: 0.003
+    min_edge_multiplier: 1.5
+  position_awareness: true
+  filters:
+    min_signal_separation: 4
+
+training:
+  labels:
+    source: forward_return
+    horizon: 20
+  loss: huber
+  huber_delta: 0.01
+  epochs: 100
+  learning_rate: 0.0005
