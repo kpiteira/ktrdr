@@ -62,7 +62,17 @@ Added "Regression Mode" section to `DESIGN_SYSTEM_PROMPT` with:
 - Design prompt line count test updated from 100→150 to accommodate regression docs
 - Pre-existing: `test_forward_return_labeler.py` errors on collection (no importorskip guard)
 
-**For Task 2.6 (E2E Validation):**
-- Requires running sandbox with design, training, and assessment workers
-- Trigger: `ktrdr research start --brief "Design a regression strategy..."`
-- Verify: strategy has output_format=regression, training uses regression gate, assessment includes regression guidance
+## Task 2.6: E2E Validation — BLOCKED
+
+**Blocker:** No sandbox configured for this worktree. E2E validation requires:
+- Running sandbox with Docker containers (design, training, assessment workers)
+- Anthropic API key configured for design and assessment agents
+- IB host service or cached data for training
+
+**Validation steps when infrastructure is available:**
+1. `ktrdr research start --brief "Design a regression strategy for EURUSD 1h predicting 20-bar forward returns"`
+2. Verify design agent produces strategy with `output_format: regression`
+3. Verify training completes with regression metrics (directional_accuracy, r_squared)
+4. Verify training gate uses regression checks (not classification accuracy)
+5. Verify assessment agent evaluates with regression context (check for "forward return" language)
+6. Verify backtest gate uses regression checks (net_return, trade_count)
