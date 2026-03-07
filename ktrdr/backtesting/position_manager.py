@@ -561,16 +561,8 @@ class PositionManager:
         gross_pnl = entry_value - trade_value
         net_pnl = gross_pnl - commission_cost
 
-        # Return reserved margin + net P&L
-        self.current_capital += (
-            entry_value
-            + (
-                self.current_position.entry_price
-                * self.current_position.quantity
-                * self.commission
-            )
-            + net_pnl
-        )
+        # Return reserved margin + net P&L (do not refund entry commission)
+        self.current_capital += entry_value + net_pnl
         logger.info(
             f"Position closed: COVER {self.current_position.quantity} units at "
             f"${execution_price:.4f} on {timestamp.strftime('%Y-%m-%d %H:%M')}, "

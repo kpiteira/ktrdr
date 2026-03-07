@@ -673,21 +673,17 @@ class TrainingPipeline:
         """
         Evaluate model on test set.
 
-        EXTRACTED FROM: StrategyTrainer._evaluate_model() (train_strategy.py:1021-1080)
-
         Args:
             model: Trained model
             X_test: Test features (None for no test data)
             y_test: Test labels (None for no test data)
             symbol_indices_test: Optional symbol indices for multi-symbol evaluation
+            output_format: 'classification' or 'regression'
 
         Returns:
-            Test metrics dict containing:
-                - test_accuracy: Test set accuracy
-                - test_loss: Test set loss
-                - precision: Weighted precision score
-                - recall: Weighted recall score
-                - f1_score: Weighted F1 score
+            Test metrics dict. For classification: test_accuracy, test_loss,
+            precision, recall, f1_score. For regression: test_accuracy
+            (directional accuracy), test_loss, mae.
         """
         logger.info(
             "🔧 TrainingPipeline.evaluate_model() - Evaluating model on test set"
