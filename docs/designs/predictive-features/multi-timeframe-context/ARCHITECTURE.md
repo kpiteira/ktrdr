@@ -28,7 +28,7 @@
 │      confidence (0.55) > adjusted_threshold (0.48)?         │
 │      → YES → BUY                                           │
 │                                                             │
-│    PositionManager.execute()                                │
+│    PositionManager.execute_trade()                           │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -233,9 +233,9 @@ model:
   architecture:
     hidden_layers: [64, 32]
     activation: relu
-    # Note: do NOT specify output_activation: softmax — the MLP applies softmax
-    # implicitly via cross-entropy loss (log-softmax). Specifying it here would
-    # cause double-softmax. Verify during M3 implementation.
+    output_activation: softmax  # Safe: DecisionFunction auto-detects applied softmax
+    # (checks if outputs sum to ~1.0) and skips redundant application.
+    # All existing v3 strategies follow this convention.
     dropout: 0.2
   training:
     learning_rate: 0.001
@@ -400,10 +400,10 @@ class ThresholdModifier:
     long_factor: float   # Multiply base threshold for long trades
     short_factor: float  # Multiply base threshold for short trades
 
-    def apply(self, base_threshold: float, direction: str) -> float:
-        if direction == "BUY":
+    def apply(self, base_threshold: float, signal: Signal) -> float:
+        if signal == Signal.BUY:
             return base_threshold * self.long_factor
-        elif direction == "SELL":
+        elif signal == Signal.SELL:
             return base_threshold * self.short_factor
         return base_threshold
 ```
@@ -420,9 +420,9 @@ signal_decision = decision_functions[active_model](features, position, bar)
 if route_result.threshold_modifier:
     adjusted_threshold = route_result.threshold_modifier.apply(
         base_threshold=model_config.confidence_threshold,
-        direction=signal_decision.direction,
+        signal=signal_decision["signal"],  # Signal enum from DecisionFunction output
     )
-    if signal_decision.confidence < adjusted_threshold:
+    if signal_decision["confidence"] < adjusted_threshold:
         final_decision = TradingDecision(HOLD, reasoning="below context-adjusted threshold")
     else:
         final_decision = signal_decision
@@ -452,10 +452,12 @@ class EnsembleBacktestRunner:
             context_features = self._context_cache.get_features_for_timestamp(timestamp)
             if context_features:
                 context_decision = self._context_decision_fn(context_features, ...)
+                # DecisionFunction returns {"probabilities": {"BULLISH": 0.6, ...}, ...}
+                probs = context_decision["probabilities"]
                 self._current_context_probs = {
-                    "bullish": context_decision.probabilities[0],
-                    "neutral": context_decision.probabilities[2],
-                    "bearish": context_decision.probabilities[1],
+                    "bullish": probs.get("BULLISH", 0.0),
+                    "neutral": probs.get("NEUTRAL", 0.0),
+                    "bearish": probs.get("BEARISH", 0.0),
                 }
             self._last_context_date = bar_date
 ```
@@ -481,7 +483,7 @@ for bar in bars:
 
     # 4. Regime transition handling (unchanged)
     if route_result.transition and route_result.transition.close_position:
-        position_manager.execute_trade(close_signal, bar)  # Note: use execute_trade(), not close_position()
+        position_manager.execute_trade(close_signal, bar["close"], bar.name)  # Note: use execute_trade(signal, price, timestamp)
 
     # 5. Signal model (unchanged)
     if route_result.active_model:
@@ -491,12 +493,12 @@ for bar in bars:
     # 6. Apply context-modified threshold (NEW)
     if route_result.threshold_modifier:
         adjusted_threshold = route_result.threshold_modifier.apply(
-            base_threshold, signal_decision.direction)
-        if signal_decision.confidence < adjusted_threshold:
+            base_threshold, signal_decision["signal"])
+        if signal_decision["confidence"] < adjusted_threshold:
             signal_decision = TradingDecision(HOLD)
 
     # 7. Execute (unchanged)
-    position_manager.process_decision(signal_decision, bar)
+    position_manager.execute_trade(signal_decision["signal"], bar["close"], bar.name)
 ```
 
 ---
@@ -550,7 +552,7 @@ The daily context model sees yesterday's completed daily bar — no lookahead bi
 ### M4 (Multi-Gate Integration)
 | File | Change | Size |
 |------|--------|------|
-| `ktrdr/backtesting/ensemble_config.py` | Add `context_gate`, `context_modifiers` | M |
+| `ktrdr/config/ensemble_config.py` | Add `context_gate`, `context_modifiers` | M |
 | `ktrdr/backtesting/regime_router.py` | Add context_probs param + threshold modifier | M |
 | `ktrdr/backtesting/ensemble_runner.py` | Context evaluation timing + per-bar flow | M |
 

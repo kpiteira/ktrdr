@@ -281,7 +281,7 @@ class EnsembleBacktestRunner:
        transition: None | TransitionAction(close_position=True)
 
 5. IF route_result.transition and route_result.transition.close_position:
-     position_manager.execute_trade(close_signal, bar)  # Note: no close_position() method exists — must use execute_trade()
+     position_manager.execute_trade(close_signal, bar["close"], ts)  # Note: execute_trade(signal, price, timestamp)
 
 6. IF route_result.active_model is not None:
      signal_features = feature_caches[route_result.active_model].get(ts)
@@ -290,7 +290,7 @@ class EnsembleBacktestRunner:
    ELSE:
      → TradingDecision(HOLD, reasoning="regime: volatile → FLAT")
 
-7. position_manager.process_decision(final_decision, bar)
+7. position_manager.execute_trade(final_decision["signal"], bar["close"], bar.name)
 ```
 
 ### 2.4 RegimeRouter
@@ -527,10 +527,14 @@ Once generalized, the EnsembleBacktestRunner interprets regime outputs based on 
 # In EnsembleBacktestRunner._interpret_regime_output():
 REGIME_NAMES = ["trending_up", "trending_down", "ranging", "volatile"]
 
-def _interpret_regime_output(self, decision: TradingDecision) -> dict[str, float]:
-    """Convert classification output to regime probabilities."""
-    probs = decision.reasoning.get("probabilities", [])
-    return dict(zip(REGIME_NAMES, probs))
+def _interpret_regime_output(self, decision: dict) -> dict[str, float]:
+    """Convert N-class DecisionFunction output to regime probabilities.
+
+    DecisionFunction returns {"probabilities": {"TRENDING_UP": 0.65, ...}, ...}
+    after M7 Task 7.3 generalizes it to N-class with regime class names.
+    """
+    nn_probs: dict[str, float] = decision.get("probabilities", {})
+    return {name: float(nn_probs.get(name.upper(), 0.0)) for name in REGIME_NAMES}
 ```
 
 ---

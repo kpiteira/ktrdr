@@ -644,9 +644,9 @@ During backtesting, the engine reads `context_data_config` from the bundle, fetc
 | `ktrdr/config/feature_resolver.py` | No changes needed (data_source is transparent) |
 | `ktrdr/indicators/indicator_engine.py` | Accept `context_data` dict, route indicators by `data_source` |
 | `ktrdr/training/training_pipeline.py` | Load context data alongside primary data |
-| `ktrdr/training/feature_cache.py` | Pass context data through to IndicatorEngine |
+| `ktrdr/backtesting/feature_cache.py` | Pass context data through to IndicatorEngine |
 | `ktrdr/backtesting/engine.py` | Load context data from model bundle metadata |
-| `ktrdr/training/model_bundle.py` | Store context_data_config in metadata |
+| `ktrdr/backtesting/model_bundle.py` | Store context_data_config in metadata |
 | `ktrdr/agents/design_sdk_prompt.py` | Update design agent with context_data awareness |
 | `ktrdr/evolution/genome.py` | Add data source dimensions to genome |
 
