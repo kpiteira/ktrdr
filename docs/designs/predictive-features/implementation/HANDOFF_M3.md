@@ -47,3 +47,13 @@
 **Decision:** PROCEED with Thread 2. Recommended defaults for context model: horizon=10, threshold=±0.007.
 
 **Analysis saved:** `docs/designs/predictive-features/multi-timeframe-context/analysis/context_label_analysis_EURUSD.md`
+
+## Task 3.5 Complete: E2E Validation
+
+**E2E test:** `cli/context-analyze` (ke2e catalog) — 7 steps, PASSED after fix.
+
+**Bug found & fixed:** `ktrdr/training/__init__.py` unconditionally imported `model_trainer` (which imports torch). This blocked the CLI command on machines without torch, even though `context_labeler.py` is pure pandas. Fixed by wrapping the import in `try/except ImportError`.
+
+**Validated output sections:** Distribution (28/33/39%), Persistence (4.3/5.2/3.1 days), Return-by-Context (+0.0003%/-0.0005%), Quality Gate Summary (all PASS).
+
+**Gotcha:** The `__init__.py` guard also removed `ModelTrainer`/`EarlyStopping`/`TrainingMetrics` from `__all__` — they're still importable directly from `ktrdr.training.model_trainer` when torch is available.
