@@ -648,11 +648,55 @@ class LegacyStrategyConfiguration(BaseModel):
 # =============================
 
 
+class ContextDataEntry(BaseModel):
+    """Single external data source declaration for context_data section.
+
+    Declares a data dependency from an external provider (FRED, IB, CFTC, etc.)
+    that will be fetched, aligned, and made available to indicators via the
+    data_source field.
+
+    Provider-specific fields are optional — validated per-provider at strategy
+    validation time, not at parse time. This allows the grammar to support
+    future providers without model changes.
+    """
+
+    provider: str = Field(..., description="Provider name (fred, ib, cftc_cot, etc.)")
+    alignment: str = Field(
+        default="forward_fill",
+        description="How to align to primary timeframe",
+    )
+
+    # IB provider fields
+    symbol: Optional[str] = Field(None, description="Symbol (IB provider)")
+    timeframe: Optional[str] = Field(None, description="Timeframe (IB provider)")
+    instrument_type: Optional[str] = Field(
+        None, description="Instrument type (IB provider)"
+    )
+
+    # FRED provider fields
+    series: Optional[Union[str, list[str]]] = Field(
+        None, description="FRED series ID(s)"
+    )
+    frequency: Optional[str] = Field(None, description="Data frequency (e.g., daily)")
+
+    # CFTC provider fields
+    report: Optional[str] = Field(None, description="COT report currency code")
+
+    # Calendar provider fields
+    currencies: Optional[list[str]] = Field(None, description="Currency codes")
+    min_impact: Optional[str] = Field(None, description="Minimum impact level")
+
+    # Sentiment provider fields
+    broker: Optional[str] = Field(None, description="Sentiment data broker")
+
+
 class IndicatorDefinition(BaseModel):
     """A single indicator calculation definition (v3 format).
 
     The key in the indicators dict serves as the indicator_id.
     All fields other than 'type' are indicator-specific parameters.
+    The optional 'data_source' extra field routes the indicator to context data
+    instead of primary data.
     """
 
     type: str = Field(..., description="Indicator type (rsi, macd, bbands, etc.)")
@@ -731,6 +775,9 @@ class StrategyConfigurationV3(BaseModel):
     # Data scope
     training_data: TrainingDataConfiguration = Field(
         ..., description="Training data configuration"
+    )
+    context_data: Optional[list[ContextDataEntry]] = Field(
+        None, description="External data source declarations (FRED, IB cross-pair, etc.)"
     )
     deployment: Optional[DeploymentConfiguration] = Field(
         None, description="Deployment configuration (optional)"
