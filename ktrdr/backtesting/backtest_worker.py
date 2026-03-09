@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from fastapi import FastAPI
 from opentelemetry import trace
+from pydantic import Field
 
 from ktrdr.api.models.operations import OperationMetadata, OperationType
 from ktrdr.api.models.workers import WorkerType
@@ -106,6 +107,7 @@ class BacktestStartRequest(WorkerOperationMixin):
     commission: float = 0.001
     slippage: float = 0.0005  # 0.05%
     model_path: Optional[str] = None  # Explicit model path for v3 models
+    timeframes: list[str] = Field(default_factory=list)
 
 
 class BacktestResumeRequest(WorkerOperationMixin):

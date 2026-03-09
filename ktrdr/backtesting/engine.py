@@ -7,7 +7,7 @@ trading use (see DESIGN.md for rationale).
 """
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Optional, cast
 
 import pandas as pd
@@ -42,6 +42,15 @@ class BacktestConfig:
     initial_capital: float = 100000.0
     commission: float = 0.001  # 0.1%
     slippage: float = 0.0005  # 0.05%
+    timeframes: list[str] = field(default_factory=list)
+
+    def get_all_timeframes(self) -> list[str]:
+        """Return all timeframes for this backtest.
+
+        If explicit timeframes list is set, returns it.
+        Otherwise falls back to [self.timeframe] for backward compatibility.
+        """
+        return self.timeframes if self.timeframes else [self.timeframe]
 
 
 @dataclass
