@@ -35,6 +35,10 @@
 - Persistence (8-10 bars) below 24-bar target — structural SER issue, handled by router stability filter.
 - Decision: **PROCEED.** Regimes exist and differentiate returns. See analysis report at `docs/designs/predictive-features/regime-detection/analysis/EURUSD_1h_regime_analysis.md`.
 
-**Next Task Notes (2.5):**
-- VALIDATION task. Need cached EURUSD 1h data in `data/` directory. Already copied from ktrdr2.
-- Use tuned params: `--horizon 48 --trending-threshold 0.2`.
+## Task 2.5 Complete: Validation
+
+**E2E Test:** cli/regime-analyze — **PASSED** (11 steps)
+- All output sections present (Distribution, Persistence, Returns, Transitions, Summary)
+- All 4 regimes detected in real EURUSD 1h data (28K bars)
+- Parameter sensitivity verified (threshold 0.2 vs 0.5 produces different distributions)
+- Error handling verified (invalid symbol → exit code 1)
