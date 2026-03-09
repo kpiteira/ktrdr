@@ -104,3 +104,16 @@
 - All infrastructure is ready for E2E validation
 - Needs real FRED API key for live test
 - Strategy must declare `context_data` with FRED provider and indicators with `data_source`
+
+## Task 6.7 Partial: Validation
+
+**What was done:**
+- E2E test designed and added to catalog: `.claude/skills/ke2e/tests/training/fred-context-data.md`
+- 8-step test covering: strategy creation, training start, completion poll, metadata verification, feature count, FRED cache check
+- Full unit test suite passes: 5328 passed, 41 skipped
+
+**Limitation:**
+- No sandbox running in this impl worktree (no .env.sandbox)
+- No FRED API key configured in environment
+- Full E2E execution deferred to when infrastructure is available
+- All unit tests validate the wiring is correct; E2E confirms real data flow
