@@ -199,9 +199,16 @@ class LocalTrainingOrchestrator:
             )
             all_data[symbol] = symbol_data
 
+        # Load context data if strategy uses external data sources
+        context_data = None
+        if hasattr(v3_config, "context_data") and v3_config.context_data:
+            import asyncio
+
+            context_data = asyncio.run(self._load_context_data(v3_config, all_data))
+
         # Prepare features using v3 pipeline
         logger.info("Preparing features with TrainingPipelineV3...")
-        features_df = pipeline.prepare_features(all_data)
+        features_df = pipeline.prepare_features(all_data, context_data=context_data)
 
         # Convert to tensors and create labels using base pipeline methods
         import numpy as np
@@ -553,6 +560,50 @@ class LocalTrainingOrchestrator:
         """
         return isinstance(config.get("indicators"), dict) and "nn_inputs" in config
 
+    async def _load_context_data(
+        self,
+        v3_config: Any,
+        all_data: dict[str, dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Load and align context data from external providers.
+
+        Args:
+            v3_config: V3 strategy configuration with context_data entries
+            all_data: Market data dict for alignment reference
+
+        Returns:
+            Dict mapping source keys to aligned DataFrames
+        """
+        from ktrdr.data.context.base import ContextDataAligner
+        from ktrdr.data.context.registry import ContextDataProviderRegistry
+
+        registry = ContextDataProviderRegistry()
+        aligner = ContextDataAligner()
+        context_data: dict[str, Any] = {}
+
+        # Get primary index for alignment (first symbol, first timeframe)
+        first_symbol = next(iter(all_data))
+        first_tf = next(iter(all_data[first_symbol]))
+        primary_index = all_data[first_symbol][first_tf].index
+
+        # Derive date range from primary data
+        start_dt = primary_index[0].to_pydatetime()
+        end_dt = primary_index[-1].to_pydatetime()
+
+        for entry in v3_config.context_data:
+            provider = registry.get(entry.provider)
+            results = await provider.fetch(entry, start_dt, end_dt)
+
+            for result in results:
+                aligned = aligner.align(result.data, primary_index)
+                context_data[result.source_id] = aligned
+                logger.info(
+                    f"Loaded context data '{result.source_id}': "
+                    f"{len(result.data)} raw → {len(aligned)} aligned rows"
+                )
+
+        return context_data
+
     @staticmethod
     def _save_v3_metadata(
         model_path: Path,
@@ -581,6 +632,32 @@ class LocalTrainingOrchestrator:
 
         from ktrdr.models.model_metadata import ModelMetadataV3
 
+        # Serialize context_data config if present
+        context_data_config = None
+        context_source_ids: list[str] = []
+        raw_context_data = config.get("context_data")
+        if raw_context_data:
+            context_data_config = [
+                entry if isinstance(entry, dict) else entry.model_dump()
+                for entry in raw_context_data
+            ]
+            try:
+                from ktrdr.data.context.registry import ContextDataProviderRegistry
+
+                registry = ContextDataProviderRegistry()
+                for entry_data in raw_context_data:
+                    from ktrdr.config.models import ContextDataEntry
+
+                    entry_obj = (
+                        entry_data
+                        if isinstance(entry_data, ContextDataEntry)
+                        else ContextDataEntry(**entry_data)
+                    )
+                    provider = registry.get(entry_obj.provider)
+                    context_source_ids.extend(provider.get_source_ids(entry_obj))
+            except Exception as e:
+                logger.warning(f"Could not resolve context source IDs: {e}")
+
         # Create metadata
         metadata = ModelMetadataV3(
             model_name=config.get("name", "unknown"),
@@ -593,6 +670,8 @@ class LocalTrainingOrchestrator:
             training_symbols=training_symbols,
             training_timeframes=training_timeframes,
             training_metrics=training_metrics,
+            context_data_config=context_data_config,
+            context_source_ids=context_source_ids,
         )
 
         # Save to model directory

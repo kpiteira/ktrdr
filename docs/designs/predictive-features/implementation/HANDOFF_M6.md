@@ -84,3 +84,23 @@
 **Next task notes (6.6):**
 - `IndicatorEngine.compute()` and `apply()` now accept `context_data` — training pipeline needs to pass it
 - Context data keys must match the `data_source` values in indicator definitions (e.g., `yield_spread_DGS2_IRLTLT01DEM156N`)
+
+## Task 6.6 Complete: Training Pipeline Context Data Loading
+
+**What was done:**
+- Added `context_data` param to `compute_for_timeframe()` in indicator_engine.py (passthrough to `compute()`)
+- Added `context_data` param to `TrainingPipelineV3.prepare_features()` — passes through to `compute_for_timeframe()`
+- Added `_load_context_data()` async method to both local_orchestrator.py and training-host-service/orchestrator.py (DUAL DISPATCH)
+- Both orchestrators use `asyncio.run()` to call async context loading from sync `_execute_v3_training()`
+- Updated `_save_v3_metadata()` in both orchestrators to serialize context_data_config and context_source_ids
+- Added `context_data_config` and `context_source_ids` fields to `ModelMetadata` with full roundtrip (to_dict/from_dict)
+
+**Gotchas:**
+- `_execute_v3_training()` is sync in both orchestrators — context data loading (async) needs `asyncio.run()`
+- training-host-service/orchestrator.py doesn't import pandas — use `dict[str, Any]` for type hints
+- `pytest.importorskip("torch")` at module level skips ALL tests in file — use `try/except` + `@skipif` instead
+
+**Next task notes (6.7):**
+- All infrastructure is ready for E2E validation
+- Needs real FRED API key for live test
+- Strategy must declare `context_data` with FRED provider and indicators with `data_source`

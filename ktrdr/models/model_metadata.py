@@ -60,6 +60,10 @@ class ModelMetadata:
     training_timeframes: list[str] = field(default_factory=list)
     training_metrics: dict[str, float] = field(default_factory=dict)
 
+    # Context data (external data like FRED yields)
+    context_data_config: Optional[list[dict[str, Any]]] = None
+    context_source_ids: list[str] = field(default_factory=list)
+
     def __post_init__(self):
         """Initialize default values."""
         if self.created_at is None:
@@ -85,6 +89,8 @@ class ModelMetadata:
             "training_symbols": self.training_symbols,
             "training_timeframes": self.training_timeframes,
             "training_metrics": self.training_metrics,
+            "context_data_config": self.context_data_config,
+            "context_source_ids": self.context_source_ids,
         }
 
     @classmethod
@@ -114,6 +120,8 @@ class ModelMetadata:
             training_symbols=data.get("training_symbols", []),
             training_timeframes=data.get("training_timeframes", []),
             training_metrics=data.get("training_metrics", {}),
+            context_data_config=data.get("context_data_config"),
+            context_source_ids=data.get("context_source_ids", []),
         )
 
 

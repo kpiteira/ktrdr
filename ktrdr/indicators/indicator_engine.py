@@ -236,7 +236,11 @@ class IndicatorEngine:
         return result
 
     def compute_for_timeframe(
-        self, data: pd.DataFrame, timeframe: str, indicator_ids: set[str]
+        self,
+        data: pd.DataFrame,
+        timeframe: str,
+        indicator_ids: set[str],
+        context_data: Optional[dict[str, pd.DataFrame]] = None,
     ) -> pd.DataFrame:
         """
         Compute indicators and prefix columns with timeframe.
@@ -248,11 +252,12 @@ class IndicatorEngine:
             data: OHLCV DataFrame
             timeframe: Timeframe string (e.g., "5m", "1h")
             indicator_ids: Which indicators to compute
+            context_data: Optional context data for data_source routing
 
         Returns:
             DataFrame with columns like "5m_rsi_14", "5m_bbands_20_2.upper"
         """
-        result = self.compute(data, indicator_ids)
+        result = self.compute(data, indicator_ids, context_data=context_data)
         return self._prefix_indicator_columns(result, timeframe)
 
     def _prefix_indicator_columns(
