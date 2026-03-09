@@ -502,6 +502,13 @@ class BacktestingEngine:
     def _load_historical_data(self) -> dict[str, pd.DataFrame]:
         """Load historical data for backtesting from cache.
 
+        Uses config.get_all_timeframes() as the primary source of timeframes.
+        This field is threaded from the API through the service layer, ensuring
+        consistency with the strategy config's training_data.timeframes.
+
+        Falls back to _get_strategy_timeframes() (from model bundle) if config
+        doesn't have explicit timeframes set.
+
         Returns:
             Dict mapping timeframes to OHLCV DataFrames
         """
@@ -509,7 +516,12 @@ class BacktestingEngine:
             span.set_attribute("data.symbol", self.config.symbol)
             span.set_attribute("data.timeframe", self.config.timeframe)
 
-            timeframes = self._get_strategy_timeframes()
+            # Prefer config.get_all_timeframes() (threaded from API) over
+            # strategy config extraction — more reliable for multi-TF models
+            timeframes = self.config.get_all_timeframes()
+            if len(timeframes) <= 1:
+                # Fall back to strategy config if config only has base timeframe
+                timeframes = self._get_strategy_timeframes()
 
             if len(timeframes) >= 2:
                 from ..data.multi_timeframe_coordinator import (

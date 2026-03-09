@@ -313,6 +313,7 @@ class BacktestWorker(WorkerAPIBase):
             initial_capital=request.initial_capital,
             commission=request.commission,
             slippage=request.slippage,
+            timeframes=request.timeframes,
         )
 
         # 4. Build progress bridge
@@ -366,6 +367,7 @@ class BacktestWorker(WorkerAPIBase):
             initial_capital=original_request.get("initial_capital", 100000.0),
             commission=original_request.get("commission", 0.001),
             slippage=original_request.get("slippage", 0.0005),
+            timeframes=original_request.get("timeframes", []),
         )
 
         # 3. Build progress bridge
