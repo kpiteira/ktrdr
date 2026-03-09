@@ -20,6 +20,7 @@ _mod = importlib.util.module_from_spec(_spec)
 sys.modules["ktrdr.training.regime_labeler"] = _mod
 _spec.loader.exec_module(_mod)
 RegimeLabeler = _mod.RegimeLabeler
+RegimeLabelStats = _mod.RegimeLabelStats
 
 
 def _make_price_data(close: list[float], freq: str = "h") -> pd.DataFrame:
@@ -327,3 +328,165 @@ class TestGenerateLabels:
         labeler = RegimeLabeler(horizon=24)
         with pytest.raises(DataError):
             labeler.generate_labels(data)
+
+
+class TestAnalyzeLabels:
+    """Tests for analyze_labels and RegimeLabelStats."""
+
+    def _make_simple_labels(self) -> tuple[pd.Series, pd.DataFrame]:
+        """Create labels with known properties for testing.
+
+        Pattern: 10 TRENDING_UP, 5 RANGING, 10 TRENDING_DOWN, 5 RANGING = 30 bars
+        """
+        pattern = (
+            [0] * 10  # TRENDING_UP
+            + [2] * 5  # RANGING
+            + [1] * 10  # TRENDING_DOWN
+            + [2] * 5  # RANGING
+        )
+        dates = pd.date_range("2024-01-01", periods=30, freq="h")
+        labels = pd.Series(pattern, index=dates, dtype=float)
+        # Create price data with close values that match regime expectations
+        close = []
+        price = 100.0
+        for label in pattern:
+            if label == 0:  # TRENDING_UP
+                price += 0.5
+            elif label == 1:  # TRENDING_DOWN
+                price -= 0.5
+            else:  # RANGING
+                price += 0.01
+            close.append(price)
+        data = _make_price_data(close)
+        return labels, data
+
+    def test_returns_dataclass(self) -> None:
+        """analyze_labels returns a RegimeLabelStats dataclass."""
+        labels, data = self._make_simple_labels()
+        labeler = RegimeLabeler(horizon=5)
+        stats = labeler.analyze_labels(labels, data)
+        assert isinstance(stats, RegimeLabelStats)
+
+    def test_distribution_sums_to_one(self) -> None:
+        """Distribution fractions should sum to ~1.0."""
+        labels, data = self._make_simple_labels()
+        labeler = RegimeLabeler(horizon=5)
+        stats = labeler.analyze_labels(labels, data)
+
+        total = sum(stats.distribution.values())
+        assert total == pytest.approx(1.0)
+
+    def test_distribution_values_correct(self) -> None:
+        """Distribution matches known label counts."""
+        labels, data = self._make_simple_labels()
+        labeler = RegimeLabeler(horizon=5)
+        stats = labeler.analyze_labels(labels, data)
+
+        # 10/30 TRENDING_UP, 10/30 TRENDING_DOWN, 10/30 RANGING
+        assert stats.distribution["trending_up"] == pytest.approx(10 / 30)
+        assert stats.distribution["trending_down"] == pytest.approx(10 / 30)
+        assert stats.distribution["ranging"] == pytest.approx(10 / 30)
+
+    def test_mean_duration_positive(self) -> None:
+        """Mean duration > 0 for all regimes present."""
+        labels, data = self._make_simple_labels()
+        labeler = RegimeLabeler(horizon=5)
+        stats = labeler.analyze_labels(labels, data)
+
+        for regime, duration in stats.mean_duration_bars.items():
+            assert duration > 0, f"Duration for {regime} should be > 0"
+
+    def test_mean_duration_correct(self) -> None:
+        """Mean duration matches known run lengths."""
+        labels, data = self._make_simple_labels()
+        labeler = RegimeLabeler(horizon=5)
+        stats = labeler.analyze_labels(labels, data)
+
+        # TRENDING_UP: one run of 10 → mean = 10
+        assert stats.mean_duration_bars["trending_up"] == pytest.approx(10.0)
+        # TRENDING_DOWN: one run of 10 → mean = 10
+        assert stats.mean_duration_bars["trending_down"] == pytest.approx(10.0)
+        # RANGING: two runs of 5 → mean = 5
+        assert stats.mean_duration_bars["ranging"] == pytest.approx(5.0)
+
+    def test_transition_matrix_rows_sum_to_one(self) -> None:
+        """Transition matrix rows should sum to ~1.0."""
+        labels, data = self._make_simple_labels()
+        labeler = RegimeLabeler(horizon=5)
+        stats = labeler.analyze_labels(labels, data)
+
+        for from_regime, to_probs in stats.transition_matrix.items():
+            row_sum = sum(to_probs.values())
+            assert row_sum == pytest.approx(
+                1.0
+            ), f"Row for {from_regime} sums to {row_sum}"
+
+    def test_transition_matrix_correct(self) -> None:
+        """Transition matrix matches known transitions."""
+        labels, data = self._make_simple_labels()
+        labeler = RegimeLabeler(horizon=5)
+        stats = labeler.analyze_labels(labels, data)
+
+        # Transitions: TRENDING_UP→RANGING, RANGING→TRENDING_DOWN, TRENDING_DOWN→RANGING
+        # TRENDING_UP transitions only to RANGING
+        assert stats.transition_matrix["trending_up"]["ranging"] == pytest.approx(1.0)
+        # TRENDING_DOWN transitions only to RANGING
+        assert stats.transition_matrix["trending_down"]["ranging"] == pytest.approx(1.0)
+        # RANGING transitions to both TRENDING_DOWN (1st time) and end (2nd run is last)
+        # Actually: RANGING→TRENDING_DOWN is the only transition from RANGING
+        assert stats.transition_matrix["ranging"]["trending_down"] == pytest.approx(1.0)
+
+    def test_return_by_regime_signs(self) -> None:
+        """Trending up should have positive return, trending down negative."""
+        labels, data = self._make_simple_labels()
+        labeler = RegimeLabeler(horizon=5)
+        stats = labeler.analyze_labels(labels, data)
+
+        assert stats.mean_return_by_regime["trending_up"] > 0
+        assert stats.mean_return_by_regime["trending_down"] < 0
+
+    def test_total_bars(self) -> None:
+        """total_bars matches label count."""
+        labels, data = self._make_simple_labels()
+        labeler = RegimeLabeler(horizon=5)
+        stats = labeler.analyze_labels(labels, data)
+
+        assert stats.total_bars == 30
+
+    def test_total_transitions(self) -> None:
+        """total_transitions matches known count."""
+        labels, data = self._make_simple_labels()
+        labeler = RegimeLabeler(horizon=5)
+        stats = labeler.analyze_labels(labels, data)
+
+        # TRENDING_UP→RANGING, RANGING→TRENDING_DOWN, TRENDING_DOWN→RANGING = 3
+        assert stats.total_transitions == 3
+
+    def test_absent_regime_excluded(self) -> None:
+        """Regime with 0 bars excluded from stats."""
+        # All TRENDING_UP — no other regimes
+        dates = pd.date_range("2024-01-01", periods=20, freq="h")
+        labels = pd.Series([0.0] * 20, index=dates)
+        close = [100.0 + i for i in range(20)]
+        data = _make_price_data(close)
+
+        labeler = RegimeLabeler(horizon=5)
+        stats = labeler.analyze_labels(labels, data)
+
+        assert "trending_up" in stats.distribution
+        assert "trending_down" not in stats.distribution
+        assert "volatile" not in stats.distribution
+
+    def test_handles_nan_labels(self) -> None:
+        """NaN labels (last horizon bars) are excluded from analysis."""
+        pattern = [0.0] * 15 + [float("nan")] * 5
+        dates = pd.date_range("2024-01-01", periods=20, freq="h")
+        labels = pd.Series(pattern, index=dates)
+        close = [100.0 + i for i in range(20)]
+        data = _make_price_data(close)
+
+        labeler = RegimeLabeler(horizon=5)
+        stats = labeler.analyze_labels(labels, data)
+
+        assert stats.total_bars == 15
+        assert stats.distribution["trending_up"] == pytest.approx(1.0)

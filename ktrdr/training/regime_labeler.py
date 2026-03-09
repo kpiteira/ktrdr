@@ -7,6 +7,8 @@ Generates 4-class regime labels:
   3 = VOLATILE       (extreme realized volatility)
 """
 
+from dataclasses import dataclass
+
 import numpy as np
 import pandas as pd
 
@@ -192,3 +194,140 @@ class RegimeLabeler:
                 rv_values[t] = 0.0
 
         return pd.Series(rv_values, index=close.index, dtype=float)
+
+    def analyze_labels(
+        self,
+        labels: pd.Series,
+        price_data: pd.DataFrame,
+    ) -> "RegimeLabelStats":
+        """Compute label quality statistics.
+
+        Analyzes distribution, persistence, return differentiation,
+        and transition patterns across regime labels.
+
+        Args:
+            labels: Series of regime labels (0-3, may contain NaN).
+            price_data: DataFrame with 'close' column (same index as labels).
+
+        Returns:
+            RegimeLabelStats with distribution, duration, return, and transition analysis.
+        """
+        # Drop NaN labels for analysis
+        valid_labels = labels.dropna().astype(int)
+        total_bars = len(valid_labels)
+
+        # Distribution: fraction of bars per regime
+        distribution: dict[str, float] = {}
+        for label_val, name in REGIME_NAMES.items():
+            count = (valid_labels == label_val).sum()
+            if count > 0:
+                distribution[name] = count / total_bars
+
+        # Mean duration: average consecutive run length per regime
+        mean_duration_bars = self._compute_mean_durations(valid_labels)
+
+        # Mean return by regime: forward return grouped by label
+        mean_return_by_regime = self._compute_mean_returns(valid_labels, price_data)
+
+        # Transition matrix and count
+        transition_matrix, total_transitions = self._compute_transitions(valid_labels)
+
+        return RegimeLabelStats(
+            distribution=distribution,
+            mean_duration_bars=mean_duration_bars,
+            mean_return_by_regime=mean_return_by_regime,
+            transition_matrix=transition_matrix,
+            total_bars=total_bars,
+            total_transitions=total_transitions,
+        )
+
+    def _compute_mean_durations(self, labels: pd.Series) -> dict[str, float]:
+        """Compute average consecutive run length per regime."""
+        durations: dict[str, list[int]] = {}
+
+        if len(labels) == 0:
+            return {}
+
+        current_label = labels.iloc[0]
+        current_run = 1
+
+        for i in range(1, len(labels)):
+            if labels.iloc[i] == current_label:
+                current_run += 1
+            else:
+                name = REGIME_NAMES[int(current_label)]
+                durations.setdefault(name, []).append(current_run)
+                current_label = labels.iloc[i]
+                current_run = 1
+
+        # Don't forget the last run
+        name = REGIME_NAMES[int(current_label)]
+        durations.setdefault(name, []).append(current_run)
+
+        return {regime: float(np.mean(runs)) for regime, runs in durations.items()}
+
+    def _compute_mean_returns(
+        self, labels: pd.Series, price_data: pd.DataFrame
+    ) -> dict[str, float]:
+        """Compute mean forward return grouped by regime label."""
+        close = price_data["close"]
+        horizon = self.horizon
+
+        # Forward return: (close[T+H] - close[T]) / close[T]
+        future_close = close.shift(-horizon)
+        forward_returns = (future_close - close) / close
+
+        result: dict[str, float] = {}
+        for label_val, name in REGIME_NAMES.items():
+            # Get indices where this label applies
+            label_indices = labels[labels == label_val].index
+            # Intersect with forward_returns index to handle length mismatches
+            common_idx = label_indices.intersection(forward_returns.index)
+            regime_returns = forward_returns.loc[common_idx].dropna()
+            if len(regime_returns) > 0:
+                result[name] = float(regime_returns.mean())
+
+        return result
+
+    def _compute_transitions(
+        self, labels: pd.Series
+    ) -> tuple[dict[str, dict[str, float]], int]:
+        """Compute transition matrix and total transition count."""
+        if len(labels) < 2:
+            return {}, 0
+
+        # Find transition points
+        transitions: dict[str, dict[str, int]] = {}
+        total = 0
+
+        for i in range(1, len(labels)):
+            if labels.iloc[i] != labels.iloc[i - 1]:
+                from_name = REGIME_NAMES[int(labels.iloc[i - 1])]
+                to_name = REGIME_NAMES[int(labels.iloc[i])]
+                transitions.setdefault(from_name, {})
+                transitions[from_name][to_name] = (
+                    transitions[from_name].get(to_name, 0) + 1
+                )
+                total += 1
+
+        # Normalize rows to probabilities
+        matrix: dict[str, dict[str, float]] = {}
+        for from_regime, to_counts in transitions.items():
+            row_total = sum(to_counts.values())
+            matrix[from_regime] = {
+                to_regime: count / row_total for to_regime, count in to_counts.items()
+            }
+
+        return matrix, total
+
+
+@dataclass
+class RegimeLabelStats:
+    """Analysis of regime label quality."""
+
+    distribution: dict[str, float]
+    mean_duration_bars: dict[str, float]
+    mean_return_by_regime: dict[str, float]
+    transition_matrix: dict[str, dict[str, float]]
+    total_bars: int
+    total_transitions: int
