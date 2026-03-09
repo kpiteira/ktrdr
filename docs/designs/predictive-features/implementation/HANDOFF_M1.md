@@ -39,3 +39,20 @@
 
 **Gotchas:**
 - `MultiTimeframeCoordinator` is lazily imported inside `_load_historical_data()` — patch `ktrdr.data.multi_timeframe_coordinator.MultiTimeframeCoordinator` not `ktrdr.backtesting.engine.MultiTimeframeCoordinator` in tests
+
+## Task 1.4 Complete: E2E Validation
+
+**E2E Test:** `training/multi-timeframe-backtest` — 10 steps executed — **FAILED**
+
+**Result:** Timeframes threading (M1 plumbing) works correctly. Training completes, `metadata_v3.json` correctly lists 9 multi-TF features. Backtest receives timeframes but fails at `feature_cache._validate_features()` with `ValueError: Feature mismatch: missing 6 features`.
+
+**Root cause:** Two issues surfaced:
+1. **Missing 4h data:** No EURUSD 4h CSV cache exists. System doesn't auto-resample from 1h.
+2. **FeatureCache only computes 1h features:** Even though engine loads multi-TF data via coordinator, `FeatureCache.compute_all_features()` only produces features for the base timeframe. The 4h and 1d features are missing from the computed result. This is a pre-existing issue in the feature computation pipeline, not in M1's timeframes threading.
+
+**M1 scope assessment:** M1 fixes the plumbing (timeframes threaded API→service→worker→engine→coordinator). The remaining feature computation issue is in the FeatureCache/indicator resolution layer — a different fix needed in `ktrdr/backtesting/feature_cache.py`.
+
+**Sandbox gotchas:**
+- `.env.sandbox` had wrong var names: `KTRDR_OTLP_GRPC_PORT` → compose expects `KTRDR_JAEGER_OTLP_GRPC_PORT`. Added both JAEGER variants.
+- Port 5010 conflict: sandbox `KTRDR_WORKER_PORT_4=5010` clashes with `KTRDR_DESIGN_AGENT_PORT` default of 5010. Added explicit `KTRDR_DESIGN_AGENT_PORT=5011` and `KTRDR_ASSESSMENT_AGENT_PORT=5012`.
+- Port 5010/5020 also conflict with prod agent containers when both running simultaneously.
