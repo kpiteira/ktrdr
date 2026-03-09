@@ -166,7 +166,7 @@ class FredDataProvider(ContextDataProvider):
         """
         observations = response.get("observations", [])
         if not observations:
-            return pd.DataFrame(columns=["value"])
+            return pd.DataFrame(columns=["close"])
 
         dates = []
         values = []
@@ -181,6 +181,8 @@ class FredDataProvider(ContextDataProvider):
         df = pd.DataFrame({"value": values}, index=pd.DatetimeIndex(dates))
         # Forward-fill NaN from FRED's "." missing data convention
         df = df.ffill()
+        # Rename to 'close' — indicators compute on 'close' by default
+        df = df.rename(columns={"value": "close"})
         return df
 
     def _compute_spread(
@@ -195,10 +197,10 @@ class FredDataProvider(ContextDataProvider):
         Aligns on shared dates, computes difference, drops any NaN.
         """
         # Align on common index
-        combined = pd.DataFrame({"a": df_a["value"], "b": df_b["value"]}).dropna()
+        combined = pd.DataFrame({"a": df_a["close"], "b": df_b["close"]}).dropna()
 
         spread = pd.DataFrame(
-            {"value": combined["a"] - combined["b"]},
+            {"close": combined["a"] - combined["b"]},
             index=combined.index,
         )
         return spread

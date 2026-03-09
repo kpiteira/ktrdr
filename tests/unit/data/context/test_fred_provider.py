@@ -184,7 +184,7 @@ class TestFetch:
 
         df = results[0].data
         # "." on Jan 4 should be forward-filled to 4.35 (Jan 3 value)
-        assert not df["value"].isna().any()
+        assert not df["close"].isna().any()
 
     @pytest.mark.asyncio
     async def test_multi_series_produces_spread(self, provider, mock_config_multi):
@@ -224,7 +224,7 @@ class TestFetch:
             )
 
         spread = next(r for r in results if "yield_spread" in r.source_id)
-        assert spread.data["value"].iloc[0] == pytest.approx(4.38 - 2.10)
+        assert spread.data["close"].iloc[0] == pytest.approx(4.38 - 2.10)
 
 
 # -- cache tests --
