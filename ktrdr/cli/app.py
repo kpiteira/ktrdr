@@ -17,6 +17,7 @@ import typer
 from ktrdr.cli.commands.agent import agent_app
 from ktrdr.cli.commands.backtest import backtest
 from ktrdr.cli.commands.cancel import cancel
+from ktrdr.cli.commands.context import context_app
 from ktrdr.cli.commands.evolve import evolve_app
 from ktrdr.cli.commands.follow import follow
 from ktrdr.cli.commands.list_cmd import list_app
@@ -120,6 +121,9 @@ app.add_typer(agent_app)  # ktrdr agent status
 
 # Register evolution subcommand group
 app.add_typer(evolve_app)  # ktrdr evolve start
+
+# Register context analysis group
+app.add_typer(context_app)  # ktrdr context analyze
 
 
 def _register_subgroups() -> None:
