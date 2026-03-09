@@ -8,51 +8,39 @@
 
 **Gotchas:**
 - `BacktestConfig` is a dataclass — uses `field(default_factory=list)`. `BacktestStartRequest` is Pydantic — uses `Field(default_factory=list)`. Don't mix them up.
-- `backtest_worker.py` had no existing `pydantic.Field` import — had to add it explicitly
-
-**Next Task Notes (1.2):**
-- `BacktestStartRequest` now accepts `timeframes` — thread it through API endpoint → service → remote_api
-- `ModelMetadata.training_timeframes` is the source of truth for which timeframes a model was trained on
-- Check `backtesting_service.py` for how it constructs the worker payload dict
 
 ## Task 1.2 Complete: Thread Timeframes Through API and Service
 
 **Changes:**
 - `backtesting.py` (API endpoint): Extracts full timeframes via `extract_symbols_timeframes_from_strategy()` and passes to service
 - `backtesting_service.py`: Added `timeframes` param to `run_backtest()` and `run_backtest_on_worker()`, included in `request_payload` dict
-- `remote_api.py` not modified — it's DEPRECATED and the `BacktestStartRequest` Pydantic model already has the `timeframes` field from Task 1.1
 
-**Design decision:** Used `extract_symbols_timeframes_from_strategy()` as the timeframes source rather than model metadata. The API endpoint already uses this function and it doesn't require loading the model. The strategy config is the canonical source of timeframe configuration.
-
-**Next Task Notes (1.3):**
-- Worker now receives `timeframes` in the payload. Engine needs to use `config.get_all_timeframes()` to decide single vs multi-TF data loading
-- `MultiTimeframeCoordinator` is at `ktrdr/data/multi_timeframe_coordinator.py`
-- `FeatureCache.compute_features()` already accepts `dict[str, pd.DataFrame]`
+**Design decision:** Used `extract_symbols_timeframes_from_strategy()` as the timeframes source rather than model metadata.
 
 ## Task 1.3 Complete: Multi-TF Data Loading in Backtest Engine
 
 **Changes:**
-- `engine.py` `_load_historical_data()`: Now uses `config.get_all_timeframes()` as primary source, falls back to `_get_strategy_timeframes()` if config only has single TF
-- `backtest_worker.py`: Both fresh start (line ~306) and resume (line ~359) paths now pass `request.timeframes` / `original_request.get("timeframes", [])` into BacktestConfig
-
-**Design decision:** `config.get_all_timeframes()` takes priority because it's threaded from the API (extracted from strategy file). Falls back to `_get_strategy_timeframes()` (model bundle) only if config has single TF — this preserves backward compat for old code paths that don't thread timeframes.
+- `engine.py` `_load_historical_data()`: Uses `config.get_all_timeframes()` as primary source, falls back to `_get_strategy_timeframes()` if config only has single TF
+- `backtest_worker.py`: Both fresh start and resume paths pass `request.timeframes` into BacktestConfig
 
 **Gotchas:**
-- `MultiTimeframeCoordinator` is lazily imported inside `_load_historical_data()` — patch `ktrdr.data.multi_timeframe_coordinator.MultiTimeframeCoordinator` not `ktrdr.backtesting.engine.MultiTimeframeCoordinator` in tests
+- `MultiTimeframeCoordinator` is lazily imported — patch `ktrdr.data.multi_timeframe_coordinator.MultiTimeframeCoordinator` in tests
 
-## Task 1.4 Complete: E2E Validation
+## Task 1.4 Complete: E2E Validation — PASSED (after training fix)
 
-**E2E Test:** `training/multi-timeframe-backtest` — 10 steps executed — **FAILED**
+**E2E Test:** Train `v3_multi_tf_test` (1h+1d) on EURUSD, backtest it end-to-end.
 
-**Result:** Timeframes threading (M1 plumbing) works correctly. Training completes, `metadata_v3.json` correctly lists 9 multi-TF features. Backtest receives timeframes but fails at `feature_cache._validate_features()` with `ValueError: Feature mismatch: missing 6 features`.
+**First attempt FAILED** — revealed two additional bugs:
+1. **Training used only base timeframe:** `LocalTrainingOrchestrator._execute_v3_training()` used `self._context.timeframes` (from API: `["1h"]`) instead of resolving from strategy config. Model trained on 3 features but metadata declared 9.
+2. **Metadata mismatch:** `metadata_v3.json` stored `resolved_features` from strategy config (all declared features) instead of `feature_names` (actual training features). Backtest validation failed: 9 expected, 3 produced.
 
-**Root cause:** Two issues surfaced:
-1. **Missing 4h data:** No EURUSD 4h CSV cache exists. System doesn't auto-resample from 1h.
-2. **FeatureCache only computes 1h features:** Even though engine loads multi-TF data via coordinator, `FeatureCache.compute_all_features()` only produces features for the base timeframe. The 4h and 1d features are missing from the computed result. This is a pre-existing issue in the feature computation pipeline, not in M1's timeframes threading.
+**Fixes applied:**
+- `local_orchestrator.py`: Resolve timeframes from `v3_config.training_data.timeframes` for multi-TF strategies
+- `local_orchestrator.py`: Store actual `feature_names` in metadata, not config-declared `resolved_features`
+- Created `strategies/v3_multi_tf_test.yaml` (1h+1d only) — avoids dependency on non-existent 4h data
 
-**M1 scope assessment:** M1 fixes the plumbing (timeframes threaded API→service→worker→engine→coordinator). The remaining feature computation issue is in the FeatureCache/indicator resolution layer — a different fix needed in `ktrdr/backtesting/feature_cache.py`.
+**Final result:** Training produces 6 features (1h+1d), metadata matches, backtest completes with 3 trades, 1325 bars. No KeyError or feature mismatch.
 
-**Sandbox gotchas:**
-- `.env.sandbox` had wrong var names: `KTRDR_OTLP_GRPC_PORT` → compose expects `KTRDR_JAEGER_OTLP_GRPC_PORT`. Added both JAEGER variants.
-- Port 5010 conflict: sandbox `KTRDR_WORKER_PORT_4=5010` clashes with `KTRDR_DESIGN_AGENT_PORT` default of 5010. Added explicit `KTRDR_DESIGN_AGENT_PORT=5011` and `KTRDR_ASSESSMENT_AGENT_PORT=5012`.
-- Port 5010/5020 also conflict with prod agent containers when both running simultaneously.
+**Sandbox env var fixes (not committed — .env.sandbox is gitignored):**
+- Added `KTRDR_JAEGER_OTLP_GRPC_PORT=4327` / `KTRDR_JAEGER_OTLP_HTTP_PORT=4328`
+- Added `KTRDR_DESIGN_AGENT_PORT=5011` / `KTRDR_ASSESSMENT_AGENT_PORT=5012`

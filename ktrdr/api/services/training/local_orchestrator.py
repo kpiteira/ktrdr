@@ -185,6 +185,19 @@ class LocalTrainingOrchestrator:
         # Create v3 pipeline
         pipeline = TrainingPipelineV3(v3_config)
 
+        # Resolve timeframes from strategy config (authoritative source for multi-TF)
+        # The API may only pass the base timeframe, but the strategy config defines
+        # all timeframes needed for training (e.g., ["1h", "4h", "1d"]).
+        tf_config = v3_config.training_data.timeframes
+        if tf_config.timeframes and len(tf_config.timeframes) > 1:
+            training_timeframes = list(tf_config.timeframes)
+            logger.info(
+                f"V3 training: using strategy config timeframes {training_timeframes} "
+                f"(API passed {self._context.timeframes})"
+            )
+        else:
+            training_timeframes = self._context.timeframes
+
         # Load market data for all symbols
         repository = DataRepository()
         all_data: dict[str, dict[str, Any]] = {}
@@ -192,7 +205,7 @@ class LocalTrainingOrchestrator:
         for symbol in self._context.symbols:
             symbol_data = TrainingPipeline.load_market_data(
                 symbol=symbol,
-                timeframes=self._context.timeframes,
+                timeframes=training_timeframes,
                 start_date=self._context.start_date or "2020-01-01",
                 end_date=self._context.end_date or "2024-12-31",
                 repository=repository,
@@ -355,14 +368,24 @@ class LocalTrainingOrchestrator:
 
         logger.info(f"V3 model saved to: {str(model_path)}")
 
-        # CRITICAL: Save v3 metadata with resolved features
+        # CRITICAL: Save v3 metadata with ACTUAL features used in training.
+        # The resolver declares features for all config timeframes, but training
+        # may have fewer if some timeframes had no cached data. Use feature_names
+        # (from the actual prepared DataFrame) as the source of truth.
+        if set(feature_names) != set(resolved_features):
+            logger.warning(
+                f"Feature mismatch: strategy config declares {len(resolved_features)} features "
+                f"but training used {len(feature_names)}. "
+                f"Missing: {sorted(set(resolved_features) - set(feature_names))}. "
+                f"Using actual training features for metadata."
+            )
         self._save_v3_metadata(
             model_path=Path(model_path),
             config=config,
-            resolved_features=resolved_features,
+            resolved_features=feature_names,
             training_metrics=training_results,
             training_symbols=self._context.symbols,
-            training_timeframes=self._context.timeframes,
+            training_timeframes=training_timeframes,
         )
 
         return {
@@ -382,7 +405,7 @@ class LocalTrainingOrchestrator:
             },
             "data_summary": {
                 "symbols": self._context.symbols,
-                "timeframes": self._context.timeframes,
+                "timeframes": training_timeframes,
                 "start_date": self._context.start_date,
                 "end_date": self._context.end_date,
                 "total_samples": total_samples,
